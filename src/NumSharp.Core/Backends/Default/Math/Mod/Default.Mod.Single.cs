@@ -56,17 +56,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = #(caster)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = #(caster)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = #(caster)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = #(caster)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = #(caster)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = #(caster)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = #(caster)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = #(caster)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -80,7 +80,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = #(caster)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = #(caster)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -135,17 +135,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = Converts.ToBoolean(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = Converts.ToBoolean(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = Converts.ToBoolean(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = Converts.ToBoolean(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = Converts.ToBoolean(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = Converts.ToBoolean(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = Converts.ToBoolean(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = Converts.ToBoolean(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -159,7 +159,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = Converts.ToBoolean(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = Converts.ToBoolean(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -190,17 +190,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (byte)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (byte)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (byte)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (byte)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (byte)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (byte)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (byte)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (byte)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -214,7 +214,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (byte)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (byte)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -245,17 +245,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (short)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (short)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (short)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (short)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (short)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (short)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (short)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (short)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -269,7 +269,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (short)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (short)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -300,17 +300,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ushort)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ushort)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ushort)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ushort)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (ushort)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (ushort)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ushort)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ushort)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -324,7 +324,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ushort)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ushort)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -355,17 +355,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (int)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (int)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (int)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (int)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (int)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (int)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (int)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (int)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -379,7 +379,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (int)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (int)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -410,17 +410,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (uint)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (uint)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (uint)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (uint)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (uint)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (uint)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (uint)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (uint)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -434,7 +434,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (uint)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (uint)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -465,17 +465,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (long)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (long)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (long)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (long)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (long)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (long)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (long)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (long)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -489,7 +489,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (long)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (long)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -520,17 +520,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ulong)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ulong)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ulong)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ulong)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (ulong)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (ulong)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ulong)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ulong)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -544,7 +544,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ulong)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ulong)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -575,17 +575,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (char)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (char)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (char)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (char)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (char)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (char)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (char)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (char)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -599,7 +599,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (char)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (char)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -630,17 +630,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (double)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (double)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (double)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (double)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (double)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (double)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (double)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (double)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -654,7 +654,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (double)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (double)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -685,17 +685,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (float)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (float)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (float)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (float)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (float)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (float)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (float)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (float)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -709,7 +709,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (float)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (float)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -740,17 +740,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (decimal)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (decimal)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (decimal)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (decimal)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (decimal)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (decimal)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (decimal)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (decimal)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -764,7 +764,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (decimal)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (decimal)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -813,17 +813,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = Converts.ToBoolean(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = Converts.ToBoolean(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = Converts.ToBoolean(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = Converts.ToBoolean(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = Converts.ToBoolean(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = Converts.ToBoolean(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = Converts.ToBoolean(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = Converts.ToBoolean(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -837,7 +837,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = Converts.ToBoolean(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = Converts.ToBoolean(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -868,17 +868,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (byte)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (byte)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (byte)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (byte)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (byte)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (byte)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (byte)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (byte)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -892,7 +892,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (byte)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (byte)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -923,17 +923,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (short)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (short)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (short)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (short)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (short)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (short)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (short)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (short)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -947,7 +947,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (short)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (short)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -978,17 +978,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ushort)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ushort)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ushort)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ushort)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (ushort)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (ushort)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ushort)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ushort)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -1002,7 +1002,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ushort)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ushort)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -1033,17 +1033,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (int)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (int)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (int)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (int)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (int)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (int)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (int)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (int)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -1057,7 +1057,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (int)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (int)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -1088,17 +1088,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (uint)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (uint)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (uint)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (uint)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (uint)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (uint)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (uint)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (uint)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -1112,7 +1112,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (uint)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (uint)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -1143,17 +1143,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (long)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (long)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (long)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (long)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (long)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (long)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (long)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (long)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -1167,7 +1167,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (long)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (long)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -1198,17 +1198,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ulong)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ulong)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ulong)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ulong)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (ulong)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (ulong)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ulong)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ulong)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -1222,7 +1222,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ulong)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ulong)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -1253,17 +1253,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (char)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (char)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (char)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (char)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (char)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (char)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (char)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (char)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -1277,7 +1277,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (char)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (char)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -1308,17 +1308,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (double)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (double)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (double)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (double)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (double)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (double)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (double)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (double)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -1332,7 +1332,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (double)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (double)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -1363,17 +1363,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (float)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (float)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (float)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (float)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (float)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (float)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (float)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (float)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -1387,7 +1387,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (float)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (float)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -1418,17 +1418,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (decimal)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (decimal)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (decimal)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (decimal)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (decimal)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (decimal)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (decimal)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (decimal)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -1442,7 +1442,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (decimal)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (decimal)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -1491,17 +1491,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = Converts.ToBoolean(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = Converts.ToBoolean(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = Converts.ToBoolean(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = Converts.ToBoolean(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = Converts.ToBoolean(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = Converts.ToBoolean(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = Converts.ToBoolean(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = Converts.ToBoolean(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -1515,7 +1515,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = Converts.ToBoolean(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = Converts.ToBoolean(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -1546,17 +1546,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (byte)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (byte)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (byte)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (byte)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (byte)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (byte)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (byte)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (byte)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -1570,7 +1570,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (byte)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (byte)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -1601,17 +1601,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (short)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (short)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (short)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (short)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (short)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (short)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (short)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (short)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -1625,7 +1625,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (short)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (short)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -1656,17 +1656,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ushort)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ushort)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ushort)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ushort)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (ushort)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (ushort)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ushort)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ushort)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -1680,7 +1680,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ushort)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ushort)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -1711,17 +1711,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (int)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (int)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (int)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (int)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (int)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (int)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (int)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (int)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -1735,7 +1735,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (int)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (int)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -1766,17 +1766,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (uint)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (uint)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (uint)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (uint)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (uint)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (uint)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (uint)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (uint)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -1790,7 +1790,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (uint)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (uint)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -1821,17 +1821,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (long)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (long)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (long)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (long)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (long)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (long)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (long)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (long)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -1845,7 +1845,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (long)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (long)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -1876,17 +1876,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ulong)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ulong)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ulong)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ulong)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (ulong)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (ulong)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ulong)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ulong)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -1900,7 +1900,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ulong)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ulong)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -1931,17 +1931,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (char)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (char)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (char)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (char)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (char)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (char)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (char)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (char)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -1955,7 +1955,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (char)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (char)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -1986,17 +1986,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (double)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (double)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (double)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (double)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (double)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (double)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (double)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (double)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -2010,7 +2010,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (double)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (double)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -2041,17 +2041,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (float)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (float)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (float)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (float)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (float)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (float)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (float)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (float)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -2065,7 +2065,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (float)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (float)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -2096,17 +2096,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (decimal)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (decimal)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (decimal)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (decimal)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (decimal)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (decimal)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (decimal)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (decimal)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -2120,7 +2120,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (decimal)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (decimal)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -2169,17 +2169,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = Converts.ToBoolean(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = Converts.ToBoolean(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = Converts.ToBoolean(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = Converts.ToBoolean(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = Converts.ToBoolean(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = Converts.ToBoolean(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = Converts.ToBoolean(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = Converts.ToBoolean(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -2193,7 +2193,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = Converts.ToBoolean(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = Converts.ToBoolean(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -2224,17 +2224,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (byte)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (byte)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (byte)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (byte)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (byte)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (byte)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (byte)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (byte)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -2248,7 +2248,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (byte)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (byte)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -2279,17 +2279,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (short)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (short)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (short)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (short)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (short)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (short)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (short)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (short)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -2303,7 +2303,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (short)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (short)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -2334,17 +2334,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ushort)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ushort)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ushort)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ushort)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (ushort)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (ushort)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ushort)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ushort)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -2358,7 +2358,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ushort)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ushort)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -2389,17 +2389,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (int)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (int)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (int)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (int)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (int)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (int)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (int)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (int)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -2413,7 +2413,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (int)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (int)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -2444,17 +2444,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (uint)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (uint)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (uint)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (uint)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (uint)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (uint)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (uint)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (uint)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -2468,7 +2468,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (uint)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (uint)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -2499,17 +2499,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (long)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (long)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (long)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (long)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (long)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (long)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (long)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (long)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -2523,7 +2523,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (long)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (long)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -2554,17 +2554,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ulong)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ulong)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ulong)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ulong)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (ulong)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (ulong)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ulong)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ulong)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -2578,7 +2578,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ulong)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ulong)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -2609,17 +2609,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (char)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (char)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (char)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (char)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (char)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (char)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (char)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (char)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -2633,7 +2633,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (char)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (char)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -2664,17 +2664,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (double)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (double)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (double)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (double)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (double)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (double)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (double)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (double)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -2688,7 +2688,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (double)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (double)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -2719,17 +2719,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (float)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (float)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (float)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (float)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (float)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (float)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (float)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (float)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -2743,7 +2743,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (float)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (float)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -2774,17 +2774,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (decimal)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (decimal)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (decimal)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (decimal)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (decimal)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (decimal)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (decimal)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (decimal)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -2798,7 +2798,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (decimal)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (decimal)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -2847,17 +2847,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = Converts.ToBoolean(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = Converts.ToBoolean(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = Converts.ToBoolean(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = Converts.ToBoolean(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = Converts.ToBoolean(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = Converts.ToBoolean(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = Converts.ToBoolean(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = Converts.ToBoolean(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -2871,7 +2871,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = Converts.ToBoolean(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = Converts.ToBoolean(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -2902,17 +2902,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (byte)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (byte)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (byte)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (byte)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (byte)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (byte)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (byte)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (byte)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -2926,7 +2926,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (byte)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (byte)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -2957,17 +2957,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (short)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (short)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (short)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (short)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (short)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (short)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (short)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (short)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -2981,7 +2981,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (short)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (short)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -3012,17 +3012,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ushort)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ushort)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ushort)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ushort)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (ushort)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (ushort)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ushort)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ushort)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -3036,7 +3036,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ushort)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ushort)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -3067,17 +3067,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (int)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (int)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (int)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (int)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (int)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (int)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (int)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (int)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -3091,7 +3091,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (int)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (int)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -3122,17 +3122,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (uint)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (uint)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (uint)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (uint)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (uint)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (uint)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (uint)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (uint)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -3146,7 +3146,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (uint)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (uint)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -3177,17 +3177,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (long)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (long)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (long)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (long)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (long)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (long)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (long)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (long)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -3201,7 +3201,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (long)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (long)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -3232,17 +3232,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ulong)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ulong)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ulong)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ulong)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (ulong)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (ulong)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ulong)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ulong)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -3256,7 +3256,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ulong)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ulong)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -3287,17 +3287,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (char)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (char)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (char)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (char)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (char)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (char)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (char)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (char)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -3311,7 +3311,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (char)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (char)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -3342,17 +3342,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (double)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (double)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (double)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (double)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (double)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (double)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (double)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (double)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -3366,7 +3366,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (double)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (double)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -3397,17 +3397,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (float)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (float)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (float)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (float)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (float)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (float)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (float)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (float)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -3421,7 +3421,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (float)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (float)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -3452,17 +3452,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (decimal)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (decimal)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (decimal)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (decimal)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (decimal)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (decimal)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (decimal)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (decimal)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -3476,7 +3476,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (decimal)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (decimal)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -3525,17 +3525,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = Converts.ToBoolean(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = Converts.ToBoolean(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = Converts.ToBoolean(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = Converts.ToBoolean(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = Converts.ToBoolean(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = Converts.ToBoolean(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = Converts.ToBoolean(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = Converts.ToBoolean(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -3549,7 +3549,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = Converts.ToBoolean(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = Converts.ToBoolean(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -3580,17 +3580,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (byte)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (byte)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (byte)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (byte)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (byte)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (byte)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (byte)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (byte)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -3604,7 +3604,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (byte)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (byte)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -3635,17 +3635,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (short)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (short)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (short)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (short)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (short)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (short)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (short)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (short)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -3659,7 +3659,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (short)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (short)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -3690,17 +3690,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ushort)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ushort)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ushort)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ushort)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (ushort)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (ushort)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ushort)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ushort)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -3714,7 +3714,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ushort)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ushort)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -3745,17 +3745,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (int)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (int)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (int)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (int)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (int)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (int)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (int)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (int)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -3769,7 +3769,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (int)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (int)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -3800,17 +3800,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (uint)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (uint)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (uint)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (uint)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (uint)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (uint)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (uint)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (uint)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -3824,7 +3824,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (uint)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (uint)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -3855,17 +3855,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (long)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (long)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (long)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (long)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (long)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (long)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (long)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (long)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -3879,7 +3879,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (long)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (long)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -3910,17 +3910,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ulong)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ulong)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ulong)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ulong)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (ulong)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (ulong)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ulong)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ulong)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -3934,7 +3934,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ulong)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ulong)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -3965,17 +3965,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (char)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (char)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (char)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (char)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (char)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (char)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (char)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (char)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -3989,7 +3989,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (char)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (char)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -4020,17 +4020,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (double)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (double)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (double)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (double)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (double)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (double)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (double)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (double)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -4044,7 +4044,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (double)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (double)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -4075,17 +4075,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (float)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (float)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (float)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (float)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (float)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (float)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (float)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (float)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -4099,7 +4099,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (float)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (float)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -4130,17 +4130,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (decimal)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (decimal)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (decimal)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (decimal)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (decimal)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (decimal)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (decimal)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (decimal)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -4154,7 +4154,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (decimal)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (decimal)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -4203,17 +4203,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = Converts.ToBoolean(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = Converts.ToBoolean(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = Converts.ToBoolean(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = Converts.ToBoolean(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = Converts.ToBoolean(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = Converts.ToBoolean(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = Converts.ToBoolean(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = Converts.ToBoolean(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -4227,7 +4227,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = Converts.ToBoolean(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = Converts.ToBoolean(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -4258,17 +4258,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (byte)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (byte)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (byte)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (byte)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (byte)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (byte)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (byte)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (byte)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -4282,7 +4282,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (byte)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (byte)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -4313,17 +4313,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (short)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (short)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (short)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (short)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (short)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (short)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (short)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (short)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -4337,7 +4337,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (short)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (short)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -4368,17 +4368,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ushort)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ushort)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ushort)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ushort)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (ushort)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (ushort)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ushort)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ushort)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -4392,7 +4392,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ushort)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ushort)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -4423,17 +4423,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (int)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (int)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (int)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (int)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (int)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (int)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (int)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (int)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -4447,7 +4447,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (int)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (int)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -4478,17 +4478,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (uint)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (uint)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (uint)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (uint)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (uint)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (uint)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (uint)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (uint)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -4502,7 +4502,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (uint)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (uint)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -4533,17 +4533,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (long)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (long)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (long)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (long)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (long)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (long)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (long)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (long)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -4557,7 +4557,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (long)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (long)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -4588,17 +4588,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ulong)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ulong)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ulong)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ulong)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (ulong)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (ulong)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ulong)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ulong)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -4612,7 +4612,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ulong)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ulong)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -4643,17 +4643,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (char)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (char)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (char)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (char)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (char)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (char)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (char)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (char)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -4667,7 +4667,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (char)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (char)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -4698,17 +4698,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (double)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (double)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (double)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (double)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (double)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (double)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (double)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (double)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -4722,7 +4722,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (double)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (double)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -4753,17 +4753,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (float)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (float)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (float)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (float)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (float)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (float)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (float)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (float)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -4777,7 +4777,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (float)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (float)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -4808,17 +4808,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (decimal)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (decimal)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (decimal)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (decimal)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (decimal)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (decimal)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (decimal)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (decimal)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -4832,7 +4832,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (decimal)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (decimal)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -4881,17 +4881,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = Converts.ToBoolean(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = Converts.ToBoolean(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = Converts.ToBoolean(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = Converts.ToBoolean(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = Converts.ToBoolean(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = Converts.ToBoolean(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = Converts.ToBoolean(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = Converts.ToBoolean(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -4905,7 +4905,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = Converts.ToBoolean(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = Converts.ToBoolean(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -4936,17 +4936,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (byte)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (byte)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (byte)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (byte)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (byte)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (byte)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (byte)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (byte)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -4960,7 +4960,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (byte)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (byte)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -4991,17 +4991,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (short)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (short)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (short)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (short)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (short)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (short)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (short)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (short)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -5015,7 +5015,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (short)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (short)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -5046,17 +5046,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ushort)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ushort)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ushort)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ushort)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (ushort)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (ushort)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ushort)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ushort)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -5070,7 +5070,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ushort)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ushort)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -5101,17 +5101,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (int)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (int)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (int)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (int)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (int)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (int)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (int)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (int)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -5125,7 +5125,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (int)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (int)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -5156,17 +5156,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (uint)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (uint)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (uint)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (uint)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (uint)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (uint)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (uint)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (uint)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -5180,7 +5180,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (uint)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (uint)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -5211,17 +5211,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (long)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (long)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (long)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (long)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (long)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (long)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (long)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (long)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -5235,7 +5235,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (long)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (long)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -5266,17 +5266,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ulong)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ulong)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ulong)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ulong)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (ulong)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (ulong)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ulong)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ulong)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -5290,7 +5290,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ulong)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ulong)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -5321,17 +5321,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (char)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (char)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (char)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (char)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (char)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (char)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (char)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (char)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -5345,7 +5345,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (char)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (char)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -5376,17 +5376,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (double)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (double)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (double)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (double)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (double)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (double)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (double)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (double)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -5400,7 +5400,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (double)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (double)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -5431,17 +5431,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (float)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (float)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (float)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (float)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (float)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (float)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (float)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (float)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -5455,7 +5455,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (float)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (float)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -5486,17 +5486,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (decimal)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (decimal)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (decimal)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (decimal)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (decimal)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (decimal)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (decimal)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (decimal)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -5510,7 +5510,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (decimal)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (decimal)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -5559,17 +5559,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = Converts.ToBoolean(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = Converts.ToBoolean(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = Converts.ToBoolean(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = Converts.ToBoolean(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = Converts.ToBoolean(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = Converts.ToBoolean(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = Converts.ToBoolean(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = Converts.ToBoolean(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -5583,7 +5583,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = Converts.ToBoolean(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = Converts.ToBoolean(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -5614,17 +5614,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (byte)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (byte)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (byte)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (byte)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (byte)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (byte)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (byte)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (byte)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -5638,7 +5638,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (byte)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (byte)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -5669,17 +5669,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (short)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (short)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (short)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (short)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (short)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (short)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (short)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (short)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -5693,7 +5693,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (short)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (short)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -5724,17 +5724,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ushort)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ushort)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ushort)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ushort)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (ushort)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (ushort)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ushort)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ushort)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -5748,7 +5748,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ushort)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ushort)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -5779,17 +5779,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (int)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (int)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (int)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (int)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (int)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (int)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (int)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (int)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -5803,7 +5803,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (int)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (int)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -5834,17 +5834,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (uint)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (uint)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (uint)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (uint)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (uint)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (uint)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (uint)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (uint)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -5858,7 +5858,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (uint)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (uint)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -5889,17 +5889,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (long)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (long)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (long)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (long)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (long)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (long)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (long)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (long)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -5913,7 +5913,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (long)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (long)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -5944,17 +5944,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ulong)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ulong)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ulong)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ulong)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (ulong)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (ulong)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ulong)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ulong)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -5968,7 +5968,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ulong)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ulong)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -5999,17 +5999,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (char)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (char)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (char)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (char)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (char)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (char)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (char)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (char)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -6023,7 +6023,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (char)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (char)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -6054,17 +6054,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (double)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (double)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (double)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (double)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (double)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (double)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (double)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (double)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -6078,7 +6078,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (double)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (double)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -6109,17 +6109,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (float)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (float)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (float)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (float)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (float)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (float)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (float)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (float)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -6133,7 +6133,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (float)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (float)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -6164,17 +6164,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (decimal)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (decimal)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (decimal)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (decimal)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (decimal)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (decimal)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (decimal)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (decimal)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -6188,7 +6188,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (decimal)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (decimal)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -6237,17 +6237,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = Converts.ToBoolean(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = Converts.ToBoolean(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = Converts.ToBoolean(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = Converts.ToBoolean(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = Converts.ToBoolean(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = Converts.ToBoolean(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = Converts.ToBoolean(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = Converts.ToBoolean(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -6261,7 +6261,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = Converts.ToBoolean(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = Converts.ToBoolean(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -6292,17 +6292,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (byte)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (byte)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (byte)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (byte)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (byte)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (byte)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (byte)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (byte)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -6316,7 +6316,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (byte)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (byte)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -6347,17 +6347,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (short)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (short)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (short)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (short)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (short)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (short)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (short)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (short)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -6371,7 +6371,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (short)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (short)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -6402,17 +6402,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ushort)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ushort)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ushort)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ushort)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (ushort)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (ushort)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ushort)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ushort)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -6426,7 +6426,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ushort)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ushort)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -6457,17 +6457,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (int)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (int)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (int)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (int)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (int)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (int)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (int)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (int)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -6481,7 +6481,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (int)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (int)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -6512,17 +6512,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (uint)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (uint)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (uint)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (uint)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (uint)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (uint)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (uint)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (uint)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -6536,7 +6536,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (uint)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (uint)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -6567,17 +6567,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (long)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (long)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (long)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (long)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (long)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (long)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (long)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (long)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -6591,7 +6591,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (long)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (long)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -6622,17 +6622,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ulong)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ulong)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ulong)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ulong)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (ulong)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (ulong)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ulong)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ulong)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -6646,7 +6646,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ulong)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ulong)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -6677,17 +6677,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (char)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (char)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (char)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (char)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (char)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (char)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (char)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (char)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -6701,7 +6701,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (char)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (char)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -6732,17 +6732,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (double)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (double)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (double)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (double)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (double)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (double)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (double)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (double)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -6756,7 +6756,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (double)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (double)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -6787,17 +6787,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (float)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (float)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (float)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (float)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (float)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (float)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (float)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (float)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -6811,7 +6811,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (float)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (float)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -6842,17 +6842,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (decimal)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (decimal)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (decimal)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (decimal)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (decimal)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (decimal)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (decimal)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (decimal)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -6866,7 +6866,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (decimal)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (decimal)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -6915,17 +6915,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = Converts.ToBoolean(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = Converts.ToBoolean(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = Converts.ToBoolean(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = Converts.ToBoolean(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = Converts.ToBoolean(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = Converts.ToBoolean(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = Converts.ToBoolean(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = Converts.ToBoolean(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -6939,7 +6939,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = Converts.ToBoolean(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = Converts.ToBoolean(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -6970,17 +6970,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (byte)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (byte)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (byte)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (byte)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (byte)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (byte)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (byte)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (byte)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -6994,7 +6994,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (byte)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (byte)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -7025,17 +7025,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (short)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (short)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (short)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (short)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (short)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (short)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (short)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (short)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -7049,7 +7049,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (short)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (short)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -7080,17 +7080,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ushort)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ushort)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ushort)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ushort)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (ushort)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (ushort)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ushort)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ushort)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -7104,7 +7104,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ushort)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ushort)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -7135,17 +7135,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (int)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (int)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (int)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (int)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (int)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (int)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (int)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (int)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -7159,7 +7159,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (int)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (int)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -7190,17 +7190,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (uint)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (uint)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (uint)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (uint)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (uint)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (uint)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (uint)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (uint)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -7214,7 +7214,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (uint)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (uint)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -7245,17 +7245,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (long)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (long)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (long)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (long)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (long)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (long)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (long)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (long)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -7269,7 +7269,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (long)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (long)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -7300,17 +7300,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ulong)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ulong)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ulong)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ulong)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (ulong)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (ulong)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ulong)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ulong)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -7324,7 +7324,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ulong)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ulong)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -7355,17 +7355,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (char)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (char)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (char)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (char)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (char)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (char)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (char)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (char)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -7379,7 +7379,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (char)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (char)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -7410,17 +7410,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (double)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (double)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (double)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (double)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (double)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (double)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (double)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (double)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -7434,7 +7434,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (double)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (double)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -7465,17 +7465,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (float)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (float)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (float)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (float)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (float)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (float)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (float)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (float)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -7489,7 +7489,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (float)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (float)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -7520,17 +7520,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (decimal)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (decimal)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (decimal)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (decimal)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (decimal)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (decimal)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (decimal)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (decimal)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -7544,7 +7544,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (decimal)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (decimal)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -7593,17 +7593,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = Converts.ToBoolean(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = Converts.ToBoolean(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = Converts.ToBoolean(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = Converts.ToBoolean(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = Converts.ToBoolean(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = Converts.ToBoolean(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = Converts.ToBoolean(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = Converts.ToBoolean(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -7617,7 +7617,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = Converts.ToBoolean(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = Converts.ToBoolean(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -7648,17 +7648,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (byte)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (byte)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (byte)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (byte)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (byte)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (byte)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (byte)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (byte)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -7672,7 +7672,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (byte)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (byte)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -7703,17 +7703,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (short)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (short)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (short)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (short)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (short)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (short)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (short)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (short)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -7727,7 +7727,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (short)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (short)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -7758,17 +7758,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ushort)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ushort)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ushort)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ushort)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (ushort)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (ushort)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ushort)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ushort)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -7782,7 +7782,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ushort)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ushort)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -7813,17 +7813,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (int)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (int)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (int)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (int)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (int)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (int)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (int)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (int)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -7837,7 +7837,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (int)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (int)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -7868,17 +7868,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (uint)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (uint)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (uint)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (uint)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (uint)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (uint)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (uint)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (uint)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -7892,7 +7892,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (uint)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (uint)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -7923,17 +7923,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (long)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (long)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (long)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (long)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (long)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (long)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (long)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (long)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -7947,7 +7947,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (long)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (long)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -7978,17 +7978,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ulong)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ulong)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ulong)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ulong)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (ulong)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (ulong)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ulong)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ulong)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -8002,7 +8002,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (ulong)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (ulong)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -8033,17 +8033,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (char)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (char)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (char)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (char)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (char)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (char)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (char)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (char)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -8057,7 +8057,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (char)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (char)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -8088,17 +8088,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (double)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (double)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (double)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (double)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (double)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (double)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (double)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (double)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -8112,7 +8112,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (double)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (double)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -8143,17 +8143,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (float)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (float)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (float)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (float)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (float)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (float)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (float)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (float)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -8167,7 +8167,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (float)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (float)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
@@ -8198,17 +8198,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (decimal)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (decimal)(Operator.Mod((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (decimal)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (decimal)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = (decimal)(Operator.Mod((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = (decimal)(Operator.Mod((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (decimal)(Operator.Mod((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (decimal)(Operator.Mod((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -8222,7 +8222,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = (decimal)(Operator.Mod(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = (decimal)(Operator.Mod(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;

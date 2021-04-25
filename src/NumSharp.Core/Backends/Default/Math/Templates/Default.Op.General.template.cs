@@ -61,17 +61,17 @@ namespace NumSharp.Backends
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, len, i => *(ret_address + i) = #(caster)(Operator.__3__((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, len, i => ret_address[i] = #(caster)(Operator.__3__((lhs_address[i]), rval)));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, len, i => *(ret_address + i) = #(caster)(Operator.__3__(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = #(caster)(Operator.__3__(lval, (rhs_address[i]))));
                                 } else {
-                                    Parallel.For(0, len, i => *(ret_address + i) = #(caster)(Operator.__3__((*(lhs_address + i)), (*(rhs_address + i)))));
+                                    Parallel.For(0, len, i => ret_address[i] = #(caster)(Operator.__3__((lhs_address[i]), (rhs_address[i]))));
                                 }
                             } else if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = #(caster)(Operator.__3__((*(lhs_address + i)), rval)));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = #(caster)(Operator.__3__((lhs_address[i]), rval)));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
@@ -85,7 +85,7 @@ namespace NumSharp.Backends
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
                                     var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => *(ret_address + i) = #(caster)(Operator.__3__(lval, (*(rhs_address + i)))));
+                                    Parallel.For(0, ret.size, i => ret_address[i] = #(caster)(Operator.__3__(lval, (rhs_address[i]))));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
