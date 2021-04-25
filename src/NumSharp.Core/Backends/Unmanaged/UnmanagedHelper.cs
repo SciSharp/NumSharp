@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Runtime.CompilerServices;
 using NumSharp.Utilities;
 
 namespace NumSharp.Backends.Unmanaged
@@ -18,6 +19,19 @@ namespace NumSharp.Backends.Unmanaged
                 throw new ArgumentOutOfRangeException(nameof(dst), $"Unable to copy from this storage to given array because this storage count is larger than the given array length.");
 
             var bytesCount = src.BytesLength;
+            Buffer.MemoryCopy(src.Address, dst.Address, bytesCount, bytesCount);
+        }
+        
+        /// <summary>
+        ///     Copies the entire contents of this storage to given address (using <see cref="Count"/>).
+        /// </summary>
+        /// <param name="dst">The block to copy to.</param>
+        public static unsafe void CopyTo<T>(this UnmanagedMemoryBlock<T> src, UnmanagedMemoryBlock<T> dst) where T : unmanaged
+        {
+            if (src.Count > dst.Count)
+                throw new ArgumentOutOfRangeException(nameof(dst), $"Unable to copy from this storage to given array because this storage count is larger than the given array length.");
+
+            var bytesCount = src.BytesCount;
             Buffer.MemoryCopy(src.Address, dst.Address, bytesCount, bytesCount);
         }
 
