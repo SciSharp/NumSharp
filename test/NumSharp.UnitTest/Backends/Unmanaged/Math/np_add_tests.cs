@@ -439,7 +439,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
-                val.Should().Be((Boolean)true);
+                val.Should().Be(1);
                 Console.WriteLine(val);
             }
         }
@@ -579,7 +579,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
-                val.Should().Be((Boolean)true);
+                val.Should().Be(1);
                 Console.WriteLine(val);
             }
         }
@@ -719,7 +719,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
-                val.Should().Be((Boolean)true);
+                val.Should().Be(1);
                 Console.WriteLine(val);
             }
         }
@@ -859,7 +859,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
-                val.Should().Be((Boolean)true);
+                val.Should().Be(1);
                 Console.WriteLine(val);
             }
         }
@@ -999,7 +999,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
-                val.Should().Be((Boolean)true);
+                val.Should().Be(1);
                 Console.WriteLine(val);
             }
         }
@@ -1139,7 +1139,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
-                val.Should().Be((Boolean)true);
+                val.Should().Be(1);
                 Console.WriteLine(val);
             }
         }
@@ -1279,7 +1279,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
-                val.Should().Be((Boolean)true);
+                val.Should().Be(1);
                 Console.WriteLine(val);
             }
         }
@@ -1419,7 +1419,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
-                val.Should().Be((Boolean)true);
+                val.Should().Be(1);
                 Console.WriteLine(val);
             }
         }
@@ -1559,7 +1559,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             for (int i = 0; i < ret.size; i++)
             {
                 var val = ret.GetAtIndex(i);
-                val.Should().Be((Boolean)true);
+                val.Should().Be(1);
                 Console.WriteLine(val);
             }
         }
