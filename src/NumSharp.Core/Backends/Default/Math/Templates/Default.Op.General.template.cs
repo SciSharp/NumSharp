@@ -50,60 +50,62 @@ namespace NumSharp.Backends
                     var ret = new NDArray(ret_type, retShape, false);
                     var leftLinear = !leftshape.IsBroadcasted && !leftshape.IsSliced;
                     var rightLinear = !rightshape.IsBroadcasted && !rightshape.IsSliced;
+                    var len = ret.size;
                     switch (ret_type) {
                         %foreach supported_dtypes,supported_dtypes_lowercase%
                         |#normalcast = ("("+str("#102")+")")
                         |#caster = ( "#102"=="bool" | ("Converts.To" + str("#101")) | ("__2__"=="bool"|("#2"=="bool"|("Converts.To" + str("#101"))|normalcast)| normalcast) )
 	                    case NPTypeCode.#101: {
-		                    var ret_address = (#102*)ret.Address;
+		                    var ret_address = (#102*) ret.Address;
+                            
                             if (leftLinear && rightLinear) {
-                                var len = ret.size;
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
-                                    var rval =  *rhs_address;
-                                    Parallel.For(0, len, i => ret_address[i] = #(caster)(Operator.__3__((lhs_address[i]), rval)));
+                                    var rval = *rhs_address;
+                                    for (int i = 0; i < len; i++) ret_address[i] = #(caster)(Operator.__3__((lhs_address[i]), rval));
                                 } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
-                                    var lval =  *lhs_address;
-                                    Parallel.For(0, len, i => ret_address[i] = #(caster)(Operator.__3__(lval, (rhs_address[i]))));
+                                    var lval = *lhs_address;
+                                    for (int i = 0; i < len; i++) ret_address[i] = #(caster)(Operator.__3__(lval, (rhs_address[i])));
                                 } else {
-                                    Parallel.For(0, len, i => ret_address[i] = #(caster)(Operator.__3__((lhs_address[i]), (rhs_address[i]))));
+                                    for (int i = 0; i < len; i++) ret_address[i] = #(caster)(Operator.__3__((lhs_address[i]), (rhs_address[i])));
                                 }
-                            } else if (leftLinear) { // && !rightLinear
+
+                                return ret;
+                            } 
+
+                            ValueCoordinatesIncrementor incr;
+                            if (leftLinear) { // && !rightLinear
                                 if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
-                                    var rval =  *rhs_address;
-                                    Parallel.For(0, ret.size, i => ret_address[i] = #(caster)(Operator.__3__((lhs_address[i]), rval)));
+                                    var rval = *rhs_address;
+                                    for (int i = 0; i < len; i++) ret_address[i] = #(caster)(Operator.__3__((lhs_address[i]), rval));
                                 } else {
                                     int leftOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
-                                    Func<int[], int> rightOffset = rightshape.GetOffset;
                                     do {
-                                        *(ret_address + retOffset++) = #(caster)(Operator.__3__((*(lhs_address + leftOffset++)), (*(rhs_address + rightOffset(current)))));
+                                        *(ret_address + retOffset++) = #(caster)(Operator.__3__((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
                                 if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
-                                    var lval =  *lhs_address;
-                                    Parallel.For(0, ret.size, i => ret_address[i] = #(caster)(Operator.__3__(lval, (rhs_address[i]))));
+                                    var lval = *lhs_address;
+                                    for (int i = 0; i < len; i++) ret_address[i] = #(caster)(Operator.__3__(lval, (rhs_address[i])));
                                 } else {
                                     int rightOffset = 0;
                                     int retOffset = 0;
-                                    var incr = new NDCoordinatesIncrementor(ref retShape);
+                                    incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
-                                    Func<int[], int> leftOffset = leftshape.GetOffset;
                                     do {
-                                        *(ret_address + retOffset++) = #(caster)(Operator.__3__((*(lhs_address + leftOffset(current))), (*(rhs_address + rightOffset++))));
+                                        *(ret_address + retOffset++) = #(caster)(Operator.__3__((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
                                     } while (incr.Next() != null);
                                 }
                             } else {
                                 int retOffset = 0;
-                                var incr = new NDCoordinatesIncrementor(ref retShape);
+                                incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
-                                Func<int[], int> rightOffset = rightshape.GetOffset;
-                                Func<int[], int> leftOffset = leftshape.GetOffset;
                                 do {
-                                    *(ret_address + retOffset++) = #(caster)(Operator.__3__((*(lhs_address + leftOffset(current))), (*(rhs_address + rightOffset(current)))));
+                                    *(ret_address + retOffset++) = #(caster)(Operator.__3__((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
                                 } while (incr.Next() != null);
                             }
 
