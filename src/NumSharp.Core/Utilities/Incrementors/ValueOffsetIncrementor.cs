@@ -4,7 +4,7 @@ namespace NumSharp.Utilities
 {
     public struct ValueOffsetIncrementor
     {
-        private readonly ValueNDCoordinatesIncrementor _incr;
+        private readonly ValueCoordinatesIncrementor _incr;
         private readonly int[] _index;
         private bool _hasNext;
         private readonly Shape _shape;
@@ -12,7 +12,7 @@ namespace NumSharp.Utilities
         public ValueOffsetIncrementor(Shape shape)
         {
             this._shape = shape;
-            _incr = new ValueNDCoordinatesIncrementor(shape.dimensions);
+            _incr = new ValueCoordinatesIncrementor(shape.dimensions);
             _index = _incr.Index;
             _hasNext = true;
         }
@@ -56,14 +56,14 @@ namespace NumSharp.Utilities
 
     public struct ValueOffsetIncrementorAutoresetting
     {
-        private readonly ValueNDCoordinatesIncrementor incr;
+        private readonly ValueCoordinatesIncrementor incr;
         private readonly int[] index;
         private readonly Shape shape;
 
         public ValueOffsetIncrementorAutoresetting(Shape shape)
         {
             this.shape = shape;
-            incr = new ValueNDCoordinatesIncrementor(shape.dimensions, (ref ValueNDCoordinatesIncrementor incrementor) => incrementor.Reset());
+            incr = new ValueCoordinatesIncrementor(shape.dimensions, (ref ValueCoordinatesIncrementor incrementor) => incrementor.Reset());
             index = incr.Index;
         }
 

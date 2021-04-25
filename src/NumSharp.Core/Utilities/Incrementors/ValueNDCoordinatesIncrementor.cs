@@ -3,9 +3,9 @@ using System.Runtime.CompilerServices;
 
 namespace NumSharp.Utilities
 {
-    public struct ValueNDCoordinatesIncrementor
+    public struct ValueCoordinatesIncrementor
     {
-        public delegate void EndCallbackHandler(ref ValueNDCoordinatesIncrementor incr);
+        public delegate void EndCallbackHandler(ref ValueCoordinatesIncrementor incr);
         private readonly EndCallbackHandler endCallback;
         private readonly int[] dimensions;
         private readonly int resetto;
@@ -13,10 +13,10 @@ namespace NumSharp.Utilities
         private int subcursor;
 
         /// <summary>Initializes a new instance of the <see cref="T:System.Object"></see> class.</summary>
-        public ValueNDCoordinatesIncrementor(ref Shape shape)
+        public ValueCoordinatesIncrementor(ref Shape shape)
         {
             if (shape.IsEmpty || shape.size == 0)
-                throw new InvalidOperationException("Can't construct ValueNDCoordinatesIncrementor with an empty shape.");
+                throw new InvalidOperationException("Can't construct ValueCoordinatesIncrementor with an empty shape.");
 
             dimensions = shape.IsScalar ? new[] {1} : shape.dimensions;
             Index = new int[dimensions.Length];
@@ -24,15 +24,15 @@ namespace NumSharp.Utilities
             endCallback = null;
         }
 
-        public ValueNDCoordinatesIncrementor(ref Shape shape, EndCallbackHandler endCallback) : this(ref shape)
+        public ValueCoordinatesIncrementor(ref Shape shape, EndCallbackHandler endCallback) : this(ref shape)
         {
             this.endCallback = endCallback;
         }
 
-        public ValueNDCoordinatesIncrementor(int[] dims)
+        public ValueCoordinatesIncrementor(int[] dims)
         {
             if (dims == null)
-                throw new InvalidOperationException("Can't construct ValueNDCoordinatesIncrementor with an empty shape.");
+                throw new InvalidOperationException("Can't construct ValueCoordinatesIncrementor with an empty shape.");
 
             if (dims.Length == 0)
                 dims = new int[] {1};
@@ -43,7 +43,7 @@ namespace NumSharp.Utilities
             endCallback = null;
         }
 
-        public ValueNDCoordinatesIncrementor(int[] dims, EndCallbackHandler endCallback) : this(dims)
+        public ValueCoordinatesIncrementor(int[] dims, EndCallbackHandler endCallback) : this(dims)
         {
             this.endCallback = endCallback;
         }
@@ -88,7 +88,7 @@ namespace NumSharp.Utilities
         }
     }
 
-    public struct ValueNDCoordinatesIncrementorAutoResetting
+    public struct ValueCoordinatesIncrementorAutoResetting
     {
         private readonly int[] dimensions;
         private readonly int resetto;
@@ -96,20 +96,20 @@ namespace NumSharp.Utilities
         private int subcursor;
 
         /// <summary>Initializes a new instance of the <see cref="T:System.Object"></see> class.</summary>
-        public ValueNDCoordinatesIncrementorAutoResetting(ref Shape shape)
+        public ValueCoordinatesIncrementorAutoResetting(ref Shape shape)
         {
             if (shape.IsEmpty || shape.size == 0)
-                throw new InvalidOperationException("Can't construct ValueNDCoordinatesIncrementorAutoResetting with an empty shape.");
+                throw new InvalidOperationException("Can't construct ValueCoordinatesIncrementorAutoResetting with an empty shape.");
 
             dimensions = shape.dimensions;
             Index = new int[dimensions.Length];
             resetto = subcursor = dimensions.Length - 1;
         }
 
-        public ValueNDCoordinatesIncrementorAutoResetting(int[] dims)
+        public ValueCoordinatesIncrementorAutoResetting(int[] dims)
         {
             if (dims == null)
-                throw new InvalidOperationException("Can't construct ValueNDCoordinatesIncrementorAutoResetting with an empty shape.");
+                throw new InvalidOperationException("Can't construct ValueCoordinatesIncrementorAutoResetting with an empty shape.");
 
             if (dims.Length == 0)
                 dims = new int[] {1};

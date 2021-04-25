@@ -24,7 +24,7 @@ namespace NumSharp
             unsafe
             {
                 var addr = (double*)ret.Address;
-                var incr = new ValueNDCoordinatesIncrementor(ref shape);
+                var incr = new ValueCoordinatesIncrementor(ref shape);
                 do
                 {
                     *(addr + shape.GetOffset(incr.Index)) = randomizer.NextDouble();

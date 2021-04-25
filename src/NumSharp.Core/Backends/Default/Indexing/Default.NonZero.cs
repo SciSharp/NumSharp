@@ -66,7 +66,7 @@ namespace NumSharp.Backends
             switch (x.typecode) {
                 %foreach supported_dtypes, supported_dtypes_lowercase%
                 case NPTypeCode.#1: {
-                    var incr = new ValueNDCoordinatesIncrementor(x.shape);
+                    var incr = new ValueCoordinatesIncrementor(x.shape);
                     var coords = incr.Index;
                     var src = (#2*)x.Address;
                     int offset;
@@ -88,7 +88,7 @@ namespace NumSharp.Backends
             Func<int[], int> getOffset = x.Shape.GetOffset;
             switch (x.typecode) {
                 case NPTypeCode.Boolean: {
-                    var incr = new ValueNDCoordinatesIncrementor(x.shape);
+                    var incr = new ValueCoordinatesIncrementor(x.shape);
                     var coords = incr.Index;
                     var src = (bool*)x.Address;
                     int offset;
@@ -102,7 +102,7 @@ namespace NumSharp.Backends
                     break;
                 }
                 case NPTypeCode.Byte: {
-                    var incr = new ValueNDCoordinatesIncrementor(x.shape);
+                    var incr = new ValueCoordinatesIncrementor(x.shape);
                     var coords = incr.Index;
                     var src = (byte*)x.Address;
                     int offset;
@@ -116,7 +116,7 @@ namespace NumSharp.Backends
                     break;
                 }
                 case NPTypeCode.Int16: {
-                    var incr = new ValueNDCoordinatesIncrementor(x.shape);
+                    var incr = new ValueCoordinatesIncrementor(x.shape);
                     var coords = incr.Index;
                     var src = (short*)x.Address;
                     int offset;
@@ -130,7 +130,7 @@ namespace NumSharp.Backends
                     break;
                 }
                 case NPTypeCode.UInt16: {
-                    var incr = new ValueNDCoordinatesIncrementor(x.shape);
+                    var incr = new ValueCoordinatesIncrementor(x.shape);
                     var coords = incr.Index;
                     var src = (ushort*)x.Address;
                     int offset;
@@ -144,7 +144,7 @@ namespace NumSharp.Backends
                     break;
                 }
                 case NPTypeCode.Int32: {
-                    var incr = new ValueNDCoordinatesIncrementor(x.shape);
+                    var incr = new ValueCoordinatesIncrementor(x.shape);
                     var coords = incr.Index;
                     var src = (int*)x.Address;
                     int offset;
@@ -158,7 +158,7 @@ namespace NumSharp.Backends
                     break;
                 }
                 case NPTypeCode.UInt32: {
-                    var incr = new ValueNDCoordinatesIncrementor(x.shape);
+                    var incr = new ValueCoordinatesIncrementor(x.shape);
                     var coords = incr.Index;
                     var src = (uint*)x.Address;
                     int offset;
@@ -172,7 +172,7 @@ namespace NumSharp.Backends
                     break;
                 }
                 case NPTypeCode.Int64: {
-                    var incr = new ValueNDCoordinatesIncrementor(x.shape);
+                    var incr = new ValueCoordinatesIncrementor(x.shape);
                     var coords = incr.Index;
                     var src = (long*)x.Address;
                     int offset;
@@ -186,7 +186,7 @@ namespace NumSharp.Backends
                     break;
                 }
                 case NPTypeCode.UInt64: {
-                    var incr = new ValueNDCoordinatesIncrementor(x.shape);
+                    var incr = new ValueCoordinatesIncrementor(x.shape);
                     var coords = incr.Index;
                     var src = (ulong*)x.Address;
                     int offset;
@@ -200,7 +200,7 @@ namespace NumSharp.Backends
                     break;
                 }
                 case NPTypeCode.Char: {
-                    var incr = new ValueNDCoordinatesIncrementor(x.shape);
+                    var incr = new ValueCoordinatesIncrementor(x.shape);
                     var coords = incr.Index;
                     var src = (char*)x.Address;
                     int offset;
@@ -214,7 +214,7 @@ namespace NumSharp.Backends
                     break;
                 }
                 case NPTypeCode.Double: {
-                    var incr = new ValueNDCoordinatesIncrementor(x.shape);
+                    var incr = new ValueCoordinatesIncrementor(x.shape);
                     var coords = incr.Index;
                     var src = (double*)x.Address;
                     int offset;
@@ -228,7 +228,7 @@ namespace NumSharp.Backends
                     break;
                 }
                 case NPTypeCode.Single: {
-                    var incr = new ValueNDCoordinatesIncrementor(x.shape);
+                    var incr = new ValueCoordinatesIncrementor(x.shape);
                     var coords = incr.Index;
                     var src = (float*)x.Address;
                     int offset;
@@ -242,7 +242,7 @@ namespace NumSharp.Backends
                     break;
                 }
                 case NPTypeCode.Decimal: {
-                    var incr = new ValueNDCoordinatesIncrementor(x.shape);
+                    var incr = new ValueCoordinatesIncrementor(x.shape);
                     var coords = incr.Index;
                     var src = (decimal*)x.Address;
                     int offset;

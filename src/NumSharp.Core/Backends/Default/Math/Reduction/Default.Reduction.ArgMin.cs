@@ -39,7 +39,7 @@ namespace NumSharp.Backends
             //prepare ret
             var ret = new NDArray(NPTypeCode.Int32, axisedShape, false);
             var iterAxis = new NDCoordinatesAxisIncrementor(ref shape, axis);
-            var iterRet = new ValueNDCoordinatesIncrementor(ref axisedShape);
+            var iterRet = new ValueCoordinatesIncrementor(ref axisedShape);
             var iterIndex = iterRet.Index;
             var slices = iterAxis.Slices;
 

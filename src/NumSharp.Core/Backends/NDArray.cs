@@ -520,7 +520,7 @@ namespace NumSharp
                 len = len * i;
 
             var ret = new NDArray[len];
-            var iter = new ValueNDCoordinatesIncrementor(selectDimensions);
+            var iter = new ValueCoordinatesIncrementor(selectDimensions);
             var index = iter.Index; //heap the pointer to that array.
             for (int i = 0; i < ret.Length; i++)
             {

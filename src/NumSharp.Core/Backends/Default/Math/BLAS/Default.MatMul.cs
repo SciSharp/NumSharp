@@ -35,10 +35,10 @@ namespace NumSharp.Backends
             var len = l.size;
             var ret = new NDArray(np._FindCommonArrayType(l.typecode, r.typecode), retShape);
             var iterShape = new Shape(retShape.dimensions.Take(retShape.dimensions.Length - 2).ToArray());
-            var incr = new ValueNDCoordinatesIncrementor(ref iterShape);
+            var incr = new ValueCoordinatesIncrementor(ref iterShape);
             var index = incr.Index;
 
-            //TODO! we need to create IEnumeable<int> on ValueNDCoordinatesIncrementor so we can do something like this:
+            //TODO! we need to create IEnumeable<int> on ValueCoordinatesIncrementor so we can do something like this:
             //TODO! Parallel.ForEach(incr, i => MultiplyMatrix(l[index], r[index], ret[index]));
             for (int i = 0; i < len; i++, incr.Next())
             {
