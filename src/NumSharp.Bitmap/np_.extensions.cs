@@ -8,7 +8,6 @@ using NumSharp.Backends.Unmanaged;
 // ReSharper disable once CheckNamespace
 namespace NumSharp
 {
-
     [SuppressMessage("ReSharper", "SuggestVarOrType_SimpleTypes")]
     [SuppressMessage("ReSharper", "UnusedMember.Global")]
     public static class np_
@@ -59,11 +58,28 @@ namespace NumSharp
                 }
                 finally
                 {
-                    image.UnlockBits(bmpData);
+                    try
+                    {
+                        image.UnlockBits(bmpData);
+                    }
+                    catch (ArgumentException)
+                    {
+                        //swallow
+                    }
                 }
             else
             {
-                var ret = new NDArray(new ArraySlice<byte>(new UnmanagedMemoryBlock<byte>((byte*)bmpData.Scan0, bmpData.Stride * bmpData.Height, () => image.UnlockBits(bmpData))));
+                var ret = new NDArray(new ArraySlice<byte>(new UnmanagedMemoryBlock<byte>((byte*)bmpData.Scan0, bmpData.Stride * bmpData.Height, () =>
+                {
+                    try
+                    {
+                        image.UnlockBits(bmpData);
+                    }
+                    catch (ArgumentException)
+                    {
+                        //swallow
+                    }
+                })));
 
                 if (flat)
                 {
@@ -72,15 +88,15 @@ namespace NumSharp
                         if (bmpData.Stride / bmpData.Width == 4) //1byte-per-color
                         {
                             return ret.reshape(1, bmpData.Height, bmpData.Width, bmpData.Stride / bmpData.Width) //reshape
-                                [Slice.All, Slice.All, Slice.All, new Slice(stop: 3)] //slice
-                                .flat; //flatten
+                                       [Slice.All, Slice.All, Slice.All, new Slice(stop: 3)] //slice
+                                      .flat; //flatten
                         }
 
                         if (bmpData.Stride / bmpData.Width == 8) //2bytes-per-color
                         {
                             return ret.reshape(1, bmpData.Height, bmpData.Width, bmpData.Stride / bmpData.Width) //reshape
-                                [Slice.All, Slice.All, Slice.All, new Slice(stop: 6)] //slice
-                                .flat; //flatten
+                                       [Slice.All, Slice.All, Slice.All, new Slice(stop: 6)] //slice
+                                      .flat; //flatten
                         }
 
                         throw new NotSupportedException($"Given bbp ({bmpData.Stride / bmpData.Width}) is not supported.");
@@ -152,8 +168,8 @@ namespace NumSharp
                 if (ret.shape[3] == 4 && discardAlpha)
                 {
                     return ret.reshape(1, bmpData.Height, bmpData.Width, bmpData.Stride / bmpData.Width) //reshape
-                        [Slice.All, Slice.All, Slice.All, new Slice(stop: 3)] //slice
-                        .flat; //flatten
+                               [Slice.All, Slice.All, Slice.All, new Slice(stop: 3)] //slice
+                              .flat; //flatten
                 }
 
                 return ret;
@@ -193,14 +209,12 @@ namespace NumSharp
             if (nd.shape[0] != 1)
                 throw new ArgumentException($"ndarray has more than one picture in it ({nd.shape[0]}) based on the first dimension.");
 
-
             var bbp = nd.shape[3]; //bytes per pixel.
             if (bbp != extractFormatNumber())
                 throw new ArgumentException($"Given PixelFormat: {format} does not match the number of bytes per pixel in the 4th dimension of given ndarray.");
 
             if (bbp * width * height != nd.size)
                 throw new ArgumentException($"The expected size does not match the size of given ndarray. (expected: {bbp * width * height}, actual: {nd.size})");
-
 
             var ret = new Bitmap(width, height, format);
             var bitdata = ret.LockBits(new Rectangle(0, 0, width, height), ImageLockMode.WriteOnly, format);
@@ -214,7 +228,14 @@ namespace NumSharp
             }
             finally
             {
-                ret.UnlockBits(bitdata);
+                try
+                {
+                    ret.UnlockBits(bitdata);
+                }
+                catch (ArgumentException)
+                {
+                    //swallow
+                }
             }
 
             return ret;
