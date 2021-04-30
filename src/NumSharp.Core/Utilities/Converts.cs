@@ -152,7 +152,7 @@ namespace NumSharp.Utilities
             // of Int32, but the object can't actually be cast to an Int32.
             //            if (v.GetNPTypeCode() == NPTypeCode) return value;
 
-            #if _REGEN
+#if _REGEN
             switch (typeCode)
             {
 	            %foreach supported_dtypes, supported_dtypes_lowercase%
@@ -168,7 +168,7 @@ namespace NumSharp.Utilities
 	            default:
 		            throw new NotSupportedException();
             }
-            #else
+#else
 
             switch (typeCode)
             {
@@ -391,9 +391,286 @@ namespace NumSharp.Utilities
                 default:
                     throw new NotSupportedException();
             }
-            #endif
+#endif
         }
 
+
+        /// <summary>Returns an object of the specified type whose value is equivalent to the specified object.</summary>
+        /// <param name="value">An object that implements the <see cref="T:System.IConvertible"></see> interface.</param>
+        /// <param name="typeCode">The type of object to return.</param>
+        /// <returns>An object whose underlying type is <paramref name="typeCode">typeCode</paramref> and whose value is equivalent to <paramref name="value">value</paramref>.
+        /// -or-
+        /// A null reference (Nothing in Visual Basic), if <paramref name="value">value</paramref> is null and <paramref name="typeCode">typeCode</paramref> is <see cref="System.TypeCode.Empty"></see>, <see cref="System.TypeCode.String"></see>, or <see cref="System.TypeCode.Object"></see>.</returns>
+        /// <exception cref="T:System.InvalidCastException">This conversion is not supported.
+        /// -or-
+        /// <paramref name="value">value</paramref> is null and <paramref name="typeCode">typeCode</paramref> specifies a value type.
+        /// -or-
+        /// <paramref name="value">value</paramref> does not implement the <see cref="System.IConvertible"></see> interface.</exception>
+        /// <exception cref="T:System.FormatException"><paramref name="value">value</paramref> is not in a format recognized by the <paramref name="typeCode">typeCode</paramref> type.</exception>
+        /// <exception cref="T:System.OverflowException"><paramref name="value">value</paramref> represents a number that is out of the range of the <paramref name="typeCode">typeCode</paramref> type.</exception>
+        /// <exception cref="T:System.ArgumentException"><paramref name="typeCode">typeCode</paramref> is invalid.</exception>
+        [MethodImpl((MethodImplOptions)512)]
+        public static TOut ChangeType<TIn, TOut>(TIn value) where TIn : IConvertible where TOut : IConvertible
+        {
+            // This line is invalid for things like Enums that return a NPTypeCode
+            // of Int32, but the object can't actually be cast to an Int32.
+            //            if (v.GetNPTypeCode() == NPTypeCode) return value;
+
+#if _REGEN
+            switch (InfoOf<TOut>.NPTypeCode)
+            {
+	            %foreach supported_dtypes, supported_dtypes_lowercase%
+	            case NPTypeCode.#1: {
+                    |#2 res;
+                    switch (InfoOf<TIn>.NPTypeCode)
+                    {
+                	    %foreach supported_dtypes, supported_dtypes_lowercase%
+	                    case NPTypeCode.#101: res = Converts.To#1(Unsafe.As<TIn, #102>(ref value)); return Unsafe.As<#2, TOut>(ref res);
+	                    %
+                        default: throw new NotSupportedException();
+                    }
+                }
+	            %
+	            default:
+		            throw new NotSupportedException();
+            }
+#else
+
+            switch (InfoOf<TOut>.NPTypeCode)
+            {
+	            case NPTypeCode.Boolean: {
+                    bool res;
+                    switch (InfoOf<TIn>.NPTypeCode)
+                    {
+	                    case NPTypeCode.Boolean: res = Converts.ToBoolean(Unsafe.As<TIn, bool>(ref value)); return Unsafe.As<bool, TOut>(ref res);
+	                    case NPTypeCode.Byte: res = Converts.ToBoolean(Unsafe.As<TIn, byte>(ref value)); return Unsafe.As<bool, TOut>(ref res);
+	                    case NPTypeCode.Int16: res = Converts.ToBoolean(Unsafe.As<TIn, short>(ref value)); return Unsafe.As<bool, TOut>(ref res);
+	                    case NPTypeCode.UInt16: res = Converts.ToBoolean(Unsafe.As<TIn, ushort>(ref value)); return Unsafe.As<bool, TOut>(ref res);
+	                    case NPTypeCode.Int32: res = Converts.ToBoolean(Unsafe.As<TIn, int>(ref value)); return Unsafe.As<bool, TOut>(ref res);
+	                    case NPTypeCode.UInt32: res = Converts.ToBoolean(Unsafe.As<TIn, uint>(ref value)); return Unsafe.As<bool, TOut>(ref res);
+	                    case NPTypeCode.Int64: res = Converts.ToBoolean(Unsafe.As<TIn, long>(ref value)); return Unsafe.As<bool, TOut>(ref res);
+	                    case NPTypeCode.UInt64: res = Converts.ToBoolean(Unsafe.As<TIn, ulong>(ref value)); return Unsafe.As<bool, TOut>(ref res);
+	                    case NPTypeCode.Char: res = Converts.ToBoolean(Unsafe.As<TIn, char>(ref value)); return Unsafe.As<bool, TOut>(ref res);
+	                    case NPTypeCode.Double: res = Converts.ToBoolean(Unsafe.As<TIn, double>(ref value)); return Unsafe.As<bool, TOut>(ref res);
+	                    case NPTypeCode.Single: res = Converts.ToBoolean(Unsafe.As<TIn, float>(ref value)); return Unsafe.As<bool, TOut>(ref res);
+	                    case NPTypeCode.Decimal: res = Converts.ToBoolean(Unsafe.As<TIn, decimal>(ref value)); return Unsafe.As<bool, TOut>(ref res);
+                        default: throw new NotSupportedException();
+                    }
+                }
+	            case NPTypeCode.Byte: {
+                    byte res;
+                    switch (InfoOf<TIn>.NPTypeCode)
+                    {
+	                    case NPTypeCode.Boolean: res = Converts.ToByte(Unsafe.As<TIn, bool>(ref value)); return Unsafe.As<byte, TOut>(ref res);
+	                    case NPTypeCode.Byte: res = Converts.ToByte(Unsafe.As<TIn, byte>(ref value)); return Unsafe.As<byte, TOut>(ref res);
+	                    case NPTypeCode.Int16: res = Converts.ToByte(Unsafe.As<TIn, short>(ref value)); return Unsafe.As<byte, TOut>(ref res);
+	                    case NPTypeCode.UInt16: res = Converts.ToByte(Unsafe.As<TIn, ushort>(ref value)); return Unsafe.As<byte, TOut>(ref res);
+	                    case NPTypeCode.Int32: res = Converts.ToByte(Unsafe.As<TIn, int>(ref value)); return Unsafe.As<byte, TOut>(ref res);
+	                    case NPTypeCode.UInt32: res = Converts.ToByte(Unsafe.As<TIn, uint>(ref value)); return Unsafe.As<byte, TOut>(ref res);
+	                    case NPTypeCode.Int64: res = Converts.ToByte(Unsafe.As<TIn, long>(ref value)); return Unsafe.As<byte, TOut>(ref res);
+	                    case NPTypeCode.UInt64: res = Converts.ToByte(Unsafe.As<TIn, ulong>(ref value)); return Unsafe.As<byte, TOut>(ref res);
+	                    case NPTypeCode.Char: res = Converts.ToByte(Unsafe.As<TIn, char>(ref value)); return Unsafe.As<byte, TOut>(ref res);
+	                    case NPTypeCode.Double: res = Converts.ToByte(Unsafe.As<TIn, double>(ref value)); return Unsafe.As<byte, TOut>(ref res);
+	                    case NPTypeCode.Single: res = Converts.ToByte(Unsafe.As<TIn, float>(ref value)); return Unsafe.As<byte, TOut>(ref res);
+	                    case NPTypeCode.Decimal: res = Converts.ToByte(Unsafe.As<TIn, decimal>(ref value)); return Unsafe.As<byte, TOut>(ref res);
+                        default: throw new NotSupportedException();
+                    }
+                }
+	            case NPTypeCode.Int16: {
+                    short res;
+                    switch (InfoOf<TIn>.NPTypeCode)
+                    {
+	                    case NPTypeCode.Boolean: res = Converts.ToInt16(Unsafe.As<TIn, bool>(ref value)); return Unsafe.As<short, TOut>(ref res);
+	                    case NPTypeCode.Byte: res = Converts.ToInt16(Unsafe.As<TIn, byte>(ref value)); return Unsafe.As<short, TOut>(ref res);
+	                    case NPTypeCode.Int16: res = Converts.ToInt16(Unsafe.As<TIn, short>(ref value)); return Unsafe.As<short, TOut>(ref res);
+	                    case NPTypeCode.UInt16: res = Converts.ToInt16(Unsafe.As<TIn, ushort>(ref value)); return Unsafe.As<short, TOut>(ref res);
+	                    case NPTypeCode.Int32: res = Converts.ToInt16(Unsafe.As<TIn, int>(ref value)); return Unsafe.As<short, TOut>(ref res);
+	                    case NPTypeCode.UInt32: res = Converts.ToInt16(Unsafe.As<TIn, uint>(ref value)); return Unsafe.As<short, TOut>(ref res);
+	                    case NPTypeCode.Int64: res = Converts.ToInt16(Unsafe.As<TIn, long>(ref value)); return Unsafe.As<short, TOut>(ref res);
+	                    case NPTypeCode.UInt64: res = Converts.ToInt16(Unsafe.As<TIn, ulong>(ref value)); return Unsafe.As<short, TOut>(ref res);
+	                    case NPTypeCode.Char: res = Converts.ToInt16(Unsafe.As<TIn, char>(ref value)); return Unsafe.As<short, TOut>(ref res);
+	                    case NPTypeCode.Double: res = Converts.ToInt16(Unsafe.As<TIn, double>(ref value)); return Unsafe.As<short, TOut>(ref res);
+	                    case NPTypeCode.Single: res = Converts.ToInt16(Unsafe.As<TIn, float>(ref value)); return Unsafe.As<short, TOut>(ref res);
+	                    case NPTypeCode.Decimal: res = Converts.ToInt16(Unsafe.As<TIn, decimal>(ref value)); return Unsafe.As<short, TOut>(ref res);
+                        default: throw new NotSupportedException();
+                    }
+                }
+	            case NPTypeCode.UInt16: {
+                    ushort res;
+                    switch (InfoOf<TIn>.NPTypeCode)
+                    {
+	                    case NPTypeCode.Boolean: res = Converts.ToUInt16(Unsafe.As<TIn, bool>(ref value)); return Unsafe.As<ushort, TOut>(ref res);
+	                    case NPTypeCode.Byte: res = Converts.ToUInt16(Unsafe.As<TIn, byte>(ref value)); return Unsafe.As<ushort, TOut>(ref res);
+	                    case NPTypeCode.Int16: res = Converts.ToUInt16(Unsafe.As<TIn, short>(ref value)); return Unsafe.As<ushort, TOut>(ref res);
+	                    case NPTypeCode.UInt16: res = Converts.ToUInt16(Unsafe.As<TIn, ushort>(ref value)); return Unsafe.As<ushort, TOut>(ref res);
+	                    case NPTypeCode.Int32: res = Converts.ToUInt16(Unsafe.As<TIn, int>(ref value)); return Unsafe.As<ushort, TOut>(ref res);
+	                    case NPTypeCode.UInt32: res = Converts.ToUInt16(Unsafe.As<TIn, uint>(ref value)); return Unsafe.As<ushort, TOut>(ref res);
+	                    case NPTypeCode.Int64: res = Converts.ToUInt16(Unsafe.As<TIn, long>(ref value)); return Unsafe.As<ushort, TOut>(ref res);
+	                    case NPTypeCode.UInt64: res = Converts.ToUInt16(Unsafe.As<TIn, ulong>(ref value)); return Unsafe.As<ushort, TOut>(ref res);
+	                    case NPTypeCode.Char: res = Converts.ToUInt16(Unsafe.As<TIn, char>(ref value)); return Unsafe.As<ushort, TOut>(ref res);
+	                    case NPTypeCode.Double: res = Converts.ToUInt16(Unsafe.As<TIn, double>(ref value)); return Unsafe.As<ushort, TOut>(ref res);
+	                    case NPTypeCode.Single: res = Converts.ToUInt16(Unsafe.As<TIn, float>(ref value)); return Unsafe.As<ushort, TOut>(ref res);
+	                    case NPTypeCode.Decimal: res = Converts.ToUInt16(Unsafe.As<TIn, decimal>(ref value)); return Unsafe.As<ushort, TOut>(ref res);
+                        default: throw new NotSupportedException();
+                    }
+                }
+	            case NPTypeCode.Int32: {
+                    int res;
+                    switch (InfoOf<TIn>.NPTypeCode)
+                    {
+	                    case NPTypeCode.Boolean: res = Converts.ToInt32(Unsafe.As<TIn, bool>(ref value)); return Unsafe.As<int, TOut>(ref res);
+	                    case NPTypeCode.Byte: res = Converts.ToInt32(Unsafe.As<TIn, byte>(ref value)); return Unsafe.As<int, TOut>(ref res);
+	                    case NPTypeCode.Int16: res = Converts.ToInt32(Unsafe.As<TIn, short>(ref value)); return Unsafe.As<int, TOut>(ref res);
+	                    case NPTypeCode.UInt16: res = Converts.ToInt32(Unsafe.As<TIn, ushort>(ref value)); return Unsafe.As<int, TOut>(ref res);
+	                    case NPTypeCode.Int32: res = Converts.ToInt32(Unsafe.As<TIn, int>(ref value)); return Unsafe.As<int, TOut>(ref res);
+	                    case NPTypeCode.UInt32: res = Converts.ToInt32(Unsafe.As<TIn, uint>(ref value)); return Unsafe.As<int, TOut>(ref res);
+	                    case NPTypeCode.Int64: res = Converts.ToInt32(Unsafe.As<TIn, long>(ref value)); return Unsafe.As<int, TOut>(ref res);
+	                    case NPTypeCode.UInt64: res = Converts.ToInt32(Unsafe.As<TIn, ulong>(ref value)); return Unsafe.As<int, TOut>(ref res);
+	                    case NPTypeCode.Char: res = Converts.ToInt32(Unsafe.As<TIn, char>(ref value)); return Unsafe.As<int, TOut>(ref res);
+	                    case NPTypeCode.Double: res = Converts.ToInt32(Unsafe.As<TIn, double>(ref value)); return Unsafe.As<int, TOut>(ref res);
+	                    case NPTypeCode.Single: res = Converts.ToInt32(Unsafe.As<TIn, float>(ref value)); return Unsafe.As<int, TOut>(ref res);
+	                    case NPTypeCode.Decimal: res = Converts.ToInt32(Unsafe.As<TIn, decimal>(ref value)); return Unsafe.As<int, TOut>(ref res);
+                        default: throw new NotSupportedException();
+                    }
+                }
+	            case NPTypeCode.UInt32: {
+                    uint res;
+                    switch (InfoOf<TIn>.NPTypeCode)
+                    {
+	                    case NPTypeCode.Boolean: res = Converts.ToUInt32(Unsafe.As<TIn, bool>(ref value)); return Unsafe.As<uint, TOut>(ref res);
+	                    case NPTypeCode.Byte: res = Converts.ToUInt32(Unsafe.As<TIn, byte>(ref value)); return Unsafe.As<uint, TOut>(ref res);
+	                    case NPTypeCode.Int16: res = Converts.ToUInt32(Unsafe.As<TIn, short>(ref value)); return Unsafe.As<uint, TOut>(ref res);
+	                    case NPTypeCode.UInt16: res = Converts.ToUInt32(Unsafe.As<TIn, ushort>(ref value)); return Unsafe.As<uint, TOut>(ref res);
+	                    case NPTypeCode.Int32: res = Converts.ToUInt32(Unsafe.As<TIn, int>(ref value)); return Unsafe.As<uint, TOut>(ref res);
+	                    case NPTypeCode.UInt32: res = Converts.ToUInt32(Unsafe.As<TIn, uint>(ref value)); return Unsafe.As<uint, TOut>(ref res);
+	                    case NPTypeCode.Int64: res = Converts.ToUInt32(Unsafe.As<TIn, long>(ref value)); return Unsafe.As<uint, TOut>(ref res);
+	                    case NPTypeCode.UInt64: res = Converts.ToUInt32(Unsafe.As<TIn, ulong>(ref value)); return Unsafe.As<uint, TOut>(ref res);
+	                    case NPTypeCode.Char: res = Converts.ToUInt32(Unsafe.As<TIn, char>(ref value)); return Unsafe.As<uint, TOut>(ref res);
+	                    case NPTypeCode.Double: res = Converts.ToUInt32(Unsafe.As<TIn, double>(ref value)); return Unsafe.As<uint, TOut>(ref res);
+	                    case NPTypeCode.Single: res = Converts.ToUInt32(Unsafe.As<TIn, float>(ref value)); return Unsafe.As<uint, TOut>(ref res);
+	                    case NPTypeCode.Decimal: res = Converts.ToUInt32(Unsafe.As<TIn, decimal>(ref value)); return Unsafe.As<uint, TOut>(ref res);
+                        default: throw new NotSupportedException();
+                    }
+                }
+	            case NPTypeCode.Int64: {
+                    long res;
+                    switch (InfoOf<TIn>.NPTypeCode)
+                    {
+	                    case NPTypeCode.Boolean: res = Converts.ToInt64(Unsafe.As<TIn, bool>(ref value)); return Unsafe.As<long, TOut>(ref res);
+	                    case NPTypeCode.Byte: res = Converts.ToInt64(Unsafe.As<TIn, byte>(ref value)); return Unsafe.As<long, TOut>(ref res);
+	                    case NPTypeCode.Int16: res = Converts.ToInt64(Unsafe.As<TIn, short>(ref value)); return Unsafe.As<long, TOut>(ref res);
+	                    case NPTypeCode.UInt16: res = Converts.ToInt64(Unsafe.As<TIn, ushort>(ref value)); return Unsafe.As<long, TOut>(ref res);
+	                    case NPTypeCode.Int32: res = Converts.ToInt64(Unsafe.As<TIn, int>(ref value)); return Unsafe.As<long, TOut>(ref res);
+	                    case NPTypeCode.UInt32: res = Converts.ToInt64(Unsafe.As<TIn, uint>(ref value)); return Unsafe.As<long, TOut>(ref res);
+	                    case NPTypeCode.Int64: res = Converts.ToInt64(Unsafe.As<TIn, long>(ref value)); return Unsafe.As<long, TOut>(ref res);
+	                    case NPTypeCode.UInt64: res = Converts.ToInt64(Unsafe.As<TIn, ulong>(ref value)); return Unsafe.As<long, TOut>(ref res);
+	                    case NPTypeCode.Char: res = Converts.ToInt64(Unsafe.As<TIn, char>(ref value)); return Unsafe.As<long, TOut>(ref res);
+	                    case NPTypeCode.Double: res = Converts.ToInt64(Unsafe.As<TIn, double>(ref value)); return Unsafe.As<long, TOut>(ref res);
+	                    case NPTypeCode.Single: res = Converts.ToInt64(Unsafe.As<TIn, float>(ref value)); return Unsafe.As<long, TOut>(ref res);
+	                    case NPTypeCode.Decimal: res = Converts.ToInt64(Unsafe.As<TIn, decimal>(ref value)); return Unsafe.As<long, TOut>(ref res);
+                        default: throw new NotSupportedException();
+                    }
+                }
+	            case NPTypeCode.UInt64: {
+                    ulong res;
+                    switch (InfoOf<TIn>.NPTypeCode)
+                    {
+	                    case NPTypeCode.Boolean: res = Converts.ToUInt64(Unsafe.As<TIn, bool>(ref value)); return Unsafe.As<ulong, TOut>(ref res);
+	                    case NPTypeCode.Byte: res = Converts.ToUInt64(Unsafe.As<TIn, byte>(ref value)); return Unsafe.As<ulong, TOut>(ref res);
+	                    case NPTypeCode.Int16: res = Converts.ToUInt64(Unsafe.As<TIn, short>(ref value)); return Unsafe.As<ulong, TOut>(ref res);
+	                    case NPTypeCode.UInt16: res = Converts.ToUInt64(Unsafe.As<TIn, ushort>(ref value)); return Unsafe.As<ulong, TOut>(ref res);
+	                    case NPTypeCode.Int32: res = Converts.ToUInt64(Unsafe.As<TIn, int>(ref value)); return Unsafe.As<ulong, TOut>(ref res);
+	                    case NPTypeCode.UInt32: res = Converts.ToUInt64(Unsafe.As<TIn, uint>(ref value)); return Unsafe.As<ulong, TOut>(ref res);
+	                    case NPTypeCode.Int64: res = Converts.ToUInt64(Unsafe.As<TIn, long>(ref value)); return Unsafe.As<ulong, TOut>(ref res);
+	                    case NPTypeCode.UInt64: res = Converts.ToUInt64(Unsafe.As<TIn, ulong>(ref value)); return Unsafe.As<ulong, TOut>(ref res);
+	                    case NPTypeCode.Char: res = Converts.ToUInt64(Unsafe.As<TIn, char>(ref value)); return Unsafe.As<ulong, TOut>(ref res);
+	                    case NPTypeCode.Double: res = Converts.ToUInt64(Unsafe.As<TIn, double>(ref value)); return Unsafe.As<ulong, TOut>(ref res);
+	                    case NPTypeCode.Single: res = Converts.ToUInt64(Unsafe.As<TIn, float>(ref value)); return Unsafe.As<ulong, TOut>(ref res);
+	                    case NPTypeCode.Decimal: res = Converts.ToUInt64(Unsafe.As<TIn, decimal>(ref value)); return Unsafe.As<ulong, TOut>(ref res);
+                        default: throw new NotSupportedException();
+                    }
+                }
+	            case NPTypeCode.Char: {
+                    char res;
+                    switch (InfoOf<TIn>.NPTypeCode)
+                    {
+	                    case NPTypeCode.Boolean: res = Converts.ToChar(Unsafe.As<TIn, bool>(ref value)); return Unsafe.As<char, TOut>(ref res);
+	                    case NPTypeCode.Byte: res = Converts.ToChar(Unsafe.As<TIn, byte>(ref value)); return Unsafe.As<char, TOut>(ref res);
+	                    case NPTypeCode.Int16: res = Converts.ToChar(Unsafe.As<TIn, short>(ref value)); return Unsafe.As<char, TOut>(ref res);
+	                    case NPTypeCode.UInt16: res = Converts.ToChar(Unsafe.As<TIn, ushort>(ref value)); return Unsafe.As<char, TOut>(ref res);
+	                    case NPTypeCode.Int32: res = Converts.ToChar(Unsafe.As<TIn, int>(ref value)); return Unsafe.As<char, TOut>(ref res);
+	                    case NPTypeCode.UInt32: res = Converts.ToChar(Unsafe.As<TIn, uint>(ref value)); return Unsafe.As<char, TOut>(ref res);
+	                    case NPTypeCode.Int64: res = Converts.ToChar(Unsafe.As<TIn, long>(ref value)); return Unsafe.As<char, TOut>(ref res);
+	                    case NPTypeCode.UInt64: res = Converts.ToChar(Unsafe.As<TIn, ulong>(ref value)); return Unsafe.As<char, TOut>(ref res);
+	                    case NPTypeCode.Char: res = Converts.ToChar(Unsafe.As<TIn, char>(ref value)); return Unsafe.As<char, TOut>(ref res);
+	                    case NPTypeCode.Double: res = Converts.ToChar(Unsafe.As<TIn, double>(ref value)); return Unsafe.As<char, TOut>(ref res);
+	                    case NPTypeCode.Single: res = Converts.ToChar(Unsafe.As<TIn, float>(ref value)); return Unsafe.As<char, TOut>(ref res);
+	                    case NPTypeCode.Decimal: res = Converts.ToChar(Unsafe.As<TIn, decimal>(ref value)); return Unsafe.As<char, TOut>(ref res);
+                        default: throw new NotSupportedException();
+                    }
+                }
+	            case NPTypeCode.Double: {
+                    double res;
+                    switch (InfoOf<TIn>.NPTypeCode)
+                    {
+	                    case NPTypeCode.Boolean: res = Converts.ToDouble(Unsafe.As<TIn, bool>(ref value)); return Unsafe.As<double, TOut>(ref res);
+	                    case NPTypeCode.Byte: res = Converts.ToDouble(Unsafe.As<TIn, byte>(ref value)); return Unsafe.As<double, TOut>(ref res);
+	                    case NPTypeCode.Int16: res = Converts.ToDouble(Unsafe.As<TIn, short>(ref value)); return Unsafe.As<double, TOut>(ref res);
+	                    case NPTypeCode.UInt16: res = Converts.ToDouble(Unsafe.As<TIn, ushort>(ref value)); return Unsafe.As<double, TOut>(ref res);
+	                    case NPTypeCode.Int32: res = Converts.ToDouble(Unsafe.As<TIn, int>(ref value)); return Unsafe.As<double, TOut>(ref res);
+	                    case NPTypeCode.UInt32: res = Converts.ToDouble(Unsafe.As<TIn, uint>(ref value)); return Unsafe.As<double, TOut>(ref res);
+	                    case NPTypeCode.Int64: res = Converts.ToDouble(Unsafe.As<TIn, long>(ref value)); return Unsafe.As<double, TOut>(ref res);
+	                    case NPTypeCode.UInt64: res = Converts.ToDouble(Unsafe.As<TIn, ulong>(ref value)); return Unsafe.As<double, TOut>(ref res);
+	                    case NPTypeCode.Char: res = Converts.ToDouble(Unsafe.As<TIn, char>(ref value)); return Unsafe.As<double, TOut>(ref res);
+	                    case NPTypeCode.Double: res = Converts.ToDouble(Unsafe.As<TIn, double>(ref value)); return Unsafe.As<double, TOut>(ref res);
+	                    case NPTypeCode.Single: res = Converts.ToDouble(Unsafe.As<TIn, float>(ref value)); return Unsafe.As<double, TOut>(ref res);
+	                    case NPTypeCode.Decimal: res = Converts.ToDouble(Unsafe.As<TIn, decimal>(ref value)); return Unsafe.As<double, TOut>(ref res);
+                        default: throw new NotSupportedException();
+                    }
+                }
+	            case NPTypeCode.Single: {
+                    float res;
+                    switch (InfoOf<TIn>.NPTypeCode)
+                    {
+	                    case NPTypeCode.Boolean: res = Converts.ToSingle(Unsafe.As<TIn, bool>(ref value)); return Unsafe.As<float, TOut>(ref res);
+	                    case NPTypeCode.Byte: res = Converts.ToSingle(Unsafe.As<TIn, byte>(ref value)); return Unsafe.As<float, TOut>(ref res);
+	                    case NPTypeCode.Int16: res = Converts.ToSingle(Unsafe.As<TIn, short>(ref value)); return Unsafe.As<float, TOut>(ref res);
+	                    case NPTypeCode.UInt16: res = Converts.ToSingle(Unsafe.As<TIn, ushort>(ref value)); return Unsafe.As<float, TOut>(ref res);
+	                    case NPTypeCode.Int32: res = Converts.ToSingle(Unsafe.As<TIn, int>(ref value)); return Unsafe.As<float, TOut>(ref res);
+	                    case NPTypeCode.UInt32: res = Converts.ToSingle(Unsafe.As<TIn, uint>(ref value)); return Unsafe.As<float, TOut>(ref res);
+	                    case NPTypeCode.Int64: res = Converts.ToSingle(Unsafe.As<TIn, long>(ref value)); return Unsafe.As<float, TOut>(ref res);
+	                    case NPTypeCode.UInt64: res = Converts.ToSingle(Unsafe.As<TIn, ulong>(ref value)); return Unsafe.As<float, TOut>(ref res);
+	                    case NPTypeCode.Char: res = Converts.ToSingle(Unsafe.As<TIn, char>(ref value)); return Unsafe.As<float, TOut>(ref res);
+	                    case NPTypeCode.Double: res = Converts.ToSingle(Unsafe.As<TIn, double>(ref value)); return Unsafe.As<float, TOut>(ref res);
+	                    case NPTypeCode.Single: res = Converts.ToSingle(Unsafe.As<TIn, float>(ref value)); return Unsafe.As<float, TOut>(ref res);
+	                    case NPTypeCode.Decimal: res = Converts.ToSingle(Unsafe.As<TIn, decimal>(ref value)); return Unsafe.As<float, TOut>(ref res);
+                        default: throw new NotSupportedException();
+                    }
+                }
+	            case NPTypeCode.Decimal: {
+                    decimal res;
+                    switch (InfoOf<TIn>.NPTypeCode)
+                    {
+	                    case NPTypeCode.Boolean: res = Converts.ToDecimal(Unsafe.As<TIn, bool>(ref value)); return Unsafe.As<decimal, TOut>(ref res);
+	                    case NPTypeCode.Byte: res = Converts.ToDecimal(Unsafe.As<TIn, byte>(ref value)); return Unsafe.As<decimal, TOut>(ref res);
+	                    case NPTypeCode.Int16: res = Converts.ToDecimal(Unsafe.As<TIn, short>(ref value)); return Unsafe.As<decimal, TOut>(ref res);
+	                    case NPTypeCode.UInt16: res = Converts.ToDecimal(Unsafe.As<TIn, ushort>(ref value)); return Unsafe.As<decimal, TOut>(ref res);
+	                    case NPTypeCode.Int32: res = Converts.ToDecimal(Unsafe.As<TIn, int>(ref value)); return Unsafe.As<decimal, TOut>(ref res);
+	                    case NPTypeCode.UInt32: res = Converts.ToDecimal(Unsafe.As<TIn, uint>(ref value)); return Unsafe.As<decimal, TOut>(ref res);
+	                    case NPTypeCode.Int64: res = Converts.ToDecimal(Unsafe.As<TIn, long>(ref value)); return Unsafe.As<decimal, TOut>(ref res);
+	                    case NPTypeCode.UInt64: res = Converts.ToDecimal(Unsafe.As<TIn, ulong>(ref value)); return Unsafe.As<decimal, TOut>(ref res);
+	                    case NPTypeCode.Char: res = Converts.ToDecimal(Unsafe.As<TIn, char>(ref value)); return Unsafe.As<decimal, TOut>(ref res);
+	                    case NPTypeCode.Double: res = Converts.ToDecimal(Unsafe.As<TIn, double>(ref value)); return Unsafe.As<decimal, TOut>(ref res);
+	                    case NPTypeCode.Single: res = Converts.ToDecimal(Unsafe.As<TIn, float>(ref value)); return Unsafe.As<decimal, TOut>(ref res);
+	                    case NPTypeCode.Decimal: res = Converts.ToDecimal(Unsafe.As<TIn, decimal>(ref value)); return Unsafe.As<decimal, TOut>(ref res);
+                        default: throw new NotSupportedException();
+                    }
+                }
+	            default:
+		            throw new NotSupportedException();
+            }
+#endif
+        }
 
         /// <summary>Returns an object of the specified type whose value is equivalent to the specified object.</summary>
         /// <param name="value">An object that implements the <see cref="T:System.IConvertible"></see> interface.</param>
@@ -461,7 +738,7 @@ namespace NumSharp.Utilities
         /// <typeparam name="TOut">The type we expect to convert to.</typeparam>
         public static Func<TIn, TOut> FindConverter<TIn, TOut>()
         {
-            #if _REGEN
+#if _REGEN
 #region Compute
             //#n is input, #10n is output
 		    switch (InfoOf<TIn>.NPTypeCode)
@@ -493,9 +770,9 @@ namespace NumSharp.Utilities
                 }
 		    }
 #endregion
-            #else
+#else
 
-            #region Compute
+#region Compute
 
             //#n is input, #10n is output
             switch (InfoOf<TIn>.NPTypeCode)
@@ -1359,14 +1636,14 @@ namespace NumSharp.Utilities
                     }
             }
 
-            #endregion
+#endregion
 
-            #endif
+#endif
         }
 
-        #region ToScalar
+#region ToScalar
 
-        #if _REGEN
+#if _REGEN
 #region Compute
 
 		%foreach supported_dtypes,supported_dtypes_lowercase%
@@ -1381,9 +1658,9 @@ namespace NumSharp.Utilities
 		%
 			    
 #endregion
-        #else
+#else
 
-        #region Compute
+#region Compute
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool ToBoolean(NDArray nd)
@@ -1493,10 +1770,10 @@ namespace NumSharp.Utilities
             return nd.typecode == NPTypeCode.Decimal ? nd.GetAtIndex<decimal>(0) : Converts.ToDecimal(nd.GetAtIndex(0));
         }
 
-        #endregion
+#endregion
 
-        #endif
+#endif
 
-        #endregion
+#endregion
     }
 }
