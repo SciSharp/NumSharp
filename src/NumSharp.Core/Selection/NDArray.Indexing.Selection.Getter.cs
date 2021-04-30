@@ -74,7 +74,7 @@ namespace NumSharp
                     case Slice _:
                         continue;
                     case null: throw new ArgumentNullException($"The {i}th dimension in given indices is null.");
-                    default: throw new ArgumentException($"Unsupported indexing type: '{(indicesObjects[i]?.GetType()?.Name ?? "null")}'");
+                    default:   throw new ArgumentException($"Unsupported indexing type: '{(indicesObjects[i]?.GetType()?.Name ?? "null")}'");
                 }
             }
 
@@ -94,12 +94,12 @@ namespace NumSharp
                 {
                     switch (x)
                     {
-                        case Slice o: return o;
-                        case int o: return Slice.Index(o);
-                        case string o: return new Slice(o);
-                        case bool o: return o ? Slice.NewAxis : throw new NumSharpException("false bool detected"); //TODO: verify this
+                        case Slice o:        return o;
+                        case int o:          return Slice.Index(o);
+                        case string o:       return new Slice(o);
+                        case bool o:         return o ? Slice.NewAxis : throw new NumSharpException("false bool detected"); //TODO: verify this
                         case IConvertible o: return Slice.Index((int)o.ToInt32(CultureInfo.InvariantCulture));
-                        default: throw new ArgumentException($"Unsupported slice type: '{(x?.GetType()?.Name ?? "null")}'");
+                        default:             throw new ArgumentException($"Unsupported slice type: '{(x?.GetType()?.Name ?? "null")}'");
                     }
                 }).ToArray();
             }
@@ -111,7 +111,7 @@ namespace NumSharp
 
             return new NDArray(Storage.GetView(slices));
 
-//handle complex ndarrays indexing
+            //handle complex ndarrays indexing
             _NDArrayFound:
             var @this = this;
             var indices = new List<NDArray>();
@@ -250,27 +250,27 @@ namespace NumSharp
             #endregion
 #else
 
-            #region Compute
+#region Compute
 
             switch (src.typecode)
             {
                 case NPTypeCode.Boolean: return FetchIndices<bool>(src.MakeGeneric<bool>(), indices, @out, extraDim);
-                case NPTypeCode.Byte: return FetchIndices<byte>(src.MakeGeneric<byte>(), indices, @out, extraDim);
-                case NPTypeCode.Int16: return FetchIndices<short>(src.MakeGeneric<short>(), indices, @out, extraDim);
-                case NPTypeCode.UInt16: return FetchIndices<ushort>(src.MakeGeneric<ushort>(), indices, @out, extraDim);
-                case NPTypeCode.Int32: return FetchIndices<int>(src.MakeGeneric<int>(), indices, @out, extraDim);
-                case NPTypeCode.UInt32: return FetchIndices<uint>(src.MakeGeneric<uint>(), indices, @out, extraDim);
-                case NPTypeCode.Int64: return FetchIndices<long>(src.MakeGeneric<long>(), indices, @out, extraDim);
-                case NPTypeCode.UInt64: return FetchIndices<ulong>(src.MakeGeneric<ulong>(), indices, @out, extraDim);
-                case NPTypeCode.Char: return FetchIndices<char>(src.MakeGeneric<char>(), indices, @out, extraDim);
-                case NPTypeCode.Double: return FetchIndices<double>(src.MakeGeneric<double>(), indices, @out, extraDim);
-                case NPTypeCode.Single: return FetchIndices<float>(src.MakeGeneric<float>(), indices, @out, extraDim);
+                case NPTypeCode.Byte:    return FetchIndices<byte>(src.MakeGeneric<byte>(), indices, @out, extraDim);
+                case NPTypeCode.Int16:   return FetchIndices<short>(src.MakeGeneric<short>(), indices, @out, extraDim);
+                case NPTypeCode.UInt16:  return FetchIndices<ushort>(src.MakeGeneric<ushort>(), indices, @out, extraDim);
+                case NPTypeCode.Int32:   return FetchIndices<int>(src.MakeGeneric<int>(), indices, @out, extraDim);
+                case NPTypeCode.UInt32:  return FetchIndices<uint>(src.MakeGeneric<uint>(), indices, @out, extraDim);
+                case NPTypeCode.Int64:   return FetchIndices<long>(src.MakeGeneric<long>(), indices, @out, extraDim);
+                case NPTypeCode.UInt64:  return FetchIndices<ulong>(src.MakeGeneric<ulong>(), indices, @out, extraDim);
+                case NPTypeCode.Char:    return FetchIndices<char>(src.MakeGeneric<char>(), indices, @out, extraDim);
+                case NPTypeCode.Double:  return FetchIndices<double>(src.MakeGeneric<double>(), indices, @out, extraDim);
+                case NPTypeCode.Single:  return FetchIndices<float>(src.MakeGeneric<float>(), indices, @out, extraDim);
                 case NPTypeCode.Decimal: return FetchIndices<decimal>(src.MakeGeneric<decimal>(), indices, @out, extraDim);
                 default:
                     throw new NotSupportedException();
             }
 
-            #endregion
+#endregion
 
 #endif
         }
@@ -381,7 +381,6 @@ namespace NumSharp
                     for (int i = 0; i < idxs.ndim; i++)
                         retShape[i] = idxs.shape[i];
 
-
                     subShape = new int[srcShape.NDim - ndsCount];
                     for (int dst_i = idxs.ndim, src_i = ndsCount, i = 0; src_i < srcShape.NDim; dst_i++, src_i++, i++)
                     {
@@ -403,7 +402,6 @@ namespace NumSharp
                         retShape = Arrays.Concat(indicesImpliedShape, subShape);
                 }
             }
-
 
             //when -----------------------------------------
             //indices point to an ndarray
@@ -437,26 +435,24 @@ namespace NumSharp
             //compute coordinates
             if (indices.Length > 1)
             {
-                Parallel.For(0, indicesSize, i =>
+                var index = stackalloc int[ndsCount];
+                for (int i = 0; i < indicesSize; i++)
                 {
-                    var index = stackalloc int[ndsCount];
-
-                    for (int ndIdx = 0; ndIdx < ndsCount; ndIdx++) //todo optimize this loop with unmanaged address.
+                    for (int ndIdx = 0; ndIdx < ndsCount; ndIdx++)
                         index[ndIdx] = indexGetters[ndIdx](i); //replace with memory access or iterators
 
                     if ((computedAddr[i] = srcShape.GetOffset(index, ndsCount)) > largestOffset)
                         throw new IndexOutOfRangeException($"Index [{string.Join(", ", new Span<int>(index, ndsCount).ToArray())}] exceeds given NDArray's bounds. NDArray is shaped {srcShape}.");
-                });
+                }
             }
             else
             {
-                Func<int, int> srcOffset = srcShape.GetOffset_1D;
                 var getter = indexGetters[0];
-                Parallel.For(0, indicesSize, i =>
+                for (int i = 0; i < indicesSize; i++)
                 {
-                    if ((computedAddr[i] = srcOffset(getter(i))) > largestOffset)
+                    if ((computedAddr[i] = srcShape.GetOffset_1D(getter(i))) > largestOffset)
                         throw new IndexOutOfRangeException($"Index [{getter(i)}] exceeds given NDArray's bounds. NDArray is shaped {srcShape}.");
-                });
+                }
             }
 
             //based on recently made `computedOffsets` we retreive data -----------------------------------------
@@ -468,7 +464,9 @@ namespace NumSharp
                 var dst = new NDArray<T>(Shape.Vector(computedOffsets.size), false);
                 T* dstAddr = dst.Address;
                 //indices point to a scalar
-                Parallel.For(0, dst.size, i => *(dstAddr + i) = *(srcAddr + *(idxAddr + i))); //TODO linear might be faster. bench it.
+                var len = dst.size;
+                for (int i = 0; i < len; i++) 
+                    dstAddr[i] = srcAddr[idxAddr[i]];
 
                 if (retShape != null)
                     return dst.reshape(retShape);
@@ -526,8 +524,8 @@ namespace NumSharp
             T* dstAddr = (T*)dst.Address;
             int copySize = subShapeSize * InfoOf<T>.Size;
 
-            Parallel.For(0, offsetsSize, i =>
-                Buffer.MemoryCopy(srcAddr + *(offsetAddr + i), dstAddr + i * subShapeSize, copySize, copySize));
+            for (int i = 0; i < offsetsSize; i++) 
+                Buffer.MemoryCopy(srcAddr + *(offsetAddr + i), dstAddr + i * subShapeSize, copySize, copySize);
 
             return dst.MakeGeneric<T>();
         }
@@ -573,10 +571,9 @@ namespace NumSharp
 
             //compute coordinates
             //for (int i = 0; i < size; i++)
-            Parallel.For(0, size, i => //TODO: make parallel.for
+            int* index = stackalloc int[srcDims];
+            for (int i = 0; i < size; i++)
             {
-                int* index = stackalloc int[srcDims];
-
                 //load indices
                 //index[0] = i;
                 for (int k = 0; k < srcDims; k++)
@@ -590,7 +587,7 @@ namespace NumSharp
 #else
                 ret[i] = source[index, srcDims];
 #endif
-            });
+            };
             //}
 
             return ret.flat.reshape(retShape).MakeGeneric<T>();

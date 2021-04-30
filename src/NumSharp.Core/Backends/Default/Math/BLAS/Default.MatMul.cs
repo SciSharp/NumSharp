@@ -38,8 +38,6 @@ namespace NumSharp.Backends
             var incr = new ValueCoordinatesIncrementor(ref iterShape);
             var index = incr.Index;
 
-            //TODO! we need to create IEnumeable<int> on ValueCoordinatesIncrementor so we can do something like this:
-            //TODO! Parallel.ForEach(incr, i => MultiplyMatrix(l[index], r[index], ret[index]));
             for (int i = 0; i < len; i++, incr.Next())
             {
                 MultiplyMatrix(l[index], r[index], ret[index]);

@@ -26,14 +26,14 @@ namespace NumSharp.Backends
 	                case NPTypeCode.#1:
 	                {
                         var out_addr = (#2*)@out.Address;
-                        Parallel.For(0, len, i => out_addr[i] = Converts.To#1(Math.Round(out_addr[i])));
+                        for (int i = 0; i < len; i++) out_addr[i] = Converts.To#1(Math.Round(out_addr[i]));
                         return @out;
 	                }
 	                %
                     case NPTypeCode.Decimal:
 	                {
                         var out_addr = (decimal*)@out.Address;
-                        Parallel.For(0, len, i => out_addr[i] = (DecimalEx.Round(out_addr[i])));
+                        for (int i = 0; i < len; i++) out_addr[i] = (DecimalEx.Round(out_addr[i]));
                         return @out;
 	                }
 	                default:
@@ -42,19 +42,19 @@ namespace NumSharp.Backends
 	                case NPTypeCode.Double:
 	                {
                         var out_addr = (double*)@out.Address;
-                        Parallel.For(0, len, i => out_addr[i] = Converts.ToDouble(Math.Round(out_addr[i])));
+                        for (int i = 0; i < len; i++) out_addr[i] = Converts.ToDouble(Math.Round(out_addr[i]));
                         return @out;
 	                }
 	                case NPTypeCode.Single:
 	                {
                         var out_addr = (float*)@out.Address;
-                        Parallel.For(0, len, i => out_addr[i] = Converts.ToSingle(Math.Round(out_addr[i])));
+                        for (int i = 0; i < len; i++) out_addr[i] = Converts.ToSingle(Math.Round(out_addr[i]));
                         return @out;
 	                }
                     case NPTypeCode.Decimal:
 	                {
                         var out_addr = (decimal*)@out.Address;
-                        Parallel.For(0, len, i => out_addr[i] = (decimal.Round(out_addr[i])));
+                        for (int i = 0; i < len; i++) out_addr[i] = (decimal.Round(out_addr[i]));
                         return @out;
 	                }
 	                default:

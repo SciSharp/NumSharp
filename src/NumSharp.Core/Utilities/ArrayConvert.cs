@@ -1164,7 +1164,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new #2[length];
-            Parallel.For(0, length, i=> output[i] = Converts.To#2(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.To#2(sourceArray[i]);
             return output;
         }
         %
@@ -1187,7 +1187,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Byte[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToByte(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToByte(sourceArray[i]);
             return output;
         }
         
@@ -1204,7 +1204,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Int16[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToInt16(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToInt16(sourceArray[i]);
             return output;
         }
         
@@ -1221,7 +1221,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new UInt16[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt16(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToUInt16(sourceArray[i]);
             return output;
         }
         
@@ -1238,7 +1238,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Int32[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToInt32(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToInt32(sourceArray[i]);
             return output;
         }
         
@@ -1255,7 +1255,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new UInt32[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt32(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToUInt32(sourceArray[i]);
             return output;
         }
         
@@ -1272,7 +1272,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Int64[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToInt64(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToInt64(sourceArray[i]);
             return output;
         }
         
@@ -1289,7 +1289,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new UInt64[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt64(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToUInt64(sourceArray[i]);
             return output;
         }
         
@@ -1306,7 +1306,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Char[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToChar(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToChar(sourceArray[i]);
             return output;
         }
         
@@ -1323,7 +1323,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Double[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToDouble(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToDouble(sourceArray[i]);
             return output;
         }
         
@@ -1340,7 +1340,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Single[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToSingle(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToSingle(sourceArray[i]);
             return output;
         }
         
@@ -1357,7 +1357,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Decimal[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToDecimal(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToDecimal(sourceArray[i]);
             return output;
         }
         
@@ -1374,7 +1374,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new String[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToString(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToString(sourceArray[i]);
             return output;
         }
         
@@ -1391,7 +1391,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Boolean[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToBoolean(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToBoolean(sourceArray[i]);
             return output;
         }
         
@@ -1408,7 +1408,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Int16[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToInt16(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToInt16(sourceArray[i]);
             return output;
         }
         
@@ -1425,7 +1425,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new UInt16[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt16(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToUInt16(sourceArray[i]);
             return output;
         }
         
@@ -1442,7 +1442,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Int32[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToInt32(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToInt32(sourceArray[i]);
             return output;
         }
         
@@ -1459,7 +1459,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new UInt32[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt32(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToUInt32(sourceArray[i]);
             return output;
         }
         
@@ -1476,7 +1476,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Int64[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToInt64(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToInt64(sourceArray[i]);
             return output;
         }
         
@@ -1493,7 +1493,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new UInt64[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt64(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToUInt64(sourceArray[i]);
             return output;
         }
         
@@ -1510,7 +1510,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Char[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToChar(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToChar(sourceArray[i]);
             return output;
         }
         
@@ -1527,7 +1527,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Double[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToDouble(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToDouble(sourceArray[i]);
             return output;
         }
         
@@ -1544,7 +1544,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Single[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToSingle(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToSingle(sourceArray[i]);
             return output;
         }
         
@@ -1561,7 +1561,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Decimal[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToDecimal(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToDecimal(sourceArray[i]);
             return output;
         }
         
@@ -1578,7 +1578,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new String[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToString(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToString(sourceArray[i]);
             return output;
         }
         
@@ -1595,7 +1595,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Boolean[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToBoolean(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToBoolean(sourceArray[i]);
             return output;
         }
         
@@ -1612,7 +1612,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Byte[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToByte(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToByte(sourceArray[i]);
             return output;
         }
         
@@ -1629,7 +1629,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new UInt16[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt16(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToUInt16(sourceArray[i]);
             return output;
         }
         
@@ -1646,7 +1646,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Int32[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToInt32(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToInt32(sourceArray[i]);
             return output;
         }
         
@@ -1663,7 +1663,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new UInt32[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt32(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToUInt32(sourceArray[i]);
             return output;
         }
         
@@ -1680,7 +1680,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Int64[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToInt64(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToInt64(sourceArray[i]);
             return output;
         }
         
@@ -1697,7 +1697,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new UInt64[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt64(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToUInt64(sourceArray[i]);
             return output;
         }
         
@@ -1714,7 +1714,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Char[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToChar(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToChar(sourceArray[i]);
             return output;
         }
         
@@ -1731,7 +1731,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Double[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToDouble(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToDouble(sourceArray[i]);
             return output;
         }
         
@@ -1748,7 +1748,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Single[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToSingle(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToSingle(sourceArray[i]);
             return output;
         }
         
@@ -1765,7 +1765,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Decimal[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToDecimal(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToDecimal(sourceArray[i]);
             return output;
         }
         
@@ -1782,7 +1782,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new String[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToString(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToString(sourceArray[i]);
             return output;
         }
         
@@ -1799,7 +1799,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Boolean[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToBoolean(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToBoolean(sourceArray[i]);
             return output;
         }
         
@@ -1816,7 +1816,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Byte[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToByte(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToByte(sourceArray[i]);
             return output;
         }
         
@@ -1833,7 +1833,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Int16[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToInt16(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToInt16(sourceArray[i]);
             return output;
         }
         
@@ -1850,7 +1850,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Int32[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToInt32(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToInt32(sourceArray[i]);
             return output;
         }
         
@@ -1867,7 +1867,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new UInt32[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt32(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToUInt32(sourceArray[i]);
             return output;
         }
         
@@ -1884,7 +1884,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Int64[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToInt64(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToInt64(sourceArray[i]);
             return output;
         }
         
@@ -1901,7 +1901,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new UInt64[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt64(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToUInt64(sourceArray[i]);
             return output;
         }
         
@@ -1918,7 +1918,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Char[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToChar(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToChar(sourceArray[i]);
             return output;
         }
         
@@ -1935,7 +1935,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Double[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToDouble(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToDouble(sourceArray[i]);
             return output;
         }
         
@@ -1952,7 +1952,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Single[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToSingle(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToSingle(sourceArray[i]);
             return output;
         }
         
@@ -1969,7 +1969,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Decimal[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToDecimal(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToDecimal(sourceArray[i]);
             return output;
         }
         
@@ -1986,7 +1986,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new String[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToString(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToString(sourceArray[i]);
             return output;
         }
         
@@ -2003,7 +2003,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Boolean[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToBoolean(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToBoolean(sourceArray[i]);
             return output;
         }
         
@@ -2020,7 +2020,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Byte[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToByte(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToByte(sourceArray[i]);
             return output;
         }
         
@@ -2037,7 +2037,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Int16[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToInt16(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToInt16(sourceArray[i]);
             return output;
         }
         
@@ -2054,7 +2054,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new UInt16[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt16(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToUInt16(sourceArray[i]);
             return output;
         }
         
@@ -2071,7 +2071,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new UInt32[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt32(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToUInt32(sourceArray[i]);
             return output;
         }
         
@@ -2088,7 +2088,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Int64[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToInt64(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToInt64(sourceArray[i]);
             return output;
         }
         
@@ -2105,7 +2105,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new UInt64[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt64(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToUInt64(sourceArray[i]);
             return output;
         }
         
@@ -2122,7 +2122,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Char[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToChar(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToChar(sourceArray[i]);
             return output;
         }
         
@@ -2139,7 +2139,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Double[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToDouble(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToDouble(sourceArray[i]);
             return output;
         }
         
@@ -2156,7 +2156,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Single[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToSingle(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToSingle(sourceArray[i]);
             return output;
         }
         
@@ -2173,7 +2173,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Decimal[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToDecimal(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToDecimal(sourceArray[i]);
             return output;
         }
         
@@ -2190,7 +2190,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new String[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToString(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToString(sourceArray[i]);
             return output;
         }
         
@@ -2207,7 +2207,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Boolean[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToBoolean(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToBoolean(sourceArray[i]);
             return output;
         }
         
@@ -2224,7 +2224,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Byte[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToByte(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToByte(sourceArray[i]);
             return output;
         }
         
@@ -2241,7 +2241,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Int16[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToInt16(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToInt16(sourceArray[i]);
             return output;
         }
         
@@ -2258,7 +2258,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new UInt16[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt16(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToUInt16(sourceArray[i]);
             return output;
         }
         
@@ -2275,7 +2275,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Int32[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToInt32(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToInt32(sourceArray[i]);
             return output;
         }
         
@@ -2292,7 +2292,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Int64[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToInt64(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToInt64(sourceArray[i]);
             return output;
         }
         
@@ -2309,7 +2309,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new UInt64[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt64(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToUInt64(sourceArray[i]);
             return output;
         }
         
@@ -2326,7 +2326,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Char[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToChar(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToChar(sourceArray[i]);
             return output;
         }
         
@@ -2343,7 +2343,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Double[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToDouble(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToDouble(sourceArray[i]);
             return output;
         }
         
@@ -2360,7 +2360,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Single[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToSingle(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToSingle(sourceArray[i]);
             return output;
         }
         
@@ -2377,7 +2377,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Decimal[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToDecimal(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToDecimal(sourceArray[i]);
             return output;
         }
         
@@ -2394,7 +2394,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new String[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToString(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToString(sourceArray[i]);
             return output;
         }
         
@@ -2411,7 +2411,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Boolean[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToBoolean(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToBoolean(sourceArray[i]);
             return output;
         }
         
@@ -2428,7 +2428,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Byte[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToByte(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToByte(sourceArray[i]);
             return output;
         }
         
@@ -2445,7 +2445,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Int16[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToInt16(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToInt16(sourceArray[i]);
             return output;
         }
         
@@ -2462,7 +2462,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new UInt16[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt16(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToUInt16(sourceArray[i]);
             return output;
         }
         
@@ -2479,7 +2479,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Int32[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToInt32(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToInt32(sourceArray[i]);
             return output;
         }
         
@@ -2496,7 +2496,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new UInt32[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt32(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToUInt32(sourceArray[i]);
             return output;
         }
         
@@ -2513,7 +2513,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new UInt64[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt64(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToUInt64(sourceArray[i]);
             return output;
         }
         
@@ -2530,7 +2530,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Char[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToChar(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToChar(sourceArray[i]);
             return output;
         }
         
@@ -2547,7 +2547,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Double[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToDouble(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToDouble(sourceArray[i]);
             return output;
         }
         
@@ -2564,7 +2564,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Single[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToSingle(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToSingle(sourceArray[i]);
             return output;
         }
         
@@ -2581,7 +2581,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Decimal[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToDecimal(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToDecimal(sourceArray[i]);
             return output;
         }
         
@@ -2598,7 +2598,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new String[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToString(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToString(sourceArray[i]);
             return output;
         }
         
@@ -2615,7 +2615,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Boolean[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToBoolean(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToBoolean(sourceArray[i]);
             return output;
         }
         
@@ -2632,7 +2632,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Byte[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToByte(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToByte(sourceArray[i]);
             return output;
         }
         
@@ -2649,7 +2649,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Int16[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToInt16(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToInt16(sourceArray[i]);
             return output;
         }
         
@@ -2666,7 +2666,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new UInt16[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt16(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToUInt16(sourceArray[i]);
             return output;
         }
         
@@ -2683,7 +2683,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Int32[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToInt32(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToInt32(sourceArray[i]);
             return output;
         }
         
@@ -2700,7 +2700,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new UInt32[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt32(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToUInt32(sourceArray[i]);
             return output;
         }
         
@@ -2717,7 +2717,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Int64[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToInt64(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToInt64(sourceArray[i]);
             return output;
         }
         
@@ -2734,7 +2734,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Char[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToChar(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToChar(sourceArray[i]);
             return output;
         }
         
@@ -2751,7 +2751,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Double[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToDouble(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToDouble(sourceArray[i]);
             return output;
         }
         
@@ -2768,7 +2768,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Single[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToSingle(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToSingle(sourceArray[i]);
             return output;
         }
         
@@ -2785,7 +2785,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Decimal[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToDecimal(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToDecimal(sourceArray[i]);
             return output;
         }
         
@@ -2802,7 +2802,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new String[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToString(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToString(sourceArray[i]);
             return output;
         }
         
@@ -2819,7 +2819,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Boolean[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToBoolean(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToBoolean(sourceArray[i]);
             return output;
         }
         
@@ -2836,7 +2836,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Byte[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToByte(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToByte(sourceArray[i]);
             return output;
         }
         
@@ -2853,7 +2853,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Int16[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToInt16(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToInt16(sourceArray[i]);
             return output;
         }
         
@@ -2870,7 +2870,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new UInt16[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt16(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToUInt16(sourceArray[i]);
             return output;
         }
         
@@ -2887,7 +2887,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Int32[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToInt32(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToInt32(sourceArray[i]);
             return output;
         }
         
@@ -2904,7 +2904,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new UInt32[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt32(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToUInt32(sourceArray[i]);
             return output;
         }
         
@@ -2921,7 +2921,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Int64[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToInt64(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToInt64(sourceArray[i]);
             return output;
         }
         
@@ -2938,7 +2938,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new UInt64[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt64(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToUInt64(sourceArray[i]);
             return output;
         }
         
@@ -2955,7 +2955,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Double[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToDouble(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToDouble(sourceArray[i]);
             return output;
         }
         
@@ -2972,7 +2972,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Single[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToSingle(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToSingle(sourceArray[i]);
             return output;
         }
         
@@ -2989,7 +2989,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Decimal[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToDecimal(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToDecimal(sourceArray[i]);
             return output;
         }
         
@@ -3006,7 +3006,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new String[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToString(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToString(sourceArray[i]);
             return output;
         }
         
@@ -3023,7 +3023,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Boolean[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToBoolean(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToBoolean(sourceArray[i]);
             return output;
         }
         
@@ -3040,7 +3040,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Byte[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToByte(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToByte(sourceArray[i]);
             return output;
         }
         
@@ -3057,7 +3057,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Int16[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToInt16(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToInt16(sourceArray[i]);
             return output;
         }
         
@@ -3074,7 +3074,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new UInt16[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt16(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToUInt16(sourceArray[i]);
             return output;
         }
         
@@ -3091,7 +3091,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Int32[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToInt32(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToInt32(sourceArray[i]);
             return output;
         }
         
@@ -3108,7 +3108,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new UInt32[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt32(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToUInt32(sourceArray[i]);
             return output;
         }
         
@@ -3125,7 +3125,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Int64[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToInt64(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToInt64(sourceArray[i]);
             return output;
         }
         
@@ -3142,7 +3142,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new UInt64[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt64(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToUInt64(sourceArray[i]);
             return output;
         }
         
@@ -3159,7 +3159,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Char[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToChar(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToChar(sourceArray[i]);
             return output;
         }
         
@@ -3176,7 +3176,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Single[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToSingle(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToSingle(sourceArray[i]);
             return output;
         }
         
@@ -3193,7 +3193,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Decimal[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToDecimal(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToDecimal(sourceArray[i]);
             return output;
         }
         
@@ -3210,7 +3210,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new String[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToString(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToString(sourceArray[i]);
             return output;
         }
         
@@ -3227,7 +3227,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Boolean[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToBoolean(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToBoolean(sourceArray[i]);
             return output;
         }
         
@@ -3244,7 +3244,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Byte[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToByte(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToByte(sourceArray[i]);
             return output;
         }
         
@@ -3261,7 +3261,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Int16[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToInt16(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToInt16(sourceArray[i]);
             return output;
         }
         
@@ -3278,7 +3278,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new UInt16[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt16(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToUInt16(sourceArray[i]);
             return output;
         }
         
@@ -3295,7 +3295,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Int32[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToInt32(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToInt32(sourceArray[i]);
             return output;
         }
         
@@ -3312,7 +3312,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new UInt32[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt32(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToUInt32(sourceArray[i]);
             return output;
         }
         
@@ -3329,7 +3329,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Int64[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToInt64(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToInt64(sourceArray[i]);
             return output;
         }
         
@@ -3346,7 +3346,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new UInt64[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt64(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToUInt64(sourceArray[i]);
             return output;
         }
         
@@ -3363,7 +3363,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Char[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToChar(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToChar(sourceArray[i]);
             return output;
         }
         
@@ -3380,7 +3380,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Double[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToDouble(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToDouble(sourceArray[i]);
             return output;
         }
         
@@ -3397,7 +3397,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Decimal[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToDecimal(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToDecimal(sourceArray[i]);
             return output;
         }
         
@@ -3414,7 +3414,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new String[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToString(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToString(sourceArray[i]);
             return output;
         }
         
@@ -3431,7 +3431,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Boolean[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToBoolean(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToBoolean(sourceArray[i]);
             return output;
         }
         
@@ -3448,7 +3448,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Byte[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToByte(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToByte(sourceArray[i]);
             return output;
         }
         
@@ -3465,7 +3465,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Int16[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToInt16(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToInt16(sourceArray[i]);
             return output;
         }
         
@@ -3482,7 +3482,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new UInt16[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt16(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToUInt16(sourceArray[i]);
             return output;
         }
         
@@ -3499,7 +3499,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Int32[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToInt32(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToInt32(sourceArray[i]);
             return output;
         }
         
@@ -3516,7 +3516,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new UInt32[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt32(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToUInt32(sourceArray[i]);
             return output;
         }
         
@@ -3533,7 +3533,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Int64[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToInt64(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToInt64(sourceArray[i]);
             return output;
         }
         
@@ -3550,7 +3550,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new UInt64[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt64(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToUInt64(sourceArray[i]);
             return output;
         }
         
@@ -3567,7 +3567,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Char[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToChar(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToChar(sourceArray[i]);
             return output;
         }
         
@@ -3584,7 +3584,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Double[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToDouble(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToDouble(sourceArray[i]);
             return output;
         }
         
@@ -3601,7 +3601,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Single[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToSingle(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToSingle(sourceArray[i]);
             return output;
         }
         
@@ -3618,7 +3618,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new String[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToString(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToString(sourceArray[i]);
             return output;
         }
         
@@ -3635,7 +3635,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Boolean[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToBoolean(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToBoolean(sourceArray[i]);
             return output;
         }
         
@@ -3652,7 +3652,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Byte[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToByte(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToByte(sourceArray[i]);
             return output;
         }
         
@@ -3669,7 +3669,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Int16[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToInt16(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToInt16(sourceArray[i]);
             return output;
         }
         
@@ -3686,7 +3686,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new UInt16[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt16(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToUInt16(sourceArray[i]);
             return output;
         }
         
@@ -3703,7 +3703,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Int32[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToInt32(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToInt32(sourceArray[i]);
             return output;
         }
         
@@ -3720,7 +3720,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new UInt32[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt32(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToUInt32(sourceArray[i]);
             return output;
         }
         
@@ -3737,7 +3737,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Int64[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToInt64(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToInt64(sourceArray[i]);
             return output;
         }
         
@@ -3754,7 +3754,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new UInt64[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToUInt64(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToUInt64(sourceArray[i]);
             return output;
         }
         
@@ -3771,7 +3771,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Char[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToChar(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToChar(sourceArray[i]);
             return output;
         }
         
@@ -3788,7 +3788,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Double[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToDouble(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToDouble(sourceArray[i]);
             return output;
         }
         
@@ -3805,7 +3805,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Single[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToSingle(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToSingle(sourceArray[i]);
             return output;
         }
         
@@ -3822,7 +3822,7 @@ namespace NumSharp.Utilities
             
             var length = sourceArray.Length;
             var output = new Decimal[length];
-            Parallel.For(0, length, i=> output[i] = Converts.ToDecimal(sourceArray[i]));
+            for (int i = 0; i < length; i++) output[i] = Converts.ToDecimal(sourceArray[i]);
             return output;
         }
         #endregion

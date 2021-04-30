@@ -165,16 +165,17 @@ namespace NumSharp.Backends.Unmanaged
         {
             bool equals = false;
             var addr = Address;
-            Parallel.For(0L, Count, (i, state) =>
+            var len = Count;
+            var eq = EqualityComparer<T>.Default;
+            for (int i = 0; i < len; i++)
             {
-                if ((addr[i]).Equals(item))
+                if (eq.Equals(addr[i], item))
                 {
-                    equals = true;
-                    state.Stop();
+                    return true;
                 }
-            });
+            }
 
-            return equals;
+            return false;
         }
 
         /// <param name="value"></param>

@@ -161,7 +161,8 @@ namespace NumSharp
         public static NDArray repeat<T>(T a, int repeats) where T : unmanaged //TODO! , int axis = -1
         {
             var ret = new NDArray(InfoOf<T>.NPTypeCode, Shape.Vector(repeats));
-            Parallel.For(0, repeats, j => ret.itemset<T>(new int[1] {j}, a));
+            for (int j = 0; j < repeats; j++)
+                ret.itemset<T>(new int[1] {j}, a);
             return ret;
         }
     }

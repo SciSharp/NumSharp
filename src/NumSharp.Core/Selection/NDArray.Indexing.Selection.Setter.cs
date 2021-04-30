@@ -465,26 +465,25 @@ namespace NumSharp
             //compute coordinates
             if (indices.Length > 1)
             {
-                Parallel.For(0, indicesSize, i =>
-                {
-                    var index = stackalloc int[ndsCount];
+                var index = stackalloc int[ndsCount];
 
+                for (int i = 0; i < indicesSize; i++)
+                {
                     for (int ndIdx = 0; ndIdx < ndsCount; ndIdx++) //todo optimize this loop with unmanaged address.
                         index[ndIdx] = indexGetters[ndIdx](i); //replace with memory access or iterators
 
                     if ((computedAddr[i] = srcShape.GetOffset(index, ndsCount)) > largestOffset)
                         throw new IndexOutOfRangeException($"Index [{string.Join(", ", new Span<int>(index, ndsCount).ToArray())}] exceeds given NDArray's bounds. NDArray is shaped {srcShape}.");
-                });
+                }
             }
             else
             {
-                Func<int, int> srcOffset = srcShape.GetOffset_1D;
                 var getter = indexGetters[0];
-                Parallel.For(0, indicesSize, i =>
+                for (int i = 0; i < indicesSize; i++)
                 {
-                    if ((computedAddr[i] = srcOffset(getter(i))) > largestOffset)
+                    if ((computedAddr[i] = srcShape.GetOffset_1D(getter(i))) > largestOffset)
                         throw new IndexOutOfRangeException($"Index [{getter(i)}] exceeds given NDArray's bounds. NDArray is shaped {srcShape}.");
-                });
+                }
             }
 
             //based on recently made `computedOffsets` we retreive data -----------------------------------------
@@ -496,7 +495,8 @@ namespace NumSharp
                 var dst = new NDArray<T>(Shape.Vector(computedOffsets.size), false);
                 T* dstAddr = dst.Address;
                 //indices point to a scalar
-                Parallel.For(0, dst.size, i => *(dstAddr + i) = *(srcAddr + *(idxAddr + i))); //TODO linear might be faster. bench it.
+                for (int i = 0; i < dst.size; i++)
+                    dstAddr[i] = *(srcAddr + idxAddr[i]);
                 return;
                 //if (retShape != null)
                 //    return dst.reshape(retShape);
@@ -543,15 +543,15 @@ namespace NumSharp
             if (values.Shape.IsContiguous && !values.Shape.ModifiedStrides)
             {
                 //linear
-                Parallel.For(0, offsetsSize, i =>
-                    Buffer.MemoryCopy(valuesAddr + i * subShapeSize, dstAddr + *(offsetAddr + i), copySize, copySize));
+                for (int i = 0; i < offsetsSize; i++) 
+                    Buffer.MemoryCopy(valuesAddr + i * subShapeSize, dstAddr + *(offsetAddr + i), copySize, copySize);
             }
             else
             {
                 //non-linear
-                Func<int, int> valuesOffsetFunc = values.Shape.TransformOffset;
-                Parallel.For(0, offsetsSize, i =>
-                    Buffer.MemoryCopy(valuesAddr + valuesOffsetFunc(i), dstAddr + *(offsetAddr + i), copySize, copySize));
+                ref Shape shape = ref values.Storage.ShapeReference;
+                for (int i = 0; i < offsetsSize; i++) 
+                    Buffer.MemoryCopy(valuesAddr + shape.TransformOffset(i), dstAddr + *(offsetAddr + i), copySize, copySize);
 
                 //Parallel.For(0, offsetsSize, i =>
                 //    Buffer.MemoryCopy(valuesAddr + *(offsetAddr + i), dstAddr + i * subShapeSize, copySize, copySize));

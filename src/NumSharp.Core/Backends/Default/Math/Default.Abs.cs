@@ -29,27 +29,27 @@ namespace NumSharp.Backends
 	                case NPTypeCode.#1:
 	                {
                         var out_addr = (#2*)@out.Address;
-                        Parallel.For(0, len, i => *(out_addr + i) = Converts.To#1(Math.Abs(*(out_addr + i))));
+                        for (int i = 0; i < len; i++) out_addr[i] = Converts.To#1(Math.Abs(out_addr[i])));
                         return @out;
 	                }
 	                %
                     case NPTypeCode.Decimal:
 	                {
                         var out_addr = (decimal*)@out.Address;
-                        Parallel.For(0, len, i => *(out_addr + i) = (DecimalEx.Abs(*(out_addr + i))));
+                        for (int i = 0; i < len; i++) out_addr[i] = (DecimalEx.Abs(out_addr[i]));
                         return @out;
 	                }
 	                default:
 		                throw new NotSupportedException();
 #else
-	                case NPTypeCode.Byte:
+                    case NPTypeCode.Byte:
 	                {
                         return @out;
 	                }
 	                case NPTypeCode.Int16:
 	                {
                         var out_addr = (short*)@out.Address;
-                        Parallel.For(0, len, i => *(out_addr + i) = Converts.ToInt16(Math.Abs(*(out_addr + i))));
+                        for (int i = 0; i < len; i++) out_addr[i] = Converts.ToInt16(Math.Abs(out_addr[i]));
                         return @out;
 	                }
 	                case NPTypeCode.UInt16:
@@ -59,7 +59,7 @@ namespace NumSharp.Backends
 	                case NPTypeCode.Int32:
 	                {
                         var out_addr = (int*)@out.Address;
-                        Parallel.For(0, len, i => *(out_addr + i) = Converts.ToInt32(Math.Abs(*(out_addr + i))));
+                        for (int i = 0; i < len; i++) out_addr[i] = Converts.ToInt32(Math.Abs(out_addr[i]));
                         return @out;
 	                }
 	                case NPTypeCode.UInt32:
@@ -69,7 +69,7 @@ namespace NumSharp.Backends
 	                case NPTypeCode.Int64:
 	                {
                         var out_addr = (long*)@out.Address;
-                        Parallel.For(0, len, i => *(out_addr + i) = Converts.ToInt64(Math.Abs(*(out_addr + i))));
+                        for (int i = 0; i < len; i++) out_addr[i] = Converts.ToInt64(Math.Abs(out_addr[i]));
                         return @out;
 	                }
 	                case NPTypeCode.UInt64:
@@ -79,25 +79,25 @@ namespace NumSharp.Backends
 	                case NPTypeCode.Char:
 	                {
                         var out_addr = (char*)@out.Address;
-                        Parallel.For(0, len, i => *(out_addr + i) = Converts.ToChar(Math.Abs(*(out_addr + i))));
+                        for (int i = 0; i < len; i++) out_addr[i] = Converts.ToChar(Math.Abs(out_addr[i]));
                         return @out;
 	                }
 	                case NPTypeCode.Double:
 	                {
                         var out_addr = (double*)@out.Address;
-                        Parallel.For(0, len, i => *(out_addr + i) = Converts.ToDouble(Math.Abs(*(out_addr + i))));
+                        for (int i = 0; i < len; i++) out_addr[i] = Converts.ToDouble(Math.Abs(out_addr[i]));
                         return @out;
 	                }
 	                case NPTypeCode.Single:
 	                {
                         var out_addr = (float*)@out.Address;
-                        Parallel.For(0, len, i => *(out_addr + i) = Converts.ToSingle(Math.Abs(*(out_addr + i))));
+                        for (int i = 0; i < len; i++) out_addr[i] = Converts.ToSingle(Math.Abs(out_addr[i]));
                         return @out;
 	                }
                     case NPTypeCode.Decimal:
 	                {
                         var out_addr = (decimal*)@out.Address;
-                        Parallel.For(0, len, i => *(out_addr + i) = (DecimalEx.Abs(*(out_addr + i))));
+                        for (int i = 0; i < len; i++) out_addr[i] = (DecimalEx.Abs(out_addr[i]));
                         return @out;
 	                }
 	                default:

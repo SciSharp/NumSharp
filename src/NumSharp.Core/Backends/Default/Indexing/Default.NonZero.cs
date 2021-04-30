@@ -273,14 +273,14 @@ namespace NumSharp.Backends
                 addresses[i] = (int*)ret[i].Address;
 
             //extract coordinates
-            Parallel.For(0, len, i =>
+            for (int i = 0; i < len; i++)
             {
                 var coords = nonzeroCoords[i];
                 for (int axis = 0; axis < ndim; axis++)
                 {
                     addresses[axis][i] = coords[axis];
                 }
-            });
+            };
 
             return ret;
         }
