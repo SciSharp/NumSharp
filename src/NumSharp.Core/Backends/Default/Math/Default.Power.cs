@@ -30,7 +30,7 @@ namespace NumSharp.Backends
 	                {
                         var right = Converts.ToDouble(rhs);
                         var out_addr = (#2*)@out.Address;
-                        Parallel.For(0, len, i => *(out_addr + i) = Converts.To#1(Math.Pow(*(out_addr + i), right)));
+                        Parallel.For(0, len, i => out_addr[i] = Converts.To#1(Math.Pow(out_addr[i], right)));
                         return @out;
 	                }
 	                %
@@ -38,7 +38,7 @@ namespace NumSharp.Backends
                     {
                         var right = (decimal) Converts.ToDecimal(rhs);
                         var out_addr = (decimal*)@out.Address;
-                        Parallel.For(0, len, i => *(out_addr + i) = DecimalEx.Pow(*(out_addr + i), right));
+                        Parallel.For(0, len, i => out_addr[i] = DecimalEx.Pow(out_addr[i], right));
                         return @out;
 	                }
 	                default:
@@ -48,77 +48,77 @@ namespace NumSharp.Backends
 	                {
                         var right = Converts.ToDouble(rhs);
                         var out_addr = (byte*)@out.Address;
-                        Parallel.For(0, len, i => *(out_addr + i) = Converts.ToByte(Math.Pow(*(out_addr + i), right)));
+                        Parallel.For(0, len, i => out_addr[i] = Converts.ToByte(Math.Pow(out_addr[i], right)));
                         return @out;
 	                }
 	                case NPTypeCode.Int16:
 	                {
                         var right = Converts.ToDouble(rhs);
                         var out_addr = (short*)@out.Address;
-                        Parallel.For(0, len, i => *(out_addr + i) = Converts.ToInt16(Math.Pow(*(out_addr + i), right)));
+                        Parallel.For(0, len, i => out_addr[i] = Converts.ToInt16(Math.Pow(out_addr[i], right)));
                         return @out;
 	                }
 	                case NPTypeCode.UInt16:
 	                {
                         var right = Converts.ToDouble(rhs);
                         var out_addr = (ushort*)@out.Address;
-                        Parallel.For(0, len, i => *(out_addr + i) = Converts.ToUInt16(Math.Pow(*(out_addr + i), right)));
+                        Parallel.For(0, len, i => out_addr[i] = Converts.ToUInt16(Math.Pow(out_addr[i], right)));
                         return @out;
 	                }
 	                case NPTypeCode.Int32:
 	                {
                         var right = Converts.ToDouble(rhs);
                         var out_addr = (int*)@out.Address;
-                        Parallel.For(0, len, i => *(out_addr + i) = Converts.ToInt32(Math.Pow(*(out_addr + i), right)));
+                        Parallel.For(0, len, i => out_addr[i] = Converts.ToInt32(Math.Pow(out_addr[i], right)));
                         return @out;
 	                }
 	                case NPTypeCode.UInt32:
 	                {
                         var right = Converts.ToDouble(rhs);
                         var out_addr = (uint*)@out.Address;
-                        Parallel.For(0, len, i => *(out_addr + i) = Converts.ToUInt32(Math.Pow(*(out_addr + i), right)));
+                        Parallel.For(0, len, i => out_addr[i] = Converts.ToUInt32(Math.Pow(out_addr[i], right)));
                         return @out;
 	                }
 	                case NPTypeCode.Int64:
 	                {
                         var right = Converts.ToDouble(rhs);
                         var out_addr = (long*)@out.Address;
-                        Parallel.For(0, len, i => *(out_addr + i) = Converts.ToInt64(Math.Pow(*(out_addr + i), right)));
+                        Parallel.For(0, len, i => out_addr[i] = Converts.ToInt64(Math.Pow(out_addr[i], right)));
                         return @out;
 	                }
 	                case NPTypeCode.UInt64:
 	                {
                         var right = Converts.ToDouble(rhs);
                         var out_addr = (ulong*)@out.Address;
-                        Parallel.For(0, len, i => *(out_addr + i) = Converts.ToUInt64(Math.Pow(*(out_addr + i), right)));
+                        Parallel.For(0, len, i => out_addr[i] = Converts.ToUInt64(Math.Pow(out_addr[i], right)));
                         return @out;
 	                }
 	                case NPTypeCode.Char:
 	                {
                         var right = Converts.ToDouble(rhs);
                         var out_addr = (char*)@out.Address;
-                        Parallel.For(0, len, i => *(out_addr + i) = Converts.ToChar(Math.Pow(*(out_addr + i), right)));
+                        Parallel.For(0, len, i => out_addr[i] = Converts.ToChar(Math.Pow(out_addr[i], right)));
                         return @out;
 	                }
 	                case NPTypeCode.Double:
 	                {
                         var right = Converts.ToDouble(rhs);
                         var out_addr = (double*)@out.Address;
-                        Parallel.For(0, len, i => *(out_addr + i) = Converts.ToDouble(Math.Pow(*(out_addr + i), right)));
+                        Parallel.For(0, len, i => out_addr[i] = Converts.ToDouble(Math.Pow(out_addr[i], right)));
                         return @out;
 	                }
 	                case NPTypeCode.Single:
 	                {
                         var right = Converts.ToDouble(rhs);
                         var out_addr = (float*)@out.Address;
-                        Parallel.For(0, len, i => *(out_addr + i) = Converts.ToSingle(Math.Pow(*(out_addr + i), right)));
+                        Parallel.For(0, len, i => out_addr[i] = Converts.ToSingle(Math.Pow(out_addr[i], right)));
                         return @out;
 	                }
                     case NPTypeCode.Decimal:
                     {
                         var right = Converts.ToDecimal(rhs);
                         var out_addr = (decimal*)@out.Address;
-                        Parallel.For(0, len, i => *(out_addr + i) = DecimalEx.Pow(*(out_addr + i), right));
+                        Parallel.For(0, len, i => out_addr[i] = DecimalEx.Pow(out_addr[i], right));
                         return @out;
 	                }
 	                default:

@@ -79,7 +79,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = #(caster)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = #(caster)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -92,7 +92,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = #(caster)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = #(caster)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -100,7 +100,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = #(caster)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = #(caster)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -160,7 +160,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = Converts.ToBoolean(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = Converts.ToBoolean(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -173,7 +173,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = Converts.ToBoolean(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = Converts.ToBoolean(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -181,7 +181,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = Converts.ToBoolean(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = Converts.ToBoolean(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -216,7 +216,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = Converts.ToByte(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = Converts.ToByte(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -229,7 +229,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = Converts.ToByte(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = Converts.ToByte(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -237,7 +237,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = Converts.ToByte(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = Converts.ToByte(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -272,7 +272,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = Converts.ToInt16(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = Converts.ToInt16(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -285,7 +285,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = Converts.ToInt16(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = Converts.ToInt16(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -293,7 +293,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = Converts.ToInt16(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = Converts.ToInt16(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -328,7 +328,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = Converts.ToUInt16(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = Converts.ToUInt16(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -341,7 +341,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = Converts.ToUInt16(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = Converts.ToUInt16(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -349,7 +349,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = Converts.ToUInt16(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = Converts.ToUInt16(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -384,7 +384,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = Converts.ToInt32(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = Converts.ToInt32(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -397,7 +397,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = Converts.ToInt32(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = Converts.ToInt32(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -405,7 +405,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = Converts.ToInt32(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = Converts.ToInt32(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -440,7 +440,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = Converts.ToUInt32(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = Converts.ToUInt32(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -453,7 +453,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = Converts.ToUInt32(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = Converts.ToUInt32(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -461,7 +461,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = Converts.ToUInt32(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = Converts.ToUInt32(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -496,7 +496,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = Converts.ToInt64(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = Converts.ToInt64(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -509,7 +509,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = Converts.ToInt64(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = Converts.ToInt64(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -517,7 +517,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = Converts.ToInt64(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = Converts.ToInt64(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -552,7 +552,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = Converts.ToUInt64(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = Converts.ToUInt64(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -565,7 +565,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = Converts.ToUInt64(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = Converts.ToUInt64(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -573,7 +573,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = Converts.ToUInt64(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = Converts.ToUInt64(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -608,7 +608,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = Converts.ToChar(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = Converts.ToChar(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -621,7 +621,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = Converts.ToChar(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = Converts.ToChar(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -629,7 +629,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = Converts.ToChar(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = Converts.ToChar(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -664,7 +664,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = Converts.ToDouble(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = Converts.ToDouble(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -677,7 +677,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = Converts.ToDouble(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = Converts.ToDouble(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -685,7 +685,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = Converts.ToDouble(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = Converts.ToDouble(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -720,7 +720,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = Converts.ToSingle(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = Converts.ToSingle(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -733,7 +733,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = Converts.ToSingle(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = Converts.ToSingle(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -741,7 +741,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = Converts.ToSingle(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = Converts.ToSingle(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -776,7 +776,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = Converts.ToDecimal(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = Converts.ToDecimal(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -789,7 +789,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = Converts.ToDecimal(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = Converts.ToDecimal(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -797,7 +797,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = Converts.ToDecimal(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = Converts.ToDecimal(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -851,7 +851,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = Converts.ToBoolean(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = Converts.ToBoolean(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -864,7 +864,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = Converts.ToBoolean(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = Converts.ToBoolean(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -872,7 +872,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = Converts.ToBoolean(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = Converts.ToBoolean(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -907,7 +907,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (byte)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (byte)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -920,7 +920,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (byte)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (byte)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -928,7 +928,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (byte)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (byte)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -963,7 +963,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (short)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (short)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -976,7 +976,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (short)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (short)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -984,7 +984,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (short)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (short)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -1019,7 +1019,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (ushort)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (ushort)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -1032,7 +1032,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (ushort)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (ushort)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -1040,7 +1040,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (ushort)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (ushort)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -1075,7 +1075,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (int)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (int)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -1088,7 +1088,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (int)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (int)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -1096,7 +1096,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (int)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (int)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -1131,7 +1131,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (uint)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (uint)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -1144,7 +1144,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (uint)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (uint)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -1152,7 +1152,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (uint)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (uint)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -1187,7 +1187,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (long)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (long)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -1200,7 +1200,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (long)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (long)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -1208,7 +1208,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (long)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (long)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -1243,7 +1243,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (ulong)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (ulong)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -1256,7 +1256,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (ulong)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (ulong)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -1264,7 +1264,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (ulong)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (ulong)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -1299,7 +1299,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (char)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (char)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -1312,7 +1312,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (char)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (char)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -1320,7 +1320,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (char)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (char)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -1355,7 +1355,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (double)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (double)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -1368,7 +1368,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (double)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (double)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -1376,7 +1376,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (double)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (double)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -1411,7 +1411,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (float)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (float)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -1424,7 +1424,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (float)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (float)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -1432,7 +1432,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (float)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (float)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -1467,7 +1467,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (decimal)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (decimal)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -1480,7 +1480,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (decimal)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (decimal)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -1488,7 +1488,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (decimal)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (decimal)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -1542,7 +1542,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = Converts.ToBoolean(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = Converts.ToBoolean(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -1555,7 +1555,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = Converts.ToBoolean(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = Converts.ToBoolean(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -1563,7 +1563,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = Converts.ToBoolean(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = Converts.ToBoolean(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -1598,7 +1598,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (byte)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (byte)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -1611,7 +1611,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (byte)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (byte)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -1619,7 +1619,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (byte)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (byte)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -1654,7 +1654,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (short)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (short)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -1667,7 +1667,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (short)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (short)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -1675,7 +1675,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (short)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (short)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -1710,7 +1710,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (ushort)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (ushort)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -1723,7 +1723,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (ushort)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (ushort)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -1731,7 +1731,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (ushort)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (ushort)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -1766,7 +1766,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (int)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (int)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -1779,7 +1779,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (int)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (int)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -1787,7 +1787,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (int)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (int)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -1822,7 +1822,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (uint)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (uint)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -1835,7 +1835,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (uint)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (uint)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -1843,7 +1843,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (uint)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (uint)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -1878,7 +1878,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (long)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (long)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -1891,7 +1891,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (long)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (long)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -1899,7 +1899,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (long)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (long)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -1934,7 +1934,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (ulong)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (ulong)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -1947,7 +1947,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (ulong)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (ulong)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -1955,7 +1955,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (ulong)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (ulong)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -1990,7 +1990,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (char)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (char)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -2003,7 +2003,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (char)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (char)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -2011,7 +2011,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (char)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (char)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -2046,7 +2046,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (double)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (double)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -2059,7 +2059,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (double)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (double)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -2067,7 +2067,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (double)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (double)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -2102,7 +2102,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (float)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (float)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -2115,7 +2115,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (float)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (float)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -2123,7 +2123,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (float)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (float)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -2158,7 +2158,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (decimal)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (decimal)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -2171,7 +2171,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (decimal)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (decimal)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -2179,7 +2179,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (decimal)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (decimal)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -2233,7 +2233,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = Converts.ToBoolean(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = Converts.ToBoolean(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -2246,7 +2246,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = Converts.ToBoolean(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = Converts.ToBoolean(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -2254,7 +2254,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = Converts.ToBoolean(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = Converts.ToBoolean(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -2289,7 +2289,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (byte)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (byte)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -2302,7 +2302,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (byte)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (byte)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -2310,7 +2310,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (byte)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (byte)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -2345,7 +2345,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (short)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (short)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -2358,7 +2358,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (short)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (short)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -2366,7 +2366,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (short)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (short)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -2401,7 +2401,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (ushort)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (ushort)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -2414,7 +2414,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (ushort)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (ushort)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -2422,7 +2422,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (ushort)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (ushort)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -2457,7 +2457,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (int)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (int)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -2470,7 +2470,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (int)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (int)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -2478,7 +2478,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (int)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (int)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -2513,7 +2513,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (uint)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (uint)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -2526,7 +2526,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (uint)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (uint)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -2534,7 +2534,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (uint)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (uint)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -2569,7 +2569,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (long)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (long)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -2582,7 +2582,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (long)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (long)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -2590,7 +2590,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (long)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (long)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -2625,7 +2625,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (ulong)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (ulong)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -2638,7 +2638,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (ulong)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (ulong)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -2646,7 +2646,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (ulong)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (ulong)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -2681,7 +2681,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (char)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (char)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -2694,7 +2694,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (char)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (char)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -2702,7 +2702,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (char)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (char)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -2737,7 +2737,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (double)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (double)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -2750,7 +2750,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (double)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (double)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -2758,7 +2758,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (double)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (double)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -2793,7 +2793,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (float)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (float)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -2806,7 +2806,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (float)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (float)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -2814,7 +2814,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (float)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (float)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -2849,7 +2849,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (decimal)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (decimal)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -2862,7 +2862,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (decimal)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (decimal)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -2870,7 +2870,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (decimal)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (decimal)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -2924,7 +2924,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = Converts.ToBoolean(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = Converts.ToBoolean(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -2937,7 +2937,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = Converts.ToBoolean(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = Converts.ToBoolean(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -2945,7 +2945,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = Converts.ToBoolean(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = Converts.ToBoolean(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -2980,7 +2980,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (byte)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (byte)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -2993,7 +2993,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (byte)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (byte)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -3001,7 +3001,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (byte)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (byte)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -3036,7 +3036,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (short)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (short)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -3049,7 +3049,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (short)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (short)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -3057,7 +3057,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (short)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (short)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -3092,7 +3092,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (ushort)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (ushort)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -3105,7 +3105,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (ushort)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (ushort)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -3113,7 +3113,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (ushort)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (ushort)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -3148,7 +3148,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (int)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (int)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -3161,7 +3161,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (int)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (int)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -3169,7 +3169,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (int)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (int)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -3204,7 +3204,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (uint)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (uint)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -3217,7 +3217,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (uint)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (uint)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -3225,7 +3225,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (uint)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (uint)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -3260,7 +3260,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (long)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (long)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -3273,7 +3273,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (long)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (long)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -3281,7 +3281,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (long)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (long)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -3316,7 +3316,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (ulong)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (ulong)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -3329,7 +3329,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (ulong)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (ulong)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -3337,7 +3337,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (ulong)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (ulong)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -3372,7 +3372,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (char)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (char)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -3385,7 +3385,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (char)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (char)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -3393,7 +3393,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (char)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (char)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -3428,7 +3428,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (double)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (double)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -3441,7 +3441,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (double)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (double)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -3449,7 +3449,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (double)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (double)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -3484,7 +3484,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (float)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (float)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -3497,7 +3497,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (float)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (float)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -3505,7 +3505,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (float)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (float)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -3540,7 +3540,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (decimal)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (decimal)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -3553,7 +3553,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (decimal)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (decimal)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -3561,7 +3561,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (decimal)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (decimal)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -3615,7 +3615,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = Converts.ToBoolean(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = Converts.ToBoolean(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -3628,7 +3628,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = Converts.ToBoolean(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = Converts.ToBoolean(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -3636,7 +3636,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = Converts.ToBoolean(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = Converts.ToBoolean(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -3671,7 +3671,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (byte)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (byte)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -3684,7 +3684,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (byte)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (byte)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -3692,7 +3692,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (byte)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (byte)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -3727,7 +3727,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (short)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (short)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -3740,7 +3740,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (short)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (short)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -3748,7 +3748,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (short)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (short)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -3783,7 +3783,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (ushort)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (ushort)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -3796,7 +3796,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (ushort)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (ushort)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -3804,7 +3804,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (ushort)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (ushort)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -3839,7 +3839,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (int)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (int)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -3852,7 +3852,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (int)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (int)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -3860,7 +3860,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (int)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (int)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -3895,7 +3895,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (uint)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (uint)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -3908,7 +3908,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (uint)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (uint)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -3916,7 +3916,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (uint)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (uint)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -3951,7 +3951,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (long)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (long)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -3964,7 +3964,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (long)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (long)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -3972,7 +3972,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (long)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (long)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -4007,7 +4007,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (ulong)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (ulong)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -4020,7 +4020,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (ulong)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (ulong)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -4028,7 +4028,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (ulong)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (ulong)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -4063,7 +4063,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (char)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (char)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -4076,7 +4076,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (char)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (char)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -4084,7 +4084,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (char)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (char)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -4119,7 +4119,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (double)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (double)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -4132,7 +4132,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (double)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (double)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -4140,7 +4140,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (double)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (double)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -4175,7 +4175,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (float)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (float)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -4188,7 +4188,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (float)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (float)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -4196,7 +4196,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (float)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (float)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -4231,7 +4231,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (decimal)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (decimal)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -4244,7 +4244,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (decimal)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (decimal)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -4252,7 +4252,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (decimal)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (decimal)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -4306,7 +4306,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = Converts.ToBoolean(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = Converts.ToBoolean(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -4319,7 +4319,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = Converts.ToBoolean(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = Converts.ToBoolean(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -4327,7 +4327,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = Converts.ToBoolean(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = Converts.ToBoolean(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -4362,7 +4362,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (byte)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (byte)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -4375,7 +4375,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (byte)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (byte)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -4383,7 +4383,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (byte)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (byte)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -4418,7 +4418,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (short)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (short)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -4431,7 +4431,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (short)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (short)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -4439,7 +4439,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (short)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (short)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -4474,7 +4474,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (ushort)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (ushort)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -4487,7 +4487,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (ushort)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (ushort)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -4495,7 +4495,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (ushort)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (ushort)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -4530,7 +4530,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (int)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (int)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -4543,7 +4543,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (int)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (int)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -4551,7 +4551,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (int)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (int)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -4586,7 +4586,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (uint)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (uint)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -4599,7 +4599,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (uint)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (uint)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -4607,7 +4607,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (uint)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (uint)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -4642,7 +4642,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (long)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (long)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -4655,7 +4655,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (long)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (long)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -4663,7 +4663,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (long)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (long)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -4698,7 +4698,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (ulong)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (ulong)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -4711,7 +4711,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (ulong)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (ulong)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -4719,7 +4719,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (ulong)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (ulong)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -4754,7 +4754,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (char)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (char)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -4767,7 +4767,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (char)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (char)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -4775,7 +4775,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (char)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (char)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -4810,7 +4810,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (double)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (double)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -4823,7 +4823,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (double)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (double)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -4831,7 +4831,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (double)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (double)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -4866,7 +4866,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (float)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (float)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -4879,7 +4879,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (float)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (float)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -4887,7 +4887,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (float)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (float)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -4922,7 +4922,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (decimal)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (decimal)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -4935,7 +4935,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (decimal)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (decimal)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -4943,7 +4943,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (decimal)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (decimal)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -4997,7 +4997,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = Converts.ToBoolean(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = Converts.ToBoolean(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -5010,7 +5010,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = Converts.ToBoolean(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = Converts.ToBoolean(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -5018,7 +5018,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = Converts.ToBoolean(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = Converts.ToBoolean(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -5053,7 +5053,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (byte)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (byte)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -5066,7 +5066,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (byte)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (byte)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -5074,7 +5074,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (byte)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (byte)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -5109,7 +5109,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (short)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (short)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -5122,7 +5122,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (short)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (short)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -5130,7 +5130,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (short)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (short)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -5165,7 +5165,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (ushort)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (ushort)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -5178,7 +5178,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (ushort)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (ushort)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -5186,7 +5186,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (ushort)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (ushort)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -5221,7 +5221,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (int)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (int)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -5234,7 +5234,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (int)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (int)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -5242,7 +5242,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (int)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (int)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -5277,7 +5277,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (uint)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (uint)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -5290,7 +5290,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (uint)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (uint)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -5298,7 +5298,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (uint)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (uint)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -5333,7 +5333,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (long)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (long)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -5346,7 +5346,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (long)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (long)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -5354,7 +5354,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (long)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (long)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -5389,7 +5389,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (ulong)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (ulong)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -5402,7 +5402,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (ulong)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (ulong)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -5410,7 +5410,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (ulong)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (ulong)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -5445,7 +5445,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (char)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (char)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -5458,7 +5458,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (char)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (char)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -5466,7 +5466,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (char)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (char)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -5501,7 +5501,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (double)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (double)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -5514,7 +5514,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (double)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (double)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -5522,7 +5522,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (double)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (double)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -5557,7 +5557,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (float)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (float)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -5570,7 +5570,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (float)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (float)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -5578,7 +5578,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (float)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (float)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -5613,7 +5613,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (decimal)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (decimal)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -5626,7 +5626,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (decimal)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (decimal)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -5634,7 +5634,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (decimal)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (decimal)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -5688,7 +5688,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = Converts.ToBoolean(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = Converts.ToBoolean(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -5701,7 +5701,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = Converts.ToBoolean(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = Converts.ToBoolean(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -5709,7 +5709,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = Converts.ToBoolean(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = Converts.ToBoolean(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -5744,7 +5744,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (byte)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (byte)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -5757,7 +5757,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (byte)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (byte)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -5765,7 +5765,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (byte)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (byte)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -5800,7 +5800,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (short)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (short)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -5813,7 +5813,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (short)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (short)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -5821,7 +5821,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (short)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (short)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -5856,7 +5856,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (ushort)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (ushort)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -5869,7 +5869,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (ushort)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (ushort)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -5877,7 +5877,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (ushort)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (ushort)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -5912,7 +5912,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (int)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (int)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -5925,7 +5925,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (int)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (int)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -5933,7 +5933,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (int)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (int)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -5968,7 +5968,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (uint)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (uint)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -5981,7 +5981,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (uint)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (uint)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -5989,7 +5989,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (uint)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (uint)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -6024,7 +6024,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (long)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (long)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -6037,7 +6037,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (long)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (long)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -6045,7 +6045,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (long)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (long)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -6080,7 +6080,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (ulong)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (ulong)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -6093,7 +6093,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (ulong)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (ulong)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -6101,7 +6101,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (ulong)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (ulong)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -6136,7 +6136,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (char)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (char)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -6149,7 +6149,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (char)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (char)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -6157,7 +6157,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (char)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (char)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -6192,7 +6192,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (double)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (double)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -6205,7 +6205,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (double)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (double)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -6213,7 +6213,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (double)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (double)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -6248,7 +6248,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (float)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (float)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -6261,7 +6261,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (float)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (float)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -6269,7 +6269,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (float)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (float)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -6304,7 +6304,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (decimal)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (decimal)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -6317,7 +6317,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (decimal)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (decimal)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -6325,7 +6325,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (decimal)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (decimal)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -6379,7 +6379,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = Converts.ToBoolean(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = Converts.ToBoolean(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -6392,7 +6392,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = Converts.ToBoolean(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = Converts.ToBoolean(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -6400,7 +6400,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = Converts.ToBoolean(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = Converts.ToBoolean(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -6435,7 +6435,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (byte)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (byte)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -6448,7 +6448,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (byte)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (byte)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -6456,7 +6456,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (byte)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (byte)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -6491,7 +6491,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (short)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (short)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -6504,7 +6504,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (short)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (short)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -6512,7 +6512,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (short)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (short)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -6547,7 +6547,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (ushort)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (ushort)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -6560,7 +6560,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (ushort)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (ushort)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -6568,7 +6568,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (ushort)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (ushort)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -6603,7 +6603,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (int)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (int)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -6616,7 +6616,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (int)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (int)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -6624,7 +6624,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (int)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (int)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -6659,7 +6659,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (uint)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (uint)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -6672,7 +6672,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (uint)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (uint)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -6680,7 +6680,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (uint)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (uint)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -6715,7 +6715,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (long)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (long)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -6728,7 +6728,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (long)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (long)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -6736,7 +6736,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (long)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (long)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -6771,7 +6771,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (ulong)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (ulong)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -6784,7 +6784,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (ulong)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (ulong)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -6792,7 +6792,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (ulong)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (ulong)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -6827,7 +6827,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (char)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (char)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -6840,7 +6840,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (char)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (char)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -6848,7 +6848,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (char)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (char)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -6883,7 +6883,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (double)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (double)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -6896,7 +6896,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (double)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (double)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -6904,7 +6904,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (double)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (double)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -6939,7 +6939,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (float)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (float)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -6952,7 +6952,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (float)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (float)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -6960,7 +6960,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (float)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (float)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -6995,7 +6995,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (decimal)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (decimal)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -7008,7 +7008,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (decimal)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (decimal)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -7016,7 +7016,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (decimal)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (decimal)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -7070,7 +7070,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = Converts.ToBoolean(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = Converts.ToBoolean(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -7083,7 +7083,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = Converts.ToBoolean(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = Converts.ToBoolean(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -7091,7 +7091,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = Converts.ToBoolean(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = Converts.ToBoolean(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -7126,7 +7126,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (byte)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (byte)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -7139,7 +7139,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (byte)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (byte)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -7147,7 +7147,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (byte)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (byte)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -7182,7 +7182,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (short)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (short)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -7195,7 +7195,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (short)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (short)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -7203,7 +7203,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (short)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (short)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -7238,7 +7238,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (ushort)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (ushort)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -7251,7 +7251,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (ushort)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (ushort)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -7259,7 +7259,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (ushort)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (ushort)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -7294,7 +7294,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (int)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (int)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -7307,7 +7307,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (int)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (int)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -7315,7 +7315,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (int)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (int)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -7350,7 +7350,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (uint)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (uint)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -7363,7 +7363,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (uint)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (uint)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -7371,7 +7371,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (uint)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (uint)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -7406,7 +7406,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (long)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (long)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -7419,7 +7419,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (long)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (long)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -7427,7 +7427,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (long)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (long)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -7462,7 +7462,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (ulong)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (ulong)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -7475,7 +7475,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (ulong)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (ulong)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -7483,7 +7483,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (ulong)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (ulong)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -7518,7 +7518,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (char)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (char)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -7531,7 +7531,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (char)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (char)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -7539,7 +7539,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (char)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (char)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -7574,7 +7574,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (double)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (double)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -7587,7 +7587,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (double)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (double)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -7595,7 +7595,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (double)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (double)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -7630,7 +7630,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (float)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (float)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -7643,7 +7643,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (float)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (float)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -7651,7 +7651,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (float)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (float)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -7686,7 +7686,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (decimal)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (decimal)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -7699,7 +7699,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (decimal)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (decimal)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -7707,7 +7707,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (decimal)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (decimal)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -7761,7 +7761,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = Converts.ToBoolean(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = Converts.ToBoolean(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -7774,7 +7774,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = Converts.ToBoolean(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = Converts.ToBoolean(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -7782,7 +7782,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = Converts.ToBoolean(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = Converts.ToBoolean(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -7817,7 +7817,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (byte)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (byte)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -7830,7 +7830,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (byte)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (byte)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -7838,7 +7838,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (byte)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (byte)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -7873,7 +7873,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (short)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (short)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -7886,7 +7886,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (short)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (short)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -7894,7 +7894,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (short)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (short)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -7929,7 +7929,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (ushort)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (ushort)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -7942,7 +7942,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (ushort)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (ushort)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -7950,7 +7950,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (ushort)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (ushort)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -7985,7 +7985,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (int)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (int)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -7998,7 +7998,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (int)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (int)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -8006,7 +8006,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (int)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (int)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -8041,7 +8041,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (uint)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (uint)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -8054,7 +8054,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (uint)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (uint)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -8062,7 +8062,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (uint)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (uint)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -8097,7 +8097,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (long)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (long)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -8110,7 +8110,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (long)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (long)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -8118,7 +8118,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (long)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (long)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -8153,7 +8153,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (ulong)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (ulong)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -8166,7 +8166,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (ulong)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (ulong)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -8174,7 +8174,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (ulong)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (ulong)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -8209,7 +8209,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (char)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (char)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -8222,7 +8222,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (char)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (char)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -8230,7 +8230,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (char)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (char)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -8265,7 +8265,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (double)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (double)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -8278,7 +8278,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (double)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (double)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -8286,7 +8286,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (double)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (double)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -8321,7 +8321,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (float)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (float)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -8334,7 +8334,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (float)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (float)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -8342,7 +8342,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (float)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (float)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 
@@ -8377,7 +8377,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (decimal)(Operator.Mod((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = (decimal)(Operator.Mod((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -8390,7 +8390,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = (decimal)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = (decimal)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -8398,7 +8398,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = (decimal)(Operator.Mod((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = (decimal)(Operator.Mod((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 

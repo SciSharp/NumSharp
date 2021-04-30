@@ -40,12 +40,12 @@ namespace NumSharp.Backends
                             {
                                 var maxval = Converts.To#1(_max.GetAtIndex(i));
                                 var minval = Converts.To#1(_min.GetAtIndex(i));
-                                var val = *(out_addr + i);
+                                var val = out_addr[i];
                                 if (val > maxval)
                                     val = maxval;
                                 else if (val < minval)
                                     val = minval;
-                                *(out_addr + i) = val;
+                                out_addr[i] = val;
                             });
                             return @out;
 	                    }
@@ -60,12 +60,12 @@ namespace NumSharp.Backends
                             {
                                 var maxval = Converts.ToByte(_max.GetAtIndex(i));
                                 var minval = Converts.ToByte(_min.GetAtIndex(i));
-                                var val = *(out_addr + i);
+                                var val = out_addr[i];
                                 if (val > maxval)
                                     val = maxval;
                                 else if (val < minval)
                                     val = minval;
-                                *(out_addr + i) = val;
+                                out_addr[i] = val;
                             });
                             return @out;
                         }
@@ -76,12 +76,12 @@ namespace NumSharp.Backends
                             {
                                 var maxval = Converts.ToInt16(_max.GetAtIndex(i));
                                 var minval = Converts.ToInt16(_min.GetAtIndex(i));
-                                var val = *(out_addr + i);
+                                var val = out_addr[i];
                                 if (val > maxval)
                                     val = maxval;
                                 else if (val < minval)
                                     val = minval;
-                                *(out_addr + i) = val;
+                                out_addr[i] = val;
                             });
                             return @out;
                         }
@@ -92,12 +92,12 @@ namespace NumSharp.Backends
                             {
                                 var maxval = Converts.ToUInt16(_max.GetAtIndex(i));
                                 var minval = Converts.ToUInt16(_min.GetAtIndex(i));
-                                var val = *(out_addr + i);
+                                var val = out_addr[i];
                                 if (val > maxval)
                                     val = maxval;
                                 else if (val < minval)
                                     val = minval;
-                                *(out_addr + i) = val;
+                                out_addr[i] = val;
                             });
                             return @out;
                         }
@@ -108,12 +108,12 @@ namespace NumSharp.Backends
                             {
                                 var maxval = Converts.ToInt32(_max.GetAtIndex(i));
                                 var minval = Converts.ToInt32(_min.GetAtIndex(i));
-                                var val = *(out_addr + i);
+                                var val = out_addr[i];
                                 if (val > maxval)
                                     val = maxval;
                                 else if (val < minval)
                                     val = minval;
-                                *(out_addr + i) = val;
+                                out_addr[i] = val;
                             });
                             return @out;
                         }
@@ -124,12 +124,12 @@ namespace NumSharp.Backends
                             {
                                 var maxval = Converts.ToUInt32(_max.GetAtIndex(i));
                                 var minval = Converts.ToUInt32(_min.GetAtIndex(i));
-                                var val = *(out_addr + i);
+                                var val = out_addr[i];
                                 if (val > maxval)
                                     val = maxval;
                                 else if (val < minval)
                                     val = minval;
-                                *(out_addr + i) = val;
+                                out_addr[i] = val;
                             });
                             return @out;
                         }
@@ -140,12 +140,12 @@ namespace NumSharp.Backends
                             {
                                 var maxval = Converts.ToInt64(_max.GetAtIndex(i));
                                 var minval = Converts.ToInt64(_min.GetAtIndex(i));
-                                var val = *(out_addr + i);
+                                var val = out_addr[i];
                                 if (val > maxval)
                                     val = maxval;
                                 else if (val < minval)
                                     val = minval;
-                                *(out_addr + i) = val;
+                                out_addr[i] = val;
                             });
                             return @out;
                         }
@@ -156,12 +156,12 @@ namespace NumSharp.Backends
                             {
                                 var maxval = Converts.ToUInt64(_max.GetAtIndex(i));
                                 var minval = Converts.ToUInt64(_min.GetAtIndex(i));
-                                var val = *(out_addr + i);
+                                var val = out_addr[i];
                                 if (val > maxval)
                                     val = maxval;
                                 else if (val < minval)
                                     val = minval;
-                                *(out_addr + i) = val;
+                                out_addr[i] = val;
                             });
                             return @out;
                         }
@@ -172,12 +172,12 @@ namespace NumSharp.Backends
                             {
                                 var maxval = Converts.ToChar(_max.GetAtIndex(i));
                                 var minval = Converts.ToChar(_min.GetAtIndex(i));
-                                var val = *(out_addr + i);
+                                var val = out_addr[i];
                                 if (val > maxval)
                                     val = maxval;
                                 else if (val < minval)
                                     val = minval;
-                                *(out_addr + i) = val;
+                                out_addr[i] = val;
                             });
                             return @out;
                         }
@@ -188,12 +188,12 @@ namespace NumSharp.Backends
                             {
                                 var maxval = Converts.ToDouble(_max.GetAtIndex(i));
                                 var minval = Converts.ToDouble(_min.GetAtIndex(i));
-                                var val = *(out_addr + i);
+                                var val = out_addr[i];
                                 if (val > maxval)
                                     val = maxval;
                                 else if (val < minval)
                                     val = minval;
-                                *(out_addr + i) = val;
+                                out_addr[i] = val;
                             });
                             return @out;
                         }
@@ -204,12 +204,12 @@ namespace NumSharp.Backends
                             {
                                 var maxval = Converts.ToSingle(_max.GetAtIndex(i));
                                 var minval = Converts.ToSingle(_min.GetAtIndex(i));
-                                var val = *(out_addr + i);
+                                var val = out_addr[i];
                                 if (val > maxval)
                                     val = maxval;
                                 else if (val < minval)
                                     val = minval;
-                                *(out_addr + i) = val;
+                                out_addr[i] = val;
                             });
                             return @out;
                         }
@@ -220,12 +220,12 @@ namespace NumSharp.Backends
                             {
                                 var maxval = Converts.ToDecimal(_max.GetAtIndex(i));
                                 var minval = Converts.ToDecimal(_min.GetAtIndex(i));
-                                var val = *(out_addr + i);
+                                var val = out_addr[i];
                                 if (val > maxval)
                                     val = maxval;
                                 else if (val < minval)
                                     val = minval;
-                                *(out_addr + i) = val;
+                                out_addr[i] = val;
                             });
                             return @out;
                         }
@@ -249,10 +249,10 @@ namespace NumSharp.Backends
                             Parallel.For(0, len, i =>
                             {
                                 var minval = Converts.To#1(_min.GetAtIndex(i));
-                                var val = *(out_addr + i);
+                                var val = out_addr[i];
                                 if (val < minval)
                                     val = minval;
-                                *(out_addr + i) = val;
+                                out_addr[i] = val;
                             });
                             return @out;
 	                    }
@@ -267,10 +267,10 @@ namespace NumSharp.Backends
                             Parallel.For(0, len, i =>
                             {
                                 var minval = Converts.ToByte(_min.GetAtIndex(i));
-                                var val = *(out_addr + i);
+                                var val = out_addr[i];
                                 if (val < minval)
                                     val = minval;
-                                *(out_addr + i) = val;
+                                out_addr[i] = val;
                             });
                             return @out;
                         }
@@ -280,10 +280,10 @@ namespace NumSharp.Backends
                             Parallel.For(0, len, i =>
                             {
                                 var minval = Converts.ToInt16(_min.GetAtIndex(i));
-                                var val = *(out_addr + i);
+                                var val = out_addr[i];
                                 if (val < minval)
                                     val = minval;
-                                *(out_addr + i) = val;
+                                out_addr[i] = val;
                             });
                             return @out;
                         }
@@ -293,10 +293,10 @@ namespace NumSharp.Backends
                             Parallel.For(0, len, i =>
                             {
                                 var minval = Converts.ToUInt16(_min.GetAtIndex(i));
-                                var val = *(out_addr + i);
+                                var val = out_addr[i];
                                 if (val < minval)
                                     val = minval;
-                                *(out_addr + i) = val;
+                                out_addr[i] = val;
                             });
                             return @out;
                         }
@@ -306,10 +306,10 @@ namespace NumSharp.Backends
                             Parallel.For(0, len, i =>
                             {
                                 var minval = Converts.ToInt32(_min.GetAtIndex(i));
-                                var val = *(out_addr + i);
+                                var val = out_addr[i];
                                 if (val < minval)
                                     val = minval;
-                                *(out_addr + i) = val;
+                                out_addr[i] = val;
                             });
                             return @out;
                         }
@@ -319,10 +319,10 @@ namespace NumSharp.Backends
                             Parallel.For(0, len, i =>
                             {
                                 var minval = Converts.ToUInt32(_min.GetAtIndex(i));
-                                var val = *(out_addr + i);
+                                var val = out_addr[i];
                                 if (val < minval)
                                     val = minval;
-                                *(out_addr + i) = val;
+                                out_addr[i] = val;
                             });
                             return @out;
                         }
@@ -332,10 +332,10 @@ namespace NumSharp.Backends
                             Parallel.For(0, len, i =>
                             {
                                 var minval = Converts.ToInt64(_min.GetAtIndex(i));
-                                var val = *(out_addr + i);
+                                var val = out_addr[i];
                                 if (val < minval)
                                     val = minval;
-                                *(out_addr + i) = val;
+                                out_addr[i] = val;
                             });
                             return @out;
                         }
@@ -345,10 +345,10 @@ namespace NumSharp.Backends
                             Parallel.For(0, len, i =>
                             {
                                 var minval = Converts.ToUInt64(_min.GetAtIndex(i));
-                                var val = *(out_addr + i);
+                                var val = out_addr[i];
                                 if (val < minval)
                                     val = minval;
-                                *(out_addr + i) = val;
+                                out_addr[i] = val;
                             });
                             return @out;
                         }
@@ -358,10 +358,10 @@ namespace NumSharp.Backends
                             Parallel.For(0, len, i =>
                             {
                                 var minval = Converts.ToChar(_min.GetAtIndex(i));
-                                var val = *(out_addr + i);
+                                var val = out_addr[i];
                                 if (val < minval)
                                     val = minval;
-                                *(out_addr + i) = val;
+                                out_addr[i] = val;
                             });
                             return @out;
                         }
@@ -371,10 +371,10 @@ namespace NumSharp.Backends
                             Parallel.For(0, len, i =>
                             {
                                 var minval = Converts.ToDouble(_min.GetAtIndex(i));
-                                var val = *(out_addr + i);
+                                var val = out_addr[i];
                                 if (val < minval)
                                     val = minval;
-                                *(out_addr + i) = val;
+                                out_addr[i] = val;
                             });
                             return @out;
                         }
@@ -384,10 +384,10 @@ namespace NumSharp.Backends
                             Parallel.For(0, len, i =>
                             {
                                 var minval = Converts.ToSingle(_min.GetAtIndex(i));
-                                var val = *(out_addr + i);
+                                var val = out_addr[i];
                                 if (val < minval)
                                     val = minval;
-                                *(out_addr + i) = val;
+                                out_addr[i] = val;
                             });
                             return @out;
                         }
@@ -397,10 +397,10 @@ namespace NumSharp.Backends
                             Parallel.For(0, len, i =>
                             {
                                 var minval = Converts.ToDecimal(_min.GetAtIndex(i));
-                                var val = *(out_addr + i);
+                                var val = out_addr[i];
                                 if (val < minval)
                                     val = minval;
-                                *(out_addr + i) = val;
+                                out_addr[i] = val;
                             });
                             return @out;
                         }
@@ -424,10 +424,10 @@ namespace NumSharp.Backends
                             Parallel.For(0, len, i =>
                             {
                                 var maxval = Converts.To#1(_max.GetAtIndex(i));
-                                var val = *(out_addr + i);
+                                var val = out_addr[i];
                                 if (val > maxval)
                                     val = maxval;
-                                *(out_addr + i) = val;
+                                out_addr[i] = val;
                             });
                             return @out;
 	                    }
@@ -442,10 +442,10 @@ namespace NumSharp.Backends
                             Parallel.For(0, len, i =>
                             {
                                 var maxval = Converts.ToByte(_max.GetAtIndex(i));
-                                var val = *(out_addr + i);
+                                var val = out_addr[i];
                                 if (val > maxval)
                                     val = maxval;
-                                *(out_addr + i) = val;
+                                out_addr[i] = val;
                             });
                             return @out;
                         }
@@ -455,10 +455,10 @@ namespace NumSharp.Backends
                             Parallel.For(0, len, i =>
                             {
                                 var maxval = Converts.ToInt16(_max.GetAtIndex(i));
-                                var val = *(out_addr + i);
+                                var val = out_addr[i];
                                 if (val > maxval)
                                     val = maxval;
-                                *(out_addr + i) = val;
+                                out_addr[i] = val;
                             });
                             return @out;
                         }
@@ -468,10 +468,10 @@ namespace NumSharp.Backends
                             Parallel.For(0, len, i =>
                             {
                                 var maxval = Converts.ToUInt16(_max.GetAtIndex(i));
-                                var val = *(out_addr + i);
+                                var val = out_addr[i];
                                 if (val > maxval)
                                     val = maxval;
-                                *(out_addr + i) = val;
+                                out_addr[i] = val;
                             });
                             return @out;
                         }
@@ -481,10 +481,10 @@ namespace NumSharp.Backends
                             Parallel.For(0, len, i =>
                             {
                                 var maxval = Converts.ToInt32(_max.GetAtIndex(i));
-                                var val = *(out_addr + i);
+                                var val = out_addr[i];
                                 if (val > maxval)
                                     val = maxval;
-                                *(out_addr + i) = val;
+                                out_addr[i] = val;
                             });
                             return @out;
                         }
@@ -494,10 +494,10 @@ namespace NumSharp.Backends
                             Parallel.For(0, len, i =>
                             {
                                 var maxval = Converts.ToUInt32(_max.GetAtIndex(i));
-                                var val = *(out_addr + i);
+                                var val = out_addr[i];
                                 if (val > maxval)
                                     val = maxval;
-                                *(out_addr + i) = val;
+                                out_addr[i] = val;
                             });
                             return @out;
                         }
@@ -507,10 +507,10 @@ namespace NumSharp.Backends
                             Parallel.For(0, len, i =>
                             {
                                 var maxval = Converts.ToInt64(_max.GetAtIndex(i));
-                                var val = *(out_addr + i);
+                                var val = out_addr[i];
                                 if (val > maxval)
                                     val = maxval;
-                                *(out_addr + i) = val;
+                                out_addr[i] = val;
                             });
                             return @out;
                         }
@@ -520,10 +520,10 @@ namespace NumSharp.Backends
                             Parallel.For(0, len, i =>
                             {
                                 var maxval = Converts.ToUInt64(_max.GetAtIndex(i));
-                                var val = *(out_addr + i);
+                                var val = out_addr[i];
                                 if (val > maxval)
                                     val = maxval;
-                                *(out_addr + i) = val;
+                                out_addr[i] = val;
                             });
                             return @out;
                         }
@@ -533,10 +533,10 @@ namespace NumSharp.Backends
                             Parallel.For(0, len, i =>
                             {
                                 var maxval = Converts.ToChar(_max.GetAtIndex(i));
-                                var val = *(out_addr + i);
+                                var val = out_addr[i];
                                 if (val > maxval)
                                     val = maxval;
-                                *(out_addr + i) = val;
+                                out_addr[i] = val;
                             });
                             return @out;
                         }
@@ -546,10 +546,10 @@ namespace NumSharp.Backends
                             Parallel.For(0, len, i =>
                             {
                                 var maxval = Converts.ToDouble(_max.GetAtIndex(i));
-                                var val = *(out_addr + i);
+                                var val = out_addr[i];
                                 if (val > maxval)
                                     val = maxval;
-                                *(out_addr + i) = val;
+                                out_addr[i] = val;
                             });
                             return @out;
                         }
@@ -559,10 +559,10 @@ namespace NumSharp.Backends
                             Parallel.For(0, len, i =>
                             {
                                 var maxval = Converts.ToSingle(_max.GetAtIndex(i));
-                                var val = *(out_addr + i);
+                                var val = out_addr[i];
                                 if (val > maxval)
                                     val = maxval;
-                                *(out_addr + i) = val;
+                                out_addr[i] = val;
                             });
                             return @out;
                         }
@@ -572,10 +572,10 @@ namespace NumSharp.Backends
                             Parallel.For(0, len, i =>
                             {
                                 var maxval = Converts.ToDecimal(_max.GetAtIndex(i));
-                                var val = *(out_addr + i);
+                                var val = out_addr[i];
                                 if (val > maxval)
                                     val = maxval;
-                                *(out_addr + i) = val;
+                                out_addr[i] = val;
                             });
                             return @out;
                         }

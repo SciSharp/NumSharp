@@ -2409,7 +2409,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (#102) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -2445,7 +2445,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (byte) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -2461,7 +2461,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (short) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -2477,7 +2477,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (ushort) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -2493,7 +2493,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (int) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -2509,7 +2509,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (uint) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -2525,7 +2525,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (long) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -2541,7 +2541,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (ulong) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -2557,7 +2557,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (char) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -2573,7 +2573,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (double) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -2589,7 +2589,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (float) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -2605,7 +2605,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (decimal) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -2630,7 +2630,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (byte) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -2646,7 +2646,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (short) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -2662,7 +2662,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (ushort) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -2678,7 +2678,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (int) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -2694,7 +2694,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (uint) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -2710,7 +2710,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (long) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -2726,7 +2726,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (ulong) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -2742,7 +2742,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (char) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -2758,7 +2758,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (double) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -2774,7 +2774,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (float) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -2790,7 +2790,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (decimal) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -2815,7 +2815,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (byte) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -2831,7 +2831,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (short) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -2847,7 +2847,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (ushort) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -2863,7 +2863,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (int) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -2879,7 +2879,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (uint) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -2895,7 +2895,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (long) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -2911,7 +2911,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (ulong) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -2927,7 +2927,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (char) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -2943,7 +2943,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (double) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -2959,7 +2959,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (float) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -2975,7 +2975,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (decimal) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -3000,7 +3000,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (byte) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -3016,7 +3016,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (short) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -3032,7 +3032,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (ushort) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -3048,7 +3048,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (int) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -3064,7 +3064,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (uint) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -3080,7 +3080,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (long) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -3096,7 +3096,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (ulong) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -3112,7 +3112,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (char) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -3128,7 +3128,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (double) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -3144,7 +3144,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (float) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -3160,7 +3160,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (decimal) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -3185,7 +3185,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (byte) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -3201,7 +3201,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (short) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -3217,7 +3217,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (ushort) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -3233,7 +3233,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (int) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -3249,7 +3249,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (uint) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -3265,7 +3265,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (long) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -3281,7 +3281,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (ulong) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -3297,7 +3297,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (char) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -3313,7 +3313,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (double) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -3329,7 +3329,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (float) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -3345,7 +3345,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (decimal) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -3370,7 +3370,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (byte) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -3386,7 +3386,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (short) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -3402,7 +3402,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (ushort) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -3418,7 +3418,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (int) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -3434,7 +3434,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (uint) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -3450,7 +3450,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (long) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -3466,7 +3466,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (ulong) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -3482,7 +3482,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (char) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -3498,7 +3498,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (double) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -3514,7 +3514,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (float) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -3530,7 +3530,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (decimal) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -3555,7 +3555,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (byte) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -3571,7 +3571,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (short) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -3587,7 +3587,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (ushort) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -3603,7 +3603,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (int) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -3619,7 +3619,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (uint) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -3635,7 +3635,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (long) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -3651,7 +3651,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (ulong) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -3667,7 +3667,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (char) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -3683,7 +3683,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (double) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -3699,7 +3699,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (float) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -3715,7 +3715,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (decimal) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -3740,7 +3740,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (byte) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -3756,7 +3756,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (short) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -3772,7 +3772,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (ushort) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -3788,7 +3788,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (int) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -3804,7 +3804,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (uint) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -3820,7 +3820,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (long) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -3836,7 +3836,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (ulong) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -3852,7 +3852,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (char) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -3868,7 +3868,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (double) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -3884,7 +3884,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (float) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -3900,7 +3900,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (decimal) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -3925,7 +3925,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (byte) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -3941,7 +3941,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (short) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -3957,7 +3957,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (ushort) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -3973,7 +3973,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (int) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -3989,7 +3989,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (uint) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -4005,7 +4005,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (long) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -4021,7 +4021,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (ulong) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -4037,7 +4037,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (char) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -4053,7 +4053,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (double) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -4069,7 +4069,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (float) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -4085,7 +4085,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (decimal) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -4110,7 +4110,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (byte) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -4126,7 +4126,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (short) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -4142,7 +4142,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (ushort) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -4158,7 +4158,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (int) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -4174,7 +4174,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (uint) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -4190,7 +4190,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (long) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -4206,7 +4206,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (ulong) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -4222,7 +4222,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (char) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -4238,7 +4238,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (double) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -4254,7 +4254,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (float) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -4270,7 +4270,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (decimal) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -4295,7 +4295,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (byte) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -4311,7 +4311,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (short) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -4327,7 +4327,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (ushort) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -4343,7 +4343,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (int) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -4359,7 +4359,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (uint) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -4375,7 +4375,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (long) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -4391,7 +4391,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (ulong) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -4407,7 +4407,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (char) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -4423,7 +4423,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (double) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -4439,7 +4439,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (float) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;
@@ -4455,7 +4455,7 @@ namespace NumSharp.Backends
                             while (hasNext())
                             {
                                 sum += (decimal) moveNext();
-                                *(addr + i++) = sum;
+                                addr[i++] = sum;
                             }
 
                             return ret;

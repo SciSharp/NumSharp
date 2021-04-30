@@ -32,12 +32,12 @@ namespace NumSharp.Backends
                         var out_addr = (#2*)@out.Address;
                         Parallel.For(0, len, i =>
                         {
-                            var val = *(out_addr + i);
+                            var val = out_addr[i];
                             if (val > maxval)
                                 val = maxval;
                             else if (val < minval)
                                 val = minval;
-                            *(out_addr + i) = val;
+                            out_addr[i] = val;
                         });
                         return @out;
 	                }
@@ -49,12 +49,12 @@ namespace NumSharp.Backends
                         var out_addr = (decimal*)@out.Address;
                         Parallel.For(0, len, i =>
                         {
-                            var val = *(out_addr + i);
+                            var val = out_addr[i];
                             if (val > maxval)
                                 val = maxval;
                             else if (val < minval)
                                 val = minval;
-                            *(out_addr + i) = val;
+                            out_addr[i] = val;
                         });
                         return @out;
 	                }
@@ -68,12 +68,12 @@ namespace NumSharp.Backends
                             var out_addr = (byte*)@out.Address;
                             Parallel.For(0, len, i =>
                             {
-                                var val = *(out_addr + i);
+                                var val = out_addr[i];
                                 if (val > maxval)
                                     val = maxval;
                                 else if (val < minval)
                                     val = minval;
-                                *(out_addr + i) = val;
+                                out_addr[i] = val;
                             });
                             return @out;
                         }
@@ -84,12 +84,12 @@ namespace NumSharp.Backends
                             var out_addr = (short*)@out.Address;
                             Parallel.For(0, len, i =>
                             {
-                                var val = *(out_addr + i);
+                                var val = out_addr[i];
                                 if (val > maxval)
                                     val = maxval;
                                 else if (val < minval)
                                     val = minval;
-                                *(out_addr + i) = val;
+                                out_addr[i] = val;
                             });
                             return @out;
                         }
@@ -100,12 +100,12 @@ namespace NumSharp.Backends
                             var out_addr = (ushort*)@out.Address;
                             Parallel.For(0, len, i =>
                             {
-                                var val = *(out_addr + i);
+                                var val = out_addr[i];
                                 if (val > maxval)
                                     val = maxval;
                                 else if (val < minval)
                                     val = minval;
-                                *(out_addr + i) = val;
+                                out_addr[i] = val;
                             });
                             return @out;
                         }
@@ -116,12 +116,12 @@ namespace NumSharp.Backends
                             var out_addr = (int*)@out.Address;
                             Parallel.For(0, len, i =>
                             {
-                                var val = *(out_addr + i);
+                                var val = out_addr[i];
                                 if (val > maxval)
                                     val = maxval;
                                 else if (val < minval)
                                     val = minval;
-                                *(out_addr + i) = val;
+                                out_addr[i] = val;
                             });
                             return @out;
                         }
@@ -132,12 +132,12 @@ namespace NumSharp.Backends
                             var out_addr = (uint*)@out.Address;
                             Parallel.For(0, len, i =>
                             {
-                                var val = *(out_addr + i);
+                                var val = out_addr[i];
                                 if (val > maxval)
                                     val = maxval;
                                 else if (val < minval)
                                     val = minval;
-                                *(out_addr + i) = val;
+                                out_addr[i] = val;
                             });
                             return @out;
                         }
@@ -148,12 +148,12 @@ namespace NumSharp.Backends
                             var out_addr = (long*)@out.Address;
                             Parallel.For(0, len, i =>
                             {
-                                var val = *(out_addr + i);
+                                var val = out_addr[i];
                                 if (val > maxval)
                                     val = maxval;
                                 else if (val < minval)
                                     val = minval;
-                                *(out_addr + i) = val;
+                                out_addr[i] = val;
                             });
                             return @out;
                         }
@@ -164,12 +164,12 @@ namespace NumSharp.Backends
                             var out_addr = (ulong*)@out.Address;
                             Parallel.For(0, len, i =>
                             {
-                                var val = *(out_addr + i);
+                                var val = out_addr[i];
                                 if (val > maxval)
                                     val = maxval;
                                 else if (val < minval)
                                     val = minval;
-                                *(out_addr + i) = val;
+                                out_addr[i] = val;
                             });
                             return @out;
                         }
@@ -180,12 +180,12 @@ namespace NumSharp.Backends
                             var out_addr = (char*)@out.Address;
                             Parallel.For(0, len, i =>
                             {
-                                var val = *(out_addr + i);
+                                var val = out_addr[i];
                                 if (val > maxval)
                                     val = maxval;
                                 else if (val < minval)
                                     val = minval;
-                                *(out_addr + i) = val;
+                                out_addr[i] = val;
                             });
                             return @out;
                         }
@@ -196,12 +196,12 @@ namespace NumSharp.Backends
                             var out_addr = (double*)@out.Address;
                             Parallel.For(0, len, i =>
                             {
-                                var val = *(out_addr + i);
+                                var val = out_addr[i];
                                 if (val > maxval)
                                     val = maxval;
                                 else if (val < minval)
                                     val = minval;
-                                *(out_addr + i) = val;
+                                out_addr[i] = val;
                             });
                             return @out;
                         }
@@ -212,12 +212,12 @@ namespace NumSharp.Backends
                             var out_addr = (float*)@out.Address;
                             Parallel.For(0, len, i =>
                             {
-                                var val = *(out_addr + i);
+                                var val = out_addr[i];
                                 if (val > maxval)
                                     val = maxval;
                                 else if (val < minval)
                                     val = minval;
-                                *(out_addr + i) = val;
+                                out_addr[i] = val;
                             });
                             return @out;
                         }
@@ -228,12 +228,12 @@ namespace NumSharp.Backends
                             var out_addr = (decimal*)@out.Address;
                             Parallel.For(0, len, i =>
                             {
-                                var val = *(out_addr + i);
+                                var val = out_addr[i];
                                 if (val > maxval)
                                     val = maxval;
                                 else if (val < minval)
                                     val = minval;
-                                *(out_addr + i) = val;
+                                out_addr[i] = val;
                             });
                             return @out;
                         }
@@ -256,10 +256,10 @@ namespace NumSharp.Backends
                         var out_addr = (#2*)@out.Address;
                         Parallel.For(0, len, i =>
                         {
-                            var val = *(out_addr + i);
+                            var val = out_addr[i];
                             if (val < minval)
                                 val = minval;
-                            *(out_addr + i) = val;
+                            out_addr[i] = val;
                         });
                         return @out;
 	                }
@@ -270,10 +270,10 @@ namespace NumSharp.Backends
                         var out_addr = (decimal*)@out.Address;
                         Parallel.For(0, len, i =>
                         {
-                            var val = *(out_addr + i);
+                            var val = out_addr[i];
                             if (val < minval)
                                 val = minval;
-                            *(out_addr + i) = val;
+                            out_addr[i] = val;
                         });
                         return @out;
 	                }
@@ -286,10 +286,10 @@ namespace NumSharp.Backends
                         var out_addr = (byte*)@out.Address;
                         Parallel.For(0, len, i =>
                         {
-                            var val = *(out_addr + i);
+                            var val = out_addr[i];
                             if (val < minval)
                                 val = minval;
-                            *(out_addr + i) = val;
+                            out_addr[i] = val;
                         });
                         return @out;
 	                }
@@ -299,10 +299,10 @@ namespace NumSharp.Backends
                         var out_addr = (short*)@out.Address;
                         Parallel.For(0, len, i =>
                         {
-                            var val = *(out_addr + i);
+                            var val = out_addr[i];
                             if (val < minval)
                                 val = minval;
-                            *(out_addr + i) = val;
+                            out_addr[i] = val;
                         });
                         return @out;
 	                }
@@ -312,10 +312,10 @@ namespace NumSharp.Backends
                         var out_addr = (ushort*)@out.Address;
                         Parallel.For(0, len, i =>
                         {
-                            var val = *(out_addr + i);
+                            var val = out_addr[i];
                             if (val < minval)
                                 val = minval;
-                            *(out_addr + i) = val;
+                            out_addr[i] = val;
                         });
                         return @out;
 	                }
@@ -325,10 +325,10 @@ namespace NumSharp.Backends
                         var out_addr = (int*)@out.Address;
                         Parallel.For(0, len, i =>
                         {
-                            var val = *(out_addr + i);
+                            var val = out_addr[i];
                             if (val < minval)
                                 val = minval;
-                            *(out_addr + i) = val;
+                            out_addr[i] = val;
                         });
                         return @out;
 	                }
@@ -338,10 +338,10 @@ namespace NumSharp.Backends
                         var out_addr = (uint*)@out.Address;
                         Parallel.For(0, len, i =>
                         {
-                            var val = *(out_addr + i);
+                            var val = out_addr[i];
                             if (val < minval)
                                 val = minval;
-                            *(out_addr + i) = val;
+                            out_addr[i] = val;
                         });
                         return @out;
 	                }
@@ -351,10 +351,10 @@ namespace NumSharp.Backends
                         var out_addr = (long*)@out.Address;
                         Parallel.For(0, len, i =>
                         {
-                            var val = *(out_addr + i);
+                            var val = out_addr[i];
                             if (val < minval)
                                 val = minval;
-                            *(out_addr + i) = val;
+                            out_addr[i] = val;
                         });
                         return @out;
 	                }
@@ -364,10 +364,10 @@ namespace NumSharp.Backends
                         var out_addr = (ulong*)@out.Address;
                         Parallel.For(0, len, i =>
                         {
-                            var val = *(out_addr + i);
+                            var val = out_addr[i];
                             if (val < minval)
                                 val = minval;
-                            *(out_addr + i) = val;
+                            out_addr[i] = val;
                         });
                         return @out;
 	                }
@@ -377,10 +377,10 @@ namespace NumSharp.Backends
                         var out_addr = (char*)@out.Address;
                         Parallel.For(0, len, i =>
                         {
-                            var val = *(out_addr + i);
+                            var val = out_addr[i];
                             if (val < minval)
                                 val = minval;
-                            *(out_addr + i) = val;
+                            out_addr[i] = val;
                         });
                         return @out;
 	                }
@@ -390,10 +390,10 @@ namespace NumSharp.Backends
                         var out_addr = (double*)@out.Address;
                         Parallel.For(0, len, i =>
                         {
-                            var val = *(out_addr + i);
+                            var val = out_addr[i];
                             if (val < minval)
                                 val = minval;
-                            *(out_addr + i) = val;
+                            out_addr[i] = val;
                         });
                         return @out;
 	                }
@@ -403,10 +403,10 @@ namespace NumSharp.Backends
                         var out_addr = (float*)@out.Address;
                         Parallel.For(0, len, i =>
                         {
-                            var val = *(out_addr + i);
+                            var val = out_addr[i];
                             if (val < minval)
                                 val = minval;
-                            *(out_addr + i) = val;
+                            out_addr[i] = val;
                         });
                         return @out;
 	                }
@@ -416,10 +416,10 @@ namespace NumSharp.Backends
                         var out_addr = (decimal*)@out.Address;
                         Parallel.For(0, len, i =>
                         {
-                            var val = *(out_addr + i);
+                            var val = out_addr[i];
                             if (val < minval)
                                 val = minval;
-                            *(out_addr + i) = val;
+                            out_addr[i] = val;
                         });
                         return @out;
 	                }
@@ -443,10 +443,10 @@ namespace NumSharp.Backends
                         var out_addr = (#2*)@out.Address;
                         Parallel.For(0, len, i =>
                         {
-                            var val = *(out_addr + i);
+                            var val = out_addr[i];
                             if (val > maxval)
                                 val = maxval;
-                            *(out_addr + i) = val;
+                            out_addr[i] = val;
                         });
                         return @out;
 	                }
@@ -457,10 +457,10 @@ namespace NumSharp.Backends
                         var out_addr = (decimal*)@out.Address;
                         Parallel.For(0, len, i =>
                         {
-                            var val = *(out_addr + i);
+                            var val = out_addr[i];
                             if (val > maxval)
                                 val = maxval;
-                            *(out_addr + i) = val;
+                            out_addr[i] = val;
                         });
                         return @out;
 	                }
@@ -473,10 +473,10 @@ namespace NumSharp.Backends
                         var out_addr = (byte*)@out.Address;
                         Parallel.For(0, len, i =>
                         {
-                            var val = *(out_addr + i);
+                            var val = out_addr[i];
                             if (val > maxval)
                                 val = maxval;
-                            *(out_addr + i) = val;
+                            out_addr[i] = val;
                         });
                         return @out;
 	                }
@@ -486,10 +486,10 @@ namespace NumSharp.Backends
                         var out_addr = (short*)@out.Address;
                         Parallel.For(0, len, i =>
                         {
-                            var val = *(out_addr + i);
+                            var val = out_addr[i];
                             if (val > maxval)
                                 val = maxval;
-                            *(out_addr + i) = val;
+                            out_addr[i] = val;
                         });
                         return @out;
 	                }
@@ -499,10 +499,10 @@ namespace NumSharp.Backends
                         var out_addr = (ushort*)@out.Address;
                         Parallel.For(0, len, i =>
                         {
-                            var val = *(out_addr + i);
+                            var val = out_addr[i];
                             if (val > maxval)
                                 val = maxval;
-                            *(out_addr + i) = val;
+                            out_addr[i] = val;
                         });
                         return @out;
 	                }
@@ -512,10 +512,10 @@ namespace NumSharp.Backends
                         var out_addr = (int*)@out.Address;
                         Parallel.For(0, len, i =>
                         {
-                            var val = *(out_addr + i);
+                            var val = out_addr[i];
                             if (val > maxval)
                                 val = maxval;
-                            *(out_addr + i) = val;
+                            out_addr[i] = val;
                         });
                         return @out;
 	                }
@@ -525,10 +525,10 @@ namespace NumSharp.Backends
                         var out_addr = (uint*)@out.Address;
                         Parallel.For(0, len, i =>
                         {
-                            var val = *(out_addr + i);
+                            var val = out_addr[i];
                             if (val > maxval)
                                 val = maxval;
-                            *(out_addr + i) = val;
+                            out_addr[i] = val;
                         });
                         return @out;
 	                }
@@ -538,10 +538,10 @@ namespace NumSharp.Backends
                         var out_addr = (long*)@out.Address;
                         Parallel.For(0, len, i =>
                         {
-                            var val = *(out_addr + i);
+                            var val = out_addr[i];
                             if (val > maxval)
                                 val = maxval;
-                            *(out_addr + i) = val;
+                            out_addr[i] = val;
                         });
                         return @out;
 	                }
@@ -551,10 +551,10 @@ namespace NumSharp.Backends
                         var out_addr = (ulong*)@out.Address;
                         Parallel.For(0, len, i =>
                         {
-                            var val = *(out_addr + i);
+                            var val = out_addr[i];
                             if (val > maxval)
                                 val = maxval;
-                            *(out_addr + i) = val;
+                            out_addr[i] = val;
                         });
                         return @out;
 	                }
@@ -564,10 +564,10 @@ namespace NumSharp.Backends
                         var out_addr = (char*)@out.Address;
                         Parallel.For(0, len, i =>
                         {
-                            var val = *(out_addr + i);
+                            var val = out_addr[i];
                             if (val > maxval)
                                 val = maxval;
-                            *(out_addr + i) = val;
+                            out_addr[i] = val;
                         });
                         return @out;
 	                }
@@ -577,10 +577,10 @@ namespace NumSharp.Backends
                         var out_addr = (double*)@out.Address;
                         Parallel.For(0, len, i =>
                         {
-                            var val = *(out_addr + i);
+                            var val = out_addr[i];
                             if (val > maxval)
                                 val = maxval;
-                            *(out_addr + i) = val;
+                            out_addr[i] = val;
                         });
                         return @out;
 	                }
@@ -590,10 +590,10 @@ namespace NumSharp.Backends
                         var out_addr = (float*)@out.Address;
                         Parallel.For(0, len, i =>
                         {
-                            var val = *(out_addr + i);
+                            var val = out_addr[i];
                             if (val > maxval)
                                 val = maxval;
-                            *(out_addr + i) = val;
+                            out_addr[i] = val;
                         });
                         return @out;
 	                }
@@ -603,10 +603,10 @@ namespace NumSharp.Backends
                         var out_addr = (decimal*)@out.Address;
                         Parallel.For(0, len, i =>
                         {
-                            var val = *(out_addr + i);
+                            var val = out_addr[i];
                             if (val > maxval)
                                 val = maxval;
-                            *(out_addr + i) = val;
+                            out_addr[i] = val;
                         });
                         return @out;
 	                }

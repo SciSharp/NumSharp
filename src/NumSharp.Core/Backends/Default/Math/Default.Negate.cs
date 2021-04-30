@@ -21,7 +21,7 @@ namespace NumSharp.Backends
                         var addr = (bool*)nd.Address;
                         var len = nd.size;
                         for (int i = 0; i < len; i++)
-                            *(out_addr + i) = !*(addr + i);
+                            out_addr[i] = !addr[i];
                         return @out;
                     }
 #if _REGEN
@@ -34,11 +34,11 @@ namespace NumSharp.Backends
 
                         for (int i = 0; i < len; i++)
                         {
-                            var val = *(addr + i);
+                            var val = addr[i];
                             if (val == #3)
-                                *(out_addr + i) = #3;
+                                out_addr[i] = #3;
                             else
-                                *(out_addr + i) = Converts.To#1(~val+1);
+                                out_addr[i] = Converts.To#1(~val+1);
                         }
 
                         return @out;
@@ -52,7 +52,7 @@ namespace NumSharp.Backends
                         var len = nd.size;
 
                         for (int i = 0; i < len; i++)
-                            *(out_addr + i) = Converts.To#1(-*(addr + i));
+                            out_addr[i] = Converts.To#1(-addr[i]);
 
                         return @out;
 	                }
@@ -68,11 +68,11 @@ namespace NumSharp.Backends
 
                         for (int i = 0; i < len; i++)
                         {
-                            var val = *(addr + i);
+                            var val = addr[i];
                             if (val == 0)
-                                *(out_addr + i) = 0;
+                                out_addr[i] = 0;
                             else
-                                *(out_addr + i) = Converts.ToByte(~val + 1);
+                                out_addr[i] = Converts.ToByte(~val + 1);
                         }
 
                         return @out;
@@ -86,11 +86,11 @@ namespace NumSharp.Backends
 
                         for (int i = 0; i < len; i++)
                         {
-                            var val = *(addr + i);
+                            var val = addr[i];
                             if (val == 0)
-                                *(out_addr + i) = 0;
+                                out_addr[i] = 0;
                             else
-                                *(out_addr + i) = Converts.ToUInt16(~val + 1);
+                                out_addr[i] = Converts.ToUInt16(~val + 1);
                         }
 
                         return @out;
@@ -104,11 +104,11 @@ namespace NumSharp.Backends
 
                         for (int i = 0; i < len; i++)
                         {
-                            var val = *(addr + i);
+                            var val = addr[i];
                             if (val == 0U)
-                                *(out_addr + i) = 0U;
+                                out_addr[i] = 0U;
                             else
-                                *(out_addr + i) = Converts.ToUInt32(~val + 1);
+                                out_addr[i] = Converts.ToUInt32(~val + 1);
                         }
 
                         return @out;
@@ -122,11 +122,11 @@ namespace NumSharp.Backends
 
                         for (int i = 0; i < len; i++)
                         {
-                            var val = *(addr + i);
+                            var val = addr[i];
                             if (val == 0UL)
-                                *(out_addr + i) = 0UL;
+                                out_addr[i] = 0UL;
                             else
-                                *(out_addr + i) = Converts.ToUInt64(~val + 1);
+                                out_addr[i] = Converts.ToUInt64(~val + 1);
                         }
 
                         return @out;
@@ -140,11 +140,11 @@ namespace NumSharp.Backends
 
                         for (int i = 0; i < len; i++)
                         {
-                            var val = *(addr + i);
+                            var val = addr[i];
                             if (val == '\0')
-                                *(out_addr + i) = '\0';
+                                out_addr[i] = '\0';
                             else
-                                *(out_addr + i) = Converts.ToChar(~val + 1);
+                                out_addr[i] = Converts.ToChar(~val + 1);
                         }
 
                         return @out;
@@ -157,7 +157,7 @@ namespace NumSharp.Backends
                         var len = nd.size;
 
                         for (int i = 0; i < len; i++)
-                            *(out_addr + i) = Converts.ToInt16(-*(addr + i));
+                            out_addr[i] = Converts.ToInt16(-addr[i]);
 
                         return @out;
                     }
@@ -169,7 +169,7 @@ namespace NumSharp.Backends
                         var len = nd.size;
 
                         for (int i = 0; i < len; i++)
-                            *(out_addr + i) = Converts.ToInt32(-*(addr + i));
+                            out_addr[i] = Converts.ToInt32(-addr[i]);
 
                         return @out;
                     }
@@ -181,7 +181,7 @@ namespace NumSharp.Backends
                         var len = nd.size;
 
                         for (int i = 0; i < len; i++)
-                            *(out_addr + i) = Converts.ToInt64(-*(addr + i));
+                            out_addr[i] = Converts.ToInt64(-addr[i]);
 
                         return @out;
                     }
@@ -193,7 +193,7 @@ namespace NumSharp.Backends
                         var len = nd.size;
 
                         for (int i = 0; i < len; i++)
-                            *(out_addr + i) = Converts.ToDouble(-*(addr + i));
+                            out_addr[i] = Converts.ToDouble(-addr[i]);
 
                         return @out;
                     }
@@ -205,7 +205,7 @@ namespace NumSharp.Backends
                         var len = nd.size;
 
                         for (int i = 0; i < len; i++)
-                            *(out_addr + i) = Converts.ToSingle(-*(addr + i));
+                            out_addr[i] = Converts.ToSingle(-addr[i]);
 
                         return @out;
                     }
@@ -217,7 +217,7 @@ namespace NumSharp.Backends
                         var len = nd.size;
 
                         for (int i = 0; i < len; i++)
-                            *(out_addr + i) = Converts.ToDecimal(-*(addr + i));
+                            out_addr[i] = Converts.ToDecimal(-addr[i]);
 
                         return @out;
                     }

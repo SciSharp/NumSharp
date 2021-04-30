@@ -82,7 +82,7 @@ namespace NumSharp
                     unsafe
                     {
                         var addr = (bool*)ret.Address;
-                        Parallel.For(0, num, i => *(addr + i) = (start + i * step) != 0);
+                        Parallel.For(0, num, i => addr[i] = (start + i * step) != 0);
                     }
 
                     return ret;
@@ -93,7 +93,7 @@ namespace NumSharp
                     unsafe
                     {
                         var addr = (#2*)ret.Address;
-                        Parallel.For(0, num, i => *(addr + i) = Converts.To#1(start + i * step));
+                        Parallel.For(0, num, i => addr[i] = Converts.To#1(start + i * step));
                     }
 
                     return ret;
@@ -107,7 +107,7 @@ namespace NumSharp
                     unsafe
                     {
                         var addr = (bool*)ret.Address;
-                        Parallel.For(0, num, i => *(addr + i) = (start + i * step) != 0);
+                        Parallel.For(0, num, i => addr[i] = (start + i * step) != 0);
                     }
 
                     return ret;
@@ -117,7 +117,7 @@ namespace NumSharp
                     unsafe
                     {
                         var addr = (byte*)ret.Address;
-                        Parallel.For(0, num, i => *(addr + i) = Converts.ToByte(start + i * step));
+                        Parallel.For(0, num, i => addr[i] = Converts.ToByte(start + i * step));
                     }
 
                     return ret;
@@ -127,7 +127,7 @@ namespace NumSharp
                     unsafe
                     {
                         var addr = (short*)ret.Address;
-                        Parallel.For(0, num, i => *(addr + i) = Converts.ToInt16(start + i * step));
+                        Parallel.For(0, num, i => addr[i] = Converts.ToInt16(start + i * step));
                     }
 
                     return ret;
@@ -137,7 +137,7 @@ namespace NumSharp
                     unsafe
                     {
                         var addr = (ushort*)ret.Address;
-                        Parallel.For(0, num, i => *(addr + i) = Converts.ToUInt16(start + i * step));
+                        Parallel.For(0, num, i => addr[i] = Converts.ToUInt16(start + i * step));
                     }
 
                     return ret;
@@ -147,7 +147,7 @@ namespace NumSharp
                     unsafe
                     {
                         var addr = (int*)ret.Address;
-                        Parallel.For(0, num, i => *(addr + i) = Converts.ToInt32(start + i * step));
+                        Parallel.For(0, num, i => addr[i] = Converts.ToInt32(start + i * step));
                     }
 
                     return ret;
@@ -157,7 +157,7 @@ namespace NumSharp
                     unsafe
                     {
                         var addr = (uint*)ret.Address;
-                        Parallel.For(0, num, i => *(addr + i) = Converts.ToUInt32(start + i * step));
+                        Parallel.For(0, num, i => addr[i] = Converts.ToUInt32(start + i * step));
                     }
 
                     return ret;
@@ -167,7 +167,7 @@ namespace NumSharp
                     unsafe
                     {
                         var addr = (long*)ret.Address;
-                        Parallel.For(0, num, i => *(addr + i) = Converts.ToInt64(start + i * step));
+                        Parallel.For(0, num, i => addr[i] = Converts.ToInt64(start + i * step));
                     }
 
                     return ret;
@@ -177,7 +177,7 @@ namespace NumSharp
                     unsafe
                     {
                         var addr = (ulong*)ret.Address;
-                        Parallel.For(0, num, i => *(addr + i) = Converts.ToUInt64(start + i * step));
+                        Parallel.For(0, num, i => addr[i] = Converts.ToUInt64(start + i * step));
                     }
 
                     return ret;
@@ -187,7 +187,7 @@ namespace NumSharp
                     unsafe
                     {
                         var addr = (char*)ret.Address;
-                        Parallel.For(0, num, i => *(addr + i) = Converts.ToChar(start + i * step));
+                        Parallel.For(0, num, i => addr[i] = Converts.ToChar(start + i * step));
                     }
 
                     return ret;
@@ -197,7 +197,7 @@ namespace NumSharp
                     unsafe
                     {
                         var addr = (double*)ret.Address;
-                        Parallel.For(0, num, i => *(addr + i) = Converts.ToDouble(start + i * step));
+                        Parallel.For(0, num, i => addr[i] = Converts.ToDouble(start + i * step));
                     }
 
                     return ret;
@@ -207,7 +207,7 @@ namespace NumSharp
                     unsafe
                     {
                         var addr = (float*)ret.Address;
-                        Parallel.For(0, num, i => *(addr + i) = Converts.ToSingle(start + i * step));
+                        Parallel.For(0, num, i => addr[i] = Converts.ToSingle(start + i * step));
                     }
 
                     return ret;
@@ -217,7 +217,7 @@ namespace NumSharp
                     unsafe
                     {
                         var addr = (decimal*)ret.Address;
-                        Parallel.For(0, num, i => *(addr + i) = Converts.ToDecimal(start + i * step));
+                        Parallel.For(0, num, i => addr[i] = Converts.ToDecimal(start + i * step));
                     }
 
                     return ret;

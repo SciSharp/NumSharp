@@ -24,14 +24,14 @@ namespace NumSharp.Backends
 	                case NPTypeCode.#1:
 	                {
                         var out_addr = (#2*)@out.Address;
-                        Parallel.For(0, len, i => *(out_addr + i) = Converts.To#1(Math.Frac(*(out_addr + i))));
+                        Parallel.For(0, len, i => out_addr[i] = Converts.To#1(Math.Frac(out_addr[i])));
                         return @out;
 	                }
 	                %
                     case NPTypeCode.Decimal:
 	                {
                         var out_addr = (decimal*)@out.Address;
-                        Parallel.For(0, len, i => *(out_addr + i) = (DecimalEx.Frac(*(out_addr + i))));
+                        Parallel.For(0, len, i => out_addr[i] = (DecimalEx.Frac(out_addr[i])));
                         return @out;
 	                }
 	                default:
@@ -43,8 +43,8 @@ namespace NumSharp.Backends
                         var out1_addr = (double*)@out1.Address;
                         Parallel.For(0, len, (i) =>
                         {
-                            var trunc = Math.Truncate(*(out_addr + i));
-                            *(out_addr + i) = Converts.ToDouble(*(out_addr + i) - trunc);
+                            var trunc = Math.Truncate(out_addr[i]);
+                            out_addr[i] = Converts.ToDouble(out_addr[i] - trunc);
                             *(out1_addr + i) = trunc;
                         });
 
@@ -56,8 +56,8 @@ namespace NumSharp.Backends
                         var out1_addr = (float*)@out1.Address;
                         Parallel.For(0, len, (i) =>
                         {
-                            var trunc = Math.Truncate(*(out_addr + i));
-                            *(out_addr + i) = Converts.ToSingle(*(out_addr + i) - trunc);
+                            var trunc = Math.Truncate(out_addr[i]);
+                            out_addr[i] = Converts.ToSingle(out_addr[i] - trunc);
                             *(out1_addr + i) = Convert.ToSingle(trunc);
                         });
 
@@ -69,8 +69,8 @@ namespace NumSharp.Backends
                         var out1_addr = (decimal*)@out1.Address;
                         Parallel.For(0, len, (i) =>
                         {
-                            var trunc = Math.Truncate(*(out_addr + i));
-                            *(out_addr + i) = *(out_addr + i) - trunc;
+                            var trunc = Math.Truncate(out_addr[i]);
+                            out_addr[i] = out_addr[i] - trunc;
                             *(out1_addr + i) = trunc;
                         });
 

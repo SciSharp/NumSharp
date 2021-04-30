@@ -26,7 +26,7 @@ namespace NumSharp
                         var out_addr = (bool*)@out.Address;
                         var addr = (bool*)@out.Address;
                         for (int i = 0; i < len; i++)
-                            *(out_addr + i) = !*(addr + i);
+                            out_addr[i] = !addr[i];
                         return @out;
                     }
 #if _REGEN
@@ -36,9 +36,9 @@ namespace NumSharp
                         var out_addr = (#2*)@out.Address;
 
                         for (int i = 0; i < len; i++) {
-                            var val = *(out_addr + i);
+                            var val = out_addr[i];
                             if (val > 0)
-                                *(out_addr + i) = -val;
+                                out_addr[i] = -val;
                         }
                         return @out;
 	                }
@@ -53,9 +53,9 @@ namespace NumSharp
                         var out_addr = (short*)@out.Address;
 
                         for (int i = 0; i < len; i++) {
-                            var val = *(out_addr + i);
+                            var val = out_addr[i];
                             if (val > 0)
-                                *(out_addr + i) = (short) -val;
+                                out_addr[i] = (short) -val;
                         }
                         return @out;
 	                }
@@ -64,9 +64,9 @@ namespace NumSharp
                         var out_addr = (int*)@out.Address;
 
                         for (int i = 0; i < len; i++) {
-                            var val = *(out_addr + i);
+                            var val = out_addr[i];
                             if (val > 0)
-                                *(out_addr + i) = -val;
+                                out_addr[i] = -val;
                         }
                         return @out;
 	                }
@@ -75,9 +75,9 @@ namespace NumSharp
                         var out_addr = (long*)@out.Address;
 
                         for (int i = 0; i < len; i++) {
-                            var val = *(out_addr + i);
+                            var val = out_addr[i];
                             if (val > 0)
-                                *(out_addr + i) = -val;
+                                out_addr[i] = -val;
                         }
                         return @out;
 	                }
@@ -86,9 +86,9 @@ namespace NumSharp
                         var out_addr = (double*)@out.Address;
 
                         for (int i = 0; i < len; i++) {
-                            var val = *(out_addr + i);
+                            var val = out_addr[i];
                             if (val > 0)
-                                *(out_addr + i) = -val;
+                                out_addr[i] = -val;
                         }
                         return @out;
 	                }
@@ -97,9 +97,9 @@ namespace NumSharp
                         var out_addr = (float*)@out.Address;
 
                         for (int i = 0; i < len; i++) {
-                            var val = *(out_addr + i);
+                            var val = out_addr[i];
                             if (val > 0)
-                                *(out_addr + i) = -val;
+                                out_addr[i] = -val;
                         }
                         return @out;
 	                }
@@ -108,9 +108,9 @@ namespace NumSharp
                         var out_addr = (decimal*)@out.Address;
 
                         for (int i = 0; i < len; i++) {
-                            var val = *(out_addr + i);
+                            var val = out_addr[i];
                             if (val > 0)
-                                *(out_addr + i) = -val;
+                                out_addr[i] = -val;
                         }
                         return @out;
 	                }

@@ -40,7 +40,7 @@ namespace NumSharp.Backends
                     int[] current = incr.Index;
                     do
                     {
-                        *(ret_address + retShape.GetOffset(current)) = (*(lhs_address + BroadcastedLeftShape.GetOffset(current))) %(op_bool) 0 != *(rhs_address + BroadcastedRightShape.GetOffset(current));
+                        ret_address[retShape.GetOffset(current)] = (lhs_address[BroadcastedLeftShape.GetOffset(current)]) %(op_bool) 0 != rhs_address[BroadcastedRightShape.GetOffset(current)];
                     } while (incr.Next() != null);
 
                     return ret;
@@ -63,7 +63,7 @@ namespace NumSharp.Backends
                     int[] current = incr.Index;
                     do
                     {
-                        *(ret_address + retShape.GetOffset(current)) = (*(lhs_address + BroadcastedLeftShape.GetOffset(current)) #(op) (float) *(rhs_address + BroadcastedRightShape.GetOffset(current)));
+                        ret_address[retShape.GetOffset(current)] = (lhs_address[BroadcastedLeftShape.GetOffset(current)] #(op) (float) rhs_address[BroadcastedRightShape.GetOffset(current)]);
                     } while (incr.Next() != null);
 
                     return ret;
@@ -92,7 +92,7 @@ namespace NumSharp.Backends
                     int[] current = incr.Index;
                     do
                     {
-                        *(ret_address + retShape.GetOffset(current)) = (*(lhs_address + BroadcastedLeftShape.GetOffset(current))) == 0 != *(rhs_address + BroadcastedRightShape.GetOffset(current));
+                        ret_address[retShape.GetOffset(current)] = (lhs_address[BroadcastedLeftShape.GetOffset(current)]) == 0 != rhs_address[BroadcastedRightShape.GetOffset(current)];
                     } while (incr.Next() != null);
 
                     return ret;
@@ -114,7 +114,7 @@ namespace NumSharp.Backends
                     int[] current = incr.Index;
                     do
                     {
-                        *(ret_address + retShape.GetOffset(current)) = (*(lhs_address + BroadcastedLeftShape.GetOffset(current)) == (float) *(rhs_address + BroadcastedRightShape.GetOffset(current)));
+                        ret_address[retShape.GetOffset(current)] = (lhs_address[BroadcastedLeftShape.GetOffset(current)] == (float) rhs_address[BroadcastedRightShape.GetOffset(current)]);
                     } while (incr.Next() != null);
 
                     return ret;
@@ -136,7 +136,7 @@ namespace NumSharp.Backends
                     int[] current = incr.Index;
                     do
                     {
-                        *(ret_address + retShape.GetOffset(current)) = (*(lhs_address + BroadcastedLeftShape.GetOffset(current)) == (float) *(rhs_address + BroadcastedRightShape.GetOffset(current)));
+                        ret_address[retShape.GetOffset(current)] = (lhs_address[BroadcastedLeftShape.GetOffset(current)] == (float) rhs_address[BroadcastedRightShape.GetOffset(current)]);
                     } while (incr.Next() != null);
 
                     return ret;
@@ -158,7 +158,7 @@ namespace NumSharp.Backends
                     int[] current = incr.Index;
                     do
                     {
-                        *(ret_address + retShape.GetOffset(current)) = (*(lhs_address + BroadcastedLeftShape.GetOffset(current)) == (float) *(rhs_address + BroadcastedRightShape.GetOffset(current)));
+                        ret_address[retShape.GetOffset(current)] = (lhs_address[BroadcastedLeftShape.GetOffset(current)] == (float) rhs_address[BroadcastedRightShape.GetOffset(current)]);
                     } while (incr.Next() != null);
 
                     return ret;
@@ -180,7 +180,7 @@ namespace NumSharp.Backends
                     int[] current = incr.Index;
                     do
                     {
-                        *(ret_address + retShape.GetOffset(current)) = (*(lhs_address + BroadcastedLeftShape.GetOffset(current)) == (float) *(rhs_address + BroadcastedRightShape.GetOffset(current)));
+                        ret_address[retShape.GetOffset(current)] = (lhs_address[BroadcastedLeftShape.GetOffset(current)] == (float) rhs_address[BroadcastedRightShape.GetOffset(current)]);
                     } while (incr.Next() != null);
 
                     return ret;
@@ -202,7 +202,7 @@ namespace NumSharp.Backends
                     int[] current = incr.Index;
                     do
                     {
-                        *(ret_address + retShape.GetOffset(current)) = (*(lhs_address + BroadcastedLeftShape.GetOffset(current)) == (float) *(rhs_address + BroadcastedRightShape.GetOffset(current)));
+                        ret_address[retShape.GetOffset(current)] = (lhs_address[BroadcastedLeftShape.GetOffset(current)] == (float) rhs_address[BroadcastedRightShape.GetOffset(current)]);
                     } while (incr.Next() != null);
 
                     return ret;
@@ -224,7 +224,7 @@ namespace NumSharp.Backends
                     int[] current = incr.Index;
                     do
                     {
-                        *(ret_address + retShape.GetOffset(current)) = (*(lhs_address + BroadcastedLeftShape.GetOffset(current)) == (float) *(rhs_address + BroadcastedRightShape.GetOffset(current)));
+                        ret_address[retShape.GetOffset(current)] = (lhs_address[BroadcastedLeftShape.GetOffset(current)] == (float) rhs_address[BroadcastedRightShape.GetOffset(current)]);
                     } while (incr.Next() != null);
 
                     return ret;
@@ -246,7 +246,7 @@ namespace NumSharp.Backends
                     int[] current = incr.Index;
                     do
                     {
-                        *(ret_address + retShape.GetOffset(current)) = (*(lhs_address + BroadcastedLeftShape.GetOffset(current)) == (float) *(rhs_address + BroadcastedRightShape.GetOffset(current)));
+                        ret_address[retShape.GetOffset(current)] = (lhs_address[BroadcastedLeftShape.GetOffset(current)] == (float) rhs_address[BroadcastedRightShape.GetOffset(current)]);
                     } while (incr.Next() != null);
 
                     return ret;
@@ -268,7 +268,7 @@ namespace NumSharp.Backends
                     int[] current = incr.Index;
                     do
                     {
-                        *(ret_address + retShape.GetOffset(current)) = (*(lhs_address + BroadcastedLeftShape.GetOffset(current)) == (float) *(rhs_address + BroadcastedRightShape.GetOffset(current)));
+                        ret_address[retShape.GetOffset(current)] = (lhs_address[BroadcastedLeftShape.GetOffset(current)] == (float) rhs_address[BroadcastedRightShape.GetOffset(current)]);
                     } while (incr.Next() != null);
 
                     return ret;
@@ -290,7 +290,7 @@ namespace NumSharp.Backends
                     int[] current = incr.Index;
                     do
                     {
-                        *(ret_address + retShape.GetOffset(current)) = (*(lhs_address + BroadcastedLeftShape.GetOffset(current)) == (float) *(rhs_address + BroadcastedRightShape.GetOffset(current)));
+                        ret_address[retShape.GetOffset(current)] = (lhs_address[BroadcastedLeftShape.GetOffset(current)] == (float) rhs_address[BroadcastedRightShape.GetOffset(current)]);
                     } while (incr.Next() != null);
 
                     return ret;
@@ -312,7 +312,7 @@ namespace NumSharp.Backends
                     int[] current = incr.Index;
                     do
                     {
-                        *(ret_address + retShape.GetOffset(current)) = (*(lhs_address + BroadcastedLeftShape.GetOffset(current)) == (float) *(rhs_address + BroadcastedRightShape.GetOffset(current)));
+                        ret_address[retShape.GetOffset(current)] = (lhs_address[BroadcastedLeftShape.GetOffset(current)] == (float) rhs_address[BroadcastedRightShape.GetOffset(current)]);
                     } while (incr.Next() != null);
 
                     return ret;
@@ -334,7 +334,7 @@ namespace NumSharp.Backends
                     int[] current = incr.Index;
                     do
                     {
-                        *(ret_address + retShape.GetOffset(current)) = (*(lhs_address + BroadcastedLeftShape.GetOffset(current)) == (float) *(rhs_address + BroadcastedRightShape.GetOffset(current)));
+                        ret_address[retShape.GetOffset(current)] = (lhs_address[BroadcastedLeftShape.GetOffset(current)] == (float) rhs_address[BroadcastedRightShape.GetOffset(current)]);
                     } while (incr.Next() != null);
 
                     return ret;

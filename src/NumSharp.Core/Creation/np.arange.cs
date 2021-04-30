@@ -126,7 +126,7 @@ namespace NumSharp
                 {
                     var addr = (float*)nd.Array.Address;
                     for (int add = length - 1, i = 0; add >= 0; add--, i++)
-                        *(addr + i) = 1 + start + add * step;
+                        addr[i] = 1 + start + add * step;
                 }
             }
             else
@@ -135,7 +135,7 @@ namespace NumSharp
                 {
                     var addr = (float*)nd.Array.Address;
                     for (int i = 0; i < length; i++)
-                        *(addr + i) = start + i * step;
+                        addr[i] = start + i * step;
                 }
             }
 
@@ -206,7 +206,7 @@ namespace NumSharp
                 {
                     var addr = (double*)nd.Array.Address;
                     for (int add = length - 1, i = 0; add >= 0; add--, i++)
-                        *(addr + i) = 1 + start + add * step;
+                        addr[i] = 1 + start + add * step;
                 }
             }
             else
@@ -215,7 +215,7 @@ namespace NumSharp
                 {
                     var addr = (double*)nd.Array.Address;
                     for (int i = 0; i < length; i++)
-                        *(addr + i) = start + i * step;
+                        addr[i] = start + i * step;
                 }
             }
 
@@ -315,7 +315,7 @@ namespace NumSharp
                 {
                     var addr = (int*)nd.Array.Address;
                     for (int add = length - 1, i = 0; add >= 0; add--, i++) 
-                        *(addr + i) = 1 + start + add * step;
+                        addr[i] = 1 + start + add * step;
                 }
             }
             else
@@ -324,7 +324,7 @@ namespace NumSharp
                 {
                     var addr = (int*)nd.Array.Address;
                     for (int i = 0; i < length; i++)
-                        *(addr + i) = start + i * step;
+                        addr[i] = start + i * step;
                 }
             }
 

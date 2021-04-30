@@ -623,7 +623,7 @@ namespace NumSharp.Backends.Unmanaged
 
                 for (; i < length; i++)
                 {
-                    *(addr + i) = value;
+                    addr[i] = value;
                 }
             }
         }
@@ -681,7 +681,7 @@ namespace NumSharp.Backends.Unmanaged
 
                 for (; i < length; i++)
                 {
-                    *(addr + i) = value;
+                    addr[i] = value;
                 }
             }
         }

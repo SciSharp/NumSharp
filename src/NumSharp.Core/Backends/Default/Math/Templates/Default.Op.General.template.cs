@@ -71,7 +71,7 @@ namespace NumSharp.Backends
                                 }
 
                                 return ret;
-                            } 
+                            }
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
@@ -84,7 +84,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = #(caster)(Operator.__3__((*(lhs_address + leftOffset++)), (*(rhs_address + rightshape.GetOffset(current)))));
+                                        ret_address[retOffset++] = #(caster)(Operator.__3__((lhs_address[leftOffset++]), (rhs_address[rightshape.GetOffset(current)])));
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
@@ -97,7 +97,7 @@ namespace NumSharp.Backends
                                     incr = new ValueCoordinatesIncrementor(ref retShape);
                                     int[] current = incr.Index;
                                     do {
-                                        *(ret_address + retOffset++) = #(caster)(Operator.__3__((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightOffset++))));
+                                        ret_address[retOffset++] = #(caster)(Operator.__3__((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightOffset++])));
                                     } while (incr.Next() != null);
                                 }
                             } else {
@@ -105,7 +105,7 @@ namespace NumSharp.Backends
                                 incr = new ValueCoordinatesIncrementor(ref retShape);
                                 int[] current = incr.Index;
                                 do {
-                                    *(ret_address + retOffset++) = #(caster)(Operator.__3__((*(lhs_address + leftshape.GetOffset(current))), (*(rhs_address + rightshape.GetOffset(current)))));
+                                    ret_address[retOffset++] = #(caster)(Operator.__3__((lhs_address[leftshape.GetOffset(current)]), (rhs_address[rightshape.GetOffset(current)])));
                                 } while (incr.Next() != null);
                             }
 

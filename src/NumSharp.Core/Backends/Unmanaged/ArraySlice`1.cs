@@ -167,7 +167,7 @@ namespace NumSharp.Backends.Unmanaged
             var addr = Address;
             Parallel.For(0L, Count, (i, state) =>
             {
-                if ((*(addr + i)).Equals(item))
+                if ((addr[i]).Equals(item))
                 {
                     equals = true;
                     state.Stop();
@@ -225,7 +225,7 @@ namespace NumSharp.Backends.Unmanaged
 
                 for (; i < length; i++)
                 {
-                    *(addr + i) = value;
+                    addr[i] = value;
                 }
             }
         }

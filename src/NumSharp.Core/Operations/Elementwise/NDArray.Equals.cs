@@ -28,7 +28,7 @@ namespace NumSharp
                 var addr = results.Address;
 
                 for (int i = 0; i < len; i++)
-                    if (!*(addr + i))
+                    if (!addr[i])
                         return false;
 
                 return true;
