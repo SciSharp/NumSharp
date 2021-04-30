@@ -77,7 +77,7 @@ namespace NumSharp.UnitTest.Selection
         [TestMethod]
         public void Compare()
         {
-            throw new Exception("This test causes memory corruption");
+            throw new Exception("This test kills test engine process due to Debug.Assert");
             NDArray nd = new double[,] { { 1, 2, 3 }, { 4, 5, 6 } };
             (nd < 3).Should().BeOfValues(true, true, false, false, false, false);
 
@@ -1330,7 +1330,7 @@ namespace NumSharp.UnitTest.Selection
         {
             var a = np.arange(8).reshape(2,4);
             a["1, :"] = np.arange(4);
-            a.Should().AllValuesBe(8).And.BeShaped(2,4).And.BeOfValues(0,1,2,3,0,1,2,3);
+            a.Should().BeShaped(2,4).And.BeOfValues(0,1,2,3,0,1,2,3);
         }
 
         [TestMethod]
@@ -1338,7 +1338,7 @@ namespace NumSharp.UnitTest.Selection
         {
             var a = np.arange(8).reshape(2, 4);
             a[1, np.arange(4)] = np.arange(4);
-            a.Should().AllValuesBe(8).And.BeShaped(2, 4).And.BeOfValues(0, 1, 2, 3, 0, 1, 2, 3);
+            a.Should().BeShaped(2, 4).And.BeOfValues(0, 1, 2, 3, 0, 1, 2, 3);
         }
 
         [TestMethod]
@@ -1346,7 +1346,7 @@ namespace NumSharp.UnitTest.Selection
         {
             var a = np.arange(8).reshape(2, 4);
             a[np.array(1), np.arange(4)] = np.arange(4);
-            a.Should().AllValuesBe(8).And.BeShaped(2, 4).And.BeOfValues(0, 1, 2, 3, 0, 1, 2, 3);
+            a.Should().BeShaped(2, 4).And.BeOfValues(0, 1, 2, 3, 0, 1, 2, 3);
         }
 
         [TestMethod]
@@ -1354,7 +1354,7 @@ namespace NumSharp.UnitTest.Selection
         {
             var a = np.arange(8).reshape(2, 4);
             a["1:2", np.arange(4)] = np.arange(4);
-            a.Should().AllValuesBe(8).And.BeShaped(2, 4).And.BeOfValues(0, 1, 2, 3, 0, 1, 2, 3);
+            a.Should().BeShaped(2, 4).And.BeOfValues(0, 1, 2, 3, 0, 1, 2, 3);
         }
 
         [TestMethod]
@@ -1362,7 +1362,7 @@ namespace NumSharp.UnitTest.Selection
         {
             var a = np.arange(8).reshape(2, 4);
             a["1:2", Slice.All] = np.arange(4);
-            a.Should().AllValuesBe(8).And.BeShaped(2, 4).And.BeOfValues(0, 1, 2, 3, 0, 1, 2, 3);
+            a.Should().BeShaped(2, 4).And.BeOfValues(0, 1, 2, 3, 0, 1, 2, 3);
         }
 
         [TestMethod]
@@ -1370,7 +1370,7 @@ namespace NumSharp.UnitTest.Selection
         {
             var a = np.arange(8).reshape(2, 4);
             a[Slice.Index(1), Slice.All] = np.arange(4);
-            a.Should().AllValuesBe(8).And.BeShaped(2, 4).And.BeOfValues(0, 1, 2, 3, 0, 1, 2, 3);
+            a.Should().BeShaped(2, 4).And.BeOfValues(0, 1, 2, 3, 0, 1, 2, 3);
         }
 
         [TestMethod]
@@ -1378,7 +1378,7 @@ namespace NumSharp.UnitTest.Selection
         {
             var a = np.arange(8);
             a[true] = 1;
-            a.Should().AllValuesBe(8).And.BeShaped(8);
+            a.Should().BeShaped(8);
         }
 
         [TestMethod]
