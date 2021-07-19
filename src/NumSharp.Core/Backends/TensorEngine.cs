@@ -79,7 +79,9 @@ namespace NumSharp
         public abstract NDArray Ceil(in NDArray nd, Type dtype);
         public abstract NDArray Ceil(in NDArray nd, NPTypeCode? typeCode = null);
         public abstract NDArray Round(in NDArray nd, Type dtype);
+        public abstract NDArray Round(in NDArray nd, int decimals, Type dtype);
         public abstract NDArray Round(in NDArray nd, NPTypeCode? typeCode = null);
+        public abstract NDArray Round(in NDArray nd, int decimals, NPTypeCode? typeCode = null);
         public abstract (NDArray Fractional, NDArray Intergral) ModF(in NDArray nd, Type dtype);
         public abstract (NDArray Fractional, NDArray Intergral) ModF(in NDArray nd, NPTypeCode? typeCode = null);
        
