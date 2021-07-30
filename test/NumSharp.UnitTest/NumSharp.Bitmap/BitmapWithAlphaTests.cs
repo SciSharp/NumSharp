@@ -49,6 +49,16 @@ namespace NumSharp.UnitTest
             var nd = bitmap.ToNDArray(discardAlpha: false, copy: false);
             nd.Should().BeShaped(1, 554, 475, 3);
         }
+        
+        [TestMethod]
+        public void ToBitmap_Odd_Width()
+        {
+            var bitmap = EmbeddedBitmap("odd-width");
+            var nd = bitmap.ToNDArray(discardAlpha: false, copy: false);
+            var bitmap2 = nd.ToBitmap();
+            bitmap2.Width.Should().Be(bitmap.Width);
+            bitmap2.Height.Should().Be(bitmap.Height);
+        }
 
         [TestMethod]
         public void ToNDArray_Case5_flat()
