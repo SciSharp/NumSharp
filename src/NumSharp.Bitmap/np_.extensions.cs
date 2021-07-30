@@ -87,14 +87,14 @@ namespace NumSharp
                     {
                         if (bmpData.Stride / bmpData.Width == 4) //1byte-per-color
                         {
-                            return ret.reshape(1, bmpData.Height, bmpData.Width, bmpData.Stride / bmpData.Width) //reshape
+                            return ReshapeFlatData(ret, bmpData) // reshape
                                        [Slice.All, Slice.All, Slice.All, new Slice(stop: 3)] //slice
                                       .flat; //flatten
                         }
 
                         if (bmpData.Stride / bmpData.Width == 8) //2bytes-per-color
                         {
-                            return ret.reshape(1, bmpData.Height, bmpData.Width, bmpData.Stride / bmpData.Width) //reshape
+                            return ReshapeFlatData(ret, bmpData) // reshape
                                        [Slice.All, Slice.All, Slice.All, new Slice(stop: 6)] //slice
                                       .flat; //flatten
                         }
@@ -106,7 +106,7 @@ namespace NumSharp
                 }
                 else
                 {
-                    ret = ret.reshape(1, bmpData.Height, bmpData.Width, bmpData.Stride / bmpData.Width); //reshape
+                    ret = ReshapeFlatData(ret, bmpData); //reshape
                     if (discardAlpha)
                     {
                         if (ret.shape[3] == 4) //1byte-per-color
@@ -120,6 +120,25 @@ namespace NumSharp
                     return ret;
                 }
             }
+        }
+
+        /// <summary>
+        /// Reshapes the flat data to match the size of the bitmap.
+        /// </summary>
+        /// <param name="ret">flat 1-dimensional array containing the bitmap data</param>
+        /// <param name="bmpData">Source bitmap</param>
+        /// <returns>An 4-dimensional NDArray that holds the bitmap data contained in `ret`</returns>
+        private static NDArray ReshapeFlatData(NDArray ret, BitmapData bmpData)
+        {
+            var colorBytes = bmpData.Stride / bmpData.Width;
+            var strideWidth = bmpData.Stride / colorBytes; // For odd widths, this width is not equal to bmpData.Width
+            ret = ret.reshape(1, bmpData.Height, strideWidth, bmpData.Stride / bmpData.Width);
+            if (strideWidth != bmpData.Width)
+            {
+                ret = ret[Slice.All, Slice.All, new Slice(stop: bmpData.Width), new Slice(stop: colorBytes)];
+            }
+
+            return ret;
         }
 
         /// <summary>
