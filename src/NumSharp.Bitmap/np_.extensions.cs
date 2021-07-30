@@ -220,8 +220,8 @@ namespace NumSharp
 
             //if flat then initialize based on given format
             if (nd.ndim == 1 && format != PixelFormat.DontCare)
-                nd = nd.reshape(1, height, width, format.ToBytesPerPixel()); //theres a check internally for size mismatch.
-
+                nd = nd.reshape(1, height, width, format.ToBytesPerPixel()); //theres a check internally for size mismatc
+                                  
             if (nd.ndim != 4)
                 throw new ArgumentException("ndarray was expected to be of 4-dimensions, (1, bmpData.Height, bmpData.Width, bytesPerPixel)");
 
@@ -237,6 +237,9 @@ namespace NumSharp
 
             var ret = new Bitmap(width, height, format);
             var bitdata = ret.LockBits(new Rectangle(0, 0, width, height), ImageLockMode.WriteOnly, format);
+            if (bitdata.Stride != width * format.ToBytesPerPixel())
+                nd = np.concatenate((nd, np.zeros((1, height, 1, format.ToBytesPerPixel())).astype(NPTypeCode.Byte)), 2);
+
             try
             {
                 var dst = new ArraySlice<byte>(new UnmanagedMemoryBlock<byte>((byte*)bitdata.Scan0, bitdata.Stride * bitdata.Height));
