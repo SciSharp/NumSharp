@@ -24,6 +24,8 @@
     <EmbeddedResource Remove="data\**" />
     <None Remove="Backends\Unmanaged\Iterators\**" />
     <None Remove="data\**" />
+    <None Remove="NumSharp.Bitmap\resources\odd-width.png" />
+    <EmbeddedResource Include="NumSharp.Bitmap\resources\odd-width.png" />
   </ItemGroup>
 
   <ItemGroup>  
