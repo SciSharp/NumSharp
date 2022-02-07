@@ -28,7 +28,7 @@ namespace NumSharp
             return Storage.ToArray<T>();
         }
 
-        public Array ToMuliDimArray<T>() where T : unmanaged
+        public Array ToMultiDimArray<T>() where T : unmanaged
         {
             var ret = Arrays.Create(typeof(T), shape);
 
