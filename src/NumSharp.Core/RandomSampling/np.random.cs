@@ -22,7 +22,9 @@
             set_state(nativeRandomState);
         }
 
-        protected internal NumPyRandom(int seed) : this(new Randomizer(seed)) { }
+        protected internal NumPyRandom(int seed) : this(new Randomizer(seed)) {
+            Seed = seed;
+        }
 
         protected internal NumPyRandom() : this(new Randomizer()) { }
 
@@ -62,6 +64,7 @@
         /// </summary>
         public void seed(int seed)
         {
+            Seed = seed;
             randomizer = new Randomizer(seed);
         }
 

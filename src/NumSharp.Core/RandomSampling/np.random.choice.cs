@@ -13,7 +13,7 @@
         public NDArray choice(NDArray arr, Shape shape = default, bool replace = true, double[] probabilities = null)
         {
             int arrSize = arr.size;
-            NDArray mask = np.random.choice(arrSize, shape, probabilities: probabilities);
+            NDArray mask = choice(arrSize, shape, probabilities: probabilities);
             return arr[mask];
         }
 
@@ -35,14 +35,14 @@
 
             if (probabilities == null)
             {
-                idx = np.random.randint(0, arr.size, shape);
+                idx = randint(0, arr.size, shape);
             }
             else
             {
 
                 NDArray cdf = np.cumsum(probabilities);
                 cdf /= cdf[cdf.size - 1];
-                NDArray uniformSamples = np.random.uniform(0, 1, (int[]) shape);
+                NDArray uniformSamples = uniform(0, 1, (int[]) shape);
                 idx = np.searchsorted(cdf, uniformSamples);
             }
 
