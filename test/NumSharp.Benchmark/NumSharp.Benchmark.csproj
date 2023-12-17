@@ -2,11 +2,11 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net5.0</TargetFramework>
-    <LangVersion>9.0</LangVersion>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>12.0</LangVersion>
     <Platforms>AnyCPU;x64</Platforms>
-    <ApplicationIcon/>
-    <Win32Resource/>
+    <ApplicationIcon />
+    <Win32Resource />
     <SignAssembly>true</SignAssembly>
     <AssemblyOriginatorKeyFile>Open.snk</AssemblyOriginatorKeyFile>
     <Configurations>Debug;Release;Publish</Configurations>
@@ -14,20 +14,20 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="System.Drawing.Common" Version="5.0.2"/>
-    <PackageReference Include="BenchmarkDotNet" Version="0.12.1"/>
-    <PackageReference Include="Microsoft.CSharp" Version="4.7.0"/>
-    <PackageReference Include="Microsoft.Windows.Compatibility" Version="5.0.2"/>
-    <PackageReference Include="System.Memory" Version="4.5.4"/>
-    <PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="5.0.0"/>
+    <PackageReference Include="System.Drawing.Common" Version="8.0.0" />
+    <PackageReference Include="BenchmarkDotNet" Version="0.12.1" />
+    <PackageReference Include="Microsoft.CSharp" Version="4.7.0" />
+    <PackageReference Include="Microsoft.Windows.Compatibility" Version="5.0.2" />
+    <PackageReference Include="System.Memory" Version="4.5.5" />
+    <PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="6.0.0" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\NumSharp.Core\NumSharp.Core.csproj"/>
+    <ProjectReference Include="..\..\src\NumSharp.Core\NumSharp.Core.csproj" />
   </ItemGroup>
 
   <Target Name="LogDebugInfo">
-    <Message Text="Building for $(TargetFramework) on $(OS)" Importance="High"/>
+    <Message Text="Building for $(TargetFramework) on $(OS)" Importance="High" />
   </Target>
 
 </Project>
