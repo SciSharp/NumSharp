@@ -34,7 +34,6 @@ namespace NumSharp.UnitTest.APIs
         }
 
         [TestMethod]
-        // [DataRow(@"data/arange_f2_le.npy")] // Ignore: Half-precision floats not supported
         [DataRow(@"data/arange_f4_le.npy")]
         [DataRow(@"data/arange_f8_le.npy")]
         [DataRow(@"data/arange_i1.npy")]
@@ -45,20 +44,9 @@ namespace NumSharp.UnitTest.APIs
         [DataRow(@"data/arange_u2_le.npy")]
         [DataRow(@"data/arange_u4_le.npy")]
         [DataRow(@"data/arange_u8_le.npy")]
-        // [DataRow(@"data/arange_f2_be.npy")] // Ignore: Big-endian types not supported
-        // [DataRow(@"data/arange_f4_be.npy")] // Ignore: Big-endian types not supported
-        // [DataRow(@"data/arange_f8_be.npy")] // Ignore: Big-endian types not supported
-        // [DataRow(@"data/arange_i2_be.npy")] // Ignore: Big-endian types not supported
-        // [DataRow(@"data/arange_i4_be.npy")] // Ignore: Big-endian types not supported
-        // [DataRow(@"data/arange_i8_be.npy")] // Ignore: Big-endian types not supported
-        // [DataRow(@"data/arange_u2_be.npy")] // Ignore: Big-endian types not supported
-        // [DataRow(@"data/arange_u4_be.npy")] // Ignore: Big-endian types not supported
-        // [DataRow(@"data/arange_u8_be.npy")] // Ignore: Big-endian types not supported
         public void load_Arange(string path)
         {
-            NDArray arr = np.load(path);            
-            // Assert.IsNotNull(arr);
-            // Assert.IsTrue(arr.ndim == 1 && arr.shape[0] > 0);
+            NDArray arr = np.load(path);
 
             for (int i = 0; i < arr.shape[0]; ++i)
             {
@@ -69,19 +57,15 @@ namespace NumSharp.UnitTest.APIs
 
         [TestMethod]
         [DataRow(@"data/hello_S5.npy")]
-        // [DataRow(@"data/hello_U5_be.npy")] // Ignore: Unicode strings not supported
-        // [DataRow(@"data/hello_U5_le.npy")] // Ignore: Unicode strings not supported
         public void load_HelloWorld(string path)
         {
             string[] arr = np.Load<string[]>(path);
-
             Assert.AreEqual("Hello", arr[0]);
             Assert.AreEqual("World", arr[1]);
         }
 
         [TestMethod]
         [DataRow(@"data/mgrid_i4.npy")]
-        // [DataRow(@"data/mgrid_i4_fortran_order.npy")] // Ignore: Fortran order not supported
         public void load_Mgrid(string path)
         {
             NDArray arr = np.load(path);
@@ -99,12 +83,19 @@ namespace NumSharp.UnitTest.APIs
         [TestMethod]
         [DataRow(@"data/scalar_b1.npy", false)]
         [DataRow(@"data/scalar_i4_le.npy", 42)]
-        // [DataRow(@"data/scalar_i4_be.npy", 42)] // Ignore: Big-endian types not supported
         public void load_Scalar(string path, object expected)
         {
             NDArray arr = np.load(path);
-            
             Assert.AreEqual(Shape.Scalar, arr.shape);
+            Assert.AreEqual(expected, arr.GetValue(0));
+        }
+
+        [TestMethod]
+        [DataRow(@"data/scalar_b1.npy", false)]
+        [DataRow(@"data/scalar_i4_le.npy", 42)]
+        public void LoadMatrix_Scalar(string path, object expected)
+        {
+            Array arr = np.LoadMatrix(path);
             Assert.AreEqual(expected, arr.GetValue(0));
         }
     }
