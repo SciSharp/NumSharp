@@ -33,8 +33,7 @@ namespace NumSharp
                 if (!parseReader(reader, out bytes, out type, out shape))
                     throw new FormatException();
 
-                Array array = Arrays.Create(type, shape.Aggregate((dims, dim) => dims * dim));
-
+                Array array = Arrays.Create(type, shape.Aggregate(1, (dims, dim) => dims * dim));
                 var result = new NDArray(readValueMatrix(reader, array, bytes, type, shape));
                 return result.reshape(shape);
             }
@@ -165,6 +164,10 @@ namespace NumSharp
                 int[] shape;
                 if (!parseReader(reader, out bytes, out type, out shape))
                     throw new FormatException();
+                
+                // Read scalar as a single element array
+                if (shape.Length == 0)
+                    shape = new int[] { 1 };
 
                 Array matrix = Arrays.Create(type, shape);
 
@@ -188,6 +191,10 @@ namespace NumSharp
                 int[] shape;
                 if (!parseReader(reader, out bytes, out type, out shape))
                     throw new FormatException();
+                
+                // Read scalar as a single element array
+                if (shape.Length == 0)
+                    shape = new int[] { 1 };
 
                 Array matrix = Arrays.Create(type, shape);
 
@@ -357,7 +364,7 @@ namespace NumSharp
 
             mark = "'shape': (";
             s = header.IndexOf(mark) + mark.Length;
-            e = header.IndexOf(")", s + 1);
+            e = header.IndexOf(")", s);
             shape = header.Substring(s, e - s).Split(',').Where(v => !String.IsNullOrEmpty(v)).Select(Int32.Parse).ToArray();
 
             return true;
