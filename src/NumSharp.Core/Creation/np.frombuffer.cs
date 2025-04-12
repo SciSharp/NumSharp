@@ -1,109 +1,112 @@
 ﻿using System;
+using System.Runtime.InteropServices;
 using NumSharp.Utilities;
 
 namespace NumSharp
 {
     public static partial class np
     {
-        public static NDArray frombuffer(byte[] bytes, Type dtype)
+        public static NDArray fromspan(Span<byte> span, Type dtype)
         {
-            //TODO! all types
-            if (dtype.Name == nameof(Int16))
+            if (dtype == typeof(int))
             {
-                var size = bytes.Length / InfoOf<short>.Size;
-                var ints = new short[size];
-                for (var index = 0; index < size; index++)
-                {
-                    ints[index] = BitConverter.ToInt16(bytes, index * InfoOf<short>.Size);
-                }
-
-                return new NDArray(ints);
+                return new NDArray(MemoryMarshal.Cast<byte, int>(span).ToArray());
             }
-            else if (dtype.Name == nameof(Int32))
+            else if (dtype == typeof(uint))
             {
-                var size = bytes.Length / InfoOf<int>.Size;
-                var ints = new int[size];
-                for (var index = 0; index < size; index++)
-                {
-                    ints[index] = BitConverter.ToInt32(bytes, index * InfoOf<int>.Size);
-                }
-
-                return new NDArray(ints);
+                return new NDArray(MemoryMarshal.Cast<byte, uint>(span).ToArray());
             }
-            else if (dtype.Name == nameof(Int64))
+            else if (dtype == typeof(short))
             {
-                var size = bytes.Length / InfoOf<long>.Size;
-                var ints = new long[size];
-                for (var index = 0; index < size; index++)
-                {
-                    ints[index] = BitConverter.ToInt64(bytes, index * InfoOf<long>.Size);
-                }
-
-                return new NDArray(ints);
+                return new NDArray(MemoryMarshal.Cast<byte, short>(span).ToArray());
             }
-            else if (dtype.Name == nameof(UInt16))
+            else if (dtype == typeof(ushort))
             {
-                var size = bytes.Length / InfoOf<ushort>.Size;
-                var ints = new ushort[size];
-                for (var index = 0; index < size; index++)
-                {
-                    ints[index] = BitConverter.ToUInt16(bytes, index * InfoOf<ushort>.Size);
-                }
-
-                return new NDArray(ints);
+                return new NDArray(MemoryMarshal.Cast<byte, ushort>(span).ToArray());
             }
-            else if (dtype.Name == nameof(UInt32))
+            else if (dtype == typeof(long))
             {
-                var size = bytes.Length / InfoOf<uint>.Size;
-                var ints = new uint[size];
-                for (var index = 0; index < size; index++)
-                {
-                    ints[index] = BitConverter.ToUInt32(bytes, index * InfoOf<uint>.Size);
-                }
-
-                return new NDArray(ints);
+                return new NDArray(MemoryMarshal.Cast<byte, long>(span).ToArray());
             }
-            else if (dtype.Name == nameof(UInt64))
+            else if (dtype == typeof(ulong))
             {
-                var size = bytes.Length / InfoOf<ulong>.Size;
-                var ints = new ulong[size];
-                for (var index = 0; index < size; index++)
-                {
-                    ints[index] = BitConverter.ToUInt64(bytes, index * InfoOf<ulong>.Size);
-                }
-
-                return new NDArray(ints);
+                return new NDArray(MemoryMarshal.Cast<byte, ulong>(span).ToArray());
             }
-            else if (dtype.Name == nameof(Single))
+            else if (dtype == typeof(bool))
             {
-                var size = bytes.Length / InfoOf<float>.Size;
-                var floats = new float[size];
-                for (var index = 0; index < size; index++)
-                {
-                    floats[index] = BitConverter.ToSingle(bytes, index * InfoOf<float>.Size);
-                }
-
-                return new NDArray(floats);
+                return new NDArray(MemoryMarshal.Cast<byte, bool>(span).ToArray());
             }
-            else if (dtype.Name == nameof(Double))
+            else if (dtype == typeof(char))
             {
-                var size = bytes.Length / InfoOf<double>.Size;
-                var floats = new double[size];
-                for (var index = 0; index < size; index++)
-                {
-                    floats[index] = BitConverter.ToDouble(bytes, index * InfoOf<double>.Size);
-                }
-
-                return new NDArray(floats);
+                return new NDArray(MemoryMarshal.Cast<byte, char>(span).ToArray());
             }
-            else if (dtype.Name == nameof(Byte))
+            else if (dtype == typeof(byte))
             {
-                var size = bytes.Length / InfoOf<byte>.Size;
-                var ints = bytes;
-                return new NDArray(bytes);
+                return new NDArray(span.ToArray());
             }
 
             throw new NotImplementedException("");
+        }
+
+
+        public static NDArray frombuffer(byte[] bytes, Type dtype)
+        {
+            if (dtype == typeof(int))
+            {
+                var span = MemoryMarshal.Cast<byte, int>(bytes.AsSpan());
+                return new NDArray(span.ToArray());
+            }
+            else if (dtype == typeof(uint))
+            {
+                var span = MemoryMarshal.Cast<byte, uint>(bytes.AsSpan());
+                return new NDArray(span.ToArray());
+            }
+            else if (dtype == typeof(short))
+            {
+                var span = MemoryMarshal.Cast<byte, short>(bytes.AsSpan());
+                return new NDArray(span.ToArray());
+            }
+            else if (dtype == typeof(ushort))
+            {
+                var span = MemoryMarshal.Cast<byte, ushort>(bytes.AsSpan());
+                return new NDArray(span.ToArray());
+            }
+            else if (dtype == typeof(long))
+            {
+                var span = MemoryMarshal.Cast<byte, long>(bytes.AsSpan());
+                return new NDArray(span.ToArray());
+            }
+            else if (dtype == typeof(ulong))
+            {
+                var span = MemoryMarshal.Cast<byte, ulong>(bytes.AsSpan());
+                return new NDArray(span.ToArray());
+            }
+            else if (dtype == typeof(bool))
+            {
+                var span = MemoryMarshal.Cast<byte, bool>(bytes.AsSpan());
+                return new NDArray(span.ToArray());
+            }
+            else if (dtype == typeof(char))
+            {
+                var span = MemoryMarshal.Cast<byte, char>(bytes.AsSpan());
+                return new NDArray(span.ToArray());
+            }
+            else if (dtype == typeof(float))
+            {
+                var span = MemoryMarshal.Cast<byte, float>(bytes.AsSpan());
+                return new NDArray(span.ToArray());
+            }
+            else if (dtype == typeof(double))
+            {
+                var span = MemoryMarshal.Cast<byte, double>(bytes.AsSpan());
+                return new NDArray(span.ToArray());
+            }
+            else if (dtype == typeof(byte))
+            {
+                return new NDArray(bytes);
+            }
+
+            throw new NotImplementedException($"frombuffer: dtype {dtype} not supported.");
         }
 
         public static NDArray frombuffer(byte[] bytes, string dtype)
