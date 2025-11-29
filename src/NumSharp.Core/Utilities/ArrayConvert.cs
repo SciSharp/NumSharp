@@ -4097,7 +4097,7 @@ namespace NumSharp.Utilities
                     output[i] = Complex.Zero; // NullString save as zero.
                     return;
                 }
-                var match = py.Complex(sourceArray[i]);
+                var match = py.complex(sourceArray[i]);
             });
             return output;
         }
