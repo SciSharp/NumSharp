@@ -82,7 +82,7 @@ namespace NumSharp {
                 }
                 else if (keepdims)
                 {
-                    outputShape[outputIndex++] = 1; // 保留轴，但长度为1
+                    outputShape[outputIndex++] = 1; // keep axis but length is one.
                 }
             }
             
