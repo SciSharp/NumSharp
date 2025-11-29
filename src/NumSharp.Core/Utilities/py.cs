@@ -22,7 +22,7 @@ namespace NumSharp.Utilities
         private static readonly Regex _pythonComplexRegex = new Regex(
 @"^(?<real>-?\d+(\.\d+)?)?((?<imagSign>\+|-)?(?<imag>\d+(\.\d+)?)?)?j$|^(?<onlyReal>-?\d+(\.\d+)?)$",
 RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.ExplicitCapture);
-        public static Complex Complex(string input)
+        public static Complex complex(string input)
         {
             var match = _pythonComplexRegex.Match(input);
             if (!match.Success)
