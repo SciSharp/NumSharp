@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using NumSharp.Backends;
 
@@ -4072,12 +4073,13 @@ namespace NumSharp.Utilities
             Parallel.For(0, length, i => new Complex(Converts.ToDouble(sourceArray[i]), 0d));
             return output;
         }
-        
+
         /// <summary>
         ///     Converts <see cref="String"/> array to a <see cref="Complex"/> array.
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Complex</returns>
+        /// <exception cref="FormatException">A string in sourceArray has an invalid complex format</exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Complex[] ToComplex(String[] sourceArray)
         {
@@ -4087,7 +4089,16 @@ namespace NumSharp.Utilities
             var length = sourceArray.Length;
             var output = new Complex[length];
 
-            Parallel.For(0, length, i => new Complex(Converts.ToDouble(sourceArray[i]), 0d));
+            Parallel.For(0, length, i =>
+            {
+                string input = sourceArray[i]?.Trim() ?? string.Empty;
+                if (string.IsNullOrEmpty(input))
+                {
+                    output[i] = Complex.Zero; // NullString save as zero.
+                    return;
+                }
+                var match = py.Complex(sourceArray[i]);
+            });
             return output;
         }
 #endif
