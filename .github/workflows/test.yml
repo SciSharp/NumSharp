@@ -36,5 +36,8 @@ jobs:
     - name: restore
       run: dotnet restore
 
+    - name: build
+      run: dotnet build
+
     - name: test
       run: dotnet test
