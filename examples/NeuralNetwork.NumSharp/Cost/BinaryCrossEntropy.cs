@@ -15,8 +15,7 @@ namespace NeuralNetwork.NumSharp.Cost
         public override NDArray Forward(NDArray preds, NDArray labels)
         {
             //ToDo: np.clip
-            //var output = Clip(preds, Epsilon, 1 - Epsilon);
-            var output = preds;
+            var output = np.clip(preds, Epsilon, 1 - Epsilon);
             output = np.mean(-(labels * np.log(output) + (1 - labels) * np.log(1 - output)));
             return output;
         }
@@ -24,8 +23,8 @@ namespace NeuralNetwork.NumSharp.Cost
         public override NDArray Backward(NDArray preds, NDArray labels)
         {
             //ToDo: np.clip
-            //var output = Clip(preds, Epsilon, 1 - Epsilon);
-            var output = preds;
+            var output = np.clip(preds, Epsilon, 1 - Epsilon);
+            output = preds;
             return (output - labels) / (output * (1 - output));
         }
     }
