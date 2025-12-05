@@ -1,4 +1,4 @@
-# Introduction 
+# Introduction
 
 The following pages are for the users who want to use NumSharp. 
 
@@ -61,10 +61,7 @@ Column wise also starts with the element [0,0] but! it stays in the 1st column a
 
 The image below (taken from https://en.wikipedia.org/wiki/File:Row_and_column_major_order.svg) shows again the 'algorithm' for storing data from matrix to vector. 
 
-
 ![Row Wise Column Wise](../images/rowWise_ColumnWise.png)
-
-
 
 **N dim tensor**
 
@@ -100,17 +97,3 @@ So fill first dimension, increase next, fill again, etc. also in n dimensional t
 And this you can imagine as **forward filling layout**.
 
 That's it. Now you have enough knowledge about NDArray, NDStorage and Shape. Check the other chapters for a how to use. :)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
