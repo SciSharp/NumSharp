@@ -1,6 +1,8 @@
 ﻿using System;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System.Linq;
+using System;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp;
 
 namespace NumSharp.UnitTest.Logic
@@ -16,6 +18,7 @@ namespace NumSharp.UnitTest.Logic
             var result = np.any(arr, axis: 0, keepdims: false);
             //TODO：TEST
             Assert.AreEqual(true, result[0]);
+            Assert.AreEqual(true, result.GetItem(0));
         }
 
         [TestMethod]
@@ -107,4 +110,5 @@ namespace NumSharp.UnitTest.Logic
             np.any(arr, axis: 0, keepdims: false);
         }
     }
+}
 }
