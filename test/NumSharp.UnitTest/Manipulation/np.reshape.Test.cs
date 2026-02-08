@@ -9,7 +9,6 @@ namespace NumSharp.UnitTest.Manipulation
     /// Comprehensive tests for np.reshape and NDArray.reshape against NumPy 2.4.2 ground truth.
     /// All tests based on verified NumPy behavior.
     /// </summary>
-    [TestClass]
     public class np_reshape_Test : TestClass
     {
         #region Basic Reshapes

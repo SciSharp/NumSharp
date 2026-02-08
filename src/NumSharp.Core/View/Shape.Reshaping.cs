@@ -67,9 +67,12 @@ namespace NumSharp
                     throw new IncorrectShapeException($"Given shape size ({newShape.size}) does not match the size of the given storage size ({size})");
             }
 
-            if (IsSliced)
-                // Set up the new shape (of reshaped slice) to recursively represent a shape within a sliced shape
-                newShape.ViewInfo = new ViewInfo() { ParentShape = this, Slices = null };
+            // Always set ViewInfo so the reshaped broadcast resolves offsets through the
+            // parent broadcast shape's strides (via the recursive GetOffset path).
+            // Without this, GetOffset on the reshaped shape uses `offset % OriginalShape.size`
+            // modular arithmetic which only works for row broadcasts by coincidence — column
+            // broadcasts and other patterns produce wrong element ordering.
+            newShape.ViewInfo = new ViewInfo() { ParentShape = this, Slices = null };
 
             newShape.BroadcastInfo = IsBroadcasted ? BroadcastInfo.Clone() : new BroadcastInfo(this);
         }
