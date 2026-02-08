@@ -2541,1064 +2541,167 @@ namespace NumSharp.UnitTest
         }
 
         // Bugs 25-63 (NumPy 1.x deprecation audit) moved to OpenBugs.DeprecationAudit.cs
-        // ================================================================
-        //
-        //  =====================================================================
-        //  NUMPY 1.x DEPRECATION AUDIT BUGS (Bugs 25–39)
-        //  =====================================================================
-        //
-        //  These bugs were found during a systematic audit comparing NumSharp
-        //  against NumPy 2.x (v2.4.2). They represent cases where NumSharp
-        //  follows NumPy 1.x behavior that was changed, removed, or fixed
-        //  in NumPy 2.0+. Each test asserts the correct NumPy 2.x behavior.
-        //
-        //  Reference: docs/plans/numpy-1x-deprecation-findings.md
-        //
-        //  Categories:
-        //    Bug 25:       NEP 50 type promotion — arr_scalar table wrong for
-        //                  unsigned-int-array + signed-int-scalar (12 entries)
-        //    Bug 26:       bool + bool uses OR instead of integer addition
-        //    Bug 27:       np.roll static returns int instead of NDArray
-        //    Bug 28:       floor/ceil on integer arrays casts to Double
-        //    Bug 29:       np.fmax/np.fmin don't ignore NaN (same as max/min)
-        //    Bug 30:       np.fmin docstrings say "maximum" instead of "minimum"
-        //                  (no test — documentation-only bug)
-        //    Bug 31:       stardard_normal misspelled (missing 'd')
-        //                  (no test — naming-only bug)
-        //    Bug 32:       np.convolve always returns null
-        //    Bug 33:       np.any(axis) has inverted logic (implements all)
-        //    Bug 34:       np.isnan returns null (dead code)
-        //    Bug 35:       np.isfinite returns null (dead code)
-        //    Bug 36:       np.isclose returns null (dead code)
-        //    Bug 37:       operator & (AND) returns null (dead code)
-        //    Bug 38:       operator | (OR) returns null (dead code)
-        //    Bug 39:       nd.delete() returns null (dead code)
-        //
-        // ================================================================
 
         // ================================================================
+        //  BUG 64: np.transpose creates physical copy instead of stride-swapped view
         //
-        //  BUG 25: NEP 50 type promotion — array-scalar table has 12 wrong
-        //          entries for unsigned-int-array + signed-int-scalar
+        //  SEVERITY: Medium — correctness of values is fine, but view semantics
+        //  are wrong. Mutation of transposed array does NOT propagate to original.
+        //  Performance is O(n) instead of O(1).
         //
-        //  SEVERITY: Critical — affects all arithmetic between unsigned arrays
-        //  and signed scalars, producing unnecessarily widened output types.
+        //  ROOT CAUSE: Default.Transpose.cs lines 172-173 always allocate a new
+        //  buffer and copy data via MultiIterator.Assign, even though the stride
+        //  permutation at lines 162-166 correctly sets up the view. The method
+        //  should return the stride-swapped alias without copying.
         //
-        //  NumPy 2.x (NEP 50): When an array operates with a scalar of the
-        //  same kind (both integer), the array dtype wins ("weak typing").
-        //  NumSharp uses NumPy 1.x behavior where the scalar can force
-        //  widening to accommodate both ranges.
+        //  IMPACT: swapaxes, moveaxis, rollaxis all delegate to Transpose and
+        //  inherit this bug. Any downstream code (e.g. ravel on transposed arrays)
+        //  sees inverted view/copy semantics compared to NumPy.
         //
-        //  Example: uint8_array + int32_scalar
-        //    NumPy 1.x: int32 (scalar widens result)
-        //    NumPy 2.x: uint8 (array dtype wins)
-        //
-        //  AFFECTED: _typemap_arr_scalar in Logic/np.find_common_type.cs
-        //  lines 258, 260, 262, 297, 299, 301, 323, 325, 327, 349, 351, 353
-        //
-        //  PYTHON VERIFICATION (NumPy 2.4.2):
-        //    >>> (np.array([1], dtype=np.uint8) + np.int32(1)).dtype
-        //    dtype('uint8')
-        //    >>> (np.array([1], dtype=np.uint16) + np.int32(1)).dtype
-        //    dtype('uint16')
-        //    >>> (np.array([1], dtype=np.uint32) + np.int64(1)).dtype
-        //    dtype('uint32')
-        //    >>> (np.array([1], dtype=np.uint64) + np.int64(1)).dtype
-        //    dtype('uint64')
+        //  PYTHON VERIFICATION:
+        //    >>> a = np.arange(6).reshape(2,3)
+        //    >>> t = a.T
+        //    >>> t.base is a          # True — same memory
+        //    >>> t[0,0] = 999
+        //    >>> a[0,0]               # 999 — mutation propagates
+        //    >>> t.strides            # (8, 24) — stride-swapped, no copy
         //
         // ================================================================
 
         /// <summary>
-        ///     BUG 25a: uint8 array + signed int scalar should stay uint8 (NEP 50).
-        ///     NumPy 2.x: uint8. NumSharp: int16/int32/int64 (widens).
+        ///     BUG 64a: np.transpose should return a view sharing memory with the original.
+        ///
+        ///     In NumPy, transpose is O(1) — it only swaps strides, no data is copied.
+        ///     Mutating the transposed array mutates the original.
+        ///
+        ///     NumPy:    t[0,0] = 999 → a[0,0] == 999 (shared memory)
+        ///     NumSharp: t[0,0] = 999 → a[0,0] == 0   (independent copy)
         /// </summary>
         [TestMethod]
-        public void Bug_NEP50_Uint8Array_SignedIntScalar_ShouldPreserveDtype()
+        public void Bug_Transpose_ReturnsPhysicalCopy_ShouldBeView()
         {
-            var a = np.array(new byte[] { 1, 2, 3 }); // uint8
-            a.dtype.Should().Be(typeof(byte));
+            var a = np.arange(6).reshape(2, 3);
+            var t = np.transpose(a);
 
-            // In NumPy 2.x, uint8_array + int16_scalar -> uint8
-            var resultType = np.find_common_type(
-                new NPTypeCode[] { NPTypeCode.Byte },
-                new NPTypeCode[] { NPTypeCode.Int16 });
+            t.shape.Should().BeEquivalentTo(new[] { 3, 2 });
 
-            resultType.Should().Be(NPTypeCode.Byte,
-                "NumPy 2.x NEP 50: uint8 array + int16 scalar -> uint8 (array wins). " +
-                "NumSharp returns Int16 because _typemap_arr_scalar uses NumPy 1.x " +
-                "promotion that widens to accommodate both signedness ranges.");
+            // Verify values are correct
+            t.GetInt32(0, 0).Should().Be(0);
+            t.GetInt32(0, 1).Should().Be(3);
+            t.GetInt32(1, 0).Should().Be(1);
+            t.GetInt32(1, 1).Should().Be(4);
+            t.GetInt32(2, 0).Should().Be(2);
+            t.GetInt32(2, 1).Should().Be(5);
+
+            // Mutation test: writing to transpose should modify original
+            t.SetInt32(999, 0, 0);
+            a.GetInt32(0, 0).Should().Be(999,
+                "NumPy: transpose returns a view — mutating t[0,0] also mutates a[0,0]. " +
+                "NumSharp: Default.Transpose.cs always allocates new memory (line 172) " +
+                "and copies data via MultiIterator.Assign (line 173), creating an " +
+                "independent copy instead of a stride-swapped view.");
         }
 
         /// <summary>
-        ///     BUG 25b: uint16 array + signed int scalar should stay uint16 (NEP 50).
+        ///     BUG 64b: np.swapaxes should return a view sharing memory with the original.
+        ///
+        ///     swapaxes delegates to Transpose internally, so it inherits the
+        ///     same physical-copy behavior.
+        ///
+        ///     NumPy:    s[0,0,0] = 999 → a[0,0,0] == 999 (shared memory)
+        ///     NumSharp: s[0,0,0] = 999 → a[0,0,0] == 0   (independent copy)
         /// </summary>
         [TestMethod]
-        public void Bug_NEP50_Uint16Array_SignedIntScalar_ShouldPreserveDtype()
+        public void Bug_SwapAxes_ReturnsPhysicalCopy_ShouldBeView()
         {
-            var resultType = np.find_common_type(
-                new NPTypeCode[] { NPTypeCode.UInt16 },
-                new NPTypeCode[] { NPTypeCode.Int32 });
+            var a = np.arange(24).reshape(2, 3, 4);
+            var s = np.swapaxes(a, 0, 2);
 
-            resultType.Should().Be(NPTypeCode.UInt16,
-                "NumPy 2.x NEP 50: uint16 array + int32 scalar -> uint16 (array wins). " +
-                "NumSharp returns Int32.");
-        }
+            s.shape.Should().BeEquivalentTo(new[] { 4, 3, 2 });
 
-        /// <summary>
-        ///     BUG 25c: uint32 array + signed int scalar should stay uint32 (NEP 50).
-        /// </summary>
-        [TestMethod]
-        public void Bug_NEP50_Uint32Array_SignedIntScalar_ShouldPreserveDtype()
-        {
-            var resultType = np.find_common_type(
-                new NPTypeCode[] { NPTypeCode.UInt32 },
-                new NPTypeCode[] { NPTypeCode.Int64 });
+            // Verify values are correct
+            s.GetInt32(0, 0, 0).Should().Be(0);
+            s.GetInt32(1, 0, 0).Should().Be(1);
 
-            resultType.Should().Be(NPTypeCode.UInt32,
-                "NumPy 2.x NEP 50: uint32 array + int64 scalar -> uint32 (array wins). " +
-                "NumSharp returns Int64.");
-        }
-
-        /// <summary>
-        ///     BUG 25d: uint64 array + signed int scalar should stay uint64 (NEP 50).
-        ///     This is the most severe case: NumSharp promotes to float64.
-        /// </summary>
-        [TestMethod]
-        public void Bug_NEP50_Uint64Array_SignedIntScalar_ShouldPreserveDtype()
-        {
-            var resultType = np.find_common_type(
-                new NPTypeCode[] { NPTypeCode.UInt64 },
-                new NPTypeCode[] { NPTypeCode.Int64 });
-
-            resultType.Should().Be(NPTypeCode.UInt64,
-                "NumPy 2.x NEP 50: uint64 array + int64 scalar -> uint64 (array wins). " +
-                "NumSharp returns Double (float64), losing integer semantics entirely.");
+            // Mutation test: writing to swapaxes result should modify original
+            s.SetInt32(999, 0, 0, 0);
+            a.GetInt32(0, 0, 0).Should().Be(999,
+                "NumPy: swapaxes returns a view — mutating s[0,0,0] also mutates a[0,0,0]. " +
+                "NumSharp: swapaxes delegates to Transpose which always copies data " +
+                "(Default.Transpose.cs line 172-173).");
         }
 
         // ================================================================
+        //  BUG 65: Shape.IsContiguous returns false for all sliced arrays,
+        //          even when the slice is contiguous in memory (step=1).
         //
-        //  BUG 26: bool + bool uses OR (||) instead of integer addition
+        //  SEVERITY: Low-Medium — causes unnecessary data copies in ravel,
+        //  flatten, and any code that checks IsContiguous.
         //
-        //  SEVERITY: Medium — silently returns wrong values for addition.
+        //  ROOT CAUSE: Shape.cs defines IsContiguous = !IsSliced && !IsBroadcasted.
+        //  This is too conservative: a step-1 slice of contiguous data IS contiguous
+        //  in memory (same strides, just a different start offset and length).
+        //  NumPy checks actual stride/shape compatibility, not just "was this sliced?".
         //
-        //  NumPy: True + True = 2 (integer addition)
-        //  NumSharp: True + True = True (logical OR, loses the count)
+        //  EXAMPLES OF FALSE NEGATIVES:
+        //    np.arange(10)[2:7]     — step=1, contiguous, but IsContiguous=false
+        //    np.arange(12).reshape(3,4)[1:3]  — row slice, contiguous, but IsContiguous=false
         //
-        //  The Operator.Add(bool, bool) in Utilities/Maths/Operator.cs:32
-        //  is defined as (lhs || rhs), which is logical OR, not addition.
-        //  NumPy treats bool as a numeric type where True=1, False=0.
+        //  EXAMPLES OF CORRECT BEHAVIOR (IsContiguous correctly returns false):
+        //    np.arange(10)[::2]     — step=2, NOT contiguous
+        //    a[:,1:3]               — column slice, NOT contiguous
+        //    broadcast arrays       — stride=0 dims, NOT contiguous
         //
-        //  PYTHON VERIFICATION (NumPy 2.4.2):
-        //    >>> np.array([True]) + np.array([True])
-        //    array([2])
-        //    >>> (np.array([True]) + np.array([True])).dtype
-        //    dtype('int64')
+        //  PYTHON VERIFICATION:
+        //    >>> a = np.arange(10)
+        //    >>> a[2:7].flags['C_CONTIGUOUS']    # True
+        //    >>> a[::2].flags['C_CONTIGUOUS']    # False
+        //    >>> b = np.arange(12).reshape(3,4)
+        //    >>> b[1:3].flags['C_CONTIGUOUS']    # True
+        //    >>> b[:,1:3].flags['C_CONTIGUOUS']  # False
         //
         // ================================================================
 
         /// <summary>
-        ///     BUG 26: bool + bool should produce integer 2, not bool True.
-        ///     NumPy: True + True = 2 (int). NumSharp: True || True = True (OR).
+        ///     BUG 65a: Shape.IsContiguous should be true for step-1 slices.
+        ///
+        ///     np.arange(10)[2:7] has step=1 and occupies a contiguous block of memory.
+        ///     NumPy reports c_contiguous=True. NumSharp reports IsContiguous=false
+        ///     because IsSliced=true, causing ravel to unnecessarily copy data.
         /// </summary>
         [TestMethod]
-        public void Bug_BoolAddBool_ShouldBeIntegerAddition()
+        public void Bug_IsContiguous_FalseForContiguousSlice1D()
         {
-            var a = np.array(new[] { true, false, true });
-            var b = np.array(new[] { true, true, false });
-            var result = a + b;
+            var a = np.arange(10);
+            var s = a["2:7"];
 
-            // NumPy 2.x: bool + bool = int (value 2 for True+True)
-            // The result dtype should be integer, not bool
-            result.GetAtIndex<int>(0).Should().Be(2,
-                "NumPy: True + True = 2 (integer addition). " +
-                "NumSharp uses bool OR: True || True = True (loses count). " +
-                "Operator.Add(bool,bool) at Utilities/Maths/Operator.cs:32 " +
-                "is defined as (lhs || rhs) instead of (lhs ? 1 : 0) + (rhs ? 1 : 0).");
-            result.GetAtIndex<int>(1).Should().Be(1, "False + True = 1");
-            result.GetAtIndex<int>(2).Should().Be(1, "True + False = 1");
-        }
-
-        // ================================================================
-        //
-        //  BUG 27: np.roll static returns int instead of NDArray
-        //
-        //  SEVERITY: High — return type is completely wrong.
-        //
-        //  The static np.roll() in APIs/np.array_manipulation.cs:16 has
-        //  return type `int` and casts `nd.roll(shift, axis)` to int.
-        //  In NumPy, np.roll always returns an ndarray.
-        //
-        //  PYTHON VERIFICATION (NumPy 2.4.2):
-        //    >>> np.roll(np.array([1,2,3,4]), 1)
-        //    array([4, 1, 2, 3])
-        //
-        // ================================================================
-
-        /// <summary>
-        ///     BUG 27: np.roll returns int instead of NDArray.
-        ///     The return type should be NDArray matching NumPy behavior.
-        /// </summary>
-        [TestMethod]
-        public void Bug_NpRoll_ReturnsInt_ShouldReturnNDArray()
-        {
-            var a = np.array(new[] { 1, 2, 3, 4, 5 });
-
-            // np.roll is declared as returning int, which is wrong.
-            // We test the instance method which should return NDArray.
-            var result = a.roll(2);
-
-            result.Should().NotBeNull("roll should return an array");
-            result.shape.Should().BeEquivalentTo(new[] { 5 });
-            result.GetInt32(0).Should().Be(4,
-                "NumPy: np.roll([1,2,3,4,5], 2) = [4,5,1,2,3]. " +
-                "The static np.roll in APIs/np.array_manipulation.cs:16 " +
-                "returns int instead of NDArray.");
-            result.GetInt32(1).Should().Be(5);
-            result.GetInt32(2).Should().Be(1);
-            result.GetInt32(3).Should().Be(2);
-            result.GetInt32(4).Should().Be(3);
-        }
-
-        // ================================================================
-        //
-        //  BUG 28: floor/ceil on integer arrays casts to Double
-        //
-        //  SEVERITY: Medium — changes dtype unnecessarily and wastes memory.
-        //
-        //  NumPy 2.1+: np.floor(int_array) returns int_array unchanged.
-        //  NumSharp: Always casts to Double via GetComputingType() in
-        //  NPTypeCode.cs:577, which maps all integer types to Double.
-        //  The Default.Floor.cs switch only handles Double/Single/Decimal.
-        //
-        //  PYTHON VERIFICATION (NumPy 2.4.2):
-        //    >>> np.floor(np.array([1, 2, 3], dtype=np.int32)).dtype
-        //    dtype('int32')
-        //    >>> np.ceil(np.array([1, 2, 3], dtype=np.int64)).dtype
-        //    dtype('int64')
-        //
-        // ================================================================
-
-        /// <summary>
-        ///     BUG 28a: np.floor on int32 array should preserve int32 dtype.
-        ///     NumPy 2.1+: int32 → int32. NumSharp: int32 → float64.
-        /// </summary>
-        [TestMethod]
-        public void Bug_Floor_IntArray_ShouldPreserveDtype()
-        {
-            var a = np.array(new[] { 1, 2, 3 }); // int32
-            var result = np.floor(a);
-
-            result.dtype.Should().Be(typeof(int),
-                "NumPy 2.1+: np.floor(int32_array).dtype = int32 (no-op for integers). " +
-                "NumSharp casts to Double because GetComputingType() in NPTypeCode.cs:577 " +
-                "maps all integer types to NPTypeCode.Double, and Default.Floor.cs only " +
-                "handles Double/Single/Decimal in its switch.");
-            result.GetInt32(0).Should().Be(1);
-            result.GetInt32(1).Should().Be(2);
-            result.GetInt32(2).Should().Be(3);
+            s.Shape.IsSliced.Should().BeTrue("slice creates a sliced shape");
+            s.Shape.IsContiguous.Should().BeTrue(
+                "NumPy: a[2:7].flags['C_CONTIGUOUS'] is True — step-1 slice " +
+                "is contiguous in memory. NumSharp returns false because " +
+                "Shape.IsContiguous = !IsSliced && !IsBroadcasted, which treats " +
+                "ALL slices as non-contiguous regardless of step size.");
         }
 
         /// <summary>
-        ///     BUG 28b: np.ceil on int64 array should preserve int64 dtype.
+        ///     BUG 65b: Shape.IsContiguous should be true for contiguous row slices.
+        ///
+        ///     np.arange(12).reshape(3,4)[1:3] selects 2 consecutive rows from a
+        ///     row-major array — the data is contiguous in memory.
+        ///     NumPy reports c_contiguous=True. NumSharp reports IsContiguous=false.
         /// </summary>
         [TestMethod]
-        public void Bug_Ceil_IntArray_ShouldPreserveDtype()
+        public void Bug_IsContiguous_FalseForContiguousRowSlice2D()
         {
-            var a = np.array(new long[] { 10, 20, 30 }); // int64
-            var result = np.ceil(a);
-
-            result.dtype.Should().Be(typeof(long),
-                "NumPy 2.1+: np.ceil(int64_array).dtype = int64. " +
-                "NumSharp casts to Double.");
-            result.GetInt64(0).Should().Be(10);
-            result.GetInt64(1).Should().Be(20);
-            result.GetInt64(2).Should().Be(30);
-        }
-
-        // ================================================================
-        //
-        //  BUG 29: np.fmax/np.fmin don't ignore NaN (same as maximum/minimum)
-        //
-        //  SEVERITY: Medium — semantic difference from NumPy.
-        //
-        //  NumPy: np.fmax ignores NaN: fmax(NaN, 1) = 1
-        //  NumPy: np.maximum propagates NaN: maximum(NaN, 1) = NaN
-        //  NumSharp: Both fmax and maximum have identical implementations.
-        //
-        //  PYTHON VERIFICATION (NumPy 2.4.2):
-        //    >>> np.fmax(np.nan, 1.0)
-        //    1.0
-        //    >>> np.maximum(np.nan, 1.0)
-        //    nan
-        //    >>> np.fmin(np.nan, 1.0)
-        //    1.0
-        //    >>> np.minimum(np.nan, 1.0)
-        //    nan
-        //
-        // ================================================================
-
-        /// <summary>
-        ///     BUG 29a: np.fmax should ignore NaN (return the non-NaN value).
-        ///     NumPy: fmax(NaN, 1.0) = 1.0. NumSharp: NaN (propagates like maximum).
-        /// </summary>
-        [TestMethod]
-        public void Bug_Fmax_ShouldIgnoreNaN()
-        {
-            var a = np.array(new[] { double.NaN, 2.0, double.NaN });
-            var b = np.array(new[] { 1.0, double.NaN, 3.0 });
-            var result = np.fmax(a, b);
-
-            result.GetDouble(0).Should().Be(1.0,
-                "NumPy: np.fmax(NaN, 1.0) = 1.0 (NaN ignored). " +
-                "NumSharp fmax has identical implementation to maximum, " +
-                "so it propagates NaN instead of ignoring it.");
-            result.GetDouble(1).Should().Be(2.0, "fmax(2.0, NaN) = 2.0");
-            result.GetDouble(2).Should().Be(3.0, "fmax(NaN, 3.0) = 3.0");
-        }
-
-        /// <summary>
-        ///     BUG 29b: np.fmin should ignore NaN (return the non-NaN value).
-        ///     NumPy: fmin(NaN, 1.0) = 1.0. NumSharp: NaN (propagates like minimum).
-        /// </summary>
-        [TestMethod]
-        public void Bug_Fmin_ShouldIgnoreNaN()
-        {
-            var a = np.array(new[] { double.NaN, 2.0, double.NaN });
-            var b = np.array(new[] { 1.0, double.NaN, 3.0 });
-            var result = np.fmin(a, b);
-
-            result.GetDouble(0).Should().Be(1.0,
-                "NumPy: np.fmin(NaN, 1.0) = 1.0 (NaN ignored). " +
-                "NumSharp fmin has identical implementation to minimum.");
-            result.GetDouble(1).Should().Be(2.0, "fmin(2.0, NaN) = 2.0");
-            result.GetDouble(2).Should().Be(3.0, "fmin(NaN, 3.0) = 3.0");
-        }
-
-        // ================================================================
-        //
-        //  BUG 32: np.convolve always returns null (dead code)
-        //
-        //  SEVERITY: Medium — public API that silently returns null.
-        //
-        //  The Regen template in Math/NdArray.Convolve.cs was never generated
-        //  into the #else block, so the method always returns null.
-        //
-        //  PYTHON VERIFICATION (NumPy 2.4.2):
-        //    >>> np.convolve([1,2,3], [0,1,0.5])
-        //    array([0. , 1. , 2.5, 4. , 1.5])
-        //
-        // ================================================================
-
-        /// <summary>
-        ///     BUG 32: np.convolve always returns null.
-        ///     The Regen template was never generated into the compiled code.
-        /// </summary>
-        [TestMethod]
-        public void Bug_Convolve_AlwaysReturnsNull()
-        {
-            var a = np.array(new double[] { 1, 2, 3 });
-            var v = np.array(new double[] { 0, 1, 0.5 });
-            var result = np.convolve(a, v);
-
-            result.Should().NotBeNull(
-                "NumPy: np.convolve([1,2,3],[0,1,0.5]) = [0,1,2.5,4,1.5]. " +
-                "NumSharp returns null because the Regen template in " +
-                "Math/NdArray.Convolve.cs was never generated into the #else block.");
-            result.size.Should().Be(5);
-            result.GetDouble(0).Should().BeApproximately(0.0, 1e-10);
-            result.GetDouble(1).Should().BeApproximately(1.0, 1e-10);
-            result.GetDouble(2).Should().BeApproximately(2.5, 1e-10);
-            result.GetDouble(3).Should().BeApproximately(4.0, 1e-10);
-            result.GetDouble(4).Should().BeApproximately(1.5, 1e-10);
-        }
-
-        // ================================================================
-        //
-        //  BUG 33: np.any(axis) has inverted logic — implements all() instead
-        //
-        //  SEVERITY: High — completely wrong results if the throw is fixed.
-        //
-        //  Bug 22 (above) covers the throw. This bug covers the LOGIC:
-        //  ComputeAnyPerAxis initializes currentResult=true and sets it to
-        //  true on break when finding a zero. This is all() logic, not any().
-        //  For any(): should initialize false and set true on non-zero.
-        //
-        //  NOTE: Bug 22 must be fixed first (the throw) before this logic
-        //  bug becomes visible. This test covers the correct final behavior.
-        //
-        //  PYTHON VERIFICATION (NumPy 2.4.2):
-        //    >>> np.any([[False, False], [False, True]], axis=0)
-        //    array([False,  True])
-        //    >>> np.any([[False, False], [False, True]], axis=1)
-        //    array([False,  True])
-        //
-        // ================================================================
-
-        /// <summary>
-        ///     BUG 33: np.any(axis=0) has inverted logic (implements all, not any).
-        ///     Even if Bug 22's throw is fixed, the logic returns wrong results.
-        /// </summary>
-        [TestMethod]
-        public void Bug_Any_Axis0_InvertedLogic_ImplementsAllInsteadOfAny()
-        {
-            var a = np.array(new bool[,] { { false, false }, { false, true } });
-
-            NDArray result = null;
-            new Action(() => result = np.any(a, 0, false))
-                .Should().NotThrow("np.any(axis=0) should not throw");
-
-            result.Should().NotBeNull();
-            result.shape.Should().BeEquivalentTo(new[] { 2 });
-
-            // any along axis=0: column 0=[F,F]→F, column 1=[F,T]→T
-            result.GetBoolean(0).Should().BeFalse(
-                "NumPy: np.any([[F,F],[F,T]], axis=0)[0] = False (no True in column 0). " +
-                "ComputeAnyPerAxis in Logic/np.any.cs initializes currentResult=true " +
-                "and detects zeros, which is all() logic. For any(), it should " +
-                "initialize false and set true when finding non-zero.");
-            result.GetBoolean(1).Should().BeTrue(
-                "np.any axis=0 column 1=[F,T] → True");
-        }
-
-        /// <summary>
-        ///     BUG 33b: np.any keepdims=true should preserve dimensionality.
-        /// </summary>
-        [TestMethod]
-        public void Bug_Any_Axis0_Keepdims()
-        {
-            var a = np.array(new bool[,] { { true, false }, { false, false } });
-
-            NDArray result = null;
-            new Action(() => result = np.any(a, 0, true))
-                .Should().NotThrow();
-
-            result.Should().NotBeNull();
-            result.shape.Should().BeEquivalentTo(new[] { 1, 2 },
-                "NumPy: np.any([[T,F],[F,F]], axis=0, keepdims=True).shape = (1,2)");
-            result.GetBoolean(0, 0).Should().BeTrue("any of [T,F] along axis 0 → T");
-            result.GetBoolean(0, 1).Should().BeFalse("any of [F,F] along axis 0 → F");
-        }
-
-        // ================================================================
-        //
-        //  BUG 34: np.isnan returns null (dead code)
-        //
-        //  SEVERITY: High — public API that crashes with NullReferenceException.
-        //
-        //  np.isnan calls DefaultEngine.IsNan which returns null.
-        //
-        //  PYTHON VERIFICATION (NumPy 2.4.2):
-        //    >>> np.isnan([1.0, np.nan, np.inf])
-        //    array([False,  True, False])
-        //
-        // ================================================================
-
-        /// <summary>
-        ///     BUG 34: np.isnan returns null. DefaultEngine.IsNan returns null.
-        /// </summary>
-        [TestMethod]
-        public void Bug_IsNan_ReturnsNull()
-        {
-            var a = np.array(new[] { 1.0, double.NaN, double.PositiveInfinity, 0.0 });
-
-            NDArray result = null;
-            new Action(() => result = np.isnan(a))
-                .Should().NotThrow(
-                    "NumPy: np.isnan([1.0, NaN, inf, 0.0]) = [F, T, F, F]. " +
-                    "NumSharp: DefaultEngine.IsNan returns null, causing NullReferenceException.");
-
-            result.Should().NotBeNull();
-            result.GetBoolean(0).Should().BeFalse("1.0 is not NaN");
-            result.GetBoolean(1).Should().BeTrue("NaN is NaN");
-            result.GetBoolean(2).Should().BeFalse("inf is not NaN");
-            result.GetBoolean(3).Should().BeFalse("0.0 is not NaN");
-        }
-
-        // ================================================================
-        //
-        //  BUG 35: np.isfinite returns null (dead code)
-        //
-        //  SEVERITY: High — public API that crashes with NullReferenceException.
-        //
-        //  PYTHON VERIFICATION (NumPy 2.4.2):
-        //    >>> np.isfinite([1.0, np.nan, np.inf, -np.inf, 0.0])
-        //    array([ True, False, False, False,  True])
-        //
-        // ================================================================
-
-        /// <summary>
-        ///     BUG 35: np.isfinite returns null. DefaultEngine.IsFinite returns null.
-        /// </summary>
-        [TestMethod]
-        public void Bug_IsFinite_ReturnsNull()
-        {
-            var a = np.array(new[] { 1.0, double.NaN, double.PositiveInfinity, double.NegativeInfinity, 0.0 });
-
-            NDArray result = null;
-            new Action(() => result = np.isfinite(a))
-                .Should().NotThrow(
-                    "NumPy: np.isfinite([1, NaN, inf, -inf, 0]) = [T, F, F, F, T]. " +
-                    "NumSharp: DefaultEngine.IsFinite returns null.");
-
-            result.Should().NotBeNull();
-            result.GetBoolean(0).Should().BeTrue("1.0 is finite");
-            result.GetBoolean(1).Should().BeFalse("NaN is not finite");
-            result.GetBoolean(2).Should().BeFalse("inf is not finite");
-            result.GetBoolean(3).Should().BeFalse("-inf is not finite");
-            result.GetBoolean(4).Should().BeTrue("0.0 is finite");
-        }
-
-        // ================================================================
-        //
-        //  BUG 36: np.isclose returns null (dead code)
-        //
-        //  SEVERITY: High — blocks np.allclose which depends on it (Bug 7).
-        //
-        //  PYTHON VERIFICATION (NumPy 2.4.2):
-        //    >>> np.isclose([1.0, 1.0001], [1.0, 1.0002], atol=1e-3)
-        //    array([ True,  True])
-        //
-        // ================================================================
-
-        /// <summary>
-        ///     BUG 36: np.isclose returns null. DefaultEngine.IsClose returns null.
-        /// </summary>
-        [TestMethod]
-        public void Bug_IsClose_ReturnsNull()
-        {
-            var a = np.array(new[] { 1.0, 1.0001 });
-            var b = np.array(new[] { 1.0, 1.0002 });
-
-            NDArray result = null;
-            new Action(() => result = np.isclose(a, b, atol: 1e-3))
-                .Should().NotThrow(
-                    "NumPy: np.isclose([1.0, 1.0001], [1.0, 1.0002], atol=1e-3) = [T, T]. " +
-                    "NumSharp: DefaultEngine.IsClose returns null, causing NullReferenceException. " +
-                    "This also blocks np.allclose (Bug 7) which depends on isclose.");
-
-            result.Should().NotBeNull();
-            result.GetBoolean(0).Should().BeTrue("1.0 ≈ 1.0 within atol=1e-3");
-            result.GetBoolean(1).Should().BeTrue("1.0001 ≈ 1.0002 within atol=1e-3");
-        }
-
-        // ================================================================
-        //
-        //  BUG 37: operator & (AND) returns null (dead code)
-        //
-        //  SEVERITY: High — public operator that silently returns null.
-        //
-        //  PYTHON VERIFICATION (NumPy 2.4.2):
-        //    >>> np.array([True, False, True]) & np.array([True, True, False])
-        //    array([ True, False, False])
-        //
-        // ================================================================
-
-        /// <summary>
-        ///     BUG 37: NDArray & NDArray returns null.
-        ///     The AND operator in NDArray.AND.cs returns null.
-        /// </summary>
-        [TestMethod]
-        public void Bug_AND_Operator_ReturnsNull()
-        {
-            var a = np.array(new[] { true, false, true });
-            var b = np.array(new[] { true, true, false });
-
-            NDArray result = null;
-            new Action(() => result = a & b)
-                .Should().NotThrow(
-                    "NumPy: [T,F,T] & [T,T,F] = [T,F,F]. " +
-                    "NumSharp: operator & in NDArray.AND.cs returns null.");
-
-            result.Should().NotBeNull();
-            result.GetBoolean(0).Should().BeTrue("T & T = T");
-            result.GetBoolean(1).Should().BeFalse("F & T = F");
-            result.GetBoolean(2).Should().BeFalse("T & F = F");
-        }
-
-        // ================================================================
-        //
-        //  BUG 38: operator | (OR) returns null (dead code)
-        //
-        //  SEVERITY: High — public operator that silently returns null.
-        //
-        //  PYTHON VERIFICATION (NumPy 2.4.2):
-        //    >>> np.array([True, False, False]) | np.array([False, False, True])
-        //    array([ True, False,  True])
-        //
-        // ================================================================
-
-        /// <summary>
-        ///     BUG 38: NDArray | NDArray returns null.
-        ///     The OR operator in NDArray.OR.cs returns null.
-        /// </summary>
-        [TestMethod]
-        public void Bug_OR_Operator_ReturnsNull()
-        {
-            var a = np.array(new[] { true, false, false });
-            var b = np.array(new[] { false, false, true });
-
-            NDArray result = null;
-            new Action(() => result = a | b)
-                .Should().NotThrow(
-                    "NumPy: [T,F,F] | [F,F,T] = [T,F,T]. " +
-                    "NumSharp: operator | in NDArray.OR.cs returns null.");
-
-            result.Should().NotBeNull();
-            result.GetBoolean(0).Should().BeTrue("T | F = T");
-            result.GetBoolean(1).Should().BeFalse("F | F = F");
-            result.GetBoolean(2).Should().BeTrue("F | T = T");
-        }
-
-        // ================================================================
-        //
-        //  BUG 39: nd.delete() returns null (dead code)
-        //
-        //  SEVERITY: Medium — public method that silently returns null.
-        //
-        //  PYTHON VERIFICATION (NumPy 2.4.2):
-        //    >>> np.delete(np.array([1,2,3,4,5]), [1,3])
-        //    array([1, 3, 5])
-        //
-        // ================================================================
-
-        /// <summary>
-        ///     BUG 39: nd.delete() returns null.
-        ///     NdArray.delete.cs always returns null.
-        /// </summary>
-        [TestMethod]
-        public void Bug_Delete_ReturnsNull()
-        {
-            var a = np.array(new[] { 1, 2, 3, 4, 5 });
-            var result = a.delete(new[] { 1 });
-
-            result.Should().NotBeNull(
-                "NumPy: np.delete([1,2,3,4,5], [1]) = [1,3,4,5]. " +
-                "NumSharp: NdArray.delete.cs always returns null.");
-            result.size.Should().Be(4);
-            result.GetInt32(0).Should().Be(1);
-            result.GetInt32(1).Should().Be(3);
-            result.GetInt32(2).Should().Be(4);
-            result.GetInt32(3).Should().Be(5);
-        }
-
-        // ================================================================
-        //
-        //  BUG 40: nd.inv() returns null (dead code)
-        //
-        //  SEVERITY: High — public method that silently returns null.
-        //  The entire LAPACK-based implementation is commented out.
-        //
-        //  PYTHON VERIFICATION (NumPy 2.4.2):
-        //    >>> np.linalg.inv(np.array([[1,2],[3,4]]))
-        //    array([[-2. ,  1. ],
-        //           [ 1.5, -0.5]])
-        //
-        // ================================================================
-
-        /// <summary>
-        ///     BUG 40: nd.inv() returns null. Implementation commented out.
-        /// </summary>
-        [TestMethod]
-        public void Bug_Inv_ReturnsNull()
-        {
-            var a = np.array(new double[,] { { 1, 2 }, { 3, 4 } });
-            var result = a.inv();
-
-            result.Should().NotBeNull(
-                "NumPy: np.linalg.inv([[1,2],[3,4]]) = [[-2,1],[1.5,-0.5]]. " +
-                "NumSharp: NdArray.Inv.cs always returns null (implementation commented out).");
-        }
-
-        // ================================================================
-        //
-        //  BUG 41: nd.qr() returns default (null, null)
-        //
-        //  SEVERITY: High — public method returning null tuple.
-        //
-        //  PYTHON VERIFICATION (NumPy 2.4.2):
-        //    >>> q, r = np.linalg.qr(np.array([[1,2],[3,4]]))
-        //    >>> q.shape, r.shape
-        //    ((2, 2), (2, 2))
-        //
-        // ================================================================
-
-        /// <summary>
-        ///     BUG 41: nd.qr() returns default (null, null).
-        /// </summary>
-        [TestMethod]
-        public void Bug_QR_ReturnsDefault()
-        {
-            var a = np.array(new double[,] { { 1, 2 }, { 3, 4 } });
-            var (q, r) = a.qr();
-
-            q.Should().NotBeNull(
-                "NumPy: np.linalg.qr([[1,2],[3,4]]) returns (Q, R) matrices. " +
-                "NumSharp: NdArray.QR.cs returns default which is (null, null).");
-            r.Should().NotBeNull();
-        }
-
-        // ================================================================
-        //
-        //  BUG 42: nd.svd() returns default (null, null, null)
-        //
-        //  SEVERITY: High — public method returning null tuple.
-        //
-        //  PYTHON VERIFICATION (NumPy 2.4.2):
-        //    >>> u, s, vh = np.linalg.svd(np.array([[1,2],[3,4]]))
-        //    >>> u.shape, s.shape, vh.shape
-        //    ((2, 2), (2,), (2, 2))
-        //
-        // ================================================================
-
-        /// <summary>
-        ///     BUG 42: nd.svd() returns default (null, null, null).
-        /// </summary>
-        [TestMethod]
-        public void Bug_SVD_ReturnsDefault()
-        {
-            var a = np.array(new double[,] { { 1, 2 }, { 3, 4 } });
-            var (u, s, vh) = a.svd();
-
-            u.Should().NotBeNull(
-                "NumPy: np.linalg.svd([[1,2],[3,4]]) returns (U, S, Vh). " +
-                "NumSharp: NdArray.SVD.cs returns default which is (null, null, null).");
-            s.Should().NotBeNull();
-            vh.Should().NotBeNull();
-        }
-
-        // ================================================================
-        //
-        //  BUG 43: nd.lstqr() returns null + misspelled (should be lstsq)
-        //
-        //  SEVERITY: High — public method returns null AND has wrong name.
-        //
-        //  PYTHON VERIFICATION (NumPy 2.4.2):
-        //    >>> a = np.array([[1,1],[1,2],[1,3]])
-        //    >>> b = np.array([1,2,3])
-        //    >>> np.linalg.lstsq(a, b, rcond=None)[0]
-        //    array([0., 1.])
-        //
-        // ================================================================
-
-        /// <summary>
-        ///     BUG 43: nd.lstqr() returns null. Also misspelled: should be lstsq.
-        /// </summary>
-        [TestMethod]
-        public void Bug_Lstsq_ReturnsNull_AndMisspelled()
-        {
-            var a = np.array(new double[,] { { 1, 1 }, { 1, 2 }, { 1, 3 } });
-            var b = np.array(new double[] { 1, 2, 3 });
-
-            // Note: method is misspelled as "lstqr" instead of "lstsq"
-            var result = a.lstqr(b);
-
-            result.Should().NotBeNull(
-                "NumPy: np.linalg.lstsq(a, b) returns least-squares solution. " +
-                "NumSharp: NdArray.LstSq.cs method 'lstqr' (misspelled, should be " +
-                "'lstsq') always returns null (implementation commented out).");
-        }
-
-        // ================================================================
-        //
-        //  BUG 44: nd.multi_dot() returns null (dead code)
-        //
-        //  SEVERITY: Medium — public method returns null.
-        //
-        //  PYTHON VERIFICATION (NumPy 2.4.2):
-        //    >>> np.linalg.multi_dot([np.eye(2), np.eye(2)])
-        //    array([[1., 0.],
-        //           [0., 1.]])
-        //
-        // ================================================================
-
-        /// <summary>
-        ///     BUG 44: nd.multi_dot() returns null.
-        /// </summary>
-        [TestMethod]
-        public void Bug_MultiDot_ReturnsNull()
-        {
-            var a = np.eye(2);
-            var b = np.eye(2);
-            var result = a.multi_dot(b);
-
-            result.Should().NotBeNull(
-                "NumPy: np.linalg.multi_dot([eye(2), eye(2)]) = eye(2). " +
-                "NumSharp: NdArray.multi_dot.cs always returns null.");
-        }
-
-        // ================================================================
-        //
-        //  BUG 45: nd.roll(shift) no-axis overload returns null
-        //
-        //  SEVERITY: Medium — public method returns null.
-        //
-        //  The no-axis overload at NDArray.roll.cs:70 has its body
-        //  commented out and returns null. The with-axis overload
-        //  partially works (Int32/Single/Double only).
-        //
-        //  PYTHON VERIFICATION (NumPy 2.4.2):
-        //    >>> np.roll(np.array([1,2,3,4,5]), 2)
-        //    array([4, 5, 1, 2, 3])
-        //
-        // ================================================================
-
-        /// <summary>
-        ///     BUG 45: nd.roll(shift) without axis returns null.
-        ///     The no-axis overload body is commented out.
-        /// </summary>
-        [TestMethod]
-        public void Bug_Roll_NoAxis_ReturnsNull()
-        {
-            var a = np.array(new[] { 1, 2, 3, 4, 5 });
-            var result = a.roll(2);
-
-            result.Should().NotBeNull(
-                "NumPy: np.roll([1,2,3,4,5], 2) = [4,5,1,2,3]. " +
-                "NumSharp: NDArray.roll(int shift) at NDArray.roll.cs:70 " +
-                "has its body commented out and returns null.");
-            result.size.Should().Be(5);
-            result.GetInt32(0).Should().Be(4);
-            result.GetInt32(1).Should().Be(5);
-            result.GetInt32(2).Should().Be(1);
-        }
-
-        // ================================================================
-        //
-        //  BUG 46: Boolean mask setter throws NotImplementedException
-        //
-        //  SEVERITY: High — fundamental indexing operation broken.
-        //
-        //  a[mask] = value is a core NumPy operation (e.g., a[a > 5] = 0).
-        //  The getter works, but the setter at NDArray.Indexing.Masking.cs:26
-        //  throws NotImplementedException.
-        //
-        //  PYTHON VERIFICATION (NumPy 2.4.2):
-        //    >>> a = np.array([1,2,3,4,5])
-        //    >>> a[a > 3] = 0
-        //    >>> a
-        //    array([1, 2, 3, 0, 0])
-        //
-        // ================================================================
-
-        /// <summary>
-        ///     BUG 46: Boolean mask setter throws NotImplementedException.
-        ///     a[mask] = value is a fundamental NumPy operation.
-        /// </summary>
-        [TestMethod]
-        public void Bug_BooleanMaskSetter_ThrowsNotImplemented()
-        {
-            var a = np.array(new[] { 1, 2, 3, 4, 5 });
-            var mask = a > np.array(new[] { 3, 3, 3, 3, 3 });
-
-            new Action(() => a[mask] = np.array(new[] { 0 }))
-                .Should().NotThrow(
-                    "NumPy: a = [1,2,3,4,5]; a[a>3] = 0 → [1,2,3,0,0]. " +
-                    "NumSharp: Boolean mask setter at NDArray.Indexing.Masking.cs:26 " +
-                    "throws NotImplementedException.");
-
-            a.GetInt32(0).Should().Be(1);
-            a.GetInt32(1).Should().Be(2);
-            a.GetInt32(2).Should().Be(3);
-            a.GetInt32(3).Should().Be(0, "element > 3 should be set to 0");
-            a.GetInt32(4).Should().Be(0, "element > 3 should be set to 0");
-        }
-
-        // ================================================================
-        //
-        //  BUG 47: np.positive() implements abs() instead of +x identity
-        //
-        //  SEVERITY: Medium — wrong semantics, silently returns wrong values.
-        //
-        //  NumPy: np.positive(x) is equivalent to +x (identity for numeric).
-        //  NumSharp: Takes absolute value of negative numbers (implements
-        //  abs instead of positive). Also flips booleans (logical NOT).
-        //
-        //  PYTHON VERIFICATION (NumPy 2.4.2):
-        //    >>> np.positive(np.array([-3, -1, 0, 2, 5]))
-        //    array([-3, -1,  0,  2,  5])
-        //
-        // ================================================================
-
-        /// <summary>
-        ///     BUG 47: np.positive implements abs() instead of +x identity.
-        ///     NumPy: positive([-3,-1,0,2,5]) = [-3,-1,0,2,5] (unchanged).
-        ///     NumSharp: [3,1,0,2,5] (takes absolute value of negatives).
-        /// </summary>
-        [TestMethod]
-        public void Bug_Positive_ImplementsAbsInsteadOfIdentity()
-        {
-            var a = np.array(new[] { -3, -1, 0, 2, 5 });
-            var result = np.positive(a);
-
-            result.GetInt32(0).Should().Be(-3,
-                "NumPy: np.positive([-3,-1,0,2,5])[0] = -3 (identity, unchanged). " +
-                "NumSharp returns 3 because NDArray.positive.cs implements abs() " +
-                "instead of the identity +x operation. The code has " +
-                "'if (val < 0) out_addr[i] = -val' which is absolute value.");
-            result.GetInt32(1).Should().Be(-1, "positive(-1) = -1 (identity)");
-            result.GetInt32(2).Should().Be(0, "positive(0) = 0");
-            result.GetInt32(3).Should().Be(2, "positive(2) = 2");
-            result.GetInt32(4).Should().Be(5, "positive(5) = 5");
-        }
-
-        // ================================================================
-        //
-        //  BUG 48: np.negative() only negates positive values
-        //
-        //  SEVERITY: Medium — wrong semantics, silently returns wrong values.
-        //
-        //  NumPy: np.negative(x) is -x for ALL elements.
-        //  NumSharp: Only negates positive values, leaves negatives unchanged.
-        //
-        //  PYTHON VERIFICATION (NumPy 2.4.2):
-        //    >>> np.negative(np.array([-3, -1, 0, 2, 5]))
-        //    array([ 3,  1,  0, -2, -5])
-        //
-        // ================================================================
-
-        /// <summary>
-        ///     BUG 48: np.negative only negates positive values, not all.
-        ///     NumPy: negative([-3,-1,0,2,5]) = [3,1,0,-2,-5].
-        ///     NumSharp: [-3,-1,0,-2,-5] (negatives left unchanged).
-        /// </summary>
-        [TestMethod]
-        public void Bug_Negative_OnlyNegatesPositiveValues()
-        {
-            var a = np.array(new[] { -3, -1, 0, 2, 5 });
-            var result = np.negative(a);
-
-            result.GetInt32(0).Should().Be(3,
-                "NumPy: np.negative(-3) = 3. NumSharp returns -3 because " +
-                "NDArray.negative.cs has 'if (val > 0) out_addr[i] = -val' " +
-                "which only negates positive values, leaving negatives unchanged.");
-            result.GetInt32(1).Should().Be(1, "negative(-1) = 1");
-            result.GetInt32(2).Should().Be(0, "negative(0) = 0");
-            result.GetInt32(3).Should().Be(-2, "negative(2) = -2");
-            result.GetInt32(4).Should().Be(-5, "negative(5) = -5");
-        }
-
-        // ================================================================
-        //
-        //  BUG 49: np.all(axis) always throws NotImplementedException
-        //
-        //  SEVERITY: High — axis reduction completely unimplemented.
-        //
-        //  DefaultEngine.All(NDArray, int axis) at Default.All.cs:44
-        //  throws NotImplementedException. Additionally, the no-axis
-        //  overload only supports boolean dtype, unlike NumPy which
-        //  treats any nonzero as True.
-        //
-        //  PYTHON VERIFICATION (NumPy 2.4.2):
-        //    >>> np.all([[True, False], [True, True]], axis=0)
-        //    array([ True, False])
-        //    >>> np.all(np.array([1, 2, 0]))  # int input
-        //    False
-        //
-        // ================================================================
-
-        /// <summary>
-        ///     BUG 49a: np.all(axis) throws NotImplementedException.
-        /// </summary>
-        [TestMethod]
-        public void Bug_All_WithAxis_AlwaysThrows()
-        {
-            var a = np.array(new bool[,] { { true, false }, { true, true } });
-
-            NDArray result = null;
-            new Action(() => result = np.all(a, 0))
-                .Should().NotThrow(
-                    "NumPy: np.all([[T,F],[T,T]], axis=0) = [True, False]. " +
-                    "NumSharp: DefaultEngine.All(NDArray, int axis) at " +
-                    "Default.All.cs:44 throws NotImplementedException.");
-
-            result.Should().NotBeNull();
-            result.shape.Should().BeEquivalentTo(new[] { 2 });
-            result.GetBoolean(0).Should().BeTrue("all of [T,T] along axis 0 → T");
-            result.GetBoolean(1).Should().BeFalse("all of [F,T] along axis 0 → F");
-        }
-
-        /// <summary>
-        ///     BUG 49b: np.all on integer array should treat nonzero as True.
-        ///     NumPy: np.all([1,2,0]) = False. NumSharp only supports boolean dtype.
-        /// </summary>
-        [TestMethod]
-        public void Bug_All_IntArray_ShouldTreatNonzeroAsTrue()
-        {
-            var a = np.array(new[] { 1, 2, 3 });
-
-            bool result = false;
-            new Action(() => result = np.all(a))
-                .Should().NotThrow(
-                    "NumPy: np.all([1,2,3]) = True (all nonzero). " +
-                    "NumSharp: DefaultEngine.All only supports boolean dtype, " +
-                    "throws or returns wrong result for integer arrays.");
-
-            result.Should().BeTrue("all elements [1,2,3] are nonzero → True");
-
-            var b = np.array(new[] { 1, 0, 3 });
-            bool result2 = true;
-            new Action(() => result2 = np.all(b))
-                .Should().NotThrow();
-            result2.Should().BeFalse("element 0 is zero → False");
-        }
-
-        // ================================================================
-        //
-        //  BUG 50: nd.roll(shift, axis) only supports 3 of 12 dtypes
-        //
-        //  SEVERITY: Medium — throws NotImplementedException for most types.
-        //
-        //  NDArray.roll(int shift, int axis) only handles Int32, Single,
-        //  Double. All other 9 supported dtypes (Boolean, Byte, Int16,
-        //  UInt16, UInt32, Int64, UInt64, Char, Decimal) throw.
-        //
-        //  PYTHON VERIFICATION (NumPy 2.4.2):
-        //    >>> np.roll(np.array([1,2,3], dtype=np.int64), 1)
-        //    array([3, 1, 2])
-        //    >>> np.roll(np.array([1,2,3], dtype=np.uint8), 1)
-        //    array([3, 1, 2], dtype=uint8)
-        //
-        // ================================================================
-
-        /// <summary>
-        ///     BUG 50a: nd.roll on int64 throws NotImplementedException.
-        /// </summary>
-        [TestMethod]
-        public void Bug_Roll_Int64_ThrowsNotImplemented()
-        {
-            var a = np.array(new long[] { 10, 20, 30 });
-
-            NDArray result = null;
-            new Action(() => result = a.roll(1, 0))
-                .Should().NotThrow(
-                    "NumPy: np.roll(int64_array, 1, axis=0) works for all dtypes. " +
-                    "NumSharp: NDArray.roll.cs only handles Int32/Single/Double; " +
-                    "all other dtypes throw NotImplementedException.");
-
-            result.Should().NotBeNull();
-            result.GetInt64(0).Should().Be(30);
-            result.GetInt64(1).Should().Be(10);
-            result.GetInt64(2).Should().Be(20);
-        }
-
-        /// <summary>
-        ///     BUG 50b: nd.roll on byte (uint8) throws NotImplementedException.
-        /// </summary>
-        [TestMethod]
-        public void Bug_Roll_Byte_ThrowsNotImplemented()
-        {
-            var a = np.array(new byte[] { 1, 2, 3 });
-
-            NDArray result = null;
-            new Action(() => result = a.roll(1, 0))
-                .Should().NotThrow(
-                    "NumPy: np.roll(uint8_array, 1, axis=0) works for all dtypes. " +
-                    "NumSharp throws NotImplementedException for byte arrays.");
-
-            result.Should().NotBeNull();
-            result.GetByte(0).Should().Be(3);
-            result.GetByte(1).Should().Be(1);
-            result.GetByte(2).Should().Be(2);
+            var a = np.arange(12).reshape(3, 4);
+            var s = a["1:3"];
+
+            s.Shape.IsSliced.Should().BeTrue("row slice creates a sliced shape");
+            s.Shape.IsContiguous.Should().BeTrue(
+                "NumPy: a[1:3].flags['C_CONTIGUOUS'] is True — consecutive row " +
+                "slice of a C-contiguous 2D array is contiguous in memory. " +
+                "NumSharp returns false because IsContiguous treats all slices " +
+                "as non-contiguous. Root cause: Shape.cs line ~39.");
         }
     }
 }

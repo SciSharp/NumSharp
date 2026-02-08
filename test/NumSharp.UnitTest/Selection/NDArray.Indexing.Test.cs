@@ -1283,10 +1283,16 @@ namespace NumSharp.UnitTest.Selection
         [TestMethod]
         public void GetCoordinates_Broadcasted()
         {
+            // Scalar 1 broadcast to (2,2,2): all elements are 1, strides are [0,0,0].
+            // GetCoordinates should return correct logical coordinates within the
+            // broadcast shape, matching np.unravel_index behavior.
             var nd = np.broadcast_to(np.array(1), (2, 2, 2));
-            var t = nd.Shape.GetCoordinatesFromAbsoluteIndex(15);
-            print(t);
-            t.Should().AllBeEquivalentTo(0);
+
+            // Valid indices: 0..7 for shape (2,2,2)
+            nd.Shape.GetCoordinatesFromAbsoluteIndex(0).Should().BeEquivalentTo(new[] { 0, 0, 0 });
+            nd.Shape.GetCoordinatesFromAbsoluteIndex(1).Should().BeEquivalentTo(new[] { 0, 0, 1 });
+            nd.Shape.GetCoordinatesFromAbsoluteIndex(4).Should().BeEquivalentTo(new[] { 1, 0, 0 });
+            nd.Shape.GetCoordinatesFromAbsoluteIndex(7).Should().BeEquivalentTo(new[] { 1, 1, 1 });
         }
 
         [TestMethod]

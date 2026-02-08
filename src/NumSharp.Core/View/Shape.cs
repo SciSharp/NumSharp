@@ -641,8 +641,16 @@ namespace NumSharp
             var bi = BroadcastInfo;
             if (IsRecursive && vi.Slices == null)
             {
-                // we are dealing with an unsliced recursively reshaped slice
-                offset = GetOffset_IgnoreViewInfo(indices);
+                // Compute pure linear offset in the reshaped shape (no broadcast modular arithmetic).
+                // Then convert to parent broadcast shape coordinates and resolve through parent's GetOffset
+                // which correctly applies broadcast strides (zero-stride for broadcast dimensions).
+                offset = 0;
+                unchecked
+                {
+                    for (int i = 0; i < indices.Length; i++)
+                        offset += strides[i] * indices[i];
+                }
+
                 var parent_coords = vi.ParentShape.GetCoordinates(offset);
                 return vi.ParentShape.GetOffset(parent_coords);
             }
@@ -711,8 +719,9 @@ namespace NumSharp
             var bi = BroadcastInfo;
             if (IsRecursive && vi.Slices == null)
             {
-                // we are dealing with an unsliced recursively reshaped slice
-                offset = GetOffset_IgnoreViewInfo(index);
+                // Compute pure linear offset (no broadcast modular arithmetic).
+                // Then resolve through parent broadcast shape's GetOffset.
+                offset = strides[0] * index;
                 var parent_coords = vi.ParentShape.GetCoordinates(offset);
                 return vi.ParentShape.GetOffset(parent_coords);
             }
@@ -855,13 +864,33 @@ namespace NumSharp
         [MethodImpl((MethodImplOptions)768)]
         public readonly int[] GetCoordinates(int offset)
         {
-            int[] coords = null;
+            // For broadcast shapes, strides contain zeros which break stride-based
+            // decomposition (dividing by zero-stride skips dimensions, causing overflow
+            // in subsequent dimensions). Use dimension-based decomposition instead,
+            // matching NumPy's PyArray_ITER_GOTO1D which uses factors (product of
+            // trailing dimensions) rather than strides.
+            if (IsBroadcasted)
+            {
+                var coords = new int[dimensions.Length];
+                int remaining = offset;
+                for (int i = 0; i < dimensions.Length; i++)
+                {
+                    int factor = 1;
+                    for (int j = i + 1; j < dimensions.Length; j++)
+                        factor *= dimensions[j];
+                    coords[i] = remaining / factor;
+                    remaining %= factor;
+                }
+                return coords;
+            }
+
+            int[] coords2 = null;
 
             if (strides.Length == 1)
-                coords = new int[] {offset};
+                coords2 = new int[] {offset};
 
             int counter = offset;
-            coords = new int[strides.Length];
+            coords2 = new int[strides.Length];
             int stride;
             for (int i = 0; i < strides.Length; i++)
             {
@@ -870,17 +899,17 @@ namespace NumSharp
                     stride = strides[i];
                     if (stride == 0)
                     {
-                        coords[i] = 0;
+                        coords2[i] = 0;
                     }
                     else
                     {
-                        coords[i] = counter / stride;
-                        counter -= coords[i] * stride;
+                        coords2[i] = counter / stride;
+                        counter -= coords2[i] * stride;
                     }
                 }
             }
 
-            return coords;
+            return coords2;
         }
 
         /// <summary>

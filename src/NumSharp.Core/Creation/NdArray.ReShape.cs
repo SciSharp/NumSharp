@@ -65,7 +65,7 @@ namespace NumSharp
         public NDArray reshape_unsafe(ref Shape newshape)
         {
             var ret = Storage.Alias();
-            ret.Reshape(shape, true);
+            ret.Reshape(ref newshape, true);
             return new NDArray(ret) { TensorEngine = TensorEngine };
         }
 

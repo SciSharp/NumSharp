@@ -1438,16 +1438,20 @@ namespace NumSharp.UnitTest.Creation
         }
 
         /// <summary>
-        ///     broadcast_to on an already-broadcasted array throws NotSupportedException.
+        ///     Re-broadcasting an already-broadcasted array should work (matching NumPy).
+        ///     NumPy: broadcast_to(broadcast_to(ones((1,3)), (4,3)), (2,4,3)) → shape (2,4,3).
+        ///     The IsBroadcasted guard was removed in Bug 4 fix (Phase 3).
         /// </summary>
         [TestMethod]
-        public void BroadcastTo_AlreadyBroadcasted_Throws()
+        public void BroadcastTo_AlreadyBroadcasted_Works()
         {
             var x = np.ones(new Shape(1, 3));
             var bx = np.broadcast_to(x, new Shape(4, 3));
 
-            new Action(() => np.broadcast_to(bx, new Shape(2, 4, 3)))
-                .Should().Throw<NotSupportedException>();
+            var result = np.broadcast_to(bx, new Shape(2, 4, 3));
+            result.shape.Should().BeEquivalentTo(new[] { 2, 4, 3 });
+            result.GetDouble(0, 0, 0).Should().Be(1.0);
+            result.GetDouble(1, 3, 2).Should().Be(1.0);
         }
 
         /// <summary>
