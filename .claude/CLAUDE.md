@@ -134,7 +134,7 @@ nd["..., -1"]     // Ellipsis fills dimensions
 | `np.amax`, `nd.amax()` | `Sorting/np.amax.cs`, `NDArray.amax.cs` |
 | `np.amin`, `nd.amin()` | `Sorting/np.min.cs`, `NDArray.amin.cs` |
 | `np.argmax`, `nd.argmax()` | `Sorting/np.argmax.cs`, `NDArray.argmax.cs` |
-| `np.argmin`, `nd.argmin()` | `NDArray.argmin.cs` |
+| `np.argmin`, `nd.argmin()` | `Sorting_Searching_Counting/np.argmax.cs`, `NDArray.argmin.cs` |
 
 ### Sorting & Searching (`Sorting_Searching_Counting/`)
 | Function | File |
@@ -148,13 +148,13 @@ nd["..., -1"]     // Ellipsis fills dimensions
 | `np.dot`, `nd.dot()` | `np.dot.cs`, `NDArray.dot.cs` |
 | `np.matmul` | `np.matmul.cs` |
 | `np.outer` | `np.outer.cs` |
-| `np.linalg.norm` | `np.linalg.norm.cs` |
-| `nd.inv()` | `NdArray.Inv.cs` |
-| `nd.qr()` | `NdArray.QR.cs` |
-| `nd.svd()` | `NdArray.SVD.cs` |
-| `nd.lstsq()` | `NdArray.LstSq.cs` |
-| `nd.multi_dot()` | `NdArray.multi_dot.cs` |
-| `nd.matrix_power()` | `NDArray.matrix_power.cs` |
+| ~~`np.linalg.norm`~~ | `np.linalg.norm.cs` | **DEAD CODE**: declared `private static` — not accessible |
+| `nd.matrix_power()` | `NDArray.matrix_power.cs` | |
+| ~~`nd.inv()`~~ | `NdArray.Inv.cs` | **DEAD CODE**: returns null |
+| ~~`nd.qr()`~~ | `NdArray.QR.cs` | **DEAD CODE**: returns default |
+| ~~`nd.svd()`~~ | `NdArray.SVD.cs` | **DEAD CODE**: returns default |
+| ~~`nd.lstsq()`~~ | `NdArray.LstSq.cs` | **DEAD CODE**: named `lstqr`, returns null |
+| ~~`nd.multi_dot()`~~ | `NdArray.multi_dot.cs` | **DEAD CODE**: returns null |
 
 ### Shape Manipulation (`Manipulation/`)
 | Function | File |
@@ -168,22 +168,25 @@ nd["..., -1"]     // Ellipsis fills dimensions
 | `np.swapaxes` | `np.swapaxes.cs`, `NdArray.swapaxes.cs` |
 | `np.moveaxis` | `np.moveaxis.cs` |
 | `np.rollaxis` | `np.rollaxis.cs` |
-| `nd.roll()` | `NDArray.roll.cs` |
+| `nd.roll()` | `NDArray.roll.cs` | Partial: only Int32/Single/Double with axis; no-axis returns null |
 | `np.atleast_1d/2d/3d` | `np.atleastd.cs` |
 | `np.unique`, `nd.unique()` | `np.unique.cs`, `NDArray.unique.cs` |
 | `np.repeat` | `np.repeat.cs` |
-| `nd.delete()` | `NdArray.delete.cs` |
+| ~~`nd.delete()`~~ | `NdArray.delete.cs` | **DEAD CODE**: returns null |
 | `np.copyto` | `np.copyto.cs` |
 
 ### Logic Functions (`Logic/`)
 | Function | File |
 |----------|------|
-| `np.all` | `np.all.cs` |
-| `np.any` | `np.any.cs` |
-| `np.allclose` | `np.allclose.cs` |
-| `np.array_equal` | `np.array_equal.cs` |
-| `np.isnan`, `np.isinf`, `np.isfinite` | `np.is.cs` |
-| `np.find_common_type` | `np.find_common_type.cs` |
+| `np.all` | `np.all.cs` | All dtypes; with-axis works |
+| `np.any` | `np.any.cs` | All dtypes; with-axis **BUGGY** (always throws) |
+| ~~`np.allclose`~~ | `np.allclose.cs` | **DEAD CODE**: depends on `np.isclose` which returns null |
+| `np.array_equal` | `np.array_equal.cs` | |
+| `np.isscalar` | `np.is.cs` | |
+| ~~`np.isnan`~~ | `np.is.cs` | **DEAD CODE**: `DefaultEngine.IsNan` returns null |
+| ~~`np.isfinite`~~ | `np.is.cs` | **DEAD CODE**: `DefaultEngine.IsFinite` returns null |
+| ~~`np.isclose`~~ | `np.is.cs` | **DEAD CODE**: `DefaultEngine.IsClose` returns null |
+| `np.find_common_type` | `np.find_common_type.cs` | |
 
 ### Comparison Operators (`Operations/Elementwise/`)
 | Operator | File |
@@ -192,8 +195,8 @@ nd["..., -1"]     // Ellipsis fills dimensions
 | `!=` | `NDArray.NotEquals.cs` |
 | `>`, `>=` | `NDArray.Greater.cs` |
 | `<`, `<=` | `NDArray.Lower.cs` |
-| `&` (AND) | `NDArray.AND.cs` |
-| `\|` (OR) | `NDArray.OR.cs` |
+| ~~`&` (AND)~~ | `NDArray.AND.cs` | **DEAD CODE**: returns null |
+| ~~`\|` (OR)~~ | `NDArray.OR.cs` | **DEAD CODE**: returns null |
 | `!` (NOT) | `NDArray.NOT.cs` |
 
 ### Arithmetic Operators (`Operations/Elementwise/`)
@@ -205,7 +208,7 @@ nd["..., -1"]     // Ellipsis fills dimensions
 | Feature | File |
 |---------|------|
 | Integer/slice indexing | `NDArray.Indexing.cs` |
-| Boolean masking | `NDArray.Indexing.Masking.cs` |
+| Boolean masking | `NDArray.Indexing.Masking.cs` | Read works; setter throws NotImplementedException |
 | Fancy indexing (NDArray indices) | `NDArray.Indexing.Selection.cs` |
 | `np.nonzero` | `Indexing/np.nonzero.cs` |
 
