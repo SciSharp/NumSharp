@@ -219,9 +219,7 @@ namespace NumSharp
             }
             else
             {
-#pragma warning disable 618 // SizeOf would be Obsolete
-                bytes = Marshal.SizeOf(type);
-#pragma warning restore 618 // SizeOf would be Obsolete
+                bytes = System.Runtime.InteropServices.Marshal.SizeOf(type);
             }
 
             if (type == typeof(bool))
