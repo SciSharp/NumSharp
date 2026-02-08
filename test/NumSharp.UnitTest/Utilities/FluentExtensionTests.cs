@@ -623,5 +623,142 @@ namespace NumSharp.UnitTest.Utilities
         }
 
         #endregion
+
+        #region New Capabilities
+
+        [TestMethod]
+        public void NDArray_BeContiguous_Passes_ForFreshArray()
+        {
+            np.arange(6).Should().BeContiguous();
+        }
+
+        [TestMethod]
+        public void NDArray_NotBeContiguous_Passes_ForSlicedWithStep()
+        {
+            np.arange(10)["::2"].Should().NotBeContiguous();
+        }
+
+        [TestMethod]
+        public void Shape_BeContiguous_Passes()
+        {
+            np.arange(6).reshape(2, 3).Shape.Should().BeContiguous();
+        }
+
+        [TestMethod]
+        public void Shape_HaveStrides_Passes()
+        {
+            // (2,3) C-order strides are (3,1)
+            np.arange(6).reshape(2, 3).Shape.Should().HaveStrides(3, 1);
+        }
+
+        [TestMethod]
+        public void Shape_HaveStrides_Fails_WhenWrong()
+        {
+            Action act = () => np.arange(6).reshape(2, 3).Shape.Should().HaveStrides(1, 3);
+            act.Should().Throw<Exception>();
+        }
+
+        [TestMethod]
+        public void NDArray_HaveStrides_Passes()
+        {
+            np.arange(6).reshape(2, 3).Should().HaveStrides(3, 1);
+        }
+
+        [TestMethod]
+        public void NDArray_BeEmpty_Passes()
+        {
+            new NDArray(NPTypeCode.Int32).Should().BeEmpty();
+        }
+
+        [TestMethod]
+        public void NDArray_BeEmpty_Fails_WhenNotEmpty()
+        {
+            Action act = () => np.arange(3).Should().BeEmpty();
+            act.Should().Throw<Exception>();
+        }
+
+        [TestMethod]
+        public void NDArray_NotBeOfType_Passes()
+        {
+            np.arange(3).Should().NotBeOfType(NPTypeCode.Double);
+        }
+
+        [TestMethod]
+        public void NDArray_NotBeOfType_Fails_WhenMatch()
+        {
+            Action act = () => np.arange(3).Should().NotBeOfType(NPTypeCode.Int32);
+            act.Should().Throw<Exception>();
+        }
+
+        [TestMethod]
+        public void NDArray_NotBeOfType_Generic_Passes()
+        {
+            np.arange(3).Should().NotBeOfType<double>();
+        }
+
+        [TestMethod]
+        public void NDArray_NotBe_Passes_WhenDifferent()
+        {
+            var a = np.array(new[] { 1, 2, 3 });
+            var b = np.array(new[] { 1, 2, 4 });
+            a.Should().NotBe(b);
+        }
+
+        [TestMethod]
+        public void NDArray_NotBe_Fails_WhenEqual()
+        {
+            var a = np.array(new[] { 1, 2, 3 });
+            var b = np.array(new[] { 1, 2, 3 });
+            Action act = () => a.Should().NotBe(b);
+            act.Should().Throw<Exception>();
+        }
+
+        #endregion
+
+        #region Correctness — Error Message Fixes
+
+        [TestMethod]
+        public void Shape_NotBe_ErrorMessage_SaysDidNotExpect()
+        {
+            // Verifies the inverted error message fix
+            var s = new Shape(2, 3);
+            try
+            {
+                s.Should().NotBe(new Shape(2, 3));
+                Assert.Fail("Should have thrown");
+            }
+            catch (Exception ex)
+            {
+                Assert.IsTrue(ex.Message.Contains("Did not expect"),
+                    $"Error message should say 'Did not expect', got: {ex.Message}");
+            }
+        }
+
+        [TestMethod]
+        public void NDArray_NotBeShaped_ErrorMessage_SaysDidNotExpect()
+        {
+            var a = np.arange(6).reshape(2, 3);
+            try
+            {
+                a.Should().NotBeShaped(new Shape(2, 3));
+                Assert.Fail("Should have thrown");
+            }
+            catch (Exception ex)
+            {
+                Assert.IsTrue(ex.Message.Contains("Did not expect"),
+                    $"Error message should say 'Did not expect', got: {ex.Message}");
+            }
+        }
+
+        [TestMethod]
+        public void BeOfValuesApproximately_UInt64_BothDirections()
+        {
+            // Verifies UInt64 overflow fix: 3UL vs 5UL should have distance 2, not wrap around
+            var a = np.array(new ulong[] { 5, 3 });
+            a.Should().BeOfValuesApproximately(3.0, 3UL, 5UL);
+        }
+
+        #endregion
     }
 }
+

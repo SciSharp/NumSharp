@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Diagnostics;
-using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using AwesomeAssertions;
@@ -116,7 +115,7 @@ namespace NumSharp.UnitTest.Utilities
             _chain
                 .BecauseOf(because, becauseArgs)
                 .ForCondition(!Subject.Equals(shape))
-                .FailWith($"Expected shape to be {shape.ToString()} but got {Subject.ToString()}");
+                .FailWith($"Did not expect shape to be {Subject.ToString()}.");
 
             return new AndConstraint<ShapeAssertions>(this);
         }
@@ -161,6 +160,27 @@ namespace NumSharp.UnitTest.Utilities
         public AndConstraint<ShapeAssertions> NotBeBroadcasted()
         {
             Subject.IsBroadcasted.Should().BeFalse();
+            return new AndConstraint<ShapeAssertions>(this);
+        }
+
+        public AndConstraint<ShapeAssertions> BeContiguous()
+        {
+            Subject.IsContiguous.Should().BeTrue("expected shape to be contiguous");
+            return new AndConstraint<ShapeAssertions>(this);
+        }
+
+        public AndConstraint<ShapeAssertions> NotBeContiguous()
+        {
+            Subject.IsContiguous.Should().BeFalse("expected shape to not be contiguous");
+            return new AndConstraint<ShapeAssertions>(this);
+        }
+
+        public AndConstraint<ShapeAssertions> HaveStrides(params int[] strides)
+        {
+            if (strides == null)
+                throw new ArgumentNullException(nameof(strides));
+
+            Subject.strides.Should().Equal(strides);
             return new AndConstraint<ShapeAssertions>(this);
         }
 
@@ -239,7 +259,7 @@ namespace NumSharp.UnitTest.Utilities
             _chain
                 .BecauseOf(because, becauseArgs)
                 .ForCondition(!Subject.Shape.Equals(shape))
-                .FailWith($"Expected shape to be {shape.ToString()} but got {Subject.ToString()}");
+                .FailWith($"Did not expect ndarray to have shape {Subject.Shape.ToString()}.");
 
             return new AndConstraint<NDArrayAssertions>(this);
         }
@@ -312,11 +332,61 @@ namespace NumSharp.UnitTest.Utilities
         /// <summary>Alias for <see cref="HaveNDim"/>.</summary>
         public AndConstraint<NDArrayAssertions> BeNDim(int ndim) => HaveNDim(ndim);
 
+        public AndConstraint<NDArrayAssertions> BeContiguous()
+        {
+            Subject.Shape.IsContiguous.Should().BeTrue("expected ndarray to be contiguous");
+            return new AndConstraint<NDArrayAssertions>(this);
+        }
+
+        public AndConstraint<NDArrayAssertions> NotBeContiguous()
+        {
+            Subject.Shape.IsContiguous.Should().BeFalse("expected ndarray to not be contiguous");
+            return new AndConstraint<NDArrayAssertions>(this);
+        }
+
+        public AndConstraint<NDArrayAssertions> BeEmpty()
+        {
+            _chain
+                .ForCondition(Subject.size == 0)
+                .FailWith($"Expected ndarray to be empty, but it has size {Subject.size}.");
+            return new AndConstraint<NDArrayAssertions>(this);
+        }
+
+        public AndConstraint<NDArrayAssertions> NotBeOfType(NPTypeCode typeCode)
+        {
+            Subject.typecode.Should().NotBe(typeCode);
+            return new AndConstraint<NDArrayAssertions>(this);
+        }
+
+        public AndConstraint<NDArrayAssertions> NotBeOfType<T>()
+        {
+            Subject.typecode.Should().NotBe(InfoOf<T>.NPTypeCode);
+            return new AndConstraint<NDArrayAssertions>(this);
+        }
+
+        public AndConstraint<NDArrayAssertions> HaveStrides(params int[] strides)
+        {
+            if (strides == null)
+                throw new ArgumentNullException(nameof(strides));
+
+            Subject.Shape.strides.Should().Equal(strides);
+            return new AndConstraint<NDArrayAssertions>(this);
+        }
+
         public AndConstraint<NDArrayAssertions> Be(NDArray expected)
         {
             _chain
                 .ForCondition(np.array_equal(Subject, expected))
                 .FailWith($"Expected the subject and other ndarray to be equals.\n------- Subject -------\n{Subject.ToString(false)}\n------- Expected -------\n{expected.ToString(false)}");
+
+            return new AndConstraint<NDArrayAssertions>(this);
+        }
+
+        public AndConstraint<NDArrayAssertions> NotBe(NDArray expected)
+        {
+            _chain
+                .ForCondition(!np.array_equal(Subject, expected))
+                .FailWith($"Did not expect the ndarrays to be equal.\n------- Subject -------\n{Subject.ToString(false)}");
 
             return new AndConstraint<NDArrayAssertions>(this);
         }
@@ -1046,7 +1116,7 @@ namespace NumSharp.UnitTest.Utilities
                         var nextval = next();
 
                         _chain
-                            .ForCondition(Math.Abs((double)(expected - nextval)) <= sensitivity)
+                            .ForCondition(Math.Abs((double)expected - (double)nextval) <= sensitivity)
                             .FailWith($"Expected NDArray's {{2}}th value to be {{0}}, but found {{1}} (dtype: UInt64).\n------- Subject -------\n{Subject.ToString(false)}\n------- Expected -------\n[{string.Join(", ", values.Select(v => v.ToString()))}]", expected, nextval, i);
                     }
                     break;
