@@ -1,4 +1,5 @@
-﻿using System.Drawing.Imaging;
+﻿using System;
+using System.Drawing.Imaging;
 using System.Resources;
 using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -9,6 +10,13 @@ namespace NumSharp.UnitTest
     [TestClass]
     public class BitmapWithAlphaTests : TestClass
     {
+        [ClassInitialize]
+        public static void RequireWindows(TestContext _)
+        {
+            if (!OperatingSystem.IsWindows())
+                Assert.Inconclusive("System.Drawing.Common requires Windows (GDI+).");
+        }
+
         [TestMethod]
         public void ToNDArray_Case1()
         {

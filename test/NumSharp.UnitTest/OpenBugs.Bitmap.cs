@@ -57,6 +57,13 @@ namespace NumSharp.UnitTest
     [TestClass]
     public class OpenBugsBitmap : TestClass
     {
+        [ClassInitialize]
+        public static void RequireWindows(TestContext _)
+        {
+            if (!OperatingSystem.IsWindows())
+                Assert.Inconclusive("System.Drawing.Common requires Windows (GDI+).");
+        }
+
         // ================================================================
         //
         //  BUG 1: ToNDArray(copy:true) on odd-width 24bpp images produces
