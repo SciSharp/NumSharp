@@ -2,12 +2,14 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Drawing;
 using System.Drawing.Imaging;
+using System.Runtime.Versioning;
 using NumSharp.Backends;
 using NumSharp.Backends.Unmanaged;
 
 // ReSharper disable once CheckNamespace
 namespace NumSharp
 {
+    [SupportedOSPlatform("windows")]
     [SuppressMessage("ReSharper", "SuggestVarOrType_SimpleTypes")]
     [SuppressMessage("ReSharper", "UnusedMember.Global")]
     public static class np_

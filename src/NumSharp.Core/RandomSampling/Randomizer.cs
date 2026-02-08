@@ -5,10 +5,9 @@ namespace NumSharp
 {
     /// <summary>
     ///     Represents a pseudo-random number generator, which is a device that produces a sequence of numbers that meet certain statistical requirements for randomness.<br></br>
-    ///     Equivalent of <see cref="System.Random"/> but with a <see cref="SerializableAttribute"/>.
+    ///     Equivalent of <see cref="System.Random"/>.
     /// </summary>
     /// <remarks>Copied and modified from https://referencesource.microsoft.com/#mscorlib/system/random.cs</remarks>
-    [Serializable]
     public sealed class Randomizer : ICloneable
     {
         private const int MBIG = int.MaxValue;

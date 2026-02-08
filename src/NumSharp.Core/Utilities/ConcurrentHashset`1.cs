@@ -2,15 +2,13 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Runtime.Serialization;
 using System.Threading;
 using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp.Utilities
 {
     [DebuggerDisplay("Count = {Count}")]
-    [Serializable]
-    public class ConcurrentHashset<T> : ICollection<T>, ISet<T>, ISerializable, IDeserializationCallback where T : unmanaged
+    public class ConcurrentHashset<T> : ICollection<T>, ISet<T> where T : unmanaged
     {
         private readonly ReaderWriterLockSlim _lock = new ReaderWriterLockSlim(LockRecursionPolicy.SupportsRecursion);
 
@@ -32,15 +30,6 @@ namespace NumSharp.Utilities
         public ConcurrentHashset(IEnumerable<T> collection, IEqualityComparer<T> comparer)
         {
             hashset = new Hashset<T>(collection, comparer);
-        }
-
-        protected ConcurrentHashset(SerializationInfo info, StreamingContext context)
-        {
-            hashset = new Hashset<T>();
-
-            // not sure about this one really...
-            var iSerializable = hashset as ISerializable;
-            iSerializable.GetObjectData(info, context);
         }
 
         #region Dispose
@@ -66,16 +55,6 @@ namespace NumSharp.Utilities
         ~ConcurrentHashset()
         {
             Dispose(false);
-        }
-
-        public void OnDeserialization(object sender)
-        {
-            hashset.OnDeserialization(sender);
-        }
-
-        public void GetObjectData(SerializationInfo info, StreamingContext context)
-        {
-            hashset.GetObjectData(info, context);
         }
 
         IEnumerator IEnumerable.GetEnumerator()

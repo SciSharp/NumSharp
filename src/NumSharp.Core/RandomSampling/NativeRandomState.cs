@@ -18,7 +18,6 @@ namespace NumSharp
     /// <summary>
     ///     Represents the stored state of <see cref="Randomizer"/>.
     /// </summary>
-    [Serializable]
     public struct NativeRandomState
     {
         public readonly byte[] State;

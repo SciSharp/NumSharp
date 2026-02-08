@@ -33,7 +33,7 @@ namespace NumSharp.UnitTest.Utilities
             //>>>
             var a = new[] {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
             Assert.AreSame(a, a.Step(1));
-            AssertAreEqual(new[] {1, 2, 3, 4, 5, 6, 7, 8, 9, 10}.Reverse().ToArray(), a.Step(-1));
+            AssertAreEqual(new[] {1, 2, 3, 4, 5, 6, 7, 8, 9, 10}.AsEnumerable().Reverse().ToArray(), a.Step(-1));
             AssertAreEqual(new[] {10, 8, 6, 4, 2,}.ToArray(), a.Step(-2));
             AssertAreEqual(new[] {1, 3, 5, 7, 9,}.ToArray(), a.Step(2));
             AssertAreEqual(new[] {10, 7, 4, 1,}.ToArray(), a.Step(-3));

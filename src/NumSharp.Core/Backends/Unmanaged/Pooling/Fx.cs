@@ -4,7 +4,6 @@ using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.ConstrainedExecution;
-using System.Runtime.Serialization;
 using System.Security;
 using System.Threading;
 using NumSharp.Utilities;
@@ -937,27 +936,17 @@ namespace NumSharp.Memory.Pooling
             }
         }
 
-        [Serializable]
         class InternalException : SystemException
         {
             public InternalException(string description)
                 : base(description)
             { }
-
-            protected InternalException(SerializationInfo info, StreamingContext context)
-                : base(info, context)
-            { }
         }
 
-        [Serializable]
         class FatalInternalException : InternalException
         {
             public FatalInternalException(string description)
                 : base(description)
-            { }
-
-            protected FatalInternalException(SerializationInfo info, StreamingContext context)
-                : base(info, context)
             { }
         }
     }

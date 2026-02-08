@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
@@ -10,7 +11,7 @@ namespace NumSharp
     /// <remarks>https://docs.scipy.org/doc/numpy-1.16.0/reference/generated/numpy.dtype.html#numpy.dtype</remarks>
     public class DType
     {
-        protected internal static readonly Dictionary<NPTypeCode, char> _kind_list_map = new Dictionary<NPTypeCode, char>()
+        protected internal static readonly FrozenDictionary<NPTypeCode, char> _kind_list_map = new Dictionary<NPTypeCode, char>()
         {
             {NPTypeCode.Complex, 'c'},
             {NPTypeCode.Boolean, '?'},
@@ -26,7 +27,7 @@ namespace NumSharp
             {NPTypeCode.Single, 'f'},
             {NPTypeCode.Decimal, 'f'},
             {NPTypeCode.String, 'S'},
-        };
+        }.ToFrozenDictionary();
 
         /// <summary>Initializes a new instance of the <see cref="T:System.Object"></see> class.</summary>
         public DType(Type type)

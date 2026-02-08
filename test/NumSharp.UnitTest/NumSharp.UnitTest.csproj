@@ -1,10 +1,10 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
     <IsPackable>false</IsPackable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <LangVersion>12.0</LangVersion>
+    <LangVersion>latest</LangVersion>
     <Platforms>AnyCPU</Platforms>
     <AssemblyOriginatorKeyFile>Open.snk</AssemblyOriginatorKeyFile>
     <Configurations>Debug;Release;Publish</Configurations>
@@ -37,8 +37,7 @@
     <PackageReference Include="FluentAssertions" Version="5.10.3" />
     <PackageReference Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageReference Include="OpenCover" Version="4.7.922" />
-    <PackageReference Include="System.Memory" Version="4.5.5" />
-    <PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="6.0.0" />	
+    <!-- System.Memory and System.Runtime.CompilerServices.Unsafe are built into net8.0+ -->
   </ItemGroup>
 
   <ItemGroup>
