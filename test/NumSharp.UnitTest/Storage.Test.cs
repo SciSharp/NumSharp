@@ -4,7 +4,7 @@ using System.Numerics;
 using System.Collections.Generic;
 using System.Text;
 using System.Linq;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.Backends;
 using NumSharp.Backends.Unmanaged;

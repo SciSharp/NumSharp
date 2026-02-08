@@ -4,7 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using FluentAssertions;
+using AwesomeAssertions;
 using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.LinearAlgebra
@@ -20,7 +20,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
 
             var ret = np.matmul(a, b);
             Console.WriteLine(ret.typecode);
-            ret.flat.AsIterator<int>().ToArray().Should().BeEquivalentTo(15, 18, 21, 42, 54, 66, 69, 90, 111);
+            ret.flat.AsIterator<int>().ToArray().Should().BeEquivalentTo(new[] { 15, 18, 21, 42, 54, 66, 69, 90, 111 });
         }
 
         [TestMethod]
@@ -41,7 +41,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
 
             var ret = np.matmul(a, b);
             Console.WriteLine(ret.typecode);
-            ret.flat.AsIterator<int>().ToArray().Should().BeEquivalentTo(5, 14, 23);
+            ret.flat.AsIterator<int>().ToArray().Should().BeEquivalentTo(new[] { 5, 14, 23 });
         }
 
         [TestMethod]
@@ -89,7 +89,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
 
             var ret = np.matmul(a, b);
             Console.WriteLine(ret.typecode);
-            ret.flat.AsIterator<int>().ToArray().Should().BeEquivalentTo(0, 0, 0, 0, 1, 2, 0, 2, 4);
+            ret.flat.AsIterator<int>().ToArray().Should().BeEquivalentTo(new[] { 0, 0, 0, 0, 1, 2, 0, 2, 4 });
         }
 
         [TestMethod]

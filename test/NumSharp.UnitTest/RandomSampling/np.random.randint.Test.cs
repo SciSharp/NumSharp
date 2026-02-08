@@ -5,7 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using FluentAssertions;
+using AwesomeAssertions;
 using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp.UnitTest.RandomSampling

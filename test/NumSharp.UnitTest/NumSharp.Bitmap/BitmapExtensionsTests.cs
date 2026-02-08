@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Drawing;
 using System.Drawing.Imaging;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.UnitTest.Utilities;
 
@@ -170,8 +170,8 @@ namespace NumSharp.UnitTest
             var nd = bitmap.ToNDArray(copy: true, discardAlpha: true, flat: true);
             var max = np.amax(nd).GetByte();
             var min = np.amin(nd).GetByte();
-            max.Should().BeLessOrEqualTo(255);
-            min.Should().BeGreaterOrEqualTo((byte)0);
+            max.Should().BeLessThanOrEqualTo(255);
+            min.Should().BeGreaterThanOrEqualTo((byte)0);
         }
 
         [TestMethod]

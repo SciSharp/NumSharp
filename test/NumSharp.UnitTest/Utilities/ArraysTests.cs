@@ -2,7 +2,7 @@
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.Backends;
 using NumSharp.Utilities;
@@ -15,19 +15,19 @@ namespace NumSharp.UnitTest.Utilities
         [TestMethod]
         public void Create_1()
         {
-            Arrays.Create(typeof(int), 1000).Should().BeOfType<int[]>().And.HaveCount(1000);
+            Arrays.Create(typeof(int), 1000).Should().BeOfType<int[]>().Which.Should().HaveCount(1000);
         }
 
         [TestMethod]
         public void Create_2()
         {
-            Arrays.Create(typeof(int), new int[] {1000}).Should().BeOfType<int[]>().And.HaveCount(1000);
+            Arrays.Create(typeof(int), new int[] {1000}).Should().BeOfType<int[]>().Which.Should().HaveCount(1000);
         }
 
         [TestMethod]
         public void Create_3()
         {
-            Arrays.Create(NPTypeCode.Int32, 1000).Should().BeOfType<int[]>().And.HaveCount(1000);
+            Arrays.Create(NPTypeCode.Int32, 1000).Should().BeOfType<int[]>().Which.Should().HaveCount(1000);
         }
 
         [TestMethod]

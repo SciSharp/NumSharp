@@ -1,5 +1,5 @@
 ﻿using System;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.Backends;
 
@@ -97,8 +97,8 @@ namespace NumSharp.UnitTest.Manipulation
             var int16 = nd.astype(np.uint16, false);
 
             //test copying
-            int16_copied.Array.Should().Equal(nd.Array);
-            int16.Array.Should().Equal(nd.Array);
+            int16_copied.Should().Be(nd);
+            int16.Should().Be(nd);
             int16_copied.GetTypeCode.Should().Be(NPTypeCode.UInt16);
             int16.GetTypeCode.Should().Be(NPTypeCode.UInt16);
         }

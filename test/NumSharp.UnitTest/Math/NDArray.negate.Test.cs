@@ -5,7 +5,7 @@ using System.Text;
 using NumSharp.Extensions;
 using System.Linq;
 using System.Numerics;
-using FluentAssertions;
+using AwesomeAssertions;
 using NumSharp;
 
 namespace NumSharp.UnitTest.Maths

@@ -1,6 +1,6 @@
 ﻿
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using FluentAssertions;
+using AwesomeAssertions;
 using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.Operations
