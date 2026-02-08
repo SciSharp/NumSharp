@@ -306,6 +306,9 @@ switch (nd.typecode)
 }
 ```
 
+## GitHub Issues
+Create issues on `SciSharp/NumSharp` via `gh issue create` when the user requests it. `GH_TOKEN` is available in the environment.
+
 ## Build & Test
 
 ```bash
@@ -337,29 +340,6 @@ NumSharp uses unsafe in many places, hence include `#:property AllowUnsafeBlocks
 #:property AssemblyName=NumSharp.DotNetRunScript
 #:property PublishAot=false
 #:property AllowUnsafeBlocks=true
-```
-
-### Quick One-Liners
-
-```bash
-# Run a script with full internal access
-dotnet run my_script.cs
-
-# Compare NumPy vs NumSharp type promotion
-dotnet run script.cs   # where script.cs contains:
-# var ct = np._FindCommonType(np.array(1), np.array(1.5));
-# Console.WriteLine(ct); // Double
-
-# Inspect Shape internals
-dotnet run script.cs   # where script.cs contains:
-# var s = new Shape(new int[]{2,3,4});
-# Console.WriteLine($"dims={string.Join(",",s.dimensions)} strides={string.Join(",",s.strides)} size={s.size}");
-
-# Check ViewInfo after slicing
-dotnet run script.cs   # where script.cs contains:
-# var arr = np.arange(24).reshape(2,3,4);
-# var sliced = arr["1, :, ::2"];
-# Console.WriteLine($"ViewInfo: {sliced.Shape.ViewInfo != null}, BroadcastInfo: {sliced.Shape.BroadcastInfo != null}");
 ```
 
 ### Key Internal Members Available
