@@ -2,8 +2,8 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net8.0</TargetFramework>
-    <LangVersion>12.0</LangVersion>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <LangVersion>latest</LangVersion>
     <Platforms>AnyCPU;x64</Platforms>
     <ApplicationIcon />
     <Win32Resource />
@@ -18,8 +18,7 @@
     <PackageReference Include="BenchmarkDotNet" Version="0.12.1" />
     <PackageReference Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageReference Include="Microsoft.Windows.Compatibility" Version="5.0.2" />
-    <PackageReference Include="System.Memory" Version="4.5.5" />
-    <PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="6.0.0" />
+    <!-- System.Memory and System.Runtime.CompilerServices.Unsafe are built into net8.0+ -->
   </ItemGroup>
 
   <ItemGroup>

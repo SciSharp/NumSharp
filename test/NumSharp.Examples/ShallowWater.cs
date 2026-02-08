@@ -1,5 +1,5 @@
 ﻿using System;
-using NumSharp.Core;
+using NumSharp;
 using System.Collections;
 using System.Collections.Generic;
 
