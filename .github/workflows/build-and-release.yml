@@ -11,6 +11,13 @@ on:
 permissions: write-all
 
 env:
+  # Suppress noisy build warnings that clutter CI annotations.
+  # Uses %3B (URL-encoded semicolon) because MSBuild CLI treats raw ; and , as property separators.
+  # XML doc warnings (CS15xx, CS17xx): ~7,200 of ~8,700 total — malformed/missing doc comments
+  # CS8981: 'np' only contains lowercase chars — intentional for NumPy API compat
+  # NU5048: PackageIconUrl deprecated — cosmetic NuGet warning
+  DOTNET_NOWARN: CS1570%3BCS1571%3BCS1572%3BCS1573%3BCS1574%3BCS1587%3BCS1591%3BCS1711%3BCS1734%3BCS8981%3BNU5048
+
   # Exclude known-failing test classes and specific test methods from CI.
   # These are pre-existing bugs tracked in OpenBugs.cs and related test files.
   # When a bug is fixed, remove its exclusion here so CI catches regressions.
@@ -60,7 +67,7 @@ jobs:
         dotnet-quality: 'preview'
 
     - name: Build
-      run: dotnet build test/NumSharp.UnitTest/NumSharp.UnitTest.csproj --configuration Release
+      run: dotnet build test/NumSharp.UnitTest/NumSharp.UnitTest.csproj --configuration Release -p:NoWarn=${{ env.DOTNET_NOWARN }}
 
     - name: Test
       run: dotnet test test/NumSharp.UnitTest/NumSharp.UnitTest.csproj --configuration Release --no-build --verbosity normal --logger trx --filter "${{ env.TEST_FILTER }} ${{ matrix.extra_filter }}"
@@ -105,6 +112,7 @@ jobs:
       run: |
         dotnet build src/NumSharp.Core/NumSharp.Core.csproj \
           --configuration Release \
+          -p:NoWarn=${{ env.DOTNET_NOWARN }} \
           -p:Version=${{ steps.version.outputs.VERSION }} \
           -p:AssemblyVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
           -p:FileVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
@@ -113,6 +121,7 @@ jobs:
 
         dotnet build src/NumSharp.Bitmap/NumSharp.Bitmap.csproj \
           --configuration Release \
+          -p:NoWarn=${{ env.DOTNET_NOWARN }} \
           -p:Version=${{ steps.version.outputs.VERSION }} \
           -p:AssemblyVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
           -p:FileVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
@@ -127,6 +136,7 @@ jobs:
           --configuration Release \
           --no-build \
           --output artifacts/nuget \
+          -p:NoWarn=${{ env.DOTNET_NOWARN }} \
           -p:Version=${{ steps.version.outputs.VERSION }} \
           -p:AssemblyVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
           -p:FileVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
@@ -136,6 +146,7 @@ jobs:
           --configuration Release \
           --no-build \
           --output artifacts/nuget \
+          -p:NoWarn=${{ env.DOTNET_NOWARN }} \
           -p:Version=${{ steps.version.outputs.VERSION }} \
           -p:AssemblyVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
           -p:FileVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
