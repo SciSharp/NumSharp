@@ -44,6 +44,7 @@ np                Static API class (like `import numpy as np`)
 | Decision | Rationale |
 |----------|-----------|
 | Unmanaged memory | Benchmarked fastest ~5y ago; Span/Memory immature then |
+| C-order only | Only row-major (C-order) memory layout. `Shape.layout = 'C'` is hardcoded. No F-order/column-major support. The `order` parameter on `ravel`, `flatten`, `copy`, `reshape` is accepted but ignored. |
 | Regen templating | ~200K lines generated for type-specific code |
 | TensorEngine abstract | Future GPU/SIMD backends possible |
 | View semantics | Slicing returns views (shared memory), not copies |
