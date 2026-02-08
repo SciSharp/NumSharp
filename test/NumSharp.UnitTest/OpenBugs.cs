@@ -50,8 +50,12 @@ namespace NumSharp.UnitTest
     ///       - Bug 14:          roll on broadcast produces zeros/wrong values
     ///       - Bug 15:          sum/mean/var/std axis=0 on column-broadcast under-counts
     ///       - Bug 16:          argsort crashes on any 2D array (not broadcast-specific)
+    ///       - Bug 17:          ROOT CAUSE — GetViewInternal clones broadcast data to
+    ///                          contiguous layout but attaches broadcast strides to the
+    ///                          clone (UnmanagedStorage.Slicing.cs:101). This stride/data
+    ///                          mismatch causes bugs 1, 11, 12, 13, 14, 15.
     ///
-    ///     Total: 16 distinct bugs, 34 test methods.
+    ///     Total: 17 distinct bugs, 38 test methods.
     /// </summary>
     [TestClass]
     public class OpenBugs : TestClass
@@ -1642,6 +1646,299 @@ namespace NumSharp.UnitTest
             result.GetDouble(0, 0).Should().Be(2.0);
             result.GetDouble(0, 1).Should().Be(5.0);
             result.GetDouble(0, 2).Should().Be(7.0);
+        }
+
+        // ================================================================
+        //
+        //  BUG 17: Slicing a broadcast array produces a view with
+        //          mismatched strides vs data layout (ROOT CAUSE)
+        //
+        //  SEVERITY: Critical — this is the ROOT CAUSE of bugs 1, 11,
+        //  12, 13, 14, and 15. Every operation that slices a broadcast
+        //  array hits this code path.
+        //
+        //  LOCATION: UnmanagedStorage.Slicing.cs, GetViewInternal(),
+        //  lines 100-101:
+        //
+        //      if (_shape.IsBroadcasted)
+        //          return Clone().Alias(_shape.Slice(slices));
+        //
+        //  WHAT HAPPENS:
+        //
+        //  1. Clone() correctly materializes the broadcast data into
+        //     contiguous memory. For broadcast_to([[100],[200],[300]],
+        //     (3,3)), CloneData() uses MultiIterator.Assign to produce
+        //     9 elements in row-major order:
+        //       [100, 100, 100, 200, 200, 200, 300, 300, 300]
+        //     This contiguous (3,3) data has implicit strides [3, 1].
+        //
+        //  2. _shape.Slice(slices) computes the sliced shape, but _shape
+        //     is the ORIGINAL BROADCAST shape with strides [1, 0]. The
+        //     resulting ViewInfo.OriginalShape inherits these broadcast
+        //     strides [1, 0].
+        //
+        //  3. .Alias() attaches this broadcast-strided shape to the
+        //     contiguous data. Now there is a MISMATCH: the data is
+        //     laid out with strides [3, 1] but the shape claims [1, 0].
+        //
+        //  4. When GetOffset computes memory offsets (for GetInt32,
+        //     iterators, reductions, etc.), it uses the broadcast
+        //     strides [1, 0] from ViewInfo.OriginalShape. For a[:, 0]:
+        //       GetOffset(0) = 0*1 + 0*0 = 0  → data[0] = 100  ✓
+        //       GetOffset(1) = 1*1 + 0*0 = 1  → data[1] = 100  ✗
+        //       GetOffset(2) = 2*1 + 0*0 = 2  → data[2] = 100  ✗
+        //     But the correct contiguous offsets should be:
+        //       GetOffset(0) = 0*3 + 0*1 = 0  → data[0] = 100  ✓
+        //       GetOffset(1) = 1*3 + 0*1 = 3  → data[3] = 200  ✓
+        //       GetOffset(2) = 2*3 + 0*1 = 6  → data[6] = 300  ✓
+        //
+        //  PROOF: np.copy(a)[:, 0] returns [100, 200, 300] (correct)
+        //  because np.copy creates a clean contiguous shape with strides
+        //  [3, 1]. The direct slice a[:, 0] returns [100, 100, 100]
+        //  because the shape retains broadcast strides [1, 0].
+        //
+        //  The non-broadcast code path (line 103) does NOT have this
+        //  problem because Alias(_shape.Slice(slices)) reuses the
+        //  SAME memory (no Clone), so the strides in the OriginalShape
+        //  match the actual data layout.
+        //
+        //  WHY THIS IS THE ROOT CAUSE OF MANY BUGS:
+        //
+        //  Every operation that indexes into a broadcast array goes
+        //  through GetViewInternal and hits line 101. The returned
+        //  storage has cloned contiguous data but broadcast strides:
+        //
+        //    Bug 1:  ToString iterates the sliced broadcast view
+        //    Bug 11: flatten() iterates the sliced broadcast view
+        //    Bug 12: concatenate copies from sliced broadcast views
+        //    Bug 13: cumsum slices along axis on broadcast arrays
+        //    Bug 14: roll slices along axis on broadcast arrays
+        //    Bug 15: sum/mean/var/std axis reduction slices each
+        //            "lane" via arr[slices] on the broadcast array
+        //
+        //  In all cases, the reduction/iteration code does arr[slices]
+        //  which calls GetViewInternal, which clones the data to
+        //  contiguous layout but keeps broadcast strides, and then
+        //  iteration reads from wrong memory offsets.
+        //
+        //  PYTHON VERIFICATION:
+        //    >>> a = np.broadcast_to(np.array([[100],[200],[300]]), (3,3))
+        //    >>> a[:, 0]
+        //    array([100, 200, 300])
+        //    >>> a[0, :]
+        //    array([100, 100, 100])
+        //    >>> a[:, 0].sum()
+        //    600
+        //
+        // ================================================================
+
+        /// <summary>
+        ///     BUG 17a: Slicing a column-broadcast array with [:, N] reads
+        ///     the same row's value for every row.
+        ///
+        ///     The slice a[:, 0] on broadcast_to([[100],[200],[300]], (3,3))
+        ///     should return [100, 200, 300] (column 0 of each row).
+        ///     Instead it returns [100, 100, 100] — row 0's value repeated.
+        ///
+        ///     Root cause: GetViewInternal clones the data to contiguous
+        ///     layout [3, 1] but the shape retains broadcast strides [1, 0].
+        ///     GetOffset computes offsets 0, 1, 2 (using stride 1) instead
+        ///     of 0, 3, 6 (using stride 3), so it reads data[0..2] which
+        ///     are all 100 (row 0 repeated 3 times in the contiguous clone).
+        /// </summary>
+        [TestMethod]
+        public void Bug_SliceBroadcast_StrideMismatch_ColumnBroadcast_SliceColumn()
+        {
+            // Setup: column vector [[100],[200],[300]] broadcast to (3,3)
+            var col = np.array(new int[,] { { 100 }, { 200 }, { 300 } });
+            var a = np.broadcast_to(col, new Shape(3, 3));
+
+            // Verify the broadcast array itself is correct via coordinate access
+            a.GetInt32(0, 0).Should().Be(100, "broadcast[0,0] = 100");
+            a.GetInt32(1, 0).Should().Be(200, "broadcast[1,0] = 200");
+            a.GetInt32(2, 0).Should().Be(300, "broadcast[2,0] = 300");
+
+            // Slice a[:, 0] — should extract column 0: [100, 200, 300]
+            var sliced = a[":, 0"];
+            sliced.shape.Should().BeEquivalentTo(new[] { 3 });
+
+            // These assertions reproduce the bug:
+            // NumPy returns [100, 200, 300]. NumSharp returns [100, 100, 100].
+            sliced.GetInt32(0).Should().Be(100,
+                "a[:, 0][0] should be 100 (row 0, col 0).");
+            sliced.GetInt32(1).Should().Be(200,
+                "a[:, 0][1] should be 200 (row 1, col 0). " +
+                "NumSharp returns 100 because GetViewInternal clones the broadcast " +
+                "data to contiguous layout (strides [3,1]) but the shape retains " +
+                "broadcast strides [1,0]. GetOffset(1) computes 1*1=1 instead of " +
+                "1*3=3, reading data[1]=100 (still row 0) instead of data[3]=200.");
+            sliced.GetInt32(2).Should().Be(300,
+                "a[:, 0][2] should be 300 (row 2, col 0). " +
+                "NumSharp returns 100 because GetOffset(2) computes 2*1=2 instead " +
+                "of 2*3=6, reading data[2]=100 (still row 0) instead of data[6]=300.");
+        }
+
+        /// <summary>
+        ///     BUG 17b: np.copy produces correct results, proving the data
+        ///     materialization itself works — only the stride assignment is wrong.
+        ///
+        ///     np.copy creates a new contiguous array with clean strides [3,1],
+        ///     so slicing the copy works correctly. This proves Clone()/CloneData()
+        ///     correctly materializes the data; the bug is purely that
+        ///     _shape.Slice(slices) attaches broadcast strides to the clone.
+        /// </summary>
+        [TestMethod]
+        public void Bug_SliceBroadcast_CopyWorkaround_Proves_StrideMismatch()
+        {
+            var col = np.array(new int[,] { { 100 }, { 200 }, { 300 } });
+            var a = np.broadcast_to(col, new Shape(3, 3));
+
+            // np.copy materializes with clean contiguous shape [3, 1]
+            var copy = np.copy(a);
+            copy.strides.Should().BeEquivalentTo(new[] { 3, 1 },
+                "np.copy produces contiguous strides [3,1]");
+            copy.Shape.IsBroadcasted.Should().BeFalse(
+                "np.copy clears broadcast flag");
+
+            // Slicing the copy works correctly
+            var copySliced = copy[":, 0"];
+            copySliced.GetInt32(0).Should().Be(100);
+            copySliced.GetInt32(1).Should().Be(200);
+            copySliced.GetInt32(2).Should().Be(300);
+
+            // Direct slice of broadcast gives wrong values
+            var directSliced = a[":, 0"];
+            directSliced.GetInt32(0).Should().Be(100);
+            directSliced.GetInt32(1).Should().Be(200,
+                "Direct slice a[:, 0][1] must equal np.copy(a)[:, 0][1] = 200. " +
+                "Both paths clone the same data; the difference is that np.copy " +
+                "creates clean strides [3,1] while GetViewInternal keeps broadcast " +
+                "strides [1,0] from _shape.Slice(slices). The data is identical, " +
+                "only the offset calculation differs.");
+            directSliced.GetInt32(2).Should().Be(300,
+                "Direct slice a[:, 0][2] must equal np.copy(a)[:, 0][2] = 300.");
+        }
+
+        /// <summary>
+        ///     BUG 17c: Sliced-then-broadcast array: slicing triggers
+        ///     memory corruption (Debug.Assert: index &lt; Count).
+        ///
+        ///     Setup: arange(12).reshape(3,4)[:,1:2] gives a (3,1) column
+        ///     with values [[1],[5],[9]] and row stride=4 (stepping over
+        ///     4-wide rows). Broadcast to (3,3) then slice b[:, 0].
+        ///
+        ///     The source column has compound strides from the reshape+slice.
+        ///     After Clone, data is 9 contiguous elements. But the shape
+        ///     retains the compound sliced+broadcast strides. GetOffset
+        ///     computes offsets using the original row stride (4), which
+        ///     overshoots the 9-element cloned buffer, triggering
+        ///     Debug.Assert("index &lt; Count, Memory corruption expected").
+        ///
+        ///     This is the same root cause as 17a but with a more severe
+        ///     manifestation: instead of just reading wrong values, the
+        ///     wrong strides cause out-of-bounds memory access.
+        ///
+        ///     We use np.copy as the control path: copy materializes with
+        ///     clean strides, then slicing works correctly.
+        /// </summary>
+        [TestMethod]
+        public void Bug_SliceBroadcast_StrideMismatch_SlicedSourceRows()
+        {
+            // arange(12).reshape(3,4) = [[ 0, 1, 2, 3],
+            //                            [ 4, 5, 6, 7],
+            //                            [ 8, 9,10,11]]
+            // Slice column 1: [:,1:2] = [[1],[5],[9]]
+            // Broadcast to (3,3): [[1,1,1],[5,5,5],[9,9,9]]
+            var x = np.arange(12).reshape(3, 4);
+            var col = x[":, 1:2"]; // (3,1): [[1],[5],[9]]
+            var b = np.broadcast_to(col, new Shape(3, 3));
+
+            // Coordinate access on the broadcast is correct
+            b.GetInt32(0, 0).Should().Be(1);
+            b.GetInt32(1, 0).Should().Be(5);
+            b.GetInt32(2, 0).Should().Be(9);
+
+            // np.copy + slice works correctly (control path)
+            var copySliced = np.copy(b)[":, 0"];
+            copySliced.GetInt32(0).Should().Be(1, "copy[:, 0][0] = 1 (control)");
+            copySliced.GetInt32(1).Should().Be(5, "copy[:, 0][1] = 5 (control)");
+            copySliced.GetInt32(2).Should().Be(9, "copy[:, 0][2] = 9 (control)");
+
+            // Direct slice should give the same result but crashes:
+            // GetViewInternal clones data to 9 contiguous elements but
+            // attaches compound strides from the sliced+broadcast shape.
+            // GetOffset computes offsets using original row stride (4),
+            // which overshoots the 9-element buffer → Debug.Assert fires.
+            //
+            // This try-catch is necessary because Debug.Assert throws a
+            // DebugAssertException that the test platform translates to a
+            // process-level failure, bypassing normal exception handling.
+            try
+            {
+                var sliced = b[":, 0"];
+                // If it doesn't throw, verify values are correct
+                sliced.GetInt32(0).Should().Be(1,
+                    "b[:, 0][0] should be 1 (row 0 value).");
+                sliced.GetInt32(1).Should().Be(5,
+                    "b[:, 0][1] should be 5 (row 1 value).");
+                sliced.GetInt32(2).Should().Be(9,
+                    "b[:, 0][2] should be 9 (row 2 value).");
+            }
+            catch (Exception ex)
+            {
+                Assert.Fail(
+                    $"Slicing b[:, 0] on a sliced+broadcast array must not throw. " +
+                    $"Threw {ex.GetType().Name}: {ex.Message}. " +
+                    $"Root cause: GetViewInternal clones data to contiguous layout " +
+                    $"but attaches sliced+broadcast strides, causing out-of-bounds " +
+                    $"offset computation. The np.copy(b)[:, 0] control path returns " +
+                    $"the correct values [1, 5, 9].");
+            }
+        }
+
+        /// <summary>
+        ///     BUG 17d: The stride mismatch directly causes Bug 15a —
+        ///     sum(axis=0) on column-broadcast returns 300 instead of 600.
+        ///
+        ///     The sum reduction does arr[Slice.All, Slice.Index(col)] for
+        ///     each output column. This calls GetViewInternal, which clones
+        ///     the data but keeps broadcast strides. The resulting 1D slice
+        ///     reads [100, 100, 100] instead of [100, 200, 300], so
+        ///     sum = 300 instead of 600.
+        ///
+        ///     This test isolates the exact mechanism: it manually performs
+        ///     the same slice that the reduction code does, proving that the
+        ///     slice itself returns wrong values.
+        /// </summary>
+        [TestMethod]
+        public void Bug_SliceBroadcast_StrideMismatch_Causes_Sum_Axis0_Bug()
+        {
+            var col = np.array(new int[,] { { 100 }, { 200 }, { 300 } });
+            var a = np.broadcast_to(col, new Shape(3, 3));
+
+            // This is exactly what the axis=0 reduction does internally:
+            // For each column, it slices arr[Slice.All, Slice.Index(col)]
+            // to get a 1D vector along axis 0, then sums it.
+            for (int c = 0; c < 3; c++)
+            {
+                var lane = a[$":, {c}"];
+                lane.size.Should().Be(3, $"lane for col {c} should have 3 elements");
+
+                // The lane should contain [100, 200, 300] for every column
+                // (because the column dimension is broadcast — all columns are identical)
+                var laneValues = new int[3];
+                for (int r = 0; r < 3; r++)
+                    laneValues[r] = lane.GetInt32(r);
+
+                var laneSum = laneValues.Sum();
+                laneSum.Should().Be(600,
+                    $"Sum of lane a[:, {c}] should be 100+200+300=600. " +
+                    $"Got values [{string.Join(", ", laneValues)}] summing to {laneSum}. " +
+                    "The reduction reads [100, 100, 100] (sum=300) because the slice " +
+                    "has broadcast strides [1,0] on contiguous data [3,1]. " +
+                    "GetOffset maps rows 0,1,2 to memory offsets 0,1,2 instead of " +
+                    "0,3,6, so all three reads land in row 0's data region.");
+            }
         }
     }
 }
