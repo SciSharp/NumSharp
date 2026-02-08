@@ -327,13 +327,16 @@ NumSharp has many key types/fields/methods marked `internal` (Shape.dimensions, 
 
 **How it works:** NumSharp declares `[assembly: InternalsVisibleTo("NumSharp.DotNetRunScript")]` in `src/NumSharp.Core/Assembly/Properties.cs`. The `#:property AssemblyName=NumSharp.DotNetRunScript` directive overrides the script's assembly name (which normally derives from the filename) to match, granting full access to all `internal` and `protected internal` members.
 
+### Accessing Unsafe code
+NumSharp uses unsafe in many places, hence include `#:property AllowUnsafeBlocks=true` in scripts.
+
 ### Script Template (copy-paste ready)
 
 ```csharp
 #:project path/to/src/NumSharp.Core
 #:property AssemblyName=NumSharp.DotNetRunScript
 #:property PublishAot=false
-
+#:property AllowUnsafeBlocks=true
 ```
 
 ### Quick One-Liners
@@ -473,7 +476,7 @@ A: Element-wise comparisons (`==`, `!=`, `>`, `<`, etc.) return `NDArray<bool>`.
 A: Integer indices, string slices (`"1:3, :"`), Slice objects, boolean masks, fancy indexing (NDArray<int> indices), and mixed combinations. All in `Selection/NDArray.Indexing*.cs`.
 
 **Q: How is linear algebra implemented?**
-A: Core ops (`dot`, `matmul`) in `LinearAlgebra/`. Advanced decompositions (`inv`, `qr`, `svd`, `lstsq`) use LAPACK bindings in `Backends/LAPACK/`.
+A: Core ops (`dot`, `matmul`) in `LinearAlgebra/`. Advanced decompositions (`inv`, `qr`, `svd`, `lstsq`) are stub methods that return null/default — the LAPACK native bindings they depended on have been removed.
 
 ---
 
@@ -483,10 +486,10 @@ A: Core ops (`dot`, `matmul`) in `LinearAlgebra/`. Advanced decompositions (`inv
 A: MSTest framework in `test/NumSharp.UnitTest/`. Many tests adapted from NumPy's own test suite. Decent coverage but gaps in edge cases.
 
 **Q: What .NET version is targeted?**
-A: Library targets .NET Standard 2.0 for broad compatibility. Tests run on .NET 8.0.
+A: Library and tests multi-target `net8.0` and `net10.0`. Dropped `netstandard2.0` in the dotnet810 branch upgrade.
 
 **Q: What are the main dependencies?**
-A: `System.Memory` (4.5.5) and `System.Runtime.CompilerServices.Unsafe` (6.0.0).
+A: No external runtime dependencies. `System.Memory` and `System.Runtime.CompilerServices.Unsafe` (previously NuGet packages) are built into the .NET 8+ runtime.
 
 **Q: What projects use NumSharp?**
 A: TensorFlow.NET, ML.NET integrations, Gym.NET, Pandas.NET, and various scientific computing projects.
