@@ -58,7 +58,7 @@ namespace NumSharp.UnitTest
     ///     Total: 17 distinct bugs, 38 test methods.
     /// </summary>
     [TestClass]
-    public class OpenBugs : TestClass
+    public partial class OpenBugs : TestClass
     {
         // ================================================================
         //
@@ -1940,5 +1940,605 @@ namespace NumSharp.UnitTest
                     "0,3,6, so all three reads land in row 0's data region.");
             }
         }
+        
+        // ================================================================
+        //
+        //  BUG 18: cumsum with axis creates output using broadcast shape,
+        //          causing writes to go to detached clones
+        //
+        //  SEVERITY: High — cumsum axis always produces garbage for
+        //  broadcast arrays, even after the GetViewInternal fix (Bug 17).
+        //
+        //  LOCATION: Default.Reduction.CumAdd.cs, ReduceCumAdd(), line 43:
+        //      var ret = new NDArray(typeCode ?? ..., shape, false);
+        //  where `shape` is arr.Shape (the broadcast shape).
+        //
+        //  WHAT HAPPENS:
+        //
+        //  1. cumsum receives a broadcast array with shape.IsBroadcasted=true
+        //  2. It creates `ret` using the BROADCAST shape: new NDArray(type, shape, false)
+        //  3. ret.Shape.IsBroadcasted is now true, even though ret is a
+        //     fresh contiguous allocation with shape.size elements
+        //  4. When cumsum does `ret[slices]` to write results, GetViewInternal
+        //     sees IsBroadcasted=true and clones ret's data into a DETACHED
+        //     buffer (either via Clone().Alias() or CloneData()+Clean())
+        //  5. MoveNextReference writes to the CLONE, not to the original ret
+        //  6. ret remains uninitialized — garbage values
+        //
+        //  The fix: cumsum should use a clean shape for ret:
+        //      var cleanShape = shape.IsBroadcasted ? shape.Clean() : shape;
+        //      var ret = new NDArray(typeCode ?? ..., cleanShape, false);
+        //  Or simply: new Shape(shape.dimensions) to strip broadcast metadata.
+        //
+        //  NOTE: This bug is INDEPENDENT of the GetViewInternal fix (Bug 17).
+        //  The GetViewInternal fix correctly handles reading FROM broadcast
+        //  arrays. This bug is about cumsum incorrectly propagating the
+        //  broadcast shape to its OUTPUT array, causing writes to go nowhere.
+        //
+        //  PYTHON VERIFICATION:
+        //    >>> np.cumsum(np.broadcast_to(np.array([1,2,3]), (3,3)), axis=0)
+        //    array([[1, 2, 3],
+        //           [2, 4, 6],
+        //           [3, 6, 9]])
+        //    >>> np.cumsum(np.broadcast_to(np.array([[1],[2],[3]]), (3,3)), axis=1)
+        //    array([[1, 2, 3],
+        //           [2, 4, 6],
+        //           [3, 6, 9]])
+        //
+        // ================================================================
+
+        /// <summary>
+        ///     BUG 18a: cumsum(axis=0) on row-broadcast produces garbage because
+        ///     the output array is created with the broadcast shape, making writes
+        ///     to ret[slices] go to detached clones instead of the actual output.
+        ///
+        ///     NumPy:    cumsum(broadcast_to([1,2,3],(3,3)), axis=0) = [[1,2,3],[2,4,6],[3,6,9]]
+        ///     NumSharp: uninitialized memory (e.g. [43060696, 32766, 0])
+        /// </summary>
+        [TestMethod]
+        public void Bug_Cumsum_OutputBroadcastShape_RowBroadcast_Axis0()
+        {
+            var a = np.broadcast_to(np.array(new int[] { 1, 2, 3 }), new Shape(3, 3));
+            var result = np.cumsum(a, 0);
+
+            result.shape.Should().BeEquivalentTo(new[] { 3, 3 });
+
+            // Row 0: first row stays as-is
+            result.GetInt32(0, 0).Should().Be(1,
+                "cumsum(axis=0) row 0 should be [1, 2, 3]. Got garbage because cumsum " +
+                "creates its output using the broadcast shape (IsBroadcasted=true), so " +
+                "ret[slices] triggers CloneData and writes to a detached clone.");
+            result.GetInt32(0, 1).Should().Be(2);
+            result.GetInt32(0, 2).Should().Be(3);
+
+            // Row 1: cumulative sum along axis 0
+            result.GetInt32(1, 0).Should().Be(2);
+            result.GetInt32(1, 1).Should().Be(4);
+            result.GetInt32(1, 2).Should().Be(6);
+
+            // Row 2
+            result.GetInt32(2, 0).Should().Be(3);
+            result.GetInt32(2, 1).Should().Be(6);
+            result.GetInt32(2, 2).Should().Be(9);
+        }
+
+        /// <summary>
+        ///     BUG 18b: cumsum(axis=1) on column-broadcast — same root cause.
+        ///
+        ///     NumPy:    cumsum(broadcast_to([[1],[2],[3]],(3,3)), axis=1) = [[1,2,3],[2,4,6],[3,6,9]]
+        ///     NumSharp: garbage
+        /// </summary>
+        [TestMethod]
+        public void Bug_Cumsum_OutputBroadcastShape_ColBroadcast_Axis1()
+        {
+            var col = np.array(new int[,] { { 1 }, { 2 }, { 3 } });
+            var a = np.broadcast_to(col, new Shape(3, 3));
+            var result = np.cumsum(a, 1);
+
+            result.shape.Should().BeEquivalentTo(new[] { 3, 3 });
+
+            // Each row: cumsum of [N, N, N] = [N, 2N, 3N]
+            result.GetInt32(0, 0).Should().Be(1,
+                "cumsum(axis=1) row 0 of col-broadcast should be [1, 2, 3]. " +
+                "Same root cause as Bug 18a: output uses broadcast shape.");
+            result.GetInt32(0, 1).Should().Be(2);
+            result.GetInt32(0, 2).Should().Be(3);
+
+            result.GetInt32(1, 0).Should().Be(2);
+            result.GetInt32(1, 1).Should().Be(4);
+            result.GetInt32(1, 2).Should().Be(6);
+
+            result.GetInt32(2, 0).Should().Be(3);
+            result.GetInt32(2, 1).Should().Be(6);
+            result.GetInt32(2, 2).Should().Be(9);
+        }
+
+        // ================================================================
+        //
+        //  BUG 19: roll() uses Data<T>() which returns the underlying small
+        //          buffer for broadcast arrays, not the materialized data
+        //
+        //  SEVERITY: High — roll is non-functional for broadcast arrays.
+        //
+        //  LOCATION: NDArray.roll.cs, roll(int shift, int axis), line 26:
+        //      var data = this.Data<int>();
+        //
+        //  WHAT HAPPENS:
+        //
+        //  1. Data<T>() returns Storage.GetData<T>() which returns the raw
+        //     underlying buffer. For broadcast_to([1,2,3], (3,3)), this is
+        //     the original 3-element buffer [1, 2, 3], not the virtual
+        //     9-element broadcast expansion.
+        //  2. The loop iterates `this.size` = 9 times with `data[idx]`.
+        //     For idx >= 3, this reads past the buffer boundary into
+        //     uninitialized memory.
+        //  3. Additionally, GetCoordinates(idx) with broadcast strides [0,1]
+        //     produces wrong coordinates (see Bug 20), causing wrong
+        //     write positions in newData.
+        //
+        //  The fix options:
+        //  a) Call .copy() at the start to materialize the broadcast data
+        //  b) Use NDIterator instead of Data<T>() for element access
+        //
+        //  PYTHON VERIFICATION:
+        //    >>> np.roll(np.broadcast_to(np.array([1,2,3]), (2,3)), 1, axis=1)
+        //    array([[3, 1, 2],
+        //           [3, 1, 2]])
+        //    >>> np.roll(np.broadcast_to(np.array([[1],[2],[3]]), (3,3)), 1, axis=0)
+        //    array([[3, 3, 3],
+        //           [1, 1, 1],
+        //           [2, 2, 2]])
+        //
+        // ================================================================
+
+        /// <summary>
+        ///     BUG 19a: roll on row-broadcast reads from 3-element buffer
+        ///     for a 9-element virtual array, producing garbage in rows > 0.
+        ///
+        ///     NumPy:    roll(broadcast_to([1,2,3],(2,3)), 1, axis=1) = [[3,1,2],[3,1,2]]
+        ///     NumSharp: row 0 may be correct, row 1 contains zeros/garbage
+        /// </summary>
+        [TestMethod]
+        public void Bug_Roll_DataT_RowBroadcast()
+        {
+            var a = np.broadcast_to(np.array(new int[] { 1, 2, 3 }), new Shape(2, 3));
+            var result = a.roll(1, 1);
+
+            result.shape.Should().BeEquivalentTo(new[] { 2, 3 });
+
+            result.GetInt32(0, 0).Should().Be(3,
+                "roll(axis=1, shift=1) should rotate [1,2,3] → [3,1,2]. " +
+                "Data<T>() returns the 3-element source buffer, so data[3..5] " +
+                "reads garbage for row 1.");
+            result.GetInt32(0, 1).Should().Be(1);
+            result.GetInt32(0, 2).Should().Be(2);
+
+            result.GetInt32(1, 0).Should().Be(3);
+            result.GetInt32(1, 1).Should().Be(1);
+            result.GetInt32(1, 2).Should().Be(2);
+        }
+
+        /// <summary>
+        ///     BUG 19b: roll on column-broadcast reads garbage after first column.
+        ///
+        ///     NumPy:    roll(broadcast_to([[1],[2],[3]],(3,3)), 1, axis=0) = [[3,3,3],[1,1,1],[2,2,2]]
+        ///     NumSharp: garbage values
+        /// </summary>
+        [TestMethod]
+        public void Bug_Roll_DataT_ColBroadcast()
+        {
+            var col = np.array(new int[,] { { 1 }, { 2 }, { 3 } });
+            var a = np.broadcast_to(col, new Shape(3, 3));
+            var result = a.roll(1, 0);
+
+            result.shape.Should().BeEquivalentTo(new[] { 3, 3 });
+
+            // After rolling axis=0 by 1: row 2 → row 0, row 0 → row 1, row 1 → row 2
+            result.GetInt32(0, 0).Should().Be(3,
+                "roll(axis=0, shift=1) should move last row [3,3,3] to top. " +
+                "Data<T>() returns 3-element source buffer, reads past end.");
+            result.GetInt32(0, 1).Should().Be(3);
+            result.GetInt32(0, 2).Should().Be(3);
+            result.GetInt32(1, 0).Should().Be(1);
+            result.GetInt32(2, 0).Should().Be(2);
+        }
+
+        // ================================================================
+        //
+        //  BUG 20: GetCoordinates() produces wrong coordinates for
+        //          broadcast shapes (zero strides break decomposition)
+        //
+        //  SEVERITY: High — affects any code that decomposes a flat index
+        //  into coordinates on a broadcast shape.
+        //
+        //  LOCATION: Shape.cs, GetCoordinates(int offset), lines 856-884
+        //
+        //  WHAT HAPPENS:
+        //
+        //  GetCoordinates decomposes a flat index into N-dimensional
+        //  coordinates by dividing by strides:
+        //      coords[i] = counter / strides[i]
+        //      counter -= coords[i] * strides[i]
+        //
+        //  For broadcast shapes with zero strides (e.g., (3,3) strides [0,1]):
+        //      GetCoordinates(3):
+        //        dim 0: stride=0, skip → coords[0]=0, counter stays 3
+        //        dim 1: stride=1, 3/1=3 → coords[1]=3 — OUT OF BOUNDS!
+        //
+        //  For strides [1,0]:
+        //      GetCoordinates(1):
+        //        dim 0: stride=1, 1/1=1 → coords[0]=1, counter=0
+        //        dim 1: stride=0, skip → coords[1]=0
+        //        Result: [1, 0] — WRONG (should be [0, 1])
+        //
+        //  The fundamental problem: broadcast strides with zeros are NOT
+        //  a bijection between flat indices and coordinates. Multiple
+        //  coordinates map to the same flat offset. GetCoordinates cannot
+        //  uniquely reverse this mapping.
+        //
+        //  This function should not be called on broadcast shapes. But
+        //  it IS called by:
+        //  - NDArray.roll() (line 29): Shape.GetCoordinates(idx)
+        //  - TransformOffset() → GetCoordinates() chain in some iteration paths
+        //
+        //  PYTHON VERIFICATION:
+        //    >>> a = np.broadcast_to(np.array([1,2,3]), (3,3))
+        //    >>> a.strides  # (0, 4) in bytes — stride 0 for broadcast dim
+        //    >>> a[1, 0], a[0, 1]  # Both accessible, different values (1 vs 2)
+        //    # But GetCoordinates(1) returns [1,0] instead of [0,1]
+        //    # because it can't distinguish flat index 1 from coord [1,0] vs [0,1]
+        //
+        // ================================================================
+
+        /// <summary>
+        ///     BUG 20a: GetCoordinates produces wrong coordinates for
+        ///     row-broadcast shape (3,3) with strides [0, 1].
+        ///     Flat index 3 maps to coords [0, 3] — dimension 1 out of bounds.
+        ///
+        ///     This is a root cause contributing to Bug 19 (roll) and
+        ///     Bug 5/9 (np.minimum via TransformOffset → GetAtIndex).
+        /// </summary>
+        [TestMethod]
+        public void Bug_GetCoordinates_BroadcastStrides_RowBroadcast()
+        {
+            // Row broadcast: [1,2,3] → (3,3), strides [0, 1]
+            var a = np.broadcast_to(np.array(new int[] { 1, 2, 3 }), new Shape(3, 3));
+            var shape = a.Shape;
+
+            // Flat index 0 → should be [0, 0]
+            var coords0 = shape.GetCoordinates(0);
+            coords0.Should().BeEquivalentTo(new[] { 0, 0 },
+                "Flat index 0 in (3,3) should map to [0,0]");
+
+            // Flat index 1 → should be [0, 1] for row-major order
+            var coords1 = shape.GetCoordinates(1);
+            coords1[0].Should().BeLessThan(3,
+                "GetCoordinates(1) dim 0 must be < 3. With strides [0,1], " +
+                "dim 0 has stride 0 so it skips, leaving counter=1. Then dim 1 " +
+                "gets 1/1=1 → coords [0,1]. But if strides were [1,0], dim 0 " +
+                "gets 1/1=1, counter=0, dim 1 gets 0 → coords [1,0] (wrong for C-order).");
+            coords1[1].Should().BeLessThan(3,
+                "GetCoordinates(1) dim 1 must be < 3.");
+
+            // Flat index 3 → should be [1, 0] for row-major order
+            var coords3 = shape.GetCoordinates(3);
+            coords3[0].Should().BeLessThan(3,
+                "GetCoordinates(3) dim 0 must be < 3 (shape is (3,3)). " +
+                "With strides [0,1]: dim 0 skips (stride 0), dim 1 gets 3/1=3 → " +
+                "coords [0, 3] which is OUT OF BOUNDS for dimension of size 3.");
+            coords3[1].Should().BeLessThan(3,
+                "GetCoordinates(3) dim 1 must be < 3.");
+        }
+
+        /// <summary>
+        ///     BUG 20b: GetCoordinates for col-broadcast (3,3) strides [1, 0].
+        ///     Flat index 1 maps to [1, 0] instead of [0, 1].
+        /// </summary>
+        [TestMethod]
+        public void Bug_GetCoordinates_BroadcastStrides_ColBroadcast()
+        {
+            var col = np.array(new int[,] { { 1 }, { 2 }, { 3 } });
+            var a = np.broadcast_to(col, new Shape(3, 3));
+            var shape = a.Shape;
+
+            // Flat index 1 → should be [0, 1] for C-order
+            var coords1 = shape.GetCoordinates(1);
+            coords1[0].Should().Be(0,
+                "Flat index 1 in C-order (3,3): coords[0] should be 0 (still in row 0). " +
+                "With broadcast strides [1,0]: dim 0 gets 1/1=1, counter=0, " +
+                "dim 1 gets 0 (stride 0 skip) → result [1,0] which is WRONG. " +
+                "The zero-stride dimension absorbs no counter, causing dim 0 " +
+                "to consume too much of the flat index.");
+            coords1[1].Should().Be(1,
+                "Flat index 1 in C-order (3,3): coords[1] should be 1 (second column).");
+        }
+
+        // ================================================================
+        //
+        //  BUG 21: Boolean mask indexing returns wrong shape for 2D+ masks
+        //
+        //  SEVERITY: Medium — boolean mask indexing is fundamentally broken
+        //  for multi-dimensional arrays. This is NOT broadcast-specific.
+        //
+        //  LOCATION: Selection/NDArray.Indexing.Masking.cs
+        //
+        //  WHAT HAPPENS:
+        //
+        //  NumPy: arr[bool_mask] where both are 2D returns a 1D array of
+        //  elements where mask is True. The result shape is (count_true,).
+        //
+        //  NumSharp: treats each True in the mask as selecting an entire
+        //  row/slice rather than a single element, producing a shape of
+        //  (count_true, *remaining_dims) instead of (count_true,).
+        //
+        //  PYTHON VERIFICATION:
+        //    >>> a = np.array([[1,2,3],[4,5,6],[7,8,9]])
+        //    >>> mask = np.array([[F,F,T],[F,T,F],[T,F,F]])
+        //    >>> a[mask]
+        //    array([3, 5, 7])     # shape (3,) — individual elements
+        //    >>> a[mask].shape
+        //    (3,)
+        //
+        // ================================================================
+
+        /// <summary>
+        ///     BUG 21: Boolean mask indexing on 2D arrays returns wrong shape.
+        ///
+        ///     NumPy:    arr[mask] where mask has 3 True values → shape (3,)
+        ///     NumSharp: returns shape (3, ...) — treats True as row selector
+        /// </summary>
+        [TestMethod]
+        public void Bug_BooleanMask_2D_WrongShape()
+        {
+            var a = np.array(new int[,] { { 1, 2, 3 }, { 4, 5, 6 }, { 7, 8, 9 } });
+            var mask = np.array(new bool[,]
+            {
+                { false, false, true },
+                { false, true, false },
+                { true, false, false }
+            });
+
+            var result = a[mask];
+
+            result.ndim.Should().Be(1,
+                "NumPy: a[2D_bool_mask] returns 1D array of selected elements. " +
+                "NumSharp returns a higher-dimensional array, treating each True " +
+                "as a row selector rather than an element selector.");
+
+            result.size.Should().Be(3,
+                "Mask has 3 True values, so result should have 3 elements.");
+
+            result.GetInt32(0).Should().Be(3, "First True is at [0,2] → value 3");
+            result.GetInt32(1).Should().Be(5, "Second True is at [1,1] → value 5");
+            result.GetInt32(2).Should().Be(7, "Third True is at [2,0] → value 7");
+        }
+
+        // ================================================================
+        //
+        //  BUG 22: np.any with axis always throws InvalidCastException
+        //
+        //  SEVERITY: High — np.any(arr, axis) is completely non-functional.
+        //
+        //  LOCATION: The reduction path for np.any with axis attempts to
+        //  cast an NDArray to NDArray<Boolean> which fails with
+        //  InvalidCastException.
+        //
+        //  PYTHON VERIFICATION:
+        //    >>> np.any(np.array([[True,False],[False,True]]), axis=0)
+        //    array([ True,  True])
+        //    >>> np.any(np.array([[True,False],[False,True]]), axis=1)
+        //    array([ True,  True])
+        //    >>> np.any(np.array([[True,False],[False,False]]), axis=0)
+        //    array([ True, False])
+        //
+        // ================================================================
+
+        /// <summary>
+        ///     BUG 22: np.any with axis throws InvalidCastException.
+        ///
+        ///     NumPy:    np.any([[T,F],[F,T]], axis=0) = [True, True]
+        ///     NumSharp: InvalidCastException: Unable to cast NDArray to NDArray&lt;Boolean&gt;
+        /// </summary>
+        [TestMethod]
+        public void Bug_Any_WithAxis_AlwaysThrows()
+        {
+            var a = np.array(new bool[,] { { true, false }, { false, true } });
+
+            NDArray result = null;
+            new Action(() => result = np.any(a, 0, false))
+                .Should().NotThrow(
+                    "NumPy: np.any([[T,F],[F,T]], axis=0) = [True, True]. " +
+                    "NumSharp throws InvalidCastException when trying to cast " +
+                    "NDArray to NDArray<Boolean> in the axis reduction path.");
+
+            result.Should().NotBeNull();
+            result.shape.Should().BeEquivalentTo(new[] { 2 });
+            result.GetBoolean(0).Should().BeTrue("any along axis 0: [T,F] → T");
+            result.GetBoolean(1).Should().BeTrue("any along axis 0: [F,T] → T");
+        }
+
+        /// <summary>
+        ///     BUG 22b: np.any with axis=1 also throws.
+        /// </summary>
+        [TestMethod]
+        public void Bug_Any_WithAxis1_AlwaysThrows()
+        {
+            var a = np.array(new bool[,] { { true, false }, { false, false } });
+
+            NDArray result = null;
+            new Action(() => result = np.any(a, 1, false))
+                .Should().NotThrow(
+                    "NumPy: np.any([[T,F],[F,F]], axis=1) = [True, False].");
+
+            result.Should().NotBeNull();
+            result.shape.Should().BeEquivalentTo(new[] { 2 });
+            result.GetBoolean(0).Should().BeTrue("any of [T,F] is True");
+            result.GetBoolean(1).Should().BeFalse("any of [F,F] is False");
+        }
+        // ================================================================
+        //
+        //  BUG 23: Reshape on column-broadcast produces wrong element order
+        //
+        //  SEVERITY: Medium — silently returns data in wrong order.
+        //
+        //  reshape(broadcast_to([[10],[20],[30]], (3,3)), (9,)) produces
+        //  [10,20,30,10,20,30,10,20,30] instead of the correct row-major
+        //  flattened order [10,10,10,20,20,20,30,30,30].
+        //
+        //  The _reshapeBroadcast method creates a new shape with
+        //  BroadcastInfo but uses default row-major strides. GetOffset
+        //  uses offset % OriginalShape.size modular arithmetic, which
+        //  walks the original (3,1) storage linearly — hitting elements
+        //  0,1,2,0,1,2,... (values 10,20,30,10,20,30,...) instead of
+        //  the logical row-major order 0,0,0,1,1,1,2,2,2
+        //  (values 10,10,10,20,20,20,30,30,30).
+        //
+        //  Row-broadcast reshape works by coincidence because strides
+        //  [0,1] happen to produce the correct iteration order.
+        //
+        //  Workaround: np.copy(a).reshape(...) materializes first.
+        //
+        //  PYTHON VERIFICATION:
+        //    >>> a = np.broadcast_to(np.array([[10],[20],[30]]), (3,3))
+        //    >>> a.reshape(9)
+        //    array([10, 10, 10, 20, 20, 20, 30, 30, 30])
+        //
+        // ================================================================
+
+        /// <summary>
+        ///     BUG 23a: reshape col-broadcast (3,3) to (9,) produces wrong order.
+        ///
+        ///     NumPy:    [10,10,10,20,20,20,30,30,30]
+        ///     NumSharp: [10,20,30,10,20,30,10,20,30]
+        /// </summary>
+        [TestMethod]
+        public void Bug_Reshape_ColBroadcast_WrongOrder()
+        {
+            var col = np.array(new int[,] { { 10 }, { 20 }, { 30 } });
+            var a = np.broadcast_to(col, new Shape(3, 3));
+            var r = a.reshape(9);
+
+            r.size.Should().Be(9);
+
+            // Row-major flattened: row 0 [10,10,10], row 1 [20,20,20], row 2 [30,30,30]
+            r.GetInt32(0).Should().Be(10, "element 0");
+            r.GetInt32(1).Should().Be(10, "element 1");
+            r.GetInt32(2).Should().Be(10, "element 2");
+            r.GetInt32(3).Should().Be(20,
+                "NumPy: reshape(broadcast_to([[10],[20],[30]],(3,3)), 9)[3] = 20. " +
+                "NumSharp returns 10 because _reshapeBroadcast uses default strides " +
+                "with offset % OriginalShape.size modular arithmetic, which walks " +
+                "the original storage linearly instead of in logical row-major order.");
+            r.GetInt32(4).Should().Be(20);
+            r.GetInt32(5).Should().Be(20);
+            r.GetInt32(6).Should().Be(30);
+            r.GetInt32(7).Should().Be(30);
+            r.GetInt32(8).Should().Be(30);
+        }
+
+        /// <summary>
+        ///     BUG 23b: np.abs on broadcast throws IncorrectShapeException.
+        ///
+        ///     np.abs internally creates an output array and the broadcast
+        ///     shape's size doesn't match the storage allocation.
+        ///
+        ///     NumPy:    abs(broadcast_to([-1,2,-3], (2,3))) = [[1,2,3],[1,2,3]]
+        ///     NumSharp: IncorrectShapeException
+        /// </summary>
+        [TestMethod]
+        public void Bug_Abs_Broadcast_Throws()
+        {
+            var a = np.broadcast_to(np.array(new int[] { -1, 2, -3 }), new Shape(2, 3));
+
+            NDArray result = null;
+            new Action(() => result = np.abs(a))
+                .Should().NotThrow(
+                    "NumPy: abs(broadcast_to([-1,2,-3],(2,3))) = [[1,2,3],[1,2,3]]. " +
+                    "NumSharp throws IncorrectShapeException because the broadcast " +
+                    "storage size doesn't match the broadcast shape size.");
+
+            result.Should().NotBeNull();
+            result.shape.Should().BeEquivalentTo(new[] { 2, 3 });
+            result.GetInt32(0, 0).Should().Be(1);
+            result.GetInt32(0, 1).Should().Be(2);
+            result.GetInt32(1, 2).Should().Be(3);
+        }
+
+        // ================================================================
+        //
+        //  BUG 24: Transpose on column-broadcast array returns wrong values
+        //
+        //  SEVERITY: Medium — silently returns wrong data.
+        //
+        //  Transposing a broadcast array materializes the data (via Clone)
+        //  but creates a plain contiguous shape, losing the stride=0
+        //  broadcast semantics. For column-broadcast arrays where
+        //  stride[1]=0 (column dim is broadcast), the transpose should
+        //  produce stride[0]=0 (row dim is broadcast). Instead, it
+        //  creates strides [3,1] on the materialized data, which was
+        //  cloned with row-major layout — so each row reads from
+        //  row 0 of the original.
+        //
+        //  Row-broadcast transpose happens to work because the data's
+        //  row-major clone layout matches the expected transposed access
+        //  pattern.
+        //
+        //  This is NOT caused by the Phase 3/4 broadcast fixes — it is a
+        //  pre-existing bug in the transpose implementation's handling of
+        //  broadcast arrays.
+        //
+        //  PYTHON VERIFICATION:
+        //    >>> a = np.broadcast_to(np.array([[10],[20],[30]]), (3,3))
+        //    >>> a.T
+        //    array([[10, 20, 30],
+        //           [10, 20, 30],
+        //           [10, 20, 30]])
+        //    >>> a.T.strides
+        //    (0, 8)           # stride=0 on row dim (broadcast preserved)
+        //
+        // ================================================================
+
+        /// <summary>
+        ///     BUG 23: Transpose on column-broadcast produces wrong values.
+        ///
+        ///     Setup: broadcast_to([[10],[20],[30]], (3,3)) with strides [1,0].
+        ///     Transpose should swap strides to [0,1], making every row [10,20,30].
+        ///
+        ///     NumPy:    [[10,20,30],[10,20,30],[10,20,30]]
+        ///     NumSharp: [[10,10,10],[10,10,10],[10,10,10]]
+        ///
+        ///     The transpose materializes the broadcast data via Clone into
+        ///     contiguous [10,10,10,20,20,20,30,30,30] then creates a plain
+        ///     shape with strides [3,1], losing the broadcast semantics.
+        /// </summary>
+        [TestMethod]
+        public void Bug_Transpose_ColBroadcast_WrongValues()
+        {
+            var col = np.array(new int[,] { { 10 }, { 20 }, { 30 } });
+            var a = np.broadcast_to(col, new Shape(3, 3));
+
+            // Verify broadcast is correct
+            a.GetInt32(0, 0).Should().Be(10);
+            a.GetInt32(1, 0).Should().Be(20);
+            a.GetInt32(2, 0).Should().Be(30);
+
+            var t = a.T;
+            t.shape.Should().BeEquivalentTo(new[] { 3, 3 });
+
+            // After transpose, each ROW should be [10,20,30]
+            // (the column dimension, which varied, becomes the row dimension)
+            t.GetInt32(0, 0).Should().Be(10, "t[0,0] = 10");
+            t.GetInt32(0, 1).Should().Be(20,
+                "NumPy: broadcast_to([[10],[20],[30]],(3,3)).T[0,1] = 20. " +
+                "NumSharp returns 10 because transpose materializes the broadcast " +
+                "data and creates plain strides [3,1], losing the stride=0 broadcast " +
+                "semantics. The transposed shape should have strides [0,1] to " +
+                "preserve the broadcast pattern after transposition.");
+            t.GetInt32(0, 2).Should().Be(30, "t[0,2] = 30");
+            t.GetInt32(1, 0).Should().Be(10, "t[1,0] = 10 (row dim is broadcast)");
+            t.GetInt32(2, 2).Should().Be(30, "t[2,2] = 30");
+        }
+
+        // Bugs 25-63 (NumPy 1.x deprecation audit) moved to OpenBugs.DeprecationAudit.cs
     }
 }
