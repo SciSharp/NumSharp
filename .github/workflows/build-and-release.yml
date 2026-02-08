@@ -49,9 +49,9 @@ jobs:
           - os: windows-latest
             extra_filter: ''
           - os: ubuntu-latest
-            extra_filter: '& FullyQualifiedName!~BitmapWithAlphaTests'
+            extra_filter: '& FullyQualifiedName!~Bitmap'
           - os: macos-latest
-            extra_filter: '& FullyQualifiedName!~BitmapWithAlphaTests'
+            extra_filter: '& FullyQualifiedName!~Bitmap'
 
     runs-on: ${{ matrix.os }}
 
