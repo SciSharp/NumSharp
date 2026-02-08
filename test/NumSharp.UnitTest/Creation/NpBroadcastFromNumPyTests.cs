@@ -375,37 +375,28 @@ namespace NumSharp.UnitTest.Creation
 
         /// <summary>
         ///     NumPy's broadcast_to is one-directional: source dims can only be 1 or match target.
-        ///     NumSharp's broadcast_to uses bilateral Broadcast, so it allows cases NumPy rejects.
+        ///     broadcast_to uses unilateral semantics matching NumPy: only stretches source
+        ///     dimensions that are size 1. Cases where the source has a dimension larger than
+        ///     the target are rejected.
         ///
-        ///     Known discrepancies documented here:
-        ///
-        ///     NumPy rejects (3,) -> (1,) but NumSharp resolves it as bilateral broadcast to (3,):
         ///     >>> np.broadcast_to(np.ones(3), (1,))  # NumPy: ValueError
-        ///
-        ///     NumPy rejects (1,2) -> (2,1) but NumSharp resolves it to (2,2):
         ///     >>> np.broadcast_to(np.ones((1,2)), (2,1))  # NumPy: ValueError
-        ///
-        ///     NumPy rejects (1,1) -> (1,) but NumSharp allows it:
-        ///     >>> np.broadcast_to(np.ones((1,1)), (1,))  # NumPy: ValueError
+        ///     >>> np.broadcast_to(np.ones((1,1)), (1,))  # NumPy: ValueError (ndim mismatch)
         /// </summary>
         [TestMethod]
-        public void BroadcastTo_BilateralBroadcast_KnownDiscrepancy()
+        public void BroadcastTo_UnilateralSemantics_RejectsInvalidCases()
         {
-            // NumSharp's broadcast_to uses bilateral broadcasting (DefaultEngine.Broadcast)
-            // rather than NumPy's one-directional broadcast_to semantics.
-            // These cases would throw in NumPy but succeed in NumSharp.
+            // (3,) -> (1,): source dim 3 != target dim 1 and != 1 → must throw
+            new Action(() => np.broadcast_to(np.ones(new Shape(3)), new Shape(1)))
+                .Should().Throw<IncorrectShapeException>();
 
-            // (3,) -> (1,): NumSharp broadcasts 1->3, result shape is (3,)
-            var r1 = np.broadcast_to(np.ones(new Shape(3)), new Shape(1));
-            AssertShapeEqual(r1, 3);
+            // (1,2) -> (2,1): source dim 2 != target dim 1 and != 1 → must throw
+            new Action(() => np.broadcast_to(np.ones(new Shape(1, 2)), new Shape(2, 1)))
+                .Should().Throw<IncorrectShapeException>();
 
-            // (1,2) -> (2,1): NumSharp broadcasts both, result shape is (2,2)
-            var r2 = np.broadcast_to(np.ones(new Shape(1, 2)), new Shape(2, 1));
-            AssertShapeEqual(r2, 2, 2);
-
-            // (1,1) -> (1,): NumSharp resolves this via bilateral broadcast
-            var r3 = np.broadcast_to(np.ones(new Shape(1, 1)), new Shape(1));
-            r3.Should().NotBeNull();
+            // (1,1) -> (1,): source has more dims than target → must throw
+            new Action(() => np.broadcast_to(np.ones(new Shape(1, 1)), new Shape(1)))
+                .Should().Throw<IncorrectShapeException>();
         }
 
         /// <summary>
@@ -1870,6 +1861,156 @@ namespace NumSharp.UnitTest.Creation
             Assert.AreEqual(true, bb.GetBoolean(0, 2));
             Assert.AreEqual(false, bb.GetBoolean(1, 0));
             Assert.AreEqual(false, bb.GetBoolean(1, 2));
+        }
+
+        #endregion
+
+        // ================================================================
+        //  Re-broadcasting and broadcast path consistency tests
+        // ================================================================
+
+        #region Re-broadcasting (2-arg path)
+
+        /// <summary>
+        ///     Re-broadcasting an already-broadcast array through the 2-arg Broadcast path.
+        ///     Verifies that the IsBroadcasted guard was removed and re-broadcast produces
+        ///     correct values.
+        ///
+        ///     >>> a = np.broadcast_to(np.array([1,2,3]), (3,3))
+        ///     >>> b = np.broadcast_to(a, (3,3))
+        ///     >>> b
+        ///     array([[1, 2, 3], [1, 2, 3], [1, 2, 3]])
+        /// </summary>
+        [TestMethod]
+        public void ReBroadcast_2Arg_SameShape()
+        {
+            var a = np.broadcast_to(np.array(new int[] { 1, 2, 3 }), new Shape(3, 3));
+            var b = np.broadcast_to(a, new Shape(3, 3));
+
+            AssertShapeEqual(b, 3, 3);
+            for (int r = 0; r < 3; r++)
+            {
+                b.GetInt32(r, 0).Should().Be(1);
+                b.GetInt32(r, 1).Should().Be(2);
+                b.GetInt32(r, 2).Should().Be(3);
+            }
+        }
+
+        /// <summary>
+        ///     Re-broadcasting to a higher-dimensional shape through the 2-arg path.
+        ///
+        ///     >>> a = np.broadcast_to(np.array([[1],[2],[3]]), (3,3))
+        ///     >>> b = np.broadcast_to(a, (2,3,3))
+        ///     >>> b[0]
+        ///     array([[1, 1, 1], [2, 2, 2], [3, 3, 3]])
+        ///     >>> b[1]
+        ///     array([[1, 1, 1], [2, 2, 2], [3, 3, 3]])
+        /// </summary>
+        [TestMethod]
+        public void ReBroadcast_2Arg_HigherDim()
+        {
+            var col = np.array(new int[,] { { 1 }, { 2 }, { 3 } });
+            var a = np.broadcast_to(col, new Shape(3, 3));
+            var b = np.broadcast_to(a, new Shape(2, 3, 3));
+
+            AssertShapeEqual(b, 2, 3, 3);
+            for (int d = 0; d < 2; d++)
+                for (int r = 0; r < 3; r++)
+                    for (int c = 0; c < 3; c++)
+                        b.GetInt32(d, r, c).Should().Be(r + 1,
+                            $"b[{d},{r},{c}] should be {r + 1}");
+        }
+
+        /// <summary>
+        ///     np.clip on a broadcast array requires re-broadcasting internally.
+        ///     This was Bug 4 variant — clip broadcasts inputs together, hitting the guard.
+        ///
+        ///     >>> np.clip(np.broadcast_to(np.array([1.,5.,9.]), (2,3)), 2., 7.)
+        ///     array([[2., 5., 7.], [2., 5., 7.]])
+        /// </summary>
+        [TestMethod]
+        public void ReBroadcast_2Arg_ClipOnBroadcast()
+        {
+            var a = np.broadcast_to(np.array(new double[] { 1.0, 5.0, 9.0 }), new Shape(2, 3));
+            var result = np.clip(a, 2.0, 7.0);
+
+            AssertShapeEqual(result, 2, 3);
+            result.GetDouble(0, 0).Should().Be(2.0);
+            result.GetDouble(0, 1).Should().Be(5.0);
+            result.GetDouble(0, 2).Should().Be(7.0);
+            result.GetDouble(1, 0).Should().Be(2.0);
+            result.GetDouble(1, 1).Should().Be(5.0);
+            result.GetDouble(1, 2).Should().Be(7.0);
+        }
+
+        #endregion
+
+        #region N-arg path consistency with sliced inputs
+
+        /// <summary>
+        ///     N-arg Broadcast with a sliced input produces correct values.
+        ///     Before the fix, the N-arg path did not set ViewInfo for sliced inputs,
+        ///     causing GetOffset to resolve wrong memory offsets.
+        ///
+        ///     >>> x = np.arange(12).reshape(3,4)
+        ///     >>> col = x[:, 1:2]           # (3,1): [[1],[5],[9]]
+        ///     >>> r = np.broadcast_arrays(col, np.ones((3,3), dtype=int))
+        ///     >>> r[0]
+        ///     array([[1, 1, 1], [5, 5, 5], [9, 9, 9]])
+        /// </summary>
+        [TestMethod]
+        public void BroadcastArrays_NArg_SlicedInput_CorrectValues()
+        {
+            var x = np.arange(12).reshape(3, 4);
+            var col = x[":, 1:2"]; // (3,1): [[1],[5],[9]]
+            var target = np.ones(new Shape(3, 3), np.int32);
+
+            var result = np.broadcast_arrays(new NDArray[] { col, target });
+
+            AssertShapeEqual(result[0], 3, 3);
+            result[0].GetInt32(0, 0).Should().Be(1, "row 0 = value from x[0,1]=1");
+            result[0].GetInt32(0, 1).Should().Be(1);
+            result[0].GetInt32(0, 2).Should().Be(1);
+            result[0].GetInt32(1, 0).Should().Be(5, "row 1 = value from x[1,1]=5");
+            result[0].GetInt32(1, 1).Should().Be(5);
+            result[0].GetInt32(1, 2).Should().Be(5);
+            result[0].GetInt32(2, 0).Should().Be(9, "row 2 = value from x[2,1]=9");
+            result[0].GetInt32(2, 1).Should().Be(9);
+            result[0].GetInt32(2, 2).Should().Be(9);
+        }
+
+        /// <summary>
+        ///     Verifies N-arg and 2-arg broadcast paths produce identical results
+        ///     for the same sliced input.
+        ///
+        ///     >>> x = np.arange(6).reshape(2,3)
+        ///     >>> row = x[0:1, :]  # (1,3): [[0,1,2]]
+        ///     >>> # 2-arg: broadcast_to
+        ///     >>> np.broadcast_to(row, (3,3))
+        ///     array([[0, 1, 2], [0, 1, 2], [0, 1, 2]])
+        ///     >>> # N-arg: broadcast_arrays
+        ///     >>> np.broadcast_arrays(row, np.ones((3,3), dtype=int))[0]
+        ///     array([[0, 1, 2], [0, 1, 2], [0, 1, 2]])
+        /// </summary>
+        [TestMethod]
+        public void BroadcastPaths_2Arg_vs_NArg_SlicedInput_Identical()
+        {
+            var x = np.arange(6).reshape(2, 3);
+            var row = x["0:1, :"]; // (1,3): [[0,1,2]]
+
+            // 2-arg path via broadcast_to
+            var via2arg = np.broadcast_to(row, new Shape(3, 3));
+
+            // N-arg path via broadcast_arrays
+            var viaNarg = np.broadcast_arrays(new NDArray[] { row, np.ones(new Shape(3, 3), np.int32) });
+
+            AssertShapeEqual(via2arg, 3, 3);
+            AssertShapeEqual(viaNarg[0], 3, 3);
+
+            for (int r = 0; r < 3; r++)
+                for (int c = 0; c < 3; c++)
+                    viaNarg[0].GetInt32(r, c).Should().Be(via2arg.GetInt32(r, c),
+                        $"N-arg[{r},{c}] should equal 2-arg[{r},{c}]={via2arg.GetInt32(r, c)}");
         }
 
         #endregion
