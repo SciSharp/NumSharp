@@ -11,9 +11,7 @@ namespace NumSharp
 {
     public class NpzDictionary<T> : IDisposable, IReadOnlyDictionary<string, T>, ICollection<T>
         where T : class,
-#if !NETSTANDARD1_4
         ICloneable,
-#endif
         IList, ICollection, IEnumerable, IStructuralComparable, IStructuralEquatable
     {
         Stream stream;

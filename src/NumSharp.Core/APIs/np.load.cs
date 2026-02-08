@@ -11,7 +11,7 @@ namespace NumSharp
     {
         #region NpyFormat
 
-        //Signature from numpy doc: 
+        //Signature from numpy doc:
         //   numpy.load(file, mmap_mode=None, allow_pickle=True, fix_imports=True, encoding='ASCII')[source]
         public static NDArray load(string path)
         {
@@ -22,9 +22,7 @@ namespace NumSharp
         public static NDArray load(Stream stream)
         {
             using (var reader = new BinaryReader(stream, System.Text.Encoding.ASCII
-#if !NET35 && !NET40
                 , leaveOpen: true
-#endif
             ))
             {
                 int bytes;
@@ -42,13 +40,9 @@ namespace NumSharp
 
         public static T Load<T>(byte[] bytes)
             where T : class,
-#if !NETSTANDARD1_4
             ICloneable,
-#endif
             IList, ICollection, IEnumerable
-#if !NET35
             , IStructuralComparable, IStructuralEquatable
-#endif
         {
             if (typeof(T).IsArray && (typeof(T).GetElementType().IsArray || typeof(T).GetElementType() == typeof(string)))
                 return LoadJagged(bytes) as T;
@@ -57,13 +51,9 @@ namespace NumSharp
 
         public static T Load<T>(byte[] bytes, out T value)
             where T : class,
-#if !NETSTANDARD1_4
             ICloneable,
-#endif
             IList, ICollection, IEnumerable
-#if !NET35
             , IStructuralComparable, IStructuralEquatable
-#endif
         {
             return value = Load<T>(bytes);
         }
@@ -71,26 +61,18 @@ namespace NumSharp
 
         public static T Load<T>(string path, out T value)
             where T : class,
-#if !NETSTANDARD1_4
             ICloneable,
-#endif
             IList, ICollection, IEnumerable
-#if !NET35
             , IStructuralComparable, IStructuralEquatable
-#endif
         {
             return value = Load<T>(path);
         }
 
         public static T Load<T>(Stream stream, out T value)
             where T : class,
-#if !NETSTANDARD1_4
             ICloneable,
-#endif
             IList, ICollection, IEnumerable
-#if !NET35
             , IStructuralComparable, IStructuralEquatable
-#endif
         {
             return value = Load<T>(stream);
         }
@@ -98,13 +80,9 @@ namespace NumSharp
 
         public static T Load<T>(string path)
             where T : class,
-#if !NETSTANDARD1_4
             ICloneable,
-#endif
             IList, ICollection, IEnumerable
-#if !NET35
             , IStructuralComparable, IStructuralEquatable
-#endif
         {
             using (var stream = new FileStream(path, FileMode.Open))
                 return Load<T>(stream);
@@ -113,13 +91,9 @@ namespace NumSharp
 
         public static T Load<T>(Stream stream)
             where T : class,
-#if !NETSTANDARD1_4
             ICloneable,
-#endif
             IList, ICollection, IEnumerable
-#if !NET35
             , IStructuralComparable, IStructuralEquatable
-#endif
         {
             if (typeof(T).IsArray && (typeof(T).GetElementType().IsArray || typeof(T).GetElementType() == typeof(string)))
                 return LoadJagged(stream) as T;
@@ -155,9 +129,7 @@ namespace NumSharp
         public static Array LoadMatrix(Stream stream)
         {
             using (var reader = new BinaryReader(stream, System.Text.Encoding.ASCII
-#if !NET35 && !NET40
                 , leaveOpen: true
-#endif
             ))
             {
                 int bytes;
@@ -178,9 +150,7 @@ namespace NumSharp
         public static Array LoadJagged(Stream stream, bool trim = true)
         {
             using (var reader = new BinaryReader(stream, System.Text.Encoding.ASCII
-#if !NET35 && !NET40
                 , leaveOpen: true
-#endif
             ))
             {
                 int bytes;
@@ -301,11 +271,7 @@ namespace NumSharp
                             }
                         }
 
-#if NETSTANDARD1_4
-                        String s = new String((char*)b);
-#else
                         String s = new String((sbyte*)b);
-#endif
                         matrix.SetValue(value: s, indices: p);
                     }
                 }
@@ -426,9 +392,7 @@ namespace NumSharp
 
         public static void Load_Npz<T>(byte[] bytes, out T value)
             where T : class,
-#if !NETSTANDARD1_4
             ICloneable,
-#endif
             IList, ICollection, IEnumerable, IStructuralComparable, IStructuralEquatable
         {
             using (var dict = Load_Npz<T>(bytes))
@@ -439,9 +403,7 @@ namespace NumSharp
 
         public static void Load_Npz<T>(string path, out T value)
             where T : class,
-#if !NETSTANDARD1_4
             ICloneable,
-#endif
             IList, ICollection, IEnumerable, IStructuralComparable, IStructuralEquatable
         {
             using (var dict = Load_Npz<T>(path))
@@ -452,9 +414,7 @@ namespace NumSharp
 
         public static void Load_Npz<T>(Stream stream, out T value)
             where T : class,
-#if !NETSTANDARD1_4
             ICloneable,
-#endif
             IList, ICollection, IEnumerable, IStructuralComparable, IStructuralEquatable
         {
             using (var dict = Load_Npz<T>(stream))
@@ -465,9 +425,7 @@ namespace NumSharp
 
         public static NpzDictionary<T> Load_Npz<T>(byte[] bytes)
             where T : class,
-#if !NETSTANDARD1_4
             ICloneable,
-#endif
             IList, ICollection, IEnumerable, IStructuralComparable, IStructuralEquatable
         {
             return Load_Npz<T>(new MemoryStream(bytes));
@@ -475,9 +433,7 @@ namespace NumSharp
 
         public static NpzDictionary<T> Load_Npz<T>(string path, out NpzDictionary<T> value)
             where T : class,
-#if !NETSTANDARD1_4
             ICloneable,
-#endif
             IList, ICollection, IEnumerable, IStructuralComparable, IStructuralEquatable
         {
             return value = Load_Npz<T>(new FileStream(path, FileMode.Open));
@@ -485,9 +441,7 @@ namespace NumSharp
 
         public static NpzDictionary<T> Load_Npz<T>(Stream stream, out NpzDictionary<T> value)
             where T : class,
-#if !NETSTANDARD1_4
             ICloneable,
-#endif
             IList, ICollection, IEnumerable, IStructuralComparable, IStructuralEquatable
         {
             return value = Load_Npz<T>(stream);
@@ -495,9 +449,7 @@ namespace NumSharp
 
         public static NpzDictionary<T> Load_Npz<T>(string path)
             where T : class,
-#if !NETSTANDARD1_4
             ICloneable,
-#endif
             IList, ICollection, IEnumerable, IStructuralComparable, IStructuralEquatable
         {
             return Load_Npz<T>(new FileStream(path, FileMode.Open));
@@ -505,9 +457,7 @@ namespace NumSharp
 
         public static NpzDictionary<T> Load_Npz<T>(Stream stream)
             where T : class,
-#if !NETSTANDARD1_4
             ICloneable,
-#endif
             IList, ICollection, IEnumerable, IStructuralComparable, IStructuralEquatable
         {
             return new NpzDictionary<T>(stream);

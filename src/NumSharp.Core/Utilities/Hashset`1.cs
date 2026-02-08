@@ -5,9 +5,6 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Diagnostics.Contracts;
 using System.Runtime.CompilerServices;
-using System.Runtime.Serialization;
-using System.Security;
-using System.Security.Permissions;
 using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp.Utilities
@@ -54,8 +51,7 @@ namespace NumSharp.Utilities
     /// <typeparam name="T"></typeparam>
     [DebuggerDisplay("Count = {" + nameof(Count) + "}")]
     [SuppressMessage("Microsoft.Naming", "CA1710:IdentifiersShouldHaveCorrectSuffix", Justification = "By design")]
-    [Serializable()]
-    public class Hashset<T> : ICollection<T>, ISerializable, IDeserializationCallback, ISet<T>, IReadOnlyCollection<T>
+    public class Hashset<T> : ICollection<T>, ISet<T>, IReadOnlyCollection<T>
     {
         // store lower 31 bits of hash code
         private const int Lower31BitMask = 0x7FFFFFFF;
@@ -70,14 +66,6 @@ namespace NumSharp.Utilities
         // This is set to 3 because capacity is acceptable as 2x rounded up to nearest prime.
         private const int ShrinkThreshold = 3;
 
-#if !SILVERLIGHT
-        // constants for serialization
-        private const String CapacityName = "Capacity";
-        private const String ElementsName = "Elements";
-        private const String ComparerName = "Comparer";
-        private const String VersionName = "Version";
-#endif
-
         private int[] m_buckets;
         private Slot[] m_slots;
         private int m_count;
@@ -85,11 +73,6 @@ namespace NumSharp.Utilities
         private int m_freeList;
         private IEqualityComparer<T> m_comparer;
         private int m_version;
-
-#if !SILVERLIGHT
-        // temporary variable needed during deserialization
-        private SerializationInfo m_siInfo;
-#endif
 
         #region Constructors
 
@@ -203,17 +186,6 @@ namespace NumSharp.Utilities
 
             m_count = count;
         }
-
-#if !SILVERLIGHT
-        protected Hashset(SerializationInfo info, StreamingContext context)
-        {
-            // We can't do anything with the keys and values until the entire graph has been 
-            // deserialized and we have a reasonable estimate that GetHashCode is not going to 
-            // fail.  For the time being, we'll just cache this.  The graph is not valid until 
-            // OnDeserialization has been called.
-            m_siInfo = info;
-        }
-#endif
 
         public Hashset(int capacity, IEqualityComparer<T> comparer)
             : this(comparer)
@@ -387,87 +359,6 @@ namespace NumSharp.Utilities
         {
             return new Enumerator(this);
         }
-
-        #endregion
-
-        #region ISerializable methods
-
-#if !SILVERLIGHT
-        [SecurityPermission(SecurityAction.LinkDemand, Flags = SecurityPermissionFlag.SerializationFormatter)]
-        [SecurityCritical]
-        public virtual void GetObjectData(SerializationInfo info, StreamingContext context)
-        {
-            if (info == null)
-            {
-                throw new ArgumentNullException(nameof(info));
-            }
-
-            // need to serialize version to avoid problems with serializing while enumerating
-            info.AddValue(VersionName, m_version);
-
-#if FEATURE_RANDOMIZED_STRING_HASHING && !FEATURE_NETCORE
-            info.AddValue(ComparerName, HashHelpers.GetEqualityComparerForSerialization(m_comparer), typeof(IEqualityComparer<T>));
-#else
-            info.AddValue(ComparerName, m_comparer, typeof(IEqualityComparer<T>));
-#endif
-
-            info.AddValue(CapacityName, m_buckets == null ? 0 : m_buckets.Length);
-            if (m_buckets != null)
-            {
-                T[] array = new T[m_count];
-                CopyTo(array);
-                info.AddValue(ElementsName, array, typeof(T[]));
-            }
-        }
-#endif
-
-        #endregion
-
-        #region IDeserializationCallback methods
-
-#if !SILVERLIGHT
-        public virtual void OnDeserialization(Object sender)
-        {
-            if (m_siInfo == null)
-            {
-                // It might be necessary to call OnDeserialization from a container if the 
-                // container object also implements OnDeserialization. However, remoting will 
-                // call OnDeserialization again. We can return immediately if this function is 
-                // called twice. Note we set m_siInfo to null at the end of this method.
-                return;
-            }
-
-            int capacity = m_siInfo.GetInt32(CapacityName);
-            m_comparer = (IEqualityComparer<T>)m_siInfo.GetValue(ComparerName, typeof(IEqualityComparer<T>));
-            m_freeList = -1;
-
-            if (capacity != 0)
-            {
-                m_buckets = new int[capacity];
-                m_slots = new Slot[capacity];
-
-                T[] array = (T[])m_siInfo.GetValue(ElementsName, typeof(T[]));
-
-                if (array == null)
-                {
-                    throw new SerializationException("SR.GetString(SR.Serialization_MissingKeys)");
-                }
-
-                // there are no resizes here because we already set capacity above
-                for (int i = 0; i < array.Length; i++)
-                {
-                    AddIfNotPresent(array[i]);
-                }
-            }
-            else
-            {
-                m_buckets = null;
-            }
-
-            m_version = m_siInfo.GetInt32(VersionName);
-            m_siInfo = null;
-        }
-#endif
 
         #endregion
 
@@ -1136,7 +1027,6 @@ namespace NumSharp.Utilities
             }
         }
 
-#if !SILVERLIGHT || FEATURE_NETCORE
         /// <summary>
         /// Used for deep equality of HashSet testing
         /// </summary>
@@ -1145,14 +1035,11 @@ namespace NumSharp.Utilities
         {
             return new HashSetEqualityComparer<T>();
         }
-#endif
+
         /// <summary>
         /// Equality comparer for hashsets of hashsets
         /// </summary>
         /// <typeparam name="T"></typeparam>
-#if !FEATURE_NETCORE
-        [Serializable()]
-#endif
         internal class HashSetEqualityComparer<T> : IEqualityComparer<Hashset<T>>
         {
             private IEqualityComparer<T> m_comparer;
@@ -1306,18 +1193,12 @@ namespace NumSharp.Utilities
 
             int hashCode = InternalGetHashCode(value);
             int bucket = hashCode % m_buckets.Length;
-#if FEATURE_RANDOMIZED_STRING_HASHING && !FEATURE_NETCORE
-            int collisionCount = 0;
-#endif
             for (int i = m_buckets[hashCode % m_buckets.Length] - 1; i >= 0; i = m_slots[i].next)
             {
                 if (m_slots[i].hashCode == hashCode && m_comparer.Equals(m_slots[i].value, value))
                 {
                     return false;
                 }
-#if FEATURE_RANDOMIZED_STRING_HASHING && !FEATURE_NETCORE
-                collisionCount++;
-#endif
             }
 
             int index;
@@ -1345,13 +1226,6 @@ namespace NumSharp.Utilities
             m_buckets[bucket] = index + 1;
             m_count++;
             m_version++;
-
-#if FEATURE_RANDOMIZED_STRING_HASHING && !FEATURE_NETCORE
-            if(collisionCount > HashHelpers.HashCollisionThreshold && HashHelpers.IsWellKnownEqualityComparer(m_comparer)) {
-                m_comparer = (IEqualityComparer<T>) HashHelpers.GetRandomizedEqualityComparer(m_comparer);
-                SetCapacity(m_buckets.Length, true);
-            }
-#endif // FEATURE_RANDOMIZED_STRING_HASHING
 
             return true;
         }
@@ -1882,9 +1756,6 @@ namespace NumSharp.Utilities
             internal T value;
         }
 
-#if !SILVERLIGHT
-        [Serializable()]
-#endif
         public struct Enumerator : IEnumerator<T>, IEnumerator
         {
             private Hashset<T> set;
