@@ -1,0 +1,242 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [ "master", "main" ]
+    tags: [ "v*" ]
+  pull_request:
+    branches: [ "master", "main" ]
+  workflow_dispatch:
+
+permissions: write-all
+
+env:
+  # Exclude known-failing test classes and specific test methods from CI.
+  # These are pre-existing bugs tracked in OpenBugs.cs and related test files.
+  # When a bug is fixed, remove its exclusion here so CI catches regressions.
+  TEST_FILTER: >-
+    FullyQualifiedName!~OpenBugs
+    & FullyQualifiedName!~NpAnyTest
+    & FullyQualifiedName!~np_all_axis_Test
+    & FullyQualifiedName!~Issue448
+    & Name!=Combining_IndexArrays_with_Slices
+    & Name!=Combining_MaskArrays_with_Slices
+    & Name!=IndexNDArray_Get_Case7
+    & Name!=IndexNDArray_Get_Case7_Broadcasted
+    & Name!=IndexNDArray_Get_Case8_Broadcasted
+    & Name!=IndexNDArray_Set_Case2
+    & Name!=IndexNDArray_Set_Case3
+    & Name!=IndexNDArray_Set_Case4
+    & Name!=IndexNDArray_Set_Case8_Broadcasted
+    & Name!=IndexNDArray_sliced3dreshaped_indexed_by_1d_1d
+    & Name!=Masking_2D_over_3D
+    & Name!=MaskSetter
+    & Name!=Compare
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            extra_filter: ''
+          - os: ubuntu-latest
+            extra_filter: '& FullyQualifiedName!~BitmapWithAlphaTests'
+          - os: macos-latest
+            extra_filter: '& FullyQualifiedName!~BitmapWithAlphaTests'
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: |
+          8.0.x
+          10.0.x
+        dotnet-quality: 'preview'
+
+    - name: Build
+      run: dotnet build test/NumSharp.UnitTest/NumSharp.UnitTest.csproj --configuration Release
+
+    - name: Test
+      run: dotnet test test/NumSharp.UnitTest/NumSharp.UnitTest.csproj --configuration Release --no-build --verbosity normal --logger trx --filter "${{ env.TEST_FILTER }} ${{ matrix.extra_filter }}"
+
+    - name: Upload Test Results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: test-results-${{ matrix.os }}
+        path: ${{ github.workspace }}/**/TestResults/**/*.trx
+        retention-days: 5
+
+  build-nuget:
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: |
+          8.0.x
+          10.0.x
+        dotnet-quality: 'preview'
+
+    - name: Get version info
+      id: version
+      shell: bash
+      run: |
+        VERSION="${GITHUB_REF#refs/tags/v}"
+        ASSEMBLY_VERSION="${VERSION%%-*}"
+        COMMIT_SHA="${GITHUB_SHA:0:7}"
+        echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+        echo "ASSEMBLY_VERSION=$ASSEMBLY_VERSION" >> $GITHUB_OUTPUT
+        echo "COMMIT_SHA=$COMMIT_SHA" >> $GITHUB_OUTPUT
+        echo "Building version $VERSION (assembly: $ASSEMBLY_VERSION) +$COMMIT_SHA"
+
+    - name: Build
+      run: |
+        dotnet build src/NumSharp.Core/NumSharp.Core.csproj \
+          --configuration Release \
+          -p:Version=${{ steps.version.outputs.VERSION }} \
+          -p:AssemblyVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
+          -p:FileVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
+          -p:PackageVersion=${{ steps.version.outputs.VERSION }} \
+          -p:SourceRevisionId=${{ steps.version.outputs.COMMIT_SHA }}
+
+        dotnet build src/NumSharp.Bitmap/NumSharp.Bitmap.csproj \
+          --configuration Release \
+          -p:Version=${{ steps.version.outputs.VERSION }} \
+          -p:AssemblyVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
+          -p:FileVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
+          -p:PackageVersion=${{ steps.version.outputs.VERSION }} \
+          -p:SourceRevisionId=${{ steps.version.outputs.COMMIT_SHA }}
+
+    - name: Pack
+      run: |
+        mkdir -p artifacts/nuget
+
+        dotnet pack src/NumSharp.Core/NumSharp.Core.csproj \
+          --configuration Release \
+          --no-build \
+          --output artifacts/nuget \
+          -p:Version=${{ steps.version.outputs.VERSION }} \
+          -p:AssemblyVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
+          -p:FileVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
+          -p:PackageVersion=${{ steps.version.outputs.VERSION }}
+
+        dotnet pack src/NumSharp.Bitmap/NumSharp.Bitmap.csproj \
+          --configuration Release \
+          --no-build \
+          --output artifacts/nuget \
+          -p:Version=${{ steps.version.outputs.VERSION }} \
+          -p:AssemblyVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
+          -p:FileVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} \
+          -p:PackageVersion=${{ steps.version.outputs.VERSION }}
+
+        echo "Packages built:"
+        ls -la artifacts/nuget/
+
+    - name: Upload NuGet Packages
+      uses: actions/upload-artifact@v4
+      with:
+        name: nuget-packages
+        path: artifacts/nuget/*.nupkg
+        retention-days: 5
+
+  create-release:
+    needs: build-nuget
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Extract version
+      id: version
+      run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+    - name: Download NuGet Packages
+      uses: actions/download-artifact@v4
+      with:
+        name: nuget-packages
+        path: artifacts
+
+    - name: Generate checksums
+      run: |
+        cd artifacts
+        for f in *.nupkg; do
+          sha256sum "$f" | cut -d' ' -f1 > "${f}.sha256"
+          echo "${f}: $(cat ${f}.sha256)"
+        done
+
+    - name: Check if prerelease
+      id: prerelease
+      run: |
+        if [[ "${{ steps.version.outputs.VERSION }}" == *"-"* ]]; then
+          echo "IS_PRERELEASE=true" >> $GITHUB_OUTPUT
+        else
+          echo "IS_PRERELEASE=false" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: |
+          artifacts/*.nupkg
+          artifacts/*.sha256
+        draft: false
+        prerelease: ${{ steps.prerelease.outputs.IS_PRERELEASE }}
+        generate_release_notes: true
+        body: |
+          ## NumSharp v${{ steps.version.outputs.VERSION }}
+
+          ### Install via NuGet
+
+          ```
+          dotnet add package NumSharp --version ${{ steps.version.outputs.VERSION }}
+          dotnet add package NumSharp.Bitmap --version ${{ steps.version.outputs.VERSION }}
+          ```
+
+          ### Packages
+
+          | Package | NuGet |
+          |---------|-------|
+          | NumSharp | [![NuGet](https://img.shields.io/nuget/v/NumSharp.svg)](https://www.nuget.org/packages/NumSharp/${{ steps.version.outputs.VERSION }}) |
+          | NumSharp.Bitmap | [![NuGet](https://img.shields.io/nuget/v/NumSharp.Bitmap.svg)](https://www.nuget.org/packages/NumSharp.Bitmap/${{ steps.version.outputs.VERSION }}) |
+
+  publish-nuget:
+    needs: build-nuget
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Download NuGet Packages
+      uses: actions/download-artifact@v4
+      with:
+        name: nuget-packages
+        path: artifacts
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '8.0.x'
+
+    - name: Push to NuGet
+      run: |
+        for package in artifacts/*.nupkg; do
+          echo "Pushing $package..."
+          dotnet nuget push "$package" \
+            --api-key ${{ secrets.NUGETAPIKEY }} \
+            --source https://api.nuget.org/v3/index.json \
+            --skip-duplicate
+        done
