@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp;
 
@@ -13,7 +14,7 @@ namespace NumSharp.UnitTest.Logic
             // 测试1维数组
             var arr = np.array(new int[] { 0, 1, 2 });
             var result = np.any(arr, axis: 0, keepdims: false);
-            Assert.AreEqual(true, result.GetItem(0));
+            Assert.AreEqual(true, result.GetBoolean(0));
         }
 
         [TestMethod]
