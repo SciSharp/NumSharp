@@ -1,0 +1,60 @@
+name: Feature / Enhancement
+description: Propose a new feature or improvement
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: overview
+    attributes:
+      label: Overview
+      description: 1-2 sentence summary of what and why.
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What's broken or missing, and why it matters.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: What to change. Use a task checklist (`- [ ]`) for individual steps.
+      placeholder: |
+        - [ ] Step 1
+        - [ ] Step 2
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Data, benchmarks, references, or NumPy behavior supporting the proposal.
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope / Non-goals
+      description: What this issue does NOT cover (prevent scope creep).
+
+  - type: textarea
+    id: benchmark
+    attributes:
+      label: Benchmark / Performance
+      description: Before/after numbers, methodology, what to measure (if applicable).
+
+  - type: textarea
+    id: breaking-changes
+    attributes:
+      label: Breaking changes
+      description: Use a table if needed (Change | Impact | Migration).
+
+  - type: textarea
+    id: related
+    attributes:
+      label: Related issues
+      description: Link dependencies or related issues.

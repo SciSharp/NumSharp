@@ -1,0 +1,54 @@
+name: Bug Report
+description: Report a bug or incorrect behavior
+labels: ["bug"]
+body:
+  - type: textarea
+    id: overview
+    attributes:
+      label: Overview
+      description: 1-2 sentence summary of the bug and its impact.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Minimal code to trigger the bug.
+      render: csharp
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected
+      description: Correct behavior. Include NumPy output as source of truth where applicable.
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual
+      description: What NumSharp does instead (error message, wrong output, crash).
+    validations:
+      required: true
+
+  - type: textarea
+    id: workaround
+    attributes:
+      label: Workaround
+      description: How users can avoid the bug today (if any).
+
+  - type: textarea
+    id: root-cause
+    attributes:
+      label: Root cause
+      description: File, line, why it happens (if known).
+
+  - type: textarea
+    id: related
+    attributes:
+      label: Related issues
+      description: Link duplicates or upstream causes.

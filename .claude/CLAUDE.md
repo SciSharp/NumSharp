@@ -307,7 +307,29 @@ switch (nd.typecode)
 ```
 
 ## GitHub Issues
-Create issues on `SciSharp/NumSharp` via `gh issue create` when the user requests it. `GH_TOKEN` is available in the environment.
+
+Create issues on `SciSharp/NumSharp` via `gh issue create`. `GH_TOKEN` is available via the `env-tokens` skill.
+
+### Feature / Enhancement
+
+- **Overview**: 1-2 sentence summary of what and why
+- **Problem**: What's broken or missing, why it matters
+- **Proposal**: What to change, with a task checklist (`- [ ]`)
+- **Evidence**: Data, benchmarks, or references supporting the proposal
+- **Scope / Non-goals**: What this issue does NOT cover (prevent scope creep)
+- **Benchmark / Performance** (if applicable): Before/after numbers, methodology, what to measure
+- **Breaking changes** table (if any): Change | Impact | Migration
+- **Related issues**: Link dependencies
+
+### Bug Report
+
+- **Overview**: 1-2 sentence summary of the bug and its impact
+- **Reproduction**: Minimal code to trigger the bug
+- **Expected**: Correct behavior (include NumPy output as source of truth)
+- **Actual**: What NumSharp does instead (error message, wrong output, crash)
+- **Workaround** (if any): How users can avoid the bug today
+- **Root cause** (if known): File, line, why it happens
+- **Related issues**: Link duplicates or upstream causes
 
 ## Build & Test
 
@@ -315,6 +337,23 @@ Create issues on `SciSharp/NumSharp` via `gh issue create` when the user request
 dotnet build -v q --nologo "-clp:NoSummary;ErrorsOnly" -p:WarningLevel=0
 dotnet test -v q --nologo "-clp:ErrorsOnly" test/NumSharp.UnitTest/NumSharp.UnitTest.csproj
 ```
+
+## Test Categories
+
+Tests are filtered by `[TestCategory]` attributes. Adding new bug reproductions or platform-specific tests only requires the right attribute — no CI workflow changes.
+
+| Category | Purpose | CI filter |
+|----------|---------|-----------|
+| `OpenBugs` | Known-failing bug reproductions. Remove category when fixed. | `TestCategory!=OpenBugs` (all platforms) |
+| `WindowsOnly` | Requires GDI+/System.Drawing.Common | `TestCategory!=WindowsOnly` (Linux/macOS) |
+
+Apply at class level (`[TestClass][TestCategory("OpenBugs")]`) or individual method level (`[TestMethod][TestCategory("OpenBugs")]`).
+
+**OpenBugs files**: `OpenBugs.cs` (broadcast bugs), `OpenBugs.Bitmap.cs` (bitmap bugs). When a bug is fixed, the test starts passing — remove the `OpenBugs` category and move to a permanent test class.
+
+## CI Pipeline
+
+`.github/workflows/build-and-release.yml` — test on 3 OSes (Windows/Ubuntu/macOS), build NuGet on tag push, create GitHub Release, publish to nuget.org.
 
 ## Scripting with `dotnet run` (.NET 10 file-based apps)
 
