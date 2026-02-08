@@ -5,7 +5,7 @@
     <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
     <Authors>Eli Belash, Haiping Chen, Meinrad Recheis</Authors>
     <PackageOutputPath>../../packages</PackageOutputPath>
-    <Description>This package provides extensions for System.Drawing.Bitmap for creating NDArray and Bitmap with or without copying.</Description>
+    <Description>Windows-only extensions for System.Drawing.Bitmap for creating NDArray and Bitmap with or without copying. Uses GDI+ via System.Drawing.Common.</Description>
     <PackageProjectUrl>https://github.com/SciSharp</PackageProjectUrl>
     <Copyright>2021 © SciSharp STACK Team</Copyright>
     <RepositoryUrl>https://github.com/SciSharp/NumSharp</RepositoryUrl>
