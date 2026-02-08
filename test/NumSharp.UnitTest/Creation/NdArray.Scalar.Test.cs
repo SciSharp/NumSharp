@@ -1,6 +1,6 @@
 ﻿using System;
 using System.Numerics;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace NumSharp.UnitTest.Creation

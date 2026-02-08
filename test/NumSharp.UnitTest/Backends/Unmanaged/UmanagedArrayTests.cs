@@ -1,6 +1,6 @@
 ﻿using System.Linq;
 using System.Runtime.InteropServices;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.Backends;
 using NumSharp.Backends.Unmanaged;

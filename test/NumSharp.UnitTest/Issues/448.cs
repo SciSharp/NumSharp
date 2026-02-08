@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Linq;
-using FluentAssertions.Execution;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.UnitTest.Utilities;
 

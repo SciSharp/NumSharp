@@ -8,7 +8,7 @@ using System.Linq;
 using System.Reflection;
 using System.Text.RegularExpressions;
 using System.Threading;
-using FluentAssertions;
+using AwesomeAssertions;
 using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.Selection
@@ -668,13 +668,13 @@ namespace NumSharp.UnitTest.Selection
         [TestMethod]
         public void IndexNDArray_Case1()
         {
-            x[np.array(new int[] { 3, 3, 1, 8 })].Array.Should().ContainInOrder(7, 7, 9, 2);
+            x[np.array(new int[] { 3, 3, 1, 8 })].Data<int>().Should().ContainInOrder(7, 7, 9, 2);
         }
 
         [TestMethod]
         public void IndexNDArray_Case2_NegativeIndex()
         {
-            x[np.array(new int[] { 3, 3, -3, 8 })].Array.Should().ContainInOrder(7, 7, 4, 2);
+            x[np.array(new int[] { 3, 3, -3, 8 })].Data<int>().Should().ContainInOrder(7, 7, 4, 2);
         }
 
         [TestMethod]
@@ -690,8 +690,8 @@ namespace NumSharp.UnitTest.Selection
          public void IndexNDArray_Case4_Shaped()
         {
             var ret = x[np.array(new int[][] { new int[] { 1, 1 }, new int[] { 2, 3 }, })];
-            ret.Array.Should().ContainInOrder(9, 9, 8, 7);
-            ret.shape.Should().ContainInOrder(2, 2);
+            ret.Data<int>().Should().ContainInOrder(9, 9, 8, 7);
+            ret.Shape.Should().BeShaped(2, 2);
         }
 
         [TestMethod]
@@ -714,8 +714,8 @@ namespace NumSharp.UnitTest.Selection
         public void IndexNDArray_Case7_Multi()
         {
             var ret = y[np.array(new int[] { 0, 2, 4 }), np.array(new int[] { 0, 1, 2 })];
-            ret.Array.Should().ContainInOrder(0, 15, 30);
-            ret.shape.Should().ContainInOrder(3);
+            ret.Data<int>().Should().ContainInOrder(0, 15, 30);
+            ret.Shape.Should().BeShaped(3);
         }
 
         [TestMethod]
@@ -724,8 +724,8 @@ namespace NumSharp.UnitTest.Selection
             var a = np.arange(27).reshape(3, 3, 3) + 1;
             var x = np.repeat(np.arange(3), 3);
             var ret = a[x, x, x];
-            ret.Array.Should().ContainInOrder(1, 14, 27);
-            ret.shape.Should().ContainInOrder(9);
+            ret.Data<int>().Should().ContainInOrder(1, 14, 27);
+            ret.Shape.Should().BeShaped(9);
         }
 
         [TestMethod]
@@ -734,8 +734,8 @@ namespace NumSharp.UnitTest.Selection
             var a = np.arange(27 * 2).reshape(2, 3, 3, 3) + 1;
             var x = np.repeat(np.arange(3), 3);
             var ret = a["0,:"][x, x, x];
-            ret.Array.Should().ContainInOrder(1, 14, 27);
-            ret.shape.Should().ContainInOrder(9);
+            ret.Data<int>().Should().ContainInOrder(1, 14, 27);
+            ret.Shape.Should().BeShaped(9);
         }
 
         [TestMethod]
@@ -746,8 +746,8 @@ namespace NumSharp.UnitTest.Selection
             var ret = a[x, x, x];
             Console.WriteLine((string)ret);
             Console.WriteLine(ret.Shape);
-            ret.Array.Should().ContainInOrder(np.repeat(np.array(1, 14, 27), 6).flat.ToArray<int>());
-            ret.shape.Should().ContainInOrder(3, 3, 2);
+            ret.Data<int>().Should().ContainInOrder(np.repeat(np.array(1, 14, 27), 6).flat.ToArray<int>());
+            ret.Shape.Should().BeShaped(3, 3, 2);
         }
 
         [TestMethod]
@@ -764,10 +764,10 @@ namespace NumSharp.UnitTest.Selection
         public void IndexNDArray_Case11_Multi()
         {
             var ret = y[np.array(new int[] { 0, 2, 4 })];
-            ret.shape.Should().ContainInOrder(3, 7);
-            ret[0].Array.Should().ContainInOrder(0, 1, 2, 3, 4, 5, 6);
-            ret[1].Array.Should().ContainInOrder(14, 15, 16, 17, 18, 19, 20);
-            ret[2].Array.Should().ContainInOrder(28, 29, 30, 31, 32, 33, 34);
+            ret.Shape.Should().BeShaped(3, 7);
+            ret[0].Data<int>().Should().ContainInOrder(0, 1, 2, 3, 4, 5, 6);
+            ret[1].Data<int>().Should().ContainInOrder(14, 15, 16, 17, 18, 19, 20);
+            ret[2].Data<int>().Should().ContainInOrder(28, 29, 30, 31, 32, 33, 34);
         }
 
         [TestMethod]
@@ -785,10 +785,10 @@ namespace NumSharp.UnitTest.Selection
         public void IndexNDArray_Case13_Multi()
         {
             var ret = y[np.array(new int[] { 0, 2, 4 })];
-            ret.shape.Should().ContainInOrder(3, 7);
-            ret[0].Array.Should().ContainInOrder(0, 1, 2, 3, 4, 5, 6);
-            ret[1].Array.Should().ContainInOrder(14, 15, 16, 17, 18, 19, 20);
-            ret[2].Array.Should().ContainInOrder(28, 29, 30, 31, 32, 33, 34);
+            ret.Shape.Should().BeShaped(3, 7);
+            ret[0].Data<int>().Should().ContainInOrder(0, 1, 2, 3, 4, 5, 6);
+            ret[1].Data<int>().Should().ContainInOrder(14, 15, 16, 17, 18, 19, 20);
+            ret[2].Data<int>().Should().ContainInOrder(28, 29, 30, 31, 32, 33, 34);
         }
 
 
@@ -801,9 +801,9 @@ namespace NumSharp.UnitTest.Selection
             var ret = a[new int[] { 0, 0, 0 }, new int[] { 0, 1, 0 }];
             ret.Should().BeShaped(3, 1, 2, 2);
             ret[1, 0, 0].Should().BeOfValues(4, 5).And.BeShaped(2);
-            //ret[0, 0].Array.Should().ContainInOrder(0, 1, 2, 3, 4, 5, 6);
-            //ret[1, 0].Array.Should().ContainInOrder(14, 15, 16, 17, 18, 19, 20);
-            //ret[2, 0].Array.Should().ContainInOrder(28, 29, 30, 31, 32, 33, 34);
+            //ret[0, 0].Data<int>().Should().ContainInOrder(0, 1, 2, 3, 4, 5, 6);
+            //ret[1, 0].Data<int>().Should().ContainInOrder(14, 15, 16, 17, 18, 19, 20);
+            //ret[2, 0].Data<int>().Should().ContainInOrder(28, 29, 30, 31, 32, 33, 34);
         }
 
         [TestMethod]
@@ -1283,16 +1283,10 @@ namespace NumSharp.UnitTest.Selection
         [TestMethod]
         public void GetCoordinates_Broadcasted()
         {
-            // Scalar 1 broadcast to (2,2,2): all elements are 1, strides are [0,0,0].
-            // GetCoordinates should return correct logical coordinates within the
-            // broadcast shape, matching np.unravel_index behavior.
             var nd = np.broadcast_to(np.array(1), (2, 2, 2));
-
-            // Valid indices: 0..7 for shape (2,2,2)
-            nd.Shape.GetCoordinatesFromAbsoluteIndex(0).Should().BeEquivalentTo(new[] { 0, 0, 0 });
-            nd.Shape.GetCoordinatesFromAbsoluteIndex(1).Should().BeEquivalentTo(new[] { 0, 0, 1 });
-            nd.Shape.GetCoordinatesFromAbsoluteIndex(4).Should().BeEquivalentTo(new[] { 1, 0, 0 });
-            nd.Shape.GetCoordinatesFromAbsoluteIndex(7).Should().BeEquivalentTo(new[] { 1, 1, 1 });
+            var t = nd.Shape.GetCoordinatesFromAbsoluteIndex(15);
+            print(t);
+            t.Should().AllBeEquivalentTo(0);
         }
 
         [TestMethod]

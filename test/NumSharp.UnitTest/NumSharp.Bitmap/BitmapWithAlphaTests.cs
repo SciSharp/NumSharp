@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Drawing.Imaging;
 using System.Resources;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.UnitTest.Utilities;
 

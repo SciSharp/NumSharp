@@ -1,6 +1,6 @@
 ﻿using System;
 using System.Runtime.CompilerServices;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.UnitTest.Utilities;
 using static NumSharp.Slice;
@@ -104,7 +104,7 @@ namespace NumSharp.UnitTest.Manipulation
         public void Case1_negativeone()
         {
             var x = np.full(2, (3, 3, 1, 1, 3));
-            x.reshape((-1, 3)).shape.Should().BeEquivalentTo(9, 3);
+            x.reshape((-1, 3)).shape.Should().BeEquivalentTo(new[] { 9, 3 });
         }
 
         [TestMethod]

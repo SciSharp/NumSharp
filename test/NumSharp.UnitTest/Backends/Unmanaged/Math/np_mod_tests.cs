@@ -1,7 +1,7 @@
 ﻿
 using System;
 using System.Linq;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.Backends;
 using NumSharp.Backends.Unmanaged;
@@ -107,7 +107,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             }
 
             var ret = left % right;
-            ret.Should().BeInAscendingOrder();
+            ret.Data<double>().Should().BeInAscendingOrder();
 
             for (int i = 0; i < ret.size; i++)
             {
@@ -126,7 +126,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
 
             var right = NDArray.Scalar(1d);
             var ret = left % right;
-            ret.Should().BeInAscendingOrder();
+            ret.Data<double>().Should().BeInAscendingOrder();
 
             for (int i = 0; i < ret.size; i++)
             {
@@ -145,7 +145,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             }
 
             var ret = left % right;
-            ret.Should().BeInAscendingOrder();
+            ret.Data<double>().Should().BeInAscendingOrder();
 
             for (int i = 0; i < ret.size; i++)
             {

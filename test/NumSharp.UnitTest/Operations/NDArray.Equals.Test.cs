@@ -4,7 +4,7 @@ using System.Numerics;
 using System.Collections.Generic;
 using System.Text;
 using System.Linq;
-using FluentAssertions;
+using AwesomeAssertions;
 using NumSharp;
 using NumSharp.Backends;
 using NumSharp.Generic;
@@ -102,7 +102,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         %
@@ -123,7 +123,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -141,7 +141,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -159,7 +159,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -177,7 +177,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -195,7 +195,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -213,7 +213,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -231,7 +231,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -249,7 +249,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -267,7 +267,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -285,7 +285,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -303,7 +303,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -321,7 +321,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -339,7 +339,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -357,7 +357,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -375,7 +375,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -393,7 +393,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -411,7 +411,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -429,7 +429,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -447,7 +447,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -465,7 +465,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -483,7 +483,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -501,7 +501,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -519,7 +519,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -537,7 +537,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -555,7 +555,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -573,7 +573,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -591,7 +591,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -609,7 +609,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -627,7 +627,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -645,7 +645,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -663,7 +663,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -681,7 +681,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -699,7 +699,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -717,7 +717,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -735,7 +735,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -753,7 +753,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -771,7 +771,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -789,7 +789,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -807,7 +807,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -825,7 +825,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -843,7 +843,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -861,7 +861,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -879,7 +879,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -897,7 +897,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -915,7 +915,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -933,7 +933,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -951,7 +951,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -969,7 +969,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -987,7 +987,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -1005,7 +1005,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -1023,7 +1023,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -1041,7 +1041,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -1059,7 +1059,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -1077,7 +1077,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -1095,7 +1095,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -1113,7 +1113,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -1131,7 +1131,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -1149,7 +1149,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -1167,7 +1167,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -1185,7 +1185,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -1203,7 +1203,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -1221,7 +1221,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -1239,7 +1239,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -1257,7 +1257,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -1275,7 +1275,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -1293,7 +1293,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -1311,7 +1311,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -1329,7 +1329,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -1347,7 +1347,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -1365,7 +1365,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -1383,7 +1383,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -1401,7 +1401,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -1419,7 +1419,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -1437,7 +1437,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -1455,7 +1455,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -1473,7 +1473,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -1491,7 +1491,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -1509,7 +1509,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -1527,7 +1527,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -1545,7 +1545,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -1563,7 +1563,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -1581,7 +1581,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -1599,7 +1599,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -1617,7 +1617,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -1635,7 +1635,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -1653,7 +1653,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -1671,7 +1671,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -1689,7 +1689,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -1707,7 +1707,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -1725,7 +1725,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -1743,7 +1743,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -1761,7 +1761,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -1779,7 +1779,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -1797,7 +1797,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -1815,7 +1815,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -1833,7 +1833,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -1851,7 +1851,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -1869,7 +1869,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -1887,7 +1887,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -1905,7 +1905,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -1923,7 +1923,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -1941,7 +1941,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -1959,7 +1959,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -1977,7 +1977,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -1995,7 +1995,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -2013,7 +2013,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -2031,7 +2031,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -2049,7 +2049,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -2067,7 +2067,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -2085,7 +2085,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -2103,7 +2103,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
         [TestMethod]
@@ -2121,7 +2121,7 @@ namespace NumSharp.UnitTest.Operations
             }
 
             var a = ((NDArray)new int[] {0, 1, 0, 1, 0, 1}).astype(NPTypeCode.Boolean);
-            ret.Array.Should().BeEquivalentTo(a.Array);
+            ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
 
         [TestMethod]

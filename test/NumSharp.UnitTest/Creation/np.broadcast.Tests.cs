@@ -5,7 +5,7 @@ using System.Globalization;
 using System.Text;
 using NumSharp.Extensions;
 using System.Linq;
-using FluentAssertions;
+using AwesomeAssertions;
 using NumSharp;
 using NumSharp.Backends;
 
