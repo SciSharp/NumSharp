@@ -249,16 +249,15 @@ namespace NumSharp.Backends
             for (i = 0; i < len; i++)
             {
                 Shape ogiter = shapes[i];
+                // When re-broadcasting, track the root original shape
+                Shape ogOriginal = ogiter.IsBroadcasted ? ogiter.BroadcastInfo.OriginalShape : ogiter;
                 ret[i] = mit.Clean();
                 ref Shape it = ref ret[i];
                 nd = ogiter.NDim;
-                it.BroadcastInfo = new BroadcastInfo(ogiter);
-                it.size = tmp;
-                //it.layout = 'C';
-                //if (nd != 0)
-                //{
-                //    it->factors[mit.nd - 1] = 1;
-                //}
+                it.BroadcastInfo = new BroadcastInfo(ogOriginal);
+                // Set ViewInfo for sliced inputs so GetOffset resolves slice strides correctly
+                if (ogOriginal.IsSliced)
+                    it.ViewInfo = new ViewInfo() {ParentShape = ogOriginal, Slices = null};
                 for (j = 0; j < mit.NDim; j++)
                 {
                     //it->dims_m1[j] = mit.dimensions[j] - 1;
@@ -296,8 +295,12 @@ namespace NumSharp.Backends
             if (leftShape._hashCode != 0 && leftShape._hashCode == rightShape._hashCode)
                 return (leftShape, rightShape);
 
-            if (leftShape.IsBroadcasted || rightShape.IsBroadcasted)
-                throw new NotSupportedException("Unable to broadcast already broadcasted shape."); //TODO! it would make sense to use shape.BroadcastInfo.Original.
+            // When re-broadcasting an already-broadcast shape, resolve to the original
+            // pre-broadcast shape for BroadcastInfo tracking. The broadcast shape's dimensions
+            // and strides are used as-is for the new broadcast computation — stride=0 dims
+            // from the prior broadcast naturally propagate.
+            Shape leftOriginal = leftShape.IsBroadcasted ? leftShape.BroadcastInfo.OriginalShape : leftShape;
+            Shape rightOriginal = rightShape.IsBroadcasted ? rightShape.BroadcastInfo.OriginalShape : rightShape;
 
             Shape left, right, mit;
             int i, nd, k, j, tmp;
@@ -307,7 +310,7 @@ namespace NumSharp.Backends
             {
                 left = rightShape; //copy right
                 left.strides = new int[left.strides.Length]; //zero strides
-                left.BroadcastInfo = new BroadcastInfo(leftShape);
+                left.BroadcastInfo = new BroadcastInfo(leftOriginal);
                 return (left, rightShape);
             }
             //is right a scalar
@@ -315,7 +318,7 @@ namespace NumSharp.Backends
             {
                 right = leftShape; //copy left
                 right.strides = new int[right.strides.Length]; //zero strides
-                right.BroadcastInfo = new BroadcastInfo(rightShape);
+                right.BroadcastInfo = new BroadcastInfo(rightOriginal);
                 return (leftShape, right);
             }
             else
@@ -376,12 +379,12 @@ namespace NumSharp.Backends
                 }
 
 
-                left = new Shape(mit.dimensions) {BroadcastInfo = new BroadcastInfo(leftShape)};
-                right = new Shape(mit.dimensions) {BroadcastInfo = new BroadcastInfo(rightShape)};
-                if (leftShape.IsSliced)
-                    left.ViewInfo = new ViewInfo() {ParentShape = leftShape, Slices = null};
-                if (rightShape.IsSliced)
-                    right.ViewInfo = new ViewInfo() {ParentShape = rightShape, Slices = null};
+                left = new Shape(mit.dimensions) {BroadcastInfo = new BroadcastInfo(leftOriginal)};
+                right = new Shape(mit.dimensions) {BroadcastInfo = new BroadcastInfo(rightOriginal)};
+                if (leftOriginal.IsSliced)
+                    left.ViewInfo = new ViewInfo() {ParentShape = leftOriginal, Slices = null};
+                if (rightOriginal.IsSliced)
+                    right.ViewInfo = new ViewInfo() {ParentShape = rightOriginal, Slices = null};
 
                 //left.ViewInfo = leftShape.ViewInfo;
                 //right.ViewInfo = rightShape.ViewInfo;
