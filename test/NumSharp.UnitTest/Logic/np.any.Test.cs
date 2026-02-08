@@ -6,6 +6,7 @@ using NumSharp;
 namespace NumSharp.UnitTest.Logic
 {
     [TestClass]
+    [TestCategory("OpenBugs")]
     public class NpAnyTest
     {
         [TestMethod]

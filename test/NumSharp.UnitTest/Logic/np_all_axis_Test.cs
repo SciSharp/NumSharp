@@ -8,6 +8,7 @@ using NumSharp;
 namespace NumSharp.UnitTest.Logic
 {
     [TestClass]
+    [TestCategory("OpenBugs")]
     public class np_all_axis_Test
     {
         [TestMethod]

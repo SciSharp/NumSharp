@@ -63,6 +63,7 @@ namespace NumSharp.UnitTest.Selection
         }
 
         [TestMethod]
+        [TestCategory("OpenBugs")]
         public void MaskSetter()
         {
             NDArray nd = new double[] { 1, 2, 3 };
@@ -75,6 +76,7 @@ namespace NumSharp.UnitTest.Selection
         }
 
         [TestMethod]
+        [TestCategory("OpenBugs")]
         public void Compare()
         {
             throw new Exception("This test kills test engine process due to Debug.Assert");
@@ -1106,6 +1108,7 @@ namespace NumSharp.UnitTest.Selection
         }
 
         [TestMethod]
+        [TestCategory("OpenBugs")]
         public void Masking_2D_over_3D()
         {
             //>>> x = np.arange(30).reshape(2,3,5)
@@ -1139,6 +1142,7 @@ namespace NumSharp.UnitTest.Selection
         }
 
         [TestMethod]
+        [TestCategory("OpenBugs")]
         public void Combining_IndexArrays_with_Slices()
         {
             //>>> y = np.arange(35).reshape(5, 7)
@@ -1152,6 +1156,7 @@ namespace NumSharp.UnitTest.Selection
 
 
         [TestMethod]
+        [TestCategory("OpenBugs")]
         public void Combining_MaskArrays_with_Slices()
         {
             //>>> y = np.arange(35).reshape(5, 7)
@@ -1252,6 +1257,7 @@ namespace NumSharp.UnitTest.Selection
         }
 
         [TestMethod]
+        [TestCategory("OpenBugs")]
         public void IndexNDArray_sliced3dreshaped_indexed_by_1d_1d()
         {
             Test(np.arange(2 * 2 * 4 * 2)["::2"].reshape(2, 4, 2));
@@ -1334,6 +1340,7 @@ namespace NumSharp.UnitTest.Selection
         }
 
         [TestMethod]
+        [TestCategory("OpenBugs")]
         public void IndexNDArray_Set_Case2()
         {
             var a = np.arange(8).reshape(2, 4);
@@ -1342,6 +1349,7 @@ namespace NumSharp.UnitTest.Selection
         }
 
         [TestMethod]
+        [TestCategory("OpenBugs")]
         public void IndexNDArray_Set_Case3()
         {
             var a = np.arange(8).reshape(2, 4);
@@ -1350,6 +1358,7 @@ namespace NumSharp.UnitTest.Selection
         }
 
         [TestMethod]
+        [TestCategory("OpenBugs")]
         public void IndexNDArray_Set_Case4()
         {
             var a = np.arange(8).reshape(2, 4);
@@ -1382,6 +1391,7 @@ namespace NumSharp.UnitTest.Selection
         }
 
         [TestMethod]
+        [TestCategory("OpenBugs")]
         public void IndexNDArray_Set_Case8_Broadcasted()
         {
             var a = np.broadcast_to(np.arange(4).reshape(1, 4), (2, 4));
@@ -1439,6 +1449,7 @@ namespace NumSharp.UnitTest.Selection
         }
 
         [TestMethod]
+        [TestCategory("OpenBugs")]
         public void IndexNDArray_Get_Case7_Broadcasted()
         {
             //TODO: this produces incorrect return shape
@@ -1452,6 +1463,7 @@ namespace NumSharp.UnitTest.Selection
         }
 
         [TestMethod]
+        [TestCategory("OpenBugs")]
         public void IndexNDArray_Get_Case7()
         {
             //TODO: this produces incorrect return shape
@@ -1468,6 +1480,7 @@ namespace NumSharp.UnitTest.Selection
 
 
         [TestMethod]
+        [TestCategory("OpenBugs")]
         public void IndexNDArray_Get_Case8_Broadcasted()
         {
             //TODO: this produces incorrect return shape

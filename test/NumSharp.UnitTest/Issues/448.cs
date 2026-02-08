@@ -7,6 +7,7 @@ using NumSharp.UnitTest.Utilities;
 namespace NumSharp.UnitTest.Issues
 {
     [TestClass]
+    [TestCategory("OpenBugs")]
     public class Issue448
     {
         [TestMethod]

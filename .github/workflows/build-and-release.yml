@@ -18,27 +18,11 @@ env:
   # NU5048: PackageIconUrl deprecated — cosmetic NuGet warning
   DOTNET_NOWARN: CS1570%3BCS1571%3BCS1572%3BCS1573%3BCS1574%3BCS1587%3BCS1591%3BCS1711%3BCS1734%3BCS8981%3BNU5048
 
-  # Exclude known-failing test classes and specific test methods from CI.
-  # These are pre-existing bugs tracked in OpenBugs.cs and related test files.
-  # When a bug is fixed, remove its exclusion here so CI catches regressions.
-  TEST_FILTER: >-
-    FullyQualifiedName!~OpenBugs
-    & FullyQualifiedName!~NpAnyTest
-    & FullyQualifiedName!~np_all_axis_Test
-    & FullyQualifiedName!~Issue448
-    & Name!=Combining_IndexArrays_with_Slices
-    & Name!=Combining_MaskArrays_with_Slices
-    & Name!=IndexNDArray_Get_Case7
-    & Name!=IndexNDArray_Get_Case7_Broadcasted
-    & Name!=IndexNDArray_Get_Case8_Broadcasted
-    & Name!=IndexNDArray_Set_Case2
-    & Name!=IndexNDArray_Set_Case3
-    & Name!=IndexNDArray_Set_Case4
-    & Name!=IndexNDArray_Set_Case8_Broadcasted
-    & Name!=IndexNDArray_sliced3dreshaped_indexed_by_1d_1d
-    & Name!=Masking_2D_over_3D
-    & Name!=MaskSetter
-    & Name!=Compare
+  # Exclude tests by category. Tag tests with [TestCategory("...")] instead of
+  # adding individual Name!= exclusions here.
+  #   OpenBugs    — known-failing bug reproductions (pass when fixed, then remove category)
+  #   WindowsOnly — require GDI+/System.Drawing.Common (excluded on Linux/macOS)
+  TEST_FILTER: TestCategory!=OpenBugs
 
 jobs:
   test:
@@ -49,9 +33,9 @@ jobs:
           - os: windows-latest
             extra_filter: ''
           - os: ubuntu-latest
-            extra_filter: '& FullyQualifiedName!~Bitmap'
+            extra_filter: '& TestCategory!=WindowsOnly'
           - os: macos-latest
-            extra_filter: '& FullyQualifiedName!~Bitmap'
+            extra_filter: '& TestCategory!=WindowsOnly'
 
     runs-on: ${{ matrix.os }}
 

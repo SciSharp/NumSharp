@@ -8,15 +8,9 @@ using NumSharp.UnitTest.Utilities;
 namespace NumSharp.UnitTest
 {
     [TestClass]
+    [TestCategory("WindowsOnly")]
     public class BitmapExtensionsTests : TestClass
     {
-        [ClassInitialize]
-        public static void RequireWindows(TestContext _)
-        {
-            if (!OperatingSystem.IsWindows())
-                Assert.Inconclusive("System.Drawing.Common requires Windows (GDI+).");
-        }
-
         // ================================================================
         // Bugs discovered during test coverage expansion:
         //

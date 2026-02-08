@@ -55,14 +55,10 @@ namespace NumSharp.UnitTest
     ///     Total: 8 distinct bugs, 10 test methods.
     /// </summary>
     [TestClass]
+    [TestCategory("OpenBugs")]
+    [TestCategory("WindowsOnly")]
     public class OpenBugsBitmap : TestClass
     {
-        [ClassInitialize]
-        public static void RequireWindows(TestContext _)
-        {
-            if (!OperatingSystem.IsWindows())
-                Assert.Inconclusive("System.Drawing.Common requires Windows (GDI+).");
-        }
 
         // ================================================================
         //

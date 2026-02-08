@@ -58,6 +58,7 @@ namespace NumSharp.UnitTest
     ///     Total: 17 distinct bugs, 38 test methods.
     /// </summary>
     [TestClass]
+    [TestCategory("OpenBugs")]
     public partial class OpenBugs : TestClass
     {
         // ================================================================
