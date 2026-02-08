@@ -309,16 +309,82 @@ switch (nd.typecode)
 ## Build & Test
 
 ```bash
-dotnet build src/NumSharp.Core/NumSharp.Core.csproj
-dotnet test test/NumSharp.UnitTest/NumSharp.UnitTest.csproj
+dotnet build -v q --nologo "-clp:NoSummary;ErrorsOnly" -p:WarningLevel=0
+dotnet test -v q --nologo "-clp:ErrorsOnly" test/NumSharp.UnitTest/NumSharp.UnitTest.csproj
 ```
+
+## Scripting with `dotnet run` (.NET 10 file-based apps)
+
+### Accessing Internal Members
+
+NumSharp has many key types/fields/methods marked `internal` (Shape.dimensions, Shape.strides, NDArray.Storage, np._FindCommonType, etc.). To access them from a `dotnet run` script, override the assembly name to match an existing `InternalsVisibleTo` entry:
+
+```csharp
+#:project path/to/src/NumSharp.Core
+#:property AssemblyName=NumSharp.DotNetRunScript
+#:property PublishAot=false
+```
+
+**How it works:** NumSharp declares `[assembly: InternalsVisibleTo("NumSharp.DotNetRunScript")]` in `src/NumSharp.Core/Assembly/Properties.cs`. The `#:property AssemblyName=NumSharp.DotNetRunScript` directive overrides the script's assembly name (which normally derives from the filename) to match, granting full access to all `internal` and `protected internal` members.
+
+### Script Template (copy-paste ready)
+
+```csharp
+#:project path/to/src/NumSharp.Core
+#:property AssemblyName=NumSharp.DotNetRunScript
+#:property PublishAot=false
+
+```
+
+### Quick One-Liners
+
+```bash
+# Run a script with full internal access
+dotnet run my_script.cs
+
+# Compare NumPy vs NumSharp type promotion
+dotnet run script.cs   # where script.cs contains:
+# var ct = np._FindCommonType(np.array(1), np.array(1.5));
+# Console.WriteLine(ct); // Double
+
+# Inspect Shape internals
+dotnet run script.cs   # where script.cs contains:
+# var s = new Shape(new int[]{2,3,4});
+# Console.WriteLine($"dims={string.Join(",",s.dimensions)} strides={string.Join(",",s.strides)} size={s.size}");
+
+# Check ViewInfo after slicing
+dotnet run script.cs   # where script.cs contains:
+# var arr = np.arange(24).reshape(2,3,4);
+# var sliced = arr["1, :, ::2"];
+# Console.WriteLine($"ViewInfo: {sliced.Shape.ViewInfo != null}, BroadcastInfo: {sliced.Shape.BroadcastInfo != null}");
+```
+
+### Key Internal Members Available
+
+| Member | What it exposes |
+|--------|----------------|
+| `shape.dimensions` | Raw int[] of dimension sizes |
+| `shape.strides` | Raw int[] of stride values |
+| `shape.size` | Total element count |
+| `shape.ViewInfo` | Slice/view metadata (null if not a view) |
+| `shape.BroadcastInfo` | Broadcast metadata (null if not broadcast) |
+| `arr.Storage` | Underlying `UnmanagedStorage` |
+| `arr.GetTypeCode` | `NPTypeCode` of the array |
+| `arr.Array` | `IArraySlice` — raw data access |
+| `np._FindCommonType(...)` | Type promotion logic |
+| `np.powerOrder` | Type promotion ordering |
+| `NPTypeCode.GetGroup()` | Type category (int/uint/float/etc.) |
+| `NPTypeCode.GetPriority()` | Type priority for promotion |
+| `NPTypeCode.AsNumpyDtypeName()` | NumPy dtype name (e.g. "int32") |
+| `Shape.NewScalar()` | Create scalar shapes |
+| `Shape.ComputeHashcode()` | Recalculate shape hash |
 
 ## Adding New Features
 
 1. Read NumPy docs for the function
-2. **Run actual Python code** to observe exact behavior
+2. **Run actual Python code** to observe exact behavior and fuzzy all possible inputs to define a behavior matrix.
 3. Check existing similar implementations
-4. Implement matching behavior exactly
+4. Implement behavior matching exactly that of numpy.
 5. Write tests based on observed NumPy output
 6. Handle all 12 dtypes
 
