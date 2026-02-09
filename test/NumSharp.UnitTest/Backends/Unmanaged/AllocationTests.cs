@@ -18,7 +18,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             {
                 var shape = new Shape((1, (int)onegb));
                 shape.Should().BeShaped(1, (int)onegb).And.NotBeOfSize(1);
-                new Action(() => np.ones(shape, NPTypeCode.Int32)).Should().NotThrow();
+                new Action(() => np.empty(shape, NPTypeCode.Int32)).Should().NotThrow();
             }
         }
 

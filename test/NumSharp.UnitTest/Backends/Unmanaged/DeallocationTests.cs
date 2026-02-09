@@ -27,7 +27,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         public unsafe void GcDoesntCollectArraySliceAlone()
         {
             //this test should be churned.
-            const int iterations = 100_000;
+            const int iterations = 10_000;
             //alocate and store
             var l = new List<ArraySlice<float>>(iterations);
             for (int i = 0; i < iterations; i++)

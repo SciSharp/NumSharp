@@ -84,8 +84,7 @@ namespace NumSharp.UnitTest
         {
             var bitmap = EmbeddedBitmap("captcha-a");
             var withAlpha = bitmap.ToNDArray(copy: true, discardAlpha: false);
-            var bitmap2 = EmbeddedBitmap("captcha-a");
-            var noAlpha = bitmap2.ToNDArray(copy: true, discardAlpha: true);
+            var noAlpha = bitmap.ToNDArray(copy: true, discardAlpha: true);
 
             withAlpha.shape[3].Should().Be(4, "captcha-a is 32bpp ARGB");
             noAlpha.shape[3].Should().Be(3, "discardAlpha should strip alpha channel");
@@ -129,10 +128,9 @@ namespace NumSharp.UnitTest
         [Test]
         public void ToNDArray_Flat_SizeMatchesShaped()
         {
-            var bitmap1 = EmbeddedBitmap("captcha-a");
-            var shaped = bitmap1.ToNDArray(flat: false, copy: true, discardAlpha: true);
-            var bitmap2 = EmbeddedBitmap("captcha-a");
-            var flat = bitmap2.ToNDArray(flat: true, copy: true, discardAlpha: true);
+            var bitmap = EmbeddedBitmap("captcha-a");
+            var shaped = bitmap.ToNDArray(flat: false, copy: true, discardAlpha: true);
+            var flat = bitmap.ToNDArray(flat: true, copy: true, discardAlpha: true);
             flat.size.Should().Be(shaped.size, "flat and shaped should have same total elements");
         }
 
@@ -176,10 +174,9 @@ namespace NumSharp.UnitTest
         [Test]
         public void ToNDArray_DiscardAlpha_PixelDataMatchesFirstThreeChannels()
         {
-            var bitmap1 = EmbeddedBitmap("captcha-a");
-            var full = bitmap1.ToNDArray(copy: true, discardAlpha: false);
-            var bitmap2 = EmbeddedBitmap("captcha-a");
-            var trimmed = bitmap2.ToNDArray(copy: true, discardAlpha: true);
+            var bitmap = EmbeddedBitmap("captcha-a");
+            var full = bitmap.ToNDArray(copy: true, discardAlpha: false);
+            var trimmed = bitmap.ToNDArray(copy: true, discardAlpha: true);
 
             // The trimmed array should match the first 3 channels of the full array
             var fullRgb = full[Slice.All, Slice.All, Slice.All, new Slice(stop: 3)];
@@ -404,7 +401,7 @@ namespace NumSharp.UnitTest
             var bitmap = EmbeddedBitmap("captcha-a");
             var fromBitmap = bitmap.ToNDArray(copy: true, discardAlpha: false);
 
-            Image image = EmbeddedBitmap("captcha-a");
+            Image image = bitmap; // Bitmap inherits from Image
             var fromImage = image.ToNDArray(copy: true, discardAlpha: false);
 
             fromImage.Should().BeShaped(fromBitmap.shape[0], fromBitmap.shape[1], fromBitmap.shape[2], fromBitmap.shape[3]);
