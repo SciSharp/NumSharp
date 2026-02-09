@@ -7,11 +7,10 @@ using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest
 {
-    [TestClass]
-    [TestCategory("WindowsOnly")]
+    [Category("WindowsOnly")]
     public class BitmapWithAlphaTests : TestClass
     {
-        [TestMethod]
+        [Test]
         public void ToNDArray_Case1()
         {
             var bitmap = EmbeddedBitmap("captcha-a");
@@ -19,7 +18,7 @@ namespace NumSharp.UnitTest
             nd.Should().BeShaped(1, 165, 400, 3);
         }
 
-        [TestMethod]
+        [Test]
         public void ToNDArray_Case2()
         {
             var bitmap = EmbeddedBitmap("captcha-a");
@@ -27,7 +26,7 @@ namespace NumSharp.UnitTest
             nd.Should().BeShaped(1, 165, 400, 3);
         }
 
-        [TestMethod]
+        [Test]
         public void ToNDArray_Case3()
         {
             var bitmap = EmbeddedBitmap("captcha-a");
@@ -35,7 +34,7 @@ namespace NumSharp.UnitTest
             nd.Should().BeShaped(1, 165, 400, 4);
         }
 
-        [TestMethod]
+        [Test]
         public void ToNDArray_Case4()
         {
             var bitmap = EmbeddedBitmap("captcha-a");
@@ -44,7 +43,7 @@ namespace NumSharp.UnitTest
         }
         
         
-        [TestMethod]
+        [Test]
         public void ToNDArray_Odd_Width()
         {
             var bitmap = EmbeddedBitmap("odd-width");
@@ -52,7 +51,7 @@ namespace NumSharp.UnitTest
             nd.Should().BeShaped(1, 554, 475, 3);
         }
         
-        [TestMethod]
+        [Test]
         public void ToBitmap_Odd_Width()
         {
             var bitmap = EmbeddedBitmap("odd-width");
@@ -62,7 +61,7 @@ namespace NumSharp.UnitTest
             bitmap2.Height.Should().Be(bitmap.Height);
         }
 
-        [TestMethod]
+        [Test]
         public void ToNDArray_Case5_flat()
         {
             var bitmap = EmbeddedBitmap("captcha-a");
@@ -70,7 +69,7 @@ namespace NumSharp.UnitTest
             nd.Should().BeShaped(1 * 165 * 400 * 3);
         }
 
-        [TestMethod]
+        [Test]
         public void ToNDArray_Case6_flat()
         {
             var bitmap = EmbeddedBitmap("captcha-a");
@@ -78,7 +77,7 @@ namespace NumSharp.UnitTest
             nd.Should().BeShaped(1 * 165 * 400 * 3);
         }
 
-        [TestMethod]
+        [Test]
         public void ToNDArray_Case7_flat()
         {
             var bitmap = EmbeddedBitmap("captcha-a");
@@ -86,7 +85,7 @@ namespace NumSharp.UnitTest
             nd.Should().BeShaped(1 * 165 * 400 * 4);
         }
 
-        [TestMethod]
+        [Test]
         public void ToNDArray_Case8_flat()
         {
             var bitmap = EmbeddedBitmap("captcha-a");
@@ -94,14 +93,14 @@ namespace NumSharp.UnitTest
             nd.Should().BeShaped(1 * 165 * 400 * 4);
         }
 
-        [TestMethod]
+        [Test]
         public void ToBitmap_PixelFormat_DontCare_Case1()
         {
             var bm = np.arange(0, 3 * 3 * 3).reshape(1, 3, 3, 3).astype(NPTypeCode.Byte).ToBitmap();
             bm.PixelFormat.Should().Be(PixelFormat.Format24bppRgb);
         }
 
-        [TestMethod]
+        [Test]
         public void ToBitmap_PixelFormat_DontCare_Case2()
         {
             var bm = np.arange(0, 3 * 3 * 4).reshape(1, 3, 3, 4).astype(NPTypeCode.Byte).ToBitmap();

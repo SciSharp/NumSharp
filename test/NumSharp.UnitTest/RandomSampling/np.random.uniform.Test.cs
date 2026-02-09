@@ -7,10 +7,9 @@ using System.Linq;
 
 namespace NumSharp.UnitTest.RandomSampling
 {
-    [TestClass]
     public class NpRandomUniformTests : TestClass
     {
-        [TestMethod]
+        [Test]
         public void UniformByNDArrays()
         {
             var low = np.array(1d, 2d, 3d, 4d, 5d);
@@ -29,7 +28,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.IsTrue(uniformed.size == 5);
         }
 
-        [TestMethod]
+        [Test]
         public void UniformByIntegers1D()
         {
             var low = 1d;
@@ -44,7 +43,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.IsTrue(data[0] >= 1 && data[0] < 2);
         }
 
-        [TestMethod]
+        [Test]
         public void UniformByIntegers2D()
         {
             var low = 1d;

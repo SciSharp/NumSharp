@@ -7,16 +7,15 @@ using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
 {
-    [TestClass]
     public class ReduceAddTests
     {
-        [TestMethod]
+        [Test]
         public void EmptyArray()
         {
             np.sum(np.array(new int[0])).Should().BeScalar(0);
         }
 
-        [TestMethod]
+        [Test]
         public void Case1_Elementwise_keepdims()
         {
             var np1 = np.array(new double[] {1, 2, 3, 4, 5, 6}).reshape(3, 2);
@@ -26,7 +25,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             mean.GetValue(0).Should().BeEquivalentTo(21);
         }
 
-        [TestMethod]
+        [Test]
         public void Case0_Scalar()
         {
             var a = NDArray.Scalar(1);
@@ -35,7 +34,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             ret.GetInt32(0).Should().Be(1);
         }
 
-        [TestMethod]
+        [Test]
         public void Case0_Scalar_Axis0()
         {
             var a = NDArray.Scalar(1);
@@ -44,7 +43,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             ret.GetInt32(0).Should().Be(1);
         }
 
-        [TestMethod]
+        [Test]
         public void Case1_Elementwise()
         {
             var a = np.ones((3, 3, 3), NPTypeCode.Int32);
@@ -53,7 +52,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             ret.GetInt32(0).Should().Be(3 * 3 * 3);
         }
 
-        [TestMethod]
+        [Test]
         public void Case1_Axis0()
         {
             var a = np.ones((3, 3, 3), NPTypeCode.Int32);
@@ -65,7 +64,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             ret.Cast<int>().Should().AllBeEquivalentTo(3);
         }
 
-        [TestMethod]
+        [Test]
         public void Case1_Axis1()
         {
             var a = np.ones((3, 3, 3), NPTypeCode.Int32);
@@ -76,7 +75,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             ret.Cast<int>().Should().AllBeEquivalentTo(3);
         }
 
-        [TestMethod]
+        [Test]
         public void Case1_Axis2()
         {
             var a = np.ones((3, 3, 3), NPTypeCode.Int32);
@@ -87,7 +86,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             ret.Cast<int>().Should().AllBeEquivalentTo(3);
         }
 
-        [TestMethod]
+        [Test]
         public void Case1_Axis_minus1()
         {
             var a = np.ones((3, 3, 3), NPTypeCode.Int32);
@@ -98,7 +97,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             ret.Cast<int>().Should().AllBeEquivalentTo(3);
         }
 
-        [TestMethod]
+        [Test]
         public void Case1_Axis2_keepdims()
         {
             var a = np.ones((3, 3, 3), NPTypeCode.Int32);
@@ -109,7 +108,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             ret.Cast<int>().Should().AllBeEquivalentTo(3);
         }
 
-        [TestMethod]
+        [Test]
         public void Case1_Axis_minus1_keepdims()
         {
             var a = np.ones((3, 3, 3), NPTypeCode.Int32);
@@ -120,7 +119,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             ret.Cast<int>().Should().AllBeEquivalentTo(3);
         }
 
-        [TestMethod]
+        [Test]
         public void Case1_Axis_1_keepdims()
         {
             var a = np.ones((3, 3, 3), NPTypeCode.Int32);
@@ -132,7 +131,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
         }
 
 
-        [TestMethod]
+        [Test]
         public void Case2_Elementwise()
         {
             var a = np.ones((2, 1, 3, 5, 1), np.int32);
@@ -142,7 +141,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             ret.GetInt32(0).Should().Be(2 * 1 * 3 * 5 * 1);
         }
 
-        [TestMethod]
+        [Test]
         public void Case2_Axis0()
         {
             var a = np.ones((2, 1, 3, 5, 1), np.int32);
@@ -153,7 +152,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             ret.Cast<int>().Should().AllBeEquivalentTo(2);
         }
 
-        [TestMethod]
+        [Test]
         public void Case2_Axis1()
         {
             var a = np.ones((2, 1, 3, 5, 1), np.int32);
@@ -164,7 +163,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             ret.Cast<int>().Should().AllBeEquivalentTo(1);
         }
 
-        [TestMethod]
+        [Test]
         public void Case2_Axis2()
         {
             var a = np.ones((2, 1, 3, 5, 1), np.int32);
@@ -175,7 +174,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             ret.Cast<int>().Should().AllBeEquivalentTo(3);
         }
 
-        [TestMethod]
+        [Test]
         public void Case2_Axis4()
         {
             var a = np.ones((2, 1, 3, 5, 1), np.int32);
@@ -186,7 +185,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             ret.Cast<int>().Should().AllBeEquivalentTo(1);
         }
 
-        [TestMethod]
+        [Test]
         public void Case2_Axis_minus1()
         {
             var a = np.ones((2, 1, 3, 5, 1), np.int32);
@@ -197,7 +196,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             ret.Cast<int>().Should().AllBeEquivalentTo(1);
         }
 
-        [TestMethod]
+        [Test]
         public void Case2_Axis2_keepdims()
         {
             var a = np.ones((2, 1, 3, 5, 1), np.int32);
@@ -208,7 +207,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             ret.Cast<int>().Should().AllBeEquivalentTo(3);
         }
 
-        [TestMethod]
+        [Test]
         public void Case2_Axis_minus1_keepdims()
         {
             var a = np.ones((2, 1, 3, 5, 1), np.int32);
@@ -219,7 +218,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             ret.Cast<int>().Should().AllBeEquivalentTo(1);
         }
 
-        [TestMethod]
+        [Test]
         public void Case3_TurnIntoScalar()
         {
             NDArray a;

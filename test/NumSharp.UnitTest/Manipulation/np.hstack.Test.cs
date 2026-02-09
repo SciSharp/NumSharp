@@ -5,10 +5,9 @@ namespace NumSharp.UnitTest.Manipulation
     /// <summary>
     /// Tests following https://docs.scipy.org/doc/numpy-1.15.0/reference/generated/numpy.hstack.html
     /// </summary>
-    [TestClass]
     public class np_hstack_tests
     {
-        [TestMethod]
+        [Test]
         public void HStackNDArrays()
         {
             //1D

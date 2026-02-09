@@ -4,10 +4,9 @@ using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.Manipulation
 {
-    [TestClass]
     public class np_moveaxis_Test
     {
-        [TestMethod]
+        [Test]
         public void Case1()
         {
             var x = np.zeros((3, 4, 5));
@@ -15,7 +14,7 @@ namespace NumSharp.UnitTest.Manipulation
             np.moveaxis(x, -1, 0).Should().BeShaped(5, 4, 3);
         }        
 
-        [TestMethod]
+        [Test]
         public void Case2()
         {
             var x = np.zeros((3, 4, 5));

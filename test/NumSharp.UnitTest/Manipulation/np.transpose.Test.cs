@@ -3,10 +3,9 @@ using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.Manipulation
 {
-    [TestClass]
     public class np_transpose_Test
     {
-        [TestMethod]
+        [Test]
         public void Case1()
         {
             var nd = np.array(1, 2, 3, 4).reshape(2, 2);
@@ -14,7 +13,7 @@ namespace NumSharp.UnitTest.Manipulation
                 .BeOfValues(1, 3, 2, 4).And.BeShaped(2, 2);
         }
 
-        [TestMethod]
+        [Test]
         public void Case2()
         {
             var nd = np.arange(3 * 2 * 4).reshape(3, 2, 4);
@@ -23,7 +22,7 @@ namespace NumSharp.UnitTest.Manipulation
                 .And.BeShaped(4, 2, 3);
         }
 
-        [TestMethod]
+        [Test]
         public void Case3()
         {
             var nd = np.arange(2 * 3).reshape(1, 2, 3);
@@ -32,7 +31,7 @@ namespace NumSharp.UnitTest.Manipulation
                 .And.BeShaped(2, 1, 3);
         }
 
-        [TestMethod]
+        [Test]
         public void Case4()
         {
             var nd = np.arange(12).reshape(6, 2);
@@ -42,7 +41,7 @@ namespace NumSharp.UnitTest.Manipulation
         }
 
 
-        [TestMethod]
+        [Test]
         public void Case5()
         {
             var nd = np.broadcast_arrays(np.array(1), np.arange(9).reshape(3,3)).Lhs;

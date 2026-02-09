@@ -6,10 +6,9 @@ using System.Text;
 
 namespace NumSharp.UnitTest.RandomSampling
 {
-    [TestClass]
     public class NpRandomChoiceTests : TestClass
     {
-        [TestMethod]
+        [Test]
         public void UniformOneSample()
         {
             // Generate a uniform random sample from np.arange(5) of size 1:
@@ -30,7 +29,7 @@ namespace NumSharp.UnitTest.RandomSampling
             }
         }
 
-        [TestMethod]
+        [Test]
         public void UniformMultipleSample()
         {
             // Generate a uniform random sample from np.arange(5) of size 3:
@@ -51,7 +50,7 @@ namespace NumSharp.UnitTest.RandomSampling
             }
         }
 
-        [TestMethod]
+        [Test]
         public void NonUniformSample()
         {
             // Generate a non-uniform random sample from np.arange(5) of size 3:
@@ -74,7 +73,7 @@ namespace NumSharp.UnitTest.RandomSampling
             }
         }
 
-        [TestMethod]
+        [Test]
         [Ignore("Choice without replacement not implemented yet")]
         public void UniformSampleWithoutReplace()
         {
@@ -82,7 +81,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.Fail("Not implemented");
         }
 
-        [TestMethod]
+        [Test]
         [Ignore("Choice without replacement not implemented yet")]
         public void NonUniformSampleWithoutReplace()
         {
@@ -91,7 +90,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.Fail("Not implemented");
         }
 
-        [TestMethod]
+        [Test]
         [Ignore("Choice with string arrays not implemented yet")]
         public void StringArraySample1()
         {
@@ -111,7 +110,7 @@ namespace NumSharp.UnitTest.RandomSampling
             //}
         }
 
-        [TestMethod]
+        [Test]
         public void IntegerArraySample()
         {
             int nrSamples = 5;

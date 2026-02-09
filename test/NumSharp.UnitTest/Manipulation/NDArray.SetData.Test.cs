@@ -6,10 +6,9 @@ using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.Manipulation
 {
-    [TestClass]
     public class NDArraySetData
     {
-        [TestMethod]
+        [Test]
         public void Case1_ND_Scalar()
         {
             var lhs = np.full(5, (3, 3));
@@ -24,7 +23,7 @@ namespace NumSharp.UnitTest.Manipulation
             lhs[0].Cast<int>().Should().AllBeEquivalentTo(1);
         }
 
-        [TestMethod]
+        [Test]
         public void Case1_Scalar_Scalar()
         {
             var lhs = np.full(5, (3, 3));
@@ -39,7 +38,7 @@ namespace NumSharp.UnitTest.Manipulation
             lhs[0, 1].Cast<int>().Should().AllBeEquivalentTo(1);
         }
 
-        [TestMethod]
+        [Test]
         public void Case1_ND_Scalar_ArraySlice()
         {
             var lhs = np.full(5, (3, 3));
@@ -52,7 +51,7 @@ namespace NumSharp.UnitTest.Manipulation
             lhs[0].Cast<int>().Should().AllBeEquivalentTo(1);
         }
 
-        [TestMethod]
+        [Test]
         public void Case1_Scalar_Scalar_ArraySlice()
         {
             var lhs = np.full(5, (3, 3));
@@ -65,7 +64,7 @@ namespace NumSharp.UnitTest.Manipulation
             lhs[0, 1].Cast<int>().Should().AllBeEquivalentTo(1);
         }
 
-        [TestMethod]
+        [Test]
         public void Case1_ND_ND()
         {
             var lhs = np.full(5, (2, 1, 3, 3));
@@ -82,7 +81,7 @@ namespace NumSharp.UnitTest.Manipulation
         }
 
 
-        [TestMethod]
+        [Test]
         public void Case1_ND_ND_ArraySlice()
         {
             var lhs = np.full(5, (2, 1, 3, 3));
@@ -96,7 +95,7 @@ namespace NumSharp.UnitTest.Manipulation
             lhs[0].Cast<int>().Should().AllBeEquivalentTo(1);
         }
 
-        [TestMethod]
+        [Test]
         public void Case2_ND_ScalaryND()
         {
             var lhs = np.full(5, (2, 1, 3, 3));
@@ -112,7 +111,7 @@ namespace NumSharp.UnitTest.Manipulation
             lhs[0].Cast<int>().Should().AllBeEquivalentTo(1);
         }
 
-        [TestMethod]
+        [Test]
         public void Case2_ND_ScalaryND_ArraySlice()
         {
             var lhs = np.full(5, (2, 1, 3, 3));
@@ -126,7 +125,7 @@ namespace NumSharp.UnitTest.Manipulation
             lhs[0].Cast<int>().Should().AllBeEquivalentTo(1);
         }
 
-        [TestMethod]
+        [Test]
         public void Case1_ND_Scalar_Sliced()
         {
             var lhs = np.full(5, (3, 3));
@@ -144,7 +143,7 @@ namespace NumSharp.UnitTest.Manipulation
             lhs[0].Cast<int>().Should().AllBeEquivalentTo(1);
         }
 
-        [TestMethod]
+        [Test]
         public void Case1_Scalar_Scalar_Sliced()
         {
             var lhs = np.full(5, (3, 3));
@@ -162,7 +161,7 @@ namespace NumSharp.UnitTest.Manipulation
             lhs[0, 1].Cast<int>().Should().AllBeEquivalentTo(1);
         }
 
-        [TestMethod]
+        [Test]
         public void Case1_ND_ND_Sliced()
         {
             var lhs = np.full(5, (2, 1, 3, 3));
@@ -187,7 +186,7 @@ namespace NumSharp.UnitTest.Manipulation
             slicedlhs[0].Cast<int>().Should().AllBeEquivalentTo(1);
         }
 
-        [TestMethod]
+        [Test]
         public void Case2_ND_ScalaryND_Sliced()
         {
             var lhs = np.full(5, (2, 1, 3, 3));
@@ -207,7 +206,7 @@ namespace NumSharp.UnitTest.Manipulation
 
         //---------------
 
-        [TestMethod]
+        [Test]
         public void Case1_ND_Scalar_Cast()
         {
             var lhs = np.full(5d, (3, 3));
@@ -222,7 +221,7 @@ namespace NumSharp.UnitTest.Manipulation
             lhs[0].Cast<double>().Should().AllBeEquivalentTo(1);
         }
 
-        [TestMethod]
+        [Test]
         public void Case1_Scalar_Scalar_Cast()
         {
             var lhs = np.full(5d, (3, 3));
@@ -237,7 +236,7 @@ namespace NumSharp.UnitTest.Manipulation
             lhs[0, 1].Cast<double>().Should().AllBeEquivalentTo(1);
         }
 
-        [TestMethod]
+        [Test]
         public void Case1_ND_ND_Cast()
         {
             var lhs = np.full(5d, (2, 1, 3, 3));
@@ -252,7 +251,7 @@ namespace NumSharp.UnitTest.Manipulation
             lhs[0].Should().AllValuesBe(1);
         }
 
-        [TestMethod]
+        [Test]
         public void Case2_ND_ScalaryND_Cast()
         {
             var lhs = np.full(5d, (2, 1, 3, 3));
@@ -268,7 +267,7 @@ namespace NumSharp.UnitTest.Manipulation
             lhs[0].Cast<double>().Should().AllBeEquivalentTo(1);
         }
 
-        [TestMethod]
+        [Test]
         public void Case1_ND_Scalar_Sliced_Cast()
         {
             var lhs = np.full(5d, (3, 3));
@@ -286,7 +285,7 @@ namespace NumSharp.UnitTest.Manipulation
             lhs[0].Cast<double>().Should().AllBeEquivalentTo(1);
         }
 
-        [TestMethod]
+        [Test]
         public void Case1_Scalar_Scalar_Sliced_Cast()
         {
             var lhs = np.full(5d, (3, 3));
@@ -304,7 +303,7 @@ namespace NumSharp.UnitTest.Manipulation
             lhs[0, 1].Cast<double>().Should().AllBeEquivalentTo(1);
         }
 
-        [TestMethod]
+        [Test]
         public void Case1_ND_ND_Sliced_Cast()
         {
             var lhs = np.full(5d, (2, 1, 3, 3));
@@ -329,7 +328,7 @@ namespace NumSharp.UnitTest.Manipulation
             slicedlhs[0].Cast<double>().Should().AllBeEquivalentTo(1);
         }
 
-        [TestMethod]
+        [Test]
         public void Case2_ND_ScalaryND_Sliced_Cast()
         {
             var lhs = np.full(5d, (2, 1, 3, 3));

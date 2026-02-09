@@ -9,10 +9,9 @@ using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp.UnitTest.Creation
 {
-    [TestClass]
     public class NdArrayRollTest
     {
-        [TestMethod]
+        [Test]
         public void Base1DTest()
         {
             NDArray nd1 = new double[] {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
@@ -42,7 +41,7 @@ namespace NumSharp.UnitTest.Creation
             Assert.IsTrue(Enumerable.SequenceEqual(nd2_, expNd2));
         }
 
-        [TestMethod]
+        [Test]
         public void Base2DTest()
         {
             var nd1 = np.arange(10).reshape(2, 5);
@@ -56,7 +55,7 @@ namespace NumSharp.UnitTest.Creation
             Assert.IsTrue(Enumerable.SequenceEqual(nd1.shape, nd3.shape));
         }
 
-        [TestMethod]
+        [Test]
         public void RollWithAxis()
         {
             var x = np.arange(10);

@@ -8,10 +8,9 @@ using NumSharp.Unmanaged.Memory;
 
 namespace NumSharp.UnitTest.Utilities
 {
-    [TestClass]
     public class StackedMemoryPoolTests
     {
-        [TestMethod]
+        [Test]
         public void TakeExceedStored()
         {
             var pool = new StackedMemoryPool(4, 10);

@@ -3,17 +3,16 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace NumSharp.UnitTest.Manipulation
 {
-    [TestClass]
     public class np_repeat_tests
     {
-        [TestMethod]
+        [Test]
         public void Scalar()
         {
             var nd = np.repeat(3, 4);
             Assert.AreEqual(nd.Data<int>().Count(x => x == 3), 4);
         }
 
-        [TestMethod]
+        [Test]
         public void Simple2DArray()
         {
             var x = np.array(new int[][] {new int[] {1, 2}, new int[] {3, 4}});

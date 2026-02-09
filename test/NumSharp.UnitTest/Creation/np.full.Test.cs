@@ -7,10 +7,9 @@ using NumSharp.Backends;
 
 namespace NumSharp.UnitTest.Creation
 {
-    [TestClass]
     public class np_full_Test
     {
-        [TestMethod]
+        [Test]
         public void Full_Like()
         {
             var a = np.zeros((10, 10));
@@ -20,7 +19,7 @@ namespace NumSharp.UnitTest.Creation
             alike.Array.GetIndex(0).Should().Be(5).And.BeOfType<double>();
         }
 
-        [TestMethod]
+        [Test]
         public void SimpleInt1D()
         {
             var np1 = np.full(1d, new Shape(5));
@@ -28,7 +27,7 @@ namespace NumSharp.UnitTest.Creation
             Assert.IsTrue(np1.Data<double>().Where(x => x == 1).ToArray().Length == 5);
         }
 
-        [TestMethod]
+        [Test]
         public void SimpleInt2D()
         {
             var np1 = np.full(1d, new Shape(5, 5));
@@ -36,7 +35,7 @@ namespace NumSharp.UnitTest.Creation
             Assert.IsTrue(np1.Data<double>().Where(x => x == 1).ToArray().Length == 25);
         }
 
-        [TestMethod]
+        [Test]
         public void SimpleDouble3D()
         {
             var np1 = np.full(1d, new Shape(5, 5, 5));
@@ -44,20 +43,20 @@ namespace NumSharp.UnitTest.Creation
             Assert.IsTrue(np1.Data<double>().Where(x => x == 1).ToArray().Length == 125);
         }
 
-        [DataTestMethod]
-        [DataRow(typeof(double))]
-        [DataRow(typeof(float))]
-        [DataRow(typeof(byte))]
-        [DataRow(typeof(int))]
-        [DataRow(typeof(long))]
-        [DataRow(typeof(char))]
-        [DataRow(typeof(short))]
-        [DataRow(typeof(uint))]
-        [DataRow(typeof(ulong))]
-        [DataRow(typeof(ushort))]
-        [DataRow(typeof(decimal))]
-        //TODO! [DataRow(typeof(Complex))]
-        [DataRow(typeof(bool))]
+        [Test]
+        [Arguments(typeof(double))]
+        [Arguments(typeof(float))]
+        [Arguments(typeof(byte))]
+        [Arguments(typeof(int))]
+        [Arguments(typeof(long))]
+        [Arguments(typeof(char))]
+        [Arguments(typeof(short))]
+        [Arguments(typeof(uint))]
+        [Arguments(typeof(ulong))]
+        [Arguments(typeof(ushort))]
+        [Arguments(typeof(decimal))]
+        //TODO! [Arguments(typeof(Complex))]
+        [Arguments(typeof(bool))]
         public void Full_AllTypes(Type dtype)
         {
             var np1 = np.full((ValueType) Activator.CreateInstance(dtype), new Shape(3, 3, 3), dtype);

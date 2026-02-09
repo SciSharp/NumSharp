@@ -10,10 +10,9 @@ using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.View
 {
-    [TestClass]
     public class UnmanagedStorageTest : TestClass
     {
-        [TestMethod]
+        [Test]
         public void GetData_1D()
         {
             var data = new UnmanagedStorage(new int[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 });
@@ -66,7 +65,7 @@ namespace NumSharp.UnitTest.View
             AssertAreEqual(new[] { 9 }, view.ToArray<int>());
         }
 
-        [TestMethod]
+        [Test]
         public void GetData_1D_Negative()
         {
             var data = new UnmanagedStorage(new int[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 });
@@ -98,7 +97,7 @@ namespace NumSharp.UnitTest.View
             AssertAreEqual(new int[] { 8 }, view.ToArray<int>());
         }
 
-        [TestMethod]
+        [Test]
         public void Indexing_1D()
         {
             var data = new UnmanagedStorage(new int[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 });
@@ -158,7 +157,7 @@ namespace NumSharp.UnitTest.View
             Assert.AreEqual(9, view.GetValue<int>(0));
         }
 
-        [TestMethod]
+        [Test]
         public void NestedView_1D()
         {
             var data = new UnmanagedStorage(new int[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 });
@@ -194,7 +193,7 @@ namespace NumSharp.UnitTest.View
             AssertAreEqual(new int[] { 22, 88 }, view3.ToArray<int>());
         }
 
-        [TestMethod]
+        [Test]
         public void GetData_2D()
         {
             //>>> x = np.arange(9).reshape(3, 3)
@@ -289,7 +288,7 @@ namespace NumSharp.UnitTest.View
             AssertAreEqual(new int[] { 8, 6, 5, 3, 2, 0 }, view.ToArray<int>());
         }
 
-        [TestMethod]
+        [Test]
         public void NestedView_2D()
         {
             var data = new UnmanagedStorage(new int[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 });
@@ -345,7 +344,7 @@ namespace NumSharp.UnitTest.View
             AssertAreEqual(new int[] { 22, 88, 222, 888 }, view3.ToArray<int>());
         }
 
-        [TestMethod]
+        [Test]
         public void Reduce_1D_to_Scalar()
         {
             var data = new UnmanagedStorage(new int[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 });
@@ -356,7 +355,7 @@ namespace NumSharp.UnitTest.View
             AssertAreEqual(new int[] { 7 }, view.ToArray<int>());
         }
 
-        [TestMethod]
+        [Test]
         public void Reduce_2D_to_1D_and_0D()
         {
             //>>> x = np.arange(9).reshape(3, 3)
@@ -391,7 +390,7 @@ namespace NumSharp.UnitTest.View
             AssertAreEqual(new int[] { 8 }, view.ToArray<int>());
         }
 
-        [TestMethod]
+        [Test]
         public void NestedDimensionalityReduction()
         {
             var data = new UnmanagedStorage(new int[] { 0, 1, 2, 3, 4, 5, 6, 7, 8 });
@@ -408,14 +407,14 @@ namespace NumSharp.UnitTest.View
             AssertAreEqual(new int[] { 7, 6 }, view2.ToArray<int>());
         }
 
-        [TestMethod]
+        [Test]
         public void Scalar_to_array()
         {
             var a = new UnmanagedStorage(17);
             AssertAreEqual(new int[] { 17 }, a.ToArray<int>());
         }
 
-        [TestMethod]
+        [Test]
         public void DimensionalityReduction4D_to_1D()
         {
             var t = new UnmanagedStorage(np.arange(30).GetData(), new Shape(2, 1, 3, 5));
@@ -426,7 +425,7 @@ namespace NumSharp.UnitTest.View
             AssertAreEqual(new int[] { 0, 5, 10 }, view.ToArray<int>());
         }
 
-        [TestMethod]
+        [Test]
         public void SlicingWithNegativeIndex1()
         {
             var a = new UnmanagedStorage(np.arange(10).GetData(), new Shape(10));
@@ -438,7 +437,7 @@ namespace NumSharp.UnitTest.View
             a.GetView(":, 1:").GetView("-1, -2").GetValue(0,0).Should().BeEquivalentTo( 8 );
         }
 
-        [TestMethod]
+        [Test]
         public void SlicingWithNegativeIndex()
         {
             var a = new UnmanagedStorage(np.arange(3 * 1 * 3 * 3).GetData(), (3, 1, 3, 3));

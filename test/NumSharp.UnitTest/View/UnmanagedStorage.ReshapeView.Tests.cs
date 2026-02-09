@@ -10,11 +10,10 @@ using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.View
 {
-    [TestClass]
     public class UnmanagedStorageReshapeViewTest : TestClass
     {
 
-        [TestMethod]
+        [Test]
         public void ReshapeSlicedArray()
         {
             var t = new UnmanagedStorage(np.arange(20).GetData(), new Shape(2, 10));
@@ -27,7 +26,7 @@ namespace NumSharp.UnitTest.View
             new NDArray(view).ToString(flat: true).Should().Be("array([5, 6, 7, 8, 9, 15, 16, 17, 18, 19])");
         }
 
-        [TestMethod]
+        [Test]
         public void ExpandDimensions()
         {
             //>>> np.arange(6)
@@ -78,7 +77,7 @@ namespace NumSharp.UnitTest.View
             nd.ToString(flat: true).Should().Be("array([[[[1], [2]]], [[[4], [5]]]])");
         }
 
-        [TestMethod]
+        [Test]
         public void SliceReshapedSlicedArray()
         {
             var t = new UnmanagedStorage(np.arange(20).GetData(), new Shape(2, 10));
@@ -91,7 +90,7 @@ namespace NumSharp.UnitTest.View
             new NDArray(v1).ToString(flat: true).Should().Be("array([6, 8, 15, 17, 19])");
         }
 
-        [TestMethod]
+        [Test]
         public void TheUltimateTest______SliceReshapedSlicedReshapedSlicedArray()
         {
             var t = new UnmanagedStorage(np.arange(20).GetData(), new Shape(20));
@@ -114,7 +113,7 @@ namespace NumSharp.UnitTest.View
             new NDArray(t).ToString(flat: true).Should().Be("array([0, 11, 2, 3, 4, 5, 6, 7, 8, 99, -10, 11, 12, 13, 14, 15, 16, 17, -18, 19])");
         }
 
-        [TestMethod]
+        [Test]
         public void ReshapeSlicedArray1()
         {
             //>>> a

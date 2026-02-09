@@ -11,10 +11,9 @@ using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.View
 {
-    [TestClass]
     public class SliceTests
     {
-        [TestMethod]
+        [Test]
         public void SliceNotation()
         {
             // items start through stop-1
@@ -106,14 +105,14 @@ namespace NumSharp.UnitTest.View
             Assert.ThrowsException<ArgumentException>(() => new Slice("...."));
         }
 
-        [TestMethod]
+        [Test]
         public void N_DimensionalSliceNotation()
         {
             var s = "1:3,-5:-8,7:8:9,...,1:,999,:,:1,7::9,:7:9,::-1,-5:-8,5:8,...";
             Assert.AreEqual(s, Slice.FormatSlices(Slice.ParseSlices(s)));
         }
 
-        [TestMethod]
+        [Test]
         public void SliceDef()
         {
             // slice sanitation (prerequisite for shape slicing and correct merging!)

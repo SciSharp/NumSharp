@@ -13,14 +13,13 @@ namespace NumSharp.UnitTest.Manipulation
     /// NumPy reference: https://numpy.org/doc/stable/reference/generated/numpy.roll.html
     /// NumPy test source: numpy/_core/tests/test_numeric.py, class TestRoll
     /// </summary>
-    [TestClass]
     public class np_roll_Test
     {
         // ================================================================
         // 1D ARRAYS
         // ================================================================
 
-        [TestMethod]
+        [Test]
         public void Roll_1D_PositiveShift()
         {
             // np.roll(np.arange(10), 2) => [8 9 0 1 2 3 4 5 6 7]
@@ -31,7 +30,7 @@ namespace NumSharp.UnitTest.Manipulation
             result.Should().BeOfValues(8, 9, 0, 1, 2, 3, 4, 5, 6, 7);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_1D_NegativeShift()
         {
             // np.roll(np.arange(10), -2) => [2 3 4 5 6 7 8 9 0 1]
@@ -42,7 +41,7 @@ namespace NumSharp.UnitTest.Manipulation
             result.Should().BeOfValues(2, 3, 4, 5, 6, 7, 8, 9, 0, 1);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_1D_ZeroShift()
         {
             // np.roll(np.arange(10), 0) => [0 1 2 3 4 5 6 7 8 9]
@@ -53,7 +52,7 @@ namespace NumSharp.UnitTest.Manipulation
             result.Should().BeOfValues(0, 1, 2, 3, 4, 5, 6, 7, 8, 9);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_1D_ShiftEqualsSize()
         {
             // np.roll(np.arange(10), 10) => [0 1 2 3 4 5 6 7 8 9]
@@ -64,7 +63,7 @@ namespace NumSharp.UnitTest.Manipulation
             result.Should().BeOfValues(0, 1, 2, 3, 4, 5, 6, 7, 8, 9);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_1D_ShiftEqualsNegativeSize()
         {
             // np.roll(np.arange(10), -10) => [0 1 2 3 4 5 6 7 8 9]
@@ -75,7 +74,7 @@ namespace NumSharp.UnitTest.Manipulation
             result.Should().BeOfValues(0, 1, 2, 3, 4, 5, 6, 7, 8, 9);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_1D_ShiftGreaterThanSize()
         {
             // np.roll(np.arange(10), 12) => [8 9 0 1 2 3 4 5 6 7]  (12 % 10 = 2)
@@ -86,7 +85,7 @@ namespace NumSharp.UnitTest.Manipulation
             result.Should().BeOfValues(8, 9, 0, 1, 2, 3, 4, 5, 6, 7);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_1D_ShiftLessThanNegativeSize()
         {
             // np.roll(np.arange(10), -12) => [2 3 4 5 6 7 8 9 0 1]  (-12 % 10 = -2 => 8 effective)
@@ -97,7 +96,7 @@ namespace NumSharp.UnitTest.Manipulation
             result.Should().BeOfValues(2, 3, 4, 5, 6, 7, 8, 9, 0, 1);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_1D_ShiftMuchLarger()
         {
             // np.roll(np.arange(10), 25) => [5 6 7 8 9 0 1 2 3 4]  (25 % 10 = 5)
@@ -108,7 +107,7 @@ namespace NumSharp.UnitTest.Manipulation
             result.Should().BeOfValues(5, 6, 7, 8, 9, 0, 1, 2, 3, 4);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_1D_VeryLargeShift()
         {
             // np.roll(np.arange(5), 1000000) => [0 1 2 3 4]  (1000000 % 5 = 0)
@@ -123,7 +122,7 @@ namespace NumSharp.UnitTest.Manipulation
         // 1D - NumPy test_roll1d (exact match)
         // ================================================================
 
-        [TestMethod]
+        [Test]
         public void Roll_NumPy_test_roll1d()
         {
             // Exact replication of NumPy TestRoll.test_roll1d
@@ -136,7 +135,7 @@ namespace NumSharp.UnitTest.Manipulation
         // 2D ARRAYS
         // ================================================================
 
-        [TestMethod]
+        [Test]
         public void Roll_2D_NoAxis_Flattens()
         {
             // np.roll(x2, 1) flattens, rolls, restores shape
@@ -149,7 +148,7 @@ namespace NumSharp.UnitTest.Manipulation
             result.Should().BeOfValues(9, 0, 1, 2, 3, 4, 5, 6, 7, 8);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_2D_Axis0()
         {
             // np.roll(x2, 1, axis=0) => [[5,6,7,8,9],[0,1,2,3,4]]
@@ -160,7 +159,7 @@ namespace NumSharp.UnitTest.Manipulation
             result.Should().BeOfValues(5, 6, 7, 8, 9, 0, 1, 2, 3, 4);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_2D_Axis1()
         {
             // np.roll(x2, 1, axis=1) => [[4,0,1,2,3],[9,5,6,7,8]]
@@ -171,7 +170,7 @@ namespace NumSharp.UnitTest.Manipulation
             result.Should().BeOfValues(4, 0, 1, 2, 3, 9, 5, 6, 7, 8);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_2D_NegativeAxis1()
         {
             // np.roll(x2, 1, axis=-1) == np.roll(x2, 1, axis=1)
@@ -182,7 +181,7 @@ namespace NumSharp.UnitTest.Manipulation
             result.Should().BeOfValues(4, 0, 1, 2, 3, 9, 5, 6, 7, 8);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_2D_NegativeAxis2()
         {
             // np.roll(x2, 1, axis=-2) == np.roll(x2, 1, axis=0)
@@ -193,7 +192,7 @@ namespace NumSharp.UnitTest.Manipulation
             result.Should().BeOfValues(5, 6, 7, 8, 9, 0, 1, 2, 3, 4);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_2D_NegativeShift_Axis0()
         {
             // np.roll(x2, -1, axis=0) => [[5,6,7,8,9],[0,1,2,3,4]]
@@ -204,7 +203,7 @@ namespace NumSharp.UnitTest.Manipulation
             result.Should().BeOfValues(5, 6, 7, 8, 9, 0, 1, 2, 3, 4);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_2D_NegativeShift_Axis1()
         {
             // np.roll(x2, -1, axis=1) => [[1,2,3,4,0],[6,7,8,9,5]]
@@ -215,7 +214,7 @@ namespace NumSharp.UnitTest.Manipulation
             result.Should().BeOfValues(1, 2, 3, 4, 0, 6, 7, 8, 9, 5);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_2D_ShiftGreaterThanDimSize_Axis1()
         {
             // np.roll(x2, 6, axis=1) => [[4,0,1,2,3],[9,5,6,7,8]]  (6 % 5 = 1)
@@ -226,7 +225,7 @@ namespace NumSharp.UnitTest.Manipulation
             result.Should().BeOfValues(4, 0, 1, 2, 3, 9, 5, 6, 7, 8);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_2D_NegativeShiftWraps_Axis1()
         {
             // np.roll(x2, -4, axis=1) => [[4,0,1,2,3],[9,5,6,7,8]]  (-4 % 5 = 1 effective)
@@ -237,7 +236,7 @@ namespace NumSharp.UnitTest.Manipulation
             result.Should().BeOfValues(4, 0, 1, 2, 3, 9, 5, 6, 7, 8);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_2D_NoAxis_VariousShifts()
         {
             // x = [[0,1,2],[3,4,5]]
@@ -261,7 +260,7 @@ namespace NumSharp.UnitTest.Manipulation
         // NumPy test_roll2d (exact match)
         // ================================================================
 
-        [TestMethod]
+        [Test]
         public void Roll_NumPy_test_roll2d_NoAxis()
         {
             var x2 = np.arange(10).reshape(2, 5);
@@ -269,7 +268,7 @@ namespace NumSharp.UnitTest.Manipulation
             x2r.Should().Be(np.array(new int[,] { { 9, 0, 1, 2, 3 }, { 4, 5, 6, 7, 8 } }));
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_NumPy_test_roll2d_Axis0()
         {
             var x2 = np.arange(10).reshape(2, 5);
@@ -277,7 +276,7 @@ namespace NumSharp.UnitTest.Manipulation
             x2r.Should().Be(np.array(new int[,] { { 5, 6, 7, 8, 9 }, { 0, 1, 2, 3, 4 } }));
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_NumPy_test_roll2d_Axis1()
         {
             var x2 = np.arange(10).reshape(2, 5);
@@ -285,7 +284,7 @@ namespace NumSharp.UnitTest.Manipulation
             x2r.Should().Be(np.array(new int[,] { { 4, 0, 1, 2, 3 }, { 9, 5, 6, 7, 8 } }));
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_NumPy_test_roll2d_MoreThanOneTurn_Positive()
         {
             var x2 = np.arange(10).reshape(2, 5);
@@ -294,7 +293,7 @@ namespace NumSharp.UnitTest.Manipulation
             x2r.Should().Be(np.array(new int[,] { { 4, 0, 1, 2, 3 }, { 9, 5, 6, 7, 8 } }));
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_NumPy_test_roll2d_MoreThanOneTurn_Negative()
         {
             var x2 = np.arange(10).reshape(2, 5);
@@ -307,7 +306,7 @@ namespace NumSharp.UnitTest.Manipulation
         // 3D ARRAYS
         // ================================================================
 
-        [TestMethod]
+        [Test]
         public void Roll_3D_NoAxis()
         {
             // x3 = arange(24).reshape(2,3,4)
@@ -321,7 +320,7 @@ namespace NumSharp.UnitTest.Manipulation
                 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_3D_Axis0()
         {
             var x3 = np.arange(24).reshape(2, 3, 4);
@@ -334,7 +333,7 @@ namespace NumSharp.UnitTest.Manipulation
                 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_3D_Axis1()
         {
             var x3 = np.arange(24).reshape(2, 3, 4);
@@ -347,7 +346,7 @@ namespace NumSharp.UnitTest.Manipulation
                 20, 21, 22, 23, 12, 13, 14, 15, 16, 17, 18, 19);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_3D_Axis2()
         {
             var x3 = np.arange(24).reshape(2, 3, 4);
@@ -360,7 +359,7 @@ namespace NumSharp.UnitTest.Manipulation
                 15, 12, 13, 14, 19, 16, 17, 18, 23, 20, 21, 22);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_3D_NegativeShift_Axis0()
         {
             // For 2-element dim, roll by -1 == roll by 1
@@ -373,7 +372,7 @@ namespace NumSharp.UnitTest.Manipulation
                 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_3D_Shift2_Axis1()
         {
             var x3 = np.arange(24).reshape(2, 3, 4);
@@ -386,7 +385,7 @@ namespace NumSharp.UnitTest.Manipulation
                 16, 17, 18, 19, 20, 21, 22, 23, 12, 13, 14, 15);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_3D_NegativeAxis()
         {
             var x3 = np.arange(24).reshape(2, 3, 4);
@@ -411,7 +410,7 @@ namespace NumSharp.UnitTest.Manipulation
         // EMPTY ARRAYS
         // ================================================================
 
-        [TestMethod]
+        [Test]
         public void Roll_EmptyArray_NoAxis()
         {
             // np.roll([], 1) => []
@@ -421,7 +420,7 @@ namespace NumSharp.UnitTest.Manipulation
             result.ndim.Should().Be(1);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_EmptyArray_ZeroShift()
         {
             var x = np.array(new double[0]);
@@ -429,7 +428,7 @@ namespace NumSharp.UnitTest.Manipulation
             result.size.Should().Be(0);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_EmptyArray_NegativeShift()
         {
             var x = np.array(new double[0]);
@@ -437,7 +436,7 @@ namespace NumSharp.UnitTest.Manipulation
             result.size.Should().Be(0);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_Empty2D_NoAxis()
         {
             var x = np.empty(new Shape(0, 3));
@@ -445,7 +444,7 @@ namespace NumSharp.UnitTest.Manipulation
             result.Shape.dimensions.Should().BeEquivalentTo(new[] { 0, 3 });
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_Empty2D_Axis0()
         {
             var x = np.empty(new Shape(0, 3));
@@ -453,8 +452,8 @@ namespace NumSharp.UnitTest.Manipulation
             result.Shape.dimensions.Should().BeEquivalentTo(new[] { 0, 3 });
         }
 
-        [TestMethod]
-        [TestCategory("OpenBugs")]
+        [Test]
+        [Category("OpenBugs")]
         public void Roll_Empty2D_Axis1()
         {
             // Bug: np.roll on empty 2D array (shape 0x3) with axis=1 throws
@@ -471,7 +470,7 @@ namespace NumSharp.UnitTest.Manipulation
         // SCALAR (0-dim)
         // ================================================================
 
-        [TestMethod]
+        [Test]
         public void Roll_Scalar_ZeroShift()
         {
             // np.roll(np.array(42), 0) => array(42)
@@ -482,7 +481,7 @@ namespace NumSharp.UnitTest.Manipulation
             result.GetInt32(0).Should().Be(42);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_Scalar_PositiveShift()
         {
             // np.roll(np.array(42), 1) => array(42)
@@ -493,7 +492,7 @@ namespace NumSharp.UnitTest.Manipulation
             result.GetInt32(0).Should().Be(42);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_Scalar_NegativeShift()
         {
             // np.roll(np.array(42), -1) => array(42)
@@ -508,7 +507,7 @@ namespace NumSharp.UnitTest.Manipulation
         // OUT-OF-BOUNDS AXIS
         // ================================================================
 
-        [TestMethod]
+        [Test]
         public void Roll_OutOfBoundsAxis_Positive_Throws()
         {
             var x = np.arange(10);
@@ -516,7 +515,7 @@ namespace NumSharp.UnitTest.Manipulation
             act.Should().Throw<ArgumentException>();
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_OutOfBoundsAxis_Negative_Throws()
         {
             var x = np.arange(10);
@@ -524,7 +523,7 @@ namespace NumSharp.UnitTest.Manipulation
             act.Should().Throw<ArgumentException>();
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_Scalar_WithAxis_Throws()
         {
             // NumPy: axis 0 is out of bounds for array of dimension 0
@@ -537,7 +536,7 @@ namespace NumSharp.UnitTest.Manipulation
         // ORIGINAL NOT MODIFIED (roll returns a copy)
         // ================================================================
 
-        [TestMethod]
+        [Test]
         public void Roll_1D_DoesNotModifyOriginal()
         {
             var orig = np.arange(5);
@@ -550,7 +549,7 @@ namespace NumSharp.UnitTest.Manipulation
             orig.Should().BeOfValues(0, 1, 2, 3, 4);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_2D_WithAxis_DoesNotModifyOriginal()
         {
             var orig = np.arange(6).reshape(2, 3);
@@ -564,7 +563,7 @@ namespace NumSharp.UnitTest.Manipulation
             orig.GetInt32(1, 0).Should().Be(3);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_1D_MutatingResultDoesNotAffectOriginal()
         {
             var orig = np.arange(5);
@@ -580,7 +579,7 @@ namespace NumSharp.UnitTest.Manipulation
         // SHIFT=0 RETURNS A COPY (not a view)
         // ================================================================
 
-        [TestMethod]
+        [Test]
         public void Roll_ZeroShift_ReturnsCopy()
         {
             var a = np.arange(5);
@@ -597,7 +596,7 @@ namespace NumSharp.UnitTest.Manipulation
         // SINGLE ELEMENT ARRAYS
         // ================================================================
 
-        [TestMethod]
+        [Test]
         public void Roll_SingleElement_AnyShift()
         {
             var a = np.array(new int[] { 42 });
@@ -612,7 +611,7 @@ namespace NumSharp.UnitTest.Manipulation
         // DTYPE PRESERVATION
         // ================================================================
 
-        [TestMethod]
+        [Test]
         public void Roll_PreservesDtype_Int32()
         {
             var a = np.array(new int[] { 1, 2, 3, 4, 5 });
@@ -621,7 +620,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues(4, 5, 1, 2, 3);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_PreservesDtype_Double()
         {
             var a = np.array(new double[] { 1.0, 2.0, 3.0, 4.0, 5.0 });
@@ -630,7 +629,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues(4.0, 5.0, 1.0, 2.0, 3.0);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_PreservesDtype_Single()
         {
             var a = np.array(new float[] { 1f, 2f, 3f, 4f, 5f });
@@ -639,7 +638,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues(4f, 5f, 1f, 2f, 3f);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_PreservesDtype_Int64()
         {
             var a = np.array(new long[] { 1L, 2L, 3L, 4L, 5L });
@@ -648,7 +647,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues(4L, 5L, 1L, 2L, 3L);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_PreservesDtype_Byte()
         {
             var a = np.array(new byte[] { 1, 2, 3, 4, 5 });
@@ -657,7 +656,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues((byte)4, (byte)5, (byte)1, (byte)2, (byte)3);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_PreservesDtype_Int16()
         {
             var a = np.array(new short[] { 1, 2, 3, 4, 5 });
@@ -666,7 +665,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues((short)4, (short)5, (short)1, (short)2, (short)3);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_PreservesDtype_UInt16()
         {
             var a = np.array(new ushort[] { 1, 2, 3, 4, 5 });
@@ -675,7 +674,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues((ushort)4, (ushort)5, (ushort)1, (ushort)2, (ushort)3);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_PreservesDtype_UInt32()
         {
             var a = np.array(new uint[] { 1, 2, 3, 4, 5 });
@@ -684,7 +683,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues(4u, 5u, 1u, 2u, 3u);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_PreservesDtype_UInt64()
         {
             var a = np.array(new ulong[] { 1, 2, 3, 4, 5 });
@@ -693,7 +692,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues(4ul, 5ul, 1ul, 2ul, 3ul);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_PreservesDtype_Boolean()
         {
             var a = np.array(new bool[] { true, false, true, false, true });
@@ -703,7 +702,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues(false, true, true, false, true);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_PreservesDtype_Boolean_Shift1()
         {
             var a = np.array(new bool[] { true, false, true, false, true });
@@ -713,7 +712,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues(true, true, false, true, false);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_PreservesDtype_Boolean_NegativeShift()
         {
             var a = np.array(new bool[] { true, false, true, false, true });
@@ -723,7 +722,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues(false, true, false, true, true);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_PreservesDtype_Char()
         {
             var a = np.array(new char[] { 'a', 'b', 'c', 'd', 'e' });
@@ -732,7 +731,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues('d', 'e', 'a', 'b', 'c');
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_PreservesDtype_Decimal()
         {
             var a = np.array(new decimal[] { 1m, 2m, 3m, 4m, 5m });
@@ -745,7 +744,7 @@ namespace NumSharp.UnitTest.Manipulation
         // SLICED ARRAYS (views)
         // ================================================================
 
-        [TestMethod]
+        [Test]
         public void Roll_SlicedArray_1D()
         {
             // orig = [0,1,2,3,4,5,6,7,8,9]
@@ -763,7 +762,7 @@ namespace NumSharp.UnitTest.Manipulation
             orig.Should().BeOfValues(0, 1, 2, 3, 4, 5, 6, 7, 8, 9);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_SlicedArray_2D_Axis0()
         {
             // orig = arange(20).reshape(4,5)
@@ -778,7 +777,7 @@ namespace NumSharp.UnitTest.Manipulation
             result.Should().BeOfValues(10, 11, 12, 13, 14, 5, 6, 7, 8, 9);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_SlicedArray_2D_Axis1()
         {
             var orig = np.arange(20).reshape(4, 5);
@@ -796,7 +795,7 @@ namespace NumSharp.UnitTest.Manipulation
         // BROADCAST ARRAYS
         // ================================================================
 
-        [TestMethod]
+        [Test]
         public void Roll_BroadcastArray_RowBroadcast_NoAxis()
         {
             // row = [[1,2,3,4,5]] broadcast to (3,5)
@@ -812,7 +811,7 @@ namespace NumSharp.UnitTest.Manipulation
             result.Should().BeOfValues(5, 1, 2, 3, 4, 5, 1, 2, 3, 4, 5, 1, 2, 3, 4);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_BroadcastArray_RowBroadcast_Axis0()
         {
             // All rows identical, rolling along axis 0 just reorders identical rows
@@ -826,7 +825,7 @@ namespace NumSharp.UnitTest.Manipulation
             result.Should().BeOfValues(1, 2, 3, 4, 5, 1, 2, 3, 4, 5, 1, 2, 3, 4, 5);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_BroadcastArray_RowBroadcast_Axis1()
         {
             // Each row [1,2,3,4,5], rolled by 1 => [5,1,2,3,4]
@@ -839,7 +838,7 @@ namespace NumSharp.UnitTest.Manipulation
             result.Should().BeOfValues(5, 1, 2, 3, 4, 5, 1, 2, 3, 4, 5, 1, 2, 3, 4);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_BroadcastArray_RowBroadcast_NegativeAxis1()
         {
             // Each row [1,2,3,4,5], rolled by -1 => [2,3,4,5,1]
@@ -852,7 +851,7 @@ namespace NumSharp.UnitTest.Manipulation
             result.Should().BeOfValues(2, 3, 4, 5, 1, 2, 3, 4, 5, 1, 2, 3, 4, 5, 1);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_BroadcastArray_ColumnBroadcast_NoAxis()
         {
             // col = [[10],[20],[30]] broadcast to (3,4)
@@ -868,7 +867,7 @@ namespace NumSharp.UnitTest.Manipulation
             result.Should().BeOfValues(30, 10, 10, 10, 10, 20, 20, 20, 20, 30, 30, 30);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_BroadcastArray_ColumnBroadcast_Axis0()
         {
             // col_bc: [[10,10,10,10],[20,20,20,20],[30,30,30,30]]
@@ -882,7 +881,7 @@ namespace NumSharp.UnitTest.Manipulation
             result.Should().BeOfValues(30, 30, 30, 30, 10, 10, 10, 10, 20, 20, 20, 20);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_BroadcastArray_ColumnBroadcast_Axis1()
         {
             // col_bc: [[10,10,10,10],[20,20,20,20],[30,30,30,30]]
@@ -900,7 +899,7 @@ namespace NumSharp.UnitTest.Manipulation
         // BOOLEAN 2D
         // ================================================================
 
-        [TestMethod]
+        [Test]
         public void Roll_Bool2D_NoAxis()
         {
             // [[True, False],[False, True]]
@@ -912,7 +911,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues(true, true, false, false);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_Bool2D_Axis0()
         {
             // [[True, False],[False, True]]
@@ -923,7 +922,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues(false, true, true, false);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_Bool2D_Axis1()
         {
             // [[True, False],[False, True]]
@@ -938,7 +937,7 @@ namespace NumSharp.UnitTest.Manipulation
         // INSTANCE METHODS: a.roll(shift, axis) and a.roll(shift)
         // ================================================================
 
-        [TestMethod]
+        [Test]
         public void Roll_InstanceMethod_NoAxis()
         {
             var x = np.arange(10);
@@ -948,7 +947,7 @@ namespace NumSharp.UnitTest.Manipulation
             result.Should().BeOfValues(8, 9, 0, 1, 2, 3, 4, 5, 6, 7);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_InstanceMethod_WithAxis()
         {
             var x = np.arange(10).reshape(2, 5);
@@ -958,7 +957,7 @@ namespace NumSharp.UnitTest.Manipulation
             result.Should().BeOfValues(5, 6, 7, 8, 9, 0, 1, 2, 3, 4);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_InstanceMethod_WithAxis1()
         {
             var x = np.arange(10).reshape(2, 5);
@@ -968,7 +967,7 @@ namespace NumSharp.UnitTest.Manipulation
             result.Should().BeOfValues(4, 0, 1, 2, 3, 9, 5, 6, 7, 8);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_InstanceMethod_EquivalentToStaticMethod()
         {
             var x = np.arange(12).reshape(3, 4);
@@ -986,7 +985,7 @@ namespace NumSharp.UnitTest.Manipulation
         // 1D ARRAY WITH axis=0
         // ================================================================
 
-        [TestMethod]
+        [Test]
         public void Roll_1D_WithAxis0()
         {
             // np.roll(np.arange(5), 2, axis=0) => [3 4 0 1 2]
@@ -1001,7 +1000,7 @@ namespace NumSharp.UnitTest.Manipulation
         // NumPy test_roll_empty (exact match)
         // ================================================================
 
-        [TestMethod]
+        [Test]
         public void Roll_NumPy_test_roll_empty()
         {
             var x = np.array(new double[0]);
@@ -1013,7 +1012,7 @@ namespace NumSharp.UnitTest.Manipulation
         // SHAPE PRESERVATION
         // ================================================================
 
-        [TestMethod]
+        [Test]
         public void Roll_2D_PreservesShape_NoAxis()
         {
             var x = np.arange(12).reshape(3, 4);
@@ -1021,7 +1020,7 @@ namespace NumSharp.UnitTest.Manipulation
             result.Should().BeShaped(3, 4);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_3D_PreservesShape_NoAxis()
         {
             var x = np.arange(24).reshape(2, 3, 4);
@@ -1029,7 +1028,7 @@ namespace NumSharp.UnitTest.Manipulation
             result.Should().BeShaped(2, 3, 4);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_2D_PreservesShape_WithAxis()
         {
             var x = np.arange(12).reshape(3, 4);
@@ -1041,7 +1040,7 @@ namespace NumSharp.UnitTest.Manipulation
         // DTYPE PRESERVATION FOR 2D WITH AXIS
         // ================================================================
 
-        [TestMethod]
+        [Test]
         public void Roll_2D_PreservesDtype_Float()
         {
             var a = np.array(new float[,] { { 1f, 2f, 3f }, { 4f, 5f, 6f } });
@@ -1049,7 +1048,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.typecode.Should().Be(NPTypeCode.Single);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_2D_PreservesDtype_Double()
         {
             var a = np.array(new double[,] { { 1.0, 2.0, 3.0 }, { 4.0, 5.0, 6.0 } });
@@ -1063,8 +1062,8 @@ namespace NumSharp.UnitTest.Manipulation
         // since NumSharp only supports single int shift / single int axis.
         // ================================================================
 
-        [TestMethod]
-        [TestCategory("OpenBugs")]
+        [Test]
+        [Category("OpenBugs")]
         public void Roll_MultiAxis_ScalarShift_TupleAxis()
         {
             // NumPy: np.roll(x2, 1, axis=(0,1))
@@ -1083,8 +1082,8 @@ namespace NumSharp.UnitTest.Manipulation
             result.Should().BeOfValues(9, 5, 6, 7, 8, 4, 0, 1, 2, 3);
         }
 
-        [TestMethod]
-        [TestCategory("OpenBugs")]
+        [Test]
+        [Category("OpenBugs")]
         public void Roll_MultiAxis_TupleShift_TupleAxis()
         {
             // NumPy: np.roll(x2, (1, 0), axis=(0, 1))
@@ -1102,8 +1101,8 @@ namespace NumSharp.UnitTest.Manipulation
             result.Should().BeOfValues(5, 6, 7, 8, 9, 0, 1, 2, 3, 4);
         }
 
-        [TestMethod]
-        [TestCategory("OpenBugs")]
+        [Test]
+        [Category("OpenBugs")]
         public void Roll_MultiAxis_NegativeShift_TupleAxis()
         {
             // NumPy: np.roll(x2, (-1, 0), axis=(0, 1))
@@ -1118,8 +1117,8 @@ namespace NumSharp.UnitTest.Manipulation
             result.Should().BeOfValues(5, 6, 7, 8, 9, 0, 1, 2, 3, 4);
         }
 
-        [TestMethod]
-        [TestCategory("OpenBugs")]
+        [Test]
+        [Category("OpenBugs")]
         public void Roll_MultiAxis_BothShift1()
         {
             // NumPy: np.roll(x2, (1, 1), axis=(0, 1))
@@ -1133,8 +1132,8 @@ namespace NumSharp.UnitTest.Manipulation
             result.Should().BeOfValues(9, 5, 6, 7, 8, 4, 0, 1, 2, 3);
         }
 
-        [TestMethod]
-        [TestCategory("OpenBugs")]
+        [Test]
+        [Category("OpenBugs")]
         public void Roll_MultiAxis_BothNegative()
         {
             // NumPy: np.roll(x2, (-1, -1), axis=(0, 1))
@@ -1148,8 +1147,8 @@ namespace NumSharp.UnitTest.Manipulation
             result.Should().BeOfValues(6, 7, 8, 9, 5, 1, 2, 3, 4, 0);
         }
 
-        [TestMethod]
-        [TestCategory("OpenBugs")]
+        [Test]
+        [Category("OpenBugs")]
         public void Roll_MultiAxis_SameAxis_Twice()
         {
             // NumPy: np.roll(x2, 1, axis=(0, 0))
@@ -1165,8 +1164,8 @@ namespace NumSharp.UnitTest.Manipulation
             result.Should().BeOfValues(0, 1, 2, 3, 4, 5, 6, 7, 8, 9);
         }
 
-        [TestMethod]
-        [TestCategory("OpenBugs")]
+        [Test]
+        [Category("OpenBugs")]
         public void Roll_MultiAxis_SameAxis1_Twice()
         {
             // NumPy: np.roll(x2, 1, axis=(1, 1))
@@ -1181,8 +1180,8 @@ namespace NumSharp.UnitTest.Manipulation
             result.Should().BeOfValues(3, 4, 0, 1, 2, 8, 9, 5, 6, 7);
         }
 
-        [TestMethod]
-        [TestCategory("OpenBugs")]
+        [Test]
+        [Category("OpenBugs")]
         public void Roll_MultiAxis_ZeroAndOne()
         {
             // NumPy: np.roll(x2, (0, 1), axis=(0, 1))
@@ -1197,8 +1196,8 @@ namespace NumSharp.UnitTest.Manipulation
             result.Should().BeOfValues(4, 0, 1, 2, 3, 9, 5, 6, 7, 8);
         }
 
-        [TestMethod]
-        [TestCategory("OpenBugs")]
+        [Test]
+        [Category("OpenBugs")]
         public void Roll_MultiAxis_ZeroAndNegative()
         {
             // NumPy: np.roll(x2, (0, -1), axis=(0, 1))
@@ -1217,7 +1216,7 @@ namespace NumSharp.UnitTest.Manipulation
         // DOUBLE VALUES (not just integers)
         // ================================================================
 
-        [TestMethod]
+        [Test]
         public void Roll_1D_DoubleValues()
         {
             var a = np.array(new double[] { 1.5, 2.5, 3.5, 4.5, 5.5 });
@@ -1225,7 +1224,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues(4.5, 5.5, 1.5, 2.5, 3.5);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_2D_DoubleValues_WithAxis()
         {
             var a = np.array(new double[,] { { 1.1, 2.2, 3.3 }, { 4.4, 5.5, 6.6 } });
@@ -1237,7 +1236,7 @@ namespace NumSharp.UnitTest.Manipulation
         // REGRESSION: Existing tests from NdArray.Roll.Test.cs (re-verified)
         // ================================================================
 
-        [TestMethod]
+        [Test]
         public void Roll_Regression_Base1DTest_Positive()
         {
             NDArray nd1 = new double[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
@@ -1248,7 +1247,7 @@ namespace NumSharp.UnitTest.Manipulation
             nd1.Should().BeOfValues(1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_Regression_Base1DTest_Negative()
         {
             NDArray nd1 = new double[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
@@ -1258,7 +1257,7 @@ namespace NumSharp.UnitTest.Manipulation
             nd1.Should().BeOfValues(1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_Regression_Base2DTest_ShapePreserved()
         {
             var nd1 = np.arange(10).reshape(2, 5);
@@ -1269,7 +1268,7 @@ namespace NumSharp.UnitTest.Manipulation
             nd3.Should().BeShaped(2, 5);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_Regression_RollWithAxis0()
         {
             var x2 = np.arange(10).reshape(2, 5);
@@ -1279,7 +1278,7 @@ namespace NumSharp.UnitTest.Manipulation
             x3.Should().BeOfValues(5, 6, 7, 8, 9, 0, 1, 2, 3, 4);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_Regression_RollWithAxis1()
         {
             var x2 = np.arange(10).reshape(2, 5);
@@ -1293,7 +1292,7 @@ namespace NumSharp.UnitTest.Manipulation
         // EDGE CASES
         // ================================================================
 
-        [TestMethod]
+        [Test]
         public void Roll_LargeArray()
         {
             // Test with a larger array to ensure no off-by-one errors
@@ -1307,7 +1306,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.size.Should().Be(100);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_2D_LargeShift_Axis0()
         {
             // shift > dim size should wrap correctly
@@ -1318,7 +1317,7 @@ namespace NumSharp.UnitTest.Manipulation
             np.array_equal(r, expected).Should().BeTrue();
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_2D_LargeNegativeShift_Axis1()
         {
             // shift < -dim_size should wrap correctly
@@ -1329,7 +1328,7 @@ namespace NumSharp.UnitTest.Manipulation
             np.array_equal(r, expected).Should().BeTrue();
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_2D_ShiftEqualsAxisDim()
         {
             // shift == dim size => no change (same values)
@@ -1338,7 +1337,7 @@ namespace NumSharp.UnitTest.Manipulation
             np.array_equal(r, x).Should().BeTrue();
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_3D_ShiftEqualsAxisDim()
         {
             var x = np.arange(24).reshape(2, 3, 4);
@@ -1350,7 +1349,7 @@ namespace NumSharp.UnitTest.Manipulation
         // ASYMMETRIC 2D SHAPES
         // ================================================================
 
-        [TestMethod]
+        [Test]
         public void Roll_2D_TallArray()
         {
             // 5x2 array
@@ -1364,7 +1363,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues(6, 7, 8, 9, 0, 1, 2, 3, 4, 5);
         }
 
-        [TestMethod]
+        [Test]
         public void Roll_2D_WideArray()
         {
             // 2x6 array

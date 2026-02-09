@@ -4,10 +4,9 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace NumSharp.UnitTest.RandomSampling
 {
-    [TestClass]
     public class RandomizerTests
     {
-        [TestMethod]
+        [Test]
         public void SaveAndRestore()
         {
             var original = np.random.RandomState(42);
@@ -19,7 +18,7 @@ namespace NumSharp.UnitTest.RandomSampling
             copy.randomizer.Next().Should().Be(expectedNext);
         }
 
-        [TestMethod]
+        [Test]
         public void CompareRandomizerToRandom()
         {
             var rnd = new System.Random(42);

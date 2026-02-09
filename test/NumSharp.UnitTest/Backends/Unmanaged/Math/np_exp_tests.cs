@@ -7,10 +7,9 @@ using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp.UnitTest.Backends.Unmanaged.Math
 {
-    [TestClass]
     public class np_exp_tests
     {
-        [TestMethod]
+        [Test]
         public void Exp_0()
         {
             var arr = np.zeros(new Shape(5, 5));
@@ -23,7 +22,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             ret.GetData<double>().All(d => System.Math.Abs(d - 1.0) < 0.0001).Should().BeTrue();
         }
 
-        [TestMethod]
+        [Test]
         public void Exp_1()
         {
             var arr = np.ones(new Shape(5, 5));
@@ -53,7 +52,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             1.6948892444103338e+28, 9.253781725587787e+29, 5.052393630276104e+31, 2.7585134545231703e+33
             }, new Shape(new int[] { 5, 4 }));
 
-        [TestMethod]
+        [Test]
         public void Exp_Sliced()
         {
             var a = np.arange(1.0, 81.0);
@@ -73,7 +72,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             }
         }
 
-        [TestMethod]
+        [Test]
         public void ExpUpcast()
         {
             var right = np.zeros(new Shape(5, 5)).astype(NPTypeCode.Int32) + 5;
@@ -87,7 +86,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             }
         }
 
-        [TestMethod]
+        [Test]
         public void ExpDowncast()
         {
             var right = np.zeros(new Shape(5, 5)).astype(NPTypeCode.Double) + 5;

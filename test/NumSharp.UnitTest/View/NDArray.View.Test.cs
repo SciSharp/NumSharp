@@ -9,10 +9,9 @@ using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.View
 {
-    [TestClass]
     public class NDArrayViewTest : TestClass
     {
-        [TestMethod]
+        [Test]
         public void ValueTest()
         {
             var x = np.arange(3);
@@ -23,7 +22,7 @@ namespace NumSharp.UnitTest.View
             Assert.IsTrue((int)x[0] == (int)v[0]);
         }
 
-        [TestMethod]
+        [Test]
         public void GetData_1D()
         {
             // these slicing operations should be executed with Span<T> internally
@@ -48,7 +47,7 @@ namespace NumSharp.UnitTest.View
             AssertAreEqual(new int[] { 2 }, view.ToArray<int>());
         }
 
-        [TestMethod]
+        [Test]
         public void GetData_1D_Stepping()
         {
             // these slicing operations should be executed with Stepping internally
@@ -78,7 +77,7 @@ namespace NumSharp.UnitTest.View
             AssertAreEqual(new[] { 9 }, view.ToArray<int>());
         }
 
-        [TestMethod]
+        [Test]
         public void Indexing_1D()
         {
             var data = np.arange(10);
@@ -109,7 +108,7 @@ namespace NumSharp.UnitTest.View
             Assert.AreEqual(2, (int)view[0]);
         }
 
-        [TestMethod]
+        [Test]
         public void Indexing_1D_Stepping()
         {
             var data = np.arange(10);
@@ -147,7 +146,7 @@ namespace NumSharp.UnitTest.View
             Assert.AreEqual(9, (int)view[0]);
         }
 
-        [TestMethod]
+        [Test]
         public void Shared_Data_1D()
         {
             var data = np.arange(10);
@@ -164,7 +163,7 @@ namespace NumSharp.UnitTest.View
             Assert.AreEqual(-1, (int)view[1]);
         }
 
-        [TestMethod]
+        [Test]
         public void NestedView_1D()
         {
             var data = np.arange(10);
@@ -199,7 +198,7 @@ namespace NumSharp.UnitTest.View
             AssertAreEqual(new int[] { 55, 66, }, view3.ToArray<int>());
         }
 
-        [TestMethod]
+        [Test]
         public void NestedView_1D_Stepping()
         {
             var data = np.arange(10);
@@ -234,7 +233,7 @@ namespace NumSharp.UnitTest.View
             AssertAreEqual(new int[] { 22, 88 }, view3.ToArray<int>());
         }
 
-        [TestMethod]
+        [Test]
         public void GetData_2D()
         {
             //>>> x = np.arange(9).reshape(3, 3)
@@ -273,7 +272,7 @@ namespace NumSharp.UnitTest.View
             AssertAreEqual(new int[] { 3, 4, 5, 6, 7, 8 }, view.ToArray<int>());
         }
 
-        [TestMethod]
+        [Test]
         public void GetData_2D_Stepped()
         {
             var data = np.arange(9).reshape(3, 3);
@@ -334,7 +333,7 @@ namespace NumSharp.UnitTest.View
             AssertAreEqual(new int[] { 8, 6, 5, 3, 2, 0 }, view.ToArray<int>());
         }
 
-        [TestMethod]
+        [Test]
         public void NestedView_2D()
         {
             var data = np.array(new int[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 });
@@ -390,7 +389,7 @@ namespace NumSharp.UnitTest.View
             AssertAreEqual(new int[] { 22, 88, 222, 888 }, view3.ToArray<int>());
         }
 
-        [TestMethod]
+        [Test]
         public void Reduce_1D_to_Scalar()
         {
             var data = np.arange(10);
@@ -401,7 +400,7 @@ namespace NumSharp.UnitTest.View
             AssertAreEqual(new int[] { 7 }, view.ToArray<int>());
         }
 
-        [TestMethod]
+        [Test]
         public void Reduce_2D_to_1D_and_0D()
         {
             //>>> x = np.arange(9).reshape(3, 3)
@@ -429,7 +428,7 @@ namespace NumSharp.UnitTest.View
             AssertAreEqual(new int[] { 8 }, view.ToArray<int>());
         }
 
-        [TestMethod]
+        [Test]
         public void Reduce_2D_to_1D_and_0D_Stepping()
         {
             //>>> x = np.arange(9).reshape(3, 3)
@@ -462,7 +461,7 @@ namespace NumSharp.UnitTest.View
             AssertAreEqual(new int[] { 8 }, view.ToArray<int>());
         }
 
-        [TestMethod]
+        [Test]
         public void DimensionalityReduction4D_to_1D()
         {
             var t = np.arange(15).reshape(1, 1, 3, 5);
@@ -476,7 +475,7 @@ namespace NumSharp.UnitTest.View
             AssertAreEqual(new int[] { 0, 5, 10 }, view.ToArray<int>());
         }
 
-        [TestMethod]
+        [Test]
         public void NestedDimensionalityReduction()
         {
             var data = np.arange(9).reshape(3, 3);
@@ -492,7 +491,7 @@ namespace NumSharp.UnitTest.View
             AssertAreEqual(new int[] { 6, 7 }, view2.ToArray<int>());
         }
 
-        [TestMethod]
+        [Test]
         public void NestedDimensionalityReduction_Stepped()
         {
             var data = np.arange(9).reshape(3, 3);
@@ -508,7 +507,7 @@ namespace NumSharp.UnitTest.View
             AssertAreEqual(new int[] { 7, 6 }, view2.ToArray<int>());
         }
 
-        [TestMethod]
+        [Test]
         public void SlicingToScalar()
         {
             //numpy code:
@@ -532,7 +531,7 @@ namespace NumSharp.UnitTest.View
             slice.Shape.IsSliced.Should().BeTrue("Slicing should occurs only when lhs is already sliced.");
         }
 
-        [TestMethod]
+        [Test]
         public unsafe void SliceSelectsAll()
         {
             var lhs = np.full(5, (6, 3, 3), NPTypeCode.Int32);
@@ -543,7 +542,7 @@ namespace NumSharp.UnitTest.View
             lhs.Should().Be(sliced);
         }
 
-        [TestMethod]
+        [Test]
         public void Multiply_2DSlice_By_1D()
         {
             /*
@@ -579,7 +578,7 @@ namespace NumSharp.UnitTest.View
             Assert.AreEqual(ret54, ret);
         }
 
-        [TestMethod]
+        [Test]
         public void AllSlicesAreIndexes()
         {
             var a = np.arange(27).reshape(3, 3, 3);
@@ -597,7 +596,7 @@ namespace NumSharp.UnitTest.View
             ret.Should().BeSliced(); //its a a memory slice
         }
 
-        [TestMethod]
+        [Test]
         public void SlicingWithNegativeIndex()
         {
             var a = np.arange(3 * 1 * 3 * 3).reshape((3, 1, 3, 3));
@@ -610,7 +609,7 @@ namespace NumSharp.UnitTest.View
             b.Should().BeShaped(1, 3).And.BeOfValues(21, 22, 23);
         }
 
-        [TestMethod]
+        [Test]
         public void SlicingWithEllipsis()
         {
             var a = np.arange(16).reshape(2, 2, 2, 2);
@@ -621,7 +620,7 @@ namespace NumSharp.UnitTest.View
             new Action(() => a["..., 0, ..."].flatten()).Should().Throw<ArgumentException>();
         }
 
-        [TestMethod]
+        [Test]
         public void SlicingWithNewAxis()
         {
             var a = np.arange(16).reshape(2, 2, 2, 2);

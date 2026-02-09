@@ -11,10 +11,9 @@ using NumSharp.Generic;
 
 namespace NumSharp.UnitTest.Operations
 {
-    [TestClass]
     public class NDArrayEqualsTest
     {
-        [TestMethod]
+        [Test]
         public void IntTwo1D_NDArrayEquals()
         {
             var np0 = new NDArray(new[] {0, 0, 0, 0}, new Shape(4));
@@ -32,7 +31,7 @@ namespace NumSharp.UnitTest.Operations
             Assert.IsFalse(np4S);
         }
 
-        [TestMethod]
+        [Test]
         public void IntAnd1D_NDArrayEquals()
         {
             var np1 = new NDArray(new[] {1, 2, 3, 4}, new Shape(4));
@@ -41,7 +40,7 @@ namespace NumSharp.UnitTest.Operations
             Assert.IsTrue(Enumerable.SequenceEqual(new[] {false, true, false, false}, np2.Data<bool>()));
         }
 
-        [TestMethod]
+        [Test]
         public void IntTwo2D_NDArrayEquals()
         {
             var np1 = new NDArray(typeof(int), new Shape(2, 3));
@@ -70,7 +69,7 @@ namespace NumSharp.UnitTest.Operations
             Assert.IsTrue(Enumerable.SequenceEqual(np6.Data<bool>(), np7));
         }
 
-        [TestMethod]
+        [Test]
         public void IntAnd2D_NDArrayEquals()
         {
             var np1 = new NDArray(typeof(int), new Shape(2, 3));
@@ -87,7 +86,7 @@ namespace NumSharp.UnitTest.Operations
         %a = except(supported_dtypes, "NDArray")
         %b = [true,"1","1","1","1","1u","1L","1UL","1","1d","1f","1m"]
         %foreach forevery(a,a,true), forevery(b,b,true)%
-        [TestMethod]
+        [Test]
         public void Compare_#1_To_#2()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.#1.AsType()).reshape(new Shape(3, 2));
@@ -108,7 +107,7 @@ namespace NumSharp.UnitTest.Operations
         %
 #else
 
-        [TestMethod]
+        [Test]
         public void Compare_Boolean_To_Byte()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Boolean.AsType()).reshape(new Shape(3, 2));
@@ -126,7 +125,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Boolean_To_Int16()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Boolean.AsType()).reshape(new Shape(3, 2));
@@ -144,7 +143,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Boolean_To_UInt16()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Boolean.AsType()).reshape(new Shape(3, 2));
@@ -162,7 +161,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Boolean_To_Int32()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Boolean.AsType()).reshape(new Shape(3, 2));
@@ -180,7 +179,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Boolean_To_UInt32()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Boolean.AsType()).reshape(new Shape(3, 2));
@@ -198,7 +197,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Boolean_To_Int64()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Boolean.AsType()).reshape(new Shape(3, 2));
@@ -216,7 +215,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Boolean_To_UInt64()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Boolean.AsType()).reshape(new Shape(3, 2));
@@ -234,7 +233,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Boolean_To_Char()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Boolean.AsType()).reshape(new Shape(3, 2));
@@ -252,7 +251,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Boolean_To_Double()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Boolean.AsType()).reshape(new Shape(3, 2));
@@ -270,7 +269,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Boolean_To_Single()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Boolean.AsType()).reshape(new Shape(3, 2));
@@ -288,7 +287,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Boolean_To_Decimal()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Boolean.AsType()).reshape(new Shape(3, 2));
@@ -306,7 +305,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Byte_To_Boolean()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Byte.AsType()).reshape(new Shape(3, 2));
@@ -324,7 +323,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Byte_To_Int16()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Byte.AsType()).reshape(new Shape(3, 2));
@@ -342,7 +341,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Byte_To_UInt16()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Byte.AsType()).reshape(new Shape(3, 2));
@@ -360,7 +359,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Byte_To_Int32()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Byte.AsType()).reshape(new Shape(3, 2));
@@ -378,7 +377,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Byte_To_UInt32()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Byte.AsType()).reshape(new Shape(3, 2));
@@ -396,7 +395,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Byte_To_Int64()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Byte.AsType()).reshape(new Shape(3, 2));
@@ -414,7 +413,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Byte_To_UInt64()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Byte.AsType()).reshape(new Shape(3, 2));
@@ -432,7 +431,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Byte_To_Char()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Byte.AsType()).reshape(new Shape(3, 2));
@@ -450,7 +449,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Byte_To_Double()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Byte.AsType()).reshape(new Shape(3, 2));
@@ -468,7 +467,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Byte_To_Single()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Byte.AsType()).reshape(new Shape(3, 2));
@@ -486,7 +485,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Byte_To_Decimal()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Byte.AsType()).reshape(new Shape(3, 2));
@@ -504,7 +503,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Int16_To_Boolean()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Int16.AsType()).reshape(new Shape(3, 2));
@@ -522,7 +521,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Int16_To_Byte()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Int16.AsType()).reshape(new Shape(3, 2));
@@ -540,7 +539,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Int16_To_UInt16()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Int16.AsType()).reshape(new Shape(3, 2));
@@ -558,7 +557,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Int16_To_Int32()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Int16.AsType()).reshape(new Shape(3, 2));
@@ -576,7 +575,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Int16_To_UInt32()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Int16.AsType()).reshape(new Shape(3, 2));
@@ -594,7 +593,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Int16_To_Int64()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Int16.AsType()).reshape(new Shape(3, 2));
@@ -612,7 +611,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Int16_To_UInt64()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Int16.AsType()).reshape(new Shape(3, 2));
@@ -630,7 +629,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Int16_To_Char()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Int16.AsType()).reshape(new Shape(3, 2));
@@ -648,7 +647,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Int16_To_Double()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Int16.AsType()).reshape(new Shape(3, 2));
@@ -666,7 +665,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Int16_To_Single()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Int16.AsType()).reshape(new Shape(3, 2));
@@ -684,7 +683,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Int16_To_Decimal()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Int16.AsType()).reshape(new Shape(3, 2));
@@ -702,7 +701,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_UInt16_To_Boolean()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.UInt16.AsType()).reshape(new Shape(3, 2));
@@ -720,7 +719,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_UInt16_To_Byte()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.UInt16.AsType()).reshape(new Shape(3, 2));
@@ -738,7 +737,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_UInt16_To_Int16()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.UInt16.AsType()).reshape(new Shape(3, 2));
@@ -756,7 +755,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_UInt16_To_Int32()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.UInt16.AsType()).reshape(new Shape(3, 2));
@@ -774,7 +773,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_UInt16_To_UInt32()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.UInt16.AsType()).reshape(new Shape(3, 2));
@@ -792,7 +791,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_UInt16_To_Int64()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.UInt16.AsType()).reshape(new Shape(3, 2));
@@ -810,7 +809,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_UInt16_To_UInt64()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.UInt16.AsType()).reshape(new Shape(3, 2));
@@ -828,7 +827,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_UInt16_To_Char()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.UInt16.AsType()).reshape(new Shape(3, 2));
@@ -846,7 +845,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_UInt16_To_Double()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.UInt16.AsType()).reshape(new Shape(3, 2));
@@ -864,7 +863,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_UInt16_To_Single()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.UInt16.AsType()).reshape(new Shape(3, 2));
@@ -882,7 +881,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_UInt16_To_Decimal()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.UInt16.AsType()).reshape(new Shape(3, 2));
@@ -900,7 +899,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Int32_To_Boolean()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Int32.AsType()).reshape(new Shape(3, 2));
@@ -918,7 +917,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Int32_To_Byte()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Int32.AsType()).reshape(new Shape(3, 2));
@@ -936,7 +935,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Int32_To_Int16()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Int32.AsType()).reshape(new Shape(3, 2));
@@ -954,7 +953,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Int32_To_UInt16()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Int32.AsType()).reshape(new Shape(3, 2));
@@ -972,7 +971,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Int32_To_UInt32()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Int32.AsType()).reshape(new Shape(3, 2));
@@ -990,7 +989,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Int32_To_Int64()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Int32.AsType()).reshape(new Shape(3, 2));
@@ -1008,7 +1007,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Int32_To_UInt64()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Int32.AsType()).reshape(new Shape(3, 2));
@@ -1026,7 +1025,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Int32_To_Char()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Int32.AsType()).reshape(new Shape(3, 2));
@@ -1044,7 +1043,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Int32_To_Double()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Int32.AsType()).reshape(new Shape(3, 2));
@@ -1062,7 +1061,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Int32_To_Single()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Int32.AsType()).reshape(new Shape(3, 2));
@@ -1080,7 +1079,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Int32_To_Decimal()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Int32.AsType()).reshape(new Shape(3, 2));
@@ -1098,7 +1097,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_UInt32_To_Boolean()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.UInt32.AsType()).reshape(new Shape(3, 2));
@@ -1116,7 +1115,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_UInt32_To_Byte()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.UInt32.AsType()).reshape(new Shape(3, 2));
@@ -1134,7 +1133,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_UInt32_To_Int16()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.UInt32.AsType()).reshape(new Shape(3, 2));
@@ -1152,7 +1151,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_UInt32_To_UInt16()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.UInt32.AsType()).reshape(new Shape(3, 2));
@@ -1170,7 +1169,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_UInt32_To_Int32()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.UInt32.AsType()).reshape(new Shape(3, 2));
@@ -1188,7 +1187,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_UInt32_To_Int64()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.UInt32.AsType()).reshape(new Shape(3, 2));
@@ -1206,7 +1205,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_UInt32_To_UInt64()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.UInt32.AsType()).reshape(new Shape(3, 2));
@@ -1224,7 +1223,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_UInt32_To_Char()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.UInt32.AsType()).reshape(new Shape(3, 2));
@@ -1242,7 +1241,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_UInt32_To_Double()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.UInt32.AsType()).reshape(new Shape(3, 2));
@@ -1260,7 +1259,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_UInt32_To_Single()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.UInt32.AsType()).reshape(new Shape(3, 2));
@@ -1278,7 +1277,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_UInt32_To_Decimal()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.UInt32.AsType()).reshape(new Shape(3, 2));
@@ -1296,7 +1295,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Int64_To_Boolean()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Int64.AsType()).reshape(new Shape(3, 2));
@@ -1314,7 +1313,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Int64_To_Byte()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Int64.AsType()).reshape(new Shape(3, 2));
@@ -1332,7 +1331,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Int64_To_Int16()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Int64.AsType()).reshape(new Shape(3, 2));
@@ -1350,7 +1349,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Int64_To_UInt16()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Int64.AsType()).reshape(new Shape(3, 2));
@@ -1368,7 +1367,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Int64_To_Int32()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Int64.AsType()).reshape(new Shape(3, 2));
@@ -1386,7 +1385,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Int64_To_UInt32()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Int64.AsType()).reshape(new Shape(3, 2));
@@ -1404,7 +1403,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Int64_To_UInt64()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Int64.AsType()).reshape(new Shape(3, 2));
@@ -1422,7 +1421,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Int64_To_Char()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Int64.AsType()).reshape(new Shape(3, 2));
@@ -1440,7 +1439,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Int64_To_Double()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Int64.AsType()).reshape(new Shape(3, 2));
@@ -1458,7 +1457,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Int64_To_Single()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Int64.AsType()).reshape(new Shape(3, 2));
@@ -1476,7 +1475,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Int64_To_Decimal()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Int64.AsType()).reshape(new Shape(3, 2));
@@ -1494,7 +1493,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_UInt64_To_Boolean()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.UInt64.AsType()).reshape(new Shape(3, 2));
@@ -1512,7 +1511,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_UInt64_To_Byte()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.UInt64.AsType()).reshape(new Shape(3, 2));
@@ -1530,7 +1529,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_UInt64_To_Int16()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.UInt64.AsType()).reshape(new Shape(3, 2));
@@ -1548,7 +1547,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_UInt64_To_UInt16()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.UInt64.AsType()).reshape(new Shape(3, 2));
@@ -1566,7 +1565,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_UInt64_To_Int32()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.UInt64.AsType()).reshape(new Shape(3, 2));
@@ -1584,7 +1583,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_UInt64_To_UInt32()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.UInt64.AsType()).reshape(new Shape(3, 2));
@@ -1602,7 +1601,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_UInt64_To_Int64()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.UInt64.AsType()).reshape(new Shape(3, 2));
@@ -1620,7 +1619,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_UInt64_To_Char()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.UInt64.AsType()).reshape(new Shape(3, 2));
@@ -1638,7 +1637,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_UInt64_To_Double()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.UInt64.AsType()).reshape(new Shape(3, 2));
@@ -1656,7 +1655,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_UInt64_To_Single()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.UInt64.AsType()).reshape(new Shape(3, 2));
@@ -1674,7 +1673,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_UInt64_To_Decimal()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.UInt64.AsType()).reshape(new Shape(3, 2));
@@ -1692,7 +1691,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Char_To_Boolean()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Char.AsType()).reshape(new Shape(3, 2));
@@ -1710,7 +1709,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Char_To_Byte()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Char.AsType()).reshape(new Shape(3, 2));
@@ -1728,7 +1727,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Char_To_Int16()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Char.AsType()).reshape(new Shape(3, 2));
@@ -1746,7 +1745,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Char_To_UInt16()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Char.AsType()).reshape(new Shape(3, 2));
@@ -1764,7 +1763,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Char_To_Int32()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Char.AsType()).reshape(new Shape(3, 2));
@@ -1782,7 +1781,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Char_To_UInt32()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Char.AsType()).reshape(new Shape(3, 2));
@@ -1800,7 +1799,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Char_To_Int64()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Char.AsType()).reshape(new Shape(3, 2));
@@ -1818,7 +1817,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Char_To_UInt64()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Char.AsType()).reshape(new Shape(3, 2));
@@ -1836,7 +1835,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Char_To_Double()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Char.AsType()).reshape(new Shape(3, 2));
@@ -1854,7 +1853,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Char_To_Single()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Char.AsType()).reshape(new Shape(3, 2));
@@ -1872,7 +1871,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Char_To_Decimal()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Char.AsType()).reshape(new Shape(3, 2));
@@ -1890,7 +1889,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Double_To_Boolean()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Double.AsType()).reshape(new Shape(3, 2));
@@ -1908,7 +1907,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Double_To_Byte()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Double.AsType()).reshape(new Shape(3, 2));
@@ -1926,7 +1925,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Double_To_Int16()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Double.AsType()).reshape(new Shape(3, 2));
@@ -1944,7 +1943,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Double_To_UInt16()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Double.AsType()).reshape(new Shape(3, 2));
@@ -1962,7 +1961,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Double_To_Int32()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Double.AsType()).reshape(new Shape(3, 2));
@@ -1980,7 +1979,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Double_To_UInt32()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Double.AsType()).reshape(new Shape(3, 2));
@@ -1998,7 +1997,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Double_To_Int64()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Double.AsType()).reshape(new Shape(3, 2));
@@ -2016,7 +2015,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Double_To_UInt64()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Double.AsType()).reshape(new Shape(3, 2));
@@ -2034,7 +2033,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Double_To_Char()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Double.AsType()).reshape(new Shape(3, 2));
@@ -2052,7 +2051,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Double_To_Single()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Double.AsType()).reshape(new Shape(3, 2));
@@ -2070,7 +2069,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Double_To_Decimal()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Double.AsType()).reshape(new Shape(3, 2));
@@ -2088,7 +2087,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Single_To_Boolean()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Single.AsType()).reshape(new Shape(3, 2));
@@ -2106,7 +2105,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
         
-        [TestMethod]
+        [Test]
         public void Compare_Single_To_Byte()
         {
             var left = np.array(new int[] {0, 0, 1, 1, 0, 0}, dtype: NPTypeCode.Single.AsType()).reshape(new Shape(3, 2));
@@ -2124,7 +2123,7 @@ namespace NumSharp.UnitTest.Operations
             ret.Data<bool>().Should().Equal(a.Data<bool>());
         }
 
-        [TestMethod]
+        [Test]
         public void EqualsNull()
         {
             NDArray nd = null;

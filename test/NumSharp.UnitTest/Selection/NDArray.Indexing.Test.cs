@@ -13,10 +13,9 @@ using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.Selection
 {
-    [TestClass]
     public class IndexingTest : TestClass
     {
-        [TestMethod]
+        [Test]
         public void IndexAccessorGetter()
         {
             var nd = np.arange(12).reshape(3, 4);
@@ -25,7 +24,7 @@ namespace NumSharp.UnitTest.Selection
             Assert.IsTrue(nd.GetInt32(2, 0) == 8);
         }
 
-        [TestMethod]
+        [Test]
         public void NDArrayAccess()
         {
             var nd = np.arange(4).reshape(2, 2);
@@ -35,7 +34,7 @@ namespace NumSharp.UnitTest.Selection
             Assert.AreEqual(row1[1], 1);
         }
 
-        [TestMethod]
+        [Test]
         public void NDArrayAccess3Dim()
         {
             NDArray nd = np.arange(1, 19, 1).reshape(3, 3, 2);
@@ -48,7 +47,7 @@ namespace NumSharp.UnitTest.Selection
             Assert.AreEqual(row1[2, 1], 6);
         }
 
-        [TestMethod]
+        [Test]
         public void IndexAccessorSetter()
         {
             var nd = np.arange(12).reshape(3, 4);
@@ -62,8 +61,8 @@ namespace NumSharp.UnitTest.Selection
             Assert.IsTrue(nd.GetInt32(1, 3) == 7);
         }
 
-        [TestMethod]
-        [TestCategory("OpenBugs")]
+        [Test]
+        [Category("OpenBugs")]
         public void MaskSetter()
         {
             NDArray nd = new double[] { 1, 2, 3 };
@@ -75,8 +74,8 @@ namespace NumSharp.UnitTest.Selection
             nd.Should().BeOfValues(-2, 2, -2, 4, -2, 6);
         }
 
-        [TestMethod]
-        [TestCategory("OpenBugs")]
+        [Test]
+        [Category("OpenBugs")]
         public void Compare()
         {
             throw new Exception("This test kills test engine process due to Debug.Assert");
@@ -90,7 +89,7 @@ namespace NumSharp.UnitTest.Selection
             a.Should().BeOfValues(-2, -2, 6);
         }
 
-        [TestMethod]
+        [Test]
         public void NDArrayByNDArray()
         {
             NDArray x = new double[] { 1, 2, 3, 4, 5, 6 };
@@ -105,7 +104,7 @@ namespace NumSharp.UnitTest.Selection
             Assert.IsTrue(Enumerable.SequenceEqual(a, b));
         }
 
-        [TestMethod]
+        [Test]
         public void Filter1D()
         {
             var nd = np.array(new int[] { 3, 1, 1, 2, 3, 1 });
@@ -115,7 +114,7 @@ namespace NumSharp.UnitTest.Selection
             AssertAreEqual(new int[] { 3, 1, 1 }, result.ToArray<int>());
         }
 
-        [TestMethod]
+        [Test]
         public void Filter2D()
         {
             var nd = np.array(new int[][] { new int[] { 3, 1, 1, 2 }, new int[] { 1, 2, 2, 3 }, new int[] { 2, 1, 1, 3 }, });
@@ -129,7 +128,7 @@ namespace NumSharp.UnitTest.Selection
             x.ravel();
         }
 
-        [TestMethod]
+        [Test]
         public void Slice1()
         {
             var x = np.arange(5);
@@ -144,7 +143,7 @@ namespace NumSharp.UnitTest.Selection
         }
 
 
-        [TestMethod]
+        [Test]
         public void Slice2()
         {
             //>>> x = np.arange(5)
@@ -180,7 +179,7 @@ namespace NumSharp.UnitTest.Selection
             AssertAreEqual(y.ToArray<int>(), new int[] { 0, 1, 2, 3, 4 });
         }
 
-        [TestMethod]
+        [Test]
         public void Slice3()
         {
             //>>> x = np.arange(6)
@@ -208,7 +207,7 @@ namespace NumSharp.UnitTest.Selection
             AssertAreEqual(new int[] { 0, 99, 2, 3, 4, 5 }, x.ToArray<int>());
         }
 
-        [TestMethod]
+        [Test]
         public void Slice4()
         {
             //>>> x = np.arange(5)
@@ -227,7 +226,7 @@ namespace NumSharp.UnitTest.Selection
             Assert.AreEqual(99, (int)x[3]);
         }
 
-        [TestMethod]
+        [Test]
         public void Slice2x2Mul()
         {
             //>>> import numpy as np
@@ -248,7 +247,7 @@ namespace NumSharp.UnitTest.Selection
             z.Should().BeShaped(1, 2).And.BeOfValues(4, 6);
         }
 
-        [TestMethod]
+        [Test]
         public void Slice2x2Mul_2()
         {
             //>>> import numpy as np
@@ -271,7 +270,7 @@ namespace NumSharp.UnitTest.Selection
             //AssertAreEqual(x.ToArray<int>(), new int[] { 0, 1, 4, 6 });
         }
 
-        [TestMethod]
+        [Test]
         public void Slice2x2Mul_3()
         {
             var x = np.arange(4).reshape(2, 2);
@@ -281,7 +280,7 @@ namespace NumSharp.UnitTest.Selection
             z.Should().BeShaped(2).And.BeOfValues(2, 6);
         }
 
-        [TestMethod]
+        [Test]
         public void Slice2x2Mul_4()
         {
             var x = np.arange(4).reshape(2, 2);
@@ -291,7 +290,7 @@ namespace NumSharp.UnitTest.Selection
             z.Should().BeShaped(2).And.BeOfValues(2, 6);
         }
 
-        [TestMethod]
+        [Test]
         public void Slice2x2Mul_5()
         {
             var x = np.arange(4).reshape(2, 2);
@@ -301,7 +300,7 @@ namespace NumSharp.UnitTest.Selection
             z.Should().BeShaped(2).And.BeOfValues(1, 9);
         }
 
-        [TestMethod]
+        [Test]
         public void Slice2x2Mul_6()
         {
             var x = np.arange(4).reshape(2, 2);
@@ -311,7 +310,7 @@ namespace NumSharp.UnitTest.Selection
         }
 
         [Ignore("This can never work because C# doesn't allow overloading of the assignment operator")]
-        [TestMethod]
+        [Test]
         public void Slice2x2Mul_AssignmentChangesOriginal()
         {
             //>>> import numpy as np
@@ -337,7 +336,7 @@ namespace NumSharp.UnitTest.Selection
             AssertAreEqual(x.ToArray<int>(), new int[] { 0, 1, 4, 6 }); // <------- this fails because in C# we can not intercept assignment to a variable
         }
 
-        [TestMethod]
+        [Test]
         public void Slice5()
         {
             var x = np.arange(6).reshape(3, 2);
@@ -351,7 +350,7 @@ namespace NumSharp.UnitTest.Selection
             AssertAreEqual(new int[] { 0, 1, 99, 3, 4, 5 }, x.ToArray<int>());
         }
 
-        [TestMethod]
+        [Test]
         public void Slice_Step()
         {
             //>>> x = np.arange(5)
@@ -371,7 +370,7 @@ namespace NumSharp.UnitTest.Selection
             AssertAreEqual(y.ToArray<int>(), new int[] { 0, 2, 4 });
         }
 
-        [TestMethod]
+        [Test]
         public void Slice_Step1()
         {
             //>>> x = np.arange(6)
@@ -409,7 +408,7 @@ namespace NumSharp.UnitTest.Selection
             AssertAreEqual(new int[] { 99, 4, 111, 2, 1, 0 }, y.ToArray<int>());
         }
 
-        [TestMethod]
+        [Test]
         public void Slice_Step2()
         {
             //>>> x = np.arange(5)
@@ -425,7 +424,7 @@ namespace NumSharp.UnitTest.Selection
             Assert.AreEqual(4, (int)y[2]);
         }
 
-        [TestMethod]
+        [Test]
         public void Slice_Step3()
         {
             var x = np.arange(5);
@@ -434,7 +433,7 @@ namespace NumSharp.UnitTest.Selection
             Assert.AreEqual("[0, 2, 4]", y.ToString());
         }
 
-        [TestMethod]
+        [Test]
         public void Slice_Step_With_Offset()
         {
             //>>> x = np.arange(9).astype(np.uint8)
@@ -468,7 +467,7 @@ namespace NumSharp.UnitTest.Selection
         }
 
 
-        [TestMethod]
+        [Test]
         public void Slice3x2x2()
         {
             //>>> x = np.arange(12).reshape(3, 2, 2)
@@ -509,7 +508,7 @@ namespace NumSharp.UnitTest.Selection
             Assert.IsTrue(Enumerable.SequenceEqual(y2.ToArray<int>(), new int[] { 8, 9, 10, 11 }));
         }
 
-        [TestMethod]
+        [Test]
         public void AssignGeneric1DSlice1()
         {
             //>>> x = np.arange(5)
@@ -558,7 +557,7 @@ namespace NumSharp.UnitTest.Selection
             AssertAreEqual(new int[] { 0, 10, 11, 12, 4 }, x.ToArray<int>());
         }
 
-        [TestMethod]
+        [Test]
         public void AssignGeneric1DSliceWithStepAndOffset1()
         {
             //>>> x = np.arange(9).astype(np.uint16)
@@ -593,7 +592,7 @@ namespace NumSharp.UnitTest.Selection
             AssertAreEqual(new ushort[] { 10, 10, 2, 11, 11, 5, 12, 12, 8 }, x.ToArray<ushort>());
         }
 
-        [TestMethod]
+        [Test]
         public void AssignGeneric2DSlice1()
         {
             //>>> x = np.arange(9).reshape(3, 3)
@@ -651,7 +650,7 @@ namespace NumSharp.UnitTest.Selection
         /// <summary>
         /// Based on issue https://github.com/SciSharp/NumSharp/issues/293
         /// </summary>
-        [TestMethod]
+        [Test]
         public void CastingWhenSettingDifferentType()
         {
             NDArray output = np.zeros(5);
@@ -665,19 +664,19 @@ namespace NumSharp.UnitTest.Selection
         private static NDArray x = np.arange(10, 1, -1);
         private static NDArray y = np.arange(35).reshape(5, 7);
 
-        [TestMethod]
+        [Test]
         public void IndexNDArray_Case1()
         {
             x[np.array(new int[] { 3, 3, 1, 8 })].Data<int>().Should().ContainInOrder(7, 7, 9, 2);
         }
 
-        [TestMethod]
+        [Test]
         public void IndexNDArray_Case2_NegativeIndex()
         {
             x[np.array(new int[] { 3, 3, -3, 8 })].Data<int>().Should().ContainInOrder(7, 7, 4, 2);
         }
 
-        [TestMethod]
+        [Test]
         public void IndexNDArray_Case3()
         {
             new Action(() =>
@@ -686,7 +685,7 @@ namespace NumSharp.UnitTest.Selection
             }).Should().Throw<IndexOutOfRangeException>();
         }
 
-        [TestMethod]
+        [Test]
          public void IndexNDArray_Case4_Shaped()
         {
             var ret = x[np.array(new int[][] { new int[] { 1, 1 }, new int[] { 2, 3 }, })];
@@ -694,7 +693,7 @@ namespace NumSharp.UnitTest.Selection
             ret.Shape.Should().BeShaped(2, 2);
         }
 
-        [TestMethod]
+        [Test]
         public void IndexNDArray_Case5_Shaped()
         {
             var ret = np.arange(0, 10).reshape(2, 5)[np.array(new int[][] { new int[] { 0, 1 }, new int[] { 1, 1 }, })];
@@ -702,7 +701,7 @@ namespace NumSharp.UnitTest.Selection
             ret.Should().BeShaped(2, 2, 5).And.BeOfValues(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 5, 6, 7, 8, 9, 5, 6, 7, 8, 9);
         }
 
-        [TestMethod]
+        [Test]
         public void IndexNDArray_Case6_Shaped()
         {
             var ret = np.arange(0, 10).reshape(2, 5)[np.array(new int[] { 0, 1, 1 })];
@@ -710,7 +709,7 @@ namespace NumSharp.UnitTest.Selection
             ret.Should().BeOfValues(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 5, 6, 7, 8, 9).And.BeShaped(3, 5);
         }
 
-        [TestMethod]
+        [Test]
         public void IndexNDArray_Case7_Multi()
         {
             var ret = y[np.array(new int[] { 0, 2, 4 }), np.array(new int[] { 0, 1, 2 })];
@@ -718,7 +717,7 @@ namespace NumSharp.UnitTest.Selection
             ret.Shape.Should().BeShaped(3);
         }
 
-        [TestMethod]
+        [Test]
         public void IndexNDArray_Case8_Multi()
         {
             var a = np.arange(27).reshape(3, 3, 3) + 1;
@@ -728,7 +727,7 @@ namespace NumSharp.UnitTest.Selection
             ret.Shape.Should().BeShaped(9);
         }
 
-        [TestMethod]
+        [Test]
         public void IndexNDArray_Case14_Multi_Slice()
         {
             var a = np.arange(27 * 2).reshape(2, 3, 3, 3) + 1;
@@ -738,7 +737,7 @@ namespace NumSharp.UnitTest.Selection
             ret.Shape.Should().BeShaped(9);
         }
 
-        [TestMethod]
+        [Test]
         public void IndexNDArray_Case9_Multi()
         {
             var a = np.arange(27).reshape(3, 3, 3) + 1;
@@ -750,7 +749,7 @@ namespace NumSharp.UnitTest.Selection
             ret.Shape.Should().BeShaped(3, 3, 2);
         }
 
-        [TestMethod]
+        [Test]
         public void IndexNDArray_Case10_Multi()
         {
             new Action(() =>
@@ -760,7 +759,7 @@ namespace NumSharp.UnitTest.Selection
         }
 
 
-        [TestMethod]
+        [Test]
         public void IndexNDArray_Case11_Multi()
         {
             var ret = y[np.array(new int[] { 0, 2, 4 })];
@@ -770,7 +769,7 @@ namespace NumSharp.UnitTest.Selection
             ret[2].Data<int>().Should().ContainInOrder(28, 29, 30, 31, 32, 33, 34);
         }
 
-        [TestMethod]
+        [Test]
         public void IndexNDArray_Case12_Multi()
         {
             var a = np.arange(16).reshape(2, 2, 2, 2);
@@ -781,7 +780,7 @@ namespace NumSharp.UnitTest.Selection
             ret.GetValue(1, 0, 0).Should().Be(4);
         }
 
-        [TestMethod]
+        [Test]
         public void IndexNDArray_Case13_Multi()
         {
             var ret = y[np.array(new int[] { 0, 2, 4 })];
@@ -792,7 +791,7 @@ namespace NumSharp.UnitTest.Selection
         }
 
 
-        [TestMethod]
+        [Test]
         public void IndexNDArray_Case14_Multi()
         {
             var a = np.arange(16).reshape(2, 2, 1, 2, 2);
@@ -806,7 +805,7 @@ namespace NumSharp.UnitTest.Selection
             //ret[2, 0].Data<int>().Should().ContainInOrder(28, 29, 30, 31, 32, 33, 34);
         }
 
-        [TestMethod]
+        [Test]
         public void Slice_TwoMinusOne()
         {
             var a = np.arange(1 * 1 * 3).reshape((1, 1, 3)); //0, 1
@@ -818,7 +817,7 @@ namespace NumSharp.UnitTest.Selection
             b.Should().BeOfValues(2).And.BeShaped(1);
         }
 
-        [TestMethod]
+        [Test]
         public void IndexNegativeCoordiantes()
         {
             var p = np.arange(6).reshape(2, 3);
@@ -827,35 +826,35 @@ namespace NumSharp.UnitTest.Selection
             p[-1, 1].Should().BeScalar(4);
         }
 
-        [TestMethod]
+        [Test]
         public void MinusOne_Case1()
         {
             var a = np.arange(4 * 1 * 10 * 1).reshape((4, 1, 10, 1))[-1];
             a.Should().BeOfValues(30, 31, 32, 33, 34, 35, 36, 37, 38, 39);
         }
 
-        [TestMethod]
+        [Test]
         public void MinusOne_Case2()
         {
             var a = np.arange(4 * 1 * 10 * 1).reshape((4, 1, 10, 1))["-1"];
             a.Should().BeOfValues(30, 31, 32, 33, 34, 35, 36, 37, 38, 39);
         }
 
-        [TestMethod]
+        [Test]
         public void MinusOne_Case3()
         {
             var a = np.arange(4 * 1 * 10 * 1).reshape((4, 1, 10, 1))[-1][-1];
             a.Should().BeOfValues(30, 31, 32, 33, 34, 35, 36, 37, 38, 39);
         }
 
-        [TestMethod]
+        [Test]
         public void MinusOne_Case4()
         {
             var a = np.arange(4 * 1 * 10 * 1).reshape((4, 1, 10, 1))["-1"]["-1"];
             a.Should().BeOfValues(30, 31, 32, 33, 34, 35, 36, 37, 38, 39);
         }
 
-        [TestMethod]
+        [Test]
         public void Broadcasted_Case1()
         {
             var a = np.arange(1 * 1 * 3).reshape((1, 1, 3)); //0, 1
@@ -869,7 +868,7 @@ namespace NumSharp.UnitTest.Selection
             d.Should().BeOfValues(2, 2, 2).And.BeShaped(3);
         }
 
-        [TestMethod]
+        [Test]
         public void Broadcasted_Case2()
         {
             var a = np.arange(1 * 1 * 3).reshape((1, 1, 3));
@@ -883,7 +882,7 @@ namespace NumSharp.UnitTest.Selection
             b.Should().BeOfValues(6, 7, 8).And.BeShaped(3);
         }
 
-        [TestMethod]
+        [Test]
         public void Broadcasted_Case3()
         {
             var a = np.arange(2 * 1 * 3).reshape((2, 1, 3));
@@ -897,7 +896,7 @@ namespace NumSharp.UnitTest.Selection
             b.Should().BeOfValues(9, 10, 11, 12, 13, 14, 15, 16, 17).And.BeShaped(3, 3);
         }
 
-        [TestMethod]
+        [Test]
         public void Broadcasted_Case4()
         {
             var a = np.arange(2 * 10 * 3).reshape((2, 10, 3));
@@ -912,7 +911,7 @@ namespace NumSharp.UnitTest.Selection
             b.Should().BeShaped(10, 3);
         }
 
-        [TestMethod]
+        [Test]
         public void Broadcasted_Case5()
         {
             var a = np.arange(2 * 1 * 3).reshape((2, 1, 3)); //0, 1
@@ -929,7 +928,7 @@ namespace NumSharp.UnitTest.Selection
         }
 
 
-        [TestMethod]
+        [Test]
         public void Broadcasted_Case6_GetData()
         {
             var a = np.arange(3 * 1 * 2 * 2).reshape((3, 1, 2, 2));
@@ -945,7 +944,7 @@ namespace NumSharp.UnitTest.Selection
             ret.Should().BeShaped(2, 2).And.BeOfValues(4, 5, 6, 7);
         }
 
-        [TestMethod]
+        [Test]
         public void Broadcasted_Case7_GetData()
         {
             var a = np.arange(2 * 3 * 2 * 2).reshape((2, 3, 2, 2));
@@ -959,7 +958,7 @@ namespace NumSharp.UnitTest.Selection
             ret.Should().BeShaped(2, 2).And.BeOfValues(0, 1, 2, 3);
         }
 
-        [TestMethod]
+        [Test]
         public void Broadcasted_Case8_GetData()
         {
             var a = np.arange(2 * 3 * 2 * 2).reshape((2, 3, 2, 2));
@@ -972,7 +971,7 @@ namespace NumSharp.UnitTest.Selection
             ret.Should().BeShaped(2, 2).And.BeOfValues(4, 5, 6, 7);
         }
 
-        [TestMethod]
+        [Test]
         public void Broadcasted_Case9()
         {
             var a = np.arange(2 * 3 * 2 * 2).reshape((2, 3, 2, 2));
@@ -987,14 +986,14 @@ namespace NumSharp.UnitTest.Selection
             str.Should().Be(np.array(4, 5, 6, 7).reshape(2, 2).ToString(true));
         }
 
-        [TestMethod]
+        [Test]
         public void Slice_MinusOne()
         {
             var a = np.arange(4 * 1 * 1 * 1).reshape(4, 1, 1, 1);
             a["-1, :"].Should().Be(a["3, :"]);
         }
 
-        [TestMethod]
+        [Test]
         public void Broadcasted_Case9_Sliced()
         {
             var a = np.arange(4 * 1 * 1 * 1).reshape(4, 1, 1, 1)["3, :"];
@@ -1008,7 +1007,7 @@ namespace NumSharp.UnitTest.Selection
             b.Should().BeOfValues(30, 31, 32, 33, 34, 35, 36, 37, 38, 39);
         }
 
-        [TestMethod]
+        [Test]
         public void Broadcasted_Case10_Sliced()
         {
             var a = np.arange(2 * 2 * 1 * 3).reshape((2, 2, 1, 3))["0, -1"]; //0, 1
@@ -1022,7 +1021,7 @@ namespace NumSharp.UnitTest.Selection
             Console.WriteLine(b.ToString());
         }
 
-        [TestMethod]
+        [Test]
         public void SliceEndingWithAll()
         {
             var a = np.arange(9).reshape(3, 3);
@@ -1032,7 +1031,7 @@ namespace NumSharp.UnitTest.Selection
             sliced.Should().BeShaped(3).And.NotBeSliced();
         }
 
-        [TestMethod]
+        [Test]
         public void IndexSelecton_2D_from_1D()
         {
             //>>> x = np.arange(10, 1, -1)
@@ -1048,7 +1047,7 @@ namespace NumSharp.UnitTest.Selection
         }
 
 
-        [TestMethod]
+        [Test]
         public void IndexSelecton_2D_from_2D()
         {
             //>>> y = np.arange(35).reshape(5, 7)
@@ -1059,7 +1058,7 @@ namespace NumSharp.UnitTest.Selection
             y[np.array(0, 2, 4), np.array(0, 1, 2)].Should().BeOfValues(0, 15, 30).And.BeShaped(3);
         }
 
-        [TestMethod]
+        [Test]
         public void IndexSelecton_IndexArray_plus_Scalar_from_2D()
         {
             //>>> y = np.arange(35).reshape(5, 7)
@@ -1070,7 +1069,7 @@ namespace NumSharp.UnitTest.Selection
             y[np.array(0, 2, 4), 1].Should().BeOfValues(1, 15, 29).And.BeShaped(3);
         }
 
-        [TestMethod]
+        [Test]
         public void IndexSelecton_1D_from_2D()
         {
             //>>> y = np.arange(35).reshape(5, 7)
@@ -1082,7 +1081,7 @@ namespace NumSharp.UnitTest.Selection
             y[np.array(0, 2, 4)].Should().BeOfValues(0, 1, 2, 3, 4, 5, 6, 14, 15, 16, 17, 18, 19, 20, 28, 29, 30, 31, 32, 33, 34).And.BeShaped(3, 7);
         }
 
-        [TestMethod]
+        [Test]
         public void Masking_2D_over_2D()
         {
             //>>> y = np.arange(35).reshape(5, 7)
@@ -1093,7 +1092,7 @@ namespace NumSharp.UnitTest.Selection
             y[y > 20].Should().BeOfValues(21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34).And.BeShaped(14);
         }
 
-        [TestMethod]
+        [Test]
         public void Masking_1D_over_2D()
         {
             //>>> y = np.arange(35).reshape(5, 7)
@@ -1107,8 +1106,8 @@ namespace NumSharp.UnitTest.Selection
             y[b[":, 5"]].Should().BeOfValues(21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34).And.BeShaped(2, 7);
         }
 
-        [TestMethod]
-        [TestCategory("OpenBugs")]
+        [Test]
+        [Category("OpenBugs")]
         public void Masking_2D_over_3D()
         {
             //>>> x = np.arange(30).reshape(2,3,5)
@@ -1130,7 +1129,7 @@ namespace NumSharp.UnitTest.Selection
             y[b[":, 5"]].Should().BeOfValues(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29).And.BeShaped(4, 5);
         }
 
-        [TestMethod]
+        [Test]
         public void MixedIndexing_NDim()
         {
             // slicing with mixed index types
@@ -1141,8 +1140,8 @@ namespace NumSharp.UnitTest.Selection
             a[Slice.All, "1:2", 0].Should().BeOfValues(3, 12, 21).And.BeShaped(3, 1);
         }
 
-        [TestMethod]
-        [TestCategory("OpenBugs")]
+        [Test]
+        [Category("OpenBugs")]
         public void Combining_IndexArrays_with_Slices()
         {
             //>>> y = np.arange(35).reshape(5, 7)
@@ -1155,8 +1154,8 @@ namespace NumSharp.UnitTest.Selection
         }
 
 
-        [TestMethod]
-        [TestCategory("OpenBugs")]
+        [Test]
+        [Category("OpenBugs")]
         public void Combining_MaskArrays_with_Slices()
         {
             //>>> y = np.arange(35).reshape(5, 7)
@@ -1183,7 +1182,7 @@ namespace NumSharp.UnitTest.Selection
         }
 
 
-        [TestMethod]
+        [Test]
         public void IndexNDArray_1d_indexed_by_2d()
         {
             var nd = np.arange(12);
@@ -1193,7 +1192,7 @@ namespace NumSharp.UnitTest.Selection
             ret.Should().BeOfValues(0, 1, 2, 3, 4, 5, 6, 7, 8).And.BeShaped(3, 3);
         }
 
-        [TestMethod]
+        [Test]
         public void IndexNDArray_1d_indexed_by_2d_1d()
         {
             var nd = np.arange(24).reshape(6, 4);
@@ -1203,7 +1202,7 @@ namespace NumSharp.UnitTest.Selection
             ret.Should().BeOfValues(1, 5, 9, 13).And.BeShaped(2, 2);
         }
 
-        [TestMethod]
+        [Test]
         public void IndexNDArray_2d_indexed_by_1d()
         {
             var nd = np.arange(2 * 4).reshape(4, 2);
@@ -1213,7 +1212,7 @@ namespace NumSharp.UnitTest.Selection
             ret.Should().BeOfValues(0, 1, 4, 5).And.BeShaped(2, 2);
         }
 
-        [TestMethod]
+        [Test]
         public void IndexNDArray_2d_indexed_by_1d_1d()
         {
             var nd = np.arange(2 * 4).reshape(4, 2);
@@ -1223,7 +1222,7 @@ namespace NumSharp.UnitTest.Selection
             ret.Should().BeOfValues(0, 5).And.BeShaped(2);
         }
 
-        [TestMethod]
+        [Test]
         public void IndexNDArray_2d_and_2dsliced_indexed_by_1dsliced_1dsliced()
         {
             Test(np.arange(2 * 4).reshape(4, 2));
@@ -1240,7 +1239,7 @@ namespace NumSharp.UnitTest.Selection
             }
         }
 
-        [TestMethod]
+        [Test]
         public void IndexNDArray_sliced2dreshaped_indexed_by_1d_1d()
         {
             Test(np.arange(2 * 2 * 4)["::2"].reshape(2, 4));
@@ -1256,8 +1255,8 @@ namespace NumSharp.UnitTest.Selection
             }
         }
 
-        [TestMethod]
-        [TestCategory("OpenBugs")]
+        [Test]
+        [Category("OpenBugs")]
         public void IndexNDArray_sliced3dreshaped_indexed_by_1d_1d()
         {
             Test(np.arange(2 * 2 * 4 * 2)["::2"].reshape(2, 4, 2));
@@ -1273,14 +1272,14 @@ namespace NumSharp.UnitTest.Selection
             }
         }
 
-        [TestMethod]
+        [Test]
         public void GetIndicesFromSlice_Test()
         {
             GetIndicesFromSlice((3, 4, 3), new Slice("::2"), 1).Should().BeOfValues(0, 2).And.BeShaped(2);
             GetIndicesFromSlice((3, 4, 3), new Slice("-1::-1"), 0).Should().BeOfValues(2, 1, 0);
         }
 
-        [TestMethod]
+        [Test]
         public void GetCoordinates_Broadcasted()
         {
             var nd = np.broadcast_to(np.array(1), (2, 2, 2));
@@ -1289,49 +1288,49 @@ namespace NumSharp.UnitTest.Selection
             t.Should().AllBeEquivalentTo(0);
         }
 
-        [TestMethod]
+        [Test]
         public void IndexNDArray_NewAxis_Case1()
         {
             np.arange(8).reshape(2, 2, 2)[0, np.newaxis, 0, np.newaxis, np.newaxis, Slice.All].Should().BeShaped(1, 1, 1, 2).And.BeOfValues(0, 1);
         }
 
-        [TestMethod]
+        [Test]
         public void IndexNDArray_NewAxis_Case2()
         {
             np.arange(2 * 8).reshape(2, 2, 2, 2)[np.array(0), 0, np.newaxis, 0, np.newaxis, np.newaxis, Slice.All].Should().BeShaped(1, 1, 1, 2).And.BeOfValues(0, 1);
         }
 
-        [TestMethod]
+        [Test]
         public void IndexNDArray_NewAxis_Case3()
         {
             np.arange(4).reshape(2, 2)[np.newaxis, np.arange(2)].Should().BeShaped(1, 2, 2);
         }
 
-        [TestMethod]
+        [Test]
         public void IndexNDArray_NewAxis_Ellipsis_Case1()
         {
             np.arange(4).reshape(2, 2)["..., newaxis"].Should().BeShaped(2, 2, 1);
         }
 
-        [TestMethod]
+        [Test]
         public void IndexNDArray_Ellipsis_Case1()
         {
             np.arange(4).reshape(2, 1, 2)[Slice.Ellipsis, 0].Should().BeShaped(2, 1);
         }
 
-        [TestMethod]
+        [Test]
         public void IndexNDArray_Ellipsis_Case2()
         {
             np.arange(8).reshape(2, 1, 2, 1, 2)[Slice.Ellipsis, 0].Should().BeShaped(2, 1, 2, 1);
         }
 
-        [TestMethod]
+        [Test]
         public void IndexNDArray_Ellipsis_Case3()
         {
             np.arange(8).reshape(2, 1, 2, 1, 2)[0, Slice.Ellipsis].Should().BeShaped(1, 2, 1, 2);
         }
 
-        [TestMethod]
+        [Test]
         public void IndexNDArray_Set_Case1()
         {
             var a = np.arange(8).reshape(2,4);
@@ -1339,8 +1338,8 @@ namespace NumSharp.UnitTest.Selection
             a.Should().BeShaped(2,4).And.BeOfValues(0,1,2,3,0,1,2,3);
         }
 
-        [TestMethod]
-        [TestCategory("OpenBugs")]
+        [Test]
+        [Category("OpenBugs")]
         public void IndexNDArray_Set_Case2()
         {
             var a = np.arange(8).reshape(2, 4);
@@ -1348,8 +1347,8 @@ namespace NumSharp.UnitTest.Selection
             a.Should().BeShaped(2, 4).And.BeOfValues(0, 1, 2, 3, 0, 1, 2, 3);
         }
 
-        [TestMethod]
-        [TestCategory("OpenBugs")]
+        [Test]
+        [Category("OpenBugs")]
         public void IndexNDArray_Set_Case3()
         {
             var a = np.arange(8).reshape(2, 4);
@@ -1357,8 +1356,8 @@ namespace NumSharp.UnitTest.Selection
             a.Should().BeShaped(2, 4).And.BeOfValues(0, 1, 2, 3, 0, 1, 2, 3);
         }
 
-        [TestMethod]
-        [TestCategory("OpenBugs")]
+        [Test]
+        [Category("OpenBugs")]
         public void IndexNDArray_Set_Case4()
         {
             var a = np.arange(8).reshape(2, 4);
@@ -1366,7 +1365,7 @@ namespace NumSharp.UnitTest.Selection
             a.Should().BeShaped(2, 4).And.BeOfValues(0, 1, 2, 3, 0, 1, 2, 3);
         }
 
-        [TestMethod]
+        [Test]
         public void IndexNDArray_Set_Case5()
         {
             var a = np.arange(8).reshape(2, 4);
@@ -1374,7 +1373,7 @@ namespace NumSharp.UnitTest.Selection
             a.Should().BeShaped(2, 4).And.BeOfValues(0, 1, 2, 3, 0, 1, 2, 3);
         }
 
-        [TestMethod]
+        [Test]
         public void IndexNDArray_Set_Case6()
         {
             var a = np.arange(8).reshape(2, 4);
@@ -1382,7 +1381,7 @@ namespace NumSharp.UnitTest.Selection
             a.Should().BeShaped(2, 4).And.BeOfValues(0, 1, 2, 3, 0, 1, 2, 3);
         }
 
-        [TestMethod]
+        [Test]
         public void IndexNDArray_Set_Case7_Boolean()
         {
             var a = np.arange(8);
@@ -1390,8 +1389,8 @@ namespace NumSharp.UnitTest.Selection
             a.Should().BeShaped(8);
         }
 
-        [TestMethod]
-        [TestCategory("OpenBugs")]
+        [Test]
+        [Category("OpenBugs")]
         public void IndexNDArray_Set_Case8_Broadcasted()
         {
             var a = np.broadcast_to(np.arange(4).reshape(1, 4), (2, 4));
@@ -1403,7 +1402,7 @@ namespace NumSharp.UnitTest.Selection
             }).Should().Throw<NumSharpException>().WithMessage("assignment destination is read-only");
         }
 
-        [TestMethod]
+        [Test]
         public void IndexNDArray_Get_Case1_Broadcasted()
         {
             var a = np.broadcast_to(np.arange(4).reshape(1, 4), (2, 4));
@@ -1411,21 +1410,21 @@ namespace NumSharp.UnitTest.Selection
             a[1].Should().BeShaped(4).And.BeOfValues(0, 1, 2, 3);
         }
 
-        [TestMethod]
+        [Test]
         public void IndexNDArray_Get_Case2_Broadcasted()
         {
             var a = np.broadcast_to(np.arange(4).reshape(1, 4), (2, 4));
             a["0:1"].Should().BeShaped(1, 4).And.BeOfValues(0, 1, 2, 3);
         }
 
-        [TestMethod]
+        [Test]
         public void IndexNDArray_Get_Case3_Broadcasted()
         {
             var a = np.broadcast_to(np.arange(4).reshape(1, 4), (2, 4));
             a["0:1, :"].Should().BeShaped(1, 4).And.BeOfValues(0, 1, 2, 3);
         }
 
-        [TestMethod]
+        [Test]
         public void IndexNDArray_Get_Case4_Broadcasted()
         {
             var a = np.broadcast_to(np.arange(4).reshape(1, 4), (2, 4));
@@ -1434,22 +1433,22 @@ namespace NumSharp.UnitTest.Selection
         }
 
 
-        [TestMethod]
+        [Test]
         public void IndexNDArray_Get_Case5_Broadcasted()
         {
             var a = np.broadcast_to(np.arange(4).reshape(1, 4), (2, 4));
             a[Slice.Index(0)].Should().BeShaped(4).And.BeOfValues(0, 1, 2, 3);
         }
 
-        [TestMethod]
+        [Test]
         public void IndexNDArray_Get_Case6_Broadcasted()
         {
             var a = np.broadcast_to(np.arange(4).reshape(1, 4), (2, 4));
             a[new Slice(0, 1), Slice.All].Should().BeShaped(1, 4).And.BeOfValues(0, 1, 2, 3);
         }
 
-        [TestMethod]
-        [TestCategory("OpenBugs")]
+        [Test]
+        [Category("OpenBugs")]
         public void IndexNDArray_Get_Case7_Broadcasted()
         {
             //TODO: this produces incorrect return shape
@@ -1462,8 +1461,8 @@ namespace NumSharp.UnitTest.Selection
             a[np.arange(1) + 1, Slice.All].Should().BeShaped(1, 4).And.BeOfValues(0, 1, 2, 3);
         }
 
-        [TestMethod]
-        [TestCategory("OpenBugs")]
+        [Test]
+        [Category("OpenBugs")]
         public void IndexNDArray_Get_Case7()
         {
             //TODO: this produces incorrect return shape
@@ -1479,8 +1478,8 @@ namespace NumSharp.UnitTest.Selection
         }
 
 
-        [TestMethod]
-        [TestCategory("OpenBugs")]
+        [Test]
+        [Category("OpenBugs")]
         public void IndexNDArray_Get_Case8_Broadcasted()
         {
             //TODO: this produces incorrect return shape

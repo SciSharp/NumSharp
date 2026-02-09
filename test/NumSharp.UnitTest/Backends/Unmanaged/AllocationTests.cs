@@ -6,13 +6,12 @@ using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.Backends.Unmanaged
 {
-    [TestClass]
     public class AllocationTests
     {
         private const long onegb = 1_073_741_824;
         private static readonly object _lock = new Object();
 
-        [TestMethod]
+        [Test]
         public void Allocate_1GB()
         {
             lock (_lock)
@@ -24,7 +23,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         }
 
         [Ignore("Fails expectedly. Int32 can not address this size any more")]
-        [TestMethod]
+        [Test]
         public void Allocate_2GB()
         {
             lock (_lock)
@@ -36,7 +35,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         }
 
         [Ignore("Fails expectedly. Int32 can not address this size any more")]
-        [TestMethod]
+        [Test]
         public void Allocate_4GB()
         {
             lock (_lock)
@@ -48,7 +47,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         }
 
         [Ignore("Fails expectedly. Int32 can not address this size any more")]
-        [TestMethod]
+        [Test]
         public void Allocate_44GB()
         {
             lock (_lock)

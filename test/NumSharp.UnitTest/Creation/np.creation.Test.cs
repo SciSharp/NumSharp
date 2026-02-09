@@ -8,17 +8,16 @@ using AwesomeAssertions;
 
 namespace NumSharp.UnitTest.APIs
 {
-    [TestClass]
     public class ApiCreationTest : TestClass
     {
-        [TestMethod]
+        [Test]
         public void arange()
         {
             var nd = np.arange(3);
             AssertAreEqual(nd.Data<int>(), new int[] {0, 1, 2});
         }
 
-        [TestMethod]
+        [Test]
         public void ndarray()
         {
             var x = np.ndarray((2, 3), dtype: np.int32, order: 'C');
@@ -26,7 +25,7 @@ namespace NumSharp.UnitTest.APIs
             x.Cast<int>().Should().AllBeEquivalentTo(0);
         }
 
-        [TestMethod]
+        [Test]
         public void ReshapeDoesNotSelfModify()
         {
             var x = np.arange(9);

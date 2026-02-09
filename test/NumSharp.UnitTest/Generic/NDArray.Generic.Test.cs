@@ -9,10 +9,9 @@ using NumSharp.Generic;
 
 namespace NumSharp.UnitTest.Generic
 {
-    [TestClass]
     public class NDArrayGenericTest
     {
-        [TestMethod]
+        [Test]
         public void Generic1DBool_NDArray()
         {
             var np1 = new NDArray<bool>(new[] {true, true, false, false}, new Shape(4));
@@ -26,7 +25,7 @@ namespace NumSharp.UnitTest.Generic
             Assert.AreEqual(1, np2.ndim);
         }
 
-        [TestMethod]
+        [Test]
         public void Generic2DBool_NDArrayOR()
         {
             var np1 = new NDArray<bool>(new Shape(2, 3));

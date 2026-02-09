@@ -9,10 +9,9 @@ using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.LinearAlgebra
 {
-    [TestClass]
     public class np_matmul_test
     {
-        [TestMethod]
+        [Test]
         public void Case1_2_2()
         {
             var a = np.arange(9).reshape(3, 3);
@@ -23,7 +22,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
             ret.flat.AsIterator<int>().ToArray().Should().BeEquivalentTo(new[] { 15, 18, 21, 42, 54, 66, 69, 90, 111 });
         }
 
-        [TestMethod]
+        [Test]
         public void Case2_2_2()
         {
             var a = np.full(2, (3, 3));
@@ -33,7 +32,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
             ret.flat.AsIterator().Cast<object>().Distinct().ToArray().Should().Contain(12).And.HaveCount(1);
         }
 
-        [TestMethod]
+        [Test]
         public void Case1_2_1()
         {
             var a = np.arange(9).reshape(3, 3);
@@ -44,7 +43,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
             ret.flat.AsIterator<int>().ToArray().Should().BeEquivalentTo(new[] { 5, 14, 23 });
         }
 
-        [TestMethod]
+        [Test]
         public void Case2_2_1()
         {
             var a = np.full(2, (3, 3));
@@ -54,7 +53,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
             ret.flat.AsIterator().Cast<object>().Distinct().ToArray().Should().Contain(18).And.HaveCount(1);
         }
 
-        [TestMethod]
+        [Test]
         public void Case_3_2_2__3_2_2()
         {
             var a = np.full(2, (3, 2, 2));
@@ -63,7 +62,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
             ret.Should().AllValuesBe(12).And.BeShaped(3, 2, 2);
         }
 
-        [TestMethod]
+        [Test]
         public void Case_3_1_2_2__3_2_2()
         {
             var a = np.full(2, (3, 1, 2, 2));
@@ -72,7 +71,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
             ret.Should().AllValuesBe(12).And.BeShaped(3, 3, 2, 2);
         }
 
-        [TestMethod]
+        [Test]
         public void Case_3_1_2_2__3_2_2_Arange()
         {
             var a = np.arange(2 * 1 * 2 * 2).reshape((2, 1, 2, 2));
@@ -81,7 +80,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
             ret.Should().BeOfValues(2, 3, 6, 11, 6, 7, 26, 31, 10, 19, 14, 27, 46, 55, 66, 79).And.BeShaped(2, 2, 2, 2);
         }
 
-        [TestMethod]
+        [Test]
         public void Case1_3_1_vs_1_3()
         {
             var a = np.arange(3).reshape(3, 1);
@@ -92,7 +91,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
             ret.flat.AsIterator<int>().ToArray().Should().BeEquivalentTo(new[] { 0, 0, 0, 0, 1, 2, 0, 2, 4 });
         }
 
-        [TestMethod]
+        [Test]
         public void Case2_3_1_vs_1_3()
         {
             var a = np.full(2, (3, 1));
@@ -102,7 +101,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
             ret.flat.AsIterator().Cast<object>().Distinct().ToArray().Should().Contain(4).And.HaveCount(1);
         }
 
-        [TestMethod]
+        [Test]
         public void TwoAndTwoInt()
         {
             var a = np.array(new int[][] {new int[] {1, 0}, new int[] {0, 1}});

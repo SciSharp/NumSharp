@@ -10,10 +10,9 @@ using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp.UnitTest.Backends.Unmanaged
 {
-    [TestClass]
     public class DeallocationTests
     {
-        [TestMethod]
+        [Test]
         public unsafe void DisposerCopiedAcrossStructCopy()
         {
             var newMem = new UnmanagedMemoryBlock<int>(5);
@@ -24,7 +23,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
                 mem2.GetType().GetField("_disposer", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(newMem));
         }
 
-        [TestMethod]
+        [Test]
         public unsafe void GcDoesntCollectArraySliceAlone()
         {
             //this test should be churned.

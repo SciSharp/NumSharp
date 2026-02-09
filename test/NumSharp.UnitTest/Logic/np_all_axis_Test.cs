@@ -7,11 +7,10 @@ using NumSharp;
 
 namespace NumSharp.UnitTest.Logic
 {
-    [TestClass]
-    [TestCategory("OpenBugs")]
+    [Category("OpenBugs")]
     public class np_all_axis_Test
     {
-        [TestMethod]
+        [Test]
         public void np_all_axis_2D()
         {
             // Test array: [[true, false, true], [true, true, true]]
@@ -28,7 +27,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.IsTrue(np.array_equal(result_axis1, expected_axis1));
         }
 
-        [TestMethod]
+        [Test]
         public void np_all_axis_3D()
         {
             // Create a 3D array for testing
@@ -52,7 +51,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.AreEqual(3, result_axis2.shape[1]);
         }
 
-        [TestMethod]
+        [Test]
         public void np_all_keepdims()
         {
             var arr = np.array(new bool[,] { { true, false, true }, { true, true, true } });
@@ -69,7 +68,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.AreEqual(1, result_keepdims1.shape[1]); // The reduced axis becomes size 1
         }
 
-        [TestMethod]
+        [Test]
         public void np_all_different_types()
         {
             // Test with integer array

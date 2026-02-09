@@ -8,10 +8,9 @@ using NumSharp;
 
 namespace NumSharp.UnitTest.LinearAlgebra
 {
-    [TestClass]
     public class NdArrayInvTest
     {
-        //[TestMethod]
+        //[Test]
         public void Simple2x2()
         {
             var np1 = np.arange(4.0).reshape(2, 2);
@@ -23,7 +22,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
             Assert.IsTrue(Enumerable.SequenceEqual(new double[] {1, 0, 0, 1}, OncesMatrix.Data<double>()));
         }
 
-        //[TestMethod]
+        //[Test]
         public void Simple3x3()
         {
             var np1 = new NDArray(typeof(double), new Shape(3, 3));

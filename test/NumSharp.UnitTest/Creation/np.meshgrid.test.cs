@@ -5,10 +5,9 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace NumSharp.UnitTest.Creation
 {
-    [TestClass]
     public class NumpyMeshgridTest
     {
-        [TestMethod]
+        [Test]
         public void MeshgridTest()
         {
             NDArray X = np.array(0, 1, 2);

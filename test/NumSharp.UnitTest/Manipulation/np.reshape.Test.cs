@@ -13,7 +13,7 @@ namespace NumSharp.UnitTest.Manipulation
     {
         #region Basic Reshapes
 
-        [TestMethod]
+        [Test]
         public void Reshape_1D_to_2D()
         {
             // NumPy: np.arange(6).reshape(2,3) = [[0,1,2],[3,4,5]]
@@ -24,7 +24,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues(0, 1, 2, 3, 4, 5);
         }
 
-        [TestMethod]
+        [Test]
         public void Reshape_1D_to_3D()
         {
             // NumPy: np.arange(6).reshape(2,1,3) = [[[0,1,2]],[[3,4,5]]]
@@ -35,7 +35,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues(0, 1, 2, 3, 4, 5);
         }
 
-        [TestMethod]
+        [Test]
         public void Reshape_2D_to_1D()
         {
             // NumPy: np.arange(6).reshape(2,3).reshape(6) = [0,1,2,3,4,5]
@@ -46,7 +46,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues(0, 1, 2, 3, 4, 5);
         }
 
-        [TestMethod]
+        [Test]
         public void Reshape_2D_to_3D()
         {
             // NumPy: np.arange(6).reshape(2,3).reshape(3,1,2) = [[[0,1]],[[2,3]],[[4,5]]]
@@ -57,7 +57,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues(0, 1, 2, 3, 4, 5);
         }
 
-        [TestMethod]
+        [Test]
         public void Reshape_3D_to_2D()
         {
             // NumPy: np.arange(24).reshape(2,3,4).reshape(6,4)
@@ -77,7 +77,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.GetInt32(5, 3).Should().Be(23);
         }
 
-        [TestMethod]
+        [Test]
         public void Reshape_3D_to_1D()
         {
             // NumPy: np.arange(24).reshape(2,3,4).reshape(24) = [0..23]
@@ -90,7 +90,7 @@ namespace NumSharp.UnitTest.Manipulation
                 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23);
         }
 
-        [TestMethod]
+        [Test]
         public void Reshape_4D_to_2D()
         {
             // NumPy: np.arange(24).reshape(2,3,2,2).reshape(6,4)
@@ -105,7 +105,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.GetInt32(5, 3).Should().Be(23);
         }
 
-        [TestMethod]
+        [Test]
         public void Reshape_SameShape()
         {
             // NumPy: np.arange(6).reshape(2,3).reshape(2,3) = [[0,1,2],[3,4,5]] (no-op)
@@ -116,7 +116,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues(0, 1, 2, 3, 4, 5);
         }
 
-        [TestMethod]
+        [Test]
         public void Reshape_SingleElement()
         {
             // NumPy: np.array([42]).reshape(1,1,1) = value 42, shape (1,1,1)
@@ -127,7 +127,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.GetInt32(0, 0, 0).Should().Be(42);
         }
 
-        [TestMethod]
+        [Test]
         public void Reshape_1x6_to_6x1()
         {
             // NumPy: np.arange(6).reshape(1,6).reshape(6,1) = [[0],[1],[2],[3],[4],[5]]
@@ -147,7 +147,7 @@ namespace NumSharp.UnitTest.Manipulation
 
         #region Minus-One Inference
 
-        [TestMethod]
+        [Test]
         public void Reshape_Neg1_First()
         {
             // NumPy: np.arange(12).reshape(-1,3) → shape (4,3)
@@ -158,7 +158,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11);
         }
 
-        [TestMethod]
+        [Test]
         public void Reshape_Neg1_Last()
         {
             // NumPy: np.arange(12).reshape(3,-1) → shape (3,4)
@@ -169,7 +169,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11);
         }
 
-        [TestMethod]
+        [Test]
         public void Reshape_Neg1_Middle()
         {
             // NumPy: np.arange(12).reshape(2,-1,3) → shape (2,2,3)
@@ -180,7 +180,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11);
         }
 
-        [TestMethod]
+        [Test]
         public void Reshape_Neg1_Flatten()
         {
             // NumPy: np.arange(12).reshape(-1) → shape (12,)
@@ -191,7 +191,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11);
         }
 
-        [TestMethod]
+        [Test]
         public void Reshape_Neg1_With1()
         {
             // NumPy: np.arange(5).reshape(-1,1) → shape (5,1)
@@ -210,7 +210,7 @@ namespace NumSharp.UnitTest.Manipulation
 
         #region View Semantics
 
-        [TestMethod]
+        [Test]
         public void Reshape_Contiguous_ReturnsView()
         {
             // NumPy: reshape of contiguous array returns view, modifications visible
@@ -224,7 +224,7 @@ namespace NumSharp.UnitTest.Manipulation
             a.GetInt32(1).Should().Be(99);
         }
 
-        [TestMethod]
+        [Test]
         public void Reshape_DoubleReshape_SharesMemory()
         {
             // NumPy: arange(24)→(4,6)→(2,3,4), modify r2[0,1,2]=888 → original a[6]=888
@@ -237,7 +237,7 @@ namespace NumSharp.UnitTest.Manipulation
             a.GetInt32(6).Should().Be(888);
         }
 
-        [TestMethod]
+        [Test]
         public void Reshape_Back_SharesMemory()
         {
             // NumPy: arange(12)→(3,4)→(12) shares memory with original
@@ -255,7 +255,7 @@ namespace NumSharp.UnitTest.Manipulation
 
         #region Scalar / 0-dim
 
-        [TestMethod]
+        [Test]
         public void Reshape_ScalarTo1D()
         {
             // NumPy: np.array(42).reshape(1) → shape (1,), val [42]
@@ -268,7 +268,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.GetInt32(0).Should().Be(42);
         }
 
-        [TestMethod]
+        [Test]
         public void Reshape_ScalarTo2D()
         {
             // NumPy: np.array(42).reshape(1,1) → shape (1,1), val [[42]]
@@ -280,8 +280,8 @@ namespace NumSharp.UnitTest.Manipulation
             r.GetInt32(0, 0).Should().Be(42);
         }
 
-        [TestMethod]
-        [TestCategory("OpenBugs")]
+        [Test]
+        [Category("OpenBugs")]
         public void Reshape_1DToScalar()
         {
             // NumPy: np.array([42]).reshape(()) → scalar 42
@@ -296,7 +296,7 @@ namespace NumSharp.UnitTest.Manipulation
 
         #region Empty Arrays
 
-        [TestMethod]
+        [Test]
         public void Reshape_Empty_To0x3()
         {
             // NumPy: np.array([]).reshape(0,3) → shape (0,3), size 0
@@ -307,7 +307,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfSize(0);
         }
 
-        [TestMethod]
+        [Test]
         public void Reshape_Empty_To3x0()
         {
             // NumPy: np.array([]).reshape(3,0) → shape (3,0), size 0
@@ -318,7 +318,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfSize(0);
         }
 
-        [TestMethod]
+        [Test]
         public void Reshape_Empty_To0x0()
         {
             // NumPy: np.array([]).reshape(0,0) → shape (0,0), size 0
@@ -329,7 +329,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfSize(0);
         }
 
-        [TestMethod]
+        [Test]
         public void Reshape_0x3_To0()
         {
             // NumPy: np.empty((0,3)).reshape(0) → shape (0,)
@@ -340,7 +340,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfSize(0);
         }
 
-        [TestMethod]
+        [Test]
         public void Reshape_Empty_Neg1()
         {
             // NumPy: np.array([]).reshape(-1,3) → shape (0,3)
@@ -355,7 +355,7 @@ namespace NumSharp.UnitTest.Manipulation
 
         #region Sliced + Reshape
 
-        [TestMethod]
+        [Test]
         public void Reshape_ContiguousSlice_Values()
         {
             // NumPy: np.arange(10)[2:8].reshape(2,3) = [[2,3,4],[5,6,7]]
@@ -367,7 +367,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues(2, 3, 4, 5, 6, 7);
         }
 
-        [TestMethod]
+        [Test]
         public void Reshape_StepSlice_Values()
         {
             // NumPy: np.arange(10)[::2].reshape(1,5) = [[0,2,4,6,8]]
@@ -379,7 +379,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues(0, 2, 4, 6, 8);
         }
 
-        [TestMethod]
+        [Test]
         public void Reshape_2D_ColSlice_Values()
         {
             // NumPy: np.arange(12).reshape(3,4)[:,1:3].reshape(6) = [1,2,5,6,9,10]
@@ -391,7 +391,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues(1, 2, 5, 6, 9, 10);
         }
 
-        [TestMethod]
+        [Test]
         public void Reshape_2D_RowSlice_Values()
         {
             // NumPy: np.arange(12).reshape(3,4)[1:3].reshape(8) = [4,5,6,7,8,9,10,11]
@@ -403,7 +403,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues(4, 5, 6, 7, 8, 9, 10, 11);
         }
 
-        [TestMethod]
+        [Test]
         public void Reshape_Reversed_Values()
         {
             // NumPy: np.arange(6)[::-1].reshape(2,3) = [[5,4,3],[2,1,0]]
@@ -415,7 +415,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues(5, 4, 3, 2, 1, 0);
         }
 
-        [TestMethod]
+        [Test]
         public void Reshape_Slice_WriteThrough()
         {
             // NumPy: slice a[2:8], reshape(2,3), set [0,0]=99 → original a[2] becomes 99
@@ -432,7 +432,7 @@ namespace NumSharp.UnitTest.Manipulation
 
         #region Broadcast + Reshape
 
-        [TestMethod]
+        [Test]
         public void Reshape_RowBroadcast_CopyReshape()
         {
             // NumPy: broadcast_to([1,2,3], (3,3)), copy then reshape(9) = [1,2,3,1,2,3,1,2,3]
@@ -445,7 +445,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues(1, 2, 3, 1, 2, 3, 1, 2, 3);
         }
 
-        [TestMethod]
+        [Test]
         public void Reshape_ColBroadcast_CopyReshape()
         {
             // NumPy: broadcast_to([[10],[20],[30]], (3,3)), copy then reshape(9)
@@ -459,7 +459,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues(10, 10, 10, 20, 20, 20, 30, 30, 30);
         }
 
-        [TestMethod]
+        [Test]
         public void Reshape_Broadcast_DirectReshape()
         {
             // NumPy: np.reshape(broadcast_to([1,2,3], (3,3)), 9) = [1,2,3,1,2,3,1,2,3]
@@ -472,7 +472,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues(1, 2, 3, 1, 2, 3, 1, 2, 3);
         }
 
-        [TestMethod]
+        [Test]
         public void Reshape_ColBroadcast_DirectReshape()
         {
             // NumPy: broadcast_to column [[10],[20],[30]], reshape(9)
@@ -489,7 +489,7 @@ namespace NumSharp.UnitTest.Manipulation
 
         #region Dtypes
 
-        [TestMethod]
+        [Test]
         public void Reshape_Boolean()
         {
             var a = np.array(new[] { true, false, true, false, true, false });
@@ -500,7 +500,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues(true, false, true, false, true, false);
         }
 
-        [TestMethod]
+        [Test]
         public void Reshape_Byte()
         {
             var a = np.array(new byte[] { 0, 1, 2, 3, 4, 5 });
@@ -511,7 +511,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues(0, 1, 2, 3, 4, 5);
         }
 
-        [TestMethod]
+        [Test]
         public void Reshape_Int16()
         {
             var a = np.array(new short[] { 0, 1, 2, 3, 4, 5 });
@@ -522,7 +522,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues(0, 1, 2, 3, 4, 5);
         }
 
-        [TestMethod]
+        [Test]
         public void Reshape_UInt16()
         {
             var a = np.array(new ushort[] { 0, 1, 2, 3, 4, 5 });
@@ -533,7 +533,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues(0, 1, 2, 3, 4, 5);
         }
 
-        [TestMethod]
+        [Test]
         public void Reshape_Int32()
         {
             var a = np.array(new[] { 0, 1, 2, 3, 4, 5 });
@@ -544,7 +544,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues(0, 1, 2, 3, 4, 5);
         }
 
-        [TestMethod]
+        [Test]
         public void Reshape_UInt32()
         {
             var a = np.array(new uint[] { 0, 1, 2, 3, 4, 5 });
@@ -555,7 +555,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues(0, 1, 2, 3, 4, 5);
         }
 
-        [TestMethod]
+        [Test]
         public void Reshape_Int64()
         {
             var a = np.array(new long[] { 0, 1, 2, 3, 4, 5 });
@@ -566,7 +566,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues(0, 1, 2, 3, 4, 5);
         }
 
-        [TestMethod]
+        [Test]
         public void Reshape_UInt64()
         {
             var a = np.array(new ulong[] { 0, 1, 2, 3, 4, 5 });
@@ -577,7 +577,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues(0, 1, 2, 3, 4, 5);
         }
 
-        [TestMethod]
+        [Test]
         public void Reshape_Char()
         {
             var a = np.array(new[] { 'a', 'b', 'c', 'd', 'e', 'f' });
@@ -588,7 +588,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues('a', 'b', 'c', 'd', 'e', 'f');
         }
 
-        [TestMethod]
+        [Test]
         public void Reshape_Single()
         {
             var a = np.array(new[] { 0f, 1f, 2f, 3f, 4f, 5f });
@@ -599,7 +599,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues(0f, 1f, 2f, 3f, 4f, 5f);
         }
 
-        [TestMethod]
+        [Test]
         public void Reshape_Double()
         {
             var a = np.array(new[] { 0.0, 1.0, 2.0, 3.0, 4.0, 5.0 });
@@ -610,7 +610,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues(0.0, 1.0, 2.0, 3.0, 4.0, 5.0);
         }
 
-        [TestMethod]
+        [Test]
         public void Reshape_Decimal()
         {
             var a = np.array(new[] { 0m, 1m, 2m, 3m, 4m, 5m });
@@ -625,7 +625,7 @@ namespace NumSharp.UnitTest.Manipulation
 
         #region Large Arrays
 
-        [TestMethod]
+        [Test]
         public void Reshape_Large_100x100_to_10000()
         {
             // Test large array reshape
@@ -648,7 +648,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.GetInt32(9999).Should().Be(9999);
         }
 
-        [TestMethod]
+        [Test]
         public void Reshape_Large_100x100_to_50x200()
         {
             // Test large array different shape
@@ -669,7 +669,7 @@ namespace NumSharp.UnitTest.Manipulation
 
         #region Error Cases
 
-        [TestMethod]
+        [Test]
         public void Reshape_IncompatibleShape_Throws()
         {
             // NumPy: np.arange(6).reshape(2,4) → raises ValueError
@@ -680,7 +680,7 @@ namespace NumSharp.UnitTest.Manipulation
             act.Should().Throw<Exception>(); // Could be IncorrectShapeException or similar
         }
 
-        [TestMethod]
+        [Test]
         public void Reshape_TwoNeg1_Throws()
         {
             // NumPy: np.arange(6).reshape(-1,-1) → raises ValueError
@@ -691,7 +691,7 @@ namespace NumSharp.UnitTest.Manipulation
             act.Should().Throw<ArgumentException>();
         }
 
-        [TestMethod]
+        [Test]
         public void Reshape_Neg1_NonDivisible_Throws()
         {
             // NumPy: np.arange(7).reshape(-1,3) → raises ValueError (7 not divisible by 3)
@@ -706,7 +706,7 @@ namespace NumSharp.UnitTest.Manipulation
 
         #region Static vs Instance
 
-        [TestMethod]
+        [Test]
         public void Reshape_Static_Equals_Instance()
         {
             // NumPy: np.reshape(a, (3,4)) == a.reshape(3,4)
@@ -723,7 +723,7 @@ namespace NumSharp.UnitTest.Manipulation
 
         #region Transposed + Reshape
 
-        [TestMethod]
+        [Test]
         public void Reshape_Transposed_Values()
         {
             // NumPy: np.arange(6).reshape(2,3).T.reshape(6) = [0,3,1,4,2,5]
@@ -736,7 +736,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues(0, 3, 1, 4, 2, 5);
         }
 
-        [TestMethod]
+        [Test]
         public void Reshape_Transposed_NoWriteThrough()
         {
             // After transposed reshape, writing to result does NOT modify original
@@ -755,7 +755,7 @@ namespace NumSharp.UnitTest.Manipulation
 
         #region Fancy Combinations
 
-        [TestMethod]
+        [Test]
         public void Reshape_Slice_Reshape_Values()
         {
             // NumPy: np.arange(24).reshape(4,6)[1:3,2:5].reshape(6) = [8,9,10,14,15,16]
@@ -767,7 +767,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues(8, 9, 10, 14, 15, 16);
         }
 
-        [TestMethod]
+        [Test]
         public void Reshape_NewAxis_Values()
         {
             // NumPy: np.arange(6)[np.newaxis,:].reshape(2,3) = [[0,1,2],[3,4,5]]
@@ -780,7 +780,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues(0, 1, 2, 3, 4, 5);
         }
 
-        [TestMethod]
+        [Test]
         public void Reshape_Chain_4Steps()
         {
             // NumPy: arange(24)→(4,6)→(2,2,6)→(2,2,2,3)→(24), verify equal to original
@@ -794,7 +794,7 @@ namespace NumSharp.UnitTest.Manipulation
             np.array_equal(r4, a).Should().BeTrue();
         }
 
-        [TestMethod]
+        [Test]
         public void Reshape_Unsafe_ParamsInt()
         {
             // Test reshape_unsafe with int[] params works correctly
@@ -805,7 +805,7 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11);
         }
 
-        [TestMethod]
+        [Test]
         public void Reshape_Unsafe_Shape()
         {
             // Test reshape_unsafe with Shape overload works correctly

@@ -9,10 +9,9 @@ using NumSharp.Backends;
 
 namespace NumSharp.UnitTest.Creation
 {
-    [TestClass]
     public class np_concatenate_test
     {
-        [TestMethod]
+        [Test]
         public void Case1_Axis1()
         {
             var a = np.full(1, (3, 1, 3), NPTypeCode.Int32);
@@ -26,7 +25,7 @@ namespace NumSharp.UnitTest.Creation
             c[":, 2, :"].flat.Cast<int>().Should().AllBeEquivalentTo(2);
         }
 
-        [TestMethod]
+        [Test]
         public void Case1_Axis1_Cast()
         {
             var a = np.full(1, (3, 1, 3), NPTypeCode.Int32);
@@ -41,7 +40,7 @@ namespace NumSharp.UnitTest.Creation
             c[":, 2, :"].flat.Cast<double>().Should().AllBeEquivalentTo(2);
         }
 
-        [TestMethod]
+        [Test]
         public void Case1_Axis0()
         {
             var a = np.full(1, (1, 3, 3), NPTypeCode.Int32);
@@ -55,7 +54,7 @@ namespace NumSharp.UnitTest.Creation
             c["2, :, :"].flat.Cast<int>().Should().AllBeEquivalentTo(2);
         }
 
-        [TestMethod]
+        [Test]
         public void Case1_Axis2()
         {
             var a = np.full(1, (3, 3, 1), NPTypeCode.Int32);
@@ -69,7 +68,7 @@ namespace NumSharp.UnitTest.Creation
             c[":, :, 2"].flat.Cast<int>().Should().AllBeEquivalentTo(2);
         }
 
-        [TestMethod]
+        [Test]
         public void Case1_Axis_minus1()
         {
             var a = np.full(1, (3, 3, 1), NPTypeCode.Int32);
@@ -83,7 +82,7 @@ namespace NumSharp.UnitTest.Creation
             c[":, :, 2"].flat.Cast<int>().Should().AllBeEquivalentTo(2);
         }
 
-        [TestMethod]
+        [Test]
         public void Case2_Axis1_3Arrays_Cast()
         {
             var a = np.full(1, (3, 1, 3), NPTypeCode.Int32);

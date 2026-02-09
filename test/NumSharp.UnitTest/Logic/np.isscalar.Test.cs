@@ -7,39 +7,38 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace NumSharp.UnitTest.Logic
 {
-    [TestClass]
     public class np_isscalar_tests
     {
-        [DataTestMethod]
-        [DataRow(typeof(double))]
-        [DataRow(typeof(float))]
-        [DataRow(typeof(byte))]
-        [DataRow(typeof(int))]
-        [DataRow(typeof(long))]
-        [DataRow(typeof(char))]
-        [DataRow(typeof(short))]
-        [DataRow(typeof(uint))]
-        [DataRow(typeof(ulong))]
-        [DataRow(typeof(ushort))]
-        [DataRow(typeof(decimal))]
+        [Test]
+        [Arguments(typeof(double))]
+        [Arguments(typeof(float))]
+        [Arguments(typeof(byte))]
+        [Arguments(typeof(int))]
+        [Arguments(typeof(long))]
+        [Arguments(typeof(char))]
+        [Arguments(typeof(short))]
+        [Arguments(typeof(uint))]
+        [Arguments(typeof(ulong))]
+        [Arguments(typeof(ushort))]
+        [Arguments(typeof(decimal))]
         public void AllPrimitiveTypes(Type type)
         {
             var value = Convert.ChangeType((byte)0, type);
             Assert.IsTrue(np.isscalar(value));
         }
 
-        [DataTestMethod]
-        [DataRow(typeof(double))]
-        [DataRow(typeof(float))]
-        [DataRow(typeof(byte))]
-        [DataRow(typeof(int))]
-        [DataRow(typeof(long))]
-        [DataRow(typeof(char))]
-        [DataRow(typeof(short))]
-        [DataRow(typeof(uint))]
-        [DataRow(typeof(ulong))]
-        [DataRow(typeof(ushort))]
-        [DataRow(typeof(decimal))]
+        [Test]
+        [Arguments(typeof(double))]
+        [Arguments(typeof(float))]
+        [Arguments(typeof(byte))]
+        [Arguments(typeof(int))]
+        [Arguments(typeof(long))]
+        [Arguments(typeof(char))]
+        [Arguments(typeof(short))]
+        [Arguments(typeof(uint))]
+        [Arguments(typeof(ulong))]
+        [Arguments(typeof(ushort))]
+        [Arguments(typeof(decimal))]
         public void AllPrimitiveArrayTypes(Type type)
         {
             var value = Convert.ChangeType((byte)0, type);
@@ -48,28 +47,28 @@ namespace NumSharp.UnitTest.Logic
             Assert.IsFalse(np.isscalar(arr));
         }
 
-        [TestMethod]
+        [Test]
         public void Complex()
         {
             var value = new Complex(15, 15);
             Assert.IsTrue(np.isscalar(value));
         }
 
-        [TestMethod]
+        [Test]
         public void Null()
         {
             Assert.IsFalse(np.isscalar(null));
         }
 
-        [DataTestMethod]
-        [DataRow("")]
-        [DataRow("Hi")]
+        [Test]
+        [Arguments("")]
+        [Arguments("Hi")]
         public void String(string value)
         {
             Assert.IsTrue(np.isscalar(value));
         }
 
-        [TestMethod]
+        [Test]
         public void NDArray()
         {
             var value = np.zeros(3, 3);

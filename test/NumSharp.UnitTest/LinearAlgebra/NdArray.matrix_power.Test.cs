@@ -13,10 +13,9 @@ namespace NumSharp.UnitTest.LinearAlgebra
     /// Test concolve with standard example from 
     /// https://www.numpy.org/devdocs/reference/generated/numpy.convolve.html
     /// </summary>
-    [TestClass]
     public class NdArrayMatrixPowerTest
     {
-        [TestMethod]
+        [Test]
         public void ZeroPowerTest()
         {
             var nd1 = new NDArray(typeof(double), new Shape(3, 3));
@@ -30,7 +29,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
                 Assert.IsTrue(expected[idx, jdx] == onces[idx, jdx]);
         }
 
-        //[TestMethod]
+        //[Test]
         public void PowerOf3Test()
         {
             var nd1 = np.arange(9).reshape(3, 3).MakeGeneric<double>();

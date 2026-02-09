@@ -6,10 +6,9 @@ using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.Manipulation
 {
-    [TestClass]
     public class NDArrayGetData
     {
-        [TestMethod]
+        [Test]
         public void Case1_GetData_Nonslice()
         {
             var lhs = np.full(5, (3, 3), NPTypeCode.Int32);
@@ -22,7 +21,7 @@ namespace NumSharp.UnitTest.Manipulation
             new NDIterator<int>(slice).Should().ContainInOrder(5, 5, 5);
         }
 
-        [TestMethod]
+        [Test]
         public void Case1_GetData_Slice()
         {
             var lhs = np.full(5, (3, 3, 3), NPTypeCode.Int32);
@@ -36,7 +35,7 @@ namespace NumSharp.UnitTest.Manipulation
             new NDIterator<int>(slice).Should().ContainInOrder(5, 5, 5);
         }
 
-        [TestMethod]
+        [Test]
         public void Case1_GetData_Slice2()
         {
             var lhs = np.full(5, (6, 3, 3), NPTypeCode.Int32);
@@ -50,7 +49,7 @@ namespace NumSharp.UnitTest.Manipulation
             new NDIterator<int>(slice).Should().ContainInOrder(5, 5, 5);
         }
 
-        [TestMethod]
+        [Test]
         public void Case2_GetData_Scalar_Nonslice()
         {
             var lhs = np.full(5, (3, 3), NPTypeCode.Int32);
@@ -64,7 +63,7 @@ namespace NumSharp.UnitTest.Manipulation
             new NDIterator<int>(slice).Should().ContainInOrder(5);
         }
 
-        [TestMethod]
+        [Test]
         public void Case2_GetData_Scalar_Slice()
         {
             var lhs = np.full(5, (3, 3, 3), NPTypeCode.Int32);
@@ -79,7 +78,7 @@ namespace NumSharp.UnitTest.Manipulation
             new NDIterator<int>(slice).Should().ContainInOrder(5);
         }
 
-        [TestMethod]
+        [Test]
         public void Case2_GetData_Scalar_Slice2()
         {
             var lhs = np.full(5, (6, 3, 3), NPTypeCode.Int32);
@@ -94,7 +93,7 @@ namespace NumSharp.UnitTest.Manipulation
             new NDIterator<int>(slice).Should().ContainInOrder(5);
         }
 
-        [TestMethod]
+        [Test]
         public void Case3_GetData_All_Slice2()
         {
             var lhs = np.full(5, (6, 3, 3), NPTypeCode.Int32);
@@ -109,7 +108,7 @@ namespace NumSharp.UnitTest.Manipulation
             for (int i = 0; i < 3 * 3 * 3; i++, iter.HasNext()) iter.MoveNext().Should().Be(5);
         }
 
-        [TestMethod]
+        [Test]
         public void Case3_GetData_All()
         {
             var lhs = np.full(5, (6, 3, 3), NPTypeCode.Int32);
@@ -123,7 +122,7 @@ namespace NumSharp.UnitTest.Manipulation
             for (int i = 0; i < 6 * 3 * 3; i++, iter.HasNext()) iter.MoveNext().Should().Be(5);
         }
 
-        [TestMethod]
+        [Test]
         public void Case1_GetNDArrays_Axis0()
         {
             var a = np.full(5, (6, 3, 3), NPTypeCode.Int32);
@@ -133,7 +132,7 @@ namespace NumSharp.UnitTest.Manipulation
             f.Shape.Should().Be((3, 3));
         }
 
-        [TestMethod]
+        [Test]
         public void Case1_GetNDArrays_Axis1()
         {
             var a = np.full(5, (6, 3, 3), NPTypeCode.Int32);
@@ -143,7 +142,7 @@ namespace NumSharp.UnitTest.Manipulation
             f.Shape.Should().Be(Shape.Vector(3));
         }
 
-        [TestMethod]
+        [Test]
         public void Case1_GetNDArrays_Axis2()
         {
             var a = np.full(5, (6, 3, 3), NPTypeCode.Int32);

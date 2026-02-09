@@ -79,7 +79,7 @@ namespace NumSharp.UnitTest
         ///     NumPy:    sign(int32[]).dtype = int32
         ///     NumSharp: sign(int32[]).dtype = Double
         /// </summary>
-        [TestMethod]
+        [Test]
         public void Bug_Sign_ReturnsDouble_ForIntInput()
         {
             var a = np.array(new int[] { -3, 0, 5 });
@@ -121,7 +121,7 @@ namespace NumSharp.UnitTest
         ///     NumPy:    [1,2,3] != [1,0,3] = [False, True, False]
         ///     NumSharp: InvalidCastException
         /// </summary>
-        [TestMethod]
+        [Test]
         public void Bug_NotEquals_NDArray_ThrowsInvalidCast()
         {
             var a = np.array(new int[] { 1, 2, 3 });
@@ -163,7 +163,7 @@ namespace NumSharp.UnitTest
         ///     NumPy:    [1,5,3] &gt; [2,4,3] = [False, True, False]
         ///     NumSharp: IncorrectShapeException
         /// </summary>
-        [TestMethod]
+        [Test]
         public void Bug_GreaterThan_NDArray_ThrowsIncorrectShape()
         {
             var a = np.array(new int[] { 1, 5, 3 });
@@ -203,7 +203,7 @@ namespace NumSharp.UnitTest
         ///     NumPy:    [1,5,3] &lt; [2,4,3] = [True, False, False]
         ///     NumSharp: IncorrectShapeException
         /// </summary>
-        [TestMethod]
+        [Test]
         public void Bug_LessThan_NDArray_ThrowsIncorrectShape()
         {
             var a = np.array(new int[] { 1, 5, 3 });
@@ -249,7 +249,7 @@ namespace NumSharp.UnitTest
         ///     NumPy:    arange(5)[mask] = [0, 2, 4]
         ///     NumSharp: returns [1, 0, 1, 0, 1] (mask cast to int)
         /// </summary>
-        [TestMethod]
+        [Test]
         public void Bug_BooleanMaskGetter_ReturnsMaskInsteadOfSelection()
         {
             var a = np.arange(5); // [0, 1, 2, 3, 4]
@@ -292,7 +292,7 @@ namespace NumSharp.UnitTest
         ///     NumPy:    a = [10,20,30,40,50]; a[mask] = 99 -> [99,20,99,40,99]
         ///     NumSharp: array unchanged after assignment
         /// </summary>
-        [TestMethod]
+        [Test]
         public void Bug_BooleanMaskSetter_SilentlyNoOps()
         {
             var a = np.array(new int[] { 10, 20, 30, 40, 50 });
@@ -357,7 +357,7 @@ namespace NumSharp.UnitTest
         ///     NumPy:    float(np.sum(np.arange(10))) = 45.0
         ///     NumSharp: returns ~6.95e-310 (int32 bytes read as double)
         /// </summary>
-        [TestMethod]
+        [Test]
         public void Bug_DoubleCast_Int32NDArray_ReturnsGarbage()
         {
             // np.sum returns a scalar NDArray (ndim=0) with int32 dtype
@@ -408,7 +408,7 @@ namespace NumSharp.UnitTest
         ///     NumPy:    np.array([42]).reshape(()) = array(42), shape=(), ndim=0
         ///     NumSharp: NullReferenceException
         /// </summary>
-        [TestMethod]
+        [Test]
         public void Bug_Reshape_ScalarShape_ThrowsNullReference()
         {
             var a = np.array(new int[] { 42 }); // shape (1,)
@@ -454,7 +454,7 @@ namespace NumSharp.UnitTest
         ///     NumPy:    argmin([3.0, 1.0, NaN, 2.0]) = 2 (NaN index)
         ///     NumSharp: returns 1 (index of 1.0, ignores NaN)
         /// </summary>
-        [TestMethod]
+        [Test]
         public void Bug_Argmin_IgnoresNaN()
         {
             var a = np.array(new double[] { 3.0, 1.0, double.NaN, 2.0 });
@@ -496,7 +496,7 @@ namespace NumSharp.UnitTest
         ///     NumPy:    prod([T, T, F, T]) = 0
         ///     NumSharp: NotSupportedException
         /// </summary>
-        [TestMethod]
+        [Test]
         public void Bug_Prod_BoolArray_Crashes()
         {
             var a = np.array(new bool[] { true, true, false, true });
@@ -537,7 +537,7 @@ namespace NumSharp.UnitTest
         ///     NumPy:    cumsum([T, F, T, T, F]) = [1, 1, 2, 3, 3]
         ///     NumSharp: NotSupportedException
         /// </summary>
-        [TestMethod]
+        [Test]
         public void Bug_Cumsum_BoolArray_Crashes()
         {
             var a = np.array(new bool[] { true, false, true, true, false });
@@ -577,7 +577,7 @@ namespace NumSharp.UnitTest
         ///     NumPy:    sign([NaN, inf, -inf, 0]) = [NaN, 1, -1, 0]
         ///     NumSharp: ArithmeticException from Math.Sign(NaN)
         /// </summary>
-        [TestMethod]
+        [Test]
         public void Bug_Sign_NaN_ThrowsArithmeticException()
         {
             var a = np.array(new double[] { double.NaN, 1.0, double.PositiveInfinity, double.NegativeInfinity, 0.0 });
@@ -627,7 +627,7 @@ namespace NumSharp.UnitTest
         ///     NumPy:    std([]) = NaN (with warning)
         ///     NumSharp: InvalidOperationException: Can't construct NDIterator
         /// </summary>
-        [TestMethod]
+        [Test]
         public void Bug_Std_EmptyArray_Crashes()
         {
             var empty = np.array(new double[0]);
@@ -646,7 +646,7 @@ namespace NumSharp.UnitTest
         ///     NumPy:    var([]) = NaN (with warning)
         ///     NumSharp: InvalidOperationException: Can't construct NDIterator
         /// </summary>
-        [TestMethod]
+        [Test]
         public void Bug_Var_EmptyArray_Crashes()
         {
             var empty = np.array(new double[0]);
@@ -692,7 +692,7 @@ namespace NumSharp.UnitTest
         ///     NumPy:    [-7] % [3] = [2]  (sign of divisor)
         ///     NumSharp: [-7] % [3] = [-1] (sign of dividend, C# semantics)
         /// </summary>
-        [TestMethod]
+        [Test]
         public void Bug_Modulo_CSharpSemantics_InsteadOfPython()
         {
             var a = np.array(new int[] { 7, -7, 7, -7 });
@@ -719,7 +719,7 @@ namespace NumSharp.UnitTest
         ///     NumPy:    [-7.5] % [3] = [1.5]
         ///     NumSharp: [-7.5] % [3] = [-1.5]
         /// </summary>
-        [TestMethod]
+        [Test]
         public void Bug_Modulo_Float_CSharpSemantics()
         {
             var a = np.array(new double[] { 7.5, -7.5 });
@@ -764,7 +764,7 @@ namespace NumSharp.UnitTest
         ///     NumPy:    a[[1,3]] = [99,88] -> [10,99,30,88,50]
         ///     NumSharp: array unchanged after assignment
         /// </summary>
-        [TestMethod]
+        [Test]
         public void Bug_FancyIndexSetter_SilentlyNoOps()
         {
             var a = np.array(new int[] { 10, 20, 30, 40, 50 });

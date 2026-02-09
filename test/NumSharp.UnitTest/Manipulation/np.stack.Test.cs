@@ -6,10 +6,9 @@ namespace NumSharp.UnitTest.Manipulation
     /// <summary>
     /// Tests following https://docs.scipy.org/doc/numpy/reference/generated/numpy.dstack.html
     /// </summary>
-    [TestClass]
     public class np_stack_tests
     {
-        [TestMethod]
+        [Test]
         public void Case1()
         {
             //1D

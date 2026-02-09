@@ -3,10 +3,9 @@ using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.Manipulation
 {
-    [TestClass]
     public class np_rollaxis_Test
     {
-        [TestMethod]
+        [Test]
         public void Case1()
         {
             var a = np.ones((3, 4, 5, 6));

@@ -11,10 +11,9 @@ using NumSharp.Generic;
 
 namespace NumSharp.UnitTest.LinearAlgebra
 {
-    [TestClass]
     public class TransposeTest
     {
-        [TestMethod]
+        [Test]
         public void TransposeVector()
         {
             var x = np.arange(4);
@@ -23,7 +22,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
             Assert.IsFalse(Enumerable.SequenceEqual(x.Data<int>(), y.Data<int>()), "Transpose in NumSharp produces a copy");
         }
 
-        [TestMethod]
+        [Test]
         public void Transpose3x2()
         {
             var x = np.arange(6).reshape(3, 2).MakeGeneric<int>();

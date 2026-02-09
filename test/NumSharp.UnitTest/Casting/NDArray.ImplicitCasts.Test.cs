@@ -6,10 +6,9 @@ using System.Linq;
 
 namespace NumSharp.UnitTest
 {
-    [TestClass]
     public class ImplicitCastTester
     {
-        [TestMethod]
+        [Test]
         public void ConvertFromJagged()
         {
             double[][] a = new double[3][];
@@ -30,7 +29,7 @@ namespace NumSharp.UnitTest
                 Assert.IsTrue(c[idx, jdx] == a[idx][jdx]);
         }
 
-        [TestMethod]
+        [Test]
         public void FromDotNetVector()
         {
             NDArray nd = new double[] {1, 2, 3, 4};
@@ -41,7 +40,7 @@ namespace NumSharp.UnitTest
             Assert.IsTrue(((double)nd[3]) == 4);
         }
 
-        [TestMethod]
+        [Test]
         public void FromDotNetMatrix()
         {
             NDArray nd = new double[,] {{1, 2, 3}, {4, 5, 6}};
@@ -53,7 +52,7 @@ namespace NumSharp.UnitTest
                 Assert.IsTrue((double)nd[idx, jdx] == doubleMatr[idx, jdx]);
         }
 
-        [TestMethod]
+        [Test]
         public void FromAndToDotNetMatrix()
         {
             NDArray nd = new double[,] {{1, 2, 3}, {4, 5, 6}};
@@ -74,7 +73,7 @@ namespace NumSharp.UnitTest
             }
         }
 
-        [TestMethod]
+        [Test]
         public void StringCast2()
         {
             NDArray nd = "[1,2,3;4,5,6]";
@@ -88,7 +87,7 @@ namespace NumSharp.UnitTest
             }
         }
 
-        [TestMethod]
+        [Test]
         public void StringCast3()
         {
             NDArray nd = "[3,1,1,2]";

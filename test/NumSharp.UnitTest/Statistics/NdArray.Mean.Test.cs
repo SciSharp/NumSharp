@@ -4,11 +4,10 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace NumSharp.UnitTest.Statistics
 {
-    [TestClass]
     public class NdArrayMeanTest
     {
 
-        [TestMethod]
+        [Test]
         public void Case1_Elementwise_keepdims()
         {
             var np1 = np.array(new double[] { 1, 2, 3, 4, 5, 6 }).reshape(3, 2);
@@ -17,7 +16,7 @@ namespace NumSharp.UnitTest.Statistics
             mean.GetValue(0, 0).Should().BeEquivalentTo(3.5);
         }
 
-        [TestMethod]
+        [Test]
         public void Case0_Scalar()
         {
             var np1 = NDArray.Scalar(1d);
@@ -26,7 +25,7 @@ namespace NumSharp.UnitTest.Statistics
             mean.GetValue(0).Should().BeEquivalentTo(1d);
         }
 
-        [TestMethod]
+        [Test]
         public void Case1_Axis0()
         {
             var np1 = np.array(new double[] {1, 2, 3, 4}).reshape(2, 2);
@@ -34,7 +33,7 @@ namespace NumSharp.UnitTest.Statistics
             Assert.IsTrue(Enumerable.SequenceEqual(mean.Data<double>(), new double[] {2, 3}));
         }
 
-        [TestMethod]
+        [Test]
         public void Case1_Axis1()
         {
             var np1 = np.array(new double[] {1, 2, 3, 4}).reshape(2, 2);
@@ -42,7 +41,7 @@ namespace NumSharp.UnitTest.Statistics
             Assert.IsTrue(Enumerable.SequenceEqual(mean.Data<double>(), new double[] {1.5, 3.5}));
         }
 
-        [TestMethod]
+        [Test]
         public void Case1_Axis_minus1()
         {
             var np1 = np.array(new double[] {1, 2, 3, 4}).reshape(2, 2);
@@ -51,7 +50,7 @@ namespace NumSharp.UnitTest.Statistics
             Assert.IsTrue(Enumerable.SequenceEqual(mean.Data<double>(), new double[] {1.5, 3.5}));
         }
 
-        [TestMethod]
+        [Test]
         public void Case1_Elementwise()
         {
             var np1 = np.array(new double[] {1, 2, 3, 4, 5, 6}).reshape(3, 2);

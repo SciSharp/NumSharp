@@ -9,12 +9,11 @@ using NumSharp.Generic;
 
 namespace NumSharp.UnitTest.Operations
 {
-    [TestClass]
     public class NDArrayAndTest
     {
 
         [Ignore("TODO: fix this test")]
-        [TestMethod]
+        [Test]
         public void BoolTwo1D_NDArrayAND()
         {
             var np1 = new NDArray(new[] {true, true, false, false}, new Shape(4));
@@ -26,7 +25,7 @@ namespace NumSharp.UnitTest.Operations
         }
 
         [Ignore("TODO: fix this test")]
-        [TestMethod]
+        [Test]
         public void BoolTwo2D_NDArrayAND()
         {
             var np1 = new NDArray(typeof(bool), new Shape(2, 3));
@@ -44,7 +43,7 @@ namespace NumSharp.UnitTest.Operations
         }
 
         [Ignore("TODO: fix this test")]
-        [TestMethod]
+        [Test]
         public void Byte1D_NDArrayAND()
         {
             var np1 = new NDArray(new[] {1, 2, 3, 4}, new Shape(4));

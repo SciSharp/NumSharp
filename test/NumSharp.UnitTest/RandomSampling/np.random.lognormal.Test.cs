@@ -7,10 +7,9 @@ using System.Linq;
 
 namespace NumSharp.UnitTest.RandomSampling
 {
-    [TestClass]
     public class NpRandomLogNormalTests : TestClass
     {
-        [TestMethod]
+        [Test]
         public void Rand1D()
         {
             var rand = np.random.lognormal(1, 0.5, 5);
@@ -18,7 +17,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.IsTrue(rand.size == 5);
         }
 
-        [TestMethod]
+        [Test]
         public void Rand2D()
         {
             var rand = np.random.lognormal(1, 0.5, 5, 5);
@@ -26,7 +25,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.IsTrue(rand.size == 25);
         }
 
-        [TestMethod]
+        [Test]
         public void Rand2DByShape()
         {
             var rand = np.random.lognormal(1, 0.5, new Shape(5, 5));

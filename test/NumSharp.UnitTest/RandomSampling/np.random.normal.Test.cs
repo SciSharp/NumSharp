@@ -8,10 +8,9 @@ using NumSharp;
 
 namespace NumSharp.UnitTest.RandomSampling
 {
-    [TestClass]
     public class NpRandomNormalTest
     {
-        [TestMethod]
+        [Test]
         public void NormalDistributionTest()
         {
             // https://docs.scipy.org/doc/numpy-1.15.0/reference/generated/numpy.random.normal.html

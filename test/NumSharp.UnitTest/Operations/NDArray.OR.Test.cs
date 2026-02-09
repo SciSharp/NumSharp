@@ -3,11 +3,10 @@ using System.Linq;
 
 namespace NumSharp.UnitTest.Operations
 {
-    [TestClass]
     public class NDArrayOrTest
     {
         [Ignore("TODO: fix this test")]
-        [TestMethod]
+        [Test]
         public void BoolTwo1D_NDArrayOR()
         {
             var np1 = new NDArray(new[] {true, true, false, false}, new Shape(4));
@@ -19,7 +18,7 @@ namespace NumSharp.UnitTest.Operations
         }
 
         [Ignore("TODO: fix this test")]
-        [TestMethod]
+        [Test]
         public void BoolTwo2D_NDArrayOR()
         {
             var np1 = new NDArray(typeof(bool), new Shape(2, 3));

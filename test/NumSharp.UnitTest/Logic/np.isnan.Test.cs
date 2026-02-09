@@ -6,11 +6,10 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace NumSharp.UnitTest.Logic
 {
-    [TestClass]
     public class np_isnan_Test
     {
         [Ignore("TODO: fix this test")]
-        [TestMethod]
+        [Test]
         public void np_isnan_1D()
         {
             var np1 = new NDArray(new[] {1.0, Math.PI, Math.E, 42, double.MaxValue, double.MinValue, double.NaN});
@@ -29,7 +28,7 @@ namespace NumSharp.UnitTest.Logic
         }
 
         [Ignore("TODO: fix this test")]
-        [TestMethod]
+        [Test]
         public void np_isnan_2D()
         {
             var np1 = new NDArray(new[] {Math.PI, Math.E, 42, double.MaxValue, double.MinValue, double.NaN}, new Shape(2, 3));

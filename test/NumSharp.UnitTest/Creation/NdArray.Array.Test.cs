@@ -8,10 +8,9 @@ using NumSharp;
 
 namespace NumSharp.UnitTest.Creation
 {
-    [TestClass]
     public class NdArrayArrayTest
     {
-        [TestMethod]
+        [Test]
         public void Array1Dim()
         {
             var list = new int[] {1, 2, 3};
@@ -20,7 +19,7 @@ namespace NumSharp.UnitTest.Creation
             Assert.IsTrue(Enumerable.SequenceEqual(n.Data<int>(), new int[] {1, 2, 3}));
         }
 
-        [TestMethod]
+        [Test]
         public void Array2Dim()
         {
             var list = new int[][] {new int[] {1, 2}, new int[] {3, 4}};
@@ -37,7 +36,7 @@ namespace NumSharp.UnitTest.Creation
         }
 
 
-        [TestMethod]
+        [Test]
         public void Array2Dim_Accessing()
         {
             var list = new int[][] {new int[] {1, 2}, new int[] {3, 4}};
@@ -53,7 +52,7 @@ namespace NumSharp.UnitTest.Creation
             }
         }
 
-        [TestMethod]
+        [Test]
         public void Array3Dim()
         {
             var list = new int[,,] {{{1, 2}, {3, 4}}, {{2, 2}, {3, 3}}, {{3, 2}, {3, 1}},};
@@ -80,7 +79,7 @@ namespace NumSharp.UnitTest.Creation
             return imageArray;
         }*/
 
-        [TestMethod]
+        [Test]
         public void ArrayImage()
         {
             /*var relativePath = string.Empty;
@@ -105,7 +104,7 @@ namespace NumSharp.UnitTest.Creation
             }*/
         }
 
-        [TestMethod]
+        [Test]
         public void flatten2d()
         {
             var a = np.array(new int[,] {{1, 2}, {3, 4}});
@@ -117,7 +116,7 @@ namespace NumSharp.UnitTest.Creation
             Assert.IsTrue(Enumerable.SequenceEqual(a.Data<int>(), new int[] {1, 2, 3, 4}));
         }
 
-        [TestMethod]
+        [Test]
         public void StringCheck()
         {
             var nd = np.arange(9d).reshape(3, 3).MakeGeneric<double>();
@@ -135,7 +134,7 @@ namespace NumSharp.UnitTest.Creation
             Assert.IsTrue(stringOfNp.Contains("[["));
         }
 
-        [TestMethod, Ignore("No assertions inside")]
+        [Test, Skip("No assertions inside")]
         public void CheckVectorString()
         {
             var np = NumSharp.np.arange(9).MakeGeneric<double>();
@@ -150,7 +149,7 @@ namespace NumSharp.UnitTest.Creation
             var stringOfNp = np.ToString();
         }
 
-        [TestMethod]
+        [Test]
         public void ToDotNetArray1D()
         {
             var np1 = np.arange(9d).MakeGeneric<double>();
@@ -160,7 +159,7 @@ namespace NumSharp.UnitTest.Creation
             Assert.IsTrue(Enumerable.SequenceEqual(np1_, np1.Data<double>()));
         }
 
-        [TestMethod]
+        [Test]
         public void ToDotNetArray2D()
         {
             var np1 = np.arange(9d).reshape(3, 3).MakeGeneric<double>();
@@ -175,7 +174,7 @@ namespace NumSharp.UnitTest.Creation
             }
         }
 
-        [TestMethod]
+        [Test]
         public void ToDotNetArray3D()
         {
             var np1 = np.arange(27d).astype(np.float64).reshape(3, 3, 3);

@@ -10,10 +10,9 @@ namespace NumSharp.UnitTest.Extensions
     /// <summary>
     /// Tests following https://docs.scipy.org/doc/numpy-1.15.0/reference/generated/numpy.hstack.html
     /// </summary>
-    [TestClass]
     public class NdArrayArgSortTest
     {
-        [TestMethod]
+        [Test]
         public void OneDimension()
         {
             var x = np.array(new int[] {3, 1, 2});
@@ -21,7 +20,7 @@ namespace NumSharp.UnitTest.Extensions
             Assert.IsTrue(Enumerable.SequenceEqual(new int[] {1, 2, 0}, x.Data<int>()));
         }
 
-        [TestMethod]
+        [Test]
         public void TwoDimension()
         {
             var x = np.array(new int[] {3, 1, 2});
