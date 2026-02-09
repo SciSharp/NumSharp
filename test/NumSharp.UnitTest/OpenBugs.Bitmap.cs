@@ -55,7 +55,7 @@ namespace NumSharp.UnitTest
     ///     Total: 8 distinct bugs, 10 test methods.
     /// </summary>
     [Category("OpenBugs")]
-    [Category("WindowsOnly")]
+    [WindowsOnly]
     public class OpenBugsBitmap : TestClass
     {
 

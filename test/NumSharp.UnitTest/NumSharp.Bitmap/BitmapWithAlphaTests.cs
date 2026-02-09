@@ -7,7 +7,7 @@ using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest
 {
-    [Category("WindowsOnly")]
+    [WindowsOnly]
     public class BitmapWithAlphaTests : TestClass
     {
         [Test]

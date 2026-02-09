@@ -36,7 +36,7 @@ namespace NumSharp.UnitTest.APIs
 
             NDArray ndArray = new NDArray(testArray);
 
-            var testFileName = @"test." + nameof(NumpyToFromFileTestByte1);
+            var testFileName = @"test." + nameof(NumpyToFromFileTestUShort1);
             ndArray.tofile(testFileName);
             var loadedArray = np.fromfile(testFileName, np.uint16);
 

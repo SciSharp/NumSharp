@@ -18,24 +18,19 @@ env:
   # NU5048: PackageIconUrl deprecated — cosmetic NuGet warning
   DOTNET_NOWARN: CS1570%3BCS1571%3BCS1572%3BCS1573%3BCS1574%3BCS1587%3BCS1591%3BCS1711%3BCS1734%3BCS8981%3BNU5048
 
-  # Exclude tests by category. Tag tests with [TestCategory("...")] instead of
+  # Exclude tests by category. Tag tests with [Category("...")] (TUnit) instead of
   # adding individual Name!= exclusions here.
   #   OpenBugs    — known-failing bug reproductions (pass when fixed, then remove category)
-  #   WindowsOnly — require GDI+/System.Drawing.Common (excluded on Linux/macOS)
-  TEST_FILTER: TestCategory!=OpenBugs
+  #   WindowsOnly — require GDI+/System.Drawing.Common; auto-skipped on non-Windows via
+  #                 runtime platform check in test base class
+  TEST_FILTER: '/*/*/*/*[Category!=OpenBugs]'
 
 jobs:
   test:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: windows-latest
-            extra_filter: ''
-          - os: ubuntu-latest
-            extra_filter: '& TestCategory!=WindowsOnly'
-          - os: macos-latest
-            extra_filter: '& TestCategory!=WindowsOnly'
+        os: [ windows-latest, ubuntu-latest, macos-latest ]
 
     runs-on: ${{ matrix.os }}
 
@@ -54,7 +49,11 @@ jobs:
       run: dotnet build test/NumSharp.UnitTest/NumSharp.UnitTest.csproj --configuration Release -p:NoWarn=${{ env.DOTNET_NOWARN }}
 
     - name: Test
-      run: dotnet test test/NumSharp.UnitTest/NumSharp.UnitTest.csproj --configuration Release --no-build --verbosity normal --logger trx --filter "${{ env.TEST_FILTER }} ${{ matrix.extra_filter }}"
+      shell: bash
+      run: |
+        dotnet run --project test/NumSharp.UnitTest/NumSharp.UnitTest.csproj \
+          --configuration Release --no-build \
+          -- --treenode-filter "${{ env.TEST_FILTER }}" --report-trx
 
     - name: Upload Test Results
       uses: actions/upload-artifact@v4
