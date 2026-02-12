@@ -107,7 +107,57 @@ namespace NumSharp.Backends
                 return new UnmanagedStorage(clonedData, cleanShape).GetViewInternal(slices);
             }
 
-            return Alias(_shape.Slice(slices));
+            var slicedShape = _shape.Slice(slices);
+
+            // Option 2: if the merged SliceDefs describe a contiguous block of memory,
+            // create an offset InternalArray alias instead of a ViewInfo-based alias.
+            // This makes IsContiguous=true for the result, enabling fast-path iteration
+            // and view semantics in ravel/copyto/etc.
+            if (!slicedShape.IsRecursive && slicedShape.ViewInfo?.Slices != null)
+            {
+                var vi = slicedShape.ViewInfo;
+                var origDims = vi.OriginalShape.dimensions;
+                var origStrides = vi.OriginalShape.strides;
+                var sdefs = vi.Slices;
+
+                // Check contiguity: scan right-to-left.
+                // Trailing dims must be fully taken (Start=0, Step=1, Count=origDim).
+                // First partially-taken dim must have Step=1 (or Count<=1).
+                // All dims left of that must have Count=1 (or be an index).
+                bool contiguous = true;
+                bool foundPartial = false;
+                for (int i = sdefs.Length - 1; i >= 0; i--)
+                {
+                    var sd = sdefs[i];
+                    int count = sd.IsIndex ? 1 : sd.Count;
+                    bool isFull = !sd.IsIndex && sd.Start == 0 && sd.Step == 1 && sd.Count == origDims[i];
+
+                    if (!foundPartial)
+                    {
+                        if (isFull) continue;
+                        foundPartial = true;
+                        if (sd.Step != 1 && count > 1) { contiguous = false; break; }
+                    }
+                    else
+                    {
+                        if (count != 1) { contiguous = false; break; }
+                    }
+                }
+
+                if (contiguous && slicedShape.size > 0)
+                {
+                    // Compute linear start offset in the underlying InternalArray
+                    int startOffset = 0;
+                    for (int i = 0; i < sdefs.Length; i++)
+                        startOffset += origStrides[i] * sdefs[i].Start;
+
+                    // Create a clean shape (no ViewInfo) with the sliced dimensions
+                    var cleanShape = slicedShape.Clean();
+                    return new UnmanagedStorage(InternalArray.Slice(startOffset, cleanShape.size), cleanShape);
+                }
+            }
+
+            return Alias(slicedShape);
         }
 
         private IEnumerable<Slice> ExpandEllipsis(Slice[] slices)
