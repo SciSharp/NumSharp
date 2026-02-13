@@ -335,22 +335,50 @@ Create issues on `SciSharp/NumSharp` via `gh issue create`. `GH_TOKEN` is availa
 ## Build & Test
 
 ```bash
+# Build (silent, errors only)
 dotnet build -v q --nologo "-clp:NoSummary;ErrorsOnly" -p:WarningLevel=0
-dotnet test -v q --nologo "-clp:ErrorsOnly" test/NumSharp.UnitTest/NumSharp.UnitTest.csproj
+```
+
+### Running Tests
+
+Tests use **TUnit** framework and require `--reflection` mode for test discovery.
+
+```bash
+# Run from test directory
+cd test/NumSharp.UnitTest
+
+# All tests (includes OpenBugs - expected failures)
+dotnet test --no-build -- --reflection
+
+# Exclude OpenBugs (CI-style - only real failures)
+dotnet test --no-build -- --reflection --treenode-filter "/*/*[Category!=OpenBugs]"
+
+# Run ONLY OpenBugs tests
+dotnet test --no-build -- --reflection --treenode-filter "/*/*[Category=OpenBugs]"
+```
+
+### Output Formatting
+
+```bash
+# Results only (no messages, no stack traces)
+dotnet test --no-build -- --reflection 2>&1 | grep -E "^(failed|skipped|Test run|  total:|  failed:|  succeeded:|  skipped:|  duration:)"
+
+# Results with messages (no stack traces)
+dotnet test --no-build -- --reflection 2>&1 | grep -v "^    at " | grep -v "^     at " | grep -v "^    ---" | grep -v "^  from K:" | sed 's/TUnit.Engine.Exceptions.TestFailedException: //' | sed 's/AssertFailedException: //'
 ```
 
 ## Test Categories
 
-Tests are filtered by `[TestCategory]` attributes. Adding new bug reproductions or platform-specific tests only requires the right attribute — no CI workflow changes.
+Tests are filtered by `[Category]` attributes (TUnit). Adding new bug reproductions or platform-specific tests only requires the right attribute — no CI workflow changes.
 
-| Category | Purpose | CI filter |
-|----------|---------|-----------|
-| `OpenBugs` | Known-failing bug reproductions. Remove category when fixed. | `TestCategory!=OpenBugs` (all platforms) |
-| `WindowsOnly` | Requires GDI+/System.Drawing.Common | `TestCategory!=WindowsOnly` (Linux/macOS) |
+| Category | Purpose | TUnit filter |
+|----------|---------|--------------|
+| `OpenBugs` | Known-failing bug reproductions. Remove category when fixed. | `--treenode-filter "/*/*[Category!=OpenBugs]"` |
+| `WindowsOnly` | Requires GDI+/System.Drawing.Common | `--treenode-filter "/*/*[Category!=WindowsOnly]"` |
 
-Apply at class level (`[TestClass][TestCategory("OpenBugs")]`) or individual method level (`[TestMethod][TestCategory("OpenBugs")]`).
+Apply at class level (`[Category("OpenBugs")] public class Foo : TestClass`) or individual test level (`[Test][Category("OpenBugs")]`).
 
-**OpenBugs files**: `OpenBugs.cs` (broadcast bugs), `OpenBugs.Bitmap.cs` (bitmap bugs). When a bug is fixed, the test starts passing — remove the `OpenBugs` category and move to a permanent test class.
+**OpenBugs files**: `OpenBugs.cs` (broadcast bugs), `OpenBugs.Bitmap.cs` (bitmap bugs), `OpenBugs.ApiAudit.cs` (API audit bugs). When a bug is fixed, the test starts passing — remove the `OpenBugs` category and move to a permanent test class.
 
 ## CI Pipeline
 
@@ -527,7 +555,7 @@ A: Core ops (`dot`, `matmul`) in `LinearAlgebra/`. Advanced decompositions (`inv
 ## Q&A - Development
 
 **Q: What's in the test suite?**
-A: MSTest framework in `test/NumSharp.UnitTest/`. Many tests adapted from NumPy's own test suite. Decent coverage but gaps in edge cases.
+A: TUnit framework in `test/NumSharp.UnitTest/`. Many tests adapted from NumPy's own test suite. Decent coverage but gaps in edge cases. Run with `--reflection` mode for test discovery.
 
 **Q: What .NET version is targeted?**
 A: Library and tests multi-target `net8.0` and `net10.0`. Dropped `netstandard2.0` in the dotnet810 branch upgrade.
