@@ -48,8 +48,8 @@ namespace NumSharp.Backends
                     var rhs_address = (#2*)rhs.Address;
                     var retShape = leftshape.Clean();
                     var ret = new NDArray(ret_type, retShape, false);
-                    var leftLinear = !leftshape.IsBroadcasted && !leftshape.IsSliced;
-                    var rightLinear = !rightshape.IsBroadcasted && !rightshape.IsSliced;
+                    var leftLinear = leftshape.IsContiguous && !leftshape.IsBroadcasted;
+                    var rightLinear = rightshape.IsContiguous && !rightshape.IsBroadcasted;
                     var len = ret.size;
                     switch (ret_type) {
                         %foreach supported_dtypes,supported_dtypes_lowercase%

@@ -43,8 +43,8 @@ namespace NumSharp.Backends
                     var rhs_address = (#2*)rhs.Address;
                     var retShape = leftshape.Clean();
                     var ret = new NDArray(ret_type, retShape, false);
-                    var leftLinear = !leftshape.IsBroadcasted && !leftshape.IsSliced;
-                    var rightLinear = !rightshape.IsBroadcasted && !rightshape.IsSliced;
+                    var leftLinear = leftshape.IsContiguous && !leftshape.IsBroadcasted;
+                    var rightLinear = rightshape.IsContiguous && !rightshape.IsBroadcasted;
                     var len = ret.size;
                     switch (ret_type) {
                         %foreach supported_dtypes,supported_dtypes_lowercase%
@@ -127,8 +127,8 @@ namespace NumSharp.Backends
                     var rhs_address = (bool*)rhs.Address;
                     var retShape = leftshape.Clean();
                     var ret = new NDArray(ret_type, retShape, false);
-                    var leftLinear = !leftshape.IsBroadcasted && !leftshape.IsSliced;
-                    var rightLinear = !rightshape.IsBroadcasted && !rightshape.IsSliced;
+                    var leftLinear = leftshape.IsContiguous && !leftshape.IsBroadcasted;
+                    var rightLinear = rightshape.IsContiguous && !rightshape.IsBroadcasted;
                     var len = ret.size;
                     switch (ret_type) {
 	                    case NPTypeCode.Boolean: {
@@ -818,8 +818,8 @@ namespace NumSharp.Backends
                     var rhs_address = (byte*)rhs.Address;
                     var retShape = leftshape.Clean();
                     var ret = new NDArray(ret_type, retShape, false);
-                    var leftLinear = !leftshape.IsBroadcasted && !leftshape.IsSliced;
-                    var rightLinear = !rightshape.IsBroadcasted && !rightshape.IsSliced;
+                    var leftLinear = leftshape.IsContiguous && !leftshape.IsBroadcasted;
+                    var rightLinear = rightshape.IsContiguous && !rightshape.IsBroadcasted;
                     var len = ret.size;
                     switch (ret_type) {
 	                    case NPTypeCode.Boolean: {
@@ -1509,8 +1509,8 @@ namespace NumSharp.Backends
                     var rhs_address = (short*)rhs.Address;
                     var retShape = leftshape.Clean();
                     var ret = new NDArray(ret_type, retShape, false);
-                    var leftLinear = !leftshape.IsBroadcasted && !leftshape.IsSliced;
-                    var rightLinear = !rightshape.IsBroadcasted && !rightshape.IsSliced;
+                    var leftLinear = leftshape.IsContiguous && !leftshape.IsBroadcasted;
+                    var rightLinear = rightshape.IsContiguous && !rightshape.IsBroadcasted;
                     var len = ret.size;
                     switch (ret_type) {
 	                    case NPTypeCode.Boolean: {
@@ -2200,8 +2200,8 @@ namespace NumSharp.Backends
                     var rhs_address = (ushort*)rhs.Address;
                     var retShape = leftshape.Clean();
                     var ret = new NDArray(ret_type, retShape, false);
-                    var leftLinear = !leftshape.IsBroadcasted && !leftshape.IsSliced;
-                    var rightLinear = !rightshape.IsBroadcasted && !rightshape.IsSliced;
+                    var leftLinear = leftshape.IsContiguous && !leftshape.IsBroadcasted;
+                    var rightLinear = rightshape.IsContiguous && !rightshape.IsBroadcasted;
                     var len = ret.size;
                     switch (ret_type) {
 	                    case NPTypeCode.Boolean: {
@@ -2891,8 +2891,8 @@ namespace NumSharp.Backends
                     var rhs_address = (int*)rhs.Address;
                     var retShape = leftshape.Clean();
                     var ret = new NDArray(ret_type, retShape, false);
-                    var leftLinear = !leftshape.IsBroadcasted && !leftshape.IsSliced;
-                    var rightLinear = !rightshape.IsBroadcasted && !rightshape.IsSliced;
+                    var leftLinear = leftshape.IsContiguous && !leftshape.IsBroadcasted;
+                    var rightLinear = rightshape.IsContiguous && !rightshape.IsBroadcasted;
                     var len = ret.size;
                     switch (ret_type) {
 	                    case NPTypeCode.Boolean: {
@@ -3582,8 +3582,8 @@ namespace NumSharp.Backends
                     var rhs_address = (uint*)rhs.Address;
                     var retShape = leftshape.Clean();
                     var ret = new NDArray(ret_type, retShape, false);
-                    var leftLinear = !leftshape.IsBroadcasted && !leftshape.IsSliced;
-                    var rightLinear = !rightshape.IsBroadcasted && !rightshape.IsSliced;
+                    var leftLinear = leftshape.IsContiguous && !leftshape.IsBroadcasted;
+                    var rightLinear = rightshape.IsContiguous && !rightshape.IsBroadcasted;
                     var len = ret.size;
                     switch (ret_type) {
 	                    case NPTypeCode.Boolean: {
@@ -4273,8 +4273,8 @@ namespace NumSharp.Backends
                     var rhs_address = (long*)rhs.Address;
                     var retShape = leftshape.Clean();
                     var ret = new NDArray(ret_type, retShape, false);
-                    var leftLinear = !leftshape.IsBroadcasted && !leftshape.IsSliced;
-                    var rightLinear = !rightshape.IsBroadcasted && !rightshape.IsSliced;
+                    var leftLinear = leftshape.IsContiguous && !leftshape.IsBroadcasted;
+                    var rightLinear = rightshape.IsContiguous && !rightshape.IsBroadcasted;
                     var len = ret.size;
                     switch (ret_type) {
 	                    case NPTypeCode.Boolean: {
@@ -4964,8 +4964,8 @@ namespace NumSharp.Backends
                     var rhs_address = (ulong*)rhs.Address;
                     var retShape = leftshape.Clean();
                     var ret = new NDArray(ret_type, retShape, false);
-                    var leftLinear = !leftshape.IsBroadcasted && !leftshape.IsSliced;
-                    var rightLinear = !rightshape.IsBroadcasted && !rightshape.IsSliced;
+                    var leftLinear = leftshape.IsContiguous && !leftshape.IsBroadcasted;
+                    var rightLinear = rightshape.IsContiguous && !rightshape.IsBroadcasted;
                     var len = ret.size;
                     switch (ret_type) {
 	                    case NPTypeCode.Boolean: {
@@ -5655,8 +5655,8 @@ namespace NumSharp.Backends
                     var rhs_address = (char*)rhs.Address;
                     var retShape = leftshape.Clean();
                     var ret = new NDArray(ret_type, retShape, false);
-                    var leftLinear = !leftshape.IsBroadcasted && !leftshape.IsSliced;
-                    var rightLinear = !rightshape.IsBroadcasted && !rightshape.IsSliced;
+                    var leftLinear = leftshape.IsContiguous && !leftshape.IsBroadcasted;
+                    var rightLinear = rightshape.IsContiguous && !rightshape.IsBroadcasted;
                     var len = ret.size;
                     switch (ret_type) {
 	                    case NPTypeCode.Boolean: {
@@ -6346,8 +6346,8 @@ namespace NumSharp.Backends
                     var rhs_address = (double*)rhs.Address;
                     var retShape = leftshape.Clean();
                     var ret = new NDArray(ret_type, retShape, false);
-                    var leftLinear = !leftshape.IsBroadcasted && !leftshape.IsSliced;
-                    var rightLinear = !rightshape.IsBroadcasted && !rightshape.IsSliced;
+                    var leftLinear = leftshape.IsContiguous && !leftshape.IsBroadcasted;
+                    var rightLinear = rightshape.IsContiguous && !rightshape.IsBroadcasted;
                     var len = ret.size;
                     switch (ret_type) {
 	                    case NPTypeCode.Boolean: {
@@ -7037,8 +7037,8 @@ namespace NumSharp.Backends
                     var rhs_address = (float*)rhs.Address;
                     var retShape = leftshape.Clean();
                     var ret = new NDArray(ret_type, retShape, false);
-                    var leftLinear = !leftshape.IsBroadcasted && !leftshape.IsSliced;
-                    var rightLinear = !rightshape.IsBroadcasted && !rightshape.IsSliced;
+                    var leftLinear = leftshape.IsContiguous && !leftshape.IsBroadcasted;
+                    var rightLinear = rightshape.IsContiguous && !rightshape.IsBroadcasted;
                     var len = ret.size;
                     switch (ret_type) {
 	                    case NPTypeCode.Boolean: {
@@ -7728,8 +7728,8 @@ namespace NumSharp.Backends
                     var rhs_address = (decimal*)rhs.Address;
                     var retShape = leftshape.Clean();
                     var ret = new NDArray(ret_type, retShape, false);
-                    var leftLinear = !leftshape.IsBroadcasted && !leftshape.IsSliced;
-                    var rightLinear = !rightshape.IsBroadcasted && !rightshape.IsSliced;
+                    var leftLinear = leftshape.IsContiguous && !leftshape.IsBroadcasted;
+                    var rightLinear = rightshape.IsContiguous && !rightshape.IsBroadcasted;
                     var len = ret.size;
                     switch (ret_type) {
 	                    case NPTypeCode.Boolean: {
