@@ -1,65 +1,61 @@
 {
+  "$schema": "https://raw.githubusercontent.com/dotnet/docfx/main/schemas/docfx.schema.json",
   "metadata": [
     {
       "src": [
         {
-          "src": "../../",
-          "files": [
-            "src/NumSharp.Core/NumSharp.Core.csproj"
-          ]
+          "src": "../../src",
+          "files": ["NumSharp.Core/NumSharp.Core.csproj"]
         }
       ],
       "dest": "api",
+      "includePrivateMembers": false,
       "disableGitFeatures": false,
-      "disableDefaultFilter": false
+      "disableDefaultFilter": false,
+      "noRestore": false,
+      "namespaceLayout": "flattened",
+      "memberLayout": "samePage",
+      "enumSortOrder": "declaringOrder",
+      "allowCompilationErrors": false
     }
   ],
   "build": {
     "content": [
       {
-        "files": [
-          "api/**.yml",
-          "api/index.md"
-        ]
-      },
-      {
-        "files": [
-          "articles/**.md",
-          "articles/**/toc.yml",
-          "toc.yml",
-          "*.md"
-        ]
+        "files": ["**/*.{md,yml}"],
+        "exclude": ["_site/**", "obj/**", "scripts/**", "filterConfig.yml", "templates/**"]
       }
     ],
     "resource": [
       {
-        "files": [
-          "images/**"
-        ]
+        "files": ["images/**"]
       }
     ],
-    "overwrite": [
-      {
-        "files": [
-          "apidoc/**.md"
-        ],
-        "exclude": [
-          "obj/**",
-          "_site/**"
-        ]
+    "output": "../website",
+    "template": ["default", "modern", "templates/numsharp"],
+    "globalMetadata": {
+      "_appName": "NumSharp",
+      "_appTitle": "NumSharp Documentation",
+      "_appLogoPath": "images/numsharp.icon.svg",
+      "_appFaviconPath": "images/numsharp.icon128.png",
+      "_appFooter": "<span>Copyright &copy; 2025 <a href='https://github.com/SciSharp'>SciSharp STACK</a>. Built with <a href='https://dotnet.github.io/docfx'>DocFX</a>.</span>",
+      "_enableSearch": true,
+      "_enableNewTab": true,
+      "_disableContribution": false,
+      "_disableNextArticle": false,
+      "_lang": "en",
+      "_gitContribute": {
+        "repo": "https://github.com/SciSharp/NumSharp",
+        "branch": "master"
       }
-    ],
-    "dest": "../website",
-    "globalMetadataFiles": [],
-    "fileMetadataFiles": [],
-    "template": [
-      "default"
-    ],
-    "postProcessors": [],
-    "markdownEngineName": "markdig",
-    "noLangKeyword": false,
-    "keepFileLink": false,
-    "cleanupCacheHistory": false,
-    "disableGitFeatures": false
+    },
+    "sitemap": {
+      "baseUrl": "https://scisharp.github.io/NumSharp",
+      "changefreq": "weekly",
+      "priority": 0.5
+    },
+    "xref": [],
+    "xrefService": ["https://xref.docs.microsoft.com/query?uid={uid}"],
+    "postProcessors": ["ExtractSearchIndex"]
   }
 }

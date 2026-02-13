@@ -4,7 +4,8 @@ on:
   push:
     branches: ["master", "main"]
     paths:
-      - 'docs/website/**'
+      - 'src/**'
+      - 'docs/website-src/**'
   workflow_dispatch:
 
 permissions:
@@ -17,7 +18,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy:
+  build-and-deploy:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -25,6 +26,23 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Install DocFX
+        run: dotnet tool install -g docfx
+
+      - name: Build docs
+        run: docfx docs/website-src/docfx.json
+
+      - name: Generate AI-friendly docs (llms.txt)
+        run: |
+          cd docs/website-src
+          chmod +x scripts/generate-llms-txt.sh
+          ./scripts/generate-llms-txt.sh ../website
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
