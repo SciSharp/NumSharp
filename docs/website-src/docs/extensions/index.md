@@ -1,103 +1,25 @@
 # Extending Libraries
 
-NumSharp's core functionality can be extended with additional packages that integrate with platform-specific features or external libraries.
+NumSharp is designed to integrate with the broader .NET ecosystem. Extension packages bridge NumSharp arrays with platform-specific features and external libraries.
 
----
+## Official Extensions
 
-## Available Extensions
+| Package | Purpose |
+|---------|---------|
+| [NumSharp.Bitmap](bitmap.md) | Image ↔ NDArray conversion via `System.Drawing` |
 
-| Package | Description | Platform |
-|---------|-------------|----------|
-| [NumSharp.Bitmap](bitmap.md) | Convert between `System.Drawing.Bitmap` and `NDArray` | Windows |
+## Build Your Own
 
----
-
-## NumSharp.Bitmap
-
-Seamless image-to-array conversion for image processing and ML workflows.
+NumSharp exposes low-level memory access for integration with native libraries, GPU frameworks, or domain-specific formats:
 
 ```csharp
-using System.Drawing;
-using NumSharp;
+// Access raw memory for interop
+byte* ptr = (byte*)ndarray.Unsafe.Address;
 
-// Image → Array
-var bitmap = new Bitmap("photo.jpg");
-var pixels = bitmap.ToNDArray();  // (1, height, width, channels)
-
-// Process pixels with NumSharp operations...
-
-// Array → Image
-var result = processedPixels.ToBitmap();
-result.Save("output.jpg");
+// Wrap external memory as NDArray
+var nd = new NDArray(new ArraySlice<byte>(
+    new UnmanagedMemoryBlock<byte>(ptr, length, onDispose)
+));
 ```
 
-**Key Features:**
-- Zero-copy mode for performance-critical code
-- Supports 24bpp and 32bpp images
-- Alpha channel handling
-- Round-trip support (load → process → save)
-
-[Full documentation →](bitmap.md)
-
----
-
-## Installing Extensions
-
-Extensions are separate NuGet packages:
-
-```bash
-# Core library (always required)
-dotnet add package NumSharp
-
-# Extensions (optional, add as needed)
-dotnet add package NumSharp.Bitmap
-```
-
----
-
-## Creating Your Own Extensions
-
-NumSharp is designed to be extensible. The key integration points:
-
-### Working with NDArray Memory
-
-```csharp
-// Get raw pointer to contiguous data
-unsafe
-{
-    byte* ptr = (byte*)ndarray.Unsafe.Address;
-    // Use with P/Invoke, native libraries, etc.
-}
-```
-
-### Creating NDArray from External Memory
-
-```csharp
-// Wrap existing unmanaged memory as NDArray
-unsafe
-{
-    var slice = new ArraySlice<byte>(
-        new UnmanagedMemoryBlock<byte>(ptr, length, disposeCallback)
-    );
-    var nd = new NDArray(slice);
-}
-```
-
-### Extension Method Pattern
-
-Follow the NumSharp.Bitmap pattern for consistent API:
-
-```csharp
-public static class YourExtensions
-{
-    public static NDArray ToNDArray(this YourType source, ...)
-    {
-        // Convert to NDArray
-    }
-
-    public static YourType ToYourType(this NDArray nd, ...)
-    {
-        // Convert from NDArray
-    }
-}
-```
+Have an extension to share? [Open a PR](https://github.com/SciSharp/NumSharp) to add it to this list.
