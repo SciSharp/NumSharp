@@ -1,0 +1,42 @@
+# NumSharp Documentation - robots.txt
+# Auto-generated - Allow all crawlers including AI
+
+User-agent: *
+Allow: /
+
+# AI Crawlers - explicitly allowed
+User-agent: GPTBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: Claude-Web
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: Anthropic-AI
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Amazonbot
+Allow: /
+
+User-agent: Bytespider
+Allow: /
+
+User-agent: CCBot
+Allow: /
+
+# AI-friendly documentation files
+# https://scisharp.github.io/NumSharp/llms.txt - Curated summary
+# https://scisharp.github.io/NumSharp/llms-full.txt - Complete documentation
+
+Sitemap: https://scisharp.github.io/NumSharp/sitemap.xml

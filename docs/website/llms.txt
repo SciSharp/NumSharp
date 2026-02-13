@@ -1,0 +1,49 @@
+# NumSharp
+
+> NumSharp is a .NET port of Python's NumPy library, bringing powerful numerical computing to the .NET ecosystem. 
+
+## Installation
+
+```bash
+dotnet add package NumSharp
+```
+
+## Quick Start
+
+```csharp
+using NumSharp;
+
+var a = np.array(new[] { 1, 2, 3, 4, 5 });
+var b = np.zeros((3, 4));
+var result = np.sum(a);
+var slice = a["1:4"];  // Slicing returns views
+```
+
+## Documentation
+
+- [Introduction](https://scisharp.github.io/NumSharp/docs/intro.html): The following pages are for the users who want to use NumSharp. 
+- [Array creation](https://scisharp.github.io/NumSharp/docs/NDArray.Creation.html): Before we do some fancy numeric stuff or even machine learning we have to clear one thing. 
+- [Linear algebra](https://scisharp.github.io/NumSharp/docs/NDArray.LinAlg.html): Now we got some arrays so we should understand what we can do with it. 
+
+## API Reference
+
+- [NumSharp.NDArray](https://scisharp.github.io/NumSharp/api/NumSharp.NDArray.html): Main n-dimensional array type
+- [NumSharp.np](https://scisharp.github.io/NumSharp/api/NumSharp.np.html): Static NumPy-style API
+- [NumSharp.Shape](https://scisharp.github.io/NumSharp/api/NumSharp.Shape.html): Array dimensions and strides
+
+## Supported Data Types
+
+bool, byte, short, ushort, int, uint, long, ulong, float, double, decimal, char
+
+## Key Concepts
+
+- **NDArray**: Multi-dimensional array in unmanaged memory
+- **Shape**: Dimensions and strides for offset calculation
+- **Broadcasting**: Arrays with different shapes operate element-wise
+- **Views**: Slicing returns views (shared memory), use `.copy()` for copies
+
+## Optional
+
+- [Full API Reference](https://scisharp.github.io/NumSharp/api/): Complete class and method documentation
+- [GitHub Repository](https://github.com/SciSharp/NumSharp): Source code and issues
+- [NuGet Package](https://www.nuget.org/packages/NumSharp): Latest releases

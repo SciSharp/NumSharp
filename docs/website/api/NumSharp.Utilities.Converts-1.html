@@ -1,0 +1,1199 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+      <title>Class Converts&lt;T&gt; | NumSharp Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class Converts&lt;T&gt; | NumSharp Documentation ">
+      
+      <meta name="description" content="Provides various methods related to  based on give T.">
+      <link rel="icon" href="../images/numsharp.icon128.png">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../images/numsharp.icon.svg" alt="NumSharp">
+            NumSharp
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="NumSharp.Utilities.Converts`1">
+
+
+
+  <h1 id="NumSharp_Utilities_Converts_1" data-uid="NumSharp.Utilities.Converts`1" class="text-break">
+Class Converts&lt;T&gt;  
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="NumSharp.html">NumSharp</a>.<a class="xref" href="NumSharp.Utilities.html">Utilities</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>NumSharp.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Provides various methods related to <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.convert">Convert</a> based on give <code class="typeparamref">T</code>.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static class Converts&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">Converts&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="NumSharp_Utilities_Converts_1_From_" data-uid="NumSharp.Utilities.Converts`1.From*"></a>
+
+  <h3 id="NumSharp_Utilities_Converts_1_From_System_Boolean_" data-uid="NumSharp.Utilities.Converts`1.From(System.Boolean)">
+  From(bool)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a> to <code class="typeparamref">T</code> using staticly cached <a class="xref" href="NumSharp.Utilities.Converts.html#NumSharp_Utilities_Converts_FindConverter__2">FindConverter&lt;TIn, TOut&gt;()</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static T From(bool obj)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>obj</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>The object to convert to <code class="typeparamref">T</code> from <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>A <code class="typeparamref">T</code></p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Utilities_Converts_1_From_" data-uid="NumSharp.Utilities.Converts`1.From*"></a>
+
+  <h3 id="NumSharp_Utilities_Converts_1_From_System_Byte_" data-uid="NumSharp.Utilities.Converts`1.From(System.Byte)">
+  From(byte)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a> to <code class="typeparamref">T</code> using staticly cached <a class="xref" href="NumSharp.Utilities.Converts.html#NumSharp_Utilities_Converts_FindConverter__2">FindConverter&lt;TIn, TOut&gt;()</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static T From(byte obj)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>obj</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a></dt>
+    <dd><p>The object to convert to <code class="typeparamref">T</code> from <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a></p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>A <code class="typeparamref">T</code></p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Utilities_Converts_1_From_" data-uid="NumSharp.Utilities.Converts`1.From*"></a>
+
+  <h3 id="NumSharp_Utilities_Converts_1_From_System_Char_" data-uid="NumSharp.Utilities.Converts`1.From(System.Char)">
+  From(char)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.char">char</a> to <code class="typeparamref">T</code> using staticly cached <a class="xref" href="NumSharp.Utilities.Converts.html#NumSharp_Utilities_Converts_FindConverter__2">FindConverter&lt;TIn, TOut&gt;()</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static T From(char obj)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>obj</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.char">char</a></dt>
+    <dd><p>The object to convert to <code class="typeparamref">T</code> from <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.char">char</a></p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>A <code class="typeparamref">T</code></p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Utilities_Converts_1_From_" data-uid="NumSharp.Utilities.Converts`1.From*"></a>
+
+  <h3 id="NumSharp_Utilities_Converts_1_From_System_Decimal_" data-uid="NumSharp.Utilities.Converts`1.From(System.Decimal)">
+  From(decimal)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a> to <code class="typeparamref">T</code> using staticly cached <a class="xref" href="NumSharp.Utilities.Converts.html#NumSharp_Utilities_Converts_FindConverter__2">FindConverter&lt;TIn, TOut&gt;()</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static T From(decimal obj)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>obj</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd><p>The object to convert to <code class="typeparamref">T</code> from <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>A <code class="typeparamref">T</code></p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Utilities_Converts_1_From_" data-uid="NumSharp.Utilities.Converts`1.From*"></a>
+
+  <h3 id="NumSharp_Utilities_Converts_1_From_System_Double_" data-uid="NumSharp.Utilities.Converts`1.From(System.Double)">
+  From(double)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a> to <code class="typeparamref">T</code> using staticly cached <a class="xref" href="NumSharp.Utilities.Converts.html#NumSharp_Utilities_Converts_FindConverter__2">FindConverter&lt;TIn, TOut&gt;()</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static T From(double obj)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>obj</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The object to convert to <code class="typeparamref">T</code> from <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>A <code class="typeparamref">T</code></p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Utilities_Converts_1_From_" data-uid="NumSharp.Utilities.Converts`1.From*"></a>
+
+  <h3 id="NumSharp_Utilities_Converts_1_From_System_Int16_" data-uid="NumSharp.Utilities.Converts`1.From(System.Int16)">
+  From(short)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int16">short</a> to <code class="typeparamref">T</code> using staticly cached <a class="xref" href="NumSharp.Utilities.Converts.html#NumSharp_Utilities_Converts_FindConverter__2">FindConverter&lt;TIn, TOut&gt;()</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static T From(short obj)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>obj</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int16">short</a></dt>
+    <dd><p>The object to convert to <code class="typeparamref">T</code> from <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int16">short</a></p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>A <code class="typeparamref">T</code></p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Utilities_Converts_1_From_" data-uid="NumSharp.Utilities.Converts`1.From*"></a>
+
+  <h3 id="NumSharp_Utilities_Converts_1_From_System_Int32_" data-uid="NumSharp.Utilities.Converts`1.From(System.Int32)">
+  From(int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a> to <code class="typeparamref">T</code> using staticly cached <a class="xref" href="NumSharp.Utilities.Converts.html#NumSharp_Utilities_Converts_FindConverter__2">FindConverter&lt;TIn, TOut&gt;()</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static T From(int obj)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>obj</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The object to convert to <code class="typeparamref">T</code> from <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>A <code class="typeparamref">T</code></p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Utilities_Converts_1_From_" data-uid="NumSharp.Utilities.Converts`1.From*"></a>
+
+  <h3 id="NumSharp_Utilities_Converts_1_From_System_Int64_" data-uid="NumSharp.Utilities.Converts`1.From(System.Int64)">
+  From(long)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a> to <code class="typeparamref">T</code> using staticly cached <a class="xref" href="NumSharp.Utilities.Converts.html#NumSharp_Utilities_Converts_FindConverter__2">FindConverter&lt;TIn, TOut&gt;()</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static T From(long obj)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>obj</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd><p>The object to convert to <code class="typeparamref">T</code> from <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>A <code class="typeparamref">T</code></p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Utilities_Converts_1_From_" data-uid="NumSharp.Utilities.Converts`1.From*"></a>
+
+  <h3 id="NumSharp_Utilities_Converts_1_From_System_Single_" data-uid="NumSharp.Utilities.Converts`1.From(System.Single)">
+  From(float)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a> to <code class="typeparamref">T</code> using staticly cached <a class="xref" href="NumSharp.Utilities.Converts.html#NumSharp_Utilities_Converts_FindConverter__2">FindConverter&lt;TIn, TOut&gt;()</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static T From(float obj)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>obj</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The object to convert to <code class="typeparamref">T</code> from <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>A <code class="typeparamref">T</code></p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Utilities_Converts_1_From_" data-uid="NumSharp.Utilities.Converts`1.From*"></a>
+
+  <h3 id="NumSharp_Utilities_Converts_1_From_System_String_" data-uid="NumSharp.Utilities.Converts`1.From(System.String)">
+  From(string)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a> to <code class="typeparamref">T</code> using staticly cached <a class="xref" href="NumSharp.Utilities.Converts.html#NumSharp_Utilities_Converts_FindConverter__2">FindConverter&lt;TIn, TOut&gt;()</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static T From(string obj)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>obj</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The object to convert to <code class="typeparamref">T</code> from <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>A <code class="typeparamref">T</code></p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Utilities_Converts_1_From_" data-uid="NumSharp.Utilities.Converts`1.From*"></a>
+
+  <h3 id="NumSharp_Utilities_Converts_1_From_System_UInt16_" data-uid="NumSharp.Utilities.Converts`1.From(System.UInt16)">
+  From(ushort)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint16">ushort</a> to <code class="typeparamref">T</code> using staticly cached <a class="xref" href="NumSharp.Utilities.Converts.html#NumSharp_Utilities_Converts_FindConverter__2">FindConverter&lt;TIn, TOut&gt;()</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static T From(ushort obj)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>obj</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint16">ushort</a></dt>
+    <dd><p>The object to convert to <code class="typeparamref">T</code> from <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint16">ushort</a></p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>A <code class="typeparamref">T</code></p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Utilities_Converts_1_From_" data-uid="NumSharp.Utilities.Converts`1.From*"></a>
+
+  <h3 id="NumSharp_Utilities_Converts_1_From_System_UInt32_" data-uid="NumSharp.Utilities.Converts`1.From(System.UInt32)">
+  From(uint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a> to <code class="typeparamref">T</code> using staticly cached <a class="xref" href="NumSharp.Utilities.Converts.html#NumSharp_Utilities_Converts_FindConverter__2">FindConverter&lt;TIn, TOut&gt;()</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static T From(uint obj)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>obj</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The object to convert to <code class="typeparamref">T</code> from <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>A <code class="typeparamref">T</code></p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Utilities_Converts_1_From_" data-uid="NumSharp.Utilities.Converts`1.From*"></a>
+
+  <h3 id="NumSharp_Utilities_Converts_1_From_System_UInt64_" data-uid="NumSharp.Utilities.Converts`1.From(System.UInt64)">
+  From(ulong)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint64">ulong</a> to <code class="typeparamref">T</code> using staticly cached <a class="xref" href="NumSharp.Utilities.Converts.html#NumSharp_Utilities_Converts_FindConverter__2">FindConverter&lt;TIn, TOut&gt;()</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static T From(ulong obj)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>obj</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint64">ulong</a></dt>
+    <dd><p>The object to convert to <code class="typeparamref">T</code> from <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint64">ulong</a></p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>A <code class="typeparamref">T</code></p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Utilities_Converts_1_ToBoolean_" data-uid="NumSharp.Utilities.Converts`1.ToBoolean*"></a>
+
+  <h3 id="NumSharp_Utilities_Converts_1_ToBoolean__0_" data-uid="NumSharp.Utilities.Converts`1.ToBoolean(`0)">
+  ToBoolean(T)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts <code class="typeparamref">T</code> to <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a> using staticly cached <a class="xref" href="NumSharp.Utilities.Converts.html#NumSharp_Utilities_Converts_FindConverter__2">FindConverter&lt;TIn, TOut&gt;()</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static bool ToBoolean(T obj)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>obj</code> <span class="xref">T</span></dt>
+    <dd><p>The object to convert to <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>A <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Utilities_Converts_1_ToByte_" data-uid="NumSharp.Utilities.Converts`1.ToByte*"></a>
+
+  <h3 id="NumSharp_Utilities_Converts_1_ToByte__0_" data-uid="NumSharp.Utilities.Converts`1.ToByte(`0)">
+  ToByte(T)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts <code class="typeparamref">T</code> to <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a> using staticly cached <a class="xref" href="NumSharp.Utilities.Converts.html#NumSharp_Utilities_Converts_FindConverter__2">FindConverter&lt;TIn, TOut&gt;()</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static byte ToByte(T obj)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>obj</code> <span class="xref">T</span></dt>
+    <dd><p>The object to convert to <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a></p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a></dt>
+    <dd><p>A <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a></p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Utilities_Converts_1_ToChar_" data-uid="NumSharp.Utilities.Converts`1.ToChar*"></a>
+
+  <h3 id="NumSharp_Utilities_Converts_1_ToChar__0_" data-uid="NumSharp.Utilities.Converts`1.ToChar(`0)">
+  ToChar(T)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts <code class="typeparamref">T</code> to <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.char">char</a> using staticly cached <a class="xref" href="NumSharp.Utilities.Converts.html#NumSharp_Utilities_Converts_FindConverter__2">FindConverter&lt;TIn, TOut&gt;()</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static char ToChar(T obj)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>obj</code> <span class="xref">T</span></dt>
+    <dd><p>The object to convert to <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.char">char</a></p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.char">char</a></dt>
+    <dd><p>A <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.char">char</a></p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Utilities_Converts_1_ToDecimal_" data-uid="NumSharp.Utilities.Converts`1.ToDecimal*"></a>
+
+  <h3 id="NumSharp_Utilities_Converts_1_ToDecimal__0_" data-uid="NumSharp.Utilities.Converts`1.ToDecimal(`0)">
+  ToDecimal(T)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts <code class="typeparamref">T</code> to <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a> using staticly cached <a class="xref" href="NumSharp.Utilities.Converts.html#NumSharp_Utilities_Converts_FindConverter__2">FindConverter&lt;TIn, TOut&gt;()</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static decimal ToDecimal(T obj)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>obj</code> <span class="xref">T</span></dt>
+    <dd><p>The object to convert to <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd><p>A <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Utilities_Converts_1_ToDouble_" data-uid="NumSharp.Utilities.Converts`1.ToDouble*"></a>
+
+  <h3 id="NumSharp_Utilities_Converts_1_ToDouble__0_" data-uid="NumSharp.Utilities.Converts`1.ToDouble(`0)">
+  ToDouble(T)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts <code class="typeparamref">T</code> to <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a> using staticly cached <a class="xref" href="NumSharp.Utilities.Converts.html#NumSharp_Utilities_Converts_FindConverter__2">FindConverter&lt;TIn, TOut&gt;()</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static double ToDouble(T obj)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>obj</code> <span class="xref">T</span></dt>
+    <dd><p>The object to convert to <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>A <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Utilities_Converts_1_ToInt16_" data-uid="NumSharp.Utilities.Converts`1.ToInt16*"></a>
+
+  <h3 id="NumSharp_Utilities_Converts_1_ToInt16__0_" data-uid="NumSharp.Utilities.Converts`1.ToInt16(`0)">
+  ToInt16(T)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts <code class="typeparamref">T</code> to <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int16">short</a> using staticly cached <a class="xref" href="NumSharp.Utilities.Converts.html#NumSharp_Utilities_Converts_FindConverter__2">FindConverter&lt;TIn, TOut&gt;()</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static short ToInt16(T obj)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>obj</code> <span class="xref">T</span></dt>
+    <dd><p>The object to convert to <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int16">short</a></p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int16">short</a></dt>
+    <dd><p>A <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int16">short</a></p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Utilities_Converts_1_ToInt32_" data-uid="NumSharp.Utilities.Converts`1.ToInt32*"></a>
+
+  <h3 id="NumSharp_Utilities_Converts_1_ToInt32__0_" data-uid="NumSharp.Utilities.Converts`1.ToInt32(`0)">
+  ToInt32(T)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts <code class="typeparamref">T</code> to <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a> using staticly cached <a class="xref" href="NumSharp.Utilities.Converts.html#NumSharp_Utilities_Converts_FindConverter__2">FindConverter&lt;TIn, TOut&gt;()</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static int ToInt32(T obj)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>obj</code> <span class="xref">T</span></dt>
+    <dd><p>The object to convert to <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>A <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Utilities_Converts_1_ToInt64_" data-uid="NumSharp.Utilities.Converts`1.ToInt64*"></a>
+
+  <h3 id="NumSharp_Utilities_Converts_1_ToInt64__0_" data-uid="NumSharp.Utilities.Converts`1.ToInt64(`0)">
+  ToInt64(T)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts <code class="typeparamref">T</code> to <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a> using staticly cached <a class="xref" href="NumSharp.Utilities.Converts.html#NumSharp_Utilities_Converts_FindConverter__2">FindConverter&lt;TIn, TOut&gt;()</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static long ToInt64(T obj)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>obj</code> <span class="xref">T</span></dt>
+    <dd><p>The object to convert to <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd><p>A <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Utilities_Converts_1_ToSingle_" data-uid="NumSharp.Utilities.Converts`1.ToSingle*"></a>
+
+  <h3 id="NumSharp_Utilities_Converts_1_ToSingle__0_" data-uid="NumSharp.Utilities.Converts`1.ToSingle(`0)">
+  ToSingle(T)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts <code class="typeparamref">T</code> to <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a> using staticly cached <a class="xref" href="NumSharp.Utilities.Converts.html#NumSharp_Utilities_Converts_FindConverter__2">FindConverter&lt;TIn, TOut&gt;()</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static float ToSingle(T obj)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>obj</code> <span class="xref">T</span></dt>
+    <dd><p>The object to convert to <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>A <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Utilities_Converts_1_ToString_" data-uid="NumSharp.Utilities.Converts`1.ToString*"></a>
+
+  <h3 id="NumSharp_Utilities_Converts_1_ToString__0_" data-uid="NumSharp.Utilities.Converts`1.ToString(`0)">
+  ToString(T)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts <code class="typeparamref">T</code> to <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a> using staticly cached <a class="xref" href="NumSharp.Utilities.Converts.html#NumSharp_Utilities_Converts_FindConverter__2">FindConverter&lt;TIn, TOut&gt;()</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static string ToString(T obj)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>obj</code> <span class="xref">T</span></dt>
+    <dd><p>The object to convert to <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>A <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Utilities_Converts_1_ToUInt16_" data-uid="NumSharp.Utilities.Converts`1.ToUInt16*"></a>
+
+  <h3 id="NumSharp_Utilities_Converts_1_ToUInt16__0_" data-uid="NumSharp.Utilities.Converts`1.ToUInt16(`0)">
+  ToUInt16(T)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts <code class="typeparamref">T</code> to <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint16">ushort</a> using staticly cached <a class="xref" href="NumSharp.Utilities.Converts.html#NumSharp_Utilities_Converts_FindConverter__2">FindConverter&lt;TIn, TOut&gt;()</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static ushort ToUInt16(T obj)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>obj</code> <span class="xref">T</span></dt>
+    <dd><p>The object to convert to <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint16">ushort</a></p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint16">ushort</a></dt>
+    <dd><p>A <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint16">ushort</a></p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Utilities_Converts_1_ToUInt32_" data-uid="NumSharp.Utilities.Converts`1.ToUInt32*"></a>
+
+  <h3 id="NumSharp_Utilities_Converts_1_ToUInt32__0_" data-uid="NumSharp.Utilities.Converts`1.ToUInt32(`0)">
+  ToUInt32(T)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts <code class="typeparamref">T</code> to <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a> using staticly cached <a class="xref" href="NumSharp.Utilities.Converts.html#NumSharp_Utilities_Converts_FindConverter__2">FindConverter&lt;TIn, TOut&gt;()</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static uint ToUInt32(T obj)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>obj</code> <span class="xref">T</span></dt>
+    <dd><p>The object to convert to <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>A <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Utilities_Converts_1_ToUInt64_" data-uid="NumSharp.Utilities.Converts`1.ToUInt64*"></a>
+
+  <h3 id="NumSharp_Utilities_Converts_1_ToUInt64__0_" data-uid="NumSharp.Utilities.Converts`1.ToUInt64(`0)">
+  ToUInt64(T)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts <code class="typeparamref">T</code> to <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint64">ulong</a> using staticly cached <a class="xref" href="NumSharp.Utilities.Converts.html#NumSharp_Utilities_Converts_FindConverter__2">FindConverter&lt;TIn, TOut&gt;()</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static ulong ToUInt64(T obj)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>obj</code> <span class="xref">T</span></dt>
+    <dd><p>The object to convert to <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint64">ulong</a></p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint64">ulong</a></dt>
+    <dd><p>A <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint64">ulong</a></p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          <span>Copyright &copy; 2025 <a href='https://github.com/SciSharp'>SciSharp STACK</a>. Built with <a href='https://dotnet.github.io/docfx'>DocFX</a>.</span>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

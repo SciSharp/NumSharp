@@ -1,0 +1,1347 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+      <title>Struct ArraySlice&lt;T&gt; | NumSharp Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Struct ArraySlice&lt;T&gt; | NumSharp Documentation ">
+      
+      <meta name="description" content="is similar to  but it can be moved around without having to follow ref struct rules.">
+      <link rel="icon" href="../images/numsharp.icon128.png">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../images/numsharp.icon.svg" alt="NumSharp">
+            NumSharp
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="NumSharp.Backends.Unmanaged.ArraySlice`1">
+
+
+
+  <h1 id="NumSharp_Backends_Unmanaged_ArraySlice_1" data-uid="NumSharp.Backends.Unmanaged.ArraySlice`1" class="text-break">
+Struct ArraySlice&lt;T&gt;  
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="NumSharp.html">NumSharp</a>.<a class="xref" href="NumSharp.Backends.html">Backends</a>.<a class="xref" href="NumSharp.Backends.Unmanaged.html">Unmanaged</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>NumSharp.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p><a class="xref" href="NumSharp.Backends.Unmanaged.ArraySlice-1.html">ArraySlice&lt;T&gt;</a> is similar to <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span&lt;T&gt;</a> but it can be moved around without having to follow <code>ref struct</code> rules.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public readonly struct ArraySlice&lt;T&gt; : IArraySlice, ICloneable, IMemoryBlock&lt;T&gt;, IMemoryBlock, IEnumerable&lt;T&gt;, IEnumerable where T : unmanaged</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The type that the <a class="xref" href="NumSharp.Backends.Unmanaged.ArraySlice-1.html#NumSharp_Backends_Unmanaged_ArraySlice_1_MemoryBlock">MemoryBlock</a> implements.</p>
+</dd>
+  </dl>
+
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="NumSharp.Backends.Unmanaged.IArraySlice.html">IArraySlice</a></div>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.icloneable">ICloneable</a></div>
+      <div><a class="xref" href="NumSharp.Backends.Unmanaged.IMemoryBlock-1.html">IMemoryBlock</a>&lt;T&gt;</div>
+      <div><a class="xref" href="NumSharp.Backends.Unmanaged.IMemoryBlock.html">IMemoryBlock</a></div>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;T&gt;</div>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.ienumerable">IEnumerable</a></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetype.equals">ValueType.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetype.gethashcode">ValueType.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetype.tostring">ValueType.ToString()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="NumSharp.Extensions.LinqExtensions.html#NumSharp_Extensions_LinqExtensions_Yield__1___0_">LinqExtensions.Yield&lt;T&gt;(T)</a>
+  </div>
+  <div>
+      <a class="xref" href="NumSharp.NDIteratorExtensions.html#NumSharp_NDIteratorExtensions_AsIterator_NumSharp_Backends_Unmanaged_IArraySlice_NumSharp_Shape_">NDIteratorExtensions.AsIterator(IArraySlice, Shape)</a>
+  </div>
+  <div>
+      <a class="xref" href="NumSharp.NDIteratorExtensions.html#NumSharp_NDIteratorExtensions_AsIterator_NumSharp_Backends_Unmanaged_IArraySlice_NumSharp_Shape_NumSharp_Shape_System_Boolean_">NDIteratorExtensions.AsIterator(IArraySlice, Shape, Shape, bool)</a>
+  </div>
+  <div>
+      <a class="xref" href="NumSharp.NDIteratorExtensions.html#NumSharp_NDIteratorExtensions_AsIterator_NumSharp_Backends_Unmanaged_IArraySlice_NumSharp_Shape_System_Boolean_">NDIteratorExtensions.AsIterator(IArraySlice, Shape, bool)</a>
+  </div>
+  <div>
+      <a class="xref" href="NumSharp.Backends.Unmanaged.UnmanagedHelper.html#NumSharp_Backends_Unmanaged_UnmanagedHelper_CopyTo_NumSharp_Backends_Unmanaged_IMemoryBlock_NumSharp_Backends_Unmanaged_IMemoryBlock_">UnmanagedHelper.CopyTo(IMemoryBlock, IMemoryBlock)</a>
+  </div>
+  <div>
+      <a class="xref" href="NumSharp.Backends.Unmanaged.UnmanagedHelper.html#NumSharp_Backends_Unmanaged_UnmanagedHelper_CopyTo_NumSharp_Backends_Unmanaged_IMemoryBlock_NumSharp_Backends_Unmanaged_IMemoryBlock_System_Int32_">UnmanagedHelper.CopyTo(IMemoryBlock, IMemoryBlock, int)</a>
+  </div>
+  <div>
+      <a class="xref" href="NumSharp.Backends.Unmanaged.UnmanagedHelper.html#NumSharp_Backends_Unmanaged_UnmanagedHelper_CopyTo_NumSharp_Backends_Unmanaged_IMemoryBlock_System_Void__">UnmanagedHelper.CopyTo(IMemoryBlock, void*)</a>
+  </div>
+  <div>
+      <a class="xref" href="NumSharp.Backends.Unmanaged.UnmanagedHelper.html#NumSharp_Backends_Unmanaged_UnmanagedHelper_CopyTo_NumSharp_Backends_Unmanaged_IMemoryBlock_System_Void__System_Int32_">UnmanagedHelper.CopyTo(IMemoryBlock, void*, int)</a>
+  </div>
+  <div>
+      <a class="xref" href="NumSharp.Backends.Unmanaged.UnmanagedMemoryBlock.html#NumSharp_Backends_Unmanaged_UnmanagedMemoryBlock_CastTo_NumSharp_Backends_Unmanaged_IMemoryBlock_NumSharp_Backends_Unmanaged_IMemoryBlock_System_Nullable_System_Int32__System_Nullable_System_Int32__">UnmanagedMemoryBlock.CastTo(IMemoryBlock, IMemoryBlock, int?, int?)</a>
+  </div>
+  <div>
+      <a class="xref" href="NumSharp.Backends.Unmanaged.UnmanagedMemoryBlock.html#NumSharp_Backends_Unmanaged_UnmanagedMemoryBlock_CastTo_NumSharp_Backends_Unmanaged_IMemoryBlock_NumSharp_NPTypeCode_">UnmanagedMemoryBlock.CastTo(IMemoryBlock, NPTypeCode)</a>
+  </div>
+  <div>
+      <a class="xref" href="NumSharp.Backends.Unmanaged.UnmanagedMemoryBlock.html#NumSharp_Backends_Unmanaged_UnmanagedMemoryBlock_CastTo__1_NumSharp_Backends_Unmanaged_IMemoryBlock_">UnmanagedMemoryBlock.CastTo&lt;TOut&gt;(IMemoryBlock)</a>
+  </div>
+  <div>
+      <a class="xref" href="NumSharp.Backends.Unmanaged.UnmanagedMemoryBlock.html#NumSharp_Backends_Unmanaged_UnmanagedMemoryBlock_CastTo__2_NumSharp_Backends_Unmanaged_IMemoryBlock_">UnmanagedMemoryBlock.CastTo&lt;TIn, TOut&gt;(IMemoryBlock)</a>
+  </div>
+  <div>
+      <a class="xref" href="NumSharp.Backends.Unmanaged.UnmanagedMemoryBlock.html#NumSharp_Backends_Unmanaged_UnmanagedMemoryBlock_CastTo__2_NumSharp_Backends_Unmanaged_IMemoryBlock___0__">UnmanagedMemoryBlock.CastTo&lt;TIn, TOut&gt;(IMemoryBlock&lt;TIn&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="NumSharp_Backends_Unmanaged_ArraySlice_1__ctor_" data-uid="NumSharp.Backends.Unmanaged.ArraySlice`1.#ctor*"></a>
+
+  <h3 id="NumSharp_Backends_Unmanaged_ArraySlice_1__ctor_NumSharp_Backends_Unmanaged_UnmanagedMemoryBlock__0__" data-uid="NumSharp.Backends.Unmanaged.ArraySlice`1.#ctor(NumSharp.Backends.Unmanaged.UnmanagedMemoryBlock{`0})">
+  ArraySlice(UnmanagedMemoryBlock&lt;T&gt;)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ArraySlice(UnmanagedMemoryBlock&lt;T&gt; memoryBlock)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>memoryBlock</code> <a class="xref" href="NumSharp.Backends.Unmanaged.UnmanagedMemoryBlock-1.html">UnmanagedMemoryBlock</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_Unmanaged_ArraySlice_1__ctor_" data-uid="NumSharp.Backends.Unmanaged.ArraySlice`1.#ctor*"></a>
+
+  <h3 id="NumSharp_Backends_Unmanaged_ArraySlice_1__ctor_NumSharp_Backends_Unmanaged_UnmanagedMemoryBlock__0__System_Span__0__" data-uid="NumSharp.Backends.Unmanaged.ArraySlice`1.#ctor(NumSharp.Backends.Unmanaged.UnmanagedMemoryBlock{`0},System.Span{`0})">
+  ArraySlice(UnmanagedMemoryBlock&lt;T&gt;, Span&lt;T&gt;)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ArraySlice(UnmanagedMemoryBlock&lt;T&gt; memoryBlock, Span&lt;T&gt; slice)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>memoryBlock</code> <a class="xref" href="NumSharp.Backends.Unmanaged.UnmanagedMemoryBlock-1.html">UnmanagedMemoryBlock</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>slice</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_Unmanaged_ArraySlice_1__ctor_" data-uid="NumSharp.Backends.Unmanaged.ArraySlice`1.#ctor*"></a>
+
+  <h3 id="NumSharp_Backends_Unmanaged_ArraySlice_1__ctor_NumSharp_Backends_Unmanaged_UnmanagedMemoryBlock__0___0__System_Int32_" data-uid="NumSharp.Backends.Unmanaged.ArraySlice`1.#ctor(NumSharp.Backends.Unmanaged.UnmanagedMemoryBlock{`0},`0*,System.Int32)">
+  ArraySlice(UnmanagedMemoryBlock&lt;T&gt;, T*, int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a sliced <a class="xref" href="NumSharp.Backends.Unmanaged.ArraySlice-1.html">ArraySlice&lt;T&gt;</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ArraySlice(UnmanagedMemoryBlock&lt;T&gt; memoryBlock, T* address, int count)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>memoryBlock</code> <a class="xref" href="NumSharp.Backends.Unmanaged.UnmanagedMemoryBlock-1.html">UnmanagedMemoryBlock</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>address</code> T*</dt>
+    <dd></dd>
+    <dt><code>count</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of <code class="typeparamref">T</code> this slice should contain - relative to the <code class="paramref">memoryBlock</code></p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_Unmanaged_ArraySlice_1__ctor_" data-uid="NumSharp.Backends.Unmanaged.ArraySlice`1.#ctor*"></a>
+
+  <h3 id="NumSharp_Backends_Unmanaged_ArraySlice_1__ctor_NumSharp_Backends_Unmanaged_UnmanagedMemoryBlock__0___0__System_Int64_" data-uid="NumSharp.Backends.Unmanaged.ArraySlice`1.#ctor(NumSharp.Backends.Unmanaged.UnmanagedMemoryBlock{`0},`0*,System.Int64)">
+  ArraySlice(UnmanagedMemoryBlock&lt;T&gt;, T*, long)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a sliced <a class="xref" href="NumSharp.Backends.Unmanaged.ArraySlice-1.html">ArraySlice&lt;T&gt;</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ArraySlice(UnmanagedMemoryBlock&lt;T&gt; memoryBlock, T* address, long count)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>memoryBlock</code> <a class="xref" href="NumSharp.Backends.Unmanaged.UnmanagedMemoryBlock-1.html">UnmanagedMemoryBlock</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>address</code> T*</dt>
+    <dd></dd>
+    <dt><code>count</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd><p>The number of <code class="typeparamref">T</code> this slice should contain - relative to the <code class="paramref">memoryBlock</code></p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="fields">Fields
+</h2>
+
+
+
+  <h3 id="NumSharp_Backends_Unmanaged_ArraySlice_1_Address" data-uid="NumSharp.Backends.Unmanaged.ArraySlice`1.Address">
+  Address
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public readonly T* Address</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt>T*</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="NumSharp_Backends_Unmanaged_ArraySlice_1_Count" data-uid="NumSharp.Backends.Unmanaged.ArraySlice`1.Count">
+  Count
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public readonly int Count</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="NumSharp_Backends_Unmanaged_ArraySlice_1_IsSlice" data-uid="NumSharp.Backends.Unmanaged.ArraySlice`1.IsSlice">
+  IsSlice
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Is this <a class="xref" href="NumSharp.Backends.Unmanaged.ArraySlice-1.html">ArraySlice&lt;T&gt;</a> a smaller part/slice of an unmanaged allocation?</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public readonly bool IsSlice</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="NumSharp_Backends_Unmanaged_ArraySlice_1_MemoryBlock" data-uid="NumSharp.Backends.Unmanaged.ArraySlice`1.MemoryBlock">
+  MemoryBlock
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>The memory block this <a class="xref" href="NumSharp.Backends.Unmanaged.ArraySlice-1.html">ArraySlice&lt;T&gt;</a> is stored in.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public readonly UnmanagedMemoryBlock&lt;T&gt; MemoryBlock</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Backends.Unmanaged.UnmanagedMemoryBlock-1.html">UnmanagedMemoryBlock</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Backends_Unmanaged_ArraySlice_1_MemoryBlock_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>If <a class="xref" href="NumSharp.Backends.Unmanaged.ArraySlice-1.html#NumSharp_Backends_Unmanaged_ArraySlice_1_IsSlice">IsSlice</a> is false then this slice represents the entire MemoryBlock.</p>
+</div>
+
+
+
+
+
+  <h3 id="NumSharp_Backends_Unmanaged_ArraySlice_1_VoidAddress" data-uid="NumSharp.Backends.Unmanaged.ArraySlice`1.VoidAddress">
+  VoidAddress
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public readonly void* VoidAddress</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.void">void</a>*</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="NumSharp_Backends_Unmanaged_ArraySlice_1_Item_" data-uid="NumSharp.Backends.Unmanaged.ArraySlice`1.Item*"></a>
+
+  <h3 id="NumSharp_Backends_Unmanaged_ArraySlice_1_Item_System_Int32_" data-uid="NumSharp.Backends.Unmanaged.ArraySlice`1.Item(System.Int32)">
+  this[int]
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T this[int index] { get; set; }</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>index</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_Unmanaged_ArraySlice_1_ItemLength_" data-uid="NumSharp.Backends.Unmanaged.ArraySlice`1.ItemLength*"></a>
+
+  <h3 id="NumSharp_Backends_Unmanaged_ArraySlice_1_ItemLength" data-uid="NumSharp.Backends.Unmanaged.ArraySlice`1.ItemLength">
+  ItemLength
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>The size of a single item stored in <a class="xref" href="NumSharp.Backends.Unmanaged.IMemoryBlock.html#NumSharp_Backends_Unmanaged_IMemoryBlock_Address">Address</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int ItemLength { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="NumSharp_Backends_Unmanaged_ArraySlice_1_ItemLength_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Equivalent to NPTypeCode.SizeOf extension.</p>
+</div>
+
+
+
+
+  <a id="NumSharp_Backends_Unmanaged_ArraySlice_1_TypeCode_" data-uid="NumSharp.Backends.Unmanaged.ArraySlice`1.TypeCode*"></a>
+
+  <h3 id="NumSharp_Backends_Unmanaged_ArraySlice_1_TypeCode" data-uid="NumSharp.Backends.Unmanaged.ArraySlice`1.TypeCode">
+  TypeCode
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static NPTypeCode TypeCode { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.NPTypeCode.html">NPTypeCode</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="NumSharp_Backends_Unmanaged_ArraySlice_1_Allocate_" data-uid="NumSharp.Backends.Unmanaged.ArraySlice`1.Allocate*"></a>
+
+  <h3 id="NumSharp_Backends_Unmanaged_ArraySlice_1_Allocate_System_Int32_" data-uid="NumSharp.Backends.Unmanaged.ArraySlice`1.Allocate(System.Int32)">
+  Allocate(int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Allocate an array filled with noisy memory.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static ArraySlice&lt;T&gt; Allocate(int count)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>count</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>How many items this array will have (aka Count).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Backends.Unmanaged.ArraySlice-1.html">ArraySlice</a>&lt;T&gt;</dt>
+    <dd><p>A newly allocated array.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_Unmanaged_ArraySlice_1_Allocate_" data-uid="NumSharp.Backends.Unmanaged.ArraySlice`1.Allocate*"></a>
+
+  <h3 id="NumSharp_Backends_Unmanaged_ArraySlice_1_Allocate_System_Int32_System_Boolean_" data-uid="NumSharp.Backends.Unmanaged.ArraySlice`1.Allocate(System.Int32,System.Boolean)">
+  Allocate(int, bool)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Allocate an array filled with default value of <code class="typeparamref">T</code>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static ArraySlice&lt;T&gt; Allocate(int count, bool fillDefault)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>count</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>How many items this array will have (aka Count).</p>
+</dd>
+    <dt><code>fillDefault</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Should the newly allocated memory be filled with the default of <code class="typeparamref">T</code></p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Backends.Unmanaged.ArraySlice-1.html">ArraySlice</a>&lt;T&gt;</dt>
+    <dd><p>A newly allocated array.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_Unmanaged_ArraySlice_1_Allocate_" data-uid="NumSharp.Backends.Unmanaged.ArraySlice`1.Allocate*"></a>
+
+  <h3 id="NumSharp_Backends_Unmanaged_ArraySlice_1_Allocate_System_Int32__0_" data-uid="NumSharp.Backends.Unmanaged.ArraySlice`1.Allocate(System.Int32,`0)">
+  Allocate(int, T)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Allocate an array filled filled with <code class="paramref">fill</code>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static ArraySlice&lt;T&gt; Allocate(int count, T fill)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>count</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>How many items this array will have (aka Count).</p>
+</dd>
+    <dt><code>fill</code> <span class="xref">T</span></dt>
+    <dd><p>The item to fill the newly allocated memory with.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Backends.Unmanaged.ArraySlice-1.html">ArraySlice</a>&lt;T&gt;</dt>
+    <dd><p>A newly allocated array.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_Unmanaged_ArraySlice_1_Clone_" data-uid="NumSharp.Backends.Unmanaged.ArraySlice`1.Clone*"></a>
+
+  <h3 id="NumSharp_Backends_Unmanaged_ArraySlice_1_Clone" data-uid="NumSharp.Backends.Unmanaged.ArraySlice`1.Clone">
+  Clone()
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ArraySlice&lt;T&gt; Clone()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Backends.Unmanaged.ArraySlice-1.html">ArraySlice</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_Unmanaged_ArraySlice_1_Contains_" data-uid="NumSharp.Backends.Unmanaged.ArraySlice`1.Contains*"></a>
+
+  <h3 id="NumSharp_Backends_Unmanaged_ArraySlice_1_Contains__0_" data-uid="NumSharp.Backends.Unmanaged.ArraySlice`1.Contains(`0)">
+  Contains(T)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool Contains(T item)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>item</code> <span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_Unmanaged_ArraySlice_1_CopyTo_" data-uid="NumSharp.Backends.Unmanaged.ArraySlice`1.CopyTo*"></a>
+
+  <h3 id="NumSharp_Backends_Unmanaged_ArraySlice_1_CopyTo_System_IntPtr_" data-uid="NumSharp.Backends.Unmanaged.ArraySlice`1.CopyTo(System.IntPtr)">
+  CopyTo(nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Copies the entire array to address.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void CopyTo(nint dst)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dst</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd><p>The address to copy to</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Backends_Unmanaged_ArraySlice_1_CopyTo_System_IntPtr__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>The destiniton has to be atleast the size of this array, otherwise memory corruption is likely to occur.</p>
+</div>
+
+
+
+
+  <a id="NumSharp_Backends_Unmanaged_ArraySlice_1_CopyTo_" data-uid="NumSharp.Backends.Unmanaged.ArraySlice`1.CopyTo*"></a>
+
+  <h3 id="NumSharp_Backends_Unmanaged_ArraySlice_1_CopyTo_System_IntPtr_System_Int32_System_Int32_" data-uid="NumSharp.Backends.Unmanaged.ArraySlice`1.CopyTo(System.IntPtr,System.Int32,System.Int32)">
+  CopyTo(nint, int, int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Copies the entire array to address.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void CopyTo(nint dst, int sourceOffset, int sourceCount)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dst</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd><p>The address to copy to</p>
+</dd>
+    <dt><code>sourceOffset</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>sourceCount</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Backends_Unmanaged_ArraySlice_1_CopyTo_System_IntPtr_System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>The destiniton has to be atleast the size of this array, otherwise memory corruption is likely to occur.</p>
+</div>
+
+
+
+
+  <a id="NumSharp_Backends_Unmanaged_ArraySlice_1_CopyTo_" data-uid="NumSharp.Backends.Unmanaged.ArraySlice`1.CopyTo*"></a>
+
+  <h3 id="NumSharp_Backends_Unmanaged_ArraySlice_1_CopyTo_System_Span__0__" data-uid="NumSharp.Backends.Unmanaged.ArraySlice`1.CopyTo(System.Span{`0})">
+  CopyTo(Span&lt;T&gt;)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void CopyTo(Span&lt;T&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_Unmanaged_ArraySlice_1_CopyTo_" data-uid="NumSharp.Backends.Unmanaged.ArraySlice`1.CopyTo*"></a>
+
+  <h3 id="NumSharp_Backends_Unmanaged_ArraySlice_1_CopyTo_System_Span__0__System_Int32_" data-uid="NumSharp.Backends.Unmanaged.ArraySlice`1.CopyTo(System.Span{`0},System.Int32)">
+  CopyTo(Span&lt;T&gt;, int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void CopyTo(Span&lt;T&gt; destination, int sourceOffset)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>sourceOffset</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>offset of source via count (not bytes)</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_Unmanaged_ArraySlice_1_CopyTo_" data-uid="NumSharp.Backends.Unmanaged.ArraySlice`1.CopyTo*"></a>
+
+  <h3 id="NumSharp_Backends_Unmanaged_ArraySlice_1_CopyTo_System_Span__0__System_Int32_System_Int32_" data-uid="NumSharp.Backends.Unmanaged.ArraySlice`1.CopyTo(System.Span{`0},System.Int32,System.Int32)">
+  CopyTo(Span&lt;T&gt;, int, int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void CopyTo(Span&lt;T&gt; destination, int sourceOffset, int sourceLength)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>sourceOffset</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>offset of source via count (not bytes)</p>
+</dd>
+    <dt><code>sourceLength</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>How many items to copy</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_Unmanaged_ArraySlice_1_DangerousFree_" data-uid="NumSharp.Backends.Unmanaged.ArraySlice`1.DangerousFree*"></a>
+
+  <h3 id="NumSharp_Backends_Unmanaged_ArraySlice_1_DangerousFree" data-uid="NumSharp.Backends.Unmanaged.ArraySlice`1.DangerousFree">
+  DangerousFree()
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs dispose on the internal unmanaged memory block.<br></p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void DangerousFree()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Backends_Unmanaged_ArraySlice_1_DangerousFree_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Dangerous because this <a class="xref" href="NumSharp.Backends.Unmanaged.ArraySlice.html">ArraySlice</a> might be a <a class="xref" href="NumSharp.Backends.Unmanaged.ArraySlice-1.html#NumSharp_Backends_Unmanaged_ArraySlice_1_IsSlice">IsSlice</a> therefore there might be other slices that point to current <a class="xref" href="NumSharp.Backends.Unmanaged.ArraySlice-1.html#NumSharp_Backends_Unmanaged_ArraySlice_1_MemoryBlock">MemoryBlock</a>.<br>
+So releasing the <a class="xref" href="NumSharp.Backends.Unmanaged.ArraySlice-1.html#NumSharp_Backends_Unmanaged_ArraySlice_1_MemoryBlock">MemoryBlock</a> might cause memory corruption elsewhere.<br>
+It is best to leave MemoryBlock to GC.</p>
+</div>
+
+
+
+
+  <a id="NumSharp_Backends_Unmanaged_ArraySlice_1_Fill_" data-uid="NumSharp.Backends.Unmanaged.ArraySlice`1.Fill*"></a>
+
+  <h3 id="NumSharp_Backends_Unmanaged_ArraySlice_1_Fill__0_" data-uid="NumSharp.Backends.Unmanaged.ArraySlice`1.Fill(`0)">
+  Fill(T)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Fill(T value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_Unmanaged_ArraySlice_1_GetEnumerator_" data-uid="NumSharp.Backends.Unmanaged.ArraySlice`1.GetEnumerator*"></a>
+
+  <h3 id="NumSharp_Backends_Unmanaged_ArraySlice_1_GetEnumerator" data-uid="NumSharp.Backends.Unmanaged.ArraySlice`1.GetEnumerator">
+  GetEnumerator()
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns an enumerator that iterates through the collection.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IEnumerator&lt;T&gt; GetEnumerator()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerator-1">IEnumerator</a>&lt;T&gt;</dt>
+    <dd><p>An enumerator that can be used to iterate through the collection.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_Unmanaged_ArraySlice_1_GetIndex_" data-uid="NumSharp.Backends.Unmanaged.ArraySlice`1.GetIndex*"></a>
+
+  <h3 id="NumSharp_Backends_Unmanaged_ArraySlice_1_GetIndex_System_Int32_" data-uid="NumSharp.Backends.Unmanaged.ArraySlice`1.GetIndex(System.Int32)">
+  GetIndex(int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T GetIndex(int index)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>index</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_Unmanaged_ArraySlice_1_SetIndex_" data-uid="NumSharp.Backends.Unmanaged.ArraySlice`1.SetIndex*"></a>
+
+  <h3 id="NumSharp_Backends_Unmanaged_ArraySlice_1_SetIndex_System_Int32_System_Object_" data-uid="NumSharp.Backends.Unmanaged.ArraySlice`1.SetIndex(System.Int32,System.Object)">
+  SetIndex(int, object)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SetIndex(int index, object value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>index</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_Unmanaged_ArraySlice_1_SetIndex_" data-uid="NumSharp.Backends.Unmanaged.ArraySlice`1.SetIndex*"></a>
+
+  <h3 id="NumSharp_Backends_Unmanaged_ArraySlice_1_SetIndex_System_Int32__0_" data-uid="NumSharp.Backends.Unmanaged.ArraySlice`1.SetIndex(System.Int32,`0)">
+  SetIndex(int, T)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SetIndex(int index, T value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>index</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>value</code> <span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_Unmanaged_ArraySlice_1_Slice_" data-uid="NumSharp.Backends.Unmanaged.ArraySlice`1.Slice*"></a>
+
+  <h3 id="NumSharp_Backends_Unmanaged_ArraySlice_1_Slice_System_Int32_" data-uid="NumSharp.Backends.Unmanaged.ArraySlice`1.Slice(System.Int32)">
+  Slice(int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ArraySlice&lt;T&gt; Slice(int start)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>start</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Backends.Unmanaged.ArraySlice-1.html">ArraySlice</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_Unmanaged_ArraySlice_1_Slice_" data-uid="NumSharp.Backends.Unmanaged.ArraySlice`1.Slice*"></a>
+
+  <h3 id="NumSharp_Backends_Unmanaged_ArraySlice_1_Slice_System_Int32_System_Int32_" data-uid="NumSharp.Backends.Unmanaged.ArraySlice`1.Slice(System.Int32,System.Int32)">
+  Slice(int, int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ArraySlice&lt;T&gt; Slice(int start, int length)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>start</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>length</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Backends.Unmanaged.ArraySlice-1.html">ArraySlice</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_Unmanaged_ArraySlice_1_ToArray_" data-uid="NumSharp.Backends.Unmanaged.ArraySlice`1.ToArray*"></a>
+
+  <h3 id="NumSharp_Backends_Unmanaged_ArraySlice_1_ToArray" data-uid="NumSharp.Backends.Unmanaged.ArraySlice`1.ToArray">
+  ToArray()
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Copies the contents of this span into a new array.  This heap
+allocates, so should generally be avoided, however it is sometimes
+necessary to bridge the gap with APIs written in terms of arrays.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T[] ToArray()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>T[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_Unmanaged_ArraySlice_1_TryCopyTo_" data-uid="NumSharp.Backends.Unmanaged.ArraySlice`1.TryCopyTo*"></a>
+
+  <h3 id="NumSharp_Backends_Unmanaged_ArraySlice_1_TryCopyTo_System_Span__0__" data-uid="NumSharp.Backends.Unmanaged.ArraySlice`1.TryCopyTo(System.Span{`0})">
+  TryCopyTo(Span&lt;T&gt;)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool TryCopyTo(Span&lt;T&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          <span>Copyright &copy; 2025 <a href='https://github.com/SciSharp'>SciSharp STACK</a>. Built with <a href='https://dotnet.github.io/docfx'>DocFX</a>.</span>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

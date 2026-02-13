@@ -1,0 +1,240 @@
+### YamlMime:TableOfContent
+items:
+- name: API Reference
+  href: index.md
+
+# Core Types - the essentials
+- name: Core Types
+  items:
+  - uid: NumSharp.NDArray
+    name: NDArray
+  - uid: NumSharp.np
+    name: np (Static API)
+  - uid: NumSharp.Shape
+    name: Shape
+  - uid: NumSharp.Slice
+    name: Slice
+  - uid: NumSharp.SliceDef
+    name: SliceDef
+  - uid: NumSharp.Generic.NDArray`1
+    name: NDArray<T>
+
+# Random sampling via np.random
+- name: Random Sampling
+  items:
+  - uid: NumSharp.NumPyRandom
+    name: NumPyRandom (np.random)
+  - uid: NumSharp.Randomizer
+    name: Randomizer
+  - uid: NumSharp.NativeRandomState
+    name: NativeRandomState
+
+# Linear algebra via np.linalg
+- name: Linear Algebra
+  items:
+  - uid: NumSharp.np.linalg
+    name: np.linalg
+
+# Broadcasting
+- name: Broadcasting
+  items:
+  - uid: NumSharp.np.Broadcast
+    name: np.Broadcast
+  - uid: NumSharp.BroadcastInfo
+    name: BroadcastInfo
+  - uid: NumSharp.ViewInfo
+    name: ViewInfo
+
+# Type Information
+- name: Type System
+  items:
+  - uid: NumSharp.NPTypeCode
+    name: NPTypeCode
+  - uid: NumSharp.NPTypeCodeExtensions
+    name: NPTypeCodeExtensions
+  - uid: NumSharp.DType
+    name: DType
+
+# File I/O
+- name: File I/O
+  items:
+  - uid: NumSharp.NpzDictionary
+    name: NpzDictionary
+  - uid: NumSharp.NpzDictionary`1
+    name: NpzDictionary<T>
+
+# Iteration
+- name: Iterators
+  items:
+  - uid: NumSharp.NDIterator
+    name: NDIterator
+  - uid: NumSharp.NDIterator`1
+    name: NDIterator<T>
+  - uid: NumSharp.NDIteratorExtensions
+    name: NDIteratorExtensions
+  - uid: NumSharp.MultiIterator
+    name: MultiIterator
+  - uid: NumSharp.IteratorType
+    name: IteratorType
+  - uid: NumSharp.MoveNextReferencedDelegate`1
+    name: MoveNextReferencedDelegate<T>
+
+# Exceptions
+- name: Exceptions
+  items:
+  - uid: NumSharp.INumSharpException
+    name: INumSharpException
+  - uid: NumSharp.NumSharpException
+    name: NumSharpException
+  - uid: NumSharp.AxisOutOfRangeException
+    name: AxisOutOfRangeException
+  - uid: NumSharp.IncorrectShapeException
+    name: IncorrectShapeException
+  - uid: NumSharp.IncorrectSizeException
+    name: IncorrectSizeException
+  - uid: NumSharp.IncorrectTypeException
+    name: IncorrectTypeException
+
+# Internals section - Storage & Backends
+- name: Internals
+  items:
+  - name: Backends
+    items:
+    - uid: NumSharp.TensorEngine
+      name: TensorEngine
+    - uid: NumSharp.Backends.DefaultEngine
+      name: DefaultEngine
+    - uid: NumSharp.Backends.UnmanagedStorage
+      name: UnmanagedStorage
+    - uid: NumSharp.Backends.BackendFactory
+      name: BackendFactory
+    - uid: NumSharp.BackendType
+      name: BackendType
+    - uid: NumSharp.StorageType
+      name: StorageType
+  - name: Unmanaged Memory
+    items:
+    - uid: NumSharp.Backends.Unmanaged.ArraySlice
+      name: ArraySlice
+    - uid: NumSharp.Backends.Unmanaged.ArraySlice`1
+      name: ArraySlice<T>
+    - uid: NumSharp.Backends.Unmanaged.IArraySlice
+      name: IArraySlice
+    - uid: NumSharp.Backends.Unmanaged.IMemoryBlock
+      name: IMemoryBlock
+    - uid: NumSharp.Backends.Unmanaged.IMemoryBlock`1
+      name: IMemoryBlock<T>
+    - uid: NumSharp.Backends.Unmanaged.IUnmanagedMemoryBlock
+      name: IUnmanagedMemoryBlock
+    - uid: NumSharp.Backends.Unmanaged.UnmanagedMemoryBlock
+      name: UnmanagedMemoryBlock
+    - uid: NumSharp.Backends.Unmanaged.UnmanagedMemoryBlock`1
+      name: UnmanagedMemoryBlock<T>
+    - uid: NumSharp.Backends.Unmanaged.UnmanagedHelper
+      name: UnmanagedHelper
+  - name: Memory Pools
+    items:
+    - uid: NumSharp.Unmanaged.Memory.ScalarMemoryPool
+      name: ScalarMemoryPool
+    - uid: NumSharp.Unmanaged.Memory.StackedMemoryPool
+      name: StackedMemoryPool
+  - name: NDArray Internals
+    items:
+    - uid: NumSharp.NDArray._Unsafe
+      name: NDArray._Unsafe
+    - uid: NumSharp.NDArray._Unsafe._Pinning
+      name: NDArray._Unsafe._Pinning
+    - uid: NumSharp.IIndex
+      name: IIndex
+    - uid: NumSharp.Kwargs
+      name: Kwargs
+
+# Utilities
+- name: Utilities
+  items:
+  - name: Type Conversion
+    items:
+    - uid: NumSharp.Utilities.Converts
+      name: Converts
+    - uid: NumSharp.Utilities.Converts`1
+      name: Converts<T>
+    - uid: NumSharp.Utilities.NonGenericConvert
+      name: NonGenericConvert
+    - uid: NumSharp.Utilities.TypelessConvert
+      name: TypelessConvert
+    - uid: NumSharp.Utilities.TypelessConvertDelegate
+      name: TypelessConvertDelegate
+    - uid: NumSharp.Utilities.ArrayConvert
+      name: ArrayConvert
+  - name: Type Info
+    items:
+    - uid: NumSharp.Utilities.InfoOf`1
+      name: InfoOf<T>
+    - uid: NumSharp.Utilities.NumberInfo
+      name: NumberInfo
+  - name: Arrays
+    items:
+    - uid: NumSharp.Utilities.Arrays
+      name: Arrays
+    - uid: NumSharp.Utilities.ArraysExtensions
+      name: ArraysExtensions
+  - name: Coordinate Incrementors
+    items:
+    - uid: NumSharp.Utilities.NDCoordinatesIncrementor
+      name: NDCoordinatesIncrementor
+    - uid: NumSharp.Utilities.NDCoordinatesIncrementorAutoResetting
+      name: NDCoordinatesIncrementorAutoResetting
+    - uid: NumSharp.Utilities.NDCoordinatesAxisIncrementor
+      name: NDCoordinatesAxisIncrementor
+    - uid: NumSharp.Utilities.NDCoordinatesLeftToAxisIncrementor
+      name: NDCoordinatesLeftToAxisIncrementor
+    - uid: NumSharp.Utilities.NDExtendedCoordinatesIncrementor
+      name: NDExtendedCoordinatesIncrementor
+    - uid: NumSharp.Utilities.NDOffsetIncrementor
+      name: NDOffsetIncrementor
+    - uid: NumSharp.Utilities.NDOffsetIncrementorAutoresetting
+      name: NDOffsetIncrementorAutoresetting
+    - uid: NumSharp.Utilities.ValueCoordinatesIncrementor
+      name: ValueCoordinatesIncrementor
+    - uid: NumSharp.Utilities.ValueCoordinatesIncrementor.EndCallbackHandler
+      name: ValueCoordinatesIncrementor.EndCallbackHandler
+    - uid: NumSharp.Utilities.ValueCoordinatesIncrementorAutoResetting
+      name: ValueCoordinatesIncrementorAutoResetting
+    - uid: NumSharp.Utilities.ValueOffsetIncrementor
+      name: ValueOffsetIncrementor
+    - uid: NumSharp.Utilities.ValueOffsetIncrementorAutoresetting
+      name: ValueOffsetIncrementorAutoresetting
+  - name: Collections
+    items:
+    - uid: NumSharp.Utilities.Hashset`1
+      name: Hashset<T>
+    - uid: NumSharp.Utilities.Hashset`1.Enumerator
+      name: Hashset<T>.Enumerator
+    - uid: NumSharp.Utilities.ConcurrentHashset`1
+      name: ConcurrentHashset<T>
+  - name: LINQ Extensions
+    items:
+    - uid: NumSharp.Utilities.Linq.IEnumeratorExtensions
+      name: IEnumeratorExtensions
+    - uid: NumSharp.Utilities.Linq.IExtremaEnumerable`1
+      name: IExtremaEnumerable<T>
+  - name: Other
+    items:
+    - uid: NumSharp.Utilities.SteppingExtension
+      name: SteppingExtension
+    - uid: NumSharp.Utilities.py
+      name: py
+
+# Extensions
+- name: Extensions
+  items:
+  - uid: NumSharp.Extensions.LinqExtensions
+    name: LinqExtensions
+
+# External Dependencies
+- name: External
+  items:
+  - uid: DecimalMath.DecimalEx
+    name: DecimalEx (DecimalMath)
+
+memberLayout: SamePage

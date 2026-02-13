@@ -1,0 +1,2148 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+      <title>Class NumPyRandom | NumSharp Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class NumPyRandom | NumSharp Documentation ">
+      
+      <meta name="description" content="A class that serves as numpy.random.RandomState in python.">
+      <link rel="icon" href="../images/numsharp.icon128.png">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../images/numsharp.icon.svg" alt="NumSharp">
+            NumSharp
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="NumSharp.NumPyRandom">
+
+
+
+  <h1 id="NumSharp_NumPyRandom" data-uid="NumSharp.NumPyRandom" class="text-break">
+Class NumPyRandom  
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="NumSharp.html">NumSharp</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>NumSharp.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>A class that serves as numpy.random.RandomState in python.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class NumPyRandom</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">NumPyRandom</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="NumSharp.Extensions.LinqExtensions.html#NumSharp_Extensions_LinqExtensions_Yield__1___0_">LinqExtensions.Yield&lt;T&gt;(T)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="NumSharp_NumPyRandom_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><a href="https://docs.scipy.org/doc/numpy-1.16.1/reference/routines.random.html">https://docs.scipy.org/doc/numpy-1.16.1/reference/routines.random.html</a></p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="NumSharp_NumPyRandom__ctor_" data-uid="NumSharp.NumPyRandom.#ctor*"></a>
+
+  <h3 id="NumSharp_NumPyRandom__ctor" data-uid="NumSharp.NumPyRandom.#ctor">
+  NumPyRandom()
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected NumPyRandom()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_NumPyRandom__ctor_" data-uid="NumSharp.NumPyRandom.#ctor*"></a>
+
+  <h3 id="NumSharp_NumPyRandom__ctor_NumSharp_NativeRandomState_" data-uid="NumSharp.NumPyRandom.#ctor(NumSharp.NativeRandomState)">
+  NumPyRandom(NativeRandomState)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected NumPyRandom(NativeRandomState nativeRandomState)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>nativeRandomState</code> <a class="xref" href="NumSharp.NativeRandomState.html">NativeRandomState</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_NumPyRandom__ctor_" data-uid="NumSharp.NumPyRandom.#ctor*"></a>
+
+  <h3 id="NumSharp_NumPyRandom__ctor_NumSharp_Randomizer_" data-uid="NumSharp.NumPyRandom.#ctor(NumSharp.Randomizer)">
+  NumPyRandom(Randomizer)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected NumPyRandom(Randomizer randomizer)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>randomizer</code> <a class="xref" href="NumSharp.Randomizer.html">Randomizer</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_NumPyRandom__ctor_" data-uid="NumSharp.NumPyRandom.#ctor*"></a>
+
+  <h3 id="NumSharp_NumPyRandom__ctor_System_Int32_" data-uid="NumSharp.NumPyRandom.#ctor(System.Int32)">
+  NumPyRandom(int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected NumPyRandom(int seed)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>seed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="fields">Fields
+</h2>
+
+
+
+  <h3 id="NumSharp_NumPyRandom_randomizer" data-uid="NumSharp.NumPyRandom.randomizer">
+  randomizer
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected Randomizer randomizer</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Randomizer.html">Randomizer</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="NumSharp_NumPyRandom_Seed_" data-uid="NumSharp.NumPyRandom.Seed*"></a>
+
+  <h3 id="NumSharp_NumPyRandom_Seed" data-uid="NumSharp.NumPyRandom.Seed">
+  Seed
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int Seed { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="NumSharp_NumPyRandom_RandomState_" data-uid="NumSharp.NumPyRandom.RandomState*"></a>
+
+  <h3 id="NumSharp_NumPyRandom_RandomState" data-uid="NumSharp.NumPyRandom.RandomState">
+  RandomState()
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns a new instance of <a class="xref" href="NumSharp.NumPyRandom.html">NumPyRandom</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NumPyRandom RandomState()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.NumPyRandom.html">NumPyRandom</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_NumPyRandom_RandomState_" data-uid="NumSharp.NumPyRandom.RandomState*"></a>
+
+  <h3 id="NumSharp_NumPyRandom_RandomState_NumSharp_NativeRandomState_" data-uid="NumSharp.NumPyRandom.RandomState(NumSharp.NativeRandomState)">
+  RandomState(NativeRandomState)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns a new instance of <a class="xref" href="NumSharp.NumPyRandom.html">NumPyRandom</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NumPyRandom RandomState(NativeRandomState state)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>state</code> <a class="xref" href="NumSharp.NativeRandomState.html">NativeRandomState</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.NumPyRandom.html">NumPyRandom</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_NumPyRandom_RandomState_" data-uid="NumSharp.NumPyRandom.RandomState*"></a>
+
+  <h3 id="NumSharp_NumPyRandom_RandomState_System_Int32_" data-uid="NumSharp.NumPyRandom.RandomState(System.Int32)">
+  RandomState(int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns a new instance of <a class="xref" href="NumSharp.NumPyRandom.html">NumPyRandom</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NumPyRandom RandomState(int seed)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>seed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.NumPyRandom.html">NumPyRandom</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_NumPyRandom_bernoulli_" data-uid="NumSharp.NumPyRandom.bernoulli*"></a>
+
+  <h3 id="NumSharp_NumPyRandom_bernoulli_System_Double_NumSharp_Shape_" data-uid="NumSharp.NumPyRandom.bernoulli(System.Double,NumSharp.Shape)">
+  bernoulli(double, Shape)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Draw samples from a bernoulli distribution.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray bernoulli(double p, Shape shape)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>p</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Parameter of the distribution, &gt;= 0 and &lt;=1.</p>
+</dd>
+    <dt><code>shape</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd><p>Output Shape</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.NDArray.html">NDArray</a></dt>
+    <dd><p>Drawn samples from the parameterized bernoulli distribution.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_NumPyRandom_bernoulli_" data-uid="NumSharp.NumPyRandom.bernoulli*"></a>
+
+  <h3 id="NumSharp_NumPyRandom_bernoulli_System_Double_System_Int32___" data-uid="NumSharp.NumPyRandom.bernoulli(System.Double,System.Int32[])">
+  bernoulli(double, params int[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Draw samples from a bernoulli distribution.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray bernoulli(double p, params int[] dims)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>p</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Parameter of the distribution, &gt;= 0 and &lt;=1.</p>
+</dd>
+    <dt><code>dims</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>Output Shape</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.NDArray.html">NDArray</a></dt>
+    <dd><p>Drawn samples from the parameterized bernoulli distribution.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_NumPyRandom_beta_" data-uid="NumSharp.NumPyRandom.beta*"></a>
+
+  <h3 id="NumSharp_NumPyRandom_beta_System_Double_System_Double_NumSharp_Shape_" data-uid="NumSharp.NumPyRandom.beta(System.Double,System.Double,NumSharp.Shape)">
+  beta(double, double, Shape)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Draw samples from a Beta distribution.
+The Beta distribution is a special case of the Dirichlet distribution, and is related to the Gamma distribution.It has the probability distribution function</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray beta(double alpha, double betaValue, Shape shape)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>alpha</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Alpha value</p>
+</dd>
+    <dt><code>betaValue</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Beta value</p>
+</dd>
+    <dt><code>shape</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd><p>Output Shape</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.NDArray.html">NDArray</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_NumPyRandom_beta_" data-uid="NumSharp.NumPyRandom.beta*"></a>
+
+  <h3 id="NumSharp_NumPyRandom_beta_System_Double_System_Double_System_Int32___" data-uid="NumSharp.NumPyRandom.beta(System.Double,System.Double,System.Int32[])">
+  beta(double, double, params int[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Draw samples from a Beta distribution.
+The Beta distribution is a special case of the Dirichlet distribution, and is related to the Gamma distribution.It has the probability distribution function</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray beta(double alpha, double betaValue, params int[] dims)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>alpha</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Alpha value</p>
+</dd>
+    <dt><code>betaValue</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Beta value</p>
+</dd>
+    <dt><code>dims</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>Output Shape</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.NDArray.html">NDArray</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_NumPyRandom_binomial_" data-uid="NumSharp.NumPyRandom.binomial*"></a>
+
+  <h3 id="NumSharp_NumPyRandom_binomial_System_Int32_System_Double_NumSharp_Shape_" data-uid="NumSharp.NumPyRandom.binomial(System.Int32,System.Double,NumSharp.Shape)">
+  binomial(int, double, Shape)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Draw samples from a binomial distribution.
+Samples are drawn from a binomial distribution with specified parameters, n trials and p probability of success where n an integer &gt;= 0 and p is in the interval[0, 1]. (n may be input as a float, but it is truncated to an integer in use)</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray binomial(int n, double p, Shape shape)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>n</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Parameter of the distribution, &gt;= 0. Floats are also accepted, but they will be truncated to integers.</p>
+</dd>
+    <dt><code>p</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Parameter of the distribution, &gt;= 0 and &lt;=1.</p>
+</dd>
+    <dt><code>shape</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd><p>Output Shape</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.NDArray.html">NDArray</a></dt>
+    <dd><p>Drawn samples from the parameterized binomial distribution, where each sample is equal to the number of successes over the n trials.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_NumPyRandom_binomial_System_Int32_System_Double_NumSharp_Shape__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><a href="https://docs.scipy.org/doc/numpy-1.14.0/reference/generated/numpy.random.binomial.html">https://docs.scipy.org/doc/numpy-1.14.0/reference/generated/numpy.random.binomial.html</a></p>
+</div>
+
+
+
+
+  <a id="NumSharp_NumPyRandom_binomial_" data-uid="NumSharp.NumPyRandom.binomial*"></a>
+
+  <h3 id="NumSharp_NumPyRandom_binomial_System_Int32_System_Double_System_Int32___" data-uid="NumSharp.NumPyRandom.binomial(System.Int32,System.Double,System.Int32[])">
+  binomial(int, double, params int[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Draw samples from a binomial distribution.
+Samples are drawn from a binomial distribution with specified parameters, n trials and p probability of success where n an integer &gt;= 0 and p is in the interval[0, 1]. (n may be input as a float, but it is truncated to an integer in use)</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray binomial(int n, double p, params int[] dims)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>n</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Parameter of the distribution, &gt;= 0. Floats are also accepted, but they will be truncated to integers.</p>
+</dd>
+    <dt><code>p</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Parameter of the distribution, &gt;= 0 and &lt;=1.</p>
+</dd>
+    <dt><code>dims</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>Output Shape</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.NDArray.html">NDArray</a></dt>
+    <dd><p>Drawn samples from the parameterized binomial distribution, where each sample is equal to the number of successes over the n trials.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_NumPyRandom_binomial_System_Int32_System_Double_System_Int32____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><a href="https://docs.scipy.org/doc/numpy-1.14.0/reference/generated/numpy.random.binomial.html">https://docs.scipy.org/doc/numpy-1.14.0/reference/generated/numpy.random.binomial.html</a></p>
+</div>
+
+
+
+
+  <a id="NumSharp_NumPyRandom_chisquare_" data-uid="NumSharp.NumPyRandom.chisquare*"></a>
+
+  <h3 id="NumSharp_NumPyRandom_chisquare_System_Double_NumSharp_Shape_" data-uid="NumSharp.NumPyRandom.chisquare(System.Double,NumSharp.Shape)">
+  chisquare(double, Shape)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Draw samples from a chi-square distribution.
+When df independent random variables, each with standard normal distributions(mean 0, variance 1), are squared and summed,
+the resulting distribution is chi-square(see Notes). This distribution is often used in hypothesis testing.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray chisquare(double df, Shape shape)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>df</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Number of degrees of freedom, should be &gt; 0.</p>
+</dd>
+    <dt><code>shape</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd><p>Output Shape</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.NDArray.html">NDArray</a></dt>
+    <dd><p>Drawn samples from the parameterized chi-square distribution.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_NumPyRandom_chisquare_System_Double_NumSharp_Shape__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><a href="https://docs.scipy.org/doc/numpy-1.15.0/reference/generated/numpy.random.chisquare.html">https://docs.scipy.org/doc/numpy-1.15.0/reference/generated/numpy.random.chisquare.html</a></p>
+</div>
+
+
+
+
+  <a id="NumSharp_NumPyRandom_chisquare_" data-uid="NumSharp.NumPyRandom.chisquare*"></a>
+
+  <h3 id="NumSharp_NumPyRandom_chisquare_System_Double_System_Int32___" data-uid="NumSharp.NumPyRandom.chisquare(System.Double,System.Int32[])">
+  chisquare(double, params int[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Draw samples from a chi-square distribution.
+When df independent random variables, each with standard normal distributions(mean 0, variance 1), are squared and summed,
+the resulting distribution is chi-square(see Notes). This distribution is often used in hypothesis testing.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray chisquare(double df, params int[] dims)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>df</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Number of degrees of freedom, should be &gt; 0.</p>
+</dd>
+    <dt><code>dims</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>Output Shape</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.NDArray.html">NDArray</a></dt>
+    <dd><p>Drawn samples from the parameterized chi-square distribution.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_NumPyRandom_chisquare_System_Double_System_Int32____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><a href="https://docs.scipy.org/doc/numpy-1.15.0/reference/generated/numpy.random.chisquare.html">https://docs.scipy.org/doc/numpy-1.15.0/reference/generated/numpy.random.chisquare.html</a></p>
+</div>
+
+
+
+
+  <a id="NumSharp_NumPyRandom_choice_" data-uid="NumSharp.NumPyRandom.choice*"></a>
+
+  <h3 id="NumSharp_NumPyRandom_choice_NumSharp_NDArray_NumSharp_Shape_System_Boolean_System_Double___" data-uid="NumSharp.NumPyRandom.choice(NumSharp.NDArray,NumSharp.Shape,System.Boolean,System.Double[])">
+  choice(NDArray, Shape, bool, double[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates a random sample from a given 1-D array</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray choice(NDArray arr, Shape shape = default, bool replace = true, double[] probabilities = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>arr</code> <a class="xref" href="NumSharp.NDArray.html">NDArray</a></dt>
+    <dd><p>If an ndarray, a random sample is generated from its elements. If an int, the random sample is generated as if a were np.arange(a)</p>
+</dd>
+    <dt><code>shape</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd><p>Output shape. If the given shape is, e.g., (m, n, k), then m * n * k samples are drawn. Default is None, in which case a single value is returned.</p>
+</dd>
+    <dt><code>replace</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether the sample is with or without replacement</p>
+</dd>
+    <dt><code>probabilities</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>[]</dt>
+    <dd><p>The probabilities associated with each entry in a. If not given the sample assumes a uniform distribution over all entries in a.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.NDArray.html">NDArray</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_NumPyRandom_choice_NumSharp_NDArray_NumSharp_Shape_System_Boolean_System_Double____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><a href="https://docs.scipy.org/doc/numpy/reference/generated/numpy.random.choice.html">https://docs.scipy.org/doc/numpy/reference/generated/numpy.random.choice.html</a></p>
+</div>
+
+
+
+
+  <a id="NumSharp_NumPyRandom_choice_" data-uid="NumSharp.NumPyRandom.choice*"></a>
+
+  <h3 id="NumSharp_NumPyRandom_choice_System_Int32_NumSharp_Shape_System_Boolean_System_Double___" data-uid="NumSharp.NumPyRandom.choice(System.Int32,NumSharp.Shape,System.Boolean,System.Double[])">
+  choice(int, Shape, bool, double[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates a random sample from a given 1-D array</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray choice(int a, Shape shape = default, bool replace = true, double[] probabilities = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>If an ndarray, a random sample is generated from its elements. If an int, the random sample is generated as if a were np.arange(a)</p>
+</dd>
+    <dt><code>shape</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd><p>Output shape. If the given shape is, e.g., (m, n, k), then m * n * k samples are drawn. Default is None, in which case a single value is returned.</p>
+</dd>
+    <dt><code>replace</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether the sample is with or without replacement</p>
+</dd>
+    <dt><code>probabilities</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>[]</dt>
+    <dd><p>The probabilities associated with each entry in a. If not given the sample assumes a uniform distribution over all entries in a.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.NDArray.html">NDArray</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_NumPyRandom_choice_System_Int32_NumSharp_Shape_System_Boolean_System_Double____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><a href="https://docs.scipy.org/doc/numpy/reference/generated/numpy.random.choice.html">https://docs.scipy.org/doc/numpy/reference/generated/numpy.random.choice.html</a></p>
+</div>
+
+
+
+
+  <a id="NumSharp_NumPyRandom_exponential_" data-uid="NumSharp.NumPyRandom.exponential*"></a>
+
+  <h3 id="NumSharp_NumPyRandom_exponential_System_Double_NumSharp_Shape_" data-uid="NumSharp.NumPyRandom.exponential(System.Double,NumSharp.Shape)">
+  exponential(double, Shape)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Draw samples from an exponential distribution.
+The exponential distribution is a continuous analogue of the geometric distribution. It describes many common situations, such as the size of raindrops measured over many rainstorms</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray exponential(double scale, Shape shape)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>scale</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The scale parameter, \beta = 1/\lambda.</p>
+</dd>
+    <dt><code>shape</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd><p>Output Shape</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.NDArray.html">NDArray</a></dt>
+    <dd><p>Drawn samples from the parameterized exponential distribution.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_NumPyRandom_exponential_System_Double_NumSharp_Shape__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><a href="https://docs.scipy.org/doc/numpy-1.15.0/reference/generated/numpy.random.exponential.html">https://docs.scipy.org/doc/numpy-1.15.0/reference/generated/numpy.random.exponential.html</a></p>
+</div>
+
+
+
+
+  <a id="NumSharp_NumPyRandom_exponential_" data-uid="NumSharp.NumPyRandom.exponential*"></a>
+
+  <h3 id="NumSharp_NumPyRandom_exponential_System_Double_System_Int32___" data-uid="NumSharp.NumPyRandom.exponential(System.Double,System.Int32[])">
+  exponential(double, params int[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Draw samples from an exponential distribution.
+The exponential distribution is a continuous analogue of the geometric distribution. It describes many common situations, such as the size of raindrops measured over many rainstorms</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray exponential(double scale, params int[] dims)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>scale</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The scale parameter, \beta = 1/\lambda.</p>
+</dd>
+    <dt><code>dims</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>Output Shape</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.NDArray.html">NDArray</a></dt>
+    <dd><p>Drawn samples from the parameterized exponential distribution.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_NumPyRandom_exponential_System_Double_System_Int32____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><a href="https://docs.scipy.org/doc/numpy-1.15.0/reference/generated/numpy.random.exponential.html">https://docs.scipy.org/doc/numpy-1.15.0/reference/generated/numpy.random.exponential.html</a></p>
+</div>
+
+
+
+
+  <a id="NumSharp_NumPyRandom_gamma_" data-uid="NumSharp.NumPyRandom.gamma*"></a>
+
+  <h3 id="NumSharp_NumPyRandom_gamma_System_Double_System_Double_NumSharp_Shape_" data-uid="NumSharp.NumPyRandom.gamma(System.Double,System.Double,NumSharp.Shape)">
+  gamma(double, double, Shape)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Draw samples from a Gamma distribution.
+Samples are drawn from a Gamma distribution with specified parameters, shape (sometimes designated “k”) and scale(sometimes designated “theta”),
+where both parameters are &gt; 0.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray gamma(double shapeV, double scale, Shape shape)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>shapeV</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The shape of the gamma distribution. Should be greater than zero.</p>
+</dd>
+    <dt><code>scale</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The scale of the gamma distribution. Should be greater than zero. Default is equal to 1.</p>
+</dd>
+    <dt><code>shape</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd><p>Output shape.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.NDArray.html">NDArray</a></dt>
+    <dd><p>Drawn samples from the parameterized gamma distribution.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_NumPyRandom_gamma_System_Double_System_Double_NumSharp_Shape__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><a href="https://docs.scipy.org/doc/numpy-1.15.0/reference/generated/numpy.random.gamma.html">https://docs.scipy.org/doc/numpy-1.15.0/reference/generated/numpy.random.gamma.html</a></p>
+</div>
+
+
+
+
+  <a id="NumSharp_NumPyRandom_gamma_" data-uid="NumSharp.NumPyRandom.gamma*"></a>
+
+  <h3 id="NumSharp_NumPyRandom_gamma_System_Double_System_Double_System_Int32___" data-uid="NumSharp.NumPyRandom.gamma(System.Double,System.Double,System.Int32[])">
+  gamma(double, double, params int[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Draw samples from a Gamma distribution.
+Samples are drawn from a Gamma distribution with specified parameters, shape (sometimes designated “k”) and scale(sometimes designated “theta”),
+where both parameters are &gt; 0.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray gamma(double shape, double scale, params int[] dims)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>shape</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The shape of the gamma distribution. Should be greater than zero.</p>
+</dd>
+    <dt><code>scale</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The scale of the gamma distribution. Should be greater than zero. Default is equal to 1.</p>
+</dd>
+    <dt><code>dims</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>Output shape.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.NDArray.html">NDArray</a></dt>
+    <dd><p>Drawn samples from the parameterized gamma distribution.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_NumPyRandom_gamma_System_Double_System_Double_System_Int32____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><a href="https://docs.scipy.org/doc/numpy-1.15.0/reference/generated/numpy.random.gamma.html">https://docs.scipy.org/doc/numpy-1.15.0/reference/generated/numpy.random.gamma.html</a></p>
+</div>
+
+
+
+
+  <a id="NumSharp_NumPyRandom_geometric_" data-uid="NumSharp.NumPyRandom.geometric*"></a>
+
+  <h3 id="NumSharp_NumPyRandom_geometric_System_Double_NumSharp_Shape_" data-uid="NumSharp.NumPyRandom.geometric(System.Double,NumSharp.Shape)">
+  geometric(double, Shape)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Draw samples from the geometric distribution.
+Bernoulli trials are experiments with one of two outcomes: success or failure(an example of such an experiment is flipping a coin).
+The geometric distribution models the number of trials that must be run in order to achieve success.It is therefore supported on the positive integers, k = 1, 2, ....</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray geometric(double p, Shape shape)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>p</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The probability of success of an individual trial.</p>
+</dd>
+    <dt><code>shape</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd><p>Output Shape</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.NDArray.html">NDArray</a></dt>
+    <dd><p>Drawn samples from the parameterized geometric distribution.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_NumPyRandom_geometric_System_Double_NumSharp_Shape__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><a href="https://docs.scipy.org/doc/numpy-1.16.0/reference/generated/numpy.random.geometric.html">https://docs.scipy.org/doc/numpy-1.16.0/reference/generated/numpy.random.geometric.html</a></p>
+</div>
+
+
+
+
+  <a id="NumSharp_NumPyRandom_geometric_" data-uid="NumSharp.NumPyRandom.geometric*"></a>
+
+  <h3 id="NumSharp_NumPyRandom_geometric_System_Double_System_Int32___" data-uid="NumSharp.NumPyRandom.geometric(System.Double,System.Int32[])">
+  geometric(double, params int[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Draw samples from the geometric distribution.
+Bernoulli trials are experiments with one of two outcomes: success or failure(an example of such an experiment is flipping a coin).
+The geometric distribution models the number of trials that must be run in order to achieve success.It is therefore supported on the positive integers, k = 1, 2, ....</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray geometric(double p, params int[] dims)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>p</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The probability of success of an individual trial.</p>
+</dd>
+    <dt><code>dims</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>Output Shape</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.NDArray.html">NDArray</a></dt>
+    <dd><p>Drawn samples from the parameterized geometric distribution.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_NumPyRandom_geometric_System_Double_System_Int32____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><a href="https://docs.scipy.org/doc/numpy-1.16.0/reference/generated/numpy.random.geometric.html">https://docs.scipy.org/doc/numpy-1.16.0/reference/generated/numpy.random.geometric.html</a></p>
+</div>
+
+
+
+
+  <a id="NumSharp_NumPyRandom_get_state_" data-uid="NumSharp.NumPyRandom.get_state*"></a>
+
+  <h3 id="NumSharp_NumPyRandom_get_state" data-uid="NumSharp.NumPyRandom.get_state">
+  get_state()
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Return a <a class="xref" href="NumSharp.NumPyRandom.html">NumPyRandom</a> representing the internal state of the generator.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NativeRandomState get_state()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.NativeRandomState.html">NativeRandomState</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_NumPyRandom_lognormal_" data-uid="NumSharp.NumPyRandom.lognormal*"></a>
+
+  <h3 id="NumSharp_NumPyRandom_lognormal_System_Double_System_Double_NumSharp_Shape_" data-uid="NumSharp.NumPyRandom.lognormal(System.Double,System.Double,NumSharp.Shape)">
+  lognormal(double, double, Shape)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Draw samples from a log-normal distribution.
+Draw samples from a log-normal distribution with specified mean, standard deviation, and array shape.
+Note that the mean and standard deviation are not the values for the distribution itself, but of the underlying normal distribution it is derived from.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray lognormal(double mean, double sigma, Shape shape)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>mean</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Mean value of the underlying normal distribution. Default is 0.</p>
+</dd>
+    <dt><code>sigma</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Standard deviation of the underlying normal distribution. Should be greater than zero. Default is 1.</p>
+</dd>
+    <dt><code>shape</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd><p>Output Shape</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.NDArray.html">NDArray</a></dt>
+    <dd><p>Drawn samples from the parameterized bernoulli distribution.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_NumPyRandom_lognormal_System_Double_System_Double_NumSharp_Shape__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><a href="https://docs.scipy.org/doc/numpy-1.16.0/reference/generated/numpy.random.lognormal.html">https://docs.scipy.org/doc/numpy-1.16.0/reference/generated/numpy.random.lognormal.html</a></p>
+</div>
+
+
+
+
+  <a id="NumSharp_NumPyRandom_lognormal_" data-uid="NumSharp.NumPyRandom.lognormal*"></a>
+
+  <h3 id="NumSharp_NumPyRandom_lognormal_System_Double_System_Double_System_Int32___" data-uid="NumSharp.NumPyRandom.lognormal(System.Double,System.Double,System.Int32[])">
+  lognormal(double, double, params int[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Draw samples from a log-normal distribution.
+Draw samples from a log-normal distribution with specified mean, standard deviation, and array shape.
+Note that the mean and standard deviation are not the values for the distribution itself, but of the underlying normal distribution it is derived from.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray lognormal(double mean, double sigma, params int[] dims)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>mean</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Mean value of the underlying normal distribution. Default is 0.</p>
+</dd>
+    <dt><code>sigma</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Standard deviation of the underlying normal distribution. Should be greater than zero. Default is 1.</p>
+</dd>
+    <dt><code>dims</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>Output Shape</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.NDArray.html">NDArray</a></dt>
+    <dd><p>Drawn samples from the parameterized bernoulli distribution.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_NumPyRandom_lognormal_System_Double_System_Double_System_Int32____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><a href="https://docs.scipy.org/doc/numpy-1.16.0/reference/generated/numpy.random.lognormal.html">https://docs.scipy.org/doc/numpy-1.16.0/reference/generated/numpy.random.lognormal.html</a></p>
+</div>
+
+
+
+
+  <a id="NumSharp_NumPyRandom_normal_" data-uid="NumSharp.NumPyRandom.normal*"></a>
+
+  <h3 id="NumSharp_NumPyRandom_normal_System_Double_System_Double_System_Int32___" data-uid="NumSharp.NumPyRandom.normal(System.Double,System.Double,System.Int32[])">
+  normal(double, double, params int[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Draw random samples from a normal (Gaussian) distribution.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray normal(double loc, double scale, params int[] dims)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>loc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Mean of the distribution</p>
+</dd>
+    <dt><code>scale</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Standard deviation of the distribution</p>
+</dd>
+    <dt><code>dims</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.NDArray.html">NDArray</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_NumPyRandom_permutation_" data-uid="NumSharp.NumPyRandom.permutation*"></a>
+
+  <h3 id="NumSharp_NumPyRandom_permutation_NumSharp_NDArray_" data-uid="NumSharp.NumPyRandom.permutation(NumSharp.NDArray)">
+  permutation(NDArray)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Randomly permute a sequence, or return a permuted range.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray permutation(NDArray x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="NumSharp.NDArray.html">NDArray</a></dt>
+    <dd><p>If x is an integer, randomly permute np.arange(x).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.NDArray.html">NDArray</a></dt>
+    <dd><p>Permuted sequence or array range.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_NumPyRandom_permutation_NumSharp_NDArray__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><a href="https://docs.scipy.org/doc/numpy/reference/generated/numpy.random.permutation.html">https://docs.scipy.org/doc/numpy/reference/generated/numpy.random.permutation.html</a></p>
+</div>
+
+
+
+
+  <a id="NumSharp_NumPyRandom_permutation_" data-uid="NumSharp.NumPyRandom.permutation*"></a>
+
+  <h3 id="NumSharp_NumPyRandom_permutation_System_Int32_" data-uid="NumSharp.NumPyRandom.permutation(System.Int32)">
+  permutation(int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Randomly permute a sequence, or return a permuted range.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray permutation(int x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>If x is an integer, randomly permute np.arange(x).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.NDArray.html">NDArray</a></dt>
+    <dd><p>Permuted sequence or array range.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_NumPyRandom_permutation_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><a href="https://docs.scipy.org/doc/numpy/reference/generated/numpy.random.permutation.html">https://docs.scipy.org/doc/numpy/reference/generated/numpy.random.permutation.html</a></p>
+</div>
+
+
+
+
+  <a id="NumSharp_NumPyRandom_poisson_" data-uid="NumSharp.NumPyRandom.poisson*"></a>
+
+  <h3 id="NumSharp_NumPyRandom_poisson_System_Double_NumSharp_Shape_" data-uid="NumSharp.NumPyRandom.poisson(System.Double,NumSharp.Shape)">
+  poisson(double, Shape)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Draw samples from a Poisson distribution. The Poisson distribution is the limit of the binomial distribution for large N.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray poisson(double lam, Shape shape)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>lam</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Expectation of interval, should be &gt;= 0. A sequence of expectation intervals must be broadcastable over the requested size.</p>
+</dd>
+    <dt><code>shape</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd><p>Output Shape</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.NDArray.html">NDArray</a></dt>
+    <dd><p>Drawn samples from the parameterized binomial distribution, where each sample is equal to the number of successes over the n trials.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_NumPyRandom_poisson_System_Double_NumSharp_Shape__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><a href="https://docs.scipy.org/doc/numpy-1.16.0/reference/generated/numpy.random.poisson.html">https://docs.scipy.org/doc/numpy-1.16.0/reference/generated/numpy.random.poisson.html</a></p>
+</div>
+
+
+
+
+  <a id="NumSharp_NumPyRandom_poisson_" data-uid="NumSharp.NumPyRandom.poisson*"></a>
+
+  <h3 id="NumSharp_NumPyRandom_poisson_System_Double_System_Int32___" data-uid="NumSharp.NumPyRandom.poisson(System.Double,System.Int32[])">
+  poisson(double, params int[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Draw samples from a Poisson distribution. The Poisson distribution is the limit of the binomial distribution for large N.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray poisson(double lam, params int[] dims)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>lam</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Expectation of interval, should be &gt;= 0. A sequence of expectation intervals must be broadcastable over the requested size.</p>
+</dd>
+    <dt><code>dims</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>Output Shape</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.NDArray.html">NDArray</a></dt>
+    <dd><p>Drawn samples from the parameterized binomial distribution, where each sample is equal to the number of successes over the n trials.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_NumPyRandom_poisson_System_Double_System_Int32____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><a href="https://docs.scipy.org/doc/numpy-1.16.0/reference/generated/numpy.random.poisson.html">https://docs.scipy.org/doc/numpy-1.16.0/reference/generated/numpy.random.poisson.html</a></p>
+</div>
+
+
+
+
+  <a id="NumSharp_NumPyRandom_rand_" data-uid="NumSharp.NumPyRandom.rand*"></a>
+
+  <h3 id="NumSharp_NumPyRandom_rand_NumSharp_Shape_" data-uid="NumSharp.NumPyRandom.rand(NumSharp.Shape)">
+  rand(Shape)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Random values in a given shape.
+Create an array of the given shape and populate it with random samples from a uniform distribution over [0, 1).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray rand(Shape shape)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>shape</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.NDArray.html">NDArray</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_NumPyRandom_rand_" data-uid="NumSharp.NumPyRandom.rand*"></a>
+
+  <h3 id="NumSharp_NumPyRandom_rand_System_Int32___" data-uid="NumSharp.NumPyRandom.rand(System.Int32[])">
+  rand(params int[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Random values in a given shape.
+Create an array of the given shape and populate it with random samples from a uniform distribution over [0, 1).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray rand(params int[] size)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>size</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.NDArray.html">NDArray</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_NumPyRandom_randint_" data-uid="NumSharp.NumPyRandom.randint*"></a>
+
+  <h3 id="NumSharp_NumPyRandom_randint_System_Int64_System_Int64_NumSharp_Shape_System_Type_" data-uid="NumSharp.NumPyRandom.randint(System.Int64,System.Int64,NumSharp.Shape,System.Type)">
+  randint(long, long, Shape, Type)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Return random integers from the “discrete uniform” distribution of the specified dtype in the “half-open” interval [low, high). If high is None (the default), then results are from [0, low).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray randint(long low, long high = -1, Shape size = default, Type dtype = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>low</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd><p>Lowest (signed) integer to be drawn from the distribution (unless high=-1, in which case this parameter is one above the highest such integer).</p>
+</dd>
+    <dt><code>high</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd><p>If provided, one above the largest (signed) integer to be drawn from the distribution (see above for behavior if high=-1).</p>
+</dd>
+    <dt><code>size</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd><p>The shape of the array.</p>
+</dd>
+    <dt><code>dtype</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.type">Type</a></dt>
+    <dd><p>Desired dtype of the result. All dtypes are determined by their name, i.e., ‘int64’, ‘int’, etc, so byteorder is not available and a specific precision may have different C types depending on the platform. The default value is ‘np.int’.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.NDArray.html">NDArray</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_NumPyRandom_randint_System_Int64_System_Int64_NumSharp_Shape_System_Type__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><a href="https://docs.scipy.org/doc/numpy/reference/generated/numpy.random.randint.html">https://docs.scipy.org/doc/numpy/reference/generated/numpy.random.randint.html</a></p>
+</div>
+
+
+
+
+  <a id="NumSharp_NumPyRandom_randn_" data-uid="NumSharp.NumPyRandom.randn*"></a>
+
+  <h3 id="NumSharp_NumPyRandom_randn_System_Int32___" data-uid="NumSharp.NumPyRandom.randn(System.Int32[])">
+  randn(params int[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Return a sample (or samples) from the “standard normal” distribution.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray randn(params int[] size)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>size</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.NDArray.html">NDArray</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_NumPyRandom_randn_" data-uid="NumSharp.NumPyRandom.randn*"></a>
+
+  <h3 id="NumSharp_NumPyRandom_randn__1" data-uid="NumSharp.NumPyRandom.randn``1">
+  randn&lt;T&gt;()
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Scalar value</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T randn&lt;T&gt;()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_NumPyRandom_random_sample_" data-uid="NumSharp.NumPyRandom.random_sample*"></a>
+
+  <h3 id="NumSharp_NumPyRandom_random_sample_NumSharp_Shape_" data-uid="NumSharp.NumPyRandom.random_sample(NumSharp.Shape)">
+  random_sample(Shape)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Return random floats in the half-open interval [0.0, 1.0).
+Results are from the “continuous uniform” distribution over the stated interval. To sample Unif[a, b), b &gt; a multiply the output of random_sample by (b-a) and add a:</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray random_sample(Shape shape)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>shape</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd><p>The shape to randomize</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.NDArray.html">NDArray</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_NumPyRandom_random_sample_" data-uid="NumSharp.NumPyRandom.random_sample*"></a>
+
+  <h3 id="NumSharp_NumPyRandom_random_sample_System_Int32___" data-uid="NumSharp.NumPyRandom.random_sample(System.Int32[])">
+  random_sample(params int[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Return random floats in the half-open interval [0.0, 1.0).
+Results are from the “continuous uniform” distribution over the stated interval. To sample Unif[a, b), b &gt; a multiply the output of random_sample by (b-a) and add a:</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray random_sample(params int[] size)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>size</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The samples</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.NDArray.html">NDArray</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_NumPyRandom_seed_" data-uid="NumSharp.NumPyRandom.seed*"></a>
+
+  <h3 id="NumSharp_NumPyRandom_seed_System_Int32_" data-uid="NumSharp.NumPyRandom.seed(System.Int32)">
+  seed(int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Seeds the generator.
+It can be called again to re-seed the generator.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void seed(int seed)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>seed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_NumPyRandom_set_state_" data-uid="NumSharp.NumPyRandom.set_state*"></a>
+
+  <h3 id="NumSharp_NumPyRandom_set_state_NumSharp_NativeRandomState_" data-uid="NumSharp.NumPyRandom.set_state(NumSharp.NativeRandomState)">
+  set_state(NativeRandomState)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Set the internal state of the generator from a <a class="xref" href="NumSharp.NumPyRandom.html">NumPyRandom</a>.
+for use if one has reason to manually (re-)set the internal state of the pseudo-random number generating algorithm.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void set_state(NativeRandomState nativeRandomState)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>nativeRandomState</code> <a class="xref" href="NumSharp.NativeRandomState.html">NativeRandomState</a></dt>
+    <dd><p>The state to restore onto this <a class="xref" href="NumSharp.NumPyRandom.html">NumPyRandom</a></p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_NumPyRandom_shuffle_" data-uid="NumSharp.NumPyRandom.shuffle*"></a>
+
+  <h3 id="NumSharp_NumPyRandom_shuffle_NumSharp_NDArray_System_Int32_" data-uid="NumSharp.NumPyRandom.shuffle(NumSharp.NDArray,System.Int32)">
+  shuffle(NDArray, int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Modify a sequence in-place by shuffling its contents.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">[SuppressMessage(&quot;ReSharper&quot;, &quot;TooWideLocalVariableScope&quot;)]
+public void shuffle(NDArray x, int passes = 2)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="NumSharp.NDArray.html">NDArray</a></dt>
+    <dd><p>The array or list to be shuffled.</p>
+</dd>
+    <dt><code>passes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>How many times to pass all items in a complexity of O(n*passes)</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_NumPyRandom_shuffle_NumSharp_NDArray_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><a href="https://docs.scipy.org/doc/numpy/reference/generated/numpy.random.shuffle.html">https://docs.scipy.org/doc/numpy/reference/generated/numpy.random.shuffle.html</a> <br>Does not copy <code class="paramref">x</code></p>
+</div>
+
+
+
+
+  <a id="NumSharp_NumPyRandom_stardard_normal_" data-uid="NumSharp.NumPyRandom.stardard_normal*"></a>
+
+  <h3 id="NumSharp_NumPyRandom_stardard_normal_System_Int32___" data-uid="NumSharp.NumPyRandom.stardard_normal(System.Int32[])">
+  stardard_normal(params int[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Draw samples from a standard Normal distribution (mean=0, stdev=1).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray stardard_normal(params int[] size)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>size</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.NDArray.html">NDArray</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_NumPyRandom_uniform_" data-uid="NumSharp.NumPyRandom.uniform*"></a>
+
+  <h3 id="NumSharp_NumPyRandom_uniform_NumSharp_NDArray_NumSharp_NDArray_System_Type_" data-uid="NumSharp.NumPyRandom.uniform(NumSharp.NDArray,NumSharp.NDArray,System.Type)">
+  uniform(NDArray, NDArray, Type)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Draw samples from a uniform distribution.
+Samples are uniformly distributed over the half-open interval [low, high) (includes low, but excludes high). In other words, any value within the given interval is equally likely to be drawn by uniform.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray uniform(NDArray low, NDArray high, Type dType = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>low</code> <a class="xref" href="NumSharp.NDArray.html">NDArray</a></dt>
+    <dd><p>Lower boundary of the output interval. All values generated will be greater than or equal to low. The default value is 0.</p>
+</dd>
+    <dt><code>high</code> <a class="xref" href="NumSharp.NDArray.html">NDArray</a></dt>
+    <dd><p>Upper boundary of the output interval. All values generated will be less than high. The default value is 1.0.</p>
+</dd>
+    <dt><code>dType</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.type">Type</a></dt>
+    <dd><p>The type of the output <a class="xref" href="NumSharp.NDArray.html">NDArray</a></p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.NDArray.html">NDArray</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_NumPyRandom_uniform_" data-uid="NumSharp.NumPyRandom.uniform*"></a>
+
+  <h3 id="NumSharp_NumPyRandom_uniform_System_Double_System_Double_NumSharp_Shape_" data-uid="NumSharp.NumPyRandom.uniform(System.Double,System.Double,NumSharp.Shape)">
+  uniform(double, double, Shape)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Draw samples from a uniform distribution.
+Samples are uniformly distributed over the half-open interval [low, high) (includes low, but excludes high). In other words, any value within the given interval is equally likely to be drawn by uniform.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray uniform(double low, double high, Shape shape)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>low</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Lower boundary of the output interval. All values generated will be greater than or equal to low. The default value is 0.</p>
+</dd>
+    <dt><code>high</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Upper boundary of the output interval. All values generated will be less than high. The default value is 1.0.</p>
+</dd>
+    <dt><code>shape</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd><p>Output shape. If the given shape is, e.g., m, n, k, then m * n * k samples are drawn. If size is None (default), a single value is returned if low and high are both scalars.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.NDArray.html">NDArray</a></dt>
+    <dd><p>NDArray with values of type <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_NumPyRandom_uniform_" data-uid="NumSharp.NumPyRandom.uniform*"></a>
+
+  <h3 id="NumSharp_NumPyRandom_uniform_System_Double_System_Double_System_Int32___" data-uid="NumSharp.NumPyRandom.uniform(System.Double,System.Double,System.Int32[])">
+  uniform(double, double, params int[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Draw samples from a uniform distribution.
+Samples are uniformly distributed over the half-open interval [low, high) (includes low, but excludes high). In other words, any value within the given interval is equally likely to be drawn by uniform.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray uniform(double low, double high, params int[] size)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>low</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Lower boundary of the output interval. All values generated will be greater than or equal to low. The default value is 0.</p>
+</dd>
+    <dt><code>high</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Upper boundary of the output interval. All values generated will be less than high. The default value is 1.0.</p>
+</dd>
+    <dt><code>size</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>Output shape. If the given shape is, e.g., m, n, k, then m * n * k samples are drawn. If size is None (default), a single value is returned if low and high are both scalars.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.NDArray.html">NDArray</a></dt>
+    <dd><p>NDArray with values of type <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          <span>Copyright &copy; 2025 <a href='https://github.com/SciSharp'>SciSharp STACK</a>. Built with <a href='https://dotnet.github.io/docfx'>DocFX</a>.</span>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

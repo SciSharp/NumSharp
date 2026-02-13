@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+      <title>Struct NDArray._Unsafe | NumSharp Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Struct NDArray._Unsafe | NumSharp Documentation ">
+      
+      
+      <link rel="icon" href="../images/numsharp.icon128.png">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../images/numsharp.icon.svg" alt="NumSharp">
+            NumSharp
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="NumSharp.NDArray._Unsafe">
+
+
+
+  <h1 id="NumSharp_NDArray__Unsafe" data-uid="NumSharp.NDArray._Unsafe" class="text-break">
+Struct NDArray._Unsafe  
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="NumSharp.html">NumSharp</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>NumSharp.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"></div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public readonly struct NDArray._Unsafe</code></pre>
+  </div>
+
+
+
+
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetype.equals">ValueType.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetype.gethashcode">ValueType.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetype.tostring">ValueType.ToString()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="NumSharp.Extensions.LinqExtensions.html#NumSharp_Extensions_LinqExtensions_Yield__1___0_">LinqExtensions.Yield&lt;T&gt;(T)</a>
+  </div>
+  </dd></dl>
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="NumSharp_NDArray__Unsafe_Address_" data-uid="NumSharp.NDArray._Unsafe.Address*"></a>
+
+  <h3 id="NumSharp_NDArray__Unsafe_Address" data-uid="NumSharp.NDArray._Unsafe.Address">
+  Address
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the memory address to the start of this block of memory.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void* Address { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.void">void</a>*</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>When this NDArray is a slice.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="NumSharp_NDArray__Unsafe_BytesLength_" data-uid="NumSharp.NDArray._Unsafe.BytesLength*"></a>
+
+  <h3 id="NumSharp_NDArray__Unsafe_BytesLength" data-uid="NumSharp.NDArray._Unsafe.BytesLength">
+  BytesLength
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>How many bytes are stored in this memory block.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int BytesLength { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="NumSharp_NDArray__Unsafe_BytesLength_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Calculated by <a class="xref" href="NumSharp.NDArray._Unsafe.html#NumSharp_NDArray__Unsafe_Count">Count</a>*<a class="xref" href="NumSharp.NDArray._Unsafe.html#NumSharp_NDArray__Unsafe_ItemLength">ItemLength</a></p>
+</div>
+
+
+
+
+  <a id="NumSharp_NDArray__Unsafe_Count_" data-uid="NumSharp.NDArray._Unsafe.Count*"></a>
+
+  <h3 id="NumSharp_NDArray__Unsafe_Count" data-uid="NumSharp.NDArray._Unsafe.Count">
+  Count
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>How many items are stored in <a class="xref" href="NumSharp.NDArray._Unsafe.html#NumSharp_NDArray__Unsafe_Address">Address</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int Count { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="NumSharp_NDArray__Unsafe_Count_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Not to confuse with <a class="xref" href="NumSharp.NDArray._Unsafe.html#NumSharp_NDArray__Unsafe_BytesLength">BytesLength</a></p>
+</div>
+
+
+
+
+  <a id="NumSharp_NDArray__Unsafe_ItemLength_" data-uid="NumSharp.NDArray._Unsafe.ItemLength*"></a>
+
+  <h3 id="NumSharp_NDArray__Unsafe_ItemLength" data-uid="NumSharp.NDArray._Unsafe.ItemLength">
+  ItemLength
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>The size of a single item stored in <a class="xref" href="NumSharp.NDArray._Unsafe.html#NumSharp_NDArray__Unsafe_Address">Address</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int ItemLength { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="NumSharp_NDArray__Unsafe_ItemLength_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Equivalent to NPTypeCode.SizeOf extension.</p>
+</div>
+
+
+
+
+  <a id="NumSharp_NDArray__Unsafe_Pin_" data-uid="NumSharp.NDArray._Unsafe.Pin*"></a>
+
+  <h3 id="NumSharp_NDArray__Unsafe_Pin" data-uid="NumSharp.NDArray._Unsafe.Pin">
+  Pin
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Provides the ability to return a pin to the memory address of NDArray.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray._Unsafe._Pinning Pin { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.NDArray.html">NDArray</a>.<a class="xref" href="NumSharp.NDArray._Unsafe.html">_Unsafe</a>.<a class="xref" href="NumSharp.NDArray._Unsafe._Pinning.html">_Pinning</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="NumSharp_NDArray__Unsafe_Pin_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Possible only when the ndarray is not sliced.</p>
+</div>
+
+
+
+
+  <a id="NumSharp_NDArray__Unsafe_Storage_" data-uid="NumSharp.NDArray._Unsafe.Storage*"></a>
+
+  <h3 id="NumSharp_NDArray__Unsafe_Storage" data-uid="NumSharp.NDArray._Unsafe.Storage">
+  Storage
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Provides access to the internal <a class="xref" href="NumSharp.Backends.UnmanagedStorage.html">UnmanagedStorage</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public UnmanagedStorage Storage { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Backends.UnmanagedStorage.html">UnmanagedStorage</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="NumSharp_NDArray__Unsafe_AsSpan_" data-uid="NumSharp.NDArray._Unsafe.AsSpan*"></a>
+
+  <h3 id="NumSharp_NDArray__Unsafe_AsSpan__1" data-uid="NumSharp.NDArray._Unsafe.AsSpan``1">
+  AsSpan&lt;T&gt;()
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Span&lt;T&gt; AsSpan&lt;T&gt;()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_NDArray__Unsafe_AsSpan__1_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Does not perform copy.</p>
+</div>
+
+
+
+
+  <a id="NumSharp_NDArray__Unsafe_Fill_" data-uid="NumSharp.NDArray._Unsafe.Fill*"></a>
+
+  <h3 id="NumSharp_NDArray__Unsafe_Fill_System_Object_" data-uid="NumSharp.NDArray._Unsafe.Fill(System.Object)">
+  Fill(object)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Fills all indexes with <code class="paramref">value</code>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Fill(object value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_NDArray__Unsafe_GetIndex_" data-uid="NumSharp.NDArray._Unsafe.GetIndex*"></a>
+
+  <h3 id="NumSharp_NDArray__Unsafe_GetIndex_System_Int32_" data-uid="NumSharp.NDArray._Unsafe.GetIndex(System.Int32)">
+  GetIndex(int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public object GetIndex(int index)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>index</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_NDArray__Unsafe_GetIndex_" data-uid="NumSharp.NDArray._Unsafe.GetIndex*"></a>
+
+  <h3 id="NumSharp_NDArray__Unsafe_GetIndex__1_System_Int32_" data-uid="NumSharp.NDArray._Unsafe.GetIndex``1(System.Int32)">
+  GetIndex&lt;T&gt;(int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T GetIndex&lt;T&gt;(int index) where T : unmanaged</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>index</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_NDArray__Unsafe_GetPinnableReference_" data-uid="NumSharp.NDArray._Unsafe.GetPinnableReference*"></a>
+
+  <h3 id="NumSharp_NDArray__Unsafe_GetPinnableReference" data-uid="NumSharp.NDArray._Unsafe.GetPinnableReference">
+  GetPinnableReference()
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ref byte GetPinnableReference()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>When this NDArray is a slice.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="NumSharp_NDArray__Unsafe_GetPinnableReference_" data-uid="NumSharp.NDArray._Unsafe.GetPinnableReference*"></a>
+
+  <h3 id="NumSharp_NDArray__Unsafe_GetPinnableReference__1" data-uid="NumSharp.NDArray._Unsafe.GetPinnableReference``1">
+  GetPinnableReference&lt;T&gt;()
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets pinnable reference of the first item in the memory block storage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ref T GetPinnableReference&lt;T&gt;() where T : unmanaged</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          <span>Copyright &copy; 2025 <a href='https://github.com/SciSharp'>SciSharp STACK</a>. Built with <a href='https://dotnet.github.io/docfx'>DocFX</a>.</span>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,5 +1,7 @@
 ###############
 #  temp file  #
 ###############
+# Generated API YAML files (except toc.yml which we customize)
 *.yml
+!toc.yml
 .manifest

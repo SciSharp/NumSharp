@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+      <title>Interface IMemoryBlock&lt;T&gt; | NumSharp Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface IMemoryBlock&lt;T&gt; | NumSharp Documentation ">
+      
+      
+      <link rel="icon" href="../images/numsharp.icon128.png">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../images/numsharp.icon.svg" alt="NumSharp">
+            NumSharp
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="NumSharp.Backends.Unmanaged.IMemoryBlock`1">
+
+
+
+  <h1 id="NumSharp_Backends_Unmanaged_IMemoryBlock_1" data-uid="NumSharp.Backends.Unmanaged.IMemoryBlock`1" class="text-break">
+Interface IMemoryBlock&lt;T&gt;  
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="NumSharp.html">NumSharp</a>.<a class="xref" href="NumSharp.Backends.html">Backends</a>.<a class="xref" href="NumSharp.Backends.Unmanaged.html">Unmanaged</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>NumSharp.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"></div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface IMemoryBlock&lt;T&gt; : IMemoryBlock where T : unmanaged</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="NumSharp.Backends.Unmanaged.IMemoryBlock.html#NumSharp_Backends_Unmanaged_IMemoryBlock_ItemLength">IMemoryBlock.ItemLength</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.Backends.Unmanaged.IMemoryBlock.html#NumSharp_Backends_Unmanaged_IMemoryBlock_Count">IMemoryBlock.Count</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.Backends.Unmanaged.IMemoryBlock.html#NumSharp_Backends_Unmanaged_IMemoryBlock_BytesLength">IMemoryBlock.BytesLength</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.Backends.Unmanaged.IMemoryBlock.html#NumSharp_Backends_Unmanaged_IMemoryBlock_TypeCode">IMemoryBlock.TypeCode</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="NumSharp.Backends.Unmanaged.UnmanagedHelper.html#NumSharp_Backends_Unmanaged_UnmanagedHelper_CopyTo_NumSharp_Backends_Unmanaged_IMemoryBlock_NumSharp_Backends_Unmanaged_IMemoryBlock_">UnmanagedHelper.CopyTo(IMemoryBlock, IMemoryBlock)</a>
+  </div>
+  <div>
+      <a class="xref" href="NumSharp.Backends.Unmanaged.UnmanagedHelper.html#NumSharp_Backends_Unmanaged_UnmanagedHelper_CopyTo_NumSharp_Backends_Unmanaged_IMemoryBlock_NumSharp_Backends_Unmanaged_IMemoryBlock_System_Int32_">UnmanagedHelper.CopyTo(IMemoryBlock, IMemoryBlock, int)</a>
+  </div>
+  <div>
+      <a class="xref" href="NumSharp.Backends.Unmanaged.UnmanagedHelper.html#NumSharp_Backends_Unmanaged_UnmanagedHelper_CopyTo_NumSharp_Backends_Unmanaged_IMemoryBlock_System_Void__">UnmanagedHelper.CopyTo(IMemoryBlock, void*)</a>
+  </div>
+  <div>
+      <a class="xref" href="NumSharp.Backends.Unmanaged.UnmanagedHelper.html#NumSharp_Backends_Unmanaged_UnmanagedHelper_CopyTo_NumSharp_Backends_Unmanaged_IMemoryBlock_System_Void__System_Int32_">UnmanagedHelper.CopyTo(IMemoryBlock, void*, int)</a>
+  </div>
+  <div>
+      <a class="xref" href="NumSharp.Backends.Unmanaged.UnmanagedMemoryBlock.html#NumSharp_Backends_Unmanaged_UnmanagedMemoryBlock_CastTo_NumSharp_Backends_Unmanaged_IMemoryBlock_NumSharp_Backends_Unmanaged_IMemoryBlock_System_Nullable_System_Int32__System_Nullable_System_Int32__">UnmanagedMemoryBlock.CastTo(IMemoryBlock, IMemoryBlock, int?, int?)</a>
+  </div>
+  <div>
+      <a class="xref" href="NumSharp.Backends.Unmanaged.UnmanagedMemoryBlock.html#NumSharp_Backends_Unmanaged_UnmanagedMemoryBlock_CastTo_NumSharp_Backends_Unmanaged_IMemoryBlock_NumSharp_NPTypeCode_">UnmanagedMemoryBlock.CastTo(IMemoryBlock, NPTypeCode)</a>
+  </div>
+  <div>
+      <a class="xref" href="NumSharp.Backends.Unmanaged.UnmanagedMemoryBlock.html#NumSharp_Backends_Unmanaged_UnmanagedMemoryBlock_CastTo__1_NumSharp_Backends_Unmanaged_IMemoryBlock_">UnmanagedMemoryBlock.CastTo&lt;TOut&gt;(IMemoryBlock)</a>
+  </div>
+  <div>
+      <a class="xref" href="NumSharp.Backends.Unmanaged.UnmanagedMemoryBlock.html#NumSharp_Backends_Unmanaged_UnmanagedMemoryBlock_CastTo__2_NumSharp_Backends_Unmanaged_IMemoryBlock_">UnmanagedMemoryBlock.CastTo&lt;TIn, TOut&gt;(IMemoryBlock)</a>
+  </div>
+  <div>
+      <a class="xref" href="NumSharp.Backends.Unmanaged.UnmanagedMemoryBlock.html#NumSharp_Backends_Unmanaged_UnmanagedMemoryBlock_CastTo__2_NumSharp_Backends_Unmanaged_IMemoryBlock___0__">UnmanagedMemoryBlock.CastTo&lt;TIn, TOut&gt;(IMemoryBlock&lt;TIn&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="NumSharp.Extensions.LinqExtensions.html#NumSharp_Extensions_LinqExtensions_Yield__1___0_">LinqExtensions.Yield&lt;T&gt;(T)</a>
+  </div>
+  </dd></dl>
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="NumSharp_Backends_Unmanaged_IMemoryBlock_1_Address_" data-uid="NumSharp.Backends.Unmanaged.IMemoryBlock`1.Address*"></a>
+
+  <h3 id="NumSharp_Backends_Unmanaged_IMemoryBlock_1_Address" data-uid="NumSharp.Backends.Unmanaged.IMemoryBlock`1.Address">
+  Address
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>The start address of this memory block.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T* Address { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt>T*</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          <span>Copyright &copy; 2025 <a href='https://github.com/SciSharp'>SciSharp STACK</a>. Built with <a href='https://dotnet.github.io/docfx'>DocFX</a>.</span>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>
