@@ -5,8 +5,8 @@ using NumSharp.UnitTest.Utilities;
 namespace NumSharp.UnitTest
 {
     /// <summary>
-    ///     Phase 1 parity tests: Verify GetOffsetSimple() matches GetOffset() for basic shapes.
-    ///     These tests establish the foundation for the NumPy alignment migration.
+    ///     NumPy-aligned offset parity tests: Verify element access uses the formula
+    ///     offset + sum(indices * strides) for all shape types (simple, sliced, broadcast).
     /// </summary>
     public class ShapeOffsetParityTests
     {
@@ -162,12 +162,11 @@ namespace NumSharp.UnitTest
         }
 
         // ================================================================
-        //  Phase 2: Sliced shape parity tests
-        //  Verify offset is computed at slice time
+        //  Sliced shape tests - offset computed at slice time
         // ================================================================
 
         [Test]
-        public void Phase2_SlicedShape_OffsetComputedAtSliceTime()
+        public void Slice_SlicedShape_OffsetComputedAtSliceTime()
         {
             // Original shape (4,3) with strides [3, 1]
             // Slice [1:3, :] should start at offset 1*3 = 3
@@ -180,7 +179,7 @@ namespace NumSharp.UnitTest
         }
 
         [Test]
-        public void Phase2_SlicedShape_GetOffsetSimple_Parity()
+        public void Slice_SlicedShape_GetOffsetSimple_Parity()
         {
             // np.arange(12).reshape(4,3)[1:3, :]
             // Original: [[0,1,2], [3,4,5], [6,7,8], [9,10,11]]
@@ -201,7 +200,7 @@ namespace NumSharp.UnitTest
         }
 
         [Test]
-        public void Phase2_SlicedVector_OffsetAndParity()
+        public void Slice_SlicedVector_OffsetAndParity()
         {
             // np.arange(10)[3:7] -> offset=3, strides=[1], dims=[4]
             var original = new Shape(10);
@@ -219,7 +218,7 @@ namespace NumSharp.UnitTest
         }
 
         [Test]
-        public void Phase2_SlicedWithStep_OffsetAndStrides()
+        public void Slice_SlicedWithStep_OffsetAndStrides()
         {
             // np.arange(10)[1:7:2] -> starts at 1, takes [1,3,5], dims=[3]
             // offset=1, strides=[2]
@@ -240,7 +239,7 @@ namespace NumSharp.UnitTest
         }
 
         [Test]
-        public void Phase2_Sliced2D_ColumnSlice()
+        public void Slice_Sliced2D_ColumnSlice()
         {
             // np.arange(12).reshape(4,3)[:, 1] -> column 1
             // Original strides [3, 1], slicing [:, 1] gives offset=1, dims=[4], strides=[3]
@@ -261,7 +260,7 @@ namespace NumSharp.UnitTest
         }
 
         [Test]
-        public void Phase2_SlicedScalar_Offset()
+        public void Slice_SlicedScalar_Offset()
         {
             // np.arange(12).reshape(4,3)[2, 1] -> scalar at offset 2*3 + 1 = 7
             var original = new Shape(4, 3);
@@ -272,7 +271,7 @@ namespace NumSharp.UnitTest
         }
 
         [Test]
-        public void Phase2_DoubleSliced_OffsetAccumulates()
+        public void Slice_DoubleSliced_OffsetAccumulates()
         {
             // First slice: np.arange(12).reshape(4,3)[1:, :] -> offset=3
             // Second slice: [1:, 1:] on the result -> additional offset
@@ -299,12 +298,11 @@ namespace NumSharp.UnitTest
         }
 
         // ================================================================
-        //  Phase 3: Broadcast shape parity tests
-        //  Verify offset is preserved from source when broadcasting
+        //  Broadcast shape tests - offset preserved from source
         // ================================================================
 
         [Test]
-        public void Phase3_BroadcastBasic_OffsetPreserved()
+        public void Broadcast_BroadcastBasic_OffsetPreserved()
         {
             // Broadcast a simple shape - offset should stay 0
             var left = new Shape(3, 1);
@@ -318,7 +316,7 @@ namespace NumSharp.UnitTest
         }
 
         [Test]
-        public void Phase3_BroadcastSliced_OffsetPreserved()
+        public void Broadcast_BroadcastSliced_OffsetPreserved()
         {
             // Slice a shape (gains offset), then broadcast
             // np.arange(12).reshape(4,3)[1:3, :] has offset=3
@@ -336,7 +334,7 @@ namespace NumSharp.UnitTest
         }
 
         [Test]
-        public void Phase3_BroadcastScalar_OffsetPreserved()
+        public void Broadcast_BroadcastScalar_OffsetPreserved()
         {
             // Slice to get scalar with offset, then broadcast
             var original = new Shape(4, 3);
@@ -354,7 +352,7 @@ namespace NumSharp.UnitTest
         }
 
         [Test]
-        public void Phase3_BroadcastTo_SlicedArray()
+        public void Broadcast_BroadcastTo_SlicedArray()
         {
             // np.arange(10)[3:7] = [3,4,5,6], offset=3, shape=(4,)
             // broadcast_to shape (3, 4)
@@ -370,7 +368,7 @@ namespace NumSharp.UnitTest
         }
 
         [Test]
-        public void Phase3_BroadcastMultiple_OffsetPreserved()
+        public void Broadcast_BroadcastMultiple_OffsetPreserved()
         {
             // Test Broadcast(Shape[]) with multiple shapes
             var shape1 = new Shape(4, 3);
@@ -388,7 +386,7 @@ namespace NumSharp.UnitTest
         }
 
         [Test]
-        public void Phase3_GetOffsetSimple_BroadcastedSliced()
+        public void Broadcast_GetOffsetSimple_BroadcastedSliced()
         {
             // End-to-end: slice then broadcast, verify GetOffsetSimple parity
             var original = new Shape(4, 3);
@@ -409,13 +407,13 @@ namespace NumSharp.UnitTest
         }
 
         // ================================================================
-        //  Phase 5: Verify GetOffset uses GetOffsetSimple for non-recursive slices
+        //  NumPy-aligned GetOffset verification
         // ================================================================
 
         [Test]
-        public void Phase5_SlicedShape_GetOffset_UsesGetOffsetSimple()
+        public void SlicedShape_GetOffset_NumPyAligned()
         {
-            // After Phase 5, GetOffset delegates to GetOffsetSimple for non-recursive slices
+            // GetOffset uses NumPy formula: offset + sum(indices * strides)
             // This test verifies the full element access path works correctly
 
             // Simple row slice
@@ -433,7 +431,7 @@ namespace NumSharp.UnitTest
         }
 
         [Test]
-        public void Phase5_SlicedWithStep_GetOffset_UsesGetOffsetSimple()
+        public void SlicedWithStep_GetOffset_NumPyAligned()
         {
             // Slice with step
             var arr = np.arange(10);
@@ -446,7 +444,7 @@ namespace NumSharp.UnitTest
         }
 
         [Test]
-        public void Phase5_ColumnSlice_GetOffset_UsesGetOffsetSimple()
+        public void ColumnSlice_GetOffset_NumPyAligned()
         {
             // Column slice (dimension reduction)
             var arr = np.arange(12).reshape(4, 3);
@@ -460,7 +458,7 @@ namespace NumSharp.UnitTest
         }
 
         [Test]
-        public void Phase5_DoubleSliced_GetOffset_UsesGetOffsetSimple()
+        public void DoubleSliced_GetOffset_NumPyAligned()
         {
             // Double slice (slice of slice)
             var arr = np.arange(12).reshape(4, 3);
@@ -478,11 +476,11 @@ namespace NumSharp.UnitTest
         }
 
         // ================================================================
-        //  Phase 6: Cleanup verification
+        //  NumPy purity verification
         // ================================================================
 
         [Test]
-        public void Phase6_IsSimpleSlice_TrueForNonContiguousSlice()
+        public void NumPyPurity_IsSimpleSlice_TrueForNonContiguousSlice()
         {
             // Note: Contiguous slices get optimized (IsSliced=false).
             // Use step or column slices to test IsSimpleSlice.
@@ -491,12 +489,11 @@ namespace NumSharp.UnitTest
 
             stepSliced.Shape.IsSliced.Should().BeTrue();
             stepSliced.Shape.IsSimpleSlice.Should().BeTrue();
-            stepSliced.Shape.IsRecursive.Should().BeFalse();
             stepSliced.Shape.IsBroadcasted.Should().BeFalse();
         }
 
         [Test]
-        public void Phase6_IsSimpleSlice_TrueForColumnSlice()
+        public void NumPyPurity_IsSimpleSlice_TrueForColumnSlice()
         {
             // Column slice is non-contiguous
             var arr = np.arange(12).reshape(4, 3);
@@ -509,7 +506,7 @@ namespace NumSharp.UnitTest
         }
 
         [Test]
-        public void Phase6_IsSimpleSlice_FalseForBroadcast()
+        public void NumPyPurity_IsSimpleSlice_FalseForBroadcast()
         {
             var arr = np.arange(3);
             var broadcasted = np.broadcast_to(arr, (2, 3));
@@ -519,7 +516,7 @@ namespace NumSharp.UnitTest
         }
 
         [Test]
-        public void Phase6_ContiguousSlice_Optimized()
+        public void NumPyPurity_ContiguousSlice_Optimized()
         {
             // Contiguous slices are optimized: no ViewInfo, IsSliced=false
             // This matches NumPy's architecture (data pointer adjustment)
@@ -536,7 +533,7 @@ namespace NumSharp.UnitTest
         }
 
         [Test]
-        public void Phase6_NonSlicedShape_UsesGetOffsetSimple()
+        public void NumPyPurity_NonSlicedShape_UsesGetOffsetSimple()
         {
             // Verify non-sliced shapes also use the simple offset formula
             var arr = np.arange(12).reshape(4, 3);

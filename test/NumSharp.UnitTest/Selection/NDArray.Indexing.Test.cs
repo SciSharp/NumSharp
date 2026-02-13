@@ -1279,14 +1279,7 @@ namespace NumSharp.UnitTest.Selection
             GetIndicesFromSlice((3, 4, 3), new Slice("-1::-1"), 0).Should().BeOfValues(2, 1, 0);
         }
 
-        [Test]
-        public void GetCoordinates_Broadcasted()
-        {
-            var nd = np.broadcast_to(np.array(1), (2, 2, 2));
-            var t = nd.Shape.GetCoordinatesFromAbsoluteIndex(15);
-            print(t);
-            t.Should().AllBeEquivalentTo(0);
-        }
+        // GetCoordinates_Broadcasted test removed - GetCoordinatesFromAbsoluteIndex was dead API
 
         [Test]
         public void IndexNDArray_NewAxis_Case1()

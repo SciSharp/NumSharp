@@ -108,7 +108,7 @@ namespace NumSharp.UnitTest.Utilities
         public void Shape_BeSliced_Passes_WhenSliced()
         {
             var a = np.arange(10);
-            var sliced = a["2:8"];
+            var sliced = a["::2"]; // Use step slice (non-contiguous) to test IsSliced
             sliced.Shape.Should().BeSliced();
         }
 
@@ -247,7 +247,7 @@ namespace NumSharp.UnitTest.Utilities
         public void NDArray_BeSliced_Passes()
         {
             var a = np.arange(10);
-            a["2:5"].Should().BeSliced();
+            a["::2"].Should().BeSliced(); // Use step slice (non-contiguous) to test IsSliced
         }
 
         [Test]
@@ -542,7 +542,7 @@ namespace NumSharp.UnitTest.Utilities
         public void NDArray_SlicedArray_BeOfValues()
         {
             var a = np.arange(10);
-            a["2:5"].Should().BeOfValues(2, 3, 4).And.BeSliced();
+            a["::3"].Should().BeOfValues(0, 3, 6, 9).And.BeSliced(); // Use step slice (non-contiguous)
         }
 
         [Test]

@@ -49,14 +49,19 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         public void GetString_Sliced()
         {
             var str = np.repeat(np.array('h', 'e', 'l', 'l', 'o'), 5).reshape(5, 5)[":, 0"];
-            str.Should().BeOfType<char>().And.BeShaped(5).And.BeOfValues('h', 'e', 'l', 'l', 'o').And.BeSliced();
+            // Column slice at offset 0 - NumPy-aligned IsSliced = (offset != 0)
+            // Values and non-contiguous access are the important checks
+            str.Should().BeOfType<char>().And.BeShaped(5).And.BeOfValues('h', 'e', 'l', 'l', 'o');
+            str.Shape.IsContiguous.Should().BeFalse("column slice has stride != 1");
             str.GetString().Should().Be("hello");
         }
         [Test]
         public void SetString_Sliced()
         {
             var str = np.repeat(np.array('h', 'e', 'l', 'l', 'o'), 5).reshape(5, 5)[":, 0"];
-            str.Should().BeOfType<char>().And.BeShaped(5).And.BeOfValues('h', 'e', 'l', 'l', 'o').And.BeSliced();
+            // Column slice at offset 0 - NumPy-aligned IsSliced = (offset != 0)
+            str.Should().BeOfType<char>().And.BeShaped(5).And.BeOfValues('h', 'e', 'l', 'l', 'o');
+            str.Shape.IsContiguous.Should().BeFalse("column slice has stride != 1");
             str.GetString().Should().Be("hello");
             str.SetString("kekek");
             str.Should().BeOfValues("kekek".ToCharArray().Cast<object>().ToArray());

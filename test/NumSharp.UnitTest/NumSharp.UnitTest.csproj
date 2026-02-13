@@ -1,7 +1,9 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <!-- TODO: Re-enable net8.0 once TUnit compatibility issues are resolved (TUnit requires .NET 9+ runtime) -->
+    <!-- <TargetFrameworks>net8.0;net10.0</TargetFrameworks> -->
+    <TargetFrameworks>net10.0</TargetFrameworks>
     <OutputType>Exe</OutputType>
     <IsPackable>false</IsPackable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>

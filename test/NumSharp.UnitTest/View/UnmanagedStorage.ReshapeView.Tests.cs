@@ -16,6 +16,7 @@ namespace NumSharp.UnitTest.View
         [Test]
         public void ReshapeSlicedArray()
         {
+            // Reshaping a non-contiguous slice makes a copy (NumPy behavior)
             var t = new UnmanagedStorage(np.arange(20).GetData(), new Shape(2, 10));
             var view = t.GetView(":, 5:");
             Assert.AreEqual(new Shape(2, 5), view.Shape);
@@ -52,8 +53,10 @@ namespace NumSharp.UnitTest.View
             var view = t.GetView(":, 1:");
             view.Shape.IsSliced.Should().Be(true);
             new NDArray(view).ToString(flat: true).Should().Be("array([[1, 2], [4, 5]])");
+
+            // Reshape makes a copy for non-contiguous arrays (NumPy behavior)
             view.Reshape(2, 1, 2, 1);
-            view.Shape.IsSliced.Should().Be(true);
+            // After reshape with copy, IsSliced is false but values are correct
             AssertAreEqual(new int[] { 1, 2, 4, 5 }, view.ToArray<int>());
 
             // doing the same disecting with slicing which ToString would do
@@ -80,6 +83,7 @@ namespace NumSharp.UnitTest.View
         [Test]
         public void SliceReshapedSlicedArray()
         {
+            // Reshaping a non-contiguous slice makes a copy (NumPy behavior)
             var t = new UnmanagedStorage(np.arange(20).GetData(), new Shape(2, 10));
             var view = t.GetView(":, 5:");
             view.Reshape(10);
@@ -93,24 +97,32 @@ namespace NumSharp.UnitTest.View
         [Test]
         public void TheUltimateTest______SliceReshapedSlicedReshapedSlicedArray()
         {
+            // This test demonstrates the copy-on-reshape behavior for non-contiguous arrays.
+            // Each reshape of a non-contiguous array makes a copy, so modifications
+            // don't propagate back through earlier reshape boundaries.
             var t = new UnmanagedStorage(np.arange(20).GetData(), new Shape(20));
             var view = t.GetView("::-1");
-            view.Reshape(5, 4);
-            var v1=view.GetView(":, 1:-1");
+            view.Reshape(5, 4);  // Makes a copy (reversed array is non-contiguous)
+            var v1 = view.GetView(":, 1:-1");
             new NDArray(v1).ToString(flat: true).Should().Be("array([[18, 17], [14, 13], [10, 9], [6, 5], [2, 1]])");
-            v1.Reshape(1,2,5);
+            v1.Reshape(1, 2, 5);  // Makes a copy (column slice is non-contiguous)
             new NDArray(v1).ToString(flat: true).Should().Be("array([[[18, 17, 14, 13, 10], [9, 6, 5, 2, 1]]])");
             var v2 = v1.GetView(":, ::-1, ::-2");
             new NDArray(v2).ToString(flat: true).Should().Be("array([[[1, 5, 9], [10, 14, 18]]])");
-            v2.Reshape(2, 3, 1);
+            v2.Reshape(2, 3, 1);  // Makes a copy
             new NDArray(v2).ToString(flat: true).Should().Be("array([[[1], [5], [9]], [[10], [14], [18]]])");
             var v3 = v2.GetView(":,::-2, 0");
             new NDArray(v3).ToString(flat: true).Should().Be("array([[9, 1], [18, 10]])");
-            v3.SetData(ArraySlice.FromArray(new int[]{ 99, 11, -18, -10}));
+
+            // Modify v3 - changes propagate to v2 (shared memory via slicing)
+            // but NOT to v1 or t (reshape created copies)
+            v3.SetData(ArraySlice.FromArray(new int[] { 99, 11, -18, -10 }));
             new NDArray(v3).ToString(flat: true).Should().Be("array([[99, 11], [-18, -10]])");
             new NDArray(v2).ToString(flat: true).Should().Be("array([[[11], [5], [99]], [[-10], [14], [-18]]])");
-            new NDArray(v1).ToString(flat: true).Should().Be("array([[[-18, 17, 14, 13, -10], [99, 6, 5, 2, 11]]])");
-            new NDArray(t).ToString(flat: true).Should().Be("array([0, 11, 2, 3, 4, 5, 6, 7, 8, 99, -10, 11, 12, 13, 14, 15, 16, 17, -18, 19])");
+            // v1 unchanged (reshape made a copy)
+            new NDArray(v1).ToString(flat: true).Should().Be("array([[[18, 17, 14, 13, 10], [9, 6, 5, 2, 1]]])");
+            // t unchanged (reshape made a copy)
+            new NDArray(t).ToString(flat: true).Should().Be("array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19])");
         }
 
         [Test]
@@ -127,6 +139,7 @@ namespace NumSharp.UnitTest.View
             //       [4, 5],
             //       [7, 8]])
             view.Should().BeOfValues(1,2,4,5,7,8).And.BeShaped(3, 2);
+            // Reshape makes a copy for non-contiguous arrays (NumPy behavior)
             view.Reshape(2,3);
             //>>> a[:, 1:].reshape(2,3)
             //array([[1, 2, 4],
