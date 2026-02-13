@@ -13,6 +13,14 @@ namespace NumSharp
     /// <remarks>Handles slicing, indexing based on coordinates or linear offset and broadcastted indexing.</remarks>
     public partial struct Shape : ICloneable, IEquatable<Shape>
     {
+        /// <summary>
+        ///     View information for sliced shapes. Still needed for:
+        ///     - Recursive slices (IsRecursive): ParentShape tracks reshape chain
+        ///     - GetCoordinatesFromAbsoluteIndex: Needs OriginalShape and Slices
+        ///     - Double-slicing: Slices are merged from parent ViewInfo
+        ///     For simple slices (IsSimpleSlice), offset/strides enable fast access
+        ///     without ViewInfo traversal.
+        /// </summary>
         internal ViewInfo ViewInfo;
         internal BroadcastInfo BroadcastInfo;
 
@@ -92,12 +100,23 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Is this Shape a recusive view? (deeper than 1 view)
+        ///     Is this Shape a recursive view? (deeper than 1 view, e.g., slice of reshape of slice)
         /// </summary>
         public readonly bool IsRecursive
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get => ViewInfo != null && ViewInfo.ParentShape.IsEmpty == false;
+        }
+
+        /// <summary>
+        ///     Is this a simple sliced shape that uses the fast GetOffsetSimple path?
+        ///     True when: IsSliced && !IsRecursive && !IsBroadcasted
+        ///     For simple slices, element access is: offset + sum(indices * strides)
+        /// </summary>
+        public readonly bool IsSimpleSlice
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => IsSliced && !IsRecursive && !IsBroadcasted;
         }
 
         /// <summary>
@@ -114,9 +133,61 @@ namespace NumSharp
         internal int[] strides;
 
         /// <summary>
+        ///     Base offset into storage (NumPy-aligned architecture).
+        ///     Computed at slice/broadcast time, enabling simple element access:
+        ///     element[indices] = data[offset + sum(indices * strides)]
+        /// </summary>
+        internal int offset;
+
+        /// <summary>
         ///     Is this shape a broadcast and/or has modified strides?
         /// </summary>
         public readonly bool IsBroadcasted => BroadcastInfo != null;
+
+        /// <summary>
+        ///     Is this shape a scalar that was broadcast to a larger shape?
+        ///     True when all strides are 0, meaning all dimensions are broadcast from a scalar.
+        ///     Used for optimization: when iterating, we can use a single value instead of indexing.
+        /// </summary>
+        public readonly bool IsScalarBroadcast
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get
+            {
+                if (strides == null || strides.Length == 0)
+                    return false;
+                for (int i = 0; i < strides.Length; i++)
+                {
+                    if (strides[i] != 0)
+                        return false;
+                }
+                return true;
+            }
+        }
+
+        /// <summary>
+        ///     Computes the size of the original (non-broadcast) data.
+        ///     This is the product of all dimensions where stride != 0.
+        ///     For a non-broadcast shape, this equals size.
+        ///     For a broadcast shape, this is the actual data size before broadcast.
+        /// </summary>
+        public readonly int OriginalSize
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get
+            {
+                if (strides == null || strides.Length == 0)
+                    return IsScalar ? 1 : size;
+
+                int originalSize = 1;
+                for (int i = 0; i < strides.Length; i++)
+                {
+                    if (strides[i] != 0)
+                        originalSize *= dimensions[i];
+                }
+                return originalSize == 0 ? 1 : originalSize; // At least 1 for scalar broadcasts
+            }
+        }
 
         /// <summary>
         ///     Is this shape a scalar? (<see cref="NDim"/>==0 && <see cref="size"/> == 1)
@@ -239,6 +310,17 @@ namespace NumSharp
             get => size;
         }
 
+        /// <summary>
+        ///     Base offset into storage (like NumPy's adjusted data pointer).
+        ///     For non-view shapes this is 0. For sliced/broadcast shapes,
+        ///     this will be computed at slice/broadcast time in future phases.
+        /// </summary>
+        public readonly int Offset
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => offset;
+        }
+
         public Shape(Shape other)
         {
             if (other.IsEmpty)
@@ -252,6 +334,7 @@ namespace NumSharp
             this.size = other.size;
             this.dimensions = (int[])other.dimensions.Clone();
             this.strides = (int[])other.strides.Clone();
+            this.offset = other.offset;
             this.IsScalar = other.IsScalar;
             this.ViewInfo = other.ViewInfo?.Clone();
             this.BroadcastInfo = other.BroadcastInfo?.Clone();
@@ -439,394 +522,104 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Retrieve the transformed offset if the shape is non-contiguous (sliced, broadcasted, or transposed),
+        ///     Retrieve the transformed offset if the shape is non-contiguous,
         ///     otherwise returns <paramref name="offset"/>.
         /// </summary>
         /// <param name="offset">The offset within the bounds of <see cref="size"/>.</param>
         /// <returns>The transformed offset.</returns>
-        /// <remarks>Avoid using unless it is unclear if shape is contiguous or not.</remarks>
+        /// <remarks>For contiguous shapes, returns offset directly. For non-contiguous, translates through coordinates.</remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public readonly int TransformOffset(int offset)
         {
-            // ReSharper disable once ConvertIfStatementToReturnStatement
-            if (ViewInfo == null && BroadcastInfo == null && !ModifiedStrides)
-                return offset;
+            // For contiguous shapes, direct return
+            if (IsContiguous)
+                return this.offset + offset;
 
+            // Non-contiguous: translate through coordinates
             return GetOffset(GetCoordinates(offset));
         }
 
         /// <summary>
         ///     Get offset index out of coordinate indices.
-        ///
-        ///     The offset is the absolute offset in memory for the given coordinates.
-        ///     Even for shapes that were sliced and reshaped after slicing and sliced again (and so forth)
-        ///     this returns the absolute memory offset.
-        ///
-        ///     Note: the inverse operation to this is GetCoordinatesFromAbsoluteIndex
+        ///     NumPy-aligned: offset + sum(indices * strides)
         /// </summary>
         /// <param name="indices">The coordinates to turn into linear offset</param>
         /// <returns>The index in the memory block that refers to a specific value.</returns>
-        /// <remarks>Handles sliced indices and broadcasting</remarks>
         [MethodImpl((MethodImplOptions)768)]
         public readonly int GetOffset(params int[] indices)
         {
-            int offset;
-            if (!IsSliced)
-            {
-                if (dimensions.Length == 0 && indices.Length == 1)
-                    return indices[0];
+            // Scalar with single index: direct offset access
+            if (dimensions.Length == 0)
+                return offset + (indices.Length > 0 ? indices[0] : 0);
 
-                offset = 0;
-                unchecked
-                {
-                    for (int i = 0; i < indices.Length; i++)
-                        offset += strides[i] * indices[i];
-                }
-
-                if (IsBroadcasted)
-                    return offset % BroadcastInfo.OriginalShape.size;
-
-                return offset;
-            }
-
-            //if both sliced and broadcasted
-            if (IsBroadcasted)
-                return GetOffset_broadcasted(indices);
-
-            // we are dealing with a slice
-
-            var vi = ViewInfo;
-            if (IsRecursive && vi.Slices == null)
-            {
-                // we are dealing with an unsliced recursively reshaped slice
-                offset = GetOffset_IgnoreViewInfo(indices);
-                var parent_coords = vi.ParentShape.GetCoordinates(offset);
-                return vi.ParentShape.GetOffset(parent_coords);
-            }
-
-            var coords = new List<int>(indices);
-            if (vi.UnreducedShape.IsScalar && indices.Length == 1 && indices[0] == 0 && !IsRecursive)
-                return 0;
-            if (indices.Length > vi.UnreducedShape.dimensions.Length)
-                throw new ArgumentOutOfRangeException(nameof(indices), $"select has too many coordinates for this shape");
-            var orig_ndim = vi.OriginalShape.NDim;
-            if (orig_ndim > NDim && orig_ndim > indices.Length)
-            {
-                // fill in reduced dimensions in the provided coordinates 
-                for (int i = 0; i < vi.OriginalShape.NDim; i++)
-                {
-                    var slice = ViewInfo.Slices[i];
-                    if (slice.IsIndex)
-                        coords.Insert(i, 0);
-                    if (coords.Count == orig_ndim)
-                        break;
-                }
-            }
-
-            var orig_strides = vi.OriginalShape.strides;
-            //var orig_dims = vi.OriginalShape.dimensions;
-            offset = 0;
-            unchecked
-            {
-                for (int i = 0; i < coords.Count; i++)
-                {
-                    // note: we can refrain from bounds checking here, because we should not allow negative indices at all, this should be checked higher up though.
-                    //var coord = coords[i];
-                    //var dim = orig_dims[i];
-                    //if (coord < -dim || coord >= dim)
-                    //    throw new ArgumentException($"index {coord} is out of bounds for axis {i} with a size of {dim}");
-                    //if (coord < 0)
-                    //    coord = dim + coord;
-                    if (vi.Slices.Length <= i)
-                    {
-                        offset += orig_strides[i] * coords[i];
-                        continue;
-                    }
-
-                    var slice = vi.Slices[i];
-                    var start = slice.Start;
-                    if (slice.IsIndex)
-                        offset += orig_strides[i] * start; // the coord is irrelevant for index-slices (they are reduced dimensions)
-                    else
-                        offset += orig_strides[i] * (start + coords[i] * slice.Step);
-                }
-            }
-
-            if (!IsRecursive)
-                return offset;
-            // we are dealing with a sliced recursively reshaped slice
-            var parent_coords1 = vi.ParentShape.GetCoordinates(offset);
-            return vi.ParentShape.GetOffset(parent_coords1);
+            // NumPy formula: data_ptr + sum(indices * strides)
+            return GetOffsetSimple(indices);
         }
 
         /// <summary>
-        ///     Get offset index out of coordinate indices.
+        ///     Get offset index out of a single coordinate index (1D fast path).
+        ///     NumPy-aligned: offset + stride[0] * index
         /// </summary>
-        /// <param name="index">The coordinates to turn into linear offset</param>
+        /// <param name="index">The 1D coordinate to turn into linear offset</param>
         /// <returns>The index in the memory block that refers to a specific value.</returns>
-        /// <remarks>Handles sliced indices and broadcasting</remarks>
         [MethodImpl((MethodImplOptions)768)]
         internal readonly int GetOffset_1D(int index)
         {
-            int offset;
-            if (!IsSliced)
-            {
-                if (dimensions.Length == 0)
-                    return index;
+            // Scalar case: direct offset access
+            if (dimensions.Length == 0)
+                return offset + index;
 
-                offset = 0;
-                unchecked
-                {
-                    offset += strides[0] * index;
-                }
-
-                if (IsBroadcasted)
-                    return offset % BroadcastInfo.OriginalShape.size;
-
-                return offset;
-            }
-
-            //if both sliced and broadcasted
-            if (IsBroadcasted)
-                return GetOffset_broadcasted_1D(index);
-
-            // we are dealing with a slice
-
-            var vi = ViewInfo;
-            if (IsRecursive && vi.Slices == null)
-            {
-                // we are dealing with an unsliced recursively reshaped slice
-                offset = GetOffset_IgnoreViewInfo(index);
-                var parent_coords = vi.ParentShape.GetCoordinates(offset);
-                return vi.ParentShape.GetOffset(parent_coords);
-            }
-
-            var coords = new List<int>(1) {index};
-            if (vi.UnreducedShape.IsScalar && index == 0 && !IsRecursive)
-                return 0;
-            if (1 > vi.UnreducedShape.dimensions.Length)
-                throw new ArgumentOutOfRangeException(nameof(index), $"select has too many coordinates for this shape");
-            var orig_ndim = vi.OriginalShape.NDim;
-            if (orig_ndim > NDim && orig_ndim > 1)
-            {
-                // fill in reduced dimensions in the provided coordinates 
-                for (int i = 0; i < vi.OriginalShape.NDim; i++)
-                {
-                    var slice = ViewInfo.Slices[i];
-                    if (slice.IsIndex)
-                        coords.Insert(i, 0);
-                    if (coords.Count == orig_ndim)
-                        break;
-                }
-            }
-
-            var orig_strides = vi.OriginalShape.strides;
-            //var orig_dims = vi.OriginalShape.dimensions;
-            offset = 0;
-            unchecked
-            {
-                for (int i = 0; i < coords.Count; i++)
-                {
-                    // note: we can refrain from bounds checking here, because we should not allow negative indices at all, this should be checked higher up though.
-                    //var coord = coords[i];
-                    //var dim = orig_dims[i];
-                    //if (coord < -dim || coord >= dim)
-                    //    throw new ArgumentException($"index {coord} is out of bounds for axis {i} with a size of {dim}");
-                    //if (coord < 0)
-                    //    coord = dim + coord;
-                    if (vi.Slices.Length <= i)
-                    {
-                        offset += orig_strides[i] * coords[i];
-                        continue;
-                    }
-
-                    var slice = vi.Slices[i];
-                    var start = slice.Start;
-                    if (slice.IsIndex)
-                        offset += orig_strides[i] * start; // the coord is irrelevant for index-slices (they are reduced dimensions)
-                    else
-                        offset += orig_strides[i] * (start + coords[i] * slice.Step);
-                }
-            }
-
-            if (!IsRecursive)
-                return offset;
-            // we are dealing with a sliced recursively reshaped slice
-            var parent_coords1 = vi.ParentShape.GetCoordinates(offset);
-            return vi.ParentShape.GetOffset(parent_coords1);
+            return offset + index * strides[0];
         }
 
 
         /// <summary>
-        /// Calculate the offset in an unsliced shape. If the shape is sliced, ignore the ViewInfo
-        /// Note: to be used only inside of GetOffset()
-        /// </summary>
-        [MethodImpl((MethodImplOptions)768)]
-        private readonly int GetOffset_IgnoreViewInfo(params int[] indices)
-        {
-            if (dimensions.Length == 0 && indices.Length == 1)
-                return indices[0];
-
-            int offset = 0;
-            unchecked
-            {
-                for (int i = 0; i < indices.Length; i++)
-                    offset += strides[i] * indices[i];
-            }
-
-            if (IsBroadcasted)
-                return offset % BroadcastInfo.OriginalShape.size;
-
-            return offset;
-        }
-
-        /// <summary>
-        ///     Get offset index out of coordinate indices.
+        ///     NumPy-aligned offset calculation: offset + sum(indices * strides).
+        ///     This is the core formula - offset is computed at slice/broadcast time,
+        ///     strides include step factors, and stride=0 handles broadcasting.
         /// </summary>
         /// <param name="indices">The coordinates to turn into linear offset</param>
         /// <returns>The index in the memory block that refers to a specific value.</returns>
-        /// <remarks>Handles sliced indices and broadcasting</remarks>
-        [MethodImpl((MethodImplOptions)768)]
-        private readonly int GetOffset_broadcasted(params int[] indices)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal readonly int GetOffsetSimple(params int[] indices)
         {
-            int offset;
-            var vi = ViewInfo;
-            var bi = BroadcastInfo;
-            if (IsRecursive && vi.Slices == null)
-            {
-                // Compute pure linear offset in the reshaped shape (no broadcast modular arithmetic).
-                // Then convert to parent broadcast shape coordinates and resolve through parent's GetOffset
-                // which correctly applies broadcast strides (zero-stride for broadcast dimensions).
-                offset = 0;
-                unchecked
-                {
-                    for (int i = 0; i < indices.Length; i++)
-                        offset += strides[i] * indices[i];
-                }
-
-                var parent_coords = vi.ParentShape.GetCoordinates(offset);
-                return vi.ParentShape.GetOffset(parent_coords);
-            }
-
-            var coords = new List<int>(indices);
-            if (vi.UnreducedShape.IsScalar && indices.Length == 1 && indices[0] == 0 && !IsRecursive)
-                return 0;
-            if (indices.Length > vi.UnreducedShape.dimensions.Length)
-                throw new ArgumentOutOfRangeException(nameof(indices), $"select has too many coordinates for this shape");
-            var orig_ndim = vi.OriginalShape.NDim;
-            if (orig_ndim > NDim && orig_ndim > indices.Length)
-            {
-                // fill in reduced dimensions in the provided coordinates 
-                for (int i = 0; i < vi.OriginalShape.NDim; i++)
-                {
-                    var slice = ViewInfo.Slices[i];
-                    if (slice.IsIndex)
-                        coords.Insert(i, 0);
-                    if (coords.Count == orig_ndim)
-                        break;
-                }
-            }
-
-            var orig_strides = vi.OriginalShape.strides;
-            Shape unreducedBroadcasted = resolveUnreducedBroadcastedShape();
-
-            orig_strides = unreducedBroadcasted.strides;
-            offset = 0;
+            int off = offset;
             unchecked
             {
-                for (int i = 0; i < coords.Count; i++)
-                {
-                    if (vi.Slices.Length <= i)
-                    {
-                        offset += orig_strides[i] * coords[i];
-                        continue;
-                    }
-
-                    var slice = vi.Slices[i];
-                    var start = slice.Start;
-                    if (slice.IsIndex)
-                        offset += orig_strides[i] * start; // the coord is irrelevant for index-slices (they are reduced dimensions)
-                    else
-                        offset += orig_strides[i] * (start + coords[i] * slice.Step);
-                }
+                for (int i = 0; i < indices.Length; i++)
+                    off += indices[i] * strides[i];
             }
-
-            if (!IsRecursive)
-                return offset;
-            // we are dealing with a sliced recursively reshaped slice
-            var parent_coords1 = vi.ParentShape.GetCoordinates(offset);
-            return vi.ParentShape.GetOffset(parent_coords1);
+            return off;
         }
 
         /// <summary>
-        ///     Get offset index out of coordinate indices.
+        ///     Simplified offset calculation for 1D access.
         /// </summary>
-        /// <param name="index">The coordinates to turn into linear offset</param>
-        /// <returns>The index in the memory block that refers to a specific value.</returns>
-        /// <remarks>Handles sliced indices and broadcasting</remarks>
-        [MethodImpl((MethodImplOptions)768)]
-        private readonly int GetOffset_broadcasted_1D(int index)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal readonly int GetOffsetSimple(int index)
         {
-            int offset;
-            var vi = ViewInfo;
-            var bi = BroadcastInfo;
-            if (IsRecursive && vi.Slices == null)
-            {
-                // Compute pure linear offset (no broadcast modular arithmetic).
-                // Then resolve through parent broadcast shape's GetOffset.
-                offset = strides[0] * index;
-                var parent_coords = vi.ParentShape.GetCoordinates(offset);
-                return vi.ParentShape.GetOffset(parent_coords);
-            }
+            // Scalar case: direct offset access
+            if (strides.Length == 0)
+                return offset + index;
+            return offset + index * strides[0];
+        }
 
-            var coords = new List<int>(1) {index};
-            if (vi.UnreducedShape.IsScalar && index == 0 && !IsRecursive)
-                return 0;
-            if (1 > vi.UnreducedShape.dimensions.Length)
-                throw new ArgumentOutOfRangeException(nameof(index), $"select has too many coordinates for this shape");
-            var orig_ndim = vi.OriginalShape.NDim;
-            if (orig_ndim > NDim && orig_ndim > 1)
-            {
-                // fill in reduced dimensions in the provided coordinates 
-                for (int i = 0; i < vi.OriginalShape.NDim; i++)
-                {
-                    var slice = ViewInfo.Slices[i];
-                    if (slice.IsIndex)
-                        coords.Insert(i, 0);
-                    if (coords.Count == orig_ndim)
-                        break;
-                }
-            }
+        /// <summary>
+        ///     Simplified offset calculation for 2D access.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal readonly int GetOffsetSimple(int i, int j)
+        {
+            return offset + i * strides[0] + j * strides[1];
+        }
 
-            var orig_strides = vi.OriginalShape.strides;
-            Shape unreducedBroadcasted = resolveUnreducedBroadcastedShape();
-
-            orig_strides = unreducedBroadcasted.strides;
-            offset = 0;
-            unchecked
-            {
-                for (int i = 0; i < coords.Count; i++)
-                {
-                    if (vi.Slices.Length <= i)
-                    {
-                        offset += orig_strides[i] * coords[i];
-                        continue;
-                    }
-
-                    var slice = vi.Slices[i];
-                    var start = slice.Start;
-                    if (slice.IsIndex)
-                        offset += orig_strides[i] * start; // the coord is irrelevant for index-slices (they are reduced dimensions)
-                    else
-                        offset += orig_strides[i] * (start + coords[i] * slice.Step);
-                }
-            }
-
-            if (!IsRecursive)
-                return offset;
-            // we are dealing with a sliced recursively reshaped slice
-            var parent_coords1 = vi.ParentShape.GetCoordinates(offset);
-            return vi.ParentShape.GetOffset(parent_coords1);
+        /// <summary>
+        ///     Simplified offset calculation for 3D access.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal readonly int GetOffsetSimple(int i, int j, int k)
+        {
+            return offset + i * strides[0] + j * strides[1] + k * strides[2];
         }
 
 
@@ -988,28 +781,29 @@ namespace NumSharp
         /// </summary>
         /// <param name="offset">Is the index in the original array before it was sliced and/or reshaped</param>
         /// <remarks>Note: due to slicing the absolute indices (offset in memory) are different from what GetCoordinates would return, which are relative indices in the shape.</remarks>
+        /// <summary>
+        ///     Get coordinates from an absolute memory index.
+        ///     For simple shapes, this is the inverse of GetOffset.
+        ///     Note: This operation is not directly supported in NumPy for views.
+        /// </summary>
         [MethodImpl((MethodImplOptions)768)]
         public readonly int[] GetCoordinatesFromAbsoluteIndex(int offset)
         {
-            if (!IsSliced)
+            // For simple shapes (non-sliced, non-broadcast), use GetCoordinates
+            if (!IsSliced && !IsBroadcasted)
                 return GetCoordinates(offset);
 
-            // handle sliced shape
-            int[] parent_coords = null;
-            if (IsRecursive)
+            // For sliced shapes with ViewInfo, use the original shape
+            if (IsSliced && ViewInfo?.OriginalShape.dimensions != null)
             {
-                var parent = ViewInfo.ParentShape;
-                var unreshaped_parent_coords = parent.GetCoordinatesFromAbsoluteIndex(offset);
-                var parent_shape_offset = parent.GetOffset_IgnoreViewInfo(unreshaped_parent_coords);
-                var orig_shape = ViewInfo.OriginalShape.IsEmpty ? this : ViewInfo.OriginalShape;
-                parent_coords = orig_shape.GetCoordinates(parent_shape_offset);
+                var parent_coords = ViewInfo.OriginalShape.GetCoordinates(offset);
+                if (ViewInfo.Slices == null)
+                    return parent_coords;
+                return ReplaySlicingOnCoords(parent_coords, ViewInfo.Slices);
             }
-            else
-                parent_coords = ViewInfo.OriginalShape.GetCoordinates(offset);
 
-            if (ViewInfo.Slices == null)
-                return parent_coords;
-            return ReplaySlicingOnCoords(parent_coords, ViewInfo.Slices);
+            // Fallback for other cases
+            return GetCoordinates(offset);
         }
 
         [MethodImpl((MethodImplOptions)768)]
@@ -1020,17 +814,16 @@ namespace NumSharp
             {
                 var slice = slices[i];
                 var coord = parentCoords[i];
-                if (slice.Count == -1) // this is a Slice.Index so we remove this dim from coords
+                if (slice.Count == -1) // Slice.Index - remove this dim
                     continue;
-                if (slice.Count == 0) // this is a Slice.None which means there is no set of coordinates that can index anything in this shape
+                if (slice.Count == 0) // Slice.None - no valid coordinates
                     return new int[0];
-                if (slice.Start > coord && slice.Step > 0 || slice.Start < coord && slice.Step < 0) // outside of the slice, return empty coords
+                if (slice.Start > coord && slice.Step > 0 || slice.Start < coord && slice.Step < 0)
                     return new int[0];
-                if (coord % Math.Abs(slice.Step) != 0) // coord is between the steps, so we are "outside" of this shape, return empty coords
+                if (coord % Math.Abs(slice.Step) != 0)
                     return new int[0];
                 coords.Add((coord - slice.Start) / slice.Step);
             }
-
             return coords.ToArray();
         }
 
@@ -1121,40 +914,6 @@ namespace NumSharp
             return l.ToArray();
         }
 
-        private Shape resolveUnreducedBroadcastedShape()
-        {
-            var bi = BroadcastInfo;
-            if (bi.UnreducedBroadcastedShape.HasValue)
-                return bi.UnreducedBroadcastedShape.Value;
-
-            Shape unreducedBroadcasted;
-            var vi = ViewInfo;
-            if (bi.OriginalShape.IsScalar)
-            {
-                unreducedBroadcasted = vi.OriginalShape.Clone(true, false, false);
-                for (int i = 0; i < unreducedBroadcasted.NDim; i++)
-                {
-                    unreducedBroadcasted.dimensions[i] = 1;
-                    unreducedBroadcasted.strides[i] = 0;
-                }
-            }
-            else
-            {
-                unreducedBroadcasted = vi.OriginalShape.Clone(true, false, false);
-                for (int i = Math.Abs(vi.OriginalShape.NDim - NDim), j = 0; i < unreducedBroadcasted.NDim; i++, j++)
-                {
-                    if (strides[j] == 0)
-                    {
-                        unreducedBroadcasted.dimensions[i] = 1;
-                        unreducedBroadcasted.strides[i] = 0;
-                    }
-                }
-            }
-
-            bi.UnreducedBroadcastedShape = unreducedBroadcasted;
-            return unreducedBroadcasted;
-        }
-
         /// <summary>
         ///     Recalculate hashcode from current dimension and layout.
         /// </summary>
@@ -1230,8 +989,24 @@ namespace NumSharp
             if (IsRecursive)
                 viewInfo.ParentShape = ViewInfo.ParentShape;
 
+            // Phase 2: Compute base offset at slice time (NumPy-style).
+            // The offset is the linear position of the first element of the slice:
+            //   offset = sum(origin.strides[i] * slices[i].Start) for all dimensions
+            //
+            // When slices are merged (IsSliced && ViewInfo.Slices != null), the merged
+            // slices already encode the full path from the original shape, so we don't
+            // add this.offset (it would double-count). Otherwise, accumulate from parent.
+            bool slicesMerged = IsSliced && ViewInfo.Slices != null;
+            int sliceOffset = slicesMerged ? 0 : this.offset;
+            for (int i = 0; i < slices.Count; i++)
+                sliceOffset += origin.strides[i] * slices[i].Start;
+
             if (sliced_axes.Length == 0) //is it a scalar
-                return NewScalar(viewInfo);
+            {
+                var scalar = NewScalar(viewInfo);
+                scalar.offset = sliceOffset;
+                return scalar;
+            }
 
             // Compute actual memory strides for the sliced shape.
             // The stride for each non-reduced dimension is:
@@ -1251,7 +1026,7 @@ namespace NumSharp
                 j++;
             }
 
-            return new Shape(sliced_axes, sliced_strides) {ViewInfo = viewInfo};
+            return new Shape(sliced_axes, sliced_strides) {ViewInfo = viewInfo, offset = sliceOffset};
         }
 
         #endregion

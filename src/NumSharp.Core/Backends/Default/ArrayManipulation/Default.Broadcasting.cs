@@ -255,6 +255,7 @@ namespace NumSharp.Backends
                 ref Shape it = ref ret[i];
                 nd = ogiter.NDim;
                 it.BroadcastInfo = new BroadcastInfo(ogOriginal);
+                it.offset = ogiter.offset; // Phase 3: preserve source offset
                 // Set ViewInfo for sliced inputs so GetOffset resolves slice strides correctly
                 if (ogOriginal.IsSliced)
                     it.ViewInfo = new ViewInfo() {ParentShape = ogOriginal, Slices = null};
@@ -311,6 +312,7 @@ namespace NumSharp.Backends
                 left = rightShape; //copy right
                 left.strides = new int[left.strides.Length]; //zero strides
                 left.BroadcastInfo = new BroadcastInfo(leftOriginal);
+                left.offset = leftShape.offset; // Phase 3: preserve source offset
                 return (left, rightShape);
             }
             //is right a scalar
@@ -319,6 +321,7 @@ namespace NumSharp.Backends
                 right = leftShape; //copy left
                 right.strides = new int[right.strides.Length]; //zero strides
                 right.BroadcastInfo = new BroadcastInfo(rightOriginal);
+                right.offset = rightShape.offset; // Phase 3: preserve source offset
                 return (leftShape, right);
             }
             else
@@ -381,6 +384,9 @@ namespace NumSharp.Backends
 
                 left = new Shape(mit.dimensions) {BroadcastInfo = new BroadcastInfo(leftOriginal)};
                 right = new Shape(mit.dimensions) {BroadcastInfo = new BroadcastInfo(rightOriginal)};
+                // Phase 3: preserve source offset in broadcast result
+                left.offset = leftShape.offset;
+                right.offset = rightShape.offset;
                 if (leftOriginal.IsSliced)
                     left.ViewInfo = new ViewInfo() {ParentShape = leftOriginal, Slices = null};
                 if (rightOriginal.IsSliced)
