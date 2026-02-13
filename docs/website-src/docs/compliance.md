@@ -1,4 +1,4 @@
-# Compliance and Compatibility
+# NumPy Compliance & Compatibility
 
 NumSharp aims for **1-to-1 behavioral compatibility with NumPy 2.x** and compliance with the **Python Array API Standard**. This page tracks our progress toward these goals.
 

@@ -4,7 +4,7 @@
   href: NDArray.Creation.md
 - name: Linear Algebra
   href: NDArray.LinAlg.md
-- name: Compliance & Compatibility
+- name: NumPy Compliance & Compatibility
   href: compliance.md
 
   
