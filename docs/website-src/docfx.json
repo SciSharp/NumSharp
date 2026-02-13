@@ -3,7 +3,7 @@
     {
       "src": [
         {
-          "src": "../",
+          "src": "../../",
           "files": [
             "src/NumSharp.Core/NumSharp.Core.csproj"
           ]
@@ -49,7 +49,7 @@
         ]
       }
     ],
-    "dest": "../docs/website",
+    "dest": "../website",
     "globalMetadataFiles": [],
     "fileMetadataFiles": [],
     "template": [
