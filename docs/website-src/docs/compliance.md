@@ -37,6 +37,8 @@ NumPy 2.0 (released April 2024) was a major breaking release. It changed how typ
 
 The Python Array API Standard is an industry consortium effort to define a common API that works across array libraries. Write code against the Array API, and it runs on NumPy, PyTorch, JAX, CuPy, or Dask without changes. NumPy adopted it in version 2.0.
 
+**Deep Dive:** [Array API Standard](array-api-standard.md) — Our dedicated page with full specification details
+
 **Tracking:** [Array API Standard Milestone](https://github.com/SciSharp/NumSharp/milestone/6)
 
 ### 3. NumPy Enhancement Proposals (NEPs)
@@ -191,70 +193,25 @@ Most of the time, you won't notice. But if you're:
 
 ---
 
-## Array API Standard: Function Coverage
+## Array API Standard
 
-The Array API Standard requires 133 functions in the core specification. Here's where NumSharp stands:
+The Array API Standard specifies 133 core functions, 14 data types, and strict type promotion rules. NumSharp currently implements about **74%** of the core specification.
 
-### Creation Functions (16 required)
+| Category | Required | NumSharp | Coverage |
+|----------|----------|----------|----------|
+| Creation | 16 | 13 | 81% |
+| Element-wise | 67 | ~50 | 75% |
+| Statistical | 9 | 8 | 89% |
+| Manipulation | 14 | 11 | 79% |
+| Set | 4 | 1 | 25% |
+| Other | 23 | ~15 | ~65% |
 
-| Function | NumSharp | Notes |
-|----------|----------|-------|
-| `arange` | ✅ | |
-| `asarray` | ✅ | |
-| `empty` | ✅ | |
-| `empty_like` | ✅ | |
-| `eye` | ✅ | |
-| `from_dlpack` | ❌ | DLPack interop not implemented |
-| `full` | ✅ | |
-| `full_like` | ✅ | |
-| `linspace` | ✅ | |
-| `meshgrid` | ✅ | |
-| `ones` | ✅ | |
-| `ones_like` | ✅ | |
-| `tril` | ❌ | |
-| `triu` | ❌ | |
-| `zeros` | ✅ | |
-| `zeros_like` | ✅ | |
+**Biggest Gaps:**
+- Complex number types (`complex64`, `complex128`) — blocks FFT and many math functions
+- Set functions (`unique_all`, `unique_counts`, `unique_inverse`)
+- Array properties (`.device`, `.mT`)
 
-**Coverage: ~87%** — Missing `tril`, `triu`, and `from_dlpack`.
-
-### Element-wise Functions (67 required)
-
-This is our biggest category and we have good coverage (~75%), but we're missing some functions:
-
-**Missing:**
-- `bitwise_left_shift`, `bitwise_right_shift` (we have `<<`, `>>` operators but not named functions)
-- `copysign`, `hypot`, `logaddexp` (math functions)
-- `nextafter`, `signbit` (floating-point utilities)
-- Complex-number functions (`conj`, `imag`, `real`) — blocked on complex type support
-
-### Statistical Functions (9 required)
-
-| Function | NumSharp | Notes |
-|----------|----------|-------|
-| `max` | ✅ | `amax` |
-| `mean` | ✅ | |
-| `min` | ✅ | `amin` |
-| `prod` | ✅ | |
-| `std` | ✅ | Uses `ddof`, not `correction` parameter |
-| `sum` | ✅ | |
-| `var` | ✅ | Uses `ddof`, not `correction` parameter |
-| `cumulative_sum` | ✅ | `cumsum` |
-| `cumulative_prod` | ❌ | |
-
-**Note on std/var:** The Array API uses a `correction` parameter (default 0.0 for population statistics). NumPy uses `ddof` (delta degrees of freedom). They're mathematically equivalent but spelled differently:
-- `std(x, correction=1)` in Array API = `np.std(x, ddof=1)` in NumPy
-
-### Set Functions (4 required) — Our Weakest Area
-
-| Function | NumSharp | Notes |
-|----------|----------|-------|
-| `unique_all` | ❌ | Returns values, indices, inverse_indices, counts |
-| `unique_counts` | ❌ | Returns values, counts |
-| `unique_inverse` | ❌ | Returns values, inverse_indices |
-| `unique_values` | ✅ | `np.unique` without options |
-
-NumPy's `np.unique()` is a single function with boolean flags (`return_counts`, `return_inverse`, etc.). The Array API splits this into four focused functions. We only have the basic version.
+For the complete specification details, function lists, type promotion rules, and extension coverage, see our dedicated **[Array API Standard](array-api-standard.md)** page.
 
 ---
 

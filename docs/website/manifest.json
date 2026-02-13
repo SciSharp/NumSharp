@@ -1334,6 +1334,16 @@
     },
     {
       "type": "Conceptual",
+      "source_relative_path": "docs/array-api-standard.md",
+      "output": {
+        ".html": {
+          "relative_path": "docs/array-api-standard.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
       "source_relative_path": "docs/compliance.md",
       "output": {
         ".html": {

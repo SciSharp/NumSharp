@@ -107,6 +107,7 @@ print(b)  # [0, 1, 2] - overflow wraps around
 <p><strong>Tracking:</strong> <a href="https://github.com/SciSharp/NumSharp/milestone/9">NumPy 2.x Compliance Milestone</a></p>
 <h3 id="2-array-api-standard">2. Array API Standard</h3>
 <p>The Python Array API Standard is an industry consortium effort to define a common API that works across array libraries. Write code against the Array API, and it runs on NumPy, PyTorch, JAX, CuPy, or Dask without changes. NumPy adopted it in version 2.0.</p>
+<p><strong>Deep Dive:</strong> <a href="array-api-standard.html">Array API Standard</a> — Our dedicated page with full specification details</p>
 <p><strong>Tracking:</strong> <a href="https://github.com/SciSharp/NumSharp/milestone/6">Array API Standard Milestone</a></p>
 <h3 id="3-numpy-enhancement-proposals-neps">3. NumPy Enhancement Proposals (NEPs)</h3>
 <p>NEPs are the design documents that define NumPy's behavior. When we say &quot;NumPy does X,&quot; there's usually a NEP that specifies exactly what X means. We track the NEPs most relevant to NumSharp.</p>
@@ -310,204 +311,63 @@ f_array = np.zeros((3, 4), order='F')  # Column-major
 </ul>
 <p>...you might hit issues. See <a href="https://github.com/SciSharp/NumSharp/issues/546">#546</a> for F-order support tracking.</p>
 <hr>
-<h2 id="array-api-standard-function-coverage">Array API Standard: Function Coverage</h2>
-<p>The Array API Standard requires 133 functions in the core specification. Here's where NumSharp stands:</p>
-<h3 id="creation-functions-16-required">Creation Functions (16 required)</h3>
+<h2 id="array-api-standard">Array API Standard</h2>
+<p>The Array API Standard specifies 133 core functions, 14 data types, and strict type promotion rules. NumSharp currently implements about <strong>74%</strong> of the core specification.</p>
 <table>
 <thead>
 <tr>
-<th>Function</th>
+<th>Category</th>
+<th>Required</th>
 <th>NumSharp</th>
-<th>Notes</th>
+<th>Coverage</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>arange</code></td>
-<td>✅</td>
-<td></td>
+<td>Creation</td>
+<td>16</td>
+<td>13</td>
+<td>81%</td>
 </tr>
 <tr>
-<td><code>asarray</code></td>
-<td>✅</td>
-<td></td>
+<td>Element-wise</td>
+<td>67</td>
+<td>~50</td>
+<td>75%</td>
 </tr>
 <tr>
-<td><code>empty</code></td>
-<td>✅</td>
-<td></td>
+<td>Statistical</td>
+<td>9</td>
+<td>8</td>
+<td>89%</td>
 </tr>
 <tr>
-<td><code>empty_like</code></td>
-<td>✅</td>
-<td></td>
+<td>Manipulation</td>
+<td>14</td>
+<td>11</td>
+<td>79%</td>
 </tr>
 <tr>
-<td><code>eye</code></td>
-<td>✅</td>
-<td></td>
+<td>Set</td>
+<td>4</td>
+<td>1</td>
+<td>25%</td>
 </tr>
 <tr>
-<td><code>from_dlpack</code></td>
-<td>❌</td>
-<td>DLPack interop not implemented</td>
-</tr>
-<tr>
-<td><code>full</code></td>
-<td>✅</td>
-<td></td>
-</tr>
-<tr>
-<td><code>full_like</code></td>
-<td>✅</td>
-<td></td>
-</tr>
-<tr>
-<td><code>linspace</code></td>
-<td>✅</td>
-<td></td>
-</tr>
-<tr>
-<td><code>meshgrid</code></td>
-<td>✅</td>
-<td></td>
-</tr>
-<tr>
-<td><code>ones</code></td>
-<td>✅</td>
-<td></td>
-</tr>
-<tr>
-<td><code>ones_like</code></td>
-<td>✅</td>
-<td></td>
-</tr>
-<tr>
-<td><code>tril</code></td>
-<td>❌</td>
-<td></td>
-</tr>
-<tr>
-<td><code>triu</code></td>
-<td>❌</td>
-<td></td>
-</tr>
-<tr>
-<td><code>zeros</code></td>
-<td>✅</td>
-<td></td>
-</tr>
-<tr>
-<td><code>zeros_like</code></td>
-<td>✅</td>
-<td></td>
+<td>Other</td>
+<td>23</td>
+<td>~15</td>
+<td>~65%</td>
 </tr>
 </tbody>
 </table>
-<p><strong>Coverage: ~87%</strong> — Missing <code>tril</code>, <code>triu</code>, and <code>from_dlpack</code>.</p>
-<h3 id="element-wise-functions-67-required">Element-wise Functions (67 required)</h3>
-<p>This is our biggest category and we have good coverage (~75%), but we're missing some functions:</p>
-<p><strong>Missing:</strong></p>
+<p><strong>Biggest Gaps:</strong></p>
 <ul>
-<li><code>bitwise_left_shift</code>, <code>bitwise_right_shift</code> (we have <code>&lt;&lt;</code>, <code>&gt;&gt;</code> operators but not named functions)</li>
-<li><code>copysign</code>, <code>hypot</code>, <code>logaddexp</code> (math functions)</li>
-<li><code>nextafter</code>, <code>signbit</code> (floating-point utilities)</li>
-<li>Complex-number functions (<code>conj</code>, <code>imag</code>, <code>real</code>) — blocked on complex type support</li>
+<li>Complex number types (<code>complex64</code>, <code>complex128</code>) — blocks FFT and many math functions</li>
+<li>Set functions (<code>unique_all</code>, <code>unique_counts</code>, <code>unique_inverse</code>)</li>
+<li>Array properties (<code>.device</code>, <code>.mT</code>)</li>
 </ul>
-<h3 id="statistical-functions-9-required">Statistical Functions (9 required)</h3>
-<table>
-<thead>
-<tr>
-<th>Function</th>
-<th>NumSharp</th>
-<th>Notes</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>max</code></td>
-<td>✅</td>
-<td><code>amax</code></td>
-</tr>
-<tr>
-<td><code>mean</code></td>
-<td>✅</td>
-<td></td>
-</tr>
-<tr>
-<td><code>min</code></td>
-<td>✅</td>
-<td><code>amin</code></td>
-</tr>
-<tr>
-<td><code>prod</code></td>
-<td>✅</td>
-<td></td>
-</tr>
-<tr>
-<td><code>std</code></td>
-<td>✅</td>
-<td>Uses <code>ddof</code>, not <code>correction</code> parameter</td>
-</tr>
-<tr>
-<td><code>sum</code></td>
-<td>✅</td>
-<td></td>
-</tr>
-<tr>
-<td><code>var</code></td>
-<td>✅</td>
-<td>Uses <code>ddof</code>, not <code>correction</code> parameter</td>
-</tr>
-<tr>
-<td><code>cumulative_sum</code></td>
-<td>✅</td>
-<td><code>cumsum</code></td>
-</tr>
-<tr>
-<td><code>cumulative_prod</code></td>
-<td>❌</td>
-<td></td>
-</tr>
-</tbody>
-</table>
-<p><strong>Note on std/var:</strong> The Array API uses a <code>correction</code> parameter (default 0.0 for population statistics). NumPy uses <code>ddof</code> (delta degrees of freedom). They're mathematically equivalent but spelled differently:</p>
-<ul>
-<li><code>std(x, correction=1)</code> in Array API = <code>np.std(x, ddof=1)</code> in NumPy</li>
-</ul>
-<h3 id="set-functions-4-required--our-weakest-area">Set Functions (4 required) — Our Weakest Area</h3>
-<table>
-<thead>
-<tr>
-<th>Function</th>
-<th>NumSharp</th>
-<th>Notes</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>unique_all</code></td>
-<td>❌</td>
-<td>Returns values, indices, inverse_indices, counts</td>
-</tr>
-<tr>
-<td><code>unique_counts</code></td>
-<td>❌</td>
-<td>Returns values, counts</td>
-</tr>
-<tr>
-<td><code>unique_inverse</code></td>
-<td>❌</td>
-<td>Returns values, inverse_indices</td>
-</tr>
-<tr>
-<td><code>unique_values</code></td>
-<td>✅</td>
-<td><code>np.unique</code> without options</td>
-</tr>
-</tbody>
-</table>
-<p>NumPy's <code>np.unique()</code> is a single function with boolean flags (<code>return_counts</code>, <code>return_inverse</code>, etc.). The Array API splits this into four focused functions. We only have the basic version.</p>
+<p>For the complete specification details, function lists, type promotion rules, and extension coverage, see our dedicated <strong><a href="array-api-standard.html">Array API Standard</a></strong> page.</p>
 <hr>
 <h2 id="random-number-generation">Random Number Generation</h2>
 <p>Good news: NumSharp's <code>np.random</code> module provides <strong>1-to-1 seed matching</strong> with NumPy.</p>
