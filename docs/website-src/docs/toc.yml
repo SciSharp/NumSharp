@@ -1,8 +1,10 @@
 - name: Introduction
   href: intro.md
-- name: Array Creation 
+- name: Array Creation
   href: NDArray.Creation.md
 - name: Linear Algebra
   href: NDArray.LinAlg.md
+- name: Compliance & Compatibility
+  href: compliance.md
 
   

@@ -2,577 +2,583 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/DecimalMath.DecimalEx.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/DecimalMath.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.AxisOutOfRangeException.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.BackendType.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.Backends.BackendFactory.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.Backends.DefaultEngine.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.Backends.Unmanaged.ArraySlice-1.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.Backends.Unmanaged.ArraySlice.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.Backends.Unmanaged.IArraySlice.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.Backends.Unmanaged.IMemoryBlock-1.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.Backends.Unmanaged.IMemoryBlock.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.Backends.Unmanaged.IUnmanagedMemoryBlock.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.Backends.Unmanaged.UnmanagedHelper.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.Backends.Unmanaged.UnmanagedMemoryBlock-1.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.Backends.Unmanaged.UnmanagedMemoryBlock.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.Backends.Unmanaged.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.Backends.UnmanagedStorage.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.Backends.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.BroadcastInfo.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.DType.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.Extensions.LinqExtensions.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.Extensions.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.Generic.NDArray-1.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.Generic.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.IIndex.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.INumSharpException.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.IncorrectShapeException.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.IncorrectSizeException.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.IncorrectTypeException.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.IteratorType.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.Kwargs.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.MoveNextReferencedDelegate-1.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.MultiIterator.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.NDArray._Unsafe._Pinning.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.NDArray._Unsafe.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.NDArray.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.NDIterator-1.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.NDIterator.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.NDIteratorExtensions.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.NPTypeCode.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.NPTypeCodeExtensions.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.NativeRandomState.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.NpzDictionary-1.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.NpzDictionary.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.NumPyRandom.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.NumSharpException.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.Randomizer.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.Shape.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.Slice.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.SliceDef.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.StorageType.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.TensorEngine.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.Unmanaged.Memory.ScalarMemoryPool.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.Unmanaged.Memory.StackedMemoryPool.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.Unmanaged.Memory.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.Utilities.ArrayConvert.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.Utilities.Arrays.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.Utilities.ArraysExtensions.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.Utilities.ConcurrentHashset-1.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.Utilities.Converts-1.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.Utilities.Converts.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.Utilities.Hashset-1.Enumerator.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.Utilities.Hashset-1.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.Utilities.InfoOf-1.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.Utilities.Linq.IEnumeratorExtensions.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.Utilities.Linq.IExtremaEnumerable-1.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.Utilities.Linq.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.Utilities.NDCoordinatesAxisIncrementor.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.Utilities.NDCoordinatesIncrementor.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.Utilities.NDCoordinatesIncrementorAutoResetting.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.Utilities.NDCoordinatesLeftToAxisIncrementor.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.Utilities.NDExtendedCoordinatesIncrementor.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.Utilities.NDOffsetIncrementor.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.Utilities.NDOffsetIncrementorAutoresetting.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.Utilities.NonGenericConvert.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.Utilities.NumberInfo.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.Utilities.SteppingExtension.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.Utilities.TypelessConvert.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.Utilities.TypelessConvertDelegate.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.Utilities.ValueCoordinatesIncrementor.EndCallbackHandler.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.Utilities.ValueCoordinatesIncrementor.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.Utilities.ValueCoordinatesIncrementorAutoResetting.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.Utilities.ValueOffsetIncrementor.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.Utilities.ValueOffsetIncrementorAutoresetting.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.Utilities.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.Utilities.py.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.ViewInfo.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.np.Broadcast.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.np.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/NumSharp.np.linalg.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/api/index.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/docs/NDArray.Creation.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/docs/NDArray.LinAlg.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://scisharp.github.io/NumSharp/docs/compliance.html</loc>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/docs/intro.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://scisharp.github.io/NumSharp/index.html</loc>
-    <lastmod>2026-02-13T08:59:45+02:00</lastmod>
+    <lastmod>2026-02-13T09:09:05+02:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>

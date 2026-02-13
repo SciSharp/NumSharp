@@ -1334,6 +1334,16 @@
     },
     {
       "type": "Conceptual",
+      "source_relative_path": "docs/compliance.md",
+      "output": {
+        ".html": {
+          "relative_path": "docs/compliance.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
       "source_relative_path": "docs/intro.md",
       "output": {
         ".html": {

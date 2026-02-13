@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+      <title>Compliance and Compatibility | NumSharp Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Compliance and Compatibility | NumSharp Documentation ">
+      
+      
+      <link rel="icon" href="../images/numsharp.icon128.png">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../images/numsharp.icon.svg" alt="NumSharp">
+            NumSharp
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="compliance-and-compatibility">Compliance and Compatibility</h1>
+
+<p>NumSharp aims for <strong>1-to-1 behavioral compatibility with NumPy 2.x</strong> and compliance with the <strong>Python Array API Standard</strong>. This page tracks our progress toward these goals.</p>
+<hr>
+<h2 id="compliance-goals">Compliance Goals</h2>
+<table>
+<thead>
+<tr>
+<th>Standard</th>
+<th>Target</th>
+<th>Status</th>
+<th>Milestone</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="https://numpy.org/doc/stable/">NumPy 2.x</a></td>
+<td>2.4.2+</td>
+<td>In Progress</td>
+<td><a href="https://github.com/SciSharp/NumSharp/milestone/9">NumPy 2.x Compliance</a></td>
+</tr>
+<tr>
+<td><a href="https://data-apis.org/array-api/latest/">Array API Standard</a></td>
+<td>2024.12</td>
+<td>In Progress</td>
+<td><a href="https://github.com/SciSharp/NumSharp/milestone/6">Array API Standard</a></td>
+</tr>
+<tr>
+<td><a href="https://numpy.org/neps/">NumPy Enhancement Proposals</a></td>
+<td>Key NEPs</td>
+<td>In Progress</td>
+<td><a href="https://github.com/SciSharp/NumSharp/milestone/7">NEP Compliance</a></td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="numpy-2x-compliance">NumPy 2.x Compliance</h2>
+<p>NumPy 2.0 introduced significant breaking changes. NumSharp is working to align with these changes.</p>
+<h3 id="type-promotion-nep-50">Type Promotion (NEP 50)</h3>
+<p>NumPy 2.x changed from <strong>value-based</strong> to <strong>weak scalar</strong> promotion:</p>
+<pre><code class="lang-csharp">// NumPy 1.x behavior (OLD - value-based)
+np.result_type(np.int8, 1) == np.int8      // 1 fits in int8
+np.result_type(np.int8, 255) == np.int16   // 255 doesn't fit - UPCASTED
+
+// NumPy 2.x behavior (NEW - weak scalar)
+uint8(1) + 2 → uint8(3)           // Python scalar defers to array dtype
+uint8(1) + 255 → uint8(0)         // Overflow with warning
+</code></pre>
+<p><strong>NumSharp Status:</strong> <a href="https://github.com/SciSharp/NumSharp/issues/529">#529</a> - Type promotion diverges from NEP 50</p>
+<h3 id="api-cleanup-nep-52">API Cleanup (NEP 52)</h3>
+<p>NumPy 2.0 removed ~100 deprecated functions and aliases:</p>
+<table>
+<thead>
+<tr>
+<th>Removed</th>
+<th>Use Instead</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>np.round_</code></td>
+<td><code>np.round</code></td>
+</tr>
+<tr>
+<td><code>np.product</code></td>
+<td><code>np.prod</code></td>
+</tr>
+<tr>
+<td><code>np.sometrue</code></td>
+<td><code>np.any</code></td>
+</tr>
+<tr>
+<td><code>np.alltrue</code></td>
+<td><code>np.all</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="array-api-standard-functions-nep-56">Array API Standard Functions (NEP 56)</h3>
+<p>New functions and aliases added in NumPy 2.x:</p>
+<table>
+<thead>
+<tr>
+<th>Category</th>
+<th>Functions</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Aliases</strong></td>
+<td><code>acos</code>, <code>asin</code>, <code>atan</code>, <code>atan2</code>, <code>concat</code>, <code>permute_dims</code>, <code>pow</code></td>
+</tr>
+<tr>
+<td><strong>New</strong></td>
+<td><code>isdtype()</code>, <code>unique_values()</code>, <code>unique_counts()</code>, <code>unique_inverse()</code>, <code>unique_all()</code></td>
+</tr>
+<tr>
+<td><strong>Properties</strong></td>
+<td><code>ndarray.mT</code> (matrix transpose), <code>ndarray.device</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="copy-semantics">copy= Semantics</h3>
+<pre><code class="lang-csharp">np.asarray(x, copy: true)   // Always copy
+np.asarray(x, copy: false)  // Never copy (raise if needed)
+np.asarray(x, copy: null)   // Copy if necessary (default)
+</code></pre>
+<hr>
+<h2 id="array-api-standard-compliance">Array API Standard Compliance</h2>
+<p>The <a href="https://data-apis.org/array-api/latest/">Python Array API Standard</a> defines a common API for array computing libraries, enabling code portability across NumPy, PyTorch, JAX, CuPy, and Dask.</p>
+<h3 id="data-types">Data Types</h3>
+<table>
+<thead>
+<tr>
+<th>Category</th>
+<th>Required</th>
+<th>NumSharp</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Boolean</td>
+<td><code>bool</code></td>
+<td>✅</td>
+</tr>
+<tr>
+<td>Signed Integer</td>
+<td><code>int8</code>, <code>int16</code>, <code>int32</code>, <code>int64</code></td>
+<td>✅ (as short, int, long)</td>
+</tr>
+<tr>
+<td>Unsigned Integer</td>
+<td><code>uint8</code>, <code>uint16</code>, <code>uint32</code>, <code>uint64</code></td>
+<td>✅</td>
+</tr>
+<tr>
+<td>Floating-Point</td>
+<td><code>float32</code>, <code>float64</code></td>
+<td>✅</td>
+</tr>
+<tr>
+<td>Complex</td>
+<td><code>complex64</code>, <code>complex128</code></td>
+<td>❌ Not implemented</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Gap:</strong> Complex number support is not yet implemented.</p>
+<h3 id="required-constants">Required Constants</h3>
+<table>
+<thead>
+<tr>
+<th>Constant</th>
+<th>Description</th>
+<th>NumSharp</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>e</code></td>
+<td>Euler's constant</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>inf</code></td>
+<td>Positive infinity</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>nan</code></td>
+<td>Not a Number</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>newaxis</code></td>
+<td>Dimension expansion</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>pi</code></td>
+<td>Mathematical pi</td>
+<td>✅</td>
+</tr>
+</tbody>
+</table>
+<h3 id="array-attributes">Array Attributes</h3>
+<table>
+<thead>
+<tr>
+<th>Attribute</th>
+<th>Description</th>
+<th>NumSharp</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>dtype</code></td>
+<td>Data type</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>device</code></td>
+<td>Hardware device</td>
+<td>❌</td>
+</tr>
+<tr>
+<td><code>ndim</code></td>
+<td>Number of dimensions</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>shape</code></td>
+<td>Dimensions</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>size</code></td>
+<td>Total element count</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>T</code></td>
+<td>Transpose</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>mT</code></td>
+<td>Matrix transpose</td>
+<td>❌</td>
+</tr>
+</tbody>
+</table>
+<h3 id="function-coverage">Function Coverage</h3>
+<table>
+<thead>
+<tr>
+<th>Category</th>
+<th>Required</th>
+<th>NumSharp</th>
+<th>Coverage</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Creation</td>
+<td>16</td>
+<td>~14</td>
+<td>87%</td>
+</tr>
+<tr>
+<td>Element-wise</td>
+<td>67</td>
+<td>~50</td>
+<td>75%</td>
+</tr>
+<tr>
+<td>Data Types</td>
+<td>6</td>
+<td>~3</td>
+<td>50%</td>
+</tr>
+<tr>
+<td>Linear Algebra</td>
+<td>4</td>
+<td>4</td>
+<td>100%</td>
+</tr>
+<tr>
+<td>Manipulation</td>
+<td>14</td>
+<td>~10</td>
+<td>71%</td>
+</tr>
+<tr>
+<td>Statistical</td>
+<td>9</td>
+<td>~7</td>
+<td>78%</td>
+</tr>
+<tr>
+<td>Searching</td>
+<td>6</td>
+<td>~4</td>
+<td>67%</td>
+</tr>
+<tr>
+<td>Sorting</td>
+<td>2</td>
+<td>2</td>
+<td>100%</td>
+</tr>
+<tr>
+<td>Set</td>
+<td>4</td>
+<td>1</td>
+<td>25%</td>
+</tr>
+<tr>
+<td>Indexing</td>
+<td>2</td>
+<td>0</td>
+<td>0%</td>
+</tr>
+<tr>
+<td>Utility</td>
+<td>3</td>
+<td>2</td>
+<td>67%</td>
+</tr>
+<tr>
+<td><strong>Total Core</strong></td>
+<td><strong>133</strong></td>
+<td><strong>~80</strong></td>
+<td><strong>~60%</strong></td>
+</tr>
+</tbody>
+</table>
+<h3 id="optional-extensions">Optional Extensions</h3>
+<table>
+<thead>
+<tr>
+<th>Extension</th>
+<th>Functions</th>
+<th>NumSharp Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>linalg</strong></td>
+<td>23 (cholesky, det, eigh, inv, qr, svd, solve...)</td>
+<td>Partial (most are stubs)</td>
+</tr>
+<tr>
+<td><strong>fft</strong></td>
+<td>14 (fft, ifft, rfft, fftfreq...)</td>
+<td>Not implemented</td>
+</tr>
+</tbody>
+</table>
+<p>See <a href="https://github.com/SciSharp/NumSharp/issues/560">#560</a> for full specification details.</p>
+<hr>
+<h2 id="nep-compliance">NEP Compliance</h2>
+<p>NumPy Enhancement Proposals (NEPs) define behavioral standards. Key NEPs for NumSharp:</p>
+<h3 id="critical---numpy-20-breaking-changes">Critical - NumPy 2.0 Breaking Changes</h3>
+<table>
+<thead>
+<tr>
+<th>NEP</th>
+<th>Title</th>
+<th>Status</th>
+<th>Issue</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="https://numpy.org/neps/nep-0050-scalar-promotion.html">NEP 50</a></td>
+<td>Promotion Rules for Python Scalars</td>
+<td>In Progress</td>
+<td><a href="https://github.com/SciSharp/NumSharp/issues/547">#547</a></td>
+</tr>
+<tr>
+<td><a href="https://numpy.org/neps/nep-0052-python-api-cleanup.html">NEP 52</a></td>
+<td>Python API Cleanup</td>
+<td>In Progress</td>
+<td><a href="https://github.com/SciSharp/NumSharp/issues/547">#547</a></td>
+</tr>
+<tr>
+<td><a href="https://numpy.org/neps/nep-0056-array-api-main-namespace.html">NEP 56</a></td>
+<td>Array API Standard Support</td>
+<td>In Progress</td>
+<td><a href="https://github.com/SciSharp/NumSharp/issues/547">#547</a></td>
+</tr>
+</tbody>
+</table>
+<h3 id="high-priority---feature-completeness">High Priority - Feature Completeness</h3>
+<table>
+<thead>
+<tr>
+<th>NEP</th>
+<th>Title</th>
+<th>Status</th>
+<th>Issue</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="https://numpy.org/neps/nep-0007-datetime-proposal.html">NEP 07</a></td>
+<td>DateTime and Timedelta Types</td>
+<td>Not Started</td>
+<td><a href="https://github.com/SciSharp/NumSharp/issues/554">#554</a></td>
+</tr>
+<tr>
+<td><a href="https://numpy.org/neps/nep-0019-rng-policy.html">NEP 19</a></td>
+<td>Random Number Generator Policy</td>
+<td>Implemented</td>
+<td><a href="https://github.com/SciSharp/NumSharp/issues/553">#553</a></td>
+</tr>
+<tr>
+<td><a href="https://numpy.org/neps/nep-0027-zero-rank-arrarys.html">NEP 27</a></td>
+<td>Zero Rank Arrays (Scalars)</td>
+<td>Partial</td>
+<td><a href="https://github.com/SciSharp/NumSharp/issues/550">#550</a></td>
+</tr>
+<tr>
+<td><a href="https://numpy.org/neps/nep-0055-string_dtype.html">NEP 55</a></td>
+<td>UTF-8 Variable-Width String DType</td>
+<td>Not Started</td>
+<td><a href="https://github.com/SciSharp/NumSharp/issues/549">#549</a></td>
+</tr>
+</tbody>
+</table>
+<h3 id="medium-priority---behavioral-considerations">Medium Priority - Behavioral Considerations</h3>
+<table>
+<thead>
+<tr>
+<th>NEP</th>
+<th>Title</th>
+<th>Status</th>
+<th>Issue</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="https://numpy.org/neps/nep-0005-generalized-ufuncs.html">NEP 05</a></td>
+<td>Generalized Universal Functions</td>
+<td>Partial</td>
+<td><a href="https://github.com/SciSharp/NumSharp/issues/551">#551</a></td>
+</tr>
+<tr>
+<td><a href="https://numpy.org/neps/nep-0021-advanced-indexing.html">NEP 21</a></td>
+<td>Advanced Indexing Semantics</td>
+<td>In Progress</td>
+<td><a href="https://github.com/SciSharp/NumSharp/issues/552">#552</a></td>
+</tr>
+<tr>
+<td><a href="https://numpy.org/neps/nep-0042-new-dtypes.html">NEP 42</a></td>
+<td>New and Extensible DTypes</td>
+<td>Not Started</td>
+<td><a href="https://github.com/SciSharp/NumSharp/issues/549">#549</a></td>
+</tr>
+</tbody>
+</table>
+<h3 id="performance---simd-optimization">Performance - SIMD Optimization</h3>
+<table>
+<thead>
+<tr>
+<th>NEP</th>
+<th>Title</th>
+<th>Status</th>
+<th>Issue</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="https://numpy.org/neps/nep-0010-new-iterator-ufunc.html">NEP 10</a></td>
+<td>Iterator/UFunc Optimization</td>
+<td>Not Started</td>
+<td><a href="https://github.com/SciSharp/NumSharp/issues/548">#548</a></td>
+</tr>
+<tr>
+<td><a href="https://numpy.org/neps/nep-0038-simd-optimizations.html">NEP 38</a></td>
+<td>SIMD Optimization Instructions</td>
+<td>Not Started</td>
+<td><a href="https://github.com/SciSharp/NumSharp/issues/548">#548</a></td>
+</tr>
+<tr>
+<td><a href="https://numpy.org/neps/nep-0054-simd-highway.html">NEP 54</a></td>
+<td>SIMD Infrastructure (Highway)</td>
+<td>Not Started</td>
+<td><a href="https://github.com/SciSharp/NumSharp/issues/548">#548</a></td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="supported-data-types">Supported Data Types</h2>
+<p>NumSharp currently supports 12 numeric data types:</p>
+<table>
+<thead>
+<tr>
+<th>NPTypeCode</th>
+<th>C# Type</th>
+<th>NumPy Equivalent</th>
+<th>Array API</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Boolean</td>
+<td><code>bool</code></td>
+<td><code>np.bool_</code></td>
+<td>✅</td>
+</tr>
+<tr>
+<td>Byte</td>
+<td><code>byte</code></td>
+<td><code>np.uint8</code></td>
+<td>✅</td>
+</tr>
+<tr>
+<td>Int16</td>
+<td><code>short</code></td>
+<td><code>np.int16</code></td>
+<td>✅</td>
+</tr>
+<tr>
+<td>UInt16</td>
+<td><code>ushort</code></td>
+<td><code>np.uint16</code></td>
+<td>✅</td>
+</tr>
+<tr>
+<td>Int32</td>
+<td><code>int</code></td>
+<td><code>np.int32</code></td>
+<td>✅</td>
+</tr>
+<tr>
+<td>UInt32</td>
+<td><code>uint</code></td>
+<td><code>np.uint32</code></td>
+<td>✅</td>
+</tr>
+<tr>
+<td>Int64</td>
+<td><code>long</code></td>
+<td><code>np.int64</code></td>
+<td>✅</td>
+</tr>
+<tr>
+<td>UInt64</td>
+<td><code>ulong</code></td>
+<td><code>np.uint64</code></td>
+<td>✅</td>
+</tr>
+<tr>
+<td>Char</td>
+<td><code>char</code></td>
+<td>(no equivalent)</td>
+<td>❌</td>
+</tr>
+<tr>
+<td>Single</td>
+<td><code>float</code></td>
+<td><code>np.float32</code></td>
+<td>✅</td>
+</tr>
+<tr>
+<td>Double</td>
+<td><code>double</code></td>
+<td><code>np.float64</code></td>
+<td>✅</td>
+</tr>
+<tr>
+<td>Decimal</td>
+<td><code>decimal</code></td>
+<td>(no equivalent)</td>
+<td>❌</td>
+</tr>
+</tbody>
+</table>
+<h3 id="missing-types">Missing Types</h3>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>Status</th>
+<th>Priority</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>complex64</code></td>
+<td>Not implemented</td>
+<td>High (Array API required)</td>
+</tr>
+<tr>
+<td><code>complex128</code></td>
+<td>Not implemented</td>
+<td>High (Array API required)</td>
+</tr>
+<tr>
+<td><code>datetime64</code></td>
+<td>Not implemented</td>
+<td>Medium (NEP 07)</td>
+</tr>
+<tr>
+<td><code>timedelta64</code></td>
+<td>Not implemented</td>
+<td>Medium (NEP 07)</td>
+</tr>
+<tr>
+<td><code>StringDType</code></td>
+<td>Not implemented</td>
+<td>Low (NEP 55)</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="memory-layout">Memory Layout</h2>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>NumPy</th>
+<th>NumSharp</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>C-order (row-major)</td>
+<td>✅</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>F-order (column-major)</td>
+<td>✅</td>
+<td>❌</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Note:</strong> NumSharp only supports C-order (row-major) memory layout. The <code>order</code> parameter on <code>ravel</code>, <code>flatten</code>, <code>copy</code>, and <code>reshape</code> is accepted but ignored.</p>
+<p>See <a href="https://github.com/SciSharp/NumSharp/issues/546">#546</a> for F-order support tracking.</p>
+<hr>
+<h2 id="file-format-interoperability">File Format Interoperability</h2>
+<table>
+<thead>
+<tr>
+<th>Format</th>
+<th>Read</th>
+<th>Write</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>.npy</code></td>
+<td>✅</td>
+<td>✅</td>
+<td>NumPy array format (NEP 01)</td>
+</tr>
+<tr>
+<td><code>.npz</code></td>
+<td>✅</td>
+<td>❌</td>
+<td>Compressed archive of .npy files</td>
+</tr>
+<tr>
+<td>Binary</td>
+<td>✅</td>
+<td>✅</td>
+<td><code>fromfile()</code> / <code>tofile()</code></td>
+</tr>
+</tbody>
+</table>
+<p>Files created by NumSharp can be read by NumPy and vice versa.</p>
+<hr>
+<h2 id="random-number-generation">Random Number Generation</h2>
+<p>NumSharp's <code>np.random</code> module provides <strong>1-to-1 seed matching</strong> with NumPy (NEP 19):</p>
+<pre><code class="lang-csharp">// Same seed produces identical sequences
+np.random.seed(42);
+var a = np.random.rand(5);
+
+// Equivalent Python:
+// np.random.seed(42)
+// a = np.random.rand(5)
+</code></pre>
+<p>This enables reproducible results when porting code between NumPy and NumSharp.</p>
+<hr>
+<h2 id="implementation-roadmap">Implementation Roadmap</h2>
+<h3 id="phase-1-core-compatibility-current">Phase 1: Core Compatibility (Current)</h3>
+<ul>
+<li>Fix type promotion to match NEP 50</li>
+<li>API cleanup audit (NEP 52)</li>
+<li>Add Array API functions and aliases (NEP 56)</li>
+</ul>
+<h3 id="phase-2-feature-completeness">Phase 2: Feature Completeness</h3>
+<ul>
+<li>Add complex number support (<code>complex64</code>, <code>complex128</code>)</li>
+<li>Add <code>datetime64</code> / <code>timedelta64</code> types (NEP 07)</li>
+<li>Implement missing Array API functions</li>
+</ul>
+<h3 id="phase-3-extensions">Phase 3: Extensions</h3>
+<ul>
+<li>Complete <code>linalg</code> extension (currently stubs)</li>
+<li>Add <code>fft</code> extension</li>
+</ul>
+<h3 id="phase-4-performance">Phase 4: Performance</h3>
+<ul>
+<li>SIMD optimization (NEP 38/54)</li>
+<li>Iterator optimization (NEP 10)</li>
+</ul>
+<hr>
+<h2 id="contributing">Contributing</h2>
+<p>Help us achieve NumPy compatibility! See our <a href="https://github.com/SciSharp/NumSharp/milestones">GitHub milestones</a> for tracked issues:</p>
+<ul>
+<li><a href="https://github.com/SciSharp/NumSharp/milestone/9">NumPy 2.x Compliance</a></li>
+<li><a href="https://github.com/SciSharp/NumSharp/milestone/6">Array API Standard Compliance</a></li>
+<li><a href="https://github.com/SciSharp/NumSharp/milestone/7">NEP Compliance</a></li>
+</ul>
+<hr>
+<h2 id="references">References</h2>
+<ul>
+<li><a href="https://numpy.org/doc/stable/numpy_2_0_migration_guide.html">NumPy 2.0 Migration Guide</a></li>
+<li><a href="https://data-apis.org/array-api/latest/">Python Array API Standard</a></li>
+<li><a href="https://numpy.org/neps/">NumPy Enhancement Proposals</a></li>
+<li><a href="https://github.com/numpy/numpy/tree/v2.4.2">NumPy Source (v2.4.2)</a> - Reference implementation at <code>src/numpy/</code></li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          <span>Copyright &copy; 2025 <a href='https://github.com/SciSharp'>SciSharp STACK</a>. Built with <a href='https://dotnet.github.io/docfx'>DocFX</a>.</span>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>
