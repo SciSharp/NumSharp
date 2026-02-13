@@ -1,31 +1,49 @@
-Welcome Seeker to NumSharp's documentation!
-===========================================
+---
+_layout: landing
+---
 
-Since you reached our documentation, you must be interested into .NET or into machine learning. 
+# Welcome to NumSharp
 
-No matter what you was searching, you will be satisfied. 
+NumSharp is a .NET port of Python's NumPy library, bringing powerful numerical computing to the .NET ecosystem.
 
-NumSharp is quite new open source project with one big goal: adapt the famous and well-known python library numpy and bring it into .NET world. 
-On top of this, we try to bring the whole Scipy Stack to .NET world. 
-Sounds crazy? 
-Yes maybe a little bit. As crazy as bring .NET on mobile phones (Xamarin) or into browser (Blazor). ;)   
+## Why NumSharp?
 
-Why we should do that?
+- **NumPy API compatibility** - Feel right at home if you're coming from Python
+- **High-performance NDArray** - Multi-dimensional arrays stored efficiently in unmanaged memory
+- **Full .NET integration** - Works seamlessly with C#, F#, VB.NET, and other .NET languages
+- **Part of the SciSharp ecosystem** - Works alongside TensorFlow.NET, ML.NET, and other ML libraries
 
-- Because in .NET we trust (everybody knows why ^^)
-- Because we can do (hey we are .NET developer we can do cloud computing, do fancy web side stuff, are No. 1 for GUI programming in windows area, experiment with WASM – a.k.a. the Blazor project, do mobile things with Xamarin – yes, so how hard it can be to improve our numeric stack?)  
-- Because Microsoft also try to let .NET framework become an important framework for machine learning area. Therefore, it is time for us to support the F# developers who always were the leading experts in numeric area and machine learning. Let us help to shape .NET for numeric area. 
-- Because we can reach more languages than any other framework can do. It is not just a project for C#. We are not just C# developers – we are .NET developers and we are like a big family. Code one time and give it to all other languages. Because of this we are not just interested into C# - we also want to deliver packages special for F#, Powershell, VB, Ironpython, PHP, … we want to write the core in C# but we want to give each language the sugar it deserves. 
+## Quick Start
 
-What does Numsharp make different than the other numeric frameworks?
+```bash
+dotnet add package NumSharp
+```
 
-- We deliver a new class of array, which has a good performance in all different situations. The NDArray follows the idea of numpy and Quantstack, which store all elements of a multidimensional array (independent of the number of dimensions) into one large array. The indexing depends totally on the Shape of the NDArray, which determines if it is a matrix, a tensor, a vector or something else.
-- We try to implement the numpy APIs as well as possible so that people who come from numpy feels like be at home. More over people can find easier tutorials if they are new to machine learning or numerical stuff in general.    
+```csharp
+using NumSharp;
 
-So I hope seeker you got a quite well impression of what this is all about.
+var a = np.array(new int[] { 1, 2, 3, 4, 5 });
+var b = np.arange(5);
+var c = a + b;
+Console.WriteLine(c);  // [1, 3, 5, 7, 9]
+```
 
-- Curious? &rarr; ```dotnet add package NumSharp```
-- Want new features? &rarr; https://github.com/SciSharp/NumSharp 
-- Want to chat in digital "Coffeeroom"? &rarr; https://gitter.im/numsharp/Lobby
-- Want to support? &rarr; fork us on Github ;)  
+## Features
 
+- **Array Creation** - `np.zeros`, `np.ones`, `np.arange`, `np.linspace`, and more
+- **Array Manipulation** - Reshape, transpose, concatenate, stack operations
+- **Math Operations** - Element-wise arithmetic, broadcasting, linear algebra
+- **Slicing & Indexing** - NumPy-style slicing with views, not copies
+- **Random Sampling** - Full numpy.random compatibility with seed/state matching
+- **File I/O** - Load and save `.npy` and `.npz` files
+
+## Get Started
+
+- [Introduction](docs/intro.md) - Learn about NDArray, Shape, and Storage
+- [Array Creation](docs/NDArray.Creation.md) - Creating and initializing arrays
+- [API Reference](api/index.md) - Full API documentation
+
+## Community
+
+- [GitHub Repository](https://github.com/SciSharp/NumSharp) - Star us, report issues, contribute
+- [NuGet Package](https://www.nuget.org/packages/NumSharp) - Latest stable release

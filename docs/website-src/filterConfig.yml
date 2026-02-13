@@ -1,0 +1,40 @@
+# DocFX API Filter Configuration
+# https://dotnet.github.io/docfx/docs/dotnet-api-docs.html#filter-apis
+#
+# Uncomment rules below to hide internal/utility types from API documentation.
+# To enable: add "filter": "filterConfig.yml" to metadata section in docfx.json
+
+apiRules:
+  # Include all public APIs by default
+  - include:
+      hasAttribute:
+        uid: System.Runtime.CompilerServices.CompilerGeneratedAttribute
+      type: Member
+    exclude: true
+
+  # Uncomment to hide utility namespaces from public docs:
+  # - exclude:
+  #     uidRegex: ^NumSharp\.Utilities
+  #     type: Namespace
+
+  # - exclude:
+  #     uidRegex: ^NumSharp\.Backends\.Unmanaged\.Pooling
+  #     type: Namespace
+
+  # Uncomment to hide internal helper classes:
+  # - exclude:
+  #     uidRegex: Helper$
+  #     type: Class
+
+  # - exclude:
+  #     uidRegex: Extensions$
+  #     type: Class
+
+  # Uncomment to hide specific types:
+  # - exclude:
+  #     uidRegex: ^NumSharp\.Utilities\.InfoOf
+  #     type: Class
+
+  # - exclude:
+  #     uidRegex: ^NumSharp\.Utilities\.Converts
+  #     type: Class

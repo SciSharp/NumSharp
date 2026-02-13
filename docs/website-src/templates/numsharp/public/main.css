@@ -1,0 +1,85 @@
+/* NumSharp DocFX Custom Styles
+ * https://dotnet.github.io/docfx/docs/template.html
+ *
+ * The modern template uses Bootstrap 5.3 CSS variables.
+ * Override variables here to customize the theme.
+ */
+
+:root {
+  /* Primary brand color (NumSharp blue) */
+  --bs-primary: #0d6efd;
+  --bs-primary-rgb: 13, 110, 253;
+
+  /* Link colors */
+  --bs-link-color: #0d6efd;
+  --bs-link-hover-color: #0a58ca;
+}
+
+/* Dark mode overrides */
+[data-bs-theme="dark"] {
+  --bs-link-color: #6ea8fe;
+  --bs-link-hover-color: #8bb9fe;
+}
+
+/* Logo sizing */
+#logo {
+  height: 32px;
+  width: auto;
+}
+
+/* Footer styling */
+.footer {
+  border-top: 1px solid var(--bs-border-color);
+  padding: 1rem 0;
+  font-size: 0.875rem;
+}
+
+.footer a {
+  color: var(--bs-link-color);
+  text-decoration: none;
+}
+
+.footer a:hover {
+  text-decoration: underline;
+}
+
+/* Code block enhancements */
+pre code {
+  font-size: 0.875em;
+}
+
+/* Table of contents sticky positioning */
+@media (min-width: 992px) {
+  .sticky-top {
+    top: 80px;
+  }
+}
+
+/* API documentation improvements */
+.api-member {
+  margin-bottom: 1.5rem;
+}
+
+.api-member h4 {
+  border-bottom: 1px solid var(--bs-border-color);
+  padding-bottom: 0.5rem;
+}
+
+/* Syntax highlighting improvements for C# */
+.hljs-keyword {
+  font-weight: 600;
+}
+
+/* Print styles */
+@media print {
+  .navbar,
+  .toc,
+  .affix,
+  .footer {
+    display: none !important;
+  }
+
+  .article {
+    max-width: 100% !important;
+  }
+}
