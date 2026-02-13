@@ -23,6 +23,15 @@ namespace NumSharp
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.reshape.html</remarks>
         public NDArray reshape(ref Shape newShape)
         {
+            // NumPy: reshape returns a view when possible (contiguous), otherwise a copy
+            // For non-contiguous arrays (transposed/sliced), we must copy to get correct values
+            if (!Shape.IsContiguous)
+            {
+                // Clone data to contiguous, then reshape the clean copy
+                var copy = new NDArray(CloneData(), Shape.Clean());
+                return copy.reshape(ref newShape);
+            }
+
             var ret = Storage.Alias();
             ret.Reshape(ref newShape, false);
             return new NDArray(ret) {TensorEngine = TensorEngine};
@@ -31,15 +40,24 @@ namespace NumSharp
         /// <summary>
         ///     Gives a new shape to an array without changing its data.
         /// </summary>
-        /// <param name="shape">The new shape should be compatible with the original shape. If an integer, then the result will be a 
-        /// 1-D array of that length. One shape dimension can be -1. In this case, the value is inferred from the length of the array 
+        /// <param name="shape">The new shape should be compatible with the original shape. If an integer, then the result will be a
+        /// 1-D array of that length. One shape dimension can be -1. In this case, the value is inferred from the length of the array
         /// and remaining dimensions.</param>
-        /// <returns>This will be a new view object if possible; otherwise, it will be a copy. Note there is no guarantee of the 
+        /// <returns>This will be a new view object if possible; otherwise, it will be a copy. Note there is no guarantee of the
         /// memory layout (C- or Fortran- contiguous) of the returned array.</returns>
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.reshape.html</remarks>
         [SuppressMessage("ReSharper", "ParameterHidesMember")]
         public NDArray reshape(params int[] shape)
         {
+            // NumPy: reshape returns a view when possible (contiguous), otherwise a copy
+            // For non-contiguous arrays (transposed/sliced), we must copy to get correct values
+            if (!Shape.IsContiguous)
+            {
+                // Clone data to contiguous, then reshape the clean copy
+                var copy = new NDArray(CloneData(), Shape.Clean());
+                return copy.reshape(shape);
+            }
+
             var ret = Storage.Alias();
             ret.Reshape(shape, false);
             return new NDArray(ret) {TensorEngine = TensorEngine};

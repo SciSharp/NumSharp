@@ -109,10 +109,16 @@ namespace NumSharp.Backends
 
             var slicedShape = _shape.Slice(slices);
 
-            // Option 2: if the merged SliceDefs describe a contiguous block of memory,
-            // create an offset InternalArray alias instead of a ViewInfo-based alias.
-            // This makes IsContiguous=true for the result, enabling fast-path iteration
-            // and view semantics in ravel/copyto/etc.
+            // Contiguous slice optimization:
+            // If the slice describes a contiguous block of memory (step=1 for the
+            // first partial dimension, all trailing dims fully taken), create an
+            // offset InternalArray slice instead of a ViewInfo-based alias.
+            // This makes Address point to the correct location, enabling:
+            // - IsContiguous=true for the result
+            // - Fast-path iteration in ToArray, ravel, copyto, etc.
+            // - Proper view semantics (shares memory with original)
+            //
+            // This matches NumPy's architecture where slicing adjusts the data pointer.
             if (!slicedShape.IsRecursive && slicedShape.ViewInfo?.Slices != null)
             {
                 var vi = slicedShape.ViewInfo;
@@ -152,6 +158,7 @@ namespace NumSharp.Backends
                         startOffset += origStrides[i] * sdefs[i].Start;
 
                     // Create a clean shape (no ViewInfo) with the sliced dimensions
+                    // This makes IsContiguous=true because there's no ViewInfo
                     var cleanShape = slicedShape.Clean();
                     return new UnmanagedStorage(InternalArray.Slice(startOffset, cleanShape.size), cleanShape);
                 }

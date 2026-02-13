@@ -158,8 +158,8 @@ namespace NumSharp.Backends
         /// <returns>reference to cloned storage as System.Array</returns>
         public IArraySlice CloneData()
         {
-            //Incase shape is not sliced, we can copy the internal buffer.
-            if (!_shape.IsSliced && !_shape.IsBroadcasted)
+            //Incase shape is contiguous (not sliced, not broadcasted, not transposed), we can copy the internal buffer directly.
+            if (_shape.IsContiguous)
                 return InternalArray.Clone();
 
             if (_shape.IsScalar)

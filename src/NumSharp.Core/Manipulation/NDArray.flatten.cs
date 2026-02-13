@@ -10,10 +10,10 @@
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.ndarray.flatten.html</remarks>
         public NDArray flatten(bool clone)
         {
-            // Broadcast arrays: the non-clone path wraps the small backing buffer in a
-            // vector shape of broadcast size, causing out-of-bounds reads. The clone path
-            // uses CloneData which handles broadcast correctly, but ravel() is cleaner.
-            if (Shape.IsBroadcasted)
+            // Broadcast or transposed arrays: the non-clone path wraps the backing buffer in a
+            // vector shape which would cause incorrect element ordering for non-contiguous layouts.
+            // Use ravel() which correctly copies data in logical order.
+            if (Shape.IsBroadcasted || Shape.ModifiedStrides)
                 return np.ravel(this);
             return clone ? new NDArray(CloneData(), Shape.Vector(size)) : new NDArray(Storage, Shape.Vector(size));
         }

@@ -40,8 +40,9 @@ namespace NumSharp
                     throw new IncorrectShapeException($"Given shape size ({newShape.size}) does not match the size of the given storage size ({size})");
             }
 
-            if (IsSliced)
-                // Set up the new shape (of reshaped slice) to recursively represent a shape within a sliced shape
+            if (IsSliced || ModifiedStrides)
+                // Set up the new shape to recursively represent a shape within a sliced/transposed shape
+                // This ensures GetOffset correctly transforms coordinates through the parent shape
                 newShape.ViewInfo = new ViewInfo() { ParentShape = this, Slices = null };
 
             return newShape;

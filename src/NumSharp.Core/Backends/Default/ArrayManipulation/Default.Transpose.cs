@@ -18,9 +18,10 @@ namespace NumSharp.Backends
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static int check_and_adjust_axis(int ndims, int axis)
         {
-            if (axis >= 0)
-                return axis;
-            return ndims + axis;
+            int adjusted = axis >= 0 ? axis : ndims + axis;
+            if (adjusted < 0 || adjusted >= ndims)
+                throw new AxisOutOfRangeException(ndims, axis);
+            return adjusted;
         }
 
         /// <summary>
@@ -108,7 +109,7 @@ namespace NumSharp.Backends
                 start -= 1;
 
             if (axis == start)
-                return nd.Clone();
+                return nd;  // NumPy returns the array itself for identity case
 
             var premutes = new List<int>(n);
             for (int i = 0; i < n; i++) 
@@ -153,26 +154,39 @@ namespace NumSharp.Backends
                 }
             }
 
+            // Handle empty arrays: just create a new array with permuted dimensions, no data copy needed
+            if (nd.Shape.size == 0)
+            {
+                var emptyDims = new int[n];
+                for (i = 0; i < n; i++)
+                    emptyDims[i] = nd.Shape.dimensions[permutation[i]];
+                return new NDArray(nd.dtype, emptyDims);
+            }
+
+            // Create alias (view) for arrays where stride permutation is safe:
+            // - Contiguous: simple stride permutation
+            // - Broadcasted (not sliced): stride permutation preserves broadcast semantics (zero strides)
+            // Must clone for:
+            // - Sliced: ViewInfo complicates offset computation
+            // - Already-transposed (ModifiedStrides): would need stride composition
             UnmanagedStorage src;
-            if (nd.Shape.IsContiguous)
-                src = nd.Storage.Alias(nd.Shape.Clone());
+            if (!nd.Shape.IsSliced && !nd.Shape.ModifiedStrides)
+                src = nd.Storage.Alias(nd.Shape.Clone(deep: true, unview: false, unbroadcast: false));
             else
                 src = nd.Storage.Clone();
 
+            // Permute dimensions and strides
             for (i = 0; i < n; i++)
             {
                 src.Shape.dimensions[i] = nd.Shape.dimensions[permutation[i]];
                 src.Shape.strides[i] = nd.Shape.strides[permutation[i]];
             }
 
+            // Mark as having modified strides so IsContiguous returns false
             src.ShapeReference.SetStridesModified(true);
 
-            //Linear copy of all the sliced items.
-
-            var dst = new UnmanagedStorage(ArraySlice.Allocate(src.TypeCode, src.Shape.size, false), new Shape((int[])src.Shape.dimensions.Clone()));
-            MultiIterator.Assign(dst, src);
-
-            return new NDArray(dst);
+            // Return the view directly - no copy needed
+            return new NDArray(src);
         }
     }
 }

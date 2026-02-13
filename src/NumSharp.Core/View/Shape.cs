@@ -31,12 +31,64 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Does this Shape represents a non-sliced and non-broadcasted hence contagious unmanaged memory?
+        ///     Does this Shape represent contiguous unmanaged memory in C-order (row-major)?
+        ///     Computed from actual stride values, matching NumPy's flags['C_CONTIGUOUS'] algorithm.
         /// </summary>
+        /// <remarks>
+        ///     NumPy algorithm (from numpy/_core/src/multiarray/flagsobject.c:116-160):
+        ///     Scan right-to-left. stride[-1] must equal 1 (itemsize in NumPy, but NumSharp uses element strides).
+        ///     stride[i] must equal shape[i+1] * stride[i+1]. Size-1 dimensions are skipped (stride doesn't matter).
+        ///     Empty arrays (any dimension is 0) are considered contiguous by definition.
+        /// </remarks>
         public readonly bool IsContiguous
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            get => !IsSliced && !IsBroadcasted;
+            get => ComputeIsContiguousFromStrides();
+        }
+
+        /// <summary>
+        ///     Computes C-contiguity from actual stride values (NumPy algorithm).
+        ///     Scan right-to-left: stride[-1] must equal 1, stride[i] must equal
+        ///     shape[i+1] * stride[i+1], skipping size-1 dimensions.
+        /// </summary>
+        /// <remarks>
+        ///     IMPORTANT: In NumSharp's current architecture, views (sliced/broadcast/reshaped)
+        ///     cannot use direct memory access because the Address pointer doesn't account
+        ///     for the view's offset. All view shapes must return false here so operations
+        ///     like ToArray use GetOffset() for correct element access.
+        ///
+        ///     This is a limitation of the current architecture. NumPy uses a simpler
+        ///     offset+strides model where the data pointer is adjusted for views.
+        ///     A future refactor (Phase 2) could add dataOffset to enable true contiguity
+        ///     detection for views.
+        /// </remarks>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private readonly bool ComputeIsContiguousFromStrides()
+        {
+            // Scalar or empty shape is contiguous
+            if (dimensions == null || dimensions.Length == 0)
+                return true;
+
+            // Views (sliced, broadcast, recursive) cannot use direct memory access
+            // because Address doesn't account for the view offset. All view shapes
+            // must use GetOffset for correct element access.
+            if (IsSliced || IsBroadcasted)
+                return false;
+
+            int sd = 1; // Expected stride (element-based, not bytes)
+            for (int i = dimensions.Length - 1; i >= 0; i--)
+            {
+                int dim = dimensions[i];
+                if (dim == 0)
+                    return true; // Empty array is contiguous by definition
+                if (dim != 1) // Skip size-1 dimensions (stride doesn't matter)
+                {
+                    if (strides[i] != sd)
+                        return false;
+                    sd *= dim;
+                }
+            }
+            return true;
         }
 
         /// <summary>
@@ -387,16 +439,17 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Retrieve the transformed offset if <see cref="IsSliced"/> is true, otherwise returns <paramref name="offset"/>.
+        ///     Retrieve the transformed offset if the shape is non-contiguous (sliced, broadcasted, or transposed),
+        ///     otherwise returns <paramref name="offset"/>.
         /// </summary>
         /// <param name="offset">The offset within the bounds of <see cref="size"/>.</param>
         /// <returns>The transformed offset.</returns>
-        /// <remarks>Avoid using unless it is unclear if shape is sliced or not.</remarks>
+        /// <remarks>Avoid using unless it is unclear if shape is contiguous or not.</remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public readonly int TransformOffset(int offset)
         {
             // ReSharper disable once ConvertIfStatementToReturnStatement
-            if (ViewInfo == null && BroadcastInfo == null)
+            if (ViewInfo == null && BroadcastInfo == null && !ModifiedStrides)
                 return offset;
 
             return GetOffset(GetCoordinates(offset));
@@ -864,12 +917,16 @@ namespace NumSharp
         [MethodImpl((MethodImplOptions)768)]
         public readonly int[] GetCoordinates(int offset)
         {
-            // For broadcast shapes, strides contain zeros which break stride-based
-            // decomposition (dividing by zero-stride skips dimensions, causing overflow
-            // in subsequent dimensions). Use dimension-based decomposition instead,
-            // matching NumPy's PyArray_ITER_GOTO1D which uses factors (product of
-            // trailing dimensions) rather than strides.
-            if (IsBroadcasted)
+            // For transposed, broadcast, or sliced shapes with step != 1, strides are
+            // in non-standard order, contain zeros, or have gaps (e.g., step-2 slice has
+            // stride 2 not 1). These break stride-based decomposition because the linear
+            // index can't be decomposed using memory strides.
+            //
+            // Use dimension-based decomposition instead, matching NumPy's PyArray_ITER_GOTO1D
+            // which uses factors (product of trailing dimensions) rather than strides.
+            // This correctly maps linear index 0..size-1 to logical coordinates regardless
+            // of the actual memory layout.
+            if (ModifiedStrides || IsBroadcasted || IsSliced)
             {
                 var coords = new int[dimensions.Length];
                 int remaining = offset;
@@ -1176,7 +1233,25 @@ namespace NumSharp
             if (sliced_axes.Length == 0) //is it a scalar
                 return NewScalar(viewInfo);
 
-            return new Shape(sliced_axes) {ViewInfo = viewInfo};
+            // Compute actual memory strides for the sliced shape.
+            // The stride for each non-reduced dimension is:
+            //   new_stride[j] = original_stride[orig_i] * slice_step[orig_i]
+            // This enables IsContiguous to correctly determine memory layout.
+            // Note: Negative steps result in negative strides, making IsContiguous = false.
+            var sliced_strides = new int[sliced_axes.Length];
+            int j = 0;
+            for (int i = 0; i < slices.Count; i++)
+            {
+                if (slices[i].IsIndex)
+                    continue; // Skip reduced (index) dimensions
+
+                // Get the stride from the original shape (not the intermediate sliced shape)
+                // Preserve the sign of the step so reversed slices have negative strides
+                sliced_strides[j] = origin.strides[i] * slices[i].Step;
+                j++;
+            }
+
+            return new Shape(sliced_axes, sliced_strides) {ViewInfo = viewInfo};
         }
 
         #endregion
