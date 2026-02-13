@@ -49,7 +49,7 @@
         ]
       }
     ],
-    "dest": ".",
+    "dest": "../docs/website",
     "globalMetadataFiles": [],
     "fileMetadataFiles": [],
     "template": [
