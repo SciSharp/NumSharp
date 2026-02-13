@@ -1,0 +1,14 @@
+# Generated benchmark outputs (recreated by run-benchmarks.ps1)
+# README.md and benchmark-report.md are tracked (results documentation)
+# Only JSON and CSV are ignored as intermediate/machine-readable outputs
+/benchmark-report.json
+/benchmark-report.csv
+
+# Benchmark run outputs
+*.txt
+
+# Python cache
+__pycache__/
+*.pyc
+
+
