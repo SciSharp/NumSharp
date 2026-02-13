@@ -158,14 +158,20 @@ namespace NumSharp.Backends
         /// <returns>reference to cloned storage as System.Array</returns>
         public IArraySlice CloneData()
         {
-            //Incase shape is contiguous (not sliced, not broadcasted, not transposed), we can copy the internal buffer directly.
+            // Contiguous shapes can copy directly from memory.
+            // Must account for offset - slice the internal array at the correct position.
             if (_shape.IsContiguous)
-                return InternalArray.Clone();
+            {
+                if (_shape.offset == 0)
+                    return InternalArray.Clone();
+                else
+                    return InternalArray.Slice(_shape.offset, _shape.size).Clone();
+            }
 
             if (_shape.IsScalar)
                 return ArraySlice.Scalar(GetValue(0), _typecode);
 
-            //Linear copy of all the sliced items.
+            //Linear copy of all the sliced items (non-contiguous: broadcast, stepped, transposed).
 
             var ret = ArraySlice.Allocate(InternalArray.TypeCode, _shape.size, false);
             MultiIterator.Assign(new UnmanagedStorage(ret, _shape.Clean()), this);

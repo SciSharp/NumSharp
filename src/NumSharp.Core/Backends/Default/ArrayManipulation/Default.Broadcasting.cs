@@ -200,89 +200,67 @@ namespace NumSharp.Backends
             if (shapes.Length == 1)
                 return new Shape[] {shapes[0].Clean()};
 
-            Shape mit;
             int i, nd, k, j, tmp;
 
             var ret = new Shape[shapes.Length];
             int len = shapes.Length;
 
             tmp = 0;
-            /* Discover the broadcast number of dimensions */
-            //Gets the largest ndim of all iterators
+            // Discover the broadcast number of dimensions
             nd = 0;
             for (i = 0; i < len; i++)
                 nd = Math.Max(nd, shapes[i].NDim);
 
+            // Use temporary array for broadcast dimensions (not Shape.Empty)
+            var mitDims = new int[nd];
 
-            //this is the shared shape aka the target broadcast
-            mit = Shape.Empty(nd);
-
-            /* Discover the broadcast shape in each dimension */
+            // Discover the broadcast shape in each dimension
             for (i = 0; i < nd; i++)
             {
-                mit.dimensions[i] = 1;
+                mitDims[i] = 1;
                 for (int targetIndex = 0; targetIndex < len; targetIndex++)
                 {
                     Shape target = shapes[targetIndex];
-                    /* This prepends 1 to shapes not already equal to nd */
                     k = i + target.NDim - nd;
                     if (k >= 0)
                     {
                         tmp = target.dimensions[k];
                         if (tmp == 1)
-                        {
                             continue;
-                        }
 
-                        if (mit.dimensions[i] == 1)
-                        {
-                            mit.dimensions[i] = tmp;
-                        }
-                        else if (mit.dimensions[i] != tmp)
-                        {
+                        if (mitDims[i] == 1)
+                            mitDims[i] = tmp;
+                        else if (mitDims[i] != tmp)
                             throw new IncorrectShapeException("shape mismatch: objects cannot be broadcast to a single shape");
-                        }
                     }
                 }
             }
 
+            // Create broadcast shapes for each input
             for (i = 0; i < len; i++)
             {
                 Shape ogiter = shapes[i];
-                // When re-broadcasting, track the root original shape
-                Shape ogOriginal = ogiter.IsBroadcasted ? ogiter.BroadcastInfo.OriginalShape : ogiter;
-                ret[i] = mit.Clean();
-                ref Shape it = ref ret[i];
-                nd = ogiter.NDim;
-                it.BroadcastInfo = new BroadcastInfo(ogOriginal);
-                it.offset = ogiter.offset; // Phase 3: preserve source offset
-                // Set ViewInfo for sliced inputs so GetOffset resolves slice strides correctly
-                if (ogOriginal.IsSliced)
-                    it.ViewInfo = new ViewInfo() {ParentShape = ogOriginal, Slices = null};
-                for (j = 0; j < mit.NDim; j++)
-                {
-                    //it->dims_m1[j] = mit.dimensions[j] - 1;
-                    k = j + nd - mit.NDim;
-                    /*
-                     * If this dimension was added or shape of
-                     * underlying array was 1
-                     */
-                    if ((k < 0) ||
-                        ogiter.dimensions[k] != mit.dimensions[j])
-                    {
-                        it.strides[j] = 0;
-                    }
-                    else
-                    {
-                        it.strides[j] = ogiter.strides[k];
-                    }
+                int ogNd = ogiter.NDim;
 
-                    //it.backstrides[j] = it.strides[j] * (it.dimensions[j] - 1);
-                    //if (j > 0)
-                    //    it.factors[mit.NDim - j - 1] = it.factors[mit.NDim - j] * mit.dimensions[mit.NDim - j];
+                // Compute broadcast strides
+                var broadcastStrides = new int[nd];
+                for (j = 0; j < nd; j++)
+                {
+                    k = j + ogNd - nd;
+                    if ((k < 0) || ogiter.dimensions[k] != mitDims[j])
+                        broadcastStrides[j] = 0;
+                    else
+                        broadcastStrides[j] = ogiter.strides[k];
                 }
 
-                it.ComputeHashcode();
+                // Create immutable shape via constructor
+                int bufSize = ogiter.bufferSize > 0 ? ogiter.bufferSize : ogiter.size;
+                ret[i] = new Shape(
+                    (int[])mitDims.Clone(),
+                    broadcastStrides,
+                    ogiter.offset,
+                    bufSize
+                );
             }
 
             return ret;
@@ -296,164 +274,103 @@ namespace NumSharp.Backends
             if (leftShape._hashCode != 0 && leftShape._hashCode == rightShape._hashCode)
                 return (leftShape, rightShape);
 
-            // When re-broadcasting an already-broadcast shape, resolve to the original
-            // pre-broadcast shape for BroadcastInfo tracking. The broadcast shape's dimensions
-            // and strides are used as-is for the new broadcast computation — stride=0 dims
-            // from the prior broadcast naturally propagate.
-            Shape leftOriginal = leftShape.IsBroadcasted ? leftShape.BroadcastInfo.OriginalShape : leftShape;
-            Shape rightOriginal = rightShape.IsBroadcasted ? rightShape.BroadcastInfo.OriginalShape : rightShape;
-
-            Shape left, right, mit;
             int i, nd, k, j, tmp;
 
-            //is left a scalar
+            // Is left a scalar - broadcast to right's shape with zero strides
             if (leftShape.IsScalar || leftShape.NDim == 1 && leftShape.size == 1)
             {
-                left = rightShape; //copy right
-                left.strides = new int[left.strides.Length]; //zero strides
-                left.BroadcastInfo = new BroadcastInfo(leftOriginal);
-                left.offset = leftShape.offset; // Phase 3: preserve source offset
+                var zeroStrides = new int[rightShape.NDim];
+                int leftBufSize = leftShape.bufferSize > 0 ? leftShape.bufferSize : leftShape.size;
+                var left = new Shape(
+                    (int[])rightShape.dimensions.Clone(),
+                    zeroStrides,
+                    leftShape.offset,
+                    leftBufSize
+                );
                 return (left, rightShape);
             }
-            //is right a scalar
-            else if (rightShape.IsScalar || rightShape.NDim == 1 && rightShape.size == 1)
+
+            // Is right a scalar - broadcast to left's shape with zero strides
+            if (rightShape.IsScalar || rightShape.NDim == 1 && rightShape.size == 1)
             {
-                right = leftShape; //copy left
-                right.strides = new int[right.strides.Length]; //zero strides
-                right.BroadcastInfo = new BroadcastInfo(rightOriginal);
-                right.offset = rightShape.offset; // Phase 3: preserve source offset
+                var zeroStrides = new int[leftShape.NDim];
+                int rightBufSize = rightShape.bufferSize > 0 ? rightShape.bufferSize : rightShape.size;
+                var right = new Shape(
+                    (int[])leftShape.dimensions.Clone(),
+                    zeroStrides,
+                    rightShape.offset,
+                    rightBufSize
+                );
                 return (leftShape, right);
             }
-            else
+
+            // General case: compute broadcast shape
+            tmp = 0;
+            nd = Math.Max(rightShape.NDim, leftShape.NDim);
+
+            // Compute broadcast dimensions into temporary array
+            var mitDims = new int[nd];
+            for (i = 0; i < nd; i++)
             {
-                tmp = 0;
-                /* Discover the broadcast number of dimensions */
-                //Gets the largest ndim of all iterators
-                nd = Math.Max(rightShape.NDim, leftShape.NDim);
+                mitDims[i] = 1;
 
-                //this is the shared shape aka the target broadcast
-                mit = Shape.Empty(nd);
-
-                /* Discover the broadcast shape in each dimension */
-                for (i = 0; i < nd; i++)
+                k = i + leftShape.NDim - nd;
+                if (k >= 0)
                 {
-                    mit.dimensions[i] = 1;
-
-                    /* This prepends 1 to shapes not already equal to nd */
-                    k = i + leftShape.NDim - nd;
-                    if (k >= 0)
+                    tmp = leftShape.dimensions[k];
+                    if (tmp != 1)
                     {
-                        tmp = leftShape.dimensions[k];
-                        if (tmp == 1)
-                        {
-                            goto _continue;
-                        }
-
-                        if (mit.dimensions[i] == 1)
-                        {
-                            mit.dimensions[i] = tmp;
-                        }
-                        else if (mit.dimensions[i] != tmp)
-                        {
+                        if (mitDims[i] == 1)
+                            mitDims[i] = tmp;
+                        else if (mitDims[i] != tmp)
                             throw new IncorrectShapeException("shape mismatch: objects cannot be broadcast to a single shape");
-                        }
-                    }
-
-                    _continue:
-                    /* This prepends 1 to shapes not already equal to nd */
-                    k = i + rightShape.NDim - nd;
-                    if (k >= 0)
-                    {
-                        tmp = rightShape.dimensions[k];
-                        if (tmp == 1)
-                        {
-                            continue;
-                        }
-
-                        if (mit.dimensions[i] == 1)
-                        {
-                            mit.dimensions[i] = tmp;
-                        }
-                        else if (mit.dimensions[i] != tmp)
-                        {
-                            throw new IncorrectShapeException("shape mismatch: objects cannot be broadcast to a single shape");
-                        }
                     }
                 }
 
-
-                left = new Shape(mit.dimensions) {BroadcastInfo = new BroadcastInfo(leftOriginal)};
-                right = new Shape(mit.dimensions) {BroadcastInfo = new BroadcastInfo(rightOriginal)};
-                // Phase 3: preserve source offset in broadcast result
-                left.offset = leftShape.offset;
-                right.offset = rightShape.offset;
-                if (leftOriginal.IsSliced)
-                    left.ViewInfo = new ViewInfo() {ParentShape = leftOriginal, Slices = null};
-                if (rightOriginal.IsSliced)
-                    right.ViewInfo = new ViewInfo() {ParentShape = rightOriginal, Slices = null};
-
-                //left.ViewInfo = leftShape.ViewInfo;
-                //right.ViewInfo = rightShape.ViewInfo;
+                k = i + rightShape.NDim - nd;
+                if (k >= 0)
+                {
+                    tmp = rightShape.dimensions[k];
+                    if (tmp != 1)
+                    {
+                        if (mitDims[i] == 1)
+                            mitDims[i] = tmp;
+                        else if (mitDims[i] != tmp)
+                            throw new IncorrectShapeException("shape mismatch: objects cannot be broadcast to a single shape");
+                    }
+                }
             }
 
-            //if (nd != 0)
-            //{
-            //    it->factors[mit.nd - 1] = 1;
-            //}
-            for (j = 0; j < mit.NDim; j++)
+            // Compute left broadcast strides
+            var leftStrides = new int[nd];
+            for (j = 0; j < nd; j++)
             {
-                //it->dims_m1[j] = mit.dimensions[j] - 1;
-                k = j + leftShape.NDim - mit.NDim;
-                /*
-                 * If this dimension was added or shape of
-                 * underlying array was 1
-                 */
-                if ((k < 0) ||
-                    leftShape.dimensions[k] != mit.dimensions[j])
-                {
-                    left.strides[j] = 0;
-                }
+                k = j + leftShape.NDim - nd;
+                if ((k < 0) || leftShape.dimensions[k] != mitDims[j])
+                    leftStrides[j] = 0;
                 else
-                {
-                    left.strides[j] = leftShape.strides[k];
-                }
-
-                //it.backstrides[j] = it.strides[j] * (it.dimensions[j] - 1);
-                //if (j > 0)
-                //    it.factors[mit.NDim - j - 1] = it.factors[mit.NDim - j] * mit.dimensions[mit.NDim - j];
+                    leftStrides[j] = leftShape.strides[k];
             }
 
-            //if (nd != 0)
-            //{
-            //    it->factors[mit.nd - 1] = 1;
-            //}
-            for (j = 0; j < mit.NDim; j++)
+            // Compute right broadcast strides
+            var rightStrides = new int[nd];
+            for (j = 0; j < nd; j++)
             {
-                //it->dims_m1[j] = mit.dimensions[j] - 1;
-                k = j + rightShape.NDim - mit.NDim;
-                /*
-                 * If this dimension was added or shape of
-                 * underlying array was 1
-                 */
-                if ((k < 0) ||
-                    rightShape.dimensions[k] != mit.dimensions[j])
-                {
-                    right.strides[j] = 0;
-                }
+                k = j + rightShape.NDim - nd;
+                if ((k < 0) || rightShape.dimensions[k] != mitDims[j])
+                    rightStrides[j] = 0;
                 else
-                {
-                    right.strides[j] = rightShape.strides[k];
-                }
-
-                //it.backstrides[j] = it.strides[j] * (it.dimensions[j] - 1);
-                //if (j > 0)
-                //    it.factors[mit.NDim - j - 1] = it.factors[mit.NDim - j] * mit.dimensions[mit.NDim - j];
+                    rightStrides[j] = rightShape.strides[k];
             }
 
-            left.ComputeHashcode();
-            right.ComputeHashcode();
+            // Create immutable shapes via constructors
+            int leftBufSize2 = leftShape.bufferSize > 0 ? leftShape.bufferSize : leftShape.size;
+            int rightBufSize2 = rightShape.bufferSize > 0 ? rightShape.bufferSize : rightShape.size;
 
-            return (left, right);
+            var leftResult = new Shape(mitDims, leftStrides, leftShape.offset, leftBufSize2);
+            var rightResult = new Shape((int[])mitDims.Clone(), rightStrides, rightShape.offset, rightBufSize2);
+
+            return (leftResult, rightResult);
         }
 
         /// <remarks>Based on https://docs.scipy.org/doc/numpy-1.16.1/user/basics.broadcasting.html </remarks>

@@ -88,15 +88,6 @@ namespace NumSharp
                     {
                         //we are basically flatten the shape.
                         var flatSrcShape = new Shape(srcShape.size);
-                        if (srcShape.IsBroadcasted)
-                        {
-                            if (srcShape.IsSliced)
-                                flatSrcShape.ViewInfo = new ViewInfo() {ParentShape = srcShape.BroadcastInfo.OriginalShape, Slices = null};
-                        }
-                        else if (srcShape.IsSliced)
-                            // Set up the new shape (of reshaped slice) to recursively represent a shape within a sliced shape
-                            flatSrcShape.ViewInfo = new ViewInfo() {ParentShape = srcShape, Slices = null};
-
                         indexGetters[i] = flatSrcShape.GetOffset_1D;
                     }
                 }

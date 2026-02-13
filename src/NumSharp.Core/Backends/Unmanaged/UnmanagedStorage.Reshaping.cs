@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
+using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp.Backends
 {
@@ -30,6 +31,18 @@ namespace NumSharp.Backends
             if (dimensions == null)
                 throw new ArgumentNullException(nameof(dimensions));
 
+            // NumPy behavior: non-contiguous arrays require a copy when reshaping
+            // because Shape.Reshape creates standard C-order strides that don't
+            // account for the original non-contiguous memory layout
+            if (!_shape.IsContiguous)
+            {
+                // Make a contiguous copy of the data
+                var contiguousData = CloneData();
+                var cleanShape = _shape.Clean();
+                SetInternalArray(contiguousData);
+                _shape = cleanShape;
+            }
+
             SetShapeUnsafe(_shape.Reshape(dimensions, @unsafe));
         }
 
@@ -52,6 +65,18 @@ namespace NumSharp.Backends
         [MethodImpl((MethodImplOptions)768)]
         public void Reshape(ref Shape newShape, bool @unsafe = false)
         {
+            // NumPy behavior: non-contiguous arrays require a copy when reshaping
+            // because Shape.Reshape creates standard C-order strides that don't
+            // account for the original non-contiguous memory layout
+            if (!_shape.IsContiguous)
+            {
+                // Make a contiguous copy of the data
+                var contiguousData = CloneData();
+                var cleanShape = _shape.Clean();
+                SetInternalArray(contiguousData);
+                _shape = cleanShape;
+            }
+
             this.SetShapeUnsafe(_shape.Reshape(newShape, @unsafe));
         }
 

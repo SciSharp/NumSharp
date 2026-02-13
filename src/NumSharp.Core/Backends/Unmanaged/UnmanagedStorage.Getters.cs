@@ -95,15 +95,20 @@ namespace NumSharp.Backends
             if (this_shape.IsBroadcasted)
             {
                 var (shape, offset) = this_shape.GetSubshape(indices);
-                return UnmanagedStorage.CreateBroadcastedUnsafe(InternalArray.Slice(offset, shape.BroadcastInfo.OriginalShape.size), shape);
+                // NumPy-aligned: use bufferSize instead of BroadcastInfo.OriginalShape.size
+                int sliceSize = shape.BufferSize > 0 ? shape.BufferSize : shape.size;
+                return UnmanagedStorage.CreateBroadcastedUnsafe(InternalArray.Slice(offset, sliceSize), shape);
             }
-            else if (this_shape.IsSliced)
+            else if (!this_shape.IsContiguous)
             {
-                // in this case we can not get a slice of contiguous memory, so we slice
+                // Non-contiguous shapes (stepped slices, transposed, etc.) cannot use
+                // memory slicing. Create a view with indexed slices instead.
                 return GetView(indices.Select(Slice.Index).ToArray());
             }
             else
             {
+                // Contiguous shape: can take a direct memory slice.
+                // GetSubshape computes the correct offset accounting for shape.offset.
                 var (shape, offset) = this_shape.GetSubshape(indices);
                 return new UnmanagedStorage(InternalArray.Slice(offset, shape.Size), shape);
             }
@@ -125,11 +130,14 @@ namespace NumSharp.Backends
             if (this_shape.IsBroadcasted)
             {
                 var (shape, offset) = this_shape.GetSubshape(dims, ndims);
-                return UnmanagedStorage.CreateBroadcastedUnsafe(InternalArray.Slice(offset, shape.BroadcastInfo.OriginalShape.size), shape);
+                // NumPy-aligned: use bufferSize instead of BroadcastInfo.OriginalShape.size
+                int sliceSize = shape.BufferSize > 0 ? shape.BufferSize : shape.size;
+                return UnmanagedStorage.CreateBroadcastedUnsafe(InternalArray.Slice(offset, sliceSize), shape);
             }
-            else if (this_shape.IsSliced)
+            else if (!this_shape.IsContiguous)
             {
-                // in this case we can not get a slice of contiguous memory, so we slice
+                // Non-contiguous shapes (stepped slices, transposed, etc.) cannot use
+                // memory slicing. Create a view with indexed slices instead.
                 var slices = new Slice[ndims];
                 for (int i = 0; i < ndims; i++)
                 {
@@ -140,6 +148,8 @@ namespace NumSharp.Backends
             }
             else
             {
+                // Contiguous shape: can take a direct memory slice.
+                // GetSubshape computes the correct offset accounting for shape.offset.
                 var (shape, offset) = this_shape.GetSubshape(dims, ndims);
                 return new UnmanagedStorage(InternalArray.Slice(offset, shape.Size), shape);
             }

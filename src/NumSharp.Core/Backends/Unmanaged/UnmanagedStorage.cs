@@ -1354,12 +1354,16 @@ namespace NumSharp.Backends
             var src = (T*)Address;
             var ret = new T[Shape.Size];
 
+            // NumPy-aligned: For contiguous shapes, use fast memory copy.
+            // Must account for shape.offset which indicates the starting position in the buffer.
             if (Shape.IsContiguous)
             {
+                // Adjust source pointer by offset for sliced views
+                var srcWithOffset = src + Shape.offset;
                 fixed (T* dst = ret)
                 {
                     var len = sizeof(T) * ret.Length;
-                    Buffer.MemoryCopy(src, dst, len, len);
+                    Buffer.MemoryCopy(srcWithOffset, dst, len, len);
                 }
             }
             else

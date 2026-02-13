@@ -61,9 +61,11 @@ namespace NumSharp.Backends
         [SuppressMessage("ReSharper", "PossibleInvalidOperationException")]
         private UnmanagedStorage GetViewInternal(params Slice[] slices)
         {
-            // NOTE: GetViewInternal can not deal with Slice.Ellipsis or Slice.NewAxis! 
-            //handle memory slice if possible
-            if (!_shape.IsSliced)
+            // NOTE: GetViewInternal can not deal with Slice.Ellipsis or Slice.NewAxis!
+            // For contiguous shapes, if all slices are indices, we can use GetData to get
+            // a direct memory slice. For non-contiguous shapes (stepped, transposed), we
+            // must go through the full slice path to create a proper view.
+            if (_shape.IsContiguous)
             {
                 var indices = new int[slices.Length];
                 for (var i = 0; i < slices.Length; i++)
@@ -91,9 +93,8 @@ namespace NumSharp.Backends
             //perform a regular slicing
             _perform_slice:
 
-            // In case the slices selected are all ":"
-            // ReSharper disable once ConvertIfStatementToReturnStatement
-            if (!_shape.IsRecursive && slices.All(s => Equals(Slice.All, s)))
+            // In case the slices selected are all ":" - just return an alias
+            if (slices.All(s => Equals(Slice.All, s)))
                 return Alias();
 
             //handle broadcasted shape: materialize broadcast data into contiguous memory,
@@ -109,61 +110,9 @@ namespace NumSharp.Backends
 
             var slicedShape = _shape.Slice(slices);
 
-            // Contiguous slice optimization:
-            // If the slice describes a contiguous block of memory (step=1 for the
-            // first partial dimension, all trailing dims fully taken), create an
-            // offset InternalArray slice instead of a ViewInfo-based alias.
-            // This makes Address point to the correct location, enabling:
-            // - IsContiguous=true for the result
-            // - Fast-path iteration in ToArray, ravel, copyto, etc.
-            // - Proper view semantics (shares memory with original)
-            //
-            // This matches NumPy's architecture where slicing adjusts the data pointer.
-            if (!slicedShape.IsRecursive && slicedShape.ViewInfo?.Slices != null)
-            {
-                var vi = slicedShape.ViewInfo;
-                var origDims = vi.OriginalShape.dimensions;
-                var origStrides = vi.OriginalShape.strides;
-                var sdefs = vi.Slices;
-
-                // Check contiguity: scan right-to-left.
-                // Trailing dims must be fully taken (Start=0, Step=1, Count=origDim).
-                // First partially-taken dim must have Step=1 (or Count<=1).
-                // All dims left of that must have Count=1 (or be an index).
-                bool contiguous = true;
-                bool foundPartial = false;
-                for (int i = sdefs.Length - 1; i >= 0; i--)
-                {
-                    var sd = sdefs[i];
-                    int count = sd.IsIndex ? 1 : sd.Count;
-                    bool isFull = !sd.IsIndex && sd.Start == 0 && sd.Step == 1 && sd.Count == origDims[i];
-
-                    if (!foundPartial)
-                    {
-                        if (isFull) continue;
-                        foundPartial = true;
-                        if (sd.Step != 1 && count > 1) { contiguous = false; break; }
-                    }
-                    else
-                    {
-                        if (count != 1) { contiguous = false; break; }
-                    }
-                }
-
-                if (contiguous && slicedShape.size > 0)
-                {
-                    // Compute linear start offset in the underlying InternalArray
-                    int startOffset = 0;
-                    for (int i = 0; i < sdefs.Length; i++)
-                        startOffset += origStrides[i] * sdefs[i].Start;
-
-                    // Create a clean shape (no ViewInfo) with the sliced dimensions
-                    // This makes IsContiguous=true because there's no ViewInfo
-                    var cleanShape = slicedShape.Clean();
-                    return new UnmanagedStorage(InternalArray.Slice(startOffset, cleanShape.size), cleanShape);
-                }
-            }
-
+            // NumPy-aligned: All slices return views (aliases) that share memory with the original.
+            // The slicedShape contains the correct offset and strides computed by Shape.Slice().
+            // Views with non-zero offset or non-standard strides use coordinate-based access.
             return Alias(slicedShape);
         }
 

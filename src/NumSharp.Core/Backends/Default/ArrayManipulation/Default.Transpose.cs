@@ -163,30 +163,33 @@ namespace NumSharp.Backends
                 return new NDArray(nd.dtype, emptyDims);
             }
 
-            // Create alias (view) for arrays where stride permutation is safe:
-            // - Contiguous: simple stride permutation
-            // - Broadcasted (not sliced): stride permutation preserves broadcast semantics (zero strides)
-            // Must clone for:
-            // - Sliced: ViewInfo complicates offset computation
-            // - Already-transposed (ModifiedStrides): would need stride composition
-            UnmanagedStorage src;
-            if (!nd.Shape.IsSliced && !nd.Shape.ModifiedStrides)
-                src = nd.Storage.Alias(nd.Shape.Clone(deep: true, unview: false, unbroadcast: false));
-            else
-                src = nd.Storage.Clone();
+            // NumPy-aligned: Transpose returns a VIEW by permuting strides.
+            // For contiguous arrays, this is a simple stride permutation.
+            // For non-contiguous arrays (sliced, already transposed), we need to
+            // permute the CURRENT strides, which already encode the view's layout.
+            //
+            // No data copy is needed - transpose is always O(1).
+            // The transposed shape shares memory with the original.
+            var shape = nd.Shape;
+            var srcDims = shape.dimensions;
+            var srcStrides = shape.strides;
 
             // Permute dimensions and strides
+            var permutedDims = new int[n];
+            var permutedStrides = new int[n];
             for (i = 0; i < n; i++)
             {
-                src.Shape.dimensions[i] = nd.Shape.dimensions[permutation[i]];
-                src.Shape.strides[i] = nd.Shape.strides[permutation[i]];
+                permutedDims[i] = srcDims[permutation[i]];
+                permutedStrides[i] = srcStrides[permutation[i]];
             }
 
-            // Mark as having modified strides so IsContiguous returns false
-            src.ShapeReference.SetStridesModified(true);
+            // Create the transposed shape via constructor (immutable)
+            // modifiedStrides=true so iteration uses coordinate-based access
+            int bufSize = shape.bufferSize > 0 ? shape.bufferSize : shape.size;
+            var newShape = new Shape(permutedDims, permutedStrides, shape.offset, bufSize, modifiedStrides: true);
 
-            // Return the view directly - no copy needed
-            return new NDArray(src);
+            // Return an alias (view) with the permuted shape
+            return new NDArray(nd.Storage.Alias(newShape));
         }
     }
 }
