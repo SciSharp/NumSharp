@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
@@ -24,12 +24,11 @@ namespace NumSharp
         {
             if (IsBroadcasted)
             {
-                _reshapeBroadcast(ref newShape, @unsafe);
-                return newShape;
+                return _reshapeBroadcast(newShape, @unsafe);
             }
 
-            //handle -1 in reshape
-            _inferMissingDimension(ref newShape);
+            // Handle -1 in reshape - returns new shape with inferred dimension
+            newShape = _inferMissingDimension(newShape);
 
             if (!@unsafe)
             {
@@ -40,24 +39,24 @@ namespace NumSharp
                     throw new IncorrectShapeException($"Given shape size ({newShape.size}) does not match the size of the given storage size ({size})");
             }
 
-            if (IsSliced || ModifiedStrides)
-                // Set up the new shape to recursively represent a shape within a sliced/transposed shape
-                // This ensures GetOffset correctly transforms coordinates through the parent shape
-                newShape.ViewInfo = new ViewInfo() { ParentShape = this, Slices = null };
-
-            return newShape;
+            // NumPy-aligned: Create new shape with preserved offset and bufferSize
+            int bufSize = bufferSize > 0 ? bufferSize : size;
+            return new Shape(
+                (int[])newShape.dimensions.Clone(),
+                (int[])newShape.strides.Clone(),
+                offset,
+                bufSize
+            );
         }
 
         /// <summary>
-        ///     Changes the shape representing this storage.
+        ///     Changes the shape representing this storage (broadcast version).
         /// </summary>
-        /// <exception cref="IncorrectShapeException">If shape's size mismatches current shape size.</exception>
-        /// <exception cref="ArgumentException">If <paramref name="newShape"/>'s size == 0</exception>
         [MethodImpl((MethodImplOptions)768)]
-        private readonly void _reshapeBroadcast(ref Shape newShape, bool @unsafe = true)
+        private readonly Shape _reshapeBroadcast(Shape newShape, bool @unsafe = true)
         {
-            //handle -1 in reshape
-            _inferMissingDimension(ref newShape);
+            // Handle -1 in reshape
+            newShape = _inferMissingDimension(newShape);
 
             if (!@unsafe)
             {
@@ -68,18 +67,21 @@ namespace NumSharp
                     throw new IncorrectShapeException($"Given shape size ({newShape.size}) does not match the size of the given storage size ({size})");
             }
 
-            // Always set ViewInfo so the reshaped broadcast resolves offsets through the
-            // parent broadcast shape's strides (via the recursive GetOffset path).
-            // Without this, GetOffset on the reshaped shape uses `offset % OriginalShape.size`
-            // modular arithmetic which only works for row broadcasts by coincidence — column
-            // broadcasts and other patterns produce wrong element ordering.
-            newShape.ViewInfo = new ViewInfo() { ParentShape = this, Slices = null };
-
-            newShape.BroadcastInfo = IsBroadcasted ? BroadcastInfo.Clone() : new BroadcastInfo(this);
+            // NumPy-aligned: preserve bufferSize from original shape for broadcast tracking
+            int bufSize = bufferSize > 0 ? bufferSize : size;
+            return new Shape(
+                (int[])newShape.dimensions.Clone(),
+                (int[])newShape.strides.Clone(),
+                0,
+                bufSize
+            );
         }
 
+        /// <summary>
+        ///     Infers missing dimension (-1) and returns a new shape with correct dimensions/strides.
+        /// </summary>
         [SuppressMessage("ReSharper", "ParameterHidesMember")]
-        private readonly void _inferMissingDimension(ref Shape shape)
+        private readonly Shape _inferMissingDimension(Shape shape)
         {
             var indexOfNegOne = -1;
             int product = 1;
@@ -98,30 +100,10 @@ namespace NumSharp
             }
 
             if (indexOfNegOne == -1)
-                return;
-
+                return shape; // No -1 to infer
 
             if (this.IsBroadcasted)
             {
-                /* //TODO: the following case needs to be handled.
-                 *  a = np.arange(4).reshape(1,2,2)
-                 *  print(a.strides)
-                 *
-                 *  b = np.broadcast_to(a, (2,2,2))
-                 *  print(b.strides)
-                 *
-                 *  c = np.reshape(b, (2, -1))
-                 *  print(c.strides)
-                 *
-                 *  c = np.reshape(b, (-1, 2))
-                 *  print(c.strides)
-                 *  
-                 *  (16, 8, 4)
-                 *  (0, 8, 4)
-                 *  (0, 4) //here it handles broadcast
-                 *  (8, 4) //here can be seen that numpy performs a copy
-                 */
-                //var originalReshaped = np.broadcast_to(this.BroadcastInfo.OriginalShape.Reshape(new int[] { this.BroadcastInfo.OriginalShape.size }), (Shape) new int[] { this.size });
                 throw new NotSupportedException("Reshaping a broadcasted array with a -1 (unknown) dimension is not supported.");
             }
 
@@ -131,19 +113,14 @@ namespace NumSharp
                 throw new ArgumentException("Bad shape: missing dimension would have to be non-integer");
             }
 
-            shape.dimensions[indexOfNegOne] = missingValue;
-            var strides = shape.strides;
-            var dimensions = shape.dimensions;
+            // Create new dimensions array with inferred value
+            var newDims = (int[])shape.dimensions.Clone();
+            newDims[indexOfNegOne] = missingValue;
 
+            // Compute new strides for the corrected dimensions
+            var newStrides = ComputeContiguousStrides(newDims);
 
-
-            if (indexOfNegOne == strides.Length - 1)
-                strides[strides.Length - 1] = 1;
-
-            for (int idx = indexOfNegOne; idx >= 1; idx--)
-                strides[idx - 1] = strides[idx] * dimensions[idx];
-
-            shape.ComputeHashcode();
+            return new Shape(newDims, newStrides, 0, 0);
         }
 
         /// <summary>
@@ -154,47 +131,34 @@ namespace NumSharp
         [SuppressMessage("ReSharper", "LocalVariableHidesMember")]
         public readonly Shape ExpandDimension(int axis)
         {
-            Shape ret;
+            int[] newDims;
+            int[] newStrides;
+
             if (IsScalar)
             {
-                ret = Vector(1);
-                ret.strides[0] = 0;
+                newDims = new int[] { 1 };
+                newStrides = new int[] { 0 };
             }
             else
             {
-                ret = Clone(true, true, false);
-            }
+                newDims = (int[])dimensions.Clone();
+                newStrides = (int[])strides.Clone();
 
-            var dimensions = ret.dimensions;
-            var strides = ret.strides;
-            // Allow negative axis specification
-            if (axis < 0)
-            {
-                axis = dimensions.Length + 1 + axis;
+                // Allow negative axis specification
                 if (axis < 0)
                 {
-                    throw new ArgumentException($"Effective axis {axis} is less than 0");
+                    axis = dimensions.Length + 1 + axis;
+                    if (axis < 0)
+                        throw new ArgumentException($"Effective axis {axis} is less than 0");
                 }
+
+                Arrays.Insert(ref newDims, axis, 1);
+                Arrays.Insert(ref newStrides, axis, 0);
             }
 
-            Arrays.Insert(ref dimensions, axis, 1);
-            Arrays.Insert(ref strides, axis, 0);
-            ret.dimensions = dimensions;
-            ret.strides = strides;
-            if (IsSliced)
-            {
-                ret.ViewInfo = new ViewInfo() { ParentShape = this, Slices = null };
-            }
-
-            if (IsBroadcasted)
-            {
-                ret.BroadcastInfo = new BroadcastInfo(!BroadcastInfo.OriginalShape.IsEmpty ? BroadcastInfo.OriginalShape : this);
-                ret.BroadcastInfo.UnreducedBroadcastedShape = null; //reset so it will be recomupted.
-            }
-
-            ret.ComputeHashcode();
-            return ret;
+            // Create new shape with preserved bufferSize
+            int bufSize = bufferSize > 0 ? bufferSize : size;
+            return new Shape(newDims, newStrides, offset, bufSize);
         }
-
     }
 }

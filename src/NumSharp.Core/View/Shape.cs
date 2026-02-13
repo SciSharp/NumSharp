@@ -8,39 +8,66 @@ using NumSharp.Utilities;
 namespace NumSharp
 {
     /// <summary>
-    ///     Represents a shape of an N-D array.
+    ///     NumPy-aligned array flags. Cached at shape creation for O(1) access.
+    ///     Matches numpy/core/include/numpy/ndarraytypes.h flag definitions.
+    /// </summary>
+    [Flags]
+    public enum ArrayFlags
+    {
+        /// <summary>No flags set.</summary>
+        None = 0,
+
+        /// <summary>Data is C-contiguous (row-major, last dimension varies fastest).</summary>
+        C_CONTIGUOUS = 0x0001,
+
+        /// <summary>Data is F-contiguous (column-major). Reserved, always false for NumSharp.</summary>
+        F_CONTIGUOUS = 0x0002,
+
+        /// <summary>Array owns its data buffer.</summary>
+        OWNDATA = 0x0004,
+
+        /// <summary>Data is aligned for the CPU (always true for managed allocations).</summary>
+        ALIGNED = 0x0100,
+
+        /// <summary>Data is writeable (false for broadcast views).</summary>
+        WRITEABLE = 0x0400,
+
+        /// <summary>Shape has a broadcast dimension (stride=0 with dim > 1).</summary>
+        BROADCASTED = 0x1000,  // NumSharp extension for cached IsBroadcasted
+    }
+
+    /// <summary>
+    ///     Represents a shape of an N-D array. Immutable after construction (NumPy-aligned).
     /// </summary>
     /// <remarks>Handles slicing, indexing based on coordinates or linear offset and broadcastted indexing.</remarks>
-    public partial struct Shape : ICloneable, IEquatable<Shape>
+    public readonly partial struct Shape : ICloneable, IEquatable<Shape>
     {
         /// <summary>
-        ///     View information for sliced shapes. Still needed for:
-        ///     - Recursive slices (IsRecursive): ParentShape tracks reshape chain
-        ///     - GetCoordinatesFromAbsoluteIndex: Needs OriginalShape and Slices
-        ///     - Double-slicing: Slices are merged from parent ViewInfo
-        ///     For simple slices (IsSimpleSlice), offset/strides enable fast access
-        ///     without ViewInfo traversal.
+        ///     Cached array flags computed at shape creation.
+        ///     Use ArrayFlags enum for bit meanings.
         /// </summary>
-        internal ViewInfo ViewInfo;
-        internal BroadcastInfo BroadcastInfo;
+        internal readonly int _flags;
 
         /// <summary>
         ///     Does this Shape have modified strides, usually in scenarios like np.transpose.
         /// </summary>
-        public bool ModifiedStrides;
+        /// <remarks>DEPRECATED: Will be removed. Use !IsContiguous instead.</remarks>
+        public readonly bool ModifiedStrides;
 
         /// <summary>
-        ///     True if the shape of this array was obtained by a slicing operation that caused the underlying data to be non-contiguous
+        ///     True if this shape represents a view (sliced) into underlying data.
+        ///     A shape is "sliced" if it doesn't represent the full original buffer.
+        ///     This includes: non-zero offset, different size than buffer, or modified strides.
         /// </summary>
         public readonly bool IsSliced
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            get => ViewInfo != null;
+            get => offset != 0 || (bufferSize > 0 && bufferSize != size) || ModifiedStrides;
         }
 
         /// <summary>
         ///     Does this Shape represent contiguous unmanaged memory in C-order (row-major)?
-        ///     Computed from actual stride values, matching NumPy's flags['C_CONTIGUOUS'] algorithm.
+        ///     Cached flag computed at shape creation, matching NumPy's flags['C_CONTIGUOUS'] algorithm.
         /// </summary>
         /// <remarks>
         ///     NumPy algorithm (from numpy/_core/src/multiarray/flagsobject.c:116-160):
@@ -51,45 +78,67 @@ namespace NumSharp
         public readonly bool IsContiguous
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            get => ComputeIsContiguousFromStrides();
+            get => (_flags & (int)ArrayFlags.C_CONTIGUOUS) != 0;
+        }
+
+        #region Static Flag/Hash Computation (for readonly struct)
+
+        /// <summary>
+        ///     Computes array flags from dimensions and strides (static for readonly struct).
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static int ComputeFlagsStatic(int[] dims, int[] strides)
+        {
+            int flags = 0;
+
+            // Check BROADCASTED first
+            bool isBroadcasted = ComputeIsBroadcastedStatic(dims, strides);
+            if (isBroadcasted)
+                flags |= (int)ArrayFlags.BROADCASTED;
+
+            // Check C_CONTIGUOUS (depends on not being broadcasted)
+            if (!isBroadcasted && ComputeIsContiguousStatic(dims, strides))
+                flags |= (int)ArrayFlags.C_CONTIGUOUS;
+
+            // ALIGNED is always true for managed memory
+            flags |= (int)ArrayFlags.ALIGNED;
+
+            // WRITEABLE defaults to true, cleared for broadcast views via WithFlags()
+            flags |= (int)ArrayFlags.WRITEABLE;
+
+            return flags;
         }
 
         /// <summary>
-        ///     Computes C-contiguity from actual stride values (NumPy algorithm).
-        ///     Scan right-to-left: stride[-1] must equal 1, stride[i] must equal
-        ///     shape[i+1] * stride[i+1], skipping size-1 dimensions.
+        ///     Computes whether any dimension is broadcast (stride=0 with dim > 1).
         /// </summary>
-        /// <remarks>
-        ///     IMPORTANT: In NumSharp's current architecture, views (sliced/broadcast/reshaped)
-        ///     cannot use direct memory access because the Address pointer doesn't account
-        ///     for the view's offset. All view shapes must return false here so operations
-        ///     like ToArray use GetOffset() for correct element access.
-        ///
-        ///     This is a limitation of the current architecture. NumPy uses a simpler
-        ///     offset+strides model where the data pointer is adjusted for views.
-        ///     A future refactor (Phase 2) could add dataOffset to enable true contiguity
-        ///     detection for views.
-        /// </remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private readonly bool ComputeIsContiguousFromStrides()
+        private static bool ComputeIsBroadcastedStatic(int[] dims, int[] strides)
         {
-            // Scalar or empty shape is contiguous
-            if (dimensions == null || dimensions.Length == 0)
+            if (strides == null || strides.Length == 0)
+                return false;
+            for (int i = 0; i < strides.Length; i++)
+                if (strides[i] == 0 && dims[i] > 1)
+                    return true;
+            return false;
+        }
+
+        /// <summary>
+        ///     Computes C-contiguity from stride values (NumPy algorithm).
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static bool ComputeIsContiguousStatic(int[] dims, int[] strides)
+        {
+            if (dims == null || dims.Length == 0)
                 return true;
 
-            // Views (sliced, broadcast, recursive) cannot use direct memory access
-            // because Address doesn't account for the view offset. All view shapes
-            // must use GetOffset for correct element access.
-            if (IsSliced || IsBroadcasted)
-                return false;
-
-            int sd = 1; // Expected stride (element-based, not bytes)
-            for (int i = dimensions.Length - 1; i >= 0; i--)
+            int sd = 1;
+            for (int i = dims.Length - 1; i >= 0; i--)
             {
-                int dim = dimensions[i];
+                int dim = dims[i];
                 if (dim == 0)
-                    return true; // Empty array is contiguous by definition
-                if (dim != 1) // Skip size-1 dimensions (stride doesn't matter)
+                    return true;
+                if (dim != 1)
                 {
                     if (strides[i] != sd)
                         return false;
@@ -100,23 +149,54 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Is this Shape a recursive view? (deeper than 1 view, e.g., slice of reshape of slice)
+        ///     Computes size and hash from dimensions.
         /// </summary>
-        public readonly bool IsRecursive
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static (int size, int hash) ComputeSizeAndHash(int[] dims)
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            get => ViewInfo != null && ViewInfo.ParentShape.IsEmpty == false;
+            if (dims == null || dims.Length == 0)
+                return (1, int.MinValue); // scalar
+
+            int size = 1;
+            int hash = layout * 397;
+            unchecked
+            {
+                foreach (var v in dims)
+                {
+                    size *= v;
+                    hash ^= (size * 397) * (v * 397);
+                }
+            }
+            return (size, hash);
         }
 
         /// <summary>
+        ///     Computes C-contiguous strides for given dimensions.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static int[] ComputeContiguousStrides(int[] dims)
+        {
+            if (dims == null || dims.Length == 0)
+                return Array.Empty<int>();
+
+            var strides = new int[dims.Length];
+            strides[dims.Length - 1] = 1;
+            for (int i = dims.Length - 2; i >= 0; i--)
+                strides[i] = strides[i + 1] * dims[i + 1];
+            return strides;
+        }
+
+        #endregion
+
+        /// <summary>
         ///     Is this a simple sliced shape that uses the fast GetOffsetSimple path?
-        ///     True when: IsSliced && !IsRecursive && !IsBroadcasted
+        ///     True when: IsSliced && !IsBroadcasted
         ///     For simple slices, element access is: offset + sum(indices * strides)
         /// </summary>
         public readonly bool IsSimpleSlice
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            get => IsSliced && !IsRecursive && !IsBroadcasted;
+            get => IsSliced && !IsBroadcasted;
         }
 
         /// <summary>
@@ -127,22 +207,66 @@ namespace NumSharp
         /// </summary>
         internal const char layout = 'C';
 
-        internal int _hashCode;
-        internal int size;
-        internal int[] dimensions;
-        internal int[] strides;
+        internal readonly int _hashCode;
+        internal readonly int size;
+        internal readonly int[] dimensions;
+        internal readonly int[] strides;
+
+        /// <summary>
+        ///     Size of the underlying buffer (NumPy-aligned architecture).
+        ///     For non-view shapes, equals size. For sliced/broadcast shapes,
+        ///     this is the actual buffer size (not the view size), used for
+        ///     bounds checking and InternalArray slicing.
+        /// </summary>
+        internal readonly int bufferSize;
 
         /// <summary>
         ///     Base offset into storage (NumPy-aligned architecture).
         ///     Computed at slice/broadcast time, enabling simple element access:
         ///     element[indices] = data[offset + sum(indices * strides)]
         /// </summary>
-        internal int offset;
+        internal readonly int offset;
 
         /// <summary>
-        ///     Is this shape a broadcast and/or has modified strides?
+        ///     Is this shape a broadcast (has any stride=0 with dimension > 1)?
+        ///     Cached flag computed at shape creation for O(1) access.
         /// </summary>
-        public readonly bool IsBroadcasted => BroadcastInfo != null;
+        public readonly bool IsBroadcasted
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => (_flags & (int)ArrayFlags.BROADCASTED) != 0;
+        }
+
+        /// <summary>
+        ///     Is this array writeable? False for broadcast views (NumPy behavior).
+        ///     Cached flag computed at shape creation for O(1) access.
+        /// </summary>
+        public readonly bool IsWriteable
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => (_flags & (int)ArrayFlags.WRITEABLE) != 0;
+        }
+
+        /// <summary>
+        ///     Does this array own its data buffer?
+        ///     False for views (slices, transposes, broadcasts).
+        ///     Cached flag set at storage level.
+        /// </summary>
+        public readonly bool OwnsData
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => (_flags & (int)ArrayFlags.OWNDATA) != 0;
+        }
+
+        /// <summary>
+        ///     Get all array flags as a single integer.
+        ///     Use ArrayFlags enum for bit meanings.
+        /// </summary>
+        public readonly ArrayFlags Flags
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => (ArrayFlags)_flags;
+        }
 
         /// <summary>
         ///     Is this shape a scalar that was broadcast to a larger shape?
@@ -192,7 +316,7 @@ namespace NumSharp
         /// <summary>
         ///     Is this shape a scalar? (<see cref="NDim"/>==0 && <see cref="size"/> == 1)
         /// </summary>
-        public bool IsScalar;
+        public readonly bool IsScalar;
 
         /// <summary>
         /// True if the shape is not initialized.
@@ -211,22 +335,10 @@ namespace NumSharp
         ///     Create a new scalar shape
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal static Shape NewScalar() =>
-            new Shape(new int[0]);
-
-        /// <summary>
-        ///     Create a new scalar shape
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal static Shape NewScalar(ViewInfo viewInfo) =>
-            new Shape(new int[0]) {ViewInfo = viewInfo};
-
-        /// <summary>
-        ///     Create a new scalar shape
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal static Shape NewScalar(ViewInfo viewInfo, BroadcastInfo broadcastInfo) =>
-            new Shape(new int[0]) {ViewInfo = viewInfo, BroadcastInfo = broadcastInfo};
+        internal static Shape NewScalar()
+        {
+            return new Shape(Array.Empty<int>());
+        }
 
         /// <summary>
         ///     Create a shape that represents a vector.
@@ -234,28 +346,7 @@ namespace NumSharp
         /// <remarks>Faster than calling Shape's constructor</remarks>
         public static Shape Vector(int length)
         {
-            var shape = new Shape {dimensions = new int[] {length}, strides = new int[] {1}, size = length};
-            shape._hashCode = ( /*shape.layout*/ layout * 397) ^ (length * 397) * (length * 397);
-            return shape;
-        }
-
-        /// <summary>
-        ///     Create a shape that represents a vector.
-        /// </summary>
-        /// <remarks>Faster than calling Shape's constructor</remarks>
-        public static Shape Vector(int length, ViewInfo viewInfo)
-        {
-            var shape = new Shape
-            {
-                dimensions = new[] {length},
-                strides = new int[] {1},
-                //layout = 'C',
-                size = length,
-                ViewInfo = viewInfo
-            };
-
-            shape._hashCode = ( /*shape.layout*/ layout * 397) ^ (length * 397) * (length * 397);
-            return shape;
+            return new Shape(new int[] { length }, new int[] { 1 }, 0, length);
         }
 
         /// <summary>
@@ -264,23 +355,8 @@ namespace NumSharp
         /// <remarks>Faster than calling Shape's constructor</remarks>
         public static Shape Matrix(int rows, int cols)
         {
-            var shape = new Shape {dimensions = new[] {rows, cols}, strides = new int[] {cols, 1}, size = rows * cols};
-
-            unchecked
-            {
-                int hash = ( /*shape.layout*/ layout * 397);
-                int size = 1;
-                foreach (var v in shape.dimensions)
-                {
-                    size *= v;
-                    hash ^= (size * 397) * (v * 397);
-                }
-
-                shape._hashCode = hash;
-            }
-
-            shape.IsScalar = false;
-            return shape;
+            int sz = rows * cols;
+            return new Shape(new[] { rows, cols }, new int[] { cols, 1 }, 0, sz);
         }
 
         public readonly int NDim
@@ -321,6 +397,66 @@ namespace NumSharp
             get => offset;
         }
 
+        /// <summary>
+        ///     Size of the underlying buffer (NumPy-aligned architecture).
+        ///     For non-view shapes, equals Size. For sliced/broadcast shapes,
+        ///     this is the actual buffer size (not the view size).
+        /// </summary>
+        public readonly int BufferSize
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => bufferSize > 0 ? bufferSize : size;
+        }
+
+        #region Constructors
+
+        /// <summary>
+        ///     Complete constructor for views/broadcasts (NumPy-aligned).
+        ///     All parameters are set explicitly, flags computed from dims/strides.
+        /// </summary>
+        /// <param name="dims">Dimension sizes (not cloned - caller must provide fresh array)</param>
+        /// <param name="strides">Stride values (not cloned - caller must provide fresh array)</param>
+        /// <param name="offset">Offset into underlying buffer</param>
+        /// <param name="bufferSize">Size of underlying buffer</param>
+        /// <param name="modifiedStrides">Whether strides were modified (deprecated, use false)</param>
+        internal Shape(int[] dims, int[] strides, int offset, int bufferSize, bool modifiedStrides = false)
+        {
+            this.dimensions = dims ?? Array.Empty<int>();
+            this.strides = strides ?? Array.Empty<int>();
+            this.offset = offset;
+            this.bufferSize = bufferSize;
+            this.ModifiedStrides = modifiedStrides;
+
+            (this.size, this._hashCode) = ComputeSizeAndHash(dims);
+            this.IsScalar = size == 1 && (dims == null || dims.Length == 0);
+            this._flags = ComputeFlagsStatic(dims, strides);
+        }
+
+        /// <summary>
+        ///     Creates a shape with modified flags (for clearing WRITEABLE on broadcasts).
+        /// </summary>
+        public Shape WithFlags(ArrayFlags flagsToSet = ArrayFlags.None, ArrayFlags flagsToClear = ArrayFlags.None)
+        {
+            int newFlags = (_flags | (int)flagsToSet) & ~(int)flagsToClear;
+            return new Shape(dimensions, strides, offset, bufferSize, ModifiedStrides, newFlags);
+        }
+
+        /// <summary>
+        ///     Internal constructor with explicit flags (for WithFlags).
+        /// </summary>
+        private Shape(int[] dims, int[] strides, int offset, int bufferSize, bool modifiedStrides, int flags)
+        {
+            this.dimensions = dims;
+            this.strides = strides;
+            this.offset = offset;
+            this.bufferSize = bufferSize;
+            this.ModifiedStrides = modifiedStrides;
+            this._flags = flags;
+
+            (this.size, this._hashCode) = ComputeSizeAndHash(dims);
+            this.IsScalar = size == 1 && (dims == null || dims.Length == 0);
+        }
+
         public Shape(Shape other)
         {
             if (other.IsEmpty)
@@ -332,13 +468,13 @@ namespace NumSharp
             //this.layout = other.layout;
             this._hashCode = other._hashCode;
             this.size = other.size;
+            this.bufferSize = other.bufferSize;
             this.dimensions = (int[])other.dimensions.Clone();
             this.strides = (int[])other.strides.Clone();
             this.offset = other.offset;
             this.IsScalar = other.IsScalar;
-            this.ViewInfo = other.ViewInfo?.Clone();
-            this.BroadcastInfo = other.BroadcastInfo?.Clone();
             this.ModifiedStrides = other.ModifiedStrides;
+            this._flags = other._flags; // Copy cached flags
         }
 
         public Shape(int[] dims, int[] strides)
@@ -352,32 +488,15 @@ namespace NumSharp
             if (dims.Length != strides.Length)
                 throw new ArgumentException($"While trying to construct a shape, given dimensions and strides does not match size ({dims.Length} != {strides.Length})");
 
-            //layout = 'C';
-            size = 1;
-            unchecked
-            {
-                //calculate hash and size
-                if (dims.Length > 0)
-                {
-                    int hash = (layout * 397);
-                    foreach (var v in dims)
-                    {
-                        size *= v;
-                        hash ^= (size * 397) * (v * 397);
-                    }
-
-                    _hashCode = hash;
-                }
-                else
-                    _hashCode = 0;
-            }
-
-            this.strides = strides;
             this.dimensions = dims;
-            IsScalar = size == 1 && dims.Length == 0;
-            ViewInfo = null;
-            BroadcastInfo = null;
-            ModifiedStrides = false;
+            this.strides = strides;
+            this.offset = 0;
+            this.ModifiedStrides = false;
+
+            (this.size, this._hashCode) = ComputeSizeAndHash(dims);
+            this.bufferSize = size;
+            this.IsScalar = size == 1 && dims.Length == 0;
+            this._flags = ComputeFlagsStatic(dims, strides);
         }
 
         public Shape(int[] dims, int[] strides, Shape originalShape)
@@ -391,126 +510,46 @@ namespace NumSharp
             if (dims.Length != strides.Length)
                 throw new ArgumentException($"While trying to construct a shape, given dimensions and strides does not match size ({dims.Length} != {strides.Length})");
 
-            //layout = 'C';
-            size = 1;
-            unchecked
-            {
-                //calculate hash and size
-                if (dims.Length > 0)
-                {
-                    int hash = (layout * 397);
-                    foreach (var v in dims)
-                    {
-                        size *= v;
-                        hash ^= (size * 397) * (v * 397);
-                    }
-
-                    _hashCode = hash;
-                }
-                else
-                    _hashCode = 0;
-            }
-
-            this.strides = strides;
             this.dimensions = dims;
-            IsScalar = size == 1 && dims.Length == 0;
-            ViewInfo = null;
-            BroadcastInfo = new BroadcastInfo() {OriginalShape = originalShape};
-            ModifiedStrides = false;
+            this.strides = strides;
+            this.offset = 0;
+            this.ModifiedStrides = false;
+
+            (this.size, this._hashCode) = ComputeSizeAndHash(dims);
+            // For broadcast shapes, bufferSize is the original (pre-broadcast) size
+            this.bufferSize = originalShape.bufferSize > 0 ? originalShape.bufferSize : originalShape.size;
+            this.IsScalar = size == 1 && dims.Length == 0;
+            this._flags = ComputeFlagsStatic(dims, strides);
         }
 
         [MethodImpl((MethodImplOptions)512)]
         public Shape(params int[] dims)
         {
             if (dims == null)
-            {
-                strides = dims = dimensions = new int[0];
-            }
-            else
-            {
-                dimensions = dims;
-                strides = new int[dims.Length];
-            }
+                dims = Array.Empty<int>();
 
-            unchecked
-            {
-                size = 1;
-                //layout = 'C';
-                if (dims.Length > 0)
-                {
-                    int hash = (layout * 397);
-                    foreach (var v in dims)
-                    {
-                        size *= v;
-                        hash ^= (size * 397) * (v * 397);
-                    }
+            this.dimensions = dims;
+            this.strides = ComputeContiguousStrides(dims);
+            this.offset = 0;
+            this.ModifiedStrides = false;
 
-                    _hashCode = hash;
-                }
-                else
-                    _hashCode = int.MinValue; //scalar's hashcode is int.minvalue
-
-                if (dims.Length != 0)
-                {
-                    strides[strides.Length - 1] = 1;
-                    for (int i = strides.Length - 1; i >= 1; i--)
-                        strides[i - 1] = strides[i] * dims[i];
-                }
-            }
-
-            IsScalar = _hashCode == int.MinValue;
-            ViewInfo = null;
-            BroadcastInfo = null;
-            ModifiedStrides = false;
+            (this.size, this._hashCode) = ComputeSizeAndHash(dims);
+            this.bufferSize = size;
+            this.IsScalar = _hashCode == int.MinValue;
+            this._flags = ComputeFlagsStatic(dims, strides);
         }
 
+        #endregion
+
         /// <summary>
-        ///     An empty shape without any fields set except all are default.
+        ///     An empty shape without any fields set (all dimensions are 0).
         /// </summary>
-        /// <remarks>Used internally.</remarks>
+        /// <remarks>Used internally for building shapes that will be filled in.</remarks>
         [MethodImpl((MethodImplOptions)768)]
         public static Shape Empty(int ndim)
         {
-            return new Shape {dimensions = new int[ndim], strides = new int[ndim]};
-            //default vals already sets: ret.layout = 0;
-            //default vals already sets: ret.size = 0;
-            //default vals already sets: ret._hashCode = 0;
-            //default vals already sets: ret.IsScalar = false;
-            //default vals already sets: ret.ViewInfo = null;
-        }
-
-
-        [MethodImpl((MethodImplOptions)768)]
-        private readonly void _computeStrides()
-        {
-            if (dimensions.Length == 0)
-                return;
-
-            unchecked
-            {
-                strides[strides.Length - 1] = 1;
-                for (int idx = strides.Length - 1; idx >= 1; idx--)
-                    strides[idx - 1] = strides[idx] * dimensions[idx];
-            }
-        }
-
-
-        [MethodImpl((MethodImplOptions)768)]
-        private readonly void _computeStrides(int axis)
-        {
-            if (dimensions.Length == 0)
-                return;
-            
-            if (axis == 0)
-                strides[0] = strides[1] * dimensions[1];
-            else
-                unchecked
-                {
-                    if (axis == strides.Length - 1)
-                        strides[strides.Length - 1] = 1;
-                    else
-                        strides[axis - 1] = strides[axis] * dimensions[axis];
-                }
+            // Create shape with zero dimensions and zero strides
+            return new Shape(new int[ndim], new int[ndim], 0, 0);
         }
 
         public readonly int this[int dim]
@@ -641,48 +680,43 @@ namespace NumSharp
             if (IsBroadcasted)
             {
                 indicies = (int[])indicies.Clone(); //we must copy because we make changes to it.
-                Shape unreducedBroadcasted;
-                if (!BroadcastInfo.UnreducedBroadcastedShape.HasValue)
-                {
-                    unreducedBroadcasted = this.Clone(true, false, false);
-                    for (int i = 0; i < unreducedBroadcasted.NDim; i++)
-                    {
-                        if (unreducedBroadcasted.strides[i] == 0)
-                            unreducedBroadcasted.dimensions[i] = 1;
-                    }
 
-                    BroadcastInfo.UnreducedBroadcastedShape = unreducedBroadcasted;
-                }
-                else
-                    unreducedBroadcasted = BroadcastInfo.UnreducedBroadcastedShape.Value;
+                // NumPy-aligned: compute unreduced shape on the fly
+                // Unreduced shape has 1 for broadcast dimensions (stride=0)
+                var unreducedDims = new int[NDim];
+                for (int i = 0; i < NDim; i++)
+                    unreducedDims[i] = strides[i] == 0 ? 1 : dimensions[i];
 
-                //unbroadcast indices
+                // Unbroadcast indices (wrap around for broadcast dimensions)
                 for (int i = 0; i < dim; i++)
-                    indicies[i] = indicies[i] % unreducedBroadcasted[i];
+                    indicies[i] = indicies[i] % unreducedDims[i];
 
-                offset = unreducedBroadcasted.GetOffset(indicies);
+                // Compute offset using strides (stride=0 means index doesn't affect offset)
+                offset = this.offset;
+                for (int i = 0; i < dim; i++)
+                    offset += strides[i] * indicies[i];
 
                 var retShape = new int[newNDim];
-                var strides = new int[newNDim];
-                var original = new int[newNDim];
-                var original_strides = new int[newNDim];
+                var retStrides = new int[newNDim];
                 for (int i = 0; i < newNDim; i++)
                 {
                     retShape[i] = this.dimensions[dim + i];
-                    strides[i] = this.strides[dim + i];
-                    original[i] = unreducedBroadcasted[dim + i];
-                    original_strides[i] = unreducedBroadcasted.strides[dim + i];
+                    retStrides[i] = this.strides[dim + i];
                 }
 
-                return (new Shape(retShape, strides, new Shape(original, original_strides)), offset);
+                // Create result with bufferSize preserved (immutable constructor)
+                int bufSize = this.bufferSize > 0 ? this.bufferSize : this.size;
+                var result = new Shape(retShape, retStrides, offset, bufSize);
+                return (result, offset);
             }
 
             //compute offset
             offset = GetOffset(indicies);
 
-            var orig_shape = IsSliced ? ViewInfo.OriginalShape : this;
-            if (offset >= orig_shape.Size)
-                throw new IndexOutOfRangeException($"The offset {offset} is out of range in Shape {orig_shape.Size}");
+            // Use bufferSize for bounds checking (NumPy-aligned: no ViewInfo dependency)
+            int boundSize = bufferSize > 0 ? bufferSize : size;
+            if (offset >= boundSize)
+                throw new IndexOutOfRangeException($"The offset {offset} is out of range in Shape {boundSize}");
 
             if (indicies.Length == dimensions.Length)
                 return (Scalar, offset);
@@ -710,16 +744,15 @@ namespace NumSharp
         [MethodImpl((MethodImplOptions)768)]
         public readonly int[] GetCoordinates(int offset)
         {
-            // For transposed, broadcast, or sliced shapes with step != 1, strides are
-            // in non-standard order, contain zeros, or have gaps (e.g., step-2 slice has
-            // stride 2 not 1). These break stride-based decomposition because the linear
-            // index can't be decomposed using memory strides.
+            // For non-contiguous shapes (transposed, stepped slices, broadcast), strides
+            // don't match the standard C-contiguous pattern. Stride-based decomposition
+            // doesn't work because the linear index can't be decomposed using memory strides.
             //
             // Use dimension-based decomposition instead, matching NumPy's PyArray_ITER_GOTO1D
             // which uses factors (product of trailing dimensions) rather than strides.
             // This correctly maps linear index 0..size-1 to logical coordinates regardless
             // of the actual memory layout.
-            if (ModifiedStrides || IsBroadcasted || IsSliced)
+            if (!IsContiguous || ModifiedStrides)
             {
                 var coords = new int[dimensions.Length];
                 int remaining = offset;
@@ -760,80 +793,6 @@ namespace NumSharp
             }
 
             return coords2;
-        }
-
-        /// <summary>
-        ///     Retrievs the coordinates in current shape (potentially sliced and reshaped) from index in original array.<br></br>
-        ///     Note: this is the inverse operation of GetOffset<br></br>
-        ///     Example: Shape a (2,3) => sliced to b (2,2) by a[:, 1:]<br></br>
-        ///     The absolute indices in a are:<br></br>
-        ///     [0, 1, 2,<br></br>
-        ///      3, 4, 5]<br></br>
-        ///     The absolute indices in b are:<br></br>
-        ///     [1, 2,<br></br>
-        ///      4, 5]<br></br>
-        ///     <br></br>
-        ///     <br></br>
-        ///     Examples:<br></br>
-        ///     a.GetCoordinatesFromAbsoluteIndex(1) returns [0, 1]<br></br>
-        ///     b.GetCoordinatesFromAbsoluteIndex(0) returns [0, 0]<br></br>
-        ///     b.GetCoordinatesFromAbsoluteIndex(0) returns [] because it is out of shape<br></br>
-        /// </summary>
-        /// <param name="offset">Is the index in the original array before it was sliced and/or reshaped</param>
-        /// <remarks>Note: due to slicing the absolute indices (offset in memory) are different from what GetCoordinates would return, which are relative indices in the shape.</remarks>
-        /// <summary>
-        ///     Get coordinates from an absolute memory index.
-        ///     For simple shapes, this is the inverse of GetOffset.
-        ///     Note: This operation is not directly supported in NumPy for views.
-        /// </summary>
-        [MethodImpl((MethodImplOptions)768)]
-        public readonly int[] GetCoordinatesFromAbsoluteIndex(int offset)
-        {
-            // For simple shapes (non-sliced, non-broadcast), use GetCoordinates
-            if (!IsSliced && !IsBroadcasted)
-                return GetCoordinates(offset);
-
-            // For sliced shapes with ViewInfo, use the original shape
-            if (IsSliced && ViewInfo?.OriginalShape.dimensions != null)
-            {
-                var parent_coords = ViewInfo.OriginalShape.GetCoordinates(offset);
-                if (ViewInfo.Slices == null)
-                    return parent_coords;
-                return ReplaySlicingOnCoords(parent_coords, ViewInfo.Slices);
-            }
-
-            // Fallback for other cases
-            return GetCoordinates(offset);
-        }
-
-        [MethodImpl((MethodImplOptions)768)]
-        private int[] ReplaySlicingOnCoords(int[] parentCoords, SliceDef[] slices)
-        {
-            var coords = new List<int>();
-            for (int i = 0; i < parentCoords.Length; i++)
-            {
-                var slice = slices[i];
-                var coord = parentCoords[i];
-                if (slice.Count == -1) // Slice.Index - remove this dim
-                    continue;
-                if (slice.Count == 0) // Slice.None - no valid coordinates
-                    return new int[0];
-                if (slice.Start > coord && slice.Step > 0 || slice.Start < coord && slice.Step < 0)
-                    return new int[0];
-                if (coord % Math.Abs(slice.Step) != 0)
-                    return new int[0];
-                coords.Add((coord - slice.Start) / slice.Step);
-            }
-            return coords.ToArray();
-        }
-
-        [MethodImpl((MethodImplOptions)768)]
-        public void ChangeTensorLayout(char order = 'C')
-        {
-            return; //currently this does nothing.
-            //layout = order;
-            _computeStrides();
-            ComputeHashcode();
         }
 
         [MethodImpl((MethodImplOptions)768)]
@@ -914,29 +873,6 @@ namespace NumSharp
             return l.ToArray();
         }
 
-        /// <summary>
-        ///     Recalculate hashcode from current dimension and layout.
-        /// </summary>
-        [MethodImpl((MethodImplOptions)768)]
-        internal void ComputeHashcode()
-        {
-            if (dimensions.Length > 0)
-            {
-                unchecked
-                {
-                    size = 1;
-                    int hash = (layout * 397);
-                    foreach (var v in dimensions)
-                    {
-                        size *= v;
-                        hash ^= (size * 397) * (v * 397);
-                    }
-
-                    _hashCode = hash;
-                }
-            }
-        }
-
         #region Slicing support
 
         [MethodImpl((MethodImplOptions)768)]
@@ -949,84 +885,64 @@ namespace NumSharp
             if (IsEmpty)
                 throw new InvalidOperationException("Unable to slice an empty shape.");
 
-            //if (IsBroadcasted)
-            //    throw new NotSupportedException("Unable to slice a shape that is broadcasted.");
+            // NumPy-pure architecture: Each slice is independent - use PARENT, not ROOT.
+            // No merging of slices. The offset and strides encode the full path.
+            //
+            // NumPy formula for slice element access:
+            //   element[i] = data[offset + i * stride]
+            // where offset = parent.offset + sum(parent.strides[d] * start[d])
+            // and stride = parent.stride * step
 
-            var slices = new List<SliceDef>(16);
-            var sliced_axes_unreduced = new List<int>();
+            var sliced_axes = new List<int>();
+            var sliced_strides_list = new List<int>();
+            int sliceOffset = this.offset;
+
             for (int i = 0; i < NDim; i++)
             {
-                var dim = Dimensions[i];
-                var slice = input_slices.Length > i ? input_slices[i] : NumSharp.Slice.All; //fill missing selectors
+                var dim = dimensions[i];
+                var slice = input_slices.Length > i ? input_slices[i] : NumSharp.Slice.All;
                 var slice_def = slice.ToSliceDef(dim);
-                slices.Add(slice_def);
-                var count = Math.Abs(slices[i].Count); // for index-slices count would be -1 but we need 1.
-                sliced_axes_unreduced.Add(count);
-            }
 
-            if (IsSliced && ViewInfo.Slices != null)
-            {
-                // merge new slices with existing ones and insert the indices of the parent shape that were previously reduced
-                for (int i = 0; i < ViewInfo.OriginalShape.NDim; i++)
+                // Add start offset: offset += parent.strides[i] * slice.Start
+                sliceOffset += strides[i] * slice_def.Start;
+
+                if (slice_def.IsIndex)
                 {
-                    var orig_slice = ViewInfo.Slices[i];
-                    if (orig_slice.IsIndex)
-                    {
-                        slices.Insert(i, orig_slice);
-                        sliced_axes_unreduced.Insert(i, 1);
-                        continue;
-                    }
-
-                    slices[i] = ViewInfo.Slices[i].Merge(slices[i]);
-                    sliced_axes_unreduced[i] = Math.Abs(slices[i].Count);
+                    // Index reduces dimension - skip this axis in output
+                    continue;
                 }
+
+                // Non-index slice: add to output dimensions and strides
+                int count = Math.Abs(slice_def.Count);
+                sliced_axes.Add(count);
+
+                // new_stride = parent.stride * step
+                // Negative step produces negative stride (for reversed iteration)
+                sliced_strides_list.Add(strides[i] * slice_def.Step);
             }
 
-            var sliced_axes = sliced_axes_unreduced.Where((dim, i) => !slices[i].IsIndex).ToArray();
-            var origin = (this.IsSliced && ViewInfo.Slices != null) ? this.ViewInfo.OriginalShape : this;
-            var viewInfo = new ViewInfo() {OriginalShape = origin, Slices = slices.ToArray(), UnreducedShape = new Shape(sliced_axes_unreduced.ToArray()),};
+            // Preserve bufferSize from parent (or compute from parent.size if not set)
+            int parentBufferSize = bufferSize > 0 ? bufferSize : size;
 
-            if (IsRecursive)
-                viewInfo.ParentShape = ViewInfo.ParentShape;
-
-            // Phase 2: Compute base offset at slice time (NumPy-style).
-            // The offset is the linear position of the first element of the slice:
-            //   offset = sum(origin.strides[i] * slices[i].Start) for all dimensions
-            //
-            // When slices are merged (IsSliced && ViewInfo.Slices != null), the merged
-            // slices already encode the full path from the original shape, so we don't
-            // add this.offset (it would double-count). Otherwise, accumulate from parent.
-            bool slicesMerged = IsSliced && ViewInfo.Slices != null;
-            int sliceOffset = slicesMerged ? 0 : this.offset;
-            for (int i = 0; i < slices.Count; i++)
-                sliceOffset += origin.strides[i] * slices[i].Start;
-
-            if (sliced_axes.Length == 0) //is it a scalar
+            if (sliced_axes.Count == 0) // Result is a scalar
             {
-                var scalar = NewScalar(viewInfo);
-                scalar.offset = sliceOffset;
+                // Create scalar via constructor with offset/bufferSize
+                var scalar = new Shape(Array.Empty<int>(), Array.Empty<int>(), sliceOffset, parentBufferSize);
+                // Inherit WRITEABLE from parent
+                if (!IsWriteable)
+                    return scalar.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
                 return scalar;
             }
 
-            // Compute actual memory strides for the sliced shape.
-            // The stride for each non-reduced dimension is:
-            //   new_stride[j] = original_stride[orig_i] * slice_step[orig_i]
-            // This enables IsContiguous to correctly determine memory layout.
-            // Note: Negative steps result in negative strides, making IsContiguous = false.
-            var sliced_strides = new int[sliced_axes.Length];
-            int j = 0;
-            for (int i = 0; i < slices.Count; i++)
-            {
-                if (slices[i].IsIndex)
-                    continue; // Skip reduced (index) dimensions
+            var sliced_dims = sliced_axes.ToArray();
+            var sliced_strides = sliced_strides_list.ToArray();
 
-                // Get the stride from the original shape (not the intermediate sliced shape)
-                // Preserve the sign of the step so reversed slices have negative strides
-                sliced_strides[j] = origin.strides[i] * slices[i].Step;
-                j++;
-            }
-
-            return new Shape(sliced_axes, sliced_strides) {ViewInfo = viewInfo, offset = sliceOffset};
+            // Create slice result via constructor
+            var result = new Shape(sliced_dims, sliced_strides, sliceOffset, parentBufferSize);
+            // Inherit WRITEABLE from parent
+            if (!IsWriteable)
+                return result.WithFlags(flagsToClear: ArrayFlags.WRITEABLE);
+            return result;
         }
 
         #endregion
@@ -1226,15 +1142,6 @@ namespace NumSharp
             return coords;
         }
 
-        /// <summary>
-        ///     Flag this shape as stride-modified.
-        /// </summary>
-        /// <param name="value"></param>
-        public void SetStridesModified(bool value)
-        {
-            ModifiedStrides = value;
-        }
-
         public override string ToString() =>
             "(" + string.Join(", ", dimensions) + ")";
 
@@ -1254,37 +1161,35 @@ namespace NumSharp
 
             if (IsScalar)
             {
-                if ((unview || ViewInfo == null) && (unbroadcast || BroadcastInfo == null))
+                if (unbroadcast || !IsBroadcasted)
                     return Scalar;
-
-                return NewScalar(unview ? null : ViewInfo?.Clone(), unbroadcast ? null : BroadcastInfo?.Clone());
+                // Scalar broadcast: return scalar with same offset via constructor
+                return new Shape(Array.Empty<int>(), Array.Empty<int>(), offset, bufferSize);
             }
 
             if (deep && unview && unbroadcast)
                 return new Shape((int[])this.dimensions.Clone());
 
             if (!deep && !unview && !unbroadcast)
-                return this; //basic struct reassign
+                return this; // readonly struct copy
 
-            var ret = deep ? new Shape(this) : (Shape)MemberwiseClone();
+            // Deep clone via copy constructor
+            if (deep && !unbroadcast)
+                return new Shape(this);
 
-            if (unview)
-                ret.ViewInfo = null;
-
+            // Unbroadcast: create new shape with standard C-contiguous strides
             if (unbroadcast)
             {
-                ret.BroadcastInfo = null;
-                ret._computeStrides();
+                var newStrides = ComputeContiguousStrides(dimensions);
+                return new Shape((int[])dimensions.Clone(), newStrides, 0, size);
             }
 
-            return ret;
+            return this;
         }
 
         /// <summary>
-        ///     Returns a clean shape based on this.
-        ///     Cleans ViewInfo and returns a newly constructed.
+        ///     Returns a clean shape based on this (offset=0, standard strides).
         /// </summary>
-        /// <returns></returns>
         public readonly Shape Clean()
         {
             if (IsScalar)
