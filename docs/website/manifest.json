@@ -1314,26 +1314,6 @@
     },
     {
       "type": "Conceptual",
-      "source_relative_path": "docs/NDArray.Creation.md",
-      "output": {
-        ".html": {
-          "relative_path": "docs/NDArray.Creation.html"
-        }
-      },
-      "version": ""
-    },
-    {
-      "type": "Conceptual",
-      "source_relative_path": "docs/NDArray.LinAlg.md",
-      "output": {
-        ".html": {
-          "relative_path": "docs/NDArray.LinAlg.html"
-        }
-      },
-      "version": ""
-    },
-    {
-      "type": "Conceptual",
       "source_relative_path": "docs/array-api-standard.md",
       "output": {
         ".html": {
@@ -1348,6 +1328,26 @@
       "output": {
         ".html": {
           "relative_path": "docs/compliance.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/extensions/bitmap.md",
+      "output": {
+        ".html": {
+          "relative_path": "docs/extensions/bitmap.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/extensions/index.md",
+      "output": {
+        ".html": {
+          "relative_path": "docs/extensions/index.html"
         }
       },
       "version": ""

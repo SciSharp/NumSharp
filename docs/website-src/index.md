@@ -40,7 +40,7 @@ Console.WriteLine(c);  // [1, 3, 5, 7, 9]
 ## Get Started
 
 - [Introduction](docs/intro.md) - Learn about NDArray, Shape, and Storage
-- [Array Creation](docs/NDArray.Creation.md) - Creating and initializing arrays
+- [NumPy Compliance](docs/compliance.md) - Compatibility status and roadmap
 - [API Reference](api/index.md) - Full API documentation
 
 ## Community

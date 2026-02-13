@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+      <title>NumSharp.Bitmap | NumSharp Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="NumSharp.Bitmap | NumSharp Documentation ">
+      
+      
+      <link rel="icon" href="../../images/numsharp.icon128.png">
+      <link rel="stylesheet" href="../../public/docfx.min.css">
+      <link rel="stylesheet" href="../../public/main.css">
+      <meta name="docfx:navrel" content="../../toc.html">
+      <meta name="docfx:tocrel" content="../toc.html">
+      
+      <meta name="docfx:rel" content="../../">
+      
+      
+      
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../../index.html">
+            <img id="logo" class="svg" src="../../images/numsharp.icon.svg" alt="NumSharp">
+            NumSharp
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="numsharpbitmap">NumSharp.Bitmap</h1>
+
+<p>The <strong>NumSharp.Bitmap</strong> package provides seamless conversion between <code>System.Drawing.Bitmap</code> and <code>NDArray</code>. If you're working with images in .NET—loading them, processing pixels, applying filters, or feeding them to ML models—this extension makes it easy to move data between the image world and the array world.</p>
+<hr>
+<h2 id="installation">Installation</h2>
+<p>NumSharp.Bitmap is a separate NuGet package:</p>
+<pre><code class="lang-bash">dotnet add package NumSharp.Bitmap
+</code></pre>
+<blockquote>
+<p><strong>Platform Note:</strong> This extension uses <code>System.Drawing.Common</code>, which is only fully supported on Windows. On Linux/macOS, you'll need additional setup (libgdiplus) or consider alternatives like ImageSharp.</p>
+</blockquote>
+<hr>
+<h2 id="quick-start">Quick Start</h2>
+<pre><code class="lang-csharp">using System.Drawing;
+using NumSharp;
+
+// Load an image and convert to NDArray
+var bitmap = new Bitmap(&quot;photo.jpg&quot;);
+var pixels = bitmap.ToNDArray();
+// Shape: (1, height, width, channels)
+// e.g., (1, 480, 640, 3) for a 640x480 RGB image
+
+// Manipulate the pixel data
+var brightened = (pixels.astype(NPTypeCode.Int32) + 50).clip(0, 255).astype(NPTypeCode.Byte);
+
+// Convert back to Bitmap
+var result = brightened.ToBitmap();
+result.Save(&quot;brightened.jpg&quot;);
+</code></pre>
+<hr>
+<h2 id="converting-bitmaps-to-ndarrays">Converting Bitmaps to NDArrays</h2>
+<h3 id="bitmaptondarray"><code>Bitmap.ToNDArray()</code></h3>
+<p>The primary method for converting images to arrays.</p>
+<pre><code class="lang-csharp">public static NDArray ToNDArray(
+    this Bitmap image,
+    bool flat = false,
+    bool copy = true,
+    bool discardAlpha = false
+)
+</code></pre>
+<p><strong>Parameters:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>flat</code></td>
+<td><code>false</code></td>
+<td>If <code>true</code>, returns 1-D array of pixels: <code>R1G1B1R2G2B2...</code></td>
+</tr>
+<tr>
+<td><code>copy</code></td>
+<td><code>true</code></td>
+<td>If <code>true</code>, copies pixel data. If <code>false</code>, wraps bitmap memory directly.</td>
+</tr>
+<tr>
+<td><code>discardAlpha</code></td>
+<td><code>false</code></td>
+<td>If <code>true</code>, strips the alpha channel (4th channel) from 32bpp images.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Return Shape:</strong></p>
+<ul>
+<li><code>flat=false</code>: <code>(1, height, width, channels)</code> — 4-D tensor suitable for ML models</li>
+<li><code>flat=true</code>: <code>(height * width * channels,)</code> — 1-D array of raw pixel bytes</li>
+</ul>
+<h3 id="examples">Examples</h3>
+<p><strong>Standard conversion (recommended for most uses):</strong></p>
+<pre><code class="lang-csharp">var bitmap = new Bitmap(&quot;image.png&quot;);
+var nd = bitmap.ToNDArray();
+
+Console.WriteLine(nd.shape);  // e.g., (1, 480, 640, 4) for 32bpp ARGB
+Console.WriteLine(nd.dtype);  // Byte
+</code></pre>
+<p><strong>Discard alpha channel:</strong></p>
+<pre><code class="lang-csharp">// 32bpp ARGB → 3 channels (RGB only)
+var rgb = bitmap.ToNDArray(discardAlpha: true);
+Console.WriteLine(rgb.shape);  // (1, 480, 640, 3)
+</code></pre>
+<p><strong>Flat pixel array:</strong></p>
+<pre><code class="lang-csharp">// For algorithms that expect 1-D input
+var flat = bitmap.ToNDArray(flat: true);
+Console.WriteLine(flat.ndim);  // 1
+</code></pre>
+<p><strong>Zero-copy mode (advanced):</strong></p>
+<pre><code class="lang-csharp">// Wraps bitmap memory directly — faster but risky
+var wrapped = bitmap.ToNDArray(copy: false);
+// WARNING: The NDArray becomes invalid if the bitmap is disposed
+// or modified. The bitmap remains locked until the NDArray is GC'd.
+</code></pre>
+<h3 id="memory-layout">Memory Layout</h3>
+<p>The pixel data is in <strong>BGR/BGRA order</strong> (Windows GDI convention), not RGB:</p>
+<pre><code class="lang-csharp">var nd = bitmap.ToNDArray();
+// nd[0, y, x, 0] = Blue
+// nd[0, y, x, 1] = Green
+// nd[0, y, x, 2] = Red
+// nd[0, y, x, 3] = Alpha (if 32bpp)
+</code></pre>
+<p>If you need RGB order for ML models, swap the channels:</p>
+<pre><code class="lang-csharp">// BGRA → RGBA
+var rgba = nd[Slice.All, Slice.All, Slice.All, new int[] {2, 1, 0, 3}];
+</code></pre>
+<hr>
+<h2 id="converting-ndarrays-to-bitmaps">Converting NDArrays to Bitmaps</h2>
+<h3 id="ndarraytobitmap"><code>NDArray.ToBitmap()</code></h3>
+<p>Converts an NDArray back to a Bitmap.</p>
+<pre><code class="lang-csharp">public static Bitmap ToBitmap(
+    this NDArray nd,
+    int width,
+    int height,
+    PixelFormat format = PixelFormat.DontCare
+)
+
+// Overload that infers dimensions from shape
+public static Bitmap ToBitmap(
+    this NDArray nd,
+    PixelFormat format = PixelFormat.DontCare
+)
+</code></pre>
+<p><strong>Requirements:</strong></p>
+<ul>
+<li>NDArray must be 4-D: <code>(1, height, width, channels)</code></li>
+<li>First dimension must be 1 (single image)</li>
+<li>dtype should be <code>Byte</code></li>
+<li>Channels must match the pixel format (3 for 24bpp, 4 for 32bpp)</li>
+</ul>
+<h3 id="examples-1">Examples</h3>
+<p><strong>Basic conversion:</strong></p>
+<pre><code class="lang-csharp">var nd = np.zeros(1, 100, 200, 3).astype(NPTypeCode.Byte);
+var bitmap = nd.ToBitmap();
+// Infers: 200x100 image, 24bpp RGB
+</code></pre>
+<p><strong>Explicit format:</strong></p>
+<pre><code class="lang-csharp">var nd = np.zeros(1, 100, 200, 4).astype(NPTypeCode.Byte);
+var bitmap = nd.ToBitmap(200, 100, PixelFormat.Format32bppArgb);
+</code></pre>
+<p><strong>From flat array:</strong></p>
+<pre><code class="lang-csharp">// If you have a 1-D array, provide dimensions and format
+var flat = np.arange(0, 200 * 100 * 3).astype(NPTypeCode.Byte);
+var bitmap = flat.ToBitmap(200, 100, PixelFormat.Format24bppRgb);
+</code></pre>
+<h3 id="supported-pixel-formats">Supported Pixel Formats</h3>
+<table>
+<thead>
+<tr>
+<th>Format</th>
+<th>Channels</th>
+<th>Bytes/Pixel</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Format24bppRgb</code></td>
+<td>3</td>
+<td>3</td>
+</tr>
+<tr>
+<td><code>Format32bppArgb</code></td>
+<td>4</td>
+<td>4</td>
+</tr>
+<tr>
+<td><code>Format32bppPArgb</code></td>
+<td>4</td>
+<td>4</td>
+</tr>
+<tr>
+<td><code>Format32bppRgb</code></td>
+<td>4</td>
+<td>4</td>
+</tr>
+<tr>
+<td><code>Format48bppRgb</code></td>
+<td>3</td>
+<td>6</td>
+</tr>
+<tr>
+<td><code>Format64bppArgb</code></td>
+<td>4</td>
+<td>8</td>
+</tr>
+<tr>
+<td><code>Format64bppPArgb</code></td>
+<td>4</td>
+<td>8</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="working-with-bitmapdata-directly">Working with BitmapData Directly</h2>
+<p>For performance-critical code, you can work with <code>BitmapData</code> directly.</p>
+<h3 id="bitmapdataasndarray"><code>BitmapData.AsNDArray()</code></h3>
+<p>Wraps locked bitmap data as an NDArray without copying.</p>
+<pre><code class="lang-csharp">var bitmap = new Bitmap(&quot;image.png&quot;);
+var bmpData = bitmap.LockBits(
+    new Rectangle(0, 0, bitmap.Width, bitmap.Height),
+    ImageLockMode.ReadOnly,
+    bitmap.PixelFormat
+);
+
+try
+{
+    var nd = bmpData.AsNDArray(flat: false, discardAlpha: false);
+    // Process pixels...
+    // WARNING: nd is only valid while bits are locked!
+}
+finally
+{
+    bitmap.UnlockBits(bmpData);
+}
+</code></pre>
+<blockquote>
+<p><strong>Warning:</strong> The NDArray points directly to bitmap memory. If you call <code>UnlockBits()</code>, the NDArray becomes invalid and accessing it causes undefined behavior.</p>
+</blockquote>
+<hr>
+<h2 id="common-patterns">Common Patterns</h2>
+<h3 id="image-preprocessing-for-ml">Image Preprocessing for ML</h3>
+<pre><code class="lang-csharp">// Load and normalize for neural network input
+var bitmap = new Bitmap(&quot;input.jpg&quot;);
+var nd = bitmap.ToNDArray(discardAlpha: true);  // (1, H, W, 3)
+
+// Normalize to [0, 1] range
+var normalized = nd.astype(NPTypeCode.Single) / 255.0f;
+
+// Resize would require additional libraries (not built into NumSharp)
+</code></pre>
+<h3 id="grayscale-conversion">Grayscale Conversion</h3>
+<pre><code class="lang-csharp">var bitmap = new Bitmap(&quot;color.jpg&quot;);
+var rgb = bitmap.ToNDArray(discardAlpha: true);  // (1, H, W, 3)
+
+// Luminance formula: 0.299*R + 0.587*G + 0.114*B
+// Note: GDI uses BGR order, so channels are [B, G, R]
+var b = rgb[Slice.All, Slice.All, Slice.All, 0].astype(NPTypeCode.Single);
+var g = rgb[Slice.All, Slice.All, Slice.All, 1].astype(NPTypeCode.Single);
+var r = rgb[Slice.All, Slice.All, Slice.All, 2].astype(NPTypeCode.Single);
+
+var gray = (0.114f * b + 0.587f * g + 0.299f * r).astype(NPTypeCode.Byte);
+// Shape: (1, H, W) - single channel
+</code></pre>
+<h3 id="batch-processing">Batch Processing</h3>
+<pre><code class="lang-csharp">// Process multiple images
+var files = Directory.GetFiles(&quot;images/&quot;, &quot;*.jpg&quot;);
+var batch = new List&lt;NDArray&gt;();
+
+foreach (var file in files)
+{
+    using var bitmap = new Bitmap(file);
+    var nd = bitmap.ToNDArray(discardAlpha: true);
+    batch.Add(nd);
+}
+
+// Stack into batch: (N, H, W, 3)
+// Note: All images must have same dimensions
+var batchArray = np.concatenate(batch.ToArray(), axis: 0);
+</code></pre>
+<h3 id="round-trip-load-process-save">Round-Trip (Load, Process, Save)</h3>
+<pre><code class="lang-csharp">// Load
+var original = new Bitmap(&quot;photo.jpg&quot;);
+var nd = original.ToNDArray();
+
+// Process: invert colors
+var inverted = (255 - nd.astype(NPTypeCode.Int32)).clip(0, 255).astype(NPTypeCode.Byte);
+
+// Save
+var result = inverted.ToBitmap();
+result.Save(&quot;inverted.jpg&quot;, ImageFormat.Jpeg);
+</code></pre>
+<hr>
+<h2 id="known-limitations">Known Limitations</h2>
+<h3 id="platform-support">Platform Support</h3>
+<p><code>System.Drawing.Common</code> is Windows-only in .NET 6+. On other platforms:</p>
+<pre><code class="lang-csharp">// This throws PlatformNotSupportedException on Linux/macOS
+var bitmap = new Bitmap(&quot;image.png&quot;);
+</code></pre>
+<p><strong>Workarounds:</strong></p>
+<ul>
+<li>Use <code>libgdiplus</code> on Linux (limited compatibility)</li>
+<li>Use ImageSharp or SkiaSharp (different API, not covered by this extension)</li>
+</ul>
+<h3 id="stride-padding">Stride Padding</h3>
+<p>Bitmaps may have stride padding (row alignment to 4-byte boundaries). The extension handles this in most cases, but odd-width 24bpp images may have issues with <code>copy: true</code>. Use <code>copy: false</code> for odd-width images.</p>
+<h3 id="color-order">Color Order</h3>
+<p>Windows bitmaps use BGR/BGRA byte order, not RGB. If your ML model expects RGB, you need to swap channels manually.</p>
+<h3 id="no-resize">No Resize</h3>
+<p>NumSharp doesn't include image resizing. You'll need to resize in <code>System.Drawing</code> before converting, or use a library like ImageSharp.</p>
+<hr>
+<h2 id="api-reference">API Reference</h2>
+<h3 id="extension-methods">Extension Methods</h3>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Bitmap.ToNDArray(...)</code></td>
+<td>Convert Bitmap to NDArray</td>
+</tr>
+<tr>
+<td><code>Image.ToNDArray(...)</code></td>
+<td>Convert Image to NDArray (creates Bitmap internally)</td>
+</tr>
+<tr>
+<td><code>BitmapData.AsNDArray(...)</code></td>
+<td>Wrap locked BitmapData as NDArray (no copy)</td>
+</tr>
+<tr>
+<td><code>NDArray.ToBitmap(...)</code></td>
+<td>Convert NDArray to Bitmap</td>
+</tr>
+</tbody>
+</table>
+<h3 id="helper-methods">Helper Methods</h3>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>PixelFormat.ToBytesPerPixel()</code></td>
+<td>Get bytes per pixel for a format</td>
+</tr>
+</tbody>
+</table>
+
+</article>
+
+        <div class="contribution d-print-none">
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          <span>Copyright &copy; 2025 <a href='https://github.com/SciSharp'>SciSharp STACK</a>. Built with <a href='https://dotnet.github.io/docfx'>DocFX</a>.</span>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -2,18 +2,18 @@
 <html lang="en">
   <head>
     <meta charset="utf-8">
-      <title>Linear algebra | NumSharp Documentation </title>
+      <title>Extending Libraries | NumSharp Documentation </title>
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <meta name="title" content="Linear algebra | NumSharp Documentation ">
+      <meta name="title" content="Extending Libraries | NumSharp Documentation ">
       
       
-      <link rel="icon" href="../images/numsharp.icon128.png">
-      <link rel="stylesheet" href="../public/docfx.min.css">
-      <link rel="stylesheet" href="../public/main.css">
-      <meta name="docfx:navrel" content="../toc.html">
-      <meta name="docfx:tocrel" content="toc.html">
+      <link rel="icon" href="../../images/numsharp.icon128.png">
+      <link rel="stylesheet" href="../../public/docfx.min.css">
+      <link rel="stylesheet" href="../../public/main.css">
+      <meta name="docfx:navrel" content="../../toc.html">
+      <meta name="docfx:tocrel" content="../toc.html">
       
-      <meta name="docfx:rel" content="../">
+      <meta name="docfx:rel" content="../../">
       
       
       
@@ -30,7 +30,7 @@
       <meta name="loc:copy" content="Copy">
       <meta name="loc:downloadPdf" content="Download PDF">
 
-      <script type="module" src="./../public/docfx.min.js"></script>
+      <script type="module" src="./../../public/docfx.min.js"></script>
 
       <script>
         const theme = localStorage.getItem('theme') || 'auto'
@@ -43,8 +43,8 @@
     <header class="bg-body border-bottom">
       <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
         <div class="container-xxl flex-nowrap">
-          <a class="navbar-brand" href="../index.html">
-            <img id="logo" class="svg" src="../images/numsharp.icon.svg" alt="NumSharp">
+          <a class="navbar-brand" href="../../index.html">
+            <img id="logo" class="svg" src="../../images/numsharp.icon.svg" alt="NumSharp">
             NumSharp
           </a>
           <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
@@ -85,16 +85,96 @@
         </div>
 
         <article data-uid="">
-<h1 id="linear-algebra">Linear algebra</h1>
+<h1 id="extending-libraries">Extending Libraries</h1>
 
-<p>Now we got some arrays so we should understand what we can do with it.</p>
-<h2 id="element-wise-operation">element wise operation</h2>
-<h2 id="matrix-transpose">Matrix Transpose</h2>
-<h2 id="matrix-and-vector-multiplication">Matrix and Vector multiplication</h2>
-<h2 id="solve-linear-equation">Solve Linear Equation</h2>
-<h2 id="qr-decomposition">QR decomposition</h2>
-<h2 id="inverse-of-matrix">Inverse of Matrix</h2>
-<h2 id="svd">SVD</h2>
+<p>NumSharp's core functionality can be extended with additional packages that integrate with platform-specific features or external libraries.</p>
+<hr>
+<h2 id="available-extensions">Available Extensions</h2>
+<table>
+<thead>
+<tr>
+<th>Package</th>
+<th>Description</th>
+<th>Platform</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="bitmap.html">NumSharp.Bitmap</a></td>
+<td>Convert between <code>System.Drawing.Bitmap</code> and <code>NDArray</code></td>
+<td>Windows</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="numsharpbitmap">NumSharp.Bitmap</h2>
+<p>Seamless image-to-array conversion for image processing and ML workflows.</p>
+<pre><code class="lang-csharp">using System.Drawing;
+using NumSharp;
+
+// Image → Array
+var bitmap = new Bitmap(&quot;photo.jpg&quot;);
+var pixels = bitmap.ToNDArray();  // (1, height, width, channels)
+
+// Process pixels with NumSharp operations...
+
+// Array → Image
+var result = processedPixels.ToBitmap();
+result.Save(&quot;output.jpg&quot;);
+</code></pre>
+<p><strong>Key Features:</strong></p>
+<ul>
+<li>Zero-copy mode for performance-critical code</li>
+<li>Supports 24bpp and 32bpp images</li>
+<li>Alpha channel handling</li>
+<li>Round-trip support (load → process → save)</li>
+</ul>
+<p><a href="bitmap.html">Full documentation →</a></p>
+<hr>
+<h2 id="installing-extensions">Installing Extensions</h2>
+<p>Extensions are separate NuGet packages:</p>
+<pre><code class="lang-bash"># Core library (always required)
+dotnet add package NumSharp
+
+# Extensions (optional, add as needed)
+dotnet add package NumSharp.Bitmap
+</code></pre>
+<hr>
+<h2 id="creating-your-own-extensions">Creating Your Own Extensions</h2>
+<p>NumSharp is designed to be extensible. The key integration points:</p>
+<h3 id="working-with-ndarray-memory">Working with NDArray Memory</h3>
+<pre><code class="lang-csharp">// Get raw pointer to contiguous data
+unsafe
+{
+    byte* ptr = (byte*)ndarray.Unsafe.Address;
+    // Use with P/Invoke, native libraries, etc.
+}
+</code></pre>
+<h3 id="creating-ndarray-from-external-memory">Creating NDArray from External Memory</h3>
+<pre><code class="lang-csharp">// Wrap existing unmanaged memory as NDArray
+unsafe
+{
+    var slice = new ArraySlice&lt;byte&gt;(
+        new UnmanagedMemoryBlock&lt;byte&gt;(ptr, length, disposeCallback)
+    );
+    var nd = new NDArray(slice);
+}
+</code></pre>
+<h3 id="extension-method-pattern">Extension Method Pattern</h3>
+<p>Follow the NumSharp.Bitmap pattern for consistent API:</p>
+<pre><code class="lang-csharp">public static class YourExtensions
+{
+    public static NDArray ToNDArray(this YourType source, ...)
+    {
+        // Convert to NDArray
+    }
+
+    public static YourType ToYourType(this NDArray nd, ...)
+    {
+        // Convert from NDArray
+    }
+}
+</code></pre>
 
 </article>
 
