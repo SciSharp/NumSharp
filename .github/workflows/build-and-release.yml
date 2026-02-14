@@ -50,14 +50,16 @@ jobs:
     - name: Test (net10.0)
       shell: bash
       run: |
-        FILTER='/*/*/*/*[Category!=OpenBugs'
-        if [[ "$RUNNER_OS" != "Windows" ]]; then
-          FILTER="$FILTER & Category!=WindowsOnly"
+        if [[ "$RUNNER_OS" == "Windows" ]]; then
+          dotnet run --project test/NumSharp.UnitTest/NumSharp.UnitTest.csproj \
+            --configuration Release --no-build --framework net10.0 \
+            -- --treenode-filter '/*/*/*/*[Category!=OpenBugs]' --report-trx
+        else
+          dotnet run --project test/NumSharp.UnitTest/NumSharp.UnitTest.csproj \
+            --configuration Release --no-build --framework net10.0 \
+            -- --treenode-filter '/*/*/*/*[Category!=OpenBugs]' \
+               --treenode-filter '/*/*/*/*[Category!=WindowsOnly]' --report-trx
         fi
-        FILTER="$FILTER]"
-        dotnet run --project test/NumSharp.UnitTest/NumSharp.UnitTest.csproj \
-          --configuration Release --no-build --framework net10.0 \
-          -- --treenode-filter "$FILTER" --report-trx
 
     - name: Upload Test Results
       uses: actions/upload-artifact@v4
