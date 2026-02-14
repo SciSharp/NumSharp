@@ -53,7 +53,8 @@ jobs:
         if [[ "$RUNNER_OS" == "Windows" ]]; then
           FILTER='/*/*/*/*[Category!=OpenBugs]'
         else
-          FILTER='/*/*/*/*[Category!=OpenBugs && Category!=WindowsOnly]'
+          # Combine filters with separate brackets (TUnit syntax for AND)
+          FILTER='/*/*/*/*[Category!=OpenBugs][Category!=WindowsOnly]'
         fi
         dotnet run --project test/NumSharp.UnitTest/NumSharp.UnitTest.csproj \
           --configuration Release --no-build --framework net10.0 \
