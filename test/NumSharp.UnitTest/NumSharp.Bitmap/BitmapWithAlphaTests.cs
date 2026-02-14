@@ -8,6 +8,7 @@ using NumSharp.UnitTest.Utilities;
 namespace NumSharp.UnitTest
 {
     [WindowsOnly]
+    [SkipOnNonWindows]
     public class BitmapWithAlphaTests : TestClass
     {
         [Test]

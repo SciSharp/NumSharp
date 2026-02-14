@@ -56,6 +56,7 @@ namespace NumSharp.UnitTest
     /// </summary>
     [OpenBugs]
     [WindowsOnly]
+    [SkipOnNonWindows]
     public class OpenBugsBitmap : TestClass
     {
 
