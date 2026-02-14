@@ -16,7 +16,6 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
         }
 
         [Test]
-        [OpenBugs] // keepdims returns wrong shape (1) instead of (1,1)
         public void Case1_Elementwise_keepdims()
         {
             var np1 = np.array(new double[] {1, 2, 3, 4, 5, 6}).reshape(3, 2);
