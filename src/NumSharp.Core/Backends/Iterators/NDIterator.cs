@@ -155,9 +155,9 @@ namespace NumSharp
             //non auto-resetting.
             var localBlock = Block;
             Shape shape = Shape;
-            if (!Shape.IsContiguous || Shape.ModifiedStrides)
+            if (!Shape.IsContiguous || Shape.offset != 0)
             {
-                //Shape is sliced, not auto-resetting
+                //Shape is sliced or has offset, not auto-resetting
                 switch (Type)
                 {
                     case IteratorType.Scalar:
@@ -282,9 +282,9 @@ namespace NumSharp
         {
             var localBlock = Block;
             Shape shape = Shape;
-            if (!Shape.IsContiguous || Shape.ModifiedStrides)
+            if (!Shape.IsContiguous || Shape.offset != 0)
             {
-                //Shape is sliced, auto-resetting
+                //Shape is sliced or has offset, auto-resetting
                 switch (Type)
                 {
                     case IteratorType.Scalar:

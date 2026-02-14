@@ -77,7 +77,7 @@ namespace NumSharp
                 UnmanagedStorage src = Storage.GetData(indices);
                 Debug.Assert(src.Shape.NDim == 1);
 
-                if (!Shape.IsContiguous || Shape.ModifiedStrides)
+                if (!Shape.IsContiguous)
                 {
                     //this works faster than cloning.
                     var ret = new string('\0', src.Count);
@@ -98,6 +98,7 @@ namespace NumSharp
         public void SetString(string value, params int[] indices)
         {
             Debug.Assert(typecode == NPTypeCode.Char);
+            NumSharpException.ThrowIfNotWriteable(Shape);
 
             // ReSharper disable once ReplaceWithStringIsNullOrEmpty
             if (value == null || value.Length == 0)
