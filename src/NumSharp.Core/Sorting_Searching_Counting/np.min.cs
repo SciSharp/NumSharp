@@ -24,10 +24,8 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.amin.html</remarks>
         public static NDArray amin(in NDArray a, int? axis = null, bool keepdims = false, Type dtype = null)
         {
-            if (!axis.HasValue)
-                return a.amin(dtype);
-
-            return a.amin(axis.Value, keepdims, dtype);
+            // Delegate to TensorEngine which handles keepdims for axis=null
+            return a.TensorEngine.ReduceAMin(a, axis, keepdims, dtype?.GetTypeCode());
         }
 
         /// <summary>
@@ -41,10 +39,8 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.amin.html</remarks>
         public static NDArray min(in NDArray a, int? axis = null, bool keepdims = false, Type dtype = null)
         {
-            if (!axis.HasValue)
-                return a.amin(dtype);
-
-            return a.amin(axis.Value, keepdims, dtype);
+            // Delegate to TensorEngine which handles keepdims for axis=null
+            return a.TensorEngine.ReduceAMin(a, axis, keepdims, dtype?.GetTypeCode());
         }
     }
 }
