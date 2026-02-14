@@ -453,7 +453,7 @@ namespace NumSharp.UnitTest.Manipulation
         }
 
         [Test]
-        [Category("OpenBugs")]
+        [OpenBugs]
         public void Roll_Empty2D_Axis1()
         {
             // Bug: np.roll on empty 2D array (shape 0x3) with axis=1 throws
@@ -1063,7 +1063,7 @@ namespace NumSharp.UnitTest.Manipulation
         // ================================================================
 
         [Test]
-        [Category("OpenBugs")]
+        [OpenBugs]
         public void Roll_MultiAxis_ScalarShift_TupleAxis()
         {
             // NumPy: np.roll(x2, 1, axis=(0,1))
@@ -1083,7 +1083,7 @@ namespace NumSharp.UnitTest.Manipulation
         }
 
         [Test]
-        [Category("OpenBugs")]
+        [OpenBugs]
         public void Roll_MultiAxis_TupleShift_TupleAxis()
         {
             // NumPy: np.roll(x2, (1, 0), axis=(0, 1))
@@ -1102,7 +1102,7 @@ namespace NumSharp.UnitTest.Manipulation
         }
 
         [Test]
-        [Category("OpenBugs")]
+        [OpenBugs]
         public void Roll_MultiAxis_NegativeShift_TupleAxis()
         {
             // NumPy: np.roll(x2, (-1, 0), axis=(0, 1))
@@ -1118,7 +1118,7 @@ namespace NumSharp.UnitTest.Manipulation
         }
 
         [Test]
-        [Category("OpenBugs")]
+        [OpenBugs]
         public void Roll_MultiAxis_BothShift1()
         {
             // NumPy: np.roll(x2, (1, 1), axis=(0, 1))
@@ -1133,7 +1133,7 @@ namespace NumSharp.UnitTest.Manipulation
         }
 
         [Test]
-        [Category("OpenBugs")]
+        [OpenBugs]
         public void Roll_MultiAxis_BothNegative()
         {
             // NumPy: np.roll(x2, (-1, -1), axis=(0, 1))
@@ -1148,7 +1148,7 @@ namespace NumSharp.UnitTest.Manipulation
         }
 
         [Test]
-        [Category("OpenBugs")]
+        [OpenBugs]
         public void Roll_MultiAxis_SameAxis_Twice()
         {
             // NumPy: np.roll(x2, 1, axis=(0, 0))
@@ -1165,7 +1165,7 @@ namespace NumSharp.UnitTest.Manipulation
         }
 
         [Test]
-        [Category("OpenBugs")]
+        [OpenBugs]
         public void Roll_MultiAxis_SameAxis1_Twice()
         {
             // NumPy: np.roll(x2, 1, axis=(1, 1))
@@ -1181,7 +1181,7 @@ namespace NumSharp.UnitTest.Manipulation
         }
 
         [Test]
-        [Category("OpenBugs")]
+        [OpenBugs]
         public void Roll_MultiAxis_ZeroAndOne()
         {
             // NumPy: np.roll(x2, (0, 1), axis=(0, 1))
@@ -1197,7 +1197,7 @@ namespace NumSharp.UnitTest.Manipulation
         }
 
         [Test]
-        [Category("OpenBugs")]
+        [OpenBugs]
         public void Roll_MultiAxis_ZeroAndNegative()
         {
             // NumPy: np.roll(x2, (0, -1), axis=(0, 1))

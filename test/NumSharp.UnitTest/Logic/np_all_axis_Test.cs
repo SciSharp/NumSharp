@@ -7,7 +7,7 @@ using NumSharp;
 
 namespace NumSharp.UnitTest.Logic
 {
-    [Category("OpenBugs")]
+    [OpenBugs]
     public class np_all_axis_Test
     {
         [Test]
