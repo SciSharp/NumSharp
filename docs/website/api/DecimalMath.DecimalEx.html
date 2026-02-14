@@ -1,0 +1,1684 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+      <title>Class DecimalEx | NumSharp Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class DecimalEx | NumSharp Documentation ">
+      
+      <meta name="description" content="Contains mathematical operations performed in Decimal precision.">
+      <link rel="icon" href="../images/numsharp.icon128.png">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../images/numsharp.icon.svg" alt="NumSharp">
+            NumSharp
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="DecimalMath.DecimalEx">
+
+
+
+  <h1 id="DecimalMath_DecimalEx" data-uid="DecimalMath.DecimalEx" class="text-break">
+Class DecimalEx  
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="DecimalMath.html">DecimalMath</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>NumSharp.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Contains mathematical operations performed in Decimal precision.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static class DecimalEx</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">DecimalEx</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+
+
+  <h2 class="section" id="fields">Fields
+</h2>
+
+
+
+  <h3 id="DecimalMath_DecimalEx_E" data-uid="DecimalMath.DecimalEx.E">
+  E
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>The e constant, also known as &quot;Euler's number&quot; or &quot;Napier's constant&quot;</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public const decimal E = 2.7182818284590452353602874714</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+  <h4 class="section" id="DecimalMath_DecimalEx_E_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Full value is 2.718281828459045235360287471352662497757,
+see <a href="http://mathworld.wolfram.com/e.html">http://mathworld.wolfram.com/e.html</a></p>
+</div>
+
+
+
+
+
+  <h3 id="DecimalMath_DecimalEx_Ln10" data-uid="DecimalMath.DecimalEx.Ln10">
+  Ln10
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>The value of the natural logarithm of 10.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public const decimal Ln10 = 2.3025850929940456840179914547</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+  <h4 class="section" id="DecimalMath_DecimalEx_Ln10_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Full value is: 2.30258509299404568401799145468436420760110148862877297603332790096757
+From: <a href="http://oeis.org/A002392/constant">http://oeis.org/A002392/constant</a></p>
+</div>
+
+
+
+
+
+  <h3 id="DecimalMath_DecimalEx_Ln2" data-uid="DecimalMath.DecimalEx.Ln2">
+  Ln2
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>The value of the natural logarithm of 2.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public const decimal Ln2 = 0.6931471805599453094172321215</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+  <h4 class="section" id="DecimalMath_DecimalEx_Ln2_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Full value is: .693147180559945309417232121458176568075500134360255254120680009493393621969694715605863326996418687
+From: <a href="http://oeis.org/A002162/constant">http://oeis.org/A002162/constant</a></p>
+</div>
+
+
+
+
+
+  <h3 id="DecimalMath_DecimalEx_Pi" data-uid="DecimalMath.DecimalEx.Pi">
+  Pi
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>The pi (π) constant. Pi radians is equivalent to 180 degrees.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public const decimal Pi = 3.1415926535897932384626433833</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+  <h4 class="section" id="DecimalMath_DecimalEx_Pi_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>See <a href="http://en.wikipedia.org/wiki/Pi">http://en.wikipedia.org/wiki/Pi</a></p>
+</div>
+
+
+
+
+
+  <h3 id="DecimalMath_DecimalEx_PiHalf" data-uid="DecimalMath.DecimalEx.PiHalf">
+  PiHalf
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>π/2 - in radians is equivalent to 90 degrees.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public const decimal PiHalf = 1.5707963267948966192313216916</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="DecimalMath_DecimalEx_PiQuarter" data-uid="DecimalMath.DecimalEx.PiQuarter">
+  PiQuarter
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>π/4 - in radians is equivalent to 45 degrees.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public const decimal PiQuarter = 0.7853981633974483096156608458</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="DecimalMath_DecimalEx_PiTwelfth" data-uid="DecimalMath.DecimalEx.PiTwelfth">
+  PiTwelfth
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>π/12 - in radians is equivalent to 15 degrees.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public const decimal PiTwelfth = 0.2617993877991494365385536153</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="DecimalMath_DecimalEx_SmallestNonZeroDec" data-uid="DecimalMath.DecimalEx.SmallestNonZeroDec">
+  SmallestNonZeroDec
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Smallest non-zero decimal value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public const decimal SmallestNonZeroDec = 0.0000000000000000000000000001</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="DecimalMath_DecimalEx_TwoPi" data-uid="DecimalMath.DecimalEx.TwoPi">
+  TwoPi
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>2π - in radians is equivalent to 360 degrees.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public const decimal TwoPi = 6.2831853071795864769252867666</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="DecimalMath_DecimalEx_ACos_" data-uid="DecimalMath.DecimalEx.ACos*"></a>
+
+  <h3 id="DecimalMath_DecimalEx_ACos_System_Decimal_" data-uid="DecimalMath.DecimalEx.ACos(System.Decimal)">
+  ACos(decimal)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the angle whose cosine is the specified number.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static decimal ACos(decimal z)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>z</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd><p>A number representing a cosine, where -1 ≤d≤ 1.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="DecimalMath_DecimalEx_ACos_System_Decimal__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>See <a href="http://en.wikipedia.org/wiki/Inverse_trigonometric_function">http://en.wikipedia.org/wiki/Inverse_trigonometric_function</a>
+and <a href="http://mathworld.wolfram.com/InverseCosine.html">http://mathworld.wolfram.com/InverseCosine.html</a></p>
+</div>
+
+
+
+
+  <a id="DecimalMath_DecimalEx_AGMean_" data-uid="DecimalMath.DecimalEx.AGMean*"></a>
+
+  <h3 id="DecimalMath_DecimalEx_AGMean_System_Decimal_System_Decimal_" data-uid="DecimalMath.DecimalEx.AGMean(System.Decimal,System.Decimal)">
+  AGMean(decimal, decimal)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes arithmetic-geometric mean which is the convergence of the
+series of the arithmetic and geometric means and their mean values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static decimal AGMean(decimal x, decimal y)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd><p>A number.</p>
+</dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd><p>A number.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="DecimalMath_DecimalEx_AGMean_System_Decimal_System_Decimal__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>See <a href="http://en.wikipedia.org/wiki/Arithmetic-geometric_mean">http://en.wikipedia.org/wiki/Arithmetic-geometric_mean</a>
+Originally implemented to try to get a fast approximation of the
+natural logarithm: <a href="http://en.wikipedia.org/wiki/Natural_logarithm#High_precision">http://en.wikipedia.org/wiki/Natural_logarithm#High_precision</a>
+But it didn't yield a precise enough answer.</p>
+</div>
+
+
+
+
+  <a id="DecimalMath_DecimalEx_ASin_" data-uid="DecimalMath.DecimalEx.ASin*"></a>
+
+  <h3 id="DecimalMath_DecimalEx_ASin_System_Decimal_" data-uid="DecimalMath.DecimalEx.ASin(System.Decimal)">
+  ASin(decimal)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the angle whose sine is the specified number.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static decimal ASin(decimal z)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>z</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd><p>A number representing a sine, where -1 ≤d≤ 1.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="DecimalMath_DecimalEx_ASin_System_Decimal__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>See <a href="http://en.wikipedia.org/wiki/Inverse_trigonometric_function">http://en.wikipedia.org/wiki/Inverse_trigonometric_function</a>
+and <a href="http://mathworld.wolfram.com/InverseSine.html">http://mathworld.wolfram.com/InverseSine.html</a>
+I originally used the Taylor series for ASin, but it was extremely slow
+around -1 and 1 (millions of iterations) and still ends up being less
+accurate than deriving from the ATan function.</p>
+</div>
+
+
+
+
+  <a id="DecimalMath_DecimalEx_ATan_" data-uid="DecimalMath.DecimalEx.ATan*"></a>
+
+  <h3 id="DecimalMath_DecimalEx_ATan_System_Decimal_" data-uid="DecimalMath.DecimalEx.ATan(System.Decimal)">
+  ATan(decimal)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the angle whose tangent is the quotient of two specified numbers.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static decimal ATan(decimal x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd><p>A number representing a tangent.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="DecimalMath_DecimalEx_ATan_System_Decimal__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>See <a href="http://mathworld.wolfram.com/InverseTangent.html">http://mathworld.wolfram.com/InverseTangent.html</a> for faster converging
+series from Euler that was used here.</p>
+</div>
+
+
+
+
+  <a id="DecimalMath_DecimalEx_ATan2_" data-uid="DecimalMath.DecimalEx.ATan2*"></a>
+
+  <h3 id="DecimalMath_DecimalEx_ATan2_System_Decimal_System_Decimal_" data-uid="DecimalMath.DecimalEx.ATan2(System.Decimal,System.Decimal)">
+  ATan2(decimal, decimal)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the angle whose tangent is the quotient of two specified numbers.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static decimal ATan2(decimal y, decimal x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd><p>The y coordinate of a point.</p>
+</dd>
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd><p>The x coordinate of a point.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd><p>An angle, θ, measured in radians, such that -π≤θ≤π, and tan(θ) = y / x,
+where (x, y) is a point in the Cartesian plane. Observe the following:
+For (x, y) in quadrant 1, 0 &lt; θ &lt; π/2.
+For (x, y) in quadrant 2, π/2 &lt; θ ≤ π.
+For (x, y) in quadrant 3, -π &lt; θ &lt; -π/2.
+For (x, y) in quadrant 4, -π/2 &lt; θ &lt; 0.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="DecimalMath_DecimalEx_Abs_" data-uid="DecimalMath.DecimalEx.Abs*"></a>
+
+  <h3 id="DecimalMath_DecimalEx_Abs_System_Decimal_" data-uid="DecimalMath.DecimalEx.Abs(System.Decimal)">
+  Abs(decimal)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static decimal Abs(decimal a)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="DecimalMath_DecimalEx_Average_" data-uid="DecimalMath.DecimalEx.Average*"></a>
+
+  <h3 id="DecimalMath_DecimalEx_Average_System_Decimal___" data-uid="DecimalMath.DecimalEx.Average(System.Decimal[])">
+  Average(params decimal[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the average of the supplied numbers.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static decimal Average(params decimal[] values)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>values</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a>[]</dt>
+    <dd><p>The numbers to average.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="DecimalMath_DecimalEx_Average_System_Decimal____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Simply uses LINQ's Average function, but switches to a potentially less
+accurate method of summing each value divided by the number of values.</p>
+</div>
+
+
+
+
+  <a id="DecimalMath_DecimalEx_Ceiling_" data-uid="DecimalMath.DecimalEx.Ceiling*"></a>
+
+  <h3 id="DecimalMath_DecimalEx_Ceiling_System_Decimal_System_Int32_" data-uid="DecimalMath.DecimalEx.Ceiling(System.Decimal,System.Int32)">
+  Ceiling(decimal, int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the ceiling of a Decimal value at the given number of digits.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static decimal Ceiling(decimal value, int places = 0)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd><p>A decimal value.</p>
+</dd>
+    <dt><code>places</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>An integer representing the maximum number of digits
+after the decimal point to end up with.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="DecimalMath_DecimalEx_Cos_" data-uid="DecimalMath.DecimalEx.Cos*"></a>
+
+  <h3 id="DecimalMath_DecimalEx_Cos_System_Decimal_" data-uid="DecimalMath.DecimalEx.Cos(System.Decimal)">
+  Cos(decimal)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the cosine of the specified angle.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static decimal Cos(decimal x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd><p>An angle, measured in radians.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="DecimalMath_DecimalEx_Cos_System_Decimal__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Uses a Taylor series to calculate sine. See
+<a href="http://en.wikipedia.org/wiki/Trigonometric_functions">http://en.wikipedia.org/wiki/Trigonometric_functions</a> for details.</p>
+</div>
+
+
+
+
+  <a id="DecimalMath_DecimalEx_Exp_" data-uid="DecimalMath.DecimalEx.Exp*"></a>
+
+  <h3 id="DecimalMath_DecimalEx_Exp_System_Decimal_" data-uid="DecimalMath.DecimalEx.Exp(System.Decimal)">
+  Exp(decimal)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns e raised to the specified power.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static decimal Exp(decimal d)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>d</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd><p>A number specifying a power.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="DecimalMath_DecimalEx_Factorial_" data-uid="DecimalMath.DecimalEx.Factorial*"></a>
+
+  <h3 id="DecimalMath_DecimalEx_Factorial_System_Decimal_" data-uid="DecimalMath.DecimalEx.Factorial(System.Decimal)">
+  Factorial(decimal)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the factorial of a number n expressed as n!. Factorial is
+calculated as follows: n * (n - 1) * (n - 2) * ... * 1</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static decimal Factorial(decimal n)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>n</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd><p>An integer.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="DecimalMath_DecimalEx_Factorial_System_Decimal__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Only supports non-negative integers.</p>
+</div>
+
+
+
+
+  <a id="DecimalMath_DecimalEx_Floor_" data-uid="DecimalMath.DecimalEx.Floor*"></a>
+
+  <h3 id="DecimalMath_DecimalEx_Floor_System_Decimal_System_Int32_" data-uid="DecimalMath.DecimalEx.Floor(System.Decimal,System.Int32)">
+  Floor(decimal, int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the floor of a Decimal value at the given number of digits.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static decimal Floor(decimal value, int places = 0)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd><p>A decimal value.</p>
+</dd>
+    <dt><code>places</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>An integer representing the maximum number of digits
+after the decimal point to end up with.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="DecimalMath_DecimalEx_GCF_" data-uid="DecimalMath.DecimalEx.GCF*"></a>
+
+  <h3 id="DecimalMath_DecimalEx_GCF_System_Decimal_System_Decimal_" data-uid="DecimalMath.DecimalEx.GCF(System.Decimal,System.Decimal)">
+  GCF(decimal, decimal)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the greatest common factor of a and b to the highest level of
+precision represented by either number.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static decimal GCF(decimal a, decimal b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd></dd>
+    <dt><code>b</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="DecimalMath_DecimalEx_GCF_System_Decimal_System_Decimal__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>If either number is not an integer, the factor sought will be at the
+same precision as the most precise value.
+For example, 1.2 and 0.42 will yield 0.06.</p>
+</div>
+
+
+
+
+  <a id="DecimalMath_DecimalEx_GCF_" data-uid="DecimalMath.DecimalEx.GCF*"></a>
+
+  <h3 id="DecimalMath_DecimalEx_GCF_System_Decimal_System_Decimal_System_Decimal___" data-uid="DecimalMath.DecimalEx.GCF(System.Decimal,System.Decimal,System.Decimal[])">
+  GCF(decimal, decimal, params decimal[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the greatest common factor of three or more numbers.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static decimal GCF(decimal a, decimal b, params decimal[] values)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd></dd>
+    <dt><code>b</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd></dd>
+    <dt><code>values</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="DecimalMath_DecimalEx_GetDecimalPlaces_" data-uid="DecimalMath.DecimalEx.GetDecimalPlaces*"></a>
+
+  <h3 id="DecimalMath_DecimalEx_GetDecimalPlaces_System_Decimal_System_Boolean_" data-uid="DecimalMath.DecimalEx.GetDecimalPlaces(System.Decimal,System.Boolean)">
+  GetDecimalPlaces(decimal, bool)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of decimal places in a decimal value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static int GetDecimalPlaces(decimal dec, bool countTrailingZeros)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dec</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd></dd>
+    <dt><code>countTrailingZeros</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="DecimalMath_DecimalEx_GetDecimalPlaces_System_Decimal_System_Boolean__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Started with something found here: <a href="http://stackoverflow.com/a/6092298/856595">http://stackoverflow.com/a/6092298/856595</a></p>
+</div>
+
+
+
+
+  <a id="DecimalMath_DecimalEx_Log_" data-uid="DecimalMath.DecimalEx.Log*"></a>
+
+  <h3 id="DecimalMath_DecimalEx_Log_System_Decimal_" data-uid="DecimalMath.DecimalEx.Log(System.Decimal)">
+  Log(decimal)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the natural (base e) logarithm of a specified number.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static decimal Log(decimal d)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>d</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd><p>A number whose logarithm is to be found.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="DecimalMath_DecimalEx_Log_System_Decimal__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>I'm still not satisfied with the speed. I tried several different
+algorithms that you can find in a historical version of this
+source file. The one I settled on was the best of mediocrity.</p>
+</div>
+
+
+
+
+  <a id="DecimalMath_DecimalEx_Log_" data-uid="DecimalMath.DecimalEx.Log*"></a>
+
+  <h3 id="DecimalMath_DecimalEx_Log_System_Decimal_System_Decimal_" data-uid="DecimalMath.DecimalEx.Log(System.Decimal,System.Decimal)">
+  Log(decimal, decimal)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the logarithm of a specified number in a specified base.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static decimal Log(decimal d, decimal newBase)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>d</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd><p>A number whose logarithm is to be found.</p>
+</dd>
+    <dt><code>newBase</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd><p>The base of the logarithm.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="DecimalMath_DecimalEx_Log_System_Decimal_System_Decimal__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This is a relatively naive implementation that simply divides the
+natural log of <code class="paramref">d</code> by the natural log of the base.</p>
+</div>
+
+
+
+
+  <a id="DecimalMath_DecimalEx_Log10_" data-uid="DecimalMath.DecimalEx.Log10*"></a>
+
+  <h3 id="DecimalMath_DecimalEx_Log10_System_Decimal_" data-uid="DecimalMath.DecimalEx.Log10(System.Decimal)">
+  Log10(decimal)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the base 10 logarithm of a specified number.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static decimal Log10(decimal d)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>d</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd><p>A number whose logarithm is to be found.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="DecimalMath_DecimalEx_Log2_" data-uid="DecimalMath.DecimalEx.Log2*"></a>
+
+  <h3 id="DecimalMath_DecimalEx_Log2_System_Decimal_" data-uid="DecimalMath.DecimalEx.Log2(System.Decimal)">
+  Log2(decimal)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the base 2 logarithm of a specified number.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static decimal Log2(decimal d)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>d</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd><p>A number whose logarithm is to be found.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="DecimalMath_DecimalEx_NormalizeAngle_" data-uid="DecimalMath.DecimalEx.NormalizeAngle*"></a>
+
+  <h3 id="DecimalMath_DecimalEx_NormalizeAngle_System_Decimal_" data-uid="DecimalMath.DecimalEx.NormalizeAngle(System.Decimal)">
+  NormalizeAngle(decimal)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Normalizes an angle in radians to the 0 to 2Pi interval.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static decimal NormalizeAngle(decimal radians)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>radians</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd><p>Angle in radians.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="DecimalMath_DecimalEx_NormalizeAngleDeg_" data-uid="DecimalMath.DecimalEx.NormalizeAngleDeg*"></a>
+
+  <h3 id="DecimalMath_DecimalEx_NormalizeAngleDeg_System_Decimal_" data-uid="DecimalMath.DecimalEx.NormalizeAngleDeg(System.Decimal)">
+  NormalizeAngleDeg(decimal)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Normalizes an angle in degrees to the 0 to 360 degree interval.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static decimal NormalizeAngleDeg(decimal degrees)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>degrees</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd><p>Angle in degrees.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="DecimalMath_DecimalEx_Pow_" data-uid="DecimalMath.DecimalEx.Pow*"></a>
+
+  <h3 id="DecimalMath_DecimalEx_Pow_System_Decimal_System_Decimal_" data-uid="DecimalMath.DecimalEx.Pow(System.Decimal,System.Decimal)">
+  Pow(decimal, decimal)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns a specified number raised to the specified power.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static decimal Pow(decimal x, decimal y)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd><p>A number to be raised to a power.</p>
+</dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd><p>A number that specifies a power.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="DecimalMath_DecimalEx_Remainder_" data-uid="DecimalMath.DecimalEx.Remainder*"></a>
+
+  <h3 id="DecimalMath_DecimalEx_Remainder_System_Decimal_System_Decimal_" data-uid="DecimalMath.DecimalEx.Remainder(System.Decimal,System.Decimal)">
+  Remainder(decimal, decimal)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the remainder of one number divided by another number in such a way as to retain maximum precision.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static decimal Remainder(decimal d1, decimal d2)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>d1</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd></dd>
+    <dt><code>d2</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="DecimalMath_DecimalEx_Sin_" data-uid="DecimalMath.DecimalEx.Sin*"></a>
+
+  <h3 id="DecimalMath_DecimalEx_Sin_System_Decimal_" data-uid="DecimalMath.DecimalEx.Sin(System.Decimal)">
+  Sin(decimal)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the sine of the specified angle.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static decimal Sin(decimal x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd><p>An angle, measured in radians.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="DecimalMath_DecimalEx_Sin_System_Decimal__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Uses a Taylor series to calculate sine. See
+<a href="http://en.wikipedia.org/wiki/Trigonometric_functions">http://en.wikipedia.org/wiki/Trigonometric_functions</a> for details.</p>
+</div>
+
+
+
+
+  <a id="DecimalMath_DecimalEx_SolveQuadratic_" data-uid="DecimalMath.DecimalEx.SolveQuadratic*"></a>
+
+  <h3 id="DecimalMath_DecimalEx_SolveQuadratic_System_Decimal_System_Decimal_System_Decimal_" data-uid="DecimalMath.DecimalEx.SolveQuadratic(System.Decimal,System.Decimal,System.Decimal)">
+  SolveQuadratic(decimal, decimal, decimal)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Uses the quadratic formula to factor and solve the equation ax^2 + bx + c = 0</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static decimal[] SolveQuadratic(decimal a, decimal b, decimal c)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd><p>The coefficient of x^2.</p>
+</dd>
+    <dt><code>b</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd><p>The coefficient of x.</p>
+</dd>
+    <dt><code>c</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd><p>The constant.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="DecimalMath_DecimalEx_SolveQuadratic_System_Decimal_System_Decimal_System_Decimal__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Will return empty results where there is no solution and for complex solutions.
+See <a href="http://www.wikihow.com/Factor-Second-Degree-Polynomials-%28Quadratic-Equations%29">http://www.wikihow.com/Factor-Second-Degree-Polynomials-%28Quadratic-Equations%29</a></p>
+</div>
+
+
+
+
+  <a id="DecimalMath_DecimalEx_Sqrt_" data-uid="DecimalMath.DecimalEx.Sqrt*"></a>
+
+  <h3 id="DecimalMath_DecimalEx_Sqrt_System_Decimal_" data-uid="DecimalMath.DecimalEx.Sqrt(System.Decimal)">
+  Sqrt(decimal)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the square root of a given number.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static decimal Sqrt(decimal s)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>s</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd><p>A non-negative number.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="DecimalMath_DecimalEx_Sqrt_System_Decimal__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Uses an implementation of the &quot;Babylonian Method&quot;.
+See <a href="http://en.wikipedia.org/wiki/Methods_of_computing_square_roots#Babylonian_method">http://en.wikipedia.org/wiki/Methods_of_computing_square_roots#Babylonian_method</a></p>
+</div>
+
+
+
+
+  <a id="DecimalMath_DecimalEx_Tan_" data-uid="DecimalMath.DecimalEx.Tan*"></a>
+
+  <h3 id="DecimalMath_DecimalEx_Tan_System_Decimal_" data-uid="DecimalMath.DecimalEx.Tan(System.Decimal)">
+  Tan(decimal)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the tangent of the specified angle.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static decimal Tan(decimal radians)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>radians</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd><p>An angle, measured in radians.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="DecimalMath_DecimalEx_Tan_System_Decimal__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Uses a Taylor series to calculate sine. See
+<a href="http://en.wikipedia.org/wiki/Trigonometric_functions">http://en.wikipedia.org/wiki/Trigonometric_functions</a> for details.</p>
+</div>
+
+
+
+
+  <a id="DecimalMath_DecimalEx_ToDeg_" data-uid="DecimalMath.DecimalEx.ToDeg*"></a>
+
+  <h3 id="DecimalMath_DecimalEx_ToDeg_System_Decimal_" data-uid="DecimalMath.DecimalEx.ToDeg(System.Decimal)">
+  ToDeg(decimal)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts radians to degrees. (π radians = 180 degrees)</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static decimal ToDeg(decimal radians)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>radians</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd><p>The radians to convert.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="DecimalMath_DecimalEx_ToRad_" data-uid="DecimalMath.DecimalEx.ToRad*"></a>
+
+  <h3 id="DecimalMath_DecimalEx_ToRad_System_Decimal_" data-uid="DecimalMath.DecimalEx.ToRad(System.Decimal)">
+  ToRad(decimal)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts degrees to radians. (π radians = 180 degrees)</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static decimal ToRad(decimal degrees)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>degrees</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd><p>The degrees to convert.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          <span>Copyright &copy; 2025 <a href='https://github.com/SciSharp'>SciSharp STACK</a>. Built with <a href='https://dotnet.github.io/docfx'>DocFX</a>.</span>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

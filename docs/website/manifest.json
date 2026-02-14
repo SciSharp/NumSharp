@@ -1,246 +1,1302 @@
 {
-  "homepages": [],
-  "source_base_path": "C:/Users/KAC2ST/GitHub/NumSharp/docfx_project",
+  "sitemap": {
+    "baseUrl": "https://scisharp.github.io/NumSharp/",
+    "changefreq": "weekly",
+    "priority": 0.5
+  },
+  "source_base_path": "K:/source/NumSharp-docfx2/docs/website-src",
   "xrefmap": "xrefmap.yml",
   "files": [
     {
-      "type": "ManagedReference",
-      "source_relative_path": "api/NumSharp.Core.Extensions.NDArrayExtensions.yml",
+      "type": "Resource",
       "output": {
-        ".html": {
-          "relative_path": "api/NumSharp.Core.Extensions.NDArrayExtensions.html",
-          "hash": "sRQzNU8b8C1bQ02hzMTfwQ=="
+        "resource": {
+          "relative_path": "index.json"
         }
-      },
-      "is_incremental": false,
-      "version": ""
+      }
     },
     {
       "type": "ManagedReference",
-      "source_relative_path": "api/NumSharp.Core.Extensions.yml",
+      "source_relative_path": "api/DecimalMath.DecimalEx.yml",
       "output": {
         ".html": {
-          "relative_path": "api/NumSharp.Core.Extensions.html",
-          "hash": "hG2v/Fulj3Khfz/gQ3fdpg=="
+          "relative_path": "api/DecimalMath.DecimalEx.html"
         }
       },
-      "is_incremental": false,
-      "version": ""
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "DecimalMath.DecimalEx",
+      "Summary": "<p sourcefile=\"api/DecimalMath.DecimalEx.yml\" sourcestartlinenumber=\"1\">Contains mathematical operations performed in Decimal precision.</p>\n"
     },
     {
       "type": "ManagedReference",
-      "source_relative_path": "api/NumSharp.Core.Interfaces.IShape.yml",
+      "source_relative_path": "api/DecimalMath.yml",
       "output": {
         ".html": {
-          "relative_path": "api/NumSharp.Core.Interfaces.IShape.html",
-          "hash": "LIzW4Lsr8qydT5CWlOnGNg=="
+          "relative_path": "api/DecimalMath.html"
         }
       },
-      "is_incremental": true,
-      "version": ""
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "DecimalMath",
+      "Summary": null
     },
     {
       "type": "ManagedReference",
-      "source_relative_path": "api/NumSharp.Core.Interfaces.IStorage.yml",
+      "source_relative_path": "api/NumSharp.AxisOutOfRangeException.yml",
       "output": {
         ".html": {
-          "relative_path": "api/NumSharp.Core.Interfaces.IStorage.html",
-          "hash": "9YgCDj9Y/Nrn9wPsI62CLg=="
+          "relative_path": "api/NumSharp.AxisOutOfRangeException.html"
         }
       },
-      "is_incremental": true,
-      "version": ""
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.AxisOutOfRangeException",
+      "Summary": null
     },
     {
       "type": "ManagedReference",
-      "source_relative_path": "api/NumSharp.Core.Interfaces.yml",
+      "source_relative_path": "api/NumSharp.BackendType.yml",
       "output": {
         ".html": {
-          "relative_path": "api/NumSharp.Core.Interfaces.html",
-          "hash": "tMq88azXIF+BU7SPkCaqCw=="
+          "relative_path": "api/NumSharp.BackendType.html"
         }
       },
-      "is_incremental": true,
-      "version": ""
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.BackendType",
+      "Summary": null
     },
     {
       "type": "ManagedReference",
-      "source_relative_path": "api/NumSharp.Core.LAPACK.yml",
+      "source_relative_path": "api/NumSharp.Backends.BackendFactory.yml",
       "output": {
         ".html": {
-          "relative_path": "api/NumSharp.Core.LAPACK.html",
-          "hash": "3EGFB6QDoQmSZbQE0oNmkw=="
+          "relative_path": "api/NumSharp.Backends.BackendFactory.html"
         }
       },
-      "is_incremental": false,
-      "version": ""
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.Backends.BackendFactory",
+      "Summary": null
     },
     {
       "type": "ManagedReference",
-      "source_relative_path": "api/NumSharp.Core.Manipulation.NumPy.yml",
+      "source_relative_path": "api/NumSharp.Backends.DefaultEngine.yml",
       "output": {
         ".html": {
-          "relative_path": "api/NumSharp.Core.Manipulation.NumPy.html",
-          "hash": "bMtwBAC/Psyy6xrwHzJf0Q=="
+          "relative_path": "api/NumSharp.Backends.DefaultEngine.html"
         }
       },
-      "is_incremental": false,
-      "version": ""
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.Backends.DefaultEngine",
+      "Summary": "<p sourcefile=\"api/NumSharp.Backends.DefaultEngine.yml\" sourcestartlinenumber=\"1\">Default Tensor Engine implemented in pure micro-optimized C#.</p>\n"
     },
     {
       "type": "ManagedReference",
-      "source_relative_path": "api/NumSharp.Core.Manipulation.yml",
+      "source_relative_path": "api/NumSharp.Backends.Unmanaged.ArraySlice-1.yml",
       "output": {
         ".html": {
-          "relative_path": "api/NumSharp.Core.Manipulation.html",
-          "hash": "k2+Q5hrJCh0X4tRdi4WYHQ=="
+          "relative_path": "api/NumSharp.Backends.Unmanaged.ArraySlice-1.html"
         }
       },
-      "is_incremental": false,
-      "version": ""
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.Backends.Unmanaged.ArraySlice<T>",
+      "Summary": "<p sourcefile=\"api/NumSharp.Backends.Unmanaged.ArraySlice-1.yml\" sourcestartlinenumber=\"1\"><xref href=\"NumSharp.Backends.Unmanaged.ArraySlice%601\" data-throw-if-not-resolved=\"false\"></xref> is similar to <xref href=\"System.Span%601\" data-throw-if-not-resolved=\"false\"></xref> but it can be moved around without having to follow <code sourcefile=\"api/NumSharp.Backends.Unmanaged.ArraySlice-1.yml\" sourcestartlinenumber=\"1\">ref struct</code> rules.</p>\n"
     },
     {
       "type": "ManagedReference",
-      "source_relative_path": "api/NumSharp.Core.NDArray.yml",
+      "source_relative_path": "api/NumSharp.Backends.Unmanaged.ArraySlice.yml",
       "output": {
         ".html": {
-          "relative_path": "api/NumSharp.Core.NDArray.html",
-          "hash": "VVX028sHaxDdD9sWXFERDA=="
+          "relative_path": "api/NumSharp.Backends.Unmanaged.ArraySlice.html"
         }
       },
-      "is_incremental": false,
-      "version": ""
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.Backends.Unmanaged.ArraySlice",
+      "Summary": null
     },
     {
       "type": "ManagedReference",
-      "source_relative_path": "api/NumSharp.Core.NDArrayRandomExtensions.yml",
+      "source_relative_path": "api/NumSharp.Backends.Unmanaged.IArraySlice.yml",
       "output": {
         ".html": {
-          "relative_path": "api/NumSharp.Core.NDArrayRandomExtensions.html",
-          "hash": "q4E8BgWQdPR6H62oNIoWRA=="
+          "relative_path": "api/NumSharp.Backends.Unmanaged.IArraySlice.html"
         }
       },
-      "is_incremental": false,
-      "version": ""
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.Backends.Unmanaged.IArraySlice",
+      "Summary": null
     },
     {
       "type": "ManagedReference",
-      "source_relative_path": "api/NumSharp.Core.NDStorage.yml",
+      "source_relative_path": "api/NumSharp.Backends.Unmanaged.IMemoryBlock-1.yml",
       "output": {
         ".html": {
-          "relative_path": "api/NumSharp.Core.NDStorage.html",
-          "hash": "qPcqIx4EudcOtS9CZd5FvA=="
+          "relative_path": "api/NumSharp.Backends.Unmanaged.IMemoryBlock-1.html"
         }
       },
-      "is_incremental": true,
-      "version": ""
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.Backends.Unmanaged.IMemoryBlock<T>",
+      "Summary": null
     },
     {
       "type": "ManagedReference",
-      "source_relative_path": "api/NumSharp.Core.NumPyRandom.yml",
+      "source_relative_path": "api/NumSharp.Backends.Unmanaged.IMemoryBlock.yml",
       "output": {
         ".html": {
-          "relative_path": "api/NumSharp.Core.NumPyRandom.html",
-          "hash": "cRiiHr+b0LayXcXF44onDw=="
+          "relative_path": "api/NumSharp.Backends.Unmanaged.IMemoryBlock.html"
         }
       },
-      "is_incremental": false,
-      "version": ""
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.Backends.Unmanaged.IMemoryBlock",
+      "Summary": null
     },
     {
       "type": "ManagedReference",
-      "source_relative_path": "api/NumSharp.Core.Shape.yml",
+      "source_relative_path": "api/NumSharp.Backends.Unmanaged.IUnmanagedMemoryBlock.yml",
       "output": {
         ".html": {
-          "relative_path": "api/NumSharp.Core.Shape.html",
-          "hash": "m95I3Nf85USD6SS2BZcUmA=="
+          "relative_path": "api/NumSharp.Backends.Unmanaged.IUnmanagedMemoryBlock.html"
         }
       },
-      "is_incremental": true,
-      "version": ""
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.Backends.Unmanaged.IUnmanagedMemoryBlock",
+      "Summary": null
     },
     {
       "type": "ManagedReference",
-      "source_relative_path": "api/NumSharp.Core.Slice.yml",
+      "source_relative_path": "api/NumSharp.Backends.Unmanaged.UnmanagedHelper.yml",
       "output": {
         ".html": {
-          "relative_path": "api/NumSharp.Core.Slice.html",
-          "hash": "PtWnURvKOsry+uJwZ1Mk8Q=="
+          "relative_path": "api/NumSharp.Backends.Unmanaged.UnmanagedHelper.html"
         }
       },
-      "is_incremental": true,
-      "version": ""
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.Backends.Unmanaged.UnmanagedHelper",
+      "Summary": null
     },
     {
       "type": "ManagedReference",
-      "source_relative_path": "api/NumSharp.Core.matrix.yml",
+      "source_relative_path": "api/NumSharp.Backends.Unmanaged.UnmanagedMemoryBlock-1.yml",
       "output": {
         ".html": {
-          "relative_path": "api/NumSharp.Core.matrix.html",
-          "hash": "6LYGpdDvx+WFIpDCVv9Njg=="
+          "relative_path": "api/NumSharp.Backends.Unmanaged.UnmanagedMemoryBlock-1.html"
         }
       },
-      "is_incremental": false,
-      "version": ""
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.Backends.Unmanaged.UnmanagedMemoryBlock<T>",
+      "Summary": null
     },
     {
       "type": "ManagedReference",
-      "source_relative_path": "api/NumSharp.Core.np.yml",
+      "source_relative_path": "api/NumSharp.Backends.Unmanaged.UnmanagedMemoryBlock.yml",
       "output": {
         ".html": {
-          "relative_path": "api/NumSharp.Core.np.html",
-          "hash": "ZJLc76nk0kLCEm/mfu1rJQ=="
+          "relative_path": "api/NumSharp.Backends.Unmanaged.UnmanagedMemoryBlock.html"
         }
       },
-      "is_incremental": false,
-      "version": ""
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.Backends.Unmanaged.UnmanagedMemoryBlock",
+      "Summary": null
     },
     {
       "type": "ManagedReference",
-      "source_relative_path": "api/NumSharp.Core.yml",
+      "source_relative_path": "api/NumSharp.Backends.Unmanaged.yml",
       "output": {
         ".html": {
-          "relative_path": "api/NumSharp.Core.html",
-          "hash": "VdUKDFoOn0biV4RV3zNMag=="
+          "relative_path": "api/NumSharp.Backends.Unmanaged.html"
         }
       },
-      "is_incremental": false,
-      "version": ""
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.Backends.Unmanaged",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.Backends.UnmanagedStorage.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.Backends.UnmanagedStorage.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.Backends.UnmanagedStorage",
+      "Summary": "<p sourcefile=\"api/NumSharp.Backends.UnmanagedStorage.yml\" sourcestartlinenumber=\"1\">Serves as a typed storage for an array.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.Backends.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.Backends.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.Backends",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.BroadcastInfo.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.BroadcastInfo.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.BroadcastInfo",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.DType.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.DType.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.DType",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.Extensions.LinqExtensions.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.Extensions.LinqExtensions.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.Extensions.LinqExtensions",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.Extensions.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.Extensions.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.Extensions",
+      "Summary": null
     },
     {
       "type": "ManagedReference",
       "source_relative_path": "api/NumSharp.Generic.NDArray-1.yml",
       "output": {
         ".html": {
-          "relative_path": "api/NumSharp.Generic.NDArray-1.html",
-          "hash": "3715+Gmi8ATgWJjsz+KjWQ=="
+          "relative_path": "api/NumSharp.Generic.NDArray-1.html"
         }
       },
-      "is_incremental": false,
-      "version": ""
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.Generic.NDArray<TDType>",
+      "Summary": null
     },
     {
       "type": "ManagedReference",
       "source_relative_path": "api/NumSharp.Generic.yml",
       "output": {
         ".html": {
-          "relative_path": "api/NumSharp.Generic.html",
-          "hash": "yOTxlJr2dlBw0Vg8Yz3PEA=="
+          "relative_path": "api/NumSharp.Generic.html"
         }
       },
-      "is_incremental": false,
-      "version": ""
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.Generic",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.IIndex.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.IIndex.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.IIndex",
+      "Summary": "<p sourcefile=\"api/NumSharp.IIndex.yml\" sourcestartlinenumber=\"1\">Represents a class that can be served as an index, e.g. ndarray[new Slice(...)]</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.INumSharpException.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.INumSharpException.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.INumSharpException",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.IncorrectShapeException.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.IncorrectShapeException.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.IncorrectShapeException",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.IncorrectSizeException.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.IncorrectSizeException.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.IncorrectSizeException",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.IncorrectTypeException.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.IncorrectTypeException.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.IncorrectTypeException",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.IteratorType.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.IteratorType.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.IteratorType",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.Kwargs.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.Kwargs.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.Kwargs",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.MoveNextReferencedDelegate-1.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.MoveNextReferencedDelegate-1.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.MoveNextReferencedDelegate<T>",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.MultiIterator.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.MultiIterator.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.MultiIterator",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.NDArray._Unsafe._Pinning.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.NDArray._Unsafe._Pinning.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.NDArray._Unsafe._Pinning",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.NDArray._Unsafe.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.NDArray._Unsafe.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.NDArray._Unsafe",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.NDArray.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.NDArray.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.NDArray",
+      "Summary": "<p sourcefile=\"api/NumSharp.NDArray.yml\" sourcestartlinenumber=\"1\">An array object represents a multidimensional, homogeneous array of fixed-size items.<br>\nAn associated data-type object describes the format of each element in the array (its byte-order,<br>\nhow many bytes it occupies in memory, whether it is an integer, a floating point number, or something else, etc.)</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.NDIterator-1.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.NDIterator-1.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.NDIterator<TOut>",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.NDIterator.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.NDIterator.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.NDIterator",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.NDIteratorExtensions.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.NDIteratorExtensions.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.NDIteratorExtensions",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.NPTypeCode.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.NPTypeCode.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.NPTypeCode",
+      "Summary": "<p sourcefile=\"api/NumSharp.NPTypeCode.yml\" sourcestartlinenumber=\"1\">Represents all available types in numpy.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.NPTypeCodeExtensions.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.NPTypeCodeExtensions.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.NPTypeCodeExtensions",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.NativeRandomState.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.NativeRandomState.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.NativeRandomState",
+      "Summary": "<p sourcefile=\"api/NumSharp.NativeRandomState.yml\" sourcestartlinenumber=\"1\">Represents the stored state of <xref href=\"NumSharp.Randomizer\" data-throw-if-not-resolved=\"false\"></xref>.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.NpzDictionary-1.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.NpzDictionary-1.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.NpzDictionary<T>",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.NpzDictionary.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.NpzDictionary.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.NpzDictionary",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.NumPyRandom.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.NumPyRandom.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.NumPyRandom",
+      "Summary": "<p sourcefile=\"api/NumSharp.NumPyRandom.yml\" sourcestartlinenumber=\"1\">A class that serves as numpy.random.RandomState in python.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.NumSharpException.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.NumSharpException.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.NumSharpException",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.Randomizer.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.Randomizer.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.Randomizer",
+      "Summary": "<p sourcefile=\"api/NumSharp.Randomizer.yml\" sourcestartlinenumber=\"1\">Represents a pseudo-random number generator, which is a device that produces a sequence of numbers that meet certain statistical requirements for randomness.<br>\nEquivalent of <xref href=\"System.Random\" data-throw-if-not-resolved=\"false\"></xref>.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.Shape.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.Shape.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.Shape",
+      "Summary": "<p sourcefile=\"api/NumSharp.Shape.yml\" sourcestartlinenumber=\"1\">Represents a shape of an N-D array.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.Slice.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.Slice.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.Slice",
+      "Summary": "<pre><code sourcefile=\"api/NumSharp.Slice.yml\" sourcestartlinenumber=\"1\">                                                                                                                                 &lt;br /&gt;\n</code></pre>\n<p sourcefile=\"api/NumSharp.Slice.yml\" sourcestartlinenumber=\"2\">NDArray can be indexed using slicing                                                                                                              <br>\nA slice is constructed by start:stop:step notation                                                                                                <br>\n<br>\nExamples:                                                                                                                                         <br>\n<br>\na[start:stop]  # items start through stop-1                                                                                                       <br>\na[start:]      # items start through the rest of the array                                                                                        <br>\na[:stop]       # items from the beginning through stop-1                                                                                          <br>\n<br>\nThe key point to remember is that the :stop value represents the first value that is not                                                          <br>\nin the selected slice. So, the difference between stop and start is the number of elements                                                        <br>\nselected (if step is 1, the default).                                                                                                             <br>\n<br>\nThere is also the step value, which can be used with any of the above:                                                                            <br>\na[:]           # a copy of the whole array                                                                                                        <br>\na[start:stop:step] # start through not past stop, by step                                                                                         <br>\n<br>\nThe other feature is that start or stop may be a negative number, which means it counts                                                           <br>\nfrom the end of the array instead of the beginning. So:                                                                                           <br>\na[-1]    # last item in the array                                                                                                                 <br>\na[-2:]   # last two items in the array                                                                                                            <br>\na[:-2]   # everything except the last two items                                                                                                   <br>\nSimilarly, step may be a negative number:                                                                                                         <br>\n<br>\na[::- 1]    # all items in the array, reversed                                                                                                    <br>\na[1::- 1]   # the first two items, reversed                                                                                                       <br>\na[:-3:-1]  # the last two items, reversed                                                                                                         <br>\na[-3::- 1]  # everything except the last two items, reversed                                                                                      <br>\n<br>\nNumSharp is kind to the programmer if there are fewer items than                                                                                  <br>\nyou ask for. For example, if you  ask for a[:-2] and a only contains one element, you get an                                                      <br>\nempty list instead of an error.Sometimes you would prefer the error, so you have to be aware                                                      <br>\nthat this may happen.                                                                                                                             <br>\n<br>\nAdapted from Greg Hewgill's answer on Stackoverflow: <a href=\"https://stackoverflow.com/questions/509211/understanding-slice-notation\" sourcefile=\"api/NumSharp.Slice.yml\" sourcestartlinenumber=\"36\">https://stackoverflow.com/questions/509211/understanding-slice-notation</a>                      <br>\n<br>\nNote: special IsIndex == true                                                                                                                     <br>\nIt will pick only a single value at Start in this dimension effectively reducing the Shape of the sliced matrix by 1 dimension.                   <br>\nIt can be used to reduce an N-dimensional array/matrix to a (N-1)-dimensional array/matrix                                                        <br>\n<br>\nExample:                                                                                                                                          <br>\na=[[1, 2], [3, 4]]                                                                                                                                <br>\na[:, 1] returns the second column of that 2x2 matrix as a 1-D vector                                                                              <br></p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.SliceDef.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.SliceDef.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.SliceDef",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.StorageType.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.StorageType.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.StorageType",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.TensorEngine.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.TensorEngine.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.TensorEngine",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.Unmanaged.Memory.ScalarMemoryPool.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.Unmanaged.Memory.ScalarMemoryPool.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.Unmanaged.Memory.ScalarMemoryPool",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.Unmanaged.Memory.StackedMemoryPool.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.Unmanaged.Memory.StackedMemoryPool.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.Unmanaged.Memory.StackedMemoryPool",
+      "Summary": "<p sourcefile=\"api/NumSharp.Unmanaged.Memory.StackedMemoryPool.yml\" sourcestartlinenumber=\"1\">Pool of allocated buffers managed by internal garbage collection mechanism.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.Unmanaged.Memory.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.Unmanaged.Memory.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.Unmanaged.Memory",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.Utilities.ArrayConvert.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.Utilities.ArrayConvert.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.Utilities.ArrayConvert",
+      "Summary": "<p sourcefile=\"api/NumSharp.Utilities.ArrayConvert.yml\" sourcestartlinenumber=\"1\">Presents all possible combinations of array conversion of types supported by numpy.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.Utilities.Arrays.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.Utilities.Arrays.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.Utilities.Arrays",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.Utilities.ArraysExtensions.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.Utilities.ArraysExtensions.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.Utilities.ArraysExtensions",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.Utilities.ConcurrentHashset-1.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.Utilities.ConcurrentHashset-1.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.Utilities.ConcurrentHashset<T>",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.Utilities.Converts-1.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.Utilities.Converts-1.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.Utilities.Converts<T>",
+      "Summary": "<p sourcefile=\"api/NumSharp.Utilities.Converts-1.yml\" sourcestartlinenumber=\"1\">Provides various methods related to <xref href=\"System.Convert\" data-throw-if-not-resolved=\"false\"></xref> based on give <code class=\"typeparamref\">T</code>.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.Utilities.Converts.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.Utilities.Converts.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.Utilities.Converts",
+      "Summary": "<p sourcefile=\"api/NumSharp.Utilities.Converts.yml\" sourcestartlinenumber=\"1\">Provides various methods related to <xref href=\"System.Convert\" data-throw-if-not-resolved=\"false\"></xref>.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.Utilities.Hashset-1.Enumerator.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.Utilities.Hashset-1.Enumerator.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.Utilities.Hashset<T>.Enumerator",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.Utilities.Hashset-1.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.Utilities.Hashset-1.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.Utilities.Hashset<T>",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.Utilities.InfoOf-1.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.Utilities.InfoOf-1.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.Utilities.InfoOf<T>",
+      "Summary": "<p sourcefile=\"api/NumSharp.Utilities.InfoOf-1.yml\" sourcestartlinenumber=\"1\">Provides a cache for properties of <code class=\"typeparamref\">T</code> that requires computation.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.Utilities.Linq.IEnumeratorExtensions.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.Utilities.Linq.IEnumeratorExtensions.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.Utilities.Linq.IEnumeratorExtensions",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.Utilities.Linq.IExtremaEnumerable-1.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.Utilities.Linq.IExtremaEnumerable-1.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.Utilities.Linq.IExtremaEnumerable<T>",
+      "Summary": "<p sourcefile=\"api/NumSharp.Utilities.Linq.IExtremaEnumerable-1.yml\" sourcestartlinenumber=\"1\">Exposes the enumerator, which supports iteration over a sequence of\nsome extremum property (maximum or minimum) of a specified type.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.Utilities.Linq.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.Utilities.Linq.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.Utilities.Linq",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.Utilities.NDCoordinatesAxisIncrementor.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.Utilities.NDCoordinatesAxisIncrementor.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.Utilities.NDCoordinatesAxisIncrementor",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.Utilities.NDCoordinatesIncrementor.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.Utilities.NDCoordinatesIncrementor.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.Utilities.NDCoordinatesIncrementor",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.Utilities.NDCoordinatesIncrementorAutoResetting.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.Utilities.NDCoordinatesIncrementorAutoResetting.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.Utilities.NDCoordinatesIncrementorAutoResetting",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.Utilities.NDCoordinatesLeftToAxisIncrementor.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.Utilities.NDCoordinatesLeftToAxisIncrementor.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.Utilities.NDCoordinatesLeftToAxisIncrementor",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.Utilities.NDExtendedCoordinatesIncrementor.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.Utilities.NDExtendedCoordinatesIncrementor.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.Utilities.NDExtendedCoordinatesIncrementor",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.Utilities.NDOffsetIncrementor.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.Utilities.NDOffsetIncrementor.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.Utilities.NDOffsetIncrementor",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.Utilities.NDOffsetIncrementorAutoresetting.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.Utilities.NDOffsetIncrementorAutoresetting.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.Utilities.NDOffsetIncrementorAutoresetting",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.Utilities.NonGenericConvert.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.Utilities.NonGenericConvert.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.Utilities.NonGenericConvert",
+      "Summary": "<p sourcefile=\"api/NumSharp.Utilities.NonGenericConvert.yml\" sourcestartlinenumber=\"1\">Provides a way to convert boxed object from known time to specific type.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.Utilities.NumberInfo.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.Utilities.NumberInfo.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.Utilities.NumberInfo",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.Utilities.SteppingExtension.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.Utilities.SteppingExtension.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.Utilities.SteppingExtension",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.Utilities.TypelessConvert.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.Utilities.TypelessConvert.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.Utilities.TypelessConvert",
+      "Summary": "<p sourcefile=\"api/NumSharp.Utilities.TypelessConvert.yml\" sourcestartlinenumber=\"1\">Provides a way to convert boxed object from known input type to known output type.\nBy making it receive and return <xref href=\"System.Object\" data-throw-if-not-resolved=\"false\"></xref> - It is suitable for a common delegate: see <xref href=\"NumSharp.Utilities.TypelessConvertDelegate\" data-throw-if-not-resolved=\"false\"></xref></p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.Utilities.TypelessConvertDelegate.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.Utilities.TypelessConvertDelegate.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.Utilities.TypelessConvertDelegate",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.Utilities.ValueCoordinatesIncrementor.EndCallbackHandler.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.Utilities.ValueCoordinatesIncrementor.EndCallbackHandler.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.Utilities.ValueCoordinatesIncrementor.EndCallbackHandler",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.Utilities.ValueCoordinatesIncrementor.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.Utilities.ValueCoordinatesIncrementor.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.Utilities.ValueCoordinatesIncrementor",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.Utilities.ValueCoordinatesIncrementorAutoResetting.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.Utilities.ValueCoordinatesIncrementorAutoResetting.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.Utilities.ValueCoordinatesIncrementorAutoResetting",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.Utilities.ValueOffsetIncrementor.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.Utilities.ValueOffsetIncrementor.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.Utilities.ValueOffsetIncrementor",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.Utilities.ValueOffsetIncrementorAutoresetting.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.Utilities.ValueOffsetIncrementorAutoresetting.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.Utilities.ValueOffsetIncrementorAutoresetting",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.Utilities.py.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.Utilities.py.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.Utilities.py",
+      "Summary": "<p sourcefile=\"api/NumSharp.Utilities.py.yml\" sourcestartlinenumber=\"1\">Implements Python utility functions that are often used in connection with numpy</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.Utilities.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.Utilities.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.Utilities",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.ViewInfo.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.ViewInfo.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.ViewInfo",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.np.Broadcast.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.np.Broadcast.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.np.Broadcast",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.np.linalg.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.np.linalg.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.np.linalg",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.np.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.np.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp.np",
+      "Summary": "<p sourcefile=\"api/NumSharp.np.yml\" sourcestartlinenumber=\"1\">API bridge between NumSharp and Python NumPy</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "api/NumSharp.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/NumSharp.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "NumSharp",
+      "Summary": null
     },
     {
       "type": "Conceptual",
       "source_relative_path": "api/index.md",
       "output": {
         ".html": {
-          "relative_path": "api/index.html",
-          "hash": "SQeko4I7ApfRdkE5XoQ8CA=="
+          "relative_path": "api/index.html"
         }
       },
-      "is_incremental": false,
       "version": ""
     },
     {
@@ -248,59 +1304,105 @@
       "source_relative_path": "api/toc.yml",
       "output": {
         ".html": {
-          "relative_path": "api/toc.html",
-          "hash": "/OB9zMJCNLVqeUFkNsVmOw=="
+          "relative_path": "api/toc.html"
+        },
+        ".json": {
+          "relative_path": "api/toc.json"
         }
       },
-      "is_incremental": false,
       "version": ""
     },
     {
       "type": "Conceptual",
-      "source_relative_path": "articles/NDArray.Creation.md",
+      "source_relative_path": "docs/array-api-standard.md",
       "output": {
         ".html": {
-          "relative_path": "articles/NDArray.Creation.html",
-          "hash": "Kl9EJo7ocCkdMbsxATnrIw=="
+          "relative_path": "docs/array-api-standard.html"
         }
       },
-      "is_incremental": false,
       "version": ""
     },
     {
       "type": "Conceptual",
-      "source_relative_path": "articles/NDArray.LinAlg.md",
+      "source_relative_path": "docs/broadcasting.md",
       "output": {
         ".html": {
-          "relative_path": "articles/NDArray.LinAlg.html",
-          "hash": "Vhf+qXU/g/4GZXFGuRgfpA=="
+          "relative_path": "docs/broadcasting.html"
         }
       },
-      "is_incremental": false,
       "version": ""
     },
     {
       "type": "Conceptual",
-      "source_relative_path": "articles/intro.md",
+      "source_relative_path": "docs/compliance.md",
       "output": {
         ".html": {
-          "relative_path": "articles/intro.html",
-          "hash": "y5iN4VEFDtycfsCI73EKAQ=="
+          "relative_path": "docs/compliance.html"
         }
       },
-      "is_incremental": false,
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/extensions/bitmap.md",
+      "output": {
+        ".html": {
+          "relative_path": "docs/extensions/bitmap.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/extensions/index.md",
+      "output": {
+        ".html": {
+          "relative_path": "docs/extensions/index.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/intro.md",
+      "output": {
+        ".html": {
+          "relative_path": "docs/intro.html"
+        }
+      },
       "version": ""
     },
     {
       "type": "Toc",
-      "source_relative_path": "articles/toc.yml",
+      "source_relative_path": "docs/toc.yml",
       "output": {
         ".html": {
-          "relative_path": "articles/toc.html",
-          "hash": "Ao4weLW79Kg/nkMBj7lT+Q=="
+          "relative_path": "docs/toc.html"
+        },
+        ".json": {
+          "relative_path": "docs/toc.json"
         }
       },
-      "is_incremental": false,
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/numsharp.icon.svg",
+      "output": {
+        "resource": {
+          "relative_path": "images/numsharp.icon.svg"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "images/numsharp.icon128.png",
+      "output": {
+        "resource": {
+          "relative_path": "images/numsharp.icon128.png"
+        }
+      },
       "version": ""
     },
     {
@@ -311,7 +1413,6 @@
           "relative_path": "images/python-csharp-comparision.png"
         }
       },
-      "is_incremental": false,
       "version": ""
     },
     {
@@ -322,7 +1423,6 @@
           "relative_path": "images/rowWise_ColumnWise.png"
         }
       },
-      "is_incremental": false,
       "version": ""
     },
     {
@@ -330,11 +1430,9 @@
       "source_relative_path": "index.md",
       "output": {
         ".html": {
-          "relative_path": "index.html",
-          "hash": "oxT/YIdDuKMxSX9nXEp5VQ=="
+          "relative_path": "index.html"
         }
       },
-      "is_incremental": true,
       "version": ""
     },
     {
@@ -342,51 +1440,15 @@
       "source_relative_path": "toc.yml",
       "output": {
         ".html": {
-          "relative_path": "toc.html",
-          "hash": "sg3p87VbBWcK30qmego3TQ=="
+          "relative_path": "toc.html"
+        },
+        ".json": {
+          "relative_path": "toc.json"
         }
       },
-      "is_incremental": false,
       "version": ""
     }
   ],
-  "incremental_info": [
-    {
-      "status": {
-        "can_incremental": true,
-        "incrementalPhase": "build"
-      },
-      "processors": {
-        "TocDocumentProcessor": {
-          "can_incremental": false,
-          "details": "Processor TocDocumentProcessor cannot support incremental build because the processor doesn't implement ISupportIncrementalDocumentProcessor interface.",
-          "incrementalPhase": "build"
-        },
-        "ResourceDocumentProcessor": {
-          "can_incremental": false,
-          "details": "Processor ResourceDocumentProcessor cannot support incremental build because the processor doesn't implement ISupportIncrementalDocumentProcessor interface.",
-          "incrementalPhase": "build"
-        },
-        "ConceptualDocumentProcessor": {
-          "can_incremental": true,
-          "incrementalPhase": "build"
-        },
-        "ManagedReferenceDocumentProcessor": {
-          "can_incremental": true,
-          "incrementalPhase": "build"
-        }
-      }
-    },
-    {
-      "status": {
-        "can_incremental": true,
-        "details": "Can support incremental post processing.",
-        "incrementalPhase": "postProcessing"
-      },
-      "processors": {}
-    }
-  ],
-  "version_info": {},
   "groups": [
     {
       "xrefmap": "xrefmap.yml"

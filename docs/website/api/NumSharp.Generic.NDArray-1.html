@@ -1,440 +1,1770 @@
-﻿<!DOCTYPE html>
-<!--[if IE]><![endif]-->
-<html>
-  
+<!DOCTYPE html>
+<html lang="en">
   <head>
     <meta charset="utf-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
-    <title>Class NDArray&lt;T&gt;
-   </title>
-    <meta name="viewport" content="width=device-width">
-    <meta name="title" content="Class NDArray&lt;T&gt;
-   ">
-    <meta name="generator" content="docfx 2.40.2.0">
-    
-    <link rel="shortcut icon" href="../favicon.ico">
-    <link rel="stylesheet" href="../styles/docfx.vendor.css">
-    <link rel="stylesheet" href="../styles/docfx.css">
-    <link rel="stylesheet" href="../styles/main.css">
-    <meta property="docfx:navrel" content="../toc.html">
-    <meta property="docfx:tocrel" content="toc.html">
-    
-    
-    
+      <title>Class NDArray&lt;TDType&gt; | NumSharp Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class NDArray&lt;TDType&gt; | NumSharp Documentation ">
+      
+      
+      <link rel="icon" href="../images/numsharp.icon128.png">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
   </head>
-  <body data-spy="scroll" data-target="#affix" data-offset="120">
-    <div id="wrapper">
-      <header>
-        
-        <nav id="autocollapse" class="navbar navbar-inverse ng-scope" role="navigation">
-          <div class="container">
-            <div class="navbar-header">
-              <button type="button" class="navbar-toggle" data-toggle="collapse" data-target="#navbar">
-                <span class="sr-only">Toggle navigation</span>
-                <span class="icon-bar"></span>
-                <span class="icon-bar"></span>
-                <span class="icon-bar"></span>
-              </button>
-              
-              <a class="navbar-brand" href="../index.html">
-                <img id="logo" class="svg" src="../logo.svg" alt="">
-              </a>
-            </div>
-            <div class="collapse navbar-collapse" id="navbar">
-              <form class="navbar-form navbar-right" role="search" id="search">
-                <div class="form-group">
-                  <input type="text" class="form-control" id="search-query" placeholder="Search" autocomplete="off">
-                </div>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../images/numsharp.icon.svg" alt="NumSharp">
+            NumSharp
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
               </form>
             </div>
           </div>
-        </nav>
-        
-        <div class="subnav navbar navbar-default">
-          <div class="container hide-when-search" id="breadcrumb">
-            <ul class="breadcrumb">
-              <li></li>
-            </ul>
-          </div>
         </div>
-      </header>
-      <div role="main" class="container body-content hide-when-search">
-        
-        <div class="sidenav hide-when-search">
-          <a class="btn toc-toggle collapse" data-toggle="collapse" href="#sidetoggle" aria-expanded="false" aria-controls="sidetoggle">Show / Hide Table of Contents</a>
-          <div class="sidetoggle collapse" id="sidetoggle">
-            <div id="sidetoc"></div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
           </div>
-        </div>
-        <div class="article row grid-right">
-          <div class="col-md-10">
-            <article class="content wrap" id="_content" data-uid="NumSharp.Generic.NDArray`1">
-  
-  
-  <h1 id="NumSharp_Generic_NDArray_1" data-uid="NumSharp.Generic.NDArray`1" class="text-break">Class NDArray&lt;T&gt;
-  </h1>
-  <div class="markdown level0 summary"></div>
-  <div class="markdown level0 conceptual"></div>
-  <div class="inheritance">
-    <h5>Inheritance</h5>
-    <div class="level0"><span class="xref">System.Object</span></div>
-    <div class="level1"><a class="xref" href="NumSharp.Core.NDArray.html">NDArray</a></div>
-    <div class="level2"><span class="xref">NDArray&lt;T&gt;</span></div>
-  </div>
-  <div classs="implements">
-    <h5>Implements</h5>
-    <div><span class="xref">System.ICloneable</span></div>
-  </div>
-  <div class="inheritedMembers">
-    <h5>Inherited Members</h5>
-    <div>
-      <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_ToString">NDArray.ToString()</a>
-    </div>
-    <div>
-      <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray__ToVectorString__1">NDArray._ToVectorString&lt;T&gt;()</a>
-    </div>
-    <div>
-      <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray__ToMatrixString__1">NDArray._ToMatrixString&lt;T&gt;()</a>
-    </div>
-    <div>
-      <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray__ParseNumber_System_Object_System_Int32__System_Int32__">NDArray._ParseNumber(Object, Int32, Int32)</a>
-    </div>
-    <div>
-      <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_FromMultiDimArray_System_Array_">NDArray.FromMultiDimArray(Array)</a>
-    </div>
-    <div>
-      <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_ToJaggedArray__1">NDArray.ToJaggedArray&lt;T&gt;()</a>
-    </div>
-    <div>
-      <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_ToMuliDimArray__1">NDArray.ToMuliDimArray&lt;T&gt;()</a>
-    </div>
-    <div>
-      <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_arange_System_Int32_System_Int32_System_Int32_">NDArray.arange(Int32, Int32, Int32)</a>
-    </div>
-    <div>
-      <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_copy_System_String_">NDArray.copy(String)</a>
-    </div>
-    <div>
-      <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_eye_System_Int32_System_Int32_">NDArray.eye(Int32, Int32)</a>
-    </div>
-    <div>
-      <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_hstack_NumSharp_Core_NDArray___">NDArray.hstack(NDArray[])</a>
-    </div>
-    <div>
-      <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_linspace_System_Double_System_Double_System_Int32_System_Boolean_">NDArray.linspace(Double, Double, Int32, Boolean)</a>
-    </div>
-    <div>
-      <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_MakeGeneric__1">NDArray.MakeGeneric&lt;T&gt;()</a>
-    </div>
-    <div>
-      <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_ones_System_Type_System_Int32___">NDArray.ones(Type, Int32[])</a>
-    </div>
-    <div>
-      <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_ones_System_Int32___">NDArray.ones(Int32[])</a>
-    </div>
-    <div>
-      <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_reshape_NumSharp_Core_Shape_">NDArray.reshape(Shape)</a>
-    </div>
-    <div>
-      <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_reshape_System_Int32___">NDArray.reshape(Int32[])</a>
-    </div>
-    <div>
-      <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_FindNegativeIndex_System_Int32___">NDArray.FindNegativeIndex(Int32[])</a>
-    </div>
-    <div>
-      <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_CalculateNegativeShape_System_Int32_System_Collections_Generic_IList_System_Int32__System_Int32___">NDArray.CalculateNegativeShape(Int32, IList&lt;Int32&gt;, Int32[])</a>
-    </div>
-    <div>
-      <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_vstack_NumSharp_Core_NDArray___">NDArray.vstack(NDArray[])</a>
-    </div>
-    <div>
-      <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_normalize">NDArray.normalize()</a>
-    </div>
-    <div>
-      <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_unique__1">NDArray.unique&lt;T&gt;()</a>
-    </div>
-    <div>
-      <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_dot_NumSharp_Core_NDArray_">NDArray.dot(NDArray)</a>
-    </div>
-    <div>
-      <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_inv">NDArray.inv()</a>
-    </div>
-    <div>
-      <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_lstqr_NumSharp_Core_NDArray_System_Double_">NDArray.lstqr(NDArray, Double)</a>
-    </div>
-    <div>
-      <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_matrix_power_System_Int32_">NDArray.matrix_power(Int32)</a>
-    </div>
-    <div>
-      <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_multi_dot_NumSharp_Core_NDArray___">NDArray.multi_dot(NDArray[])</a>
-    </div>
-    <div>
-      <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_qr">NDArray.qr()</a>
-    </div>
-    <div>
-      <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_svd">NDArray.svd()</a>
-    </div>
-    <div>
-      <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_transpose">NDArray.transpose()</a>
-    </div>
-    <div>
-      <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_ravel">NDArray.ravel()</a>
-    </div>
-    <div>
-      <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_delete_System_Collections_IEnumerable_">NDArray.delete(IEnumerable)</a>
-    </div>
-    <div>
-      <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_absolute">NDArray.absolute()</a>
-    </div>
-    <div>
-      <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_argmax">NDArray.argmax()</a>
-    </div>
-    <div>
-      <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_argmax__1">NDArray.argmax&lt;T&gt;()</a>
-    </div>
-    <div>
-      <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_Convolve_NumSharp_Core_NDArray_System_String_">NDArray.Convolve(NDArray, String)</a>
-    </div>
-    <div>
-      <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_log">NDArray.log()</a>
-    </div>
-    <div>
-      <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_max_System_Nullable_System_Int32__">NDArray.max(Nullable&lt;Int32&gt;)</a>
-    </div>
-    <div>
-      <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_min_System_Nullable_System_Int32__">NDArray.min(Nullable&lt;Int32&gt;)</a>
-    </div>
-    <div>
-      <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_min__1_System_Nullable_System_Int32__">NDArray.min&lt;T&gt;(Nullable&lt;Int32&gt;)</a>
-    </div>
-    <div>
-      <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_power_System_ValueType_">NDArray.power(ValueType)</a>
-    </div>
-    <div>
-      <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_sin">NDArray.sin()</a>
-    </div>
-    <div>
-      <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_sqrt">NDArray.sqrt()</a>
-    </div>
-    <div>
-      <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_sum_NumSharp_Core_NDArray_">NDArray.sum(NDArray)</a>
-    </div>
-    <div>
-      <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_dtype">NDArray.dtype</a>
-    </div>
-    <div>
-      <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_shape">NDArray.shape</a>
-    </div>
-    <div>
-      <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_ndim">NDArray.ndim</a>
-    </div>
-    <div>
-      <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_size">NDArray.size</a>
-    </div>
-    <div>
-      <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_Storage">NDArray.Storage</a>
-    </div>
-    <div>
-      <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_GetHashCode">NDArray.GetHashCode()</a>
-    </div>
-    <div>
-      <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_Equals_System_Object_">NDArray.Equals(Object)</a>
-    </div>
-    <div>
-      <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_Clone">NDArray.Clone()</a>
-    </div>
-    <div>
-      <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_amax_System_Nullable_System_Int32__">NDArray.amax(Nullable&lt;Int32&gt;)</a>
-    </div>
-    <div>
-      <a class="xref" href="NumSharp.Core.NDArray.html#NumSharp_Core_NDArray_amin_System_Nullable_System_Int32__">NDArray.amin(Nullable&lt;Int32&gt;)</a>
-    </div>
-    <div>
-      <span class="xref">System.Object.Equals(System.Object, System.Object)</span>
-    </div>
-    <div>
-      <span class="xref">System.Object.GetType()</span>
-    </div>
-    <div>
-      <span class="xref">System.Object.MemberwiseClone()</span>
-    </div>
-    <div>
-      <span class="xref">System.Object.ReferenceEquals(System.Object, System.Object)</span>
-    </div>
-  </div>
-  <h6><strong>Namespace</strong>: <a class="xref" href="NumSharp.Generic.html">NumSharp.Generic</a></h6>
-  <h6><strong>Assembly</strong>: NumSharp.Core.dll</h6>
-  <h5 id="NumSharp_Generic_NDArray_1_syntax">Syntax</h5>
-  <div class="codewrapper">
-    <pre><code class="lang-csharp hljs">public class NDArray&lt;T&gt; : NDArray, ICloneable where T : struct</code></pre>
-  </div>
-  <h5 class="typeParameters">Type Parameters</h5>
-  <table class="table table-bordered table-striped table-condensed">
-    <thead>
-      <tr>
-        <th>Name</th>
-        <th>Description</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td><span class="parametername">T</span></td>
-        <td></td>
-      </tr>
-    </tbody>
-  </table>
-  <h3 id="constructors">Constructors
-  </h3>
-  <span class="small pull-right mobile-hide">
-    <span class="divider">|</span>
-    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Generic_NDArray_1__ctor.md&amp;value=---%0Auid%3A%20NumSharp.Generic.NDArray%601.%23ctor%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
-  </span>
-  <span class="small pull-right mobile-hide">
-    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/Generics/NDArrayGeneric.cs/#L33">View Source</a>
-  </span>
-  <a id="NumSharp_Generic_NDArray_1__ctor_" data-uid="NumSharp.Generic.NDArray`1.#ctor*"></a>
-  <h4 id="NumSharp_Generic_NDArray_1__ctor" data-uid="NumSharp.Generic.NDArray`1.#ctor">NDArray()</h4>
-  <div class="markdown level1 summary"></div>
-  <div class="markdown level1 conceptual"></div>
-  <h5 class="decalaration">Declaration</h5>
-  <div class="codewrapper">
-    <pre><code class="lang-csharp hljs">public NDArray()</code></pre>
-  </div>
-  <span class="small pull-right mobile-hide">
-    <span class="divider">|</span>
-    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Generic_NDArray_1__ctor_NumSharp_Core_Interfaces_IShape_.md&amp;value=---%0Auid%3A%20NumSharp.Generic.NDArray%601.%23ctor(NumSharp.Core.Interfaces.IShape)%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
-  </span>
-  <span class="small pull-right mobile-hide">
-    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/Generics/NDArrayGeneric.cs/#L38">View Source</a>
-  </span>
-  <a id="NumSharp_Generic_NDArray_1__ctor_" data-uid="NumSharp.Generic.NDArray`1.#ctor*"></a>
-  <h4 id="NumSharp_Generic_NDArray_1__ctor_NumSharp_Core_Interfaces_IShape_" data-uid="NumSharp.Generic.NDArray`1.#ctor(NumSharp.Core.Interfaces.IShape)">NDArray(IShape)</h4>
-  <div class="markdown level1 summary"></div>
-  <div class="markdown level1 conceptual"></div>
-  <h5 class="decalaration">Declaration</h5>
-  <div class="codewrapper">
-    <pre><code class="lang-csharp hljs">public NDArray(IShape shape)</code></pre>
-  </div>
-  <h5 class="parameters">Parameters</h5>
-  <table class="table table-bordered table-striped table-condensed">
-    <thead>
-      <tr>
-        <th>Type</th>
-        <th>Name</th>
-        <th>Description</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td><a class="xref" href="NumSharp.Core.Interfaces.IShape.html">IShape</a></td>
-        <td><span class="parametername">shape</span></td>
-        <td></td>
-      </tr>
-    </tbody>
-  </table>
-  <h3 id="properties">Properties
-  </h3>
-  <span class="small pull-right mobile-hide">
-    <span class="divider">|</span>
-    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Generic_NDArray_1_Item_System_Int32___.md&amp;value=---%0Auid%3A%20NumSharp.Generic.NDArray%601.Item(System.Int32%5B%5D)%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
-  </span>
-  <span class="small pull-right mobile-hide">
-    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/Generics/NDArrayGeneric.cs/#L47">View Source</a>
-  </span>
-  <a id="NumSharp_Generic_NDArray_1_Item_" data-uid="NumSharp.Generic.NDArray`1.Item*"></a>
-  <h4 id="NumSharp_Generic_NDArray_1_Item_System_Int32___" data-uid="NumSharp.Generic.NDArray`1.Item(System.Int32[])">Item[Int32[]]</h4>
-  <div class="markdown level1 summary"><p>indexing of generic - overridden on purpose</p>
-</div>
-  <div class="markdown level1 conceptual"></div>
-  <h5 class="decalaration">Declaration</h5>
-  <div class="codewrapper">
-    <pre><code class="lang-csharp hljs">public T this[params int[] select] { get; set; }</code></pre>
-  </div>
-  <h5 class="parameters">Parameters</h5>
-  <table class="table table-bordered table-striped table-condensed">
-    <thead>
-      <tr>
-        <th>Type</th>
-        <th>Name</th>
-        <th>Description</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td><span class="xref">System.Int32</span>[]</td>
-        <td><span class="parametername">select</span></td>
-        <td></td>
-      </tr>
-    </tbody>
-  </table>
-  <h5 class="propertyValue">Property Value</h5>
-  <table class="table table-bordered table-striped table-condensed">
-    <thead>
-      <tr>
-        <th>Type</th>
-        <th>Description</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td><span class="xref">T</span></td>
-        <td></td>
-      </tr>
-    </tbody>
-  </table>
-  <h3 id="implements">Implements</h3>
-  <div>
-      <span class="xref">System.ICloneable</span>
-  </div>
-  <h3 id="extensionmethods">Extension Methods</h3>
-  <div>
-      <a class="xref" href="NumSharp.Core.Extensions.NDArrayExtensions.html#NumSharp_Core_Extensions_NDArrayExtensions_AsMatrix_NumSharp_Core_NDArray_">NDArrayExtensions.AsMatrix(NDArray)</a>
-  </div>
-  <div>
-      <a class="xref" href="NumSharp.Core.Extensions.NDArrayExtensions.html#NumSharp_Core_Extensions_NDArrayExtensions_ArgMax__1_NumSharp_Core_NDArray_">NDArrayExtensions.ArgMax&lt;T&gt;(NDArray)</a>
-  </div>
-  <div>
-      <a class="xref" href="NumSharp.Core.Extensions.NDArrayExtensions.html#NumSharp_Core_Extensions_NDArrayExtensions_mean_NumSharp_Core_NDArray_System_Int32_">NDArrayExtensions.mean(NDArray, Int32)</a>
-  </div>
-</article>
-          </div>
-          
-          <div class="hidden-sm col-md-2" role="complementary">
-            <div class="sideaffix">
-              <div class="contribution">
-                <ul class="nav">
-                  <li>
-                    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Generic_NDArray_1.md&amp;value=---%0Auid%3A%20NumSharp.Generic.NDArray%601%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A" class="contribution-link">Improve this Doc</a>
-                  </li>
-                  <li>
-                    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp.Core/Generics/NDArrayGeneric.cs/#L31" class="contribution-link">View Source</a>
-                  </li>
-                </ul>
-              </div>
-              <nav class="bs-docs-sidebar hidden-print hidden-xs hidden-sm affix" id="affix">
-              <!-- <p><a class="back-to-top" href="#top">Back to top</a><p> -->
-              </nav>
-            </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
           </div>
         </div>
       </div>
-      
-      <footer>
-        <div class="grad-bottom"></div>
-        <div class="footer">
-          <div class="container">
-            <span class="pull-right">
-              <a href="#top">Back to top</a>
-            </span>
-            
-            <span>Generated by <strong>DocFX</strong></span>
-          </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
         </div>
-      </footer>
+
+        <article data-uid="NumSharp.Generic.NDArray`1">
+
+
+
+  <h1 id="NumSharp_Generic_NDArray_1" data-uid="NumSharp.Generic.NDArray`1" class="text-break">
+Class NDArray&lt;TDType&gt;  
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="NumSharp.html">NumSharp</a>.<a class="xref" href="NumSharp.Generic.html">Generic</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>NumSharp.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"></div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class NDArray&lt;TDType&gt; : NDArray, IIndex, ICloneable, IEnumerable where TDType : unmanaged</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>TDType</code></dt>
+    <dd></dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="NumSharp.NDArray.html">NDArray</a></div>
+      <div><span class="xref">NDArray&lt;TDType&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="NumSharp.IIndex.html">IIndex</a></div>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.icloneable">ICloneable</a></div>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.ienumerable">IEnumerable</a></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_tofile_System_String_">NDArray.tofile(string)</a>
     </div>
-    
-    <script type="text/javascript" src="../styles/docfx.vendor.js"></script>
-    <script type="text/javascript" src="../styles/docfx.js"></script>
-    <script type="text/javascript" src="../styles/main.js"></script>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_CopyTo_NumSharp_Backends_Unmanaged_IMemoryBlock_">NDArray.CopyTo(IMemoryBlock)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_CopyTo_System_Void__">NDArray.CopyTo(void*)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_CopyTo__1___0___">NDArray.CopyTo&lt;T&gt;(T[])</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_CopyTo_System_IntPtr_">NDArray.CopyTo(nint)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_CopyTo__1_NumSharp_Backends_Unmanaged_IMemoryBlock___0__">NDArray.CopyTo&lt;T&gt;(IMemoryBlock&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_CopyTo__1___0__">NDArray.CopyTo&lt;T&gt;(T*)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_tensorEngine">NDArray.tensorEngine</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_dtype">NDArray.dtype</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_typecode">NDArray.typecode</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_shape">NDArray.shape</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_ndim">NDArray.ndim</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_size">NDArray.size</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_dtypesize">NDArray.dtypesize</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_order">NDArray.order</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_strides">NDArray.strides</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_Shape">NDArray.Shape</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_Storage">NDArray.Storage</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_TensorEngine">NDArray.TensorEngine</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_Data__1">NDArray.Data&lt;T&gt;()</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_CloneData__1">NDArray.CloneData&lt;T&gt;()</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_CloneData">NDArray.CloneData()</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_astype_System_Type_System_Boolean_">NDArray.astype(Type, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_astype_NumSharp_NPTypeCode_System_Boolean_">NDArray.astype(NPTypeCode, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_Clone">NDArray.Clone()</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_GetEnumerator">NDArray.GetEnumerator()</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_view_System_Type_">NDArray.view(Type)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_view__1">NDArray.view&lt;T&gt;()</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_GetNDArrays_System_Int32_">NDArray.GetNDArrays(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_GetData__1">NDArray.GetData&lt;T&gt;()</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_GetData">NDArray.GetData()</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_GetData_System_Int32___">NDArray.GetData(params int[])</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_GetBoolean_System_Int32___">NDArray.GetBoolean(params int[])</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_GetByte_System_Int32___">NDArray.GetByte(params int[])</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_GetChar_System_Int32___">NDArray.GetChar(params int[])</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_GetDecimal_System_Int32___">NDArray.GetDecimal(params int[])</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_GetDouble_System_Int32___">NDArray.GetDouble(params int[])</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_GetInt16_System_Int32___">NDArray.GetInt16(params int[])</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_GetInt32_System_Int32___">NDArray.GetInt32(params int[])</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_GetInt64_System_Int32___">NDArray.GetInt64(params int[])</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_GetSingle_System_Int32___">NDArray.GetSingle(params int[])</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_GetUInt16_System_Int32___">NDArray.GetUInt16(params int[])</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_GetUInt32_System_Int32___">NDArray.GetUInt32(params int[])</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_GetUInt64_System_Int32___">NDArray.GetUInt64(params int[])</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_GetValue_System_Int32___">NDArray.GetValue(params int[])</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_GetValue__1_System_Int32___">NDArray.GetValue&lt;T&gt;(params int[])</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_GetAtIndex__1_System_Int32_">NDArray.GetAtIndex&lt;T&gt;(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_SetData_NumSharp_Backends_Unmanaged_IArraySlice_System_Int32___">NDArray.SetData(IArraySlice, params int[])</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_SetData_NumSharp_NDArray_System_Int32___">NDArray.SetData(NDArray, params int[])</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_SetData_System_Object_System_Int32___">NDArray.SetData(object, params int[])</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_SetValue_System_ValueType_System_Int32___">NDArray.SetValue(ValueType, params int[])</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_SetValue_System_Object_System_Int32___">NDArray.SetValue(object, params int[])</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_SetValue__1___0_System_Int32___">NDArray.SetValue&lt;T&gt;(T, params int[])</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_ReplaceData_System_Array_System_Type_">NDArray.ReplaceData(Array, Type)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_ReplaceData_System_Array_">NDArray.ReplaceData(Array)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_ReplaceData_NumSharp_NDArray_">NDArray.ReplaceData(NDArray)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_ReplaceData_System_Array_NumSharp_NPTypeCode_">NDArray.ReplaceData(Array, NPTypeCode)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_ReplaceData_NumSharp_Backends_Unmanaged_IArraySlice_System_Type_">NDArray.ReplaceData(IArraySlice, Type)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_ReplaceData_NumSharp_Backends_Unmanaged_IArraySlice_">NDArray.ReplaceData(IArraySlice)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_SetAtIndex_System_Object_System_Int32_">NDArray.SetAtIndex(object, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_SetAtIndex__1___0_System_Int32_">NDArray.SetAtIndex&lt;T&gt;(T, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_SetBoolean_System_Boolean_System_Int32___">NDArray.SetBoolean(bool, params int[])</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_SetByte_System_Byte_System_Int32___">NDArray.SetByte(byte, params int[])</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_SetInt16_System_Int16_System_Int32___">NDArray.SetInt16(short, params int[])</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_SetUInt16_System_UInt16_System_Int32___">NDArray.SetUInt16(ushort, params int[])</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_SetInt32_System_Int32_System_Int32___">NDArray.SetInt32(int, params int[])</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_SetUInt32_System_UInt32_System_Int32___">NDArray.SetUInt32(uint, params int[])</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_SetInt64_System_Int64_System_Int32___">NDArray.SetInt64(long, params int[])</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_SetUInt64_System_UInt64_System_Int32___">NDArray.SetUInt64(ulong, params int[])</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_SetChar_System_Char_System_Int32___">NDArray.SetChar(char, params int[])</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_SetDouble_System_Double_System_Int32___">NDArray.SetDouble(double, params int[])</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_SetSingle_System_Single_System_Int32___">NDArray.SetSingle(float, params int[])</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_SetDecimal_System_Decimal_System_Int32___">NDArray.SetDecimal(decimal, params int[])</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_FromString_System_String_">NDArray.FromString(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_AsString_NumSharp_NDArray_">NDArray.AsString(NDArray)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_AsStringArray_NumSharp_NDArray_">NDArray.AsStringArray(NDArray)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_GetString_System_Int32___">NDArray.GetString(params int[])</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_SetString_System_String_System_Int32___">NDArray.SetString(string, params int[])</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_GetStringAt_System_Int32_">NDArray.GetStringAt(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_SetStringAt_System_String_System_Int32_">NDArray.SetStringAt(string, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_Unsafe">NDArray.Unsafe</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_ToByteArray">NDArray.ToByteArray()</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_ToString">NDArray.ToString()</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_ToString_System_Boolean_">NDArray.ToString(bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_FromMultiDimArray__1_System_Array_System_Boolean_">NDArray.FromMultiDimArray&lt;T&gt;(Array, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_ToJaggedArray__1">NDArray.ToJaggedArray&lt;T&gt;()</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_ToArray__1">NDArray.ToArray&lt;T&gt;()</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_ToMuliDimArray__1">NDArray.ToMuliDimArray&lt;T&gt;()</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_copy_System_Char_">NDArray.copy(char)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_dstack_NumSharp_NDArray___">NDArray.dstack(params NDArray[])</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_flatten_System_Char_">NDArray.flatten(char)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_hstack_NumSharp_NDArray___">NDArray.hstack(params NDArray[])</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_MakeGeneric__1">NDArray.MakeGeneric&lt;T&gt;()</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_AsGeneric__1">NDArray.AsGeneric&lt;T&gt;()</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_AsOrMakeGeneric__1">NDArray.AsOrMakeGeneric&lt;T&gt;()</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_mgrid_NumSharp_NDArray_">NDArray.mgrid(NDArray)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_Scalar_System_Object_System_Type_">NDArray.Scalar(object, Type)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_Scalar_System_Object_">NDArray.Scalar(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_Scalar_System_ValueType_">NDArray.Scalar(ValueType)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_Scalar__1___0_">NDArray.Scalar&lt;T&gt;(T)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_Scalar__1_System_Object_">NDArray.Scalar&lt;T&gt;(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_Scalar_System_Object_NumSharp_NPTypeCode_">NDArray.Scalar(object, NPTypeCode)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_vstack_NumSharp_NDArray___">NDArray.vstack(params NDArray[])</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_Normalize">NDArray.Normalize()</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_dot_NumSharp_NDArray__">NDArray.dot(in NDArray)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_inv">NDArray.inv()</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_lstqr_NumSharp_NDArray_System_Double_">NDArray.lstqr(NDArray, double)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_matrix_power_System_Int32_">NDArray.matrix_power(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_multi_dot_NumSharp_NDArray___">NDArray.multi_dot(params NDArray[])</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_qr">NDArray.qr()</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_svd">NDArray.svd()</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_SetData_System_Object_">NDArray.SetData(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_delete_System_Collections_IEnumerable_">NDArray.delete(IEnumerable)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_flatten_System_Boolean_">NDArray.flatten(bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_itemset_NumSharp_Shape__System_ValueType_">NDArray.itemset(ref Shape, ValueType)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_itemset_NumSharp_Shape_System_ValueType_">NDArray.itemset(Shape, ValueType)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_itemset_System_Int32___System_ValueType_">NDArray.itemset(int[], ValueType)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_itemset__1_System_Int32_____0_">NDArray.itemset&lt;T&gt;(int[], T)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_ravel">NDArray.ravel()</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_roll_System_Int32_System_Int32_">NDArray.roll(int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_roll_System_Int32_">NDArray.roll(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_swapaxes_System_Int32_System_Int32_">NDArray.swapaxes(int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_transpose_System_Int32___">NDArray.transpose(int[])</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_unique">NDArray.unique()</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_unique__1">NDArray.unique&lt;T&gt;()</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_convolve_NumSharp_NDArray_System_String_">NDArray.convolve(NDArray, string)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_cumsum_System_Nullable_System_Int32__System_Type_">NDArray.cumsum(int?, Type)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_negate">NDArray.negate()</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_negative">NDArray.negative()</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_positive">NDArray.positive()</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_prod_System_Nullable_System_Int32__System_Type_System_Boolean_">NDArray.prod(int?, Type, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_sum_System_Int32_System_Boolean_System_Type_">NDArray.sum(int, bool, Type)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_sum_System_Int32_System_Boolean_System_Nullable_NumSharp_NPTypeCode__">NDArray.sum(int, bool, NPTypeCode?)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_sum_System_Int32_">NDArray.sum(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_sum">NDArray.sum()</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_Equals_System_Object_">NDArray.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_array_equal_NumSharp_NDArray_">NDArray.array_equal(NDArray)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_Item_System_Int32__System_Int32_">NDArray.this[int*, int]</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_Item_NumSharp_Generic_NDArray_System_Int32____">NDArray.this[NDArray&lt;int&gt;[]]</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_Item_System_Object___">NDArray.this[object[]]</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_Item_NumSharp_Generic_NDArray_System_Boolean__">NDArray.this[NDArray&lt;bool&gt;]</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_ExpandEllipsis_System_Object___System_Int32_">NDArray.ExpandEllipsis(object[], int)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_GetIndicesFromSlice_NumSharp_Shape_NumSharp_Slice_System_Int32_">NDArray.GetIndicesFromSlice(Shape, Slice, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_GetIndicesFromSlice_System_Int32___NumSharp_Slice_System_Int32_">NDArray.GetIndicesFromSlice(int[], Slice, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_PrepareIndexGetters_NumSharp_Shape_NumSharp_NDArray___">NDArray.PrepareIndexGetters(Shape, NDArray[])</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_GetIndices_NumSharp_NDArray_NumSharp_NDArray___">NDArray.GetIndices(NDArray, NDArray[])</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_FetchIndices_NumSharp_NDArray_NumSharp_NDArray___NumSharp_NDArray_System_Boolean_">NDArray.FetchIndices(NDArray, NDArray[], NDArray, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_FetchIndices__1_NumSharp_Generic_NDArray___0__NumSharp_NDArray___NumSharp_NDArray_System_Boolean_">NDArray.FetchIndices&lt;T&gt;(NDArray&lt;T&gt;, NDArray[], NDArray, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_FetchIndicesND__1_NumSharp_Generic_NDArray___0__NumSharp_Generic_NDArray_System_Int32__NumSharp_NDArray___System_Int32_System_Int32___System_Int32___NumSharp_NDArray_">NDArray.FetchIndicesND&lt;T&gt;(NDArray&lt;T&gt;, NDArray&lt;int&gt;, NDArray[], int, int[], int[], NDArray)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_FetchIndicesNDNonLinear__1_NumSharp_Generic_NDArray___0__NumSharp_NDArray___System_Int32_System_Int32___System_Int32___NumSharp_NDArray_">NDArray.FetchIndicesNDNonLinear&lt;T&gt;(NDArray&lt;T&gt;, NDArray[], int, int[], int[], NDArray)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_SetIndices_NumSharp_NDArray_NumSharp_NDArray___">NDArray.SetIndices(NDArray, NDArray[])</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_SetIndices_System_Object___NumSharp_NDArray_">NDArray.SetIndices(object[], NDArray)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_SetIndices_NumSharp_NDArray_NumSharp_NDArray___NumSharp_NDArray_">NDArray.SetIndices(NDArray, NDArray[], NDArray)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_SetIndices__1_NumSharp_Generic_NDArray___0__NumSharp_NDArray___NumSharp_NDArray_">NDArray.SetIndices&lt;T&gt;(NDArray&lt;T&gt;, NDArray[], NDArray)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_SetIndicesND__1_NumSharp_Generic_NDArray___0__NumSharp_Generic_NDArray_System_Int32__NumSharp_NDArray___System_Int32_System_Int32___System_Int32___NumSharp_Generic_NDArray___0__">NDArray.SetIndicesND&lt;T&gt;(NDArray&lt;T&gt;, NDArray&lt;int&gt;, NDArray[], int, int[], int[], NDArray&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_SetIndicesNDNonLinear__1_NumSharp_Generic_NDArray___0__NumSharp_NDArray___System_Int32_System_Int32___System_Int32___NumSharp_Generic_NDArray___0__">NDArray.SetIndicesNDNonLinear&lt;T&gt;(NDArray&lt;T&gt;, NDArray[], int, int[], int[], NDArray&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_argsort__1_System_Int32_">NDArray.argsort&lt;T&gt;(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_amax__1">NDArray.amax&lt;T&gt;()</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_amax_System_Int32_System_Boolean_System_Type_">NDArray.amax(int, bool, Type)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_amax_System_Type_">NDArray.amax(Type)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_max__1">NDArray.max&lt;T&gt;()</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_max_System_Int32_System_Boolean_System_Type_">NDArray.max(int, bool, Type)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_max_System_Type_">NDArray.max(Type)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_amin__1">NDArray.amin&lt;T&gt;()</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_amin_System_Int32_System_Boolean_System_Type_">NDArray.amin(int, bool, Type)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_amin_System_Type_">NDArray.amin(Type)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_min__1">NDArray.min&lt;T&gt;()</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_min_System_Int32_System_Boolean_System_Type_">NDArray.min(int, bool, Type)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_min_System_Type_">NDArray.min(Type)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_argmax">NDArray.argmax()</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_argmax_System_Int32_">NDArray.argmax(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_argmin">NDArray.argmin()</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_argmin_System_Int32_">NDArray.argmin(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_mean">NDArray.mean()</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_mean_System_Int32_">NDArray.mean(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_mean_System_Int32_System_Type_System_Boolean_">NDArray.mean(int, Type, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_mean_System_Int32_NumSharp_NPTypeCode_System_Boolean_">NDArray.mean(int, NPTypeCode, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_mean_System_Int32_System_Boolean_">NDArray.mean(int, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_std_System_Boolean_System_Nullable_System_Int32__System_Nullable_NumSharp_NPTypeCode__">NDArray.std(bool, int?, NPTypeCode?)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_std_System_Int32_System_Boolean_System_Nullable_System_Int32__System_Nullable_NumSharp_NPTypeCode__">NDArray.std(int, bool, int?, NPTypeCode?)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_var_System_Boolean_System_Nullable_System_Int32__System_Nullable_NumSharp_NPTypeCode__">NDArray.var(bool, int?, NPTypeCode?)</a>
+    </div>
+    <div>
+      <a class="xref" href="NumSharp.NDArray.html#NumSharp_NDArray_var_System_Int32_System_Boolean_System_Nullable_System_Int32__System_Nullable_NumSharp_NPTypeCode__">NDArray.var(int, bool, int?, NPTypeCode?)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="NumSharp.Extensions.LinqExtensions.html#NumSharp_Extensions_LinqExtensions_Yield__1___0_">LinqExtensions.Yield&lt;T&gt;(T)</a>
+  </div>
+  <div>
+      <a class="xref" href="NumSharp.NDIteratorExtensions.html#NumSharp_NDIteratorExtensions_AsIterator_NumSharp_NDArray_System_Boolean_">NDIteratorExtensions.AsIterator(NDArray, bool)</a>
+  </div>
+  <div>
+      <a class="xref" href="NumSharp.NDIteratorExtensions.html#NumSharp_NDIteratorExtensions_AsIterator__1_NumSharp_NDArray_System_Boolean_">NDIteratorExtensions.AsIterator&lt;T&gt;(NDArray, bool)</a>
+  </div>
+  </dd></dl>
+
+
+
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="NumSharp_Generic_NDArray_1__ctor_" data-uid="NumSharp.Generic.NDArray`1.#ctor*"></a>
+
+  <h3 id="NumSharp_Generic_NDArray_1__ctor" data-uid="NumSharp.Generic.NDArray`1.#ctor">
+  NDArray()
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Constructor for init data type
+internal storage is 1D with 1 element</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Generic_NDArray_1__ctor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This constructor does not call allocation/&gt;</p>
+</div>
+
+
+
+
+  <a id="NumSharp_Generic_NDArray_1__ctor_" data-uid="NumSharp.Generic.NDArray`1.#ctor*"></a>
+
+  <h3 id="NumSharp_Generic_NDArray_1__ctor_NumSharp_Backends_Unmanaged_IArraySlice_NumSharp_Shape_System_Char_" data-uid="NumSharp.Generic.NDArray`1.#ctor(NumSharp.Backends.Unmanaged.IArraySlice,NumSharp.Shape,System.Char)">
+  NDArray(IArraySlice, Shape, char)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Constructor which takes .NET array
+dtype and shape is determined from array</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray(IArraySlice values, Shape shape = default, char order = &#39;C&#39;)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>values</code> <a class="xref" href="NumSharp.Backends.Unmanaged.IArraySlice.html">IArraySlice</a></dt>
+    <dd></dd>
+    <dt><code>shape</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd></dd>
+    <dt><code>order</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.char">char</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Generic_NDArray_1__ctor_NumSharp_Backends_Unmanaged_IArraySlice_NumSharp_Shape_System_Char__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This constructor calls IStorage.Allocate(NumSharp.Shape,System.Type)</p>
+</div>
+
+
+
+
+  <a id="NumSharp_Generic_NDArray_1__ctor_" data-uid="NumSharp.Generic.NDArray`1.#ctor*"></a>
+
+  <h3 id="NumSharp_Generic_NDArray_1__ctor_NumSharp_Backends_UnmanagedStorage_" data-uid="NumSharp.Generic.NDArray`1.#ctor(NumSharp.Backends.UnmanagedStorage)">
+  NDArray(UnmanagedStorage)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new <a class="xref" href="NumSharp.NDArray.html">NDArray</a> with this storage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected NDArray(UnmanagedStorage storage)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>storage</code> <a class="xref" href="NumSharp.Backends.UnmanagedStorage.html">UnmanagedStorage</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Generic_NDArray_1__ctor_" data-uid="NumSharp.Generic.NDArray`1.#ctor*"></a>
+
+  <h3 id="NumSharp_Generic_NDArray_1__ctor_NumSharp_Backends_UnmanagedStorage_NumSharp_Shape_" data-uid="NumSharp.Generic.NDArray`1.#ctor(NumSharp.Backends.UnmanagedStorage,NumSharp.Shape)">
+  NDArray(UnmanagedStorage, Shape)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new <a class="xref" href="NumSharp.NDArray.html">NDArray</a> with this storage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected NDArray(UnmanagedStorage storage, Shape shape)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>storage</code> <a class="xref" href="NumSharp.Backends.UnmanagedStorage.html">UnmanagedStorage</a></dt>
+    <dd></dd>
+    <dt><code>shape</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Generic_NDArray_1__ctor_" data-uid="NumSharp.Generic.NDArray`1.#ctor*"></a>
+
+  <h3 id="NumSharp_Generic_NDArray_1__ctor_NumSharp_Backends_UnmanagedStorage_NumSharp_Shape__" data-uid="NumSharp.Generic.NDArray`1.#ctor(NumSharp.Backends.UnmanagedStorage,NumSharp.Shape@)">
+  NDArray(UnmanagedStorage, ref Shape)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new <a class="xref" href="NumSharp.NDArray.html">NDArray</a> with this storage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected NDArray(UnmanagedStorage storage, ref Shape shape)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>storage</code> <a class="xref" href="NumSharp.Backends.UnmanagedStorage.html">UnmanagedStorage</a></dt>
+    <dd></dd>
+    <dt><code>shape</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Generic_NDArray_1__ctor_" data-uid="NumSharp.Generic.NDArray`1.#ctor*"></a>
+
+  <h3 id="NumSharp_Generic_NDArray_1__ctor_NumSharp_Shape_" data-uid="NumSharp.Generic.NDArray`1.#ctor(NumSharp.Shape)">
+  NDArray(Shape)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Constructor which initialize elements with 0
+type and shape are given.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray(Shape shape)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>shape</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd><p>Shape of NDArray</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Generic_NDArray_1__ctor_NumSharp_Shape__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This constructor calls IStorage.Allocate(NumSharp.Shape,System.Type)</p>
+</div>
+
+
+
+
+  <a id="NumSharp_Generic_NDArray_1__ctor_" data-uid="NumSharp.Generic.NDArray`1.#ctor*"></a>
+
+  <h3 id="NumSharp_Generic_NDArray_1__ctor_NumSharp_Shape_System_Boolean_" data-uid="NumSharp.Generic.NDArray`1.#ctor(NumSharp.Shape,System.Boolean)">
+  NDArray(Shape, bool)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Constructor which initialize elements with 0
+type and shape are given.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray(Shape shape, bool fillZeros)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>shape</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd><p>Shape of NDArray</p>
+</dd>
+    <dt><code>fillZeros</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Should set the values of the new allocation to default(dtype)? otherwise - old memory noise</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Generic_NDArray_1__ctor_NumSharp_Shape_System_Boolean__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This constructor calls IStorage.Allocate(NumSharp.Shape,System.Type)</p>
+</div>
+
+
+
+
+  <a id="NumSharp_Generic_NDArray_1__ctor_" data-uid="NumSharp.Generic.NDArray`1.#ctor*"></a>
+
+  <h3 id="NumSharp_Generic_NDArray_1__ctor_NumSharp_TensorEngine_" data-uid="NumSharp.Generic.NDArray`1.#ctor(NumSharp.TensorEngine)">
+  NDArray(TensorEngine)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Constructor for init data type
+internal storage is 1D with 1 element</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected NDArray(TensorEngine engine)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>engine</code> <a class="xref" href="NumSharp.TensorEngine.html">TensorEngine</a></dt>
+    <dd><p>The engine of this <a class="xref" href="NumSharp.NDArray.html">NDArray</a></p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Generic_NDArray_1__ctor_NumSharp_TensorEngine__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This constructor does not call allocation/&gt;</p>
+</div>
+
+
+
+
+  <a id="NumSharp_Generic_NDArray_1__ctor_" data-uid="NumSharp.Generic.NDArray`1.#ctor*"></a>
+
+  <h3 id="NumSharp_Generic_NDArray_1__ctor_System_Array_NumSharp_Shape_System_Char_" data-uid="NumSharp.Generic.NDArray`1.#ctor(System.Array,NumSharp.Shape,System.Char)">
+  NDArray(Array, Shape, char)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Constructor which takes .NET array
+dtype and shape is determined from array</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray(Array values, Shape shape = default, char order = &#39;C&#39;)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>values</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.array">Array</a></dt>
+    <dd></dd>
+    <dt><code>shape</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd></dd>
+    <dt><code>order</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.char">char</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Generic_NDArray_1__ctor_System_Array_NumSharp_Shape_System_Char__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This constructor calls IStorage.Allocate(NumSharp.Shape,System.Type)</p>
+</div>
+
+
+
+
+  <a id="NumSharp_Generic_NDArray_1__ctor_" data-uid="NumSharp.Generic.NDArray`1.#ctor*"></a>
+
+  <h3 id="NumSharp_Generic_NDArray_1__ctor_System_Int32_" data-uid="NumSharp.Generic.NDArray`1.#ctor(System.Int32)">
+  NDArray(int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Constructor which initialize elements with length of <code class="paramref">size</code></p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray(int size)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>size</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The size as a single dimension shape</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Generic_NDArray_1__ctor_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This constructor calls IStorage.Allocate(NumSharp.Shape,System.Type)</p>
+</div>
+
+
+
+
+  <a id="NumSharp_Generic_NDArray_1__ctor_" data-uid="NumSharp.Generic.NDArray`1.#ctor*"></a>
+
+  <h3 id="NumSharp_Generic_NDArray_1__ctor_System_Int32_System_Boolean_" data-uid="NumSharp.Generic.NDArray`1.#ctor(System.Int32,System.Boolean)">
+  NDArray(int, bool)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Constructor which initialize elements with length of <code class="paramref">size</code></p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray(int size, bool fillZeros)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>size</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The size as a single dimension shape</p>
+</dd>
+    <dt><code>fillZeros</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Should set the values of the new allocation to default(dtype)? otherwise - old memory noise</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Generic_NDArray_1__ctor_System_Int32_System_Boolean__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This constructor calls IStorage.Allocate(NumSharp.Shape,System.Type)</p>
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="NumSharp_Generic_NDArray_1_Address_" data-uid="NumSharp.Generic.NDArray`1.Address*"></a>
+
+  <h3 id="NumSharp_Generic_NDArray_1_Address" data-uid="NumSharp.Generic.NDArray`1.Address">
+  Address
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the address that this NDArray starts from.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected TDType* Address { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt>TDType*</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Generic_NDArray_1_Array_" data-uid="NumSharp.Generic.NDArray`1.Array*"></a>
+
+  <h3 id="NumSharp_Generic_NDArray_1_Array" data-uid="NumSharp.Generic.NDArray`1.Array">
+  Array
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Array access to storage data - overridden on purpose</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected ArraySlice&lt;TDType&gt; Array { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Backends.Unmanaged.ArraySlice-1.html">ArraySlice</a>&lt;TDType&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Generic_NDArray_1_Item_" data-uid="NumSharp.Generic.NDArray`1.Item*"></a>
+
+  <h3 id="NumSharp_Generic_NDArray_1_Item_NumSharp_Slice___" data-uid="NumSharp.Generic.NDArray`1.Item(NumSharp.Slice[])">
+  this[Slice[]]
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>slicing of generic - overridden on purpose</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray&lt;TDType&gt; this[params Slice[] slices] { get; set; }</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>slices</code> <a class="xref" href="NumSharp.Slice.html">Slice</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Generic.NDArray-1.html">NDArray</a>&lt;TDType&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Generic_NDArray_1_Item_" data-uid="NumSharp.Generic.NDArray`1.Item*"></a>
+
+  <h3 id="NumSharp_Generic_NDArray_1_Item_System_Int32___" data-uid="NumSharp.Generic.NDArray`1.Item(System.Int32[])">
+  this[int[]]
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TDType this[params int[] indices] { get; set; }</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>indices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">TDType</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Generic_NDArray_1_Item_" data-uid="NumSharp.Generic.NDArray`1.Item*"></a>
+
+  <h3 id="NumSharp_Generic_NDArray_1_Item_System_String_" data-uid="NumSharp.Generic.NDArray`1.Item(System.String)">
+  this[string]
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>slicing of generic - overridden on purpose</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray&lt;TDType&gt; this[string slice] { get; set; }</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>slice</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Generic.NDArray-1.html">NDArray</a>&lt;TDType&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Generic_NDArray_1_T_" data-uid="NumSharp.Generic.NDArray`1.T*"></a>
+
+  <h3 id="NumSharp_Generic_NDArray_1_T" data-uid="NumSharp.Generic.NDArray`1.T">
+  T
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>The transposed array. <br>
+Same as self.transpose().</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray&lt;TDType&gt; T { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Generic.NDArray-1.html">NDArray</a>&lt;TDType&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="NumSharp_Generic_NDArray_1_T_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><a href="https://docs.scipy.org/doc/numpy/reference/generated/numpy.ndarray.T.html">https://docs.scipy.org/doc/numpy/reference/generated/numpy.ndarray.T.html</a></p>
+</div>
+
+
+
+
+  <a id="NumSharp_Generic_NDArray_1_flat_" data-uid="NumSharp.Generic.NDArray`1.flat*"></a>
+
+  <h3 id="NumSharp_Generic_NDArray_1_flat" data-uid="NumSharp.Generic.NDArray`1.flat">
+  flat
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>A 1-D iterator over the array.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray&lt;TDType&gt; flat { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Generic.NDArray-1.html">NDArray</a>&lt;TDType&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="NumSharp_Generic_NDArray_1_flat_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><a href="https://docs.scipy.org/doc/numpy/reference/generated/numpy.ndarray.flat.html">https://docs.scipy.org/doc/numpy/reference/generated/numpy.ndarray.flat.html</a></p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="NumSharp_Generic_NDArray_1_GetAtIndex_" data-uid="NumSharp.Generic.NDArray`1.GetAtIndex*"></a>
+
+  <h3 id="NumSharp_Generic_NDArray_1_GetAtIndex_System_Int32_" data-uid="NumSharp.Generic.NDArray`1.GetAtIndex(System.Int32)">
+  GetAtIndex(int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TDType GetAtIndex(int index)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>index</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">TDType</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Generic_NDArray_1_reshape_" data-uid="NumSharp.Generic.NDArray`1.reshape*"></a>
+
+  <h3 id="NumSharp_Generic_NDArray_1_reshape_NumSharp_Shape_" data-uid="NumSharp.Generic.NDArray`1.reshape(NumSharp.Shape)">
+  reshape(Shape)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gives a new shape to an array without changing its data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray&lt;TDType&gt; reshape(Shape newShape)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>newShape</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd><p>The new shape should be compatible with the original shape. If an integer, then the result will be a 1-D array of that length. One shape dimension can be -1. In this case, the value is inferred from the length of the array and remaining dimensions.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Generic.NDArray-1.html">NDArray</a>&lt;TDType&gt;</dt>
+    <dd><p>This will be a new view object if possible; otherwise, it will be a copy. Note there is no guarantee of the memory layout (C- or Fortran- contiguous) of the returned array.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Generic_NDArray_1_reshape_NumSharp_Shape__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><a href="https://docs.scipy.org/doc/numpy/reference/generated/numpy.reshape.html">https://docs.scipy.org/doc/numpy/reference/generated/numpy.reshape.html</a></p>
+</div>
+
+
+
+
+  <a id="NumSharp_Generic_NDArray_1_reshape_" data-uid="NumSharp.Generic.NDArray`1.reshape*"></a>
+
+  <h3 id="NumSharp_Generic_NDArray_1_reshape_NumSharp_Shape__" data-uid="NumSharp.Generic.NDArray`1.reshape(NumSharp.Shape@)">
+  reshape(ref Shape)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gives a new shape to an array without changing its data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray&lt;TDType&gt; reshape(ref Shape newShape)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>newShape</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd><p>The new shape should be compatible with the original shape. If an integer, then the result will be a 1-D array of that length. One shape dimension can be -1. In this case, the value is inferred from the length of the array and remaining dimensions.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Generic.NDArray-1.html">NDArray</a>&lt;TDType&gt;</dt>
+    <dd><p>This will be a new view object if possible; otherwise, it will be a copy. Note there is no guarantee of the memory layout (C- or Fortran- contiguous) of the returned array.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Generic_NDArray_1_reshape_NumSharp_Shape___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><a href="https://docs.scipy.org/doc/numpy/reference/generated/numpy.reshape.html">https://docs.scipy.org/doc/numpy/reference/generated/numpy.reshape.html</a></p>
+</div>
+
+
+
+
+  <a id="NumSharp_Generic_NDArray_1_reshape_" data-uid="NumSharp.Generic.NDArray`1.reshape*"></a>
+
+  <h3 id="NumSharp_Generic_NDArray_1_reshape_System_Int32___" data-uid="NumSharp.Generic.NDArray`1.reshape(System.Int32[])">
+  reshape(params int[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gives a new shape to an array without changing its data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">[SuppressMessage(&quot;ReSharper&quot;, &quot;ParameterHidesMember&quot;)]
+public NDArray&lt;TDType&gt; reshape(params int[] shape)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>shape</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The new shape should be compatible with the original shape. If an integer, then the result will be a
+1-D array of that length. One shape dimension can be -1. In this case, the value is inferred from the length of the array
+and remaining dimensions.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Generic.NDArray-1.html">NDArray</a>&lt;TDType&gt;</dt>
+    <dd><p>This will be a new view object if possible; otherwise, it will be a copy. Note there is no guarantee of the
+memory layout (C- or Fortran- contiguous) of the returned array.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Generic_NDArray_1_reshape_System_Int32____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><a href="https://docs.scipy.org/doc/numpy/reference/generated/numpy.reshape.html">https://docs.scipy.org/doc/numpy/reference/generated/numpy.reshape.html</a></p>
+</div>
+
+
+
+
+  <a id="NumSharp_Generic_NDArray_1_reshape_unsafe_" data-uid="NumSharp.Generic.NDArray`1.reshape_unsafe*"></a>
+
+  <h3 id="NumSharp_Generic_NDArray_1_reshape_unsafe_NumSharp_Shape_" data-uid="NumSharp.Generic.NDArray`1.reshape_unsafe(NumSharp.Shape)">
+  reshape_unsafe(Shape)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gives a new shape to an array without changing its data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray&lt;TDType&gt; reshape_unsafe(Shape newshape)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>newshape</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd><p>The new shape should be compatible with the original shape. If an integer, then the result will be a 1-D array of that length. One shape dimension can be -1. In this case, the value is inferred from the length of the array and remaining dimensions.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Generic.NDArray-1.html">NDArray</a>&lt;TDType&gt;</dt>
+    <dd><p>This will be a new view object if possible; otherwise, it will be a copy. Note there is no guarantee of the memory layout (C- or Fortran- contiguous) of the returned array.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Generic_NDArray_1_reshape_unsafe_NumSharp_Shape__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><a href="https://docs.scipy.org/doc/numpy/reference/generated/numpy.reshape.html">https://docs.scipy.org/doc/numpy/reference/generated/numpy.reshape.html</a></p>
+</div>
+
+
+
+
+  <a id="NumSharp_Generic_NDArray_1_reshape_unsafe_" data-uid="NumSharp.Generic.NDArray`1.reshape_unsafe*"></a>
+
+  <h3 id="NumSharp_Generic_NDArray_1_reshape_unsafe_NumSharp_Shape__" data-uid="NumSharp.Generic.NDArray`1.reshape_unsafe(NumSharp.Shape@)">
+  reshape_unsafe(ref Shape)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gives a new shape to an array without changing its data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NDArray&lt;TDType&gt; reshape_unsafe(ref Shape newShape)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>newShape</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Generic.NDArray-1.html">NDArray</a>&lt;TDType&gt;</dt>
+    <dd><p>This will be a new view object if possible; otherwise, it will be a copy. Note there is no guarantee of the memory layout (C- or Fortran- contiguous) of the returned array.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Generic_NDArray_1_reshape_unsafe_NumSharp_Shape___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><a href="https://docs.scipy.org/doc/numpy/reference/generated/numpy.reshape.html">https://docs.scipy.org/doc/numpy/reference/generated/numpy.reshape.html</a></p>
+</div>
+
+
+
+
+  <a id="NumSharp_Generic_NDArray_1_reshape_unsafe_" data-uid="NumSharp.Generic.NDArray`1.reshape_unsafe*"></a>
+
+  <h3 id="NumSharp_Generic_NDArray_1_reshape_unsafe_System_Int32___" data-uid="NumSharp.Generic.NDArray`1.reshape_unsafe(System.Int32[])">
+  reshape_unsafe(params int[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gives a new shape to an array without changing its data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">[SuppressMessage(&quot;ReSharper&quot;, &quot;ParameterHidesMember&quot;)]
+public NDArray&lt;TDType&gt; reshape_unsafe(params int[] shape)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>shape</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The new shape should be compatible with the original shape. If an integer, then the result will be a
+1-D array of that length. One shape dimension can be -1. In this case, the value is inferred from the length of the array
+and remaining dimensions.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Generic.NDArray-1.html">NDArray</a>&lt;TDType&gt;</dt>
+    <dd><p>This will be a new view object if possible; otherwise, it will be a copy. Note there is no guarantee of the
+memory layout (C- or Fortran- contiguous) of the returned array.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Generic_NDArray_1_reshape_unsafe_System_Int32____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><a href="https://docs.scipy.org/doc/numpy/reference/generated/numpy.reshape.html">https://docs.scipy.org/doc/numpy/reference/generated/numpy.reshape.html</a></p>
+</div>
+
+
+
+
+  <h2 class="section" id="operators">Operators
+</h2>
+
+
+  <a id="NumSharp_Generic_NDArray_1_op_Explicit_" data-uid="NumSharp.Generic.NDArray`1.op_Explicit*"></a>
+
+  <h3 id="NumSharp_Generic_NDArray_1_op_Explicit__0____NumSharp_Generic_NDArray__0_" data-uid="NumSharp.Generic.NDArray`1.op_Explicit(`0[])~NumSharp.Generic.NDArray{`0}">
+  explicit operator NDArray&lt;TDType&gt;(TDType[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static explicit operator NDArray&lt;TDType&gt;(TDType[] tArray)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>tArray</code> TDType[]</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Generic.NDArray-1.html">NDArray</a>&lt;TDType&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Generic_NDArray_1_op_Implicit_" data-uid="NumSharp.Generic.NDArray`1.op_Implicit*"></a>
+
+  <h3 id="NumSharp_Generic_NDArray_1_op_Implicit_NumSharp_Generic_NDArray__0___NumSharp_Backends_Unmanaged_ArraySlice__0_" data-uid="NumSharp.Generic.NDArray`1.op_Implicit(NumSharp.Generic.NDArray{`0})~NumSharp.Backends.Unmanaged.ArraySlice{`0}">
+  implicit operator ArraySlice&lt;TDType&gt;(NDArray&lt;TDType&gt;)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static implicit operator ArraySlice&lt;TDType&gt;(NDArray&lt;TDType&gt; nd)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>nd</code> <a class="xref" href="NumSharp.Generic.NDArray-1.html">NDArray</a>&lt;TDType&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Backends.Unmanaged.ArraySlice-1.html">ArraySlice</a>&lt;TDType&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          <span>Copyright &copy; 2025 <a href='https://github.com/SciSharp'>SciSharp STACK</a>. Built with <a href='https://dotnet.github.io/docfx'>DocFX</a>.</span>
+        </div>
+      </div>
+    </footer>
   </body>
 </html>

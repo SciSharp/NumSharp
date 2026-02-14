@@ -1,128 +1,139 @@
-﻿<!DOCTYPE html>
-<!--[if IE]><![endif]-->
-<html>
-  
+<!DOCTYPE html>
+<html lang="en">
   <head>
     <meta charset="utf-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
-    <title>Welcome Seeker to NumSharp's documentation! </title>
-    <meta name="viewport" content="width=device-width">
-    <meta name="title" content="Welcome Seeker to NumSharp's documentation! ">
-    <meta name="generator" content="docfx 2.40.2.0">
-    
-    <link rel="shortcut icon" href="favicon.ico">
-    <link rel="stylesheet" href="styles/docfx.vendor.css">
-    <link rel="stylesheet" href="styles/docfx.css">
-    <link rel="stylesheet" href="styles/main.css">
-    <meta property="docfx:navrel" content="toc.html">
-    <meta property="docfx:tocrel" content="toc.html">
-    
-    
-    
+      <title>Welcome to NumSharp | NumSharp Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Welcome to NumSharp | NumSharp Documentation ">
+      
+      
+      <link rel="icon" href="images/numsharp.icon128.png">
+      <link rel="stylesheet" href="public/docfx.min.css">
+      <link rel="stylesheet" href="public/main.css">
+      <meta name="docfx:navrel" content="toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="">
+      
+      
+      
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
   </head>
-  <body data-spy="scroll" data-target="#affix" data-offset="120">
-    <div id="wrapper">
-      <header>
-        
-        <nav id="autocollapse" class="navbar navbar-inverse ng-scope" role="navigation">
-          <div class="container">
-            <div class="navbar-header">
-              <button type="button" class="navbar-toggle" data-toggle="collapse" data-target="#navbar">
-                <span class="sr-only">Toggle navigation</span>
-                <span class="icon-bar"></span>
-                <span class="icon-bar"></span>
-                <span class="icon-bar"></span>
-              </button>
-              
-              <a class="navbar-brand" href="index.html">
-                <img id="logo" class="svg" src="logo.svg" alt="">
-              </a>
-            </div>
-            <div class="collapse navbar-collapse" id="navbar">
-              <form class="navbar-form navbar-right" role="search" id="search">
-                <div class="form-group">
-                  <input type="text" class="form-control" id="search-query" placeholder="Search" autocomplete="off">
-                </div>
+
+  <body class="tex2jax_ignore" data-layout="landing" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="index.html">
+            <img id="logo" class="svg" src="images/numsharp.icon.svg" alt="NumSharp">
+            NumSharp
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
               </form>
             </div>
           </div>
-        </nav>
-        
-        <div class="subnav navbar navbar-default">
-          <div class="container hide-when-search" id="breadcrumb">
-            <ul class="breadcrumb">
-              <li></li>
-            </ul>
-          </div>
         </div>
-      </header>
-      <div role="main" class="container body-content hide-when-search">
-        <div class="article row grid">
-          <div class="col-md-10">
-            <article class="content wrap" id="_content" data-uid="">
-<h1 id="welcome-seeker-to-numsharps-documentation">Welcome Seeker to NumSharp's documentation!</h1>
+      </nav>
+    </header>
 
-<p>Since you reached our documentation, you must be interested into .NET or into machine learning.</p>
-<p>No matter what you was searching, you will be satisfied.</p>
-<p>NumSharp is quite new open source project with one big goal: adapt the famous and well-known python library numpy and bring it into .NET world.
-On top of this, we try to bring the whole Scipy Stack to .NET world.
-Sounds crazy?
-Yes maybe a little bit. As crazy as bring .NET on mobile phones (Xamarin) or into browser (Blazor). ;)</p>
-<p>Why we should do that?</p>
+    <main class="container-xxl">
+
+      <div class="content">
+        <div class="actionbar">
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="welcome-to-numsharp">Welcome to NumSharp</h1>
+
+<p>NumSharp is a .NET port of Python's NumPy library, bringing powerful numerical computing to the .NET ecosystem.</p>
+<h2 id="why-numsharp">Why NumSharp?</h2>
 <ul>
-<li>Because in .NET we trust (everybody knows why ^^)</li>
-<li>Because we can do (hey we are .NET developer we can do cloud computing, do fancy web side stuff, are No. 1 for GUI programming in windows area, experiment with WASM – a.k.a. the Blazor project, do mobile things with Xamarin – yes, so how hard it can be to improve our numeric stack?)</li>
-<li>Because Microsoft also try to let .NET framework become an important framework for machine learning area. Therefore, it is time for us to support the F# developers who always were the leading experts in numeric area and machine learning. Let us help to shape .NET for numeric area.</li>
-<li>Because we can reach more languages than any other framework can do. It is not just a project for C#. We are not just C# developers – we are .NET developers and we are like a big family. Code one time and give it to all other languages. Because of this we are not just interested into C# - we also want to deliver packages special for F#, Powershell, VB, Ironpython, PHP, … we want to write the core in C# but we want to give each language the sugar it deserves.</li>
+<li><strong>NumPy API compatibility</strong> - Feel right at home if you're coming from Python</li>
+<li><strong>High-performance NDArray</strong> - Multi-dimensional arrays stored efficiently in unmanaged memory</li>
+<li><strong>Full .NET integration</strong> - Works seamlessly with C#, F#, VB.NET, and other .NET languages</li>
+<li><strong>Part of the SciSharp ecosystem</strong> - Works alongside TensorFlow.NET, ML.NET, and other ML libraries</li>
 </ul>
-<p>What does Numsharp make different than the other numeric frameworks?</p>
+<h2 id="quick-start">Quick Start</h2>
+<pre><code class="lang-bash">dotnet add package NumSharp
+</code></pre>
+<pre><code class="lang-csharp">using NumSharp;
+
+var a = np.array(new int[] { 1, 2, 3, 4, 5 });
+var b = np.arange(5);
+var c = a + b;
+Console.WriteLine(c);  // [1, 3, 5, 7, 9]
+</code></pre>
+<h2 id="features">Features</h2>
 <ul>
-<li>We deliver a new class of array, which has a good performance in all different situations. The NDArray follows the idea of numpy and Quantstack, which store all elements of a multidimensional array (independent of the number of dimensions) into one large array. The indexing depends totally on the Shape of the NDArray, which determines if it is a matrix, a tensor, a vector or something else.</li>
-<li>We try to implement the numpy APIs as well as possible so that people who come from numpy feels like be at home. More over people can find easier tutorials if they are new to machine learning or numerical stuff in general.</li>
+<li><strong>Array Creation</strong> - <code>np.zeros</code>, <code>np.ones</code>, <code>np.arange</code>, <code>np.linspace</code>, and more</li>
+<li><strong>Array Manipulation</strong> - Reshape, transpose, concatenate, stack operations</li>
+<li><strong>Math Operations</strong> - Element-wise arithmetic, broadcasting, linear algebra</li>
+<li><strong>Slicing &amp; Indexing</strong> - NumPy-style slicing with views, not copies</li>
+<li><strong>Random Sampling</strong> - Full numpy.random compatibility with seed/state matching</li>
+<li><strong>File I/O</strong> - Load and save <code>.npy</code> and <code>.npz</code> files</li>
 </ul>
-<p>So I hope seeker you got a quite well impression of what this is all about.</p>
+<h2 id="get-started">Get Started</h2>
 <ul>
-<li>Curious? → <code>dotnet add package NumSharp</code></li>
-<li>Want new features? → <a href="https://github.com/SciSharp/NumSharp">https://github.com/SciSharp/NumSharp</a></li>
-<li>Want to chat in digital &quot;Coffeeroom&quot;? → <a href="https://gitter.im/sci-sharp/community">https://gitter.im/sci-sharp/community</a></li>
-<li>Want to support? → fork us on Github ;)</li>
+<li><a href="docs/intro.html">Introduction</a> - Learn about NDArray, Shape, and Storage</li>
+<li><a href="docs/compliance.html">NumPy Compliance</a> - Compatibility status and roadmap</li>
+<li><a href="api/index.html">API Reference</a> - Full API documentation</li>
 </ul>
+<h2 id="community">Community</h2>
+<ul>
+<li><a href="https://github.com/SciSharp/NumSharp">GitHub Repository</a> - Star us, report issues, contribute</li>
+<li><a href="https://www.nuget.org/packages/NumSharp">NuGet Package</a> - Latest stable release</li>
+</ul>
+
 </article>
-          </div>
-          
-          <div class="hidden-sm col-md-2" role="complementary">
-            <div class="sideaffix">
-              <div class="contribution">
-                <ul class="nav">
-                  <li>
-                    <a href="https://github.com/dotChris90/NumSharp/blob/master/docfx_project/index.md/#L1" class="contribution-link">Improve this Doc</a>
-                  </li>
-                </ul>
-              </div>
-              <nav class="bs-docs-sidebar hidden-print hidden-xs hidden-sm affix" id="affix">
-              <!-- <p><a class="back-to-top" href="#top">Back to top</a><p> -->
-              </nav>
-            </div>
-          </div>
+
+        <div class="contribution d-print-none">
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          <span>Copyright &copy; 2025 <a href='https://github.com/SciSharp'>SciSharp STACK</a>. Built with <a href='https://dotnet.github.io/docfx'>DocFX</a>.</span>
         </div>
       </div>
-      
-      <footer>
-        <div class="grad-bottom"></div>
-        <div class="footer">
-          <div class="container">
-            <span class="pull-right">
-              <a href="#top">Back to top</a>
-            </span>
-            
-            <span>Generated by <strong>DocFX</strong></span>
-          </div>
-        </div>
-      </footer>
-    </div>
-    
-    <script type="text/javascript" src="styles/docfx.vendor.js"></script>
-    <script type="text/javascript" src="styles/docfx.js"></script>
-    <script type="text/javascript" src="styles/main.js"></script>
+    </footer>
   </body>
 </html>

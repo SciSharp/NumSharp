@@ -1,0 +1,1112 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+      <title>Python Array API Standard | NumSharp Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Python Array API Standard | NumSharp Documentation ">
+      
+      
+      <link rel="icon" href="../images/numsharp.icon128.png">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../images/numsharp.icon.svg" alt="NumSharp">
+            NumSharp
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="python-array-api-standard">Python Array API Standard</h1>
+
+<p>If you've ever tried to write code that works with NumPy, PyTorch, JAX, and CuPy, you know the pain. They all do similar things, but the APIs are just different enough that your code breaks when you switch libraries. The <strong>Python Array API Standard</strong> exists to fix this.</p>
+<p>NumSharp is working toward Array API compliance because it means your code can be more portable—not just between Python libraries, but between Python and C#.</p>
+<hr>
+<h2 id="what-is-the-array-api-standard">What Is the Array API Standard?</h2>
+<p>The Array API Standard is a specification developed by the <a href="https://data-apis.org/">Consortium for Python Data API Standards</a>. It defines a common interface for array operations that any library can implement.</p>
+<p>Think of it like USB for arrays. Before USB, every device had its own connector. Now they all use the same port. The Array API does the same thing for array libraries.</p>
+<h3 id="the-problem-it-solves">The Problem It Solves</h3>
+<p>By 2020, Python had accumulated a zoo of array libraries:</p>
+<ul>
+<li><strong>NumPy</strong> — The original, CPU-only</li>
+<li><strong>PyTorch</strong> — Deep learning, GPU support</li>
+<li><strong>TensorFlow</strong> — Deep learning, different API</li>
+<li><strong>JAX</strong> — Functional, JIT compilation</li>
+<li><strong>CuPy</strong> — NumPy clone for NVIDIA GPUs</li>
+<li><strong>Dask</strong> — Distributed/parallel arrays</li>
+<li><strong>MXNet</strong>, <strong>PaddlePaddle</strong>, and more...</li>
+</ul>
+<p>Each library evolved independently. They all have <code>reshape()</code>, but the parameters are slightly different. They all have <code>sum()</code>, but the axis handling varies. Code written for NumPy rarely works on PyTorch without modification.</p>
+<p>The Array API Standard says: &quot;Here's exactly what <code>reshape()</code> should look like. Here's exactly how <code>sum()</code> should behave. Implement these, and code becomes portable.&quot;</p>
+<h3 id="whos-adopting-it">Who's Adopting It?</h3>
+<p>As of 2024, these libraries have adopted or are adopting the Array API:</p>
+<table>
+<thead>
+<tr>
+<th>Library</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>NumPy 2.0+</td>
+<td>Full support in main namespace</td>
+</tr>
+<tr>
+<td>PyTorch 2.0+</td>
+<td><code>torch</code> namespace is mostly compliant</td>
+</tr>
+<tr>
+<td>JAX</td>
+<td>Compliant (with some extras)</td>
+</tr>
+<tr>
+<td>CuPy</td>
+<td>Compliant</td>
+</tr>
+<tr>
+<td>Dask</td>
+<td>Compliant</td>
+</tr>
+<tr>
+<td>ndonnx</td>
+<td>Compliant</td>
+</tr>
+</tbody>
+</table>
+<p>NumSharp aims to join this list.</p>
+<hr>
+<h2 id="why-should-you-care">Why Should You Care?</h2>
+<h3 id="for-numpy-users-moving-to-c">For NumPy Users Moving to C#</h3>
+<p>If you're porting Python ML code to C#, Array API compliance means fewer surprises. When NumSharp follows the same specification as NumPy 2.x, the behavior matches.</p>
+<h3 id="for-library-authors">For Library Authors</h3>
+<p>If you're building a C# library that consumes arrays, coding against the Array API subset means your library works with any compliant array type—not just NumSharp.</p>
+<h3 id="for-cross-platform-development">For Cross-Platform Development</h3>
+<p>Write once, run anywhere. The same algorithms can work on NumPy in Python and NumSharp in C#, producing identical results.</p>
+<hr>
+<h2 id="the-specification-whats-required">The Specification: What's Required?</h2>
+<p>The Array API Standard (version 2024.12) specifies:</p>
+<ul>
+<li><strong>14 data types</strong></li>
+<li><strong>5 constants</strong></li>
+<li><strong>133 core functions</strong></li>
+<li><strong>7 array attributes</strong></li>
+<li><strong>Full set of operators</strong></li>
+<li><strong>2 optional extensions</strong> (linear algebra, FFT)</li>
+</ul>
+<p>Let's break these down.</p>
+<hr>
+<h2 id="data-types-14-required">Data Types: 14 Required</h2>
+<p>The standard mandates support for exactly these types:</p>
+<h3 id="integer-types">Integer Types</h3>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>Bits</th>
+<th>Range</th>
+<th>C# Equivalent</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>int8</code></td>
+<td>8</td>
+<td>-128 to 127</td>
+<td><code>sbyte</code></td>
+</tr>
+<tr>
+<td><code>int16</code></td>
+<td>16</td>
+<td>-32,768 to 32,767</td>
+<td><code>short</code></td>
+</tr>
+<tr>
+<td><code>int32</code></td>
+<td>32</td>
+<td>-2B to 2B</td>
+<td><code>int</code></td>
+</tr>
+<tr>
+<td><code>int64</code></td>
+<td>64</td>
+<td>-9Q to 9Q</td>
+<td><code>long</code></td>
+</tr>
+<tr>
+<td><code>uint8</code></td>
+<td>8</td>
+<td>0 to 255</td>
+<td><code>byte</code></td>
+</tr>
+<tr>
+<td><code>uint16</code></td>
+<td>16</td>
+<td>0 to 65,535</td>
+<td><code>ushort</code></td>
+</tr>
+<tr>
+<td><code>uint32</code></td>
+<td>32</td>
+<td>0 to 4B</td>
+<td><code>uint</code></td>
+</tr>
+<tr>
+<td><code>uint64</code></td>
+<td>64</td>
+<td>0 to 18Q</td>
+<td><code>ulong</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="floating-point-types">Floating-Point Types</h3>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>Bits</th>
+<th>Precision</th>
+<th>C# Equivalent</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>float32</code></td>
+<td>32</td>
+<td>~7 digits</td>
+<td><code>float</code></td>
+</tr>
+<tr>
+<td><code>float64</code></td>
+<td>64</td>
+<td>~16 digits</td>
+<td><code>double</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="complex-types">Complex Types</h3>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>Bits</th>
+<th>Components</th>
+<th>C# Equivalent</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>complex64</code></td>
+<td>64</td>
+<td>Two float32</td>
+<td>Custom struct needed</td>
+</tr>
+<tr>
+<td><code>complex128</code></td>
+<td>128</td>
+<td>Two float64</td>
+<td><code>System.Numerics.Complex</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="boolean">Boolean</h3>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>Bits</th>
+<th>C# Equivalent</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>bool</code></td>
+<td>1</td>
+<td><code>bool</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="numsharp-status">NumSharp Status</h3>
+<p>We support 12 of 14 types. <strong>Missing:</strong> <code>complex64</code> and <code>complex128</code>.</p>
+<p>Complex numbers are our biggest gap. C# has <code>System.Numerics.Complex</code>, but it's always 128-bit. For <code>complex64</code>, we'd need to implement our own struct with two <code>float</code> components.</p>
+<hr>
+<h2 id="constants-5-required">Constants: 5 Required</h2>
+<table>
+<thead>
+<tr>
+<th>Constant</th>
+<th>Value</th>
+<th>NumSharp</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>e</code></td>
+<td>2.71828...</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>inf</code></td>
+<td>Positive infinity</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>nan</code></td>
+<td>Not a Number</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>newaxis</code></td>
+<td>None (for dimension expansion)</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>pi</code></td>
+<td>3.14159...</td>
+<td>✅</td>
+</tr>
+</tbody>
+</table>
+<p>Full compliance here.</p>
+<hr>
+<h2 id="array-attributes-7-required">Array Attributes: 7 Required</h2>
+<p>Every array object must have these properties:</p>
+<table>
+<thead>
+<tr>
+<th>Attribute</th>
+<th>Description</th>
+<th>NumSharp</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>dtype</code></td>
+<td>Data type of elements</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>device</code></td>
+<td>Hardware location (CPU/GPU)</td>
+<td>❌</td>
+</tr>
+<tr>
+<td><code>mT</code></td>
+<td>Matrix transpose (last 2 axes)</td>
+<td>❌</td>
+</tr>
+<tr>
+<td><code>ndim</code></td>
+<td>Number of dimensions</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>shape</code></td>
+<td>Tuple of dimension sizes</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>size</code></td>
+<td>Total number of elements</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>T</code></td>
+<td>Full transpose</td>
+<td>✅</td>
+</tr>
+</tbody>
+</table>
+<h3 id="whats-device">What's <code>device</code>?</h3>
+<p>The <code>device</code> attribute tells you where the array lives—CPU, GPU, TPU, etc. For NumSharp (CPU-only), this would always return a CPU device object. We need to implement this for compliance, even though we only support one device.</p>
+<h3 id="whats-mt">What's <code>mT</code>?</h3>
+<p>The <code>mT</code> property is &quot;matrix transpose&quot;—it only transposes the last two dimensions. This matters for batched matrix operations:</p>
+<pre><code class="lang-python"># x has shape (batch, rows, cols)
+x.T    # Transposes ALL dimensions → (cols, rows, batch) — usually wrong!
+x.mT   # Transposes last two only → (batch, cols, rows) — what you want
+</code></pre>
+<p>NumPy 2.0 added <code>mT</code> for Array API compliance. NumSharp needs it too.</p>
+<hr>
+<h2 id="operators-complete-set-required">Operators: Complete Set Required</h2>
+<p>Arrays must support these operators with proper semantics:</p>
+<h3 id="arithmetic">Arithmetic</h3>
+<p><code>+</code>, <code>-</code>, <code>*</code>, <code>/</code>, <code>//</code> (floor division), <code>%</code>, <code>**</code> (power), unary <code>-</code>, unary <code>+</code></p>
+<h3 id="comparison">Comparison</h3>
+<p><code>&lt;</code>, <code>&lt;=</code>, <code>&gt;</code>, <code>&gt;=</code>, <code>==</code>, <code>!=</code></p>
+<h3 id="bitwise">Bitwise</h3>
+<p><code>~</code> (NOT), <code>&amp;</code> (AND), <code>|</code> (OR), <code>^</code> (XOR), <code>&lt;&lt;</code>, <code>&gt;&gt;</code></p>
+<h3 id="matrix">Matrix</h3>
+<p><code>@</code> (matrix multiplication)</p>
+<h3 id="in-place">In-place</h3>
+<p><code>+=</code>, <code>-=</code>, <code>*=</code>, <code>/=</code>, <code>//=</code>, <code>%=</code>, <code>**=</code>, <code>&amp;=</code>, <code>|=</code>, <code>^=</code>, <code>&lt;&lt;=</code>, <code>&gt;&gt;=</code>, <code>@=</code></p>
+<p>NumSharp implements most of these. We're missing the bitwise operators as named functions (though the operators themselves work) and <code>@</code> (we have <code>np.matmul()</code> instead).</p>
+<hr>
+<h2 id="core-functions-133-required">Core Functions: 133 Required</h2>
+<p>The specification groups functions into categories. Here's where NumSharp stands:</p>
+<h3 id="creation-functions-16">Creation Functions (16)</h3>
+<p>These create new arrays from scratch or from existing data.</p>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>Description</th>
+<th>NumSharp</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>arange</code></td>
+<td>Evenly spaced values in interval</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>asarray</code></td>
+<td>Convert to array</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>empty</code></td>
+<td>Uninitialized array</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>empty_like</code></td>
+<td>Same shape, uninitialized</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>eye</code></td>
+<td>Identity matrix</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>from_dlpack</code></td>
+<td>From DLPack capsule</td>
+<td>❌</td>
+</tr>
+<tr>
+<td><code>full</code></td>
+<td>Filled with constant</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>full_like</code></td>
+<td>Same shape, filled</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>linspace</code></td>
+<td>Evenly spaced (by count)</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>meshgrid</code></td>
+<td>Coordinate matrices</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>ones</code></td>
+<td>Filled with ones</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>ones_like</code></td>
+<td>Same shape, ones</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>tril</code></td>
+<td>Lower triangle</td>
+<td>❌</td>
+</tr>
+<tr>
+<td><code>triu</code></td>
+<td>Upper triangle</td>
+<td>❌</td>
+</tr>
+<tr>
+<td><code>zeros</code></td>
+<td>Filled with zeros</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>zeros_like</code></td>
+<td>Same shape, zeros</td>
+<td>✅</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Coverage: 81%</strong> — Missing <code>tril</code>, <code>triu</code>, <code>from_dlpack</code></p>
+<h3 id="element-wise-functions-67">Element-wise Functions (67)</h3>
+<p>The largest category. Mathematical operations applied to each element.</p>
+<p><strong>Arithmetic:</strong> <code>add</code>, <code>subtract</code>, <code>multiply</code>, <code>divide</code>, <code>floor_divide</code>, <code>remainder</code>, <code>pow</code>, <code>negative</code>, <code>positive</code>, <code>abs</code>, <code>sign</code></p>
+<p><strong>Rounding:</strong> <code>ceil</code>, <code>floor</code>, <code>trunc</code>, <code>round</code></p>
+<p><strong>Exponential/Log:</strong> <code>exp</code>, <code>expm1</code>, <code>log</code>, <code>log1p</code>, <code>log2</code>, <code>log10</code></p>
+<p><strong>Trigonometric:</strong> <code>sin</code>, <code>cos</code>, <code>tan</code>, <code>asin</code>, <code>acos</code>, <code>atan</code>, <code>atan2</code>, <code>sinh</code>, <code>cosh</code>, <code>tanh</code>, <code>asinh</code>, <code>acosh</code>, <code>atanh</code></p>
+<p><strong>Comparison:</strong> <code>equal</code>, <code>not_equal</code>, <code>less</code>, <code>less_equal</code>, <code>greater</code>, <code>greater_equal</code>, <code>maximum</code>, <code>minimum</code></p>
+<p><strong>Logical:</strong> <code>logical_and</code>, <code>logical_or</code>, <code>logical_xor</code>, <code>logical_not</code></p>
+<p><strong>Bitwise:</strong> <code>bitwise_and</code>, <code>bitwise_or</code>, <code>bitwise_xor</code>, <code>bitwise_invert</code>, <code>bitwise_left_shift</code>, <code>bitwise_right_shift</code></p>
+<p><strong>Type checking:</strong> <code>isfinite</code>, <code>isinf</code>, <code>isnan</code></p>
+<p><strong>Other:</strong> <code>sqrt</code>, <code>square</code>, <code>clip</code>, <code>copysign</code>, <code>hypot</code>, <code>logaddexp</code>, <code>nextafter</code>, <code>signbit</code>, <code>conj</code>, <code>imag</code>, <code>real</code></p>
+<p><strong>NumSharp Coverage: ~75%</strong></p>
+<p>We're missing:</p>
+<ul>
+<li><code>copysign</code>, <code>hypot</code>, <code>logaddexp</code> (math functions)</li>
+<li><code>nextafter</code>, <code>signbit</code> (floating-point utilities)</li>
+<li><code>conj</code>, <code>imag</code>, <code>real</code> (complex number functions—blocked on complex type support)</li>
+<li>Named bitwise functions (we have the operators, not the functions)</li>
+</ul>
+<h3 id="statistical-functions-9">Statistical Functions (9)</h3>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>Description</th>
+<th>NumSharp</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>max</code></td>
+<td>Maximum value</td>
+<td>✅ (<code>amax</code>)</td>
+</tr>
+<tr>
+<td><code>mean</code></td>
+<td>Arithmetic mean</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>min</code></td>
+<td>Minimum value</td>
+<td>✅ (<code>amin</code>)</td>
+</tr>
+<tr>
+<td><code>prod</code></td>
+<td>Product of elements</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>std</code></td>
+<td>Standard deviation</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>sum</code></td>
+<td>Sum of elements</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>var</code></td>
+<td>Variance</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>cumulative_sum</code></td>
+<td>Cumulative sum</td>
+<td>✅ (<code>cumsum</code>)</td>
+</tr>
+<tr>
+<td><code>cumulative_prod</code></td>
+<td>Cumulative product</td>
+<td>❌</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Coverage: 89%</strong> — Missing <code>cumulative_prod</code></p>
+<p><strong>Note:</strong> The Array API uses a <code>correction</code> parameter for <code>std</code>/<code>var</code>:</p>
+<pre><code class="lang-python"># Array API
+std(x, correction=1)   # Sample standard deviation
+
+# NumPy (and NumSharp)
+np.std(x, ddof=1)      # Same thing, different name
+</code></pre>
+<h3 id="manipulation-functions-14">Manipulation Functions (14)</h3>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>Description</th>
+<th>NumSharp</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>broadcast_arrays</code></td>
+<td>Broadcast shapes</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>broadcast_to</code></td>
+<td>Broadcast to shape</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>concat</code></td>
+<td>Join along axis</td>
+<td>✅ (<code>concatenate</code>)</td>
+</tr>
+<tr>
+<td><code>expand_dims</code></td>
+<td>Add dimension</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>flip</code></td>
+<td>Reverse along axis</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>moveaxis</code></td>
+<td>Move axis position</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>permute_dims</code></td>
+<td>Permute dimensions</td>
+<td>✅ (<code>transpose</code>)</td>
+</tr>
+<tr>
+<td><code>repeat</code></td>
+<td>Repeat elements</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>reshape</code></td>
+<td>Change shape</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>roll</code></td>
+<td>Shift elements</td>
+<td>Partial</td>
+</tr>
+<tr>
+<td><code>squeeze</code></td>
+<td>Remove size-1 dimensions</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>stack</code></td>
+<td>Join along new axis</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>tile</code></td>
+<td>Repeat whole array</td>
+<td>❌</td>
+</tr>
+<tr>
+<td><code>unstack</code></td>
+<td>Split along axis</td>
+<td>❌</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Coverage: ~79%</strong> — Missing <code>tile</code>, <code>unstack</code>; <code>roll</code> is partial</p>
+<h3 id="set-functions-4">Set Functions (4)</h3>
+<p>This is our weakest area.</p>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>Description</th>
+<th>NumSharp</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>unique_all</code></td>
+<td>Values + indices + inverse + counts</td>
+<td>❌</td>
+</tr>
+<tr>
+<td><code>unique_counts</code></td>
+<td>Values + counts</td>
+<td>❌</td>
+</tr>
+<tr>
+<td><code>unique_inverse</code></td>
+<td>Values + inverse indices</td>
+<td>❌</td>
+</tr>
+<tr>
+<td><code>unique_values</code></td>
+<td>Just unique values</td>
+<td>✅ (<code>np.unique</code>)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Coverage: 25%</strong></p>
+<p>The Array API split NumPy's <code>np.unique(return_counts=True, return_inverse=True)</code> into four focused functions. We only have the basic version.</p>
+<h3 id="other-categories">Other Categories</h3>
+<table>
+<thead>
+<tr>
+<th>Category</th>
+<th>Required</th>
+<th>NumSharp</th>
+<th>Coverage</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Searching</td>
+<td>6</td>
+<td>~4</td>
+<td>~67%</td>
+</tr>
+<tr>
+<td>Sorting</td>
+<td>2</td>
+<td>2</td>
+<td>100%</td>
+</tr>
+<tr>
+<td>Linear Algebra (core)</td>
+<td>4</td>
+<td>4</td>
+<td>100%</td>
+</tr>
+<tr>
+<td>Indexing</td>
+<td>2</td>
+<td>0</td>
+<td>0%</td>
+</tr>
+<tr>
+<td>Data Types</td>
+<td>6</td>
+<td>~3</td>
+<td>~50%</td>
+</tr>
+<tr>
+<td>Utility</td>
+<td>3</td>
+<td>2</td>
+<td>~67%</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="type-promotion-rules">Type Promotion Rules</h2>
+<p>The Array API specifies strict rules for what happens when you combine different types.</p>
+<h3 id="same-kind-promotion">Same-Kind Promotion</h3>
+<p>Within a type category, smaller types promote to larger:</p>
+<pre><code>int8 + int16 → int16
+int16 + int32 → int32
+float32 + float64 → float64
+</code></pre>
+<h3 id="cross-kind-undefined">Cross-Kind: Undefined!</h3>
+<p>Here's the crucial difference from NumPy 1.x: <strong>mixing integers and floats is undefined</strong> in the Array API.</p>
+<pre><code class="lang-python"># Array API says: DON'T DO THIS
+int32_array + float32_array  # Undefined behavior!
+</code></pre>
+<p>NumPy 2.x still allows it (promoting to float), but the Array API deliberately leaves this unspecified so libraries can make their own choices.</p>
+<h3 id="scalar-promotion">Scalar Promotion</h3>
+<p>When you mix a Python scalar with an array, the scalar is &quot;weak&quot;—it adopts the array's type:</p>
+<pre><code class="lang-python">uint8_array + 2  → uint8_array  # Scalar becomes uint8
+float32_array + 1.5 → float32_array  # Scalar becomes float32
+</code></pre>
+<p>This is consistent with NEP 50 in NumPy 2.x.</p>
+<hr>
+<h2 id="extensions-optional-but-defined">Extensions: Optional but Defined</h2>
+<p>The Array API defines two optional extensions. If a library implements an extension, it must implement all functions in that extension.</p>
+<h3 id="linear-algebra-extension-23-functions">Linear Algebra Extension (23 functions)</h3>
+<p>Accessible via <code>linalg</code> namespace.</p>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>cholesky</code></td>
+<td>Cholesky decomposition</td>
+</tr>
+<tr>
+<td><code>cross</code></td>
+<td>Cross product</td>
+</tr>
+<tr>
+<td><code>det</code></td>
+<td>Determinant</td>
+</tr>
+<tr>
+<td><code>diagonal</code></td>
+<td>Extract diagonal</td>
+</tr>
+<tr>
+<td><code>eigh</code></td>
+<td>Eigenvalues/vectors (Hermitian)</td>
+</tr>
+<tr>
+<td><code>eigvalsh</code></td>
+<td>Eigenvalues only (Hermitian)</td>
+</tr>
+<tr>
+<td><code>inv</code></td>
+<td>Matrix inverse</td>
+</tr>
+<tr>
+<td><code>matmul</code></td>
+<td>Matrix multiplication</td>
+</tr>
+<tr>
+<td><code>matrix_norm</code></td>
+<td>Matrix norm</td>
+</tr>
+<tr>
+<td><code>matrix_power</code></td>
+<td>Matrix to integer power</td>
+</tr>
+<tr>
+<td><code>matrix_rank</code></td>
+<td>Numerical rank</td>
+</tr>
+<tr>
+<td><code>matrix_transpose</code></td>
+<td>Transpose last 2 dims</td>
+</tr>
+<tr>
+<td><code>outer</code></td>
+<td>Outer product</td>
+</tr>
+<tr>
+<td><code>pinv</code></td>
+<td>Pseudo-inverse</td>
+</tr>
+<tr>
+<td><code>qr</code></td>
+<td>QR decomposition</td>
+</tr>
+<tr>
+<td><code>slogdet</code></td>
+<td>Sign and log-determinant</td>
+</tr>
+<tr>
+<td><code>solve</code></td>
+<td>Solve linear system</td>
+</tr>
+<tr>
+<td><code>svd</code></td>
+<td>Singular value decomposition</td>
+</tr>
+<tr>
+<td><code>svdvals</code></td>
+<td>Singular values only</td>
+</tr>
+<tr>
+<td><code>tensordot</code></td>
+<td>Tensor contraction</td>
+</tr>
+<tr>
+<td><code>trace</code></td>
+<td>Sum of diagonal</td>
+</tr>
+<tr>
+<td><code>vecdot</code></td>
+<td>Vector dot product</td>
+</tr>
+<tr>
+<td><code>vector_norm</code></td>
+<td>Vector norm</td>
+</tr>
+</tbody>
+</table>
+<p><strong>NumSharp Status:</strong> We have <code>matmul</code>, <code>outer</code>, <code>trace</code>, and basic operations. The decompositions (<code>qr</code>, <code>svd</code>, <code>eigh</code>, <code>cholesky</code>, <code>inv</code>) are stubs that return null.</p>
+<h3 id="fft-extension-14-functions">FFT Extension (14 functions)</h3>
+<p>Accessible via <code>fft</code> namespace.</p>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>fft</code></td>
+<td>1-D discrete Fourier transform</td>
+</tr>
+<tr>
+<td><code>ifft</code></td>
+<td>Inverse of fft</td>
+</tr>
+<tr>
+<td><code>fftn</code></td>
+<td>N-D DFT</td>
+</tr>
+<tr>
+<td><code>ifftn</code></td>
+<td>Inverse of fftn</td>
+</tr>
+<tr>
+<td><code>rfft</code></td>
+<td>1-D DFT for real input</td>
+</tr>
+<tr>
+<td><code>irfft</code></td>
+<td>Inverse of rfft</td>
+</tr>
+<tr>
+<td><code>rfftn</code></td>
+<td>N-D DFT for real input</td>
+</tr>
+<tr>
+<td><code>irfftn</code></td>
+<td>Inverse of rfftn</td>
+</tr>
+<tr>
+<td><code>hfft</code></td>
+<td>1-D DFT for Hermitian input</td>
+</tr>
+<tr>
+<td><code>ihfft</code></td>
+<td>Inverse of hfft</td>
+</tr>
+<tr>
+<td><code>fftfreq</code></td>
+<td>DFT sample frequencies</td>
+</tr>
+<tr>
+<td><code>rfftfreq</code></td>
+<td>Sample frequencies for rfft</td>
+</tr>
+<tr>
+<td><code>fftshift</code></td>
+<td>Shift zero-frequency to center</td>
+</tr>
+<tr>
+<td><code>ifftshift</code></td>
+<td>Inverse of fftshift</td>
+</tr>
+</tbody>
+</table>
+<p><strong>NumSharp Status:</strong> Not implemented. FFT requires complex number support.</p>
+<hr>
+<h2 id="whats-not-in-the-standard">What's NOT in the Standard</h2>
+<p>The Array API deliberately excludes some things to remain implementable across diverse libraries:</p>
+<h3 id="out-of-scope">Out of Scope</h3>
+<ul>
+<li><strong>I/O operations</strong> — No <code>save</code>, <code>load</code>, <code>fromfile</code></li>
+<li><strong>String dtypes</strong> — No <code>StringDType</code> or fixed-width strings</li>
+<li><strong>Datetime dtypes</strong> — No <code>datetime64</code>, <code>timedelta64</code></li>
+<li><strong>Object dtype</strong> — No arrays of arbitrary Python objects</li>
+<li><strong>Specific error types</strong> — Error handling is implementation-defined</li>
+<li><strong>C API</strong> — Only Python-level interface specified</li>
+<li><strong>Execution semantics</strong> — Eager vs. lazy, parallelization, etc.</li>
+</ul>
+<p>This means NumSharp can have these features (and we do—<code>np.save</code>, <code>np.load</code> work), they're just outside the Array API specification.</p>
+<hr>
+<h2 id="real-world-use-cases">Real-World Use Cases</h2>
+<p>The specification documents several motivating use cases:</p>
+<h3 id="scipy-without-dependencies">SciPy Without Dependencies</h3>
+<p>SciPy's signal processing functions are pure Python but tied to NumPy. With Array API compliance, <code>scipy.signal.welch(x)</code> could work on GPU arrays (CuPy), distributed arrays (Dask), or NumSharp arrays—without SciPy depending on any of them.</p>
+<h3 id="einops-without-backend-code">einops Without Backend Code</h3>
+<p>The <a href="https://github.com/arogozhnikov/einops">einops</a> library maintains ~550 lines of glue code to support multiple backends. Array API compliance would eliminate this entirely.</p>
+<h3 id="jit-compilation">JIT Compilation</h3>
+<p>Numba and other JIT compilers struggle with NumPy's value-dependent type rules. The Array API's strict type-based promotion makes JIT compilation predictable.</p>
+<hr>
+<h2 id="numsharps-path-to-compliance">NumSharp's Path to Compliance</h2>
+<h3 id="current-coverage">Current Coverage</h3>
+<table>
+<thead>
+<tr>
+<th>Category</th>
+<th>Functions</th>
+<th>NumSharp</th>
+<th>%</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Creation</td>
+<td>16</td>
+<td>13</td>
+<td>81%</td>
+</tr>
+<tr>
+<td>Element-wise</td>
+<td>67</td>
+<td>~50</td>
+<td>75%</td>
+</tr>
+<tr>
+<td>Statistical</td>
+<td>9</td>
+<td>8</td>
+<td>89%</td>
+</tr>
+<tr>
+<td>Manipulation</td>
+<td>14</td>
+<td>11</td>
+<td>79%</td>
+</tr>
+<tr>
+<td>Set</td>
+<td>4</td>
+<td>1</td>
+<td>25%</td>
+</tr>
+<tr>
+<td>Searching</td>
+<td>6</td>
+<td>4</td>
+<td>67%</td>
+</tr>
+<tr>
+<td>Sorting</td>
+<td>2</td>
+<td>2</td>
+<td>100%</td>
+</tr>
+<tr>
+<td>Linear Algebra</td>
+<td>4</td>
+<td>4</td>
+<td>100%</td>
+</tr>
+<tr>
+<td>Indexing</td>
+<td>2</td>
+<td>0</td>
+<td>0%</td>
+</tr>
+<tr>
+<td>Data Types</td>
+<td>6</td>
+<td>3</td>
+<td>50%</td>
+</tr>
+<tr>
+<td>Utility</td>
+<td>3</td>
+<td>2</td>
+<td>67%</td>
+</tr>
+<tr>
+<td><strong>Total Core</strong></td>
+<td><strong>133</strong></td>
+<td><strong>~98</strong></td>
+<td><strong>~74%</strong></td>
+</tr>
+</tbody>
+</table>
+<h3 id="priority-items">Priority Items</h3>
+<ol>
+<li><strong>Complex number types</strong> — Blocks FFT extension and many math functions</li>
+<li><strong><code>device</code> and <code>mT</code> properties</strong> — Simple to add</li>
+<li><strong>Set functions</strong> (<code>unique_*</code> family) — Moderate effort</li>
+<li><strong>Missing element-wise functions</strong> — Incremental work</li>
+<li><strong>Indexing functions</strong> (<code>take</code>, <code>take_along_axis</code>) — Moderate effort</li>
+</ol>
+<h3 id="tracking">Tracking</h3>
+<p>See <a href="https://github.com/SciSharp/NumSharp/milestone/6">Array API Standard Milestone</a> for detailed issue tracking.</p>
+<hr>
+<h2 id="references">References</h2>
+<ul>
+<li><a href="https://data-apis.org/array-api/latest/">Array API Standard Specification</a> — The full specification</li>
+<li><a href="https://data-apis.org/array-api/latest/API_specification/type_promotion.html">Type Promotion Rules</a> — How types combine</li>
+<li><a href="https://data-apis.org/array-api/latest/extensions/linear_algebra_functions.html">Linear Algebra Extension</a> — All linalg functions</li>
+<li><a href="https://data-apis.org/array-api/latest/extensions/fourier_transform_functions.html">FFT Extension</a> — All FFT functions</li>
+<li><a href="https://data-apis.org/">Consortium for Python Data API Standards</a> — The organization behind the standard</li>
+<li><a href="https://numpy.org/doc/stable/reference/array_api.html">NumPy Array API Support</a> — NumPy's implementation notes</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          <span>Copyright &copy; 2025 <a href='https://github.com/SciSharp'>SciSharp STACK</a>. Built with <a href='https://dotnet.github.io/docfx'>DocFX</a>.</span>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

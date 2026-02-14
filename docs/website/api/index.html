@@ -1,111 +1,1027 @@
-﻿<!DOCTYPE html>
-<!--[if IE]><![endif]-->
-<html>
-  
+<!DOCTYPE html>
+<html lang="en">
   <head>
     <meta charset="utf-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
-    <title>NumSharp docfx documentation </title>
-    <meta name="viewport" content="width=device-width">
-    <meta name="title" content="NumSharp docfx documentation ">
-    <meta name="generator" content="docfx 2.40.2.0">
-    
-    <link rel="shortcut icon" href="../favicon.ico">
-    <link rel="stylesheet" href="../styles/docfx.vendor.css">
-    <link rel="stylesheet" href="../styles/docfx.css">
-    <link rel="stylesheet" href="../styles/main.css">
-    <meta property="docfx:navrel" content="../toc.html">
-    <meta property="docfx:tocrel" content="toc.html">
-    
-    
-    
+      <title>NumSharp API Reference | NumSharp Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="NumSharp API Reference | NumSharp Documentation ">
+      
+      
+      <link rel="icon" href="../images/numsharp.icon128.png">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
   </head>
-  <body data-spy="scroll" data-target="#affix" data-offset="120">
-    <div id="wrapper">
-      <header>
-        
-        <nav id="autocollapse" class="navbar navbar-inverse ng-scope" role="navigation">
-          <div class="container">
-            <div class="navbar-header">
-              <button type="button" class="navbar-toggle" data-toggle="collapse" data-target="#navbar">
-                <span class="sr-only">Toggle navigation</span>
-                <span class="icon-bar"></span>
-                <span class="icon-bar"></span>
-                <span class="icon-bar"></span>
-              </button>
-              
-              <a class="navbar-brand" href="../index.html">
-                <img id="logo" class="svg" src="../logo.svg" alt="">
-              </a>
-            </div>
-            <div class="collapse navbar-collapse" id="navbar">
-              <form class="navbar-form navbar-right" role="search" id="search">
-                <div class="form-group">
-                  <input type="text" class="form-control" id="search-query" placeholder="Search" autocomplete="off">
-                </div>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../images/numsharp.icon.svg" alt="NumSharp">
+            NumSharp
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
               </form>
             </div>
           </div>
-        </nav>
-        
-        <div class="subnav navbar navbar-default">
-          <div class="container hide-when-search" id="breadcrumb">
-            <ul class="breadcrumb">
-              <li></li>
-            </ul>
-          </div>
         </div>
-      </header>
-      <div role="main" class="container body-content hide-when-search">
-        
-        <div class="sidenav hide-when-search">
-          <a class="btn toc-toggle collapse" data-toggle="collapse" href="#sidetoggle" aria-expanded="false" aria-controls="sidetoggle">Show / Hide Table of Contents</a>
-          <div class="sidetoggle collapse" id="sidetoggle">
-            <div id="sidetoc"></div>
-          </div>
-        </div>
-        <div class="article row grid-right">
-          <div class="col-md-10">
-            <article class="content wrap" id="_content" data-uid="">
-<h1 id="numsharp-docfx-documentation">NumSharp docfx documentation</h1>
+      </nav>
+    </header>
 
-<p>This is the autogenerated documentation of NumSharp</p>
-</article>
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
           </div>
-          
-          <div class="hidden-sm col-md-2" role="complementary">
-            <div class="sideaffix">
-              <div class="contribution">
-                <ul class="nav">
-                  <li>
-                    <a href="https://github.com/dotChris90/NumSharp/blob/master/docfx_project/api/index.md/#L1" class="contribution-link">Improve this Doc</a>
-                  </li>
-                </ul>
-              </div>
-              <nav class="bs-docs-sidebar hidden-print hidden-xs hidden-sm affix" id="affix">
-              <!-- <p><a class="back-to-top" href="#top">Back to top</a><p> -->
-              </nav>
-            </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
           </div>
         </div>
       </div>
-      
-      <footer>
-        <div class="grad-bottom"></div>
-        <div class="footer">
-          <div class="container">
-            <span class="pull-right">
-              <a href="#top">Back to top</a>
-            </span>
-            
-            <span>Generated by <strong>DocFX</strong></span>
-          </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
         </div>
-      </footer>
-    </div>
-    
-    <script type="text/javascript" src="../styles/docfx.vendor.js"></script>
-    <script type="text/javascript" src="../styles/docfx.js"></script>
-    <script type="text/javascript" src="../styles/main.js"></script>
+
+        <article data-uid="api-index">
+<h1 id="numsharp-api-reference">NumSharp API Reference</h1>
+
+<p>NumSharp is a .NET port of Python's NumPy library. This API reference is organized by functionality, matching NumPy's documentation structure.</p>
+<hr>
+<h2 id="core-types">Core Types</h2>
+<p>The essential types for working with NumSharp.</p>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a class="xref" href="NumSharp.NDArray.html">NDArray</a></td>
+<td>The main n-dimensional array type</td>
+</tr>
+<tr>
+<td><a class="xref" href="NumSharp.np.html">np</a></td>
+<td>Static API class (like <code>import numpy as np</code> in Python)</td>
+</tr>
+<tr>
+<td><a class="xref" href="NumSharp.Shape.html">Shape</a></td>
+<td>Array dimensions and strides</td>
+</tr>
+<tr>
+<td><a class="xref" href="NumSharp.Slice.html">Slice</a></td>
+<td>Slice specification for array indexing</td>
+</tr>
+<tr>
+<td><a class="xref" href="NumSharp.Generic.NDArray-1.html">NDArray&lt;TDType&gt;</a></td>
+<td>Generic typed wrapper for type-safe access</td>
+</tr>
+</tbody>
+</table>
+<h3 id="quick-example">Quick Example</h3>
+<pre><code class="lang-csharp">using NumSharp;
+
+// Create arrays
+var a = np.array(new[] { 1, 2, 3, 4, 5 });
+var b = np.zeros((3, 4));
+var c = np.arange(10);
+
+// Operations
+var sum = np.sum(a);
+var reshaped = a.reshape(5, 1);
+var sliced = a[&quot;1:4&quot;];  // Elements 1, 2, 3
+</code></pre>
+<hr>
+<h2 id="array-creation">Array Creation</h2>
+<p>Functions for creating new arrays.</p>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>np.array(data)</code></td>
+<td>Create array from existing data</td>
+</tr>
+<tr>
+<td><code>np.zeros(shape)</code></td>
+<td>Array filled with zeros</td>
+</tr>
+<tr>
+<td><code>np.zeros_like(a)</code></td>
+<td>Array of zeros with same shape as <code>a</code></td>
+</tr>
+<tr>
+<td><code>np.ones(shape)</code></td>
+<td>Array filled with ones</td>
+</tr>
+<tr>
+<td><code>np.ones_like(a)</code></td>
+<td>Array of ones with same shape as <code>a</code></td>
+</tr>
+<tr>
+<td><code>np.empty(shape)</code></td>
+<td>Uninitialized array</td>
+</tr>
+<tr>
+<td><code>np.full(shape, value)</code></td>
+<td>Array filled with a constant value</td>
+</tr>
+<tr>
+<td><code>np.eye(N)</code></td>
+<td>Identity matrix</td>
+</tr>
+<tr>
+<td><code>np.arange(start, stop, step)</code></td>
+<td>Evenly spaced values within interval</td>
+</tr>
+<tr>
+<td><code>np.linspace(start, stop, num)</code></td>
+<td>Evenly spaced values (specify count)</td>
+</tr>
+<tr>
+<td><code>np.meshgrid(x, y)</code></td>
+<td>Coordinate matrices from vectors</td>
+</tr>
+<tr>
+<td><code>np.copy(a)</code></td>
+<td>Return a copy of the array</td>
+</tr>
+<tr>
+<td><code>np.asarray(a)</code></td>
+<td>Convert input to array</td>
+</tr>
+<tr>
+<td><code>np.frombuffer(buffer)</code></td>
+<td>Create array from buffer</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="stacking--joining">Stacking &amp; Joining</h2>
+<p>Functions for combining multiple arrays.</p>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>np.concatenate(arrays, axis)</code></td>
+<td>Join arrays along an existing axis</td>
+</tr>
+<tr>
+<td><code>np.stack(arrays, axis)</code></td>
+<td>Join arrays along a new axis</td>
+</tr>
+<tr>
+<td><code>np.vstack(arrays)</code></td>
+<td>Stack arrays vertically (row-wise)</td>
+</tr>
+<tr>
+<td><code>np.hstack(arrays)</code></td>
+<td>Stack arrays horizontally (column-wise)</td>
+</tr>
+<tr>
+<td><code>np.dstack(arrays)</code></td>
+<td>Stack arrays depth-wise (along 3rd axis)</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="math-operations">Math Operations</h2>
+<p>Arithmetic and mathematical functions.</p>
+<h3 id="arithmetic-operators">Arithmetic Operators</h3>
+<table>
+<thead>
+<tr>
+<th>Operator</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>a + b</code></td>
+<td>Element-wise addition</td>
+</tr>
+<tr>
+<td><code>a - b</code></td>
+<td>Element-wise subtraction</td>
+</tr>
+<tr>
+<td><code>a * b</code></td>
+<td>Element-wise multiplication</td>
+</tr>
+<tr>
+<td><code>a / b</code></td>
+<td>Element-wise division</td>
+</tr>
+<tr>
+<td><code>a % b</code></td>
+<td>Element-wise modulo</td>
+</tr>
+<tr>
+<td><code>-a</code></td>
+<td>Element-wise negation</td>
+</tr>
+</tbody>
+</table>
+<h3 id="math-functions">Math Functions</h3>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>np.sum(a, axis)</code></td>
+<td>Sum of array elements</td>
+</tr>
+<tr>
+<td><code>np.prod(a)</code></td>
+<td>Product of array elements</td>
+</tr>
+<tr>
+<td><code>np.cumsum(a)</code></td>
+<td>Cumulative sum</td>
+</tr>
+<tr>
+<td><code>np.sqrt(a)</code></td>
+<td>Element-wise square root</td>
+</tr>
+<tr>
+<td><code>np.power(a, n)</code></td>
+<td>Element-wise power</td>
+</tr>
+<tr>
+<td><code>np.abs(a)</code></td>
+<td>Element-wise absolute value</td>
+</tr>
+<tr>
+<td><code>np.sign(a)</code></td>
+<td>Element-wise sign</td>
+</tr>
+<tr>
+<td><code>np.floor(a)</code></td>
+<td>Element-wise floor</td>
+</tr>
+<tr>
+<td><code>np.ceil(a)</code></td>
+<td>Element-wise ceiling</td>
+</tr>
+<tr>
+<td><code>np.round(a)</code></td>
+<td>Element-wise rounding</td>
+</tr>
+<tr>
+<td><code>np.clip(a, min, max)</code></td>
+<td>Clip values to range</td>
+</tr>
+<tr>
+<td><code>np.maximum(a, b)</code></td>
+<td>Element-wise maximum</td>
+</tr>
+<tr>
+<td><code>np.minimum(a, b)</code></td>
+<td>Element-wise minimum</td>
+</tr>
+</tbody>
+</table>
+<h3 id="exponentials--logarithms">Exponentials &amp; Logarithms</h3>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>np.exp(a)</code></td>
+<td>Element-wise exponential</td>
+</tr>
+<tr>
+<td><code>np.exp2(a)</code></td>
+<td>Element-wise 2^x</td>
+</tr>
+<tr>
+<td><code>np.expm1(a)</code></td>
+<td>exp(x) - 1</td>
+</tr>
+<tr>
+<td><code>np.log(a)</code></td>
+<td>Natural logarithm</td>
+</tr>
+<tr>
+<td><code>np.log2(a)</code></td>
+<td>Base-2 logarithm</td>
+</tr>
+<tr>
+<td><code>np.log10(a)</code></td>
+<td>Base-10 logarithm</td>
+</tr>
+<tr>
+<td><code>np.log1p(a)</code></td>
+<td>log(1 + x)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="trigonometric-functions">Trigonometric Functions</h3>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>np.sin(a)</code></td>
+<td>Element-wise sine</td>
+</tr>
+<tr>
+<td><code>np.cos(a)</code></td>
+<td>Element-wise cosine</td>
+</tr>
+<tr>
+<td><code>np.tan(a)</code></td>
+<td>Element-wise tangent</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="statistics">Statistics</h2>
+<p>Statistical functions.</p>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>np.mean(a, axis)</code></td>
+<td>Arithmetic mean</td>
+</tr>
+<tr>
+<td><code>np.std(a, axis)</code></td>
+<td>Standard deviation</td>
+</tr>
+<tr>
+<td><code>np.var(a, axis)</code></td>
+<td>Variance</td>
+</tr>
+<tr>
+<td><code>np.amax(a, axis)</code></td>
+<td>Maximum value</td>
+</tr>
+<tr>
+<td><code>np.amin(a, axis)</code></td>
+<td>Minimum value</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="sorting--searching">Sorting &amp; Searching</h2>
+<p>Functions for sorting arrays and finding elements.</p>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>np.argsort(a)</code></td>
+<td>Indices that would sort an array</td>
+</tr>
+<tr>
+<td><code>np.argmax(a, axis)</code></td>
+<td>Index of maximum value</td>
+</tr>
+<tr>
+<td><code>np.argmin(a, axis)</code></td>
+<td>Index of minimum value</td>
+</tr>
+<tr>
+<td><code>np.searchsorted(a, v)</code></td>
+<td>Find indices for inserting values</td>
+</tr>
+<tr>
+<td><code>np.nonzero(a)</code></td>
+<td>Indices of non-zero elements</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="linear-algebra">Linear Algebra</h2>
+<p>Matrix and vector operations.</p>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>np.dot(a, b)</code></td>
+<td>Dot product / matrix multiplication</td>
+</tr>
+<tr>
+<td><code>np.matmul(a, b)</code></td>
+<td>Matrix product (@ operator)</td>
+</tr>
+<tr>
+<td><code>np.outer(a, b)</code></td>
+<td>Outer product of two vectors</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="shape-manipulation">Shape Manipulation</h2>
+<p>Functions for changing array shape and dimensions.</p>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>np.reshape(a, shape)</code></td>
+<td>Reshape without changing data</td>
+</tr>
+<tr>
+<td><code>a.reshape(shape)</code></td>
+<td>Instance method for reshape</td>
+</tr>
+<tr>
+<td><code>np.transpose(a)</code></td>
+<td>Permute array dimensions</td>
+</tr>
+<tr>
+<td><code>a.T</code></td>
+<td>Transpose property</td>
+</tr>
+<tr>
+<td><code>np.ravel(a)</code></td>
+<td>Flatten to 1-D array (returns view)</td>
+</tr>
+<tr>
+<td><code>a.flatten()</code></td>
+<td>Flatten to 1-D array (returns copy)</td>
+</tr>
+<tr>
+<td><code>np.squeeze(a)</code></td>
+<td>Remove axes of length 1</td>
+</tr>
+<tr>
+<td><code>np.expand_dims(a, axis)</code></td>
+<td>Insert a new axis</td>
+</tr>
+<tr>
+<td><code>np.swapaxes(a, ax1, ax2)</code></td>
+<td>Swap two axes</td>
+</tr>
+<tr>
+<td><code>np.moveaxis(a, src, dst)</code></td>
+<td>Move axes to new positions</td>
+</tr>
+<tr>
+<td><code>np.rollaxis(a, axis)</code></td>
+<td>Roll axis backwards</td>
+</tr>
+<tr>
+<td><code>np.atleast_1d(a)</code></td>
+<td>Convert to at least 1-D</td>
+</tr>
+<tr>
+<td><code>np.atleast_2d(a)</code></td>
+<td>Convert to at least 2-D</td>
+</tr>
+<tr>
+<td><code>np.atleast_3d(a)</code></td>
+<td>Convert to at least 3-D</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="indexing--slicing">Indexing &amp; Slicing</h2>
+<p>NumSharp supports Python-style array indexing and slicing.</p>
+<h3 id="slice-syntax">Slice Syntax</h3>
+<pre><code class="lang-csharp">a[&quot;:&quot;]           // All elements
+a[&quot;1:5&quot;]         // Elements 1-4 (stop exclusive)
+a[&quot;::2&quot;]         // Every 2nd element
+a[&quot;-1&quot;]          // Last element (reduces dimension)
+a[&quot;::-1&quot;]        // Reversed
+a[&quot;:, 0&quot;]        // All rows, first column
+a[&quot;..., -1&quot;]     // Ellipsis fills dimensions
+</code></pre>
+<h3 id="special-slice-constants">Special Slice Constants</h3>
+<table>
+<thead>
+<tr>
+<th>Constant</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Slice.All</code></td>
+<td>All elements (<code>:</code>)</td>
+</tr>
+<tr>
+<td><code>Slice.Ellipsis</code></td>
+<td>Fill remaining dimensions (<code>...</code>)</td>
+</tr>
+<tr>
+<td><code>Slice.NewAxis</code></td>
+<td>Insert new dimension</td>
+</tr>
+<tr>
+<td><code>Slice.Index(n)</code></td>
+<td>Single element selection</td>
+</tr>
+</tbody>
+</table>
+<h3 id="boolean-masking">Boolean Masking</h3>
+<pre><code class="lang-csharp">var a = np.array(new[] { 1, 2, 3, 4, 5 });
+var mask = a &gt; 2;        // [false, false, true, true, true]
+var filtered = a[mask];  // [3, 4, 5]
+</code></pre>
+<hr>
+<h2 id="logic-functions">Logic Functions</h2>
+<p>Boolean operations and comparisons.</p>
+<h3 id="comparison-operators">Comparison Operators</h3>
+<table>
+<thead>
+<tr>
+<th>Operator</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>a == b</code></td>
+<td>Element-wise equality</td>
+</tr>
+<tr>
+<td><code>a != b</code></td>
+<td>Element-wise inequality</td>
+</tr>
+<tr>
+<td><code>a &gt; b</code></td>
+<td>Element-wise greater than</td>
+</tr>
+<tr>
+<td><code>a &gt;= b</code></td>
+<td>Element-wise greater or equal</td>
+</tr>
+<tr>
+<td><code>a &lt; b</code></td>
+<td>Element-wise less than</td>
+</tr>
+<tr>
+<td><code>a &lt;= b</code></td>
+<td>Element-wise less or equal</td>
+</tr>
+<tr>
+<td><code>!a</code></td>
+<td>Element-wise NOT (boolean arrays)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="logic-functions-1">Logic Functions</h3>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>np.all(a, axis)</code></td>
+<td>Test if all elements are true</td>
+</tr>
+<tr>
+<td><code>np.any(a, axis)</code></td>
+<td>Test if any element is true</td>
+</tr>
+<tr>
+<td><code>np.array_equal(a, b)</code></td>
+<td>Test if arrays are equal</td>
+</tr>
+<tr>
+<td><code>np.isscalar(a)</code></td>
+<td>Test if input is scalar</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="random-sampling">Random Sampling</h2>
+<p>Random number generation. Access via <a class="xref" href="NumSharp.NumPyRandom.html">NumPyRandom</a>.</p>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>np.random.rand(d0, d1, ...)</code></td>
+<td>Random values in [0, 1)</td>
+</tr>
+<tr>
+<td><code>np.random.randn(d0, d1, ...)</code></td>
+<td>Standard normal distribution</td>
+</tr>
+<tr>
+<td><code>np.random.randint(low, high, size)</code></td>
+<td>Random integers</td>
+</tr>
+<tr>
+<td><code>np.random.uniform(low, high, size)</code></td>
+<td>Uniform distribution</td>
+</tr>
+<tr>
+<td><code>np.random.choice(a, size, replace)</code></td>
+<td>Random sample from array</td>
+</tr>
+<tr>
+<td><code>np.random.shuffle(a)</code></td>
+<td>Shuffle array in-place</td>
+</tr>
+<tr>
+<td><code>np.random.permutation(a)</code></td>
+<td>Random permutation</td>
+</tr>
+</tbody>
+</table>
+<h3 id="distributions">Distributions</h3>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>np.random.beta(a, b, size)</code></td>
+<td>Beta distribution</td>
+</tr>
+<tr>
+<td><code>np.random.binomial(n, p, size)</code></td>
+<td>Binomial distribution</td>
+</tr>
+<tr>
+<td><code>np.random.gamma(shape, scale, size)</code></td>
+<td>Gamma distribution</td>
+</tr>
+<tr>
+<td><code>np.random.poisson(lam, size)</code></td>
+<td>Poisson distribution</td>
+</tr>
+<tr>
+<td><code>np.random.exponential(scale, size)</code></td>
+<td>Exponential distribution</td>
+</tr>
+<tr>
+<td><code>np.random.geometric(p, size)</code></td>
+<td>Geometric distribution</td>
+</tr>
+<tr>
+<td><code>np.random.lognormal(mean, sigma, size)</code></td>
+<td>Log-normal distribution</td>
+</tr>
+<tr>
+<td><code>np.random.chisquare(df, size)</code></td>
+<td>Chi-square distribution</td>
+</tr>
+<tr>
+<td><code>np.random.bernoulli(p, size)</code></td>
+<td>Bernoulli distribution</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="broadcasting">Broadcasting</h2>
+<p>Functions for array broadcasting.</p>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>np.broadcast_to(a, shape)</code></td>
+<td>Broadcast array to new shape</td>
+</tr>
+<tr>
+<td><code>np.broadcast_arrays(a, b, ...)</code></td>
+<td>Broadcast arrays against each other</td>
+</tr>
+</tbody>
+</table>
+<p>Broadcasting automatically aligns array shapes for operations:</p>
+<ul>
+<li>Shapes align from the right</li>
+<li>Dimensions must be equal OR one must be 1</li>
+<li>Dimension of 1 &quot;stretches&quot; to match</li>
+</ul>
+<hr>
+<h2 id="file-io">File I/O</h2>
+<p>Functions for saving and loading arrays.</p>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>np.save(file, arr)</code></td>
+<td>Save array to <code>.npy</code> file</td>
+</tr>
+<tr>
+<td><code>np.load(file)</code></td>
+<td>Load <code>.npy</code> or <code>.npz</code> file</td>
+</tr>
+<tr>
+<td><code>np.fromfile(file, dtype)</code></td>
+<td>Load array from binary file</td>
+</tr>
+<tr>
+<td><code>arr.tofile(file)</code></td>
+<td>Write array to binary file</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="unique--set-operations">Unique &amp; Set Operations</h2>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>np.unique(a)</code></td>
+<td>Find unique elements</td>
+</tr>
+<tr>
+<td><code>np.repeat(a, repeats)</code></td>
+<td>Repeat elements of array</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="internals--advanced">Internals &amp; Advanced</h2>
+<p>These types are for advanced users extending NumSharp or understanding its internals.</p>
+<h3 id="storage--backends">Storage &amp; Backends</h3>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a class="xref" href="NumSharp.Backends.UnmanagedStorage.html">UnmanagedStorage</a></td>
+<td>Raw unmanaged memory management</td>
+</tr>
+<tr>
+<td><a class="xref" href="NumSharp.TensorEngine.html">TensorEngine</a></td>
+<td>Abstract computation backend interface</td>
+</tr>
+<tr>
+<td><a class="xref" href="NumSharp.Backends.DefaultEngine.html">DefaultEngine</a></td>
+<td>Pure C# implementation of TensorEngine</td>
+</tr>
+</tbody>
+</table>
+<h3 id="iteration">Iteration</h3>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a class="xref" href="NumSharp.NDIterator.html">NDIterator</a></td>
+<td>Traverses arrays with different memory layouts</td>
+</tr>
+<tr>
+<td><a class="xref" href="NumSharp.MultiIterator.html">MultiIterator</a></td>
+<td>Paired iteration for broadcasting</td>
+</tr>
+</tbody>
+</table>
+<h3 id="memory-management">Memory Management</h3>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a class="xref" href="NumSharp.Backends.Unmanaged.ArraySlice-1.html">ArraySlice&lt;T&gt;</a></td>
+<td>Typed memory slice</td>
+</tr>
+<tr>
+<td><a class="xref" href="NumSharp.Backends.Unmanaged.IMemoryBlock.html">IMemoryBlock</a></td>
+<td>Memory block interface</td>
+</tr>
+</tbody>
+</table>
+<h3 id="utilities">Utilities</h3>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a class="xref" href="NumSharp.Utilities.InfoOf-1.html">InfoOf&lt;T&gt;</a></td>
+<td>Static type information cache</td>
+</tr>
+<tr>
+<td><a class="xref" href="NumSharp.NPTypeCode.html">NPTypeCode</a></td>
+<td>Enum of supported data types</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="supported-data-types">Supported Data Types</h2>
+<p>NumSharp supports 12 numeric data types:</p>
+<table>
+<thead>
+<tr>
+<th>NPTypeCode</th>
+<th>C# Type</th>
+<th>NumPy Equivalent</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Boolean</td>
+<td><code>bool</code></td>
+<td><code>np.bool_</code></td>
+</tr>
+<tr>
+<td>Byte</td>
+<td><code>byte</code></td>
+<td><code>np.uint8</code></td>
+</tr>
+<tr>
+<td>Int16</td>
+<td><code>short</code></td>
+<td><code>np.int16</code></td>
+</tr>
+<tr>
+<td>UInt16</td>
+<td><code>ushort</code></td>
+<td><code>np.uint16</code></td>
+</tr>
+<tr>
+<td>Int32</td>
+<td><code>int</code></td>
+<td><code>np.int32</code></td>
+</tr>
+<tr>
+<td>UInt32</td>
+<td><code>uint</code></td>
+<td><code>np.uint32</code></td>
+</tr>
+<tr>
+<td>Int64</td>
+<td><code>long</code></td>
+<td><code>np.int64</code></td>
+</tr>
+<tr>
+<td>UInt64</td>
+<td><code>ulong</code></td>
+<td><code>np.uint64</code></td>
+</tr>
+<tr>
+<td>Char</td>
+<td><code>char</code></td>
+<td>(no equivalent)</td>
+</tr>
+<tr>
+<td>Single</td>
+<td><code>float</code></td>
+<td><code>np.float32</code></td>
+</tr>
+<tr>
+<td>Double</td>
+<td><code>double</code></td>
+<td><code>np.float64</code></td>
+</tr>
+<tr>
+<td>Decimal</td>
+<td><code>decimal</code></td>
+<td>(no equivalent)</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="see-also">See Also</h2>
+<ul>
+<li><a href="../docs/intro.html">User Documentation</a> - Tutorials and guides</li>
+<li><a href="https://github.com/SciSharp/NumSharp">GitHub Repository</a> - Source code and issues</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          <span>Copyright &copy; 2025 <a href='https://github.com/SciSharp'>SciSharp STACK</a>. Built with <a href='https://dotnet.github.io/docfx'>DocFX</a>.</span>
+        </div>
+      </div>
+    </footer>
   </body>
 </html>

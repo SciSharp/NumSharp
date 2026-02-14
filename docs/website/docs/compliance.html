@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+      <title>NumPy Compliance &amp; Compatibility | NumSharp Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="NumPy Compliance &amp; Compatibility | NumSharp Documentation ">
+      
+      
+      <link rel="icon" href="../images/numsharp.icon128.png">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../images/numsharp.icon.svg" alt="NumSharp">
+            NumSharp
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="numpy-compliance--compatibility">NumPy Compliance &amp; Compatibility</h1>
+
+<p>NumSharp exists for one reason: to let you write NumPy-style code in C#. But &quot;NumPy-style&quot; isn't just about having similar function names—it's about behaving the same way. When you add a scalar to an array, when you slice with negative indices, when you broadcast two arrays together, NumSharp should do exactly what NumPy does.</p>
+<p>This page explains where we are on that journey, what challenges we face, and how you can help.</p>
+<hr>
+<h2 id="why-compatibility-matters">Why Compatibility Matters</h2>
+<p>If you're porting Python ML code to C#, the last thing you want is subtle behavioral differences causing bugs. Consider this Python code:</p>
+<pre><code class="lang-python">import numpy as np
+a = np.array([1, 2, 3], dtype=np.uint8)
+b = a + 255
+print(b)  # [0, 1, 2] - overflow wraps around
+</code></pre>
+<p>What should NumSharp do here? In NumPy 1.x, this would silently upcast to int16 to avoid overflow. In NumPy 2.x, it wraps with a warning. These differences matter when you're debugging why your neural network produces different results in C#.</p>
+<p>Our goal is <strong>1-to-1 behavioral compatibility with NumPy 2.x</strong> (currently targeting 2.4.2). We also aim to comply with the <strong>Python Array API Standard</strong>, which defines portable array operations across NumPy, PyTorch, JAX, and other libraries.</p>
+<hr>
+<h2 id="the-big-picture-three-compliance-tracks">The Big Picture: Three Compliance Tracks</h2>
+<p>We're tracking compliance across three related but distinct standards:</p>
+<h3 id="1-numpy-2x-compatibility">1. NumPy 2.x Compatibility</h3>
+<p>NumPy 2.0 (released April 2024) was a major breaking release. It changed how types are promoted, removed deprecated functions, and added new APIs. If you learned NumPy before 2024, some of your intuitions might be wrong now.</p>
+<p><strong>Tracking:</strong> <a href="https://github.com/SciSharp/NumSharp/milestone/9">NumPy 2.x Compliance Milestone</a></p>
+<h3 id="2-array-api-standard">2. Array API Standard</h3>
+<p>The Python Array API Standard is an industry consortium effort to define a common API that works across array libraries. Write code against the Array API, and it runs on NumPy, PyTorch, JAX, CuPy, or Dask without changes. NumPy adopted it in version 2.0.</p>
+<p><strong>Deep Dive:</strong> <a href="array-api-standard.html">Array API Standard</a> — Our dedicated page with full specification details</p>
+<p><strong>Tracking:</strong> <a href="https://github.com/SciSharp/NumSharp/milestone/6">Array API Standard Milestone</a></p>
+<h3 id="3-numpy-enhancement-proposals-neps">3. NumPy Enhancement Proposals (NEPs)</h3>
+<p>NEPs are the design documents that define NumPy's behavior. When we say &quot;NumPy does X,&quot; there's usually a NEP that specifies exactly what X means. We track the NEPs most relevant to NumSharp.</p>
+<p><strong>Tracking:</strong> <a href="https://github.com/SciSharp/NumSharp/milestone/7">NEP Compliance Milestone</a></p>
+<hr>
+<h2 id="type-promotion-the-biggest-change-in-numpy-20">Type Promotion: The Biggest Change in NumPy 2.0</h2>
+<p>If there's one thing you need to understand about NumPy 2.x compatibility, it's <strong>NEP 50: Promotion Rules for Python Scalars</strong>.</p>
+<h3 id="the-old-way-numpy-1x">The Old Way (NumPy 1.x)</h3>
+<p>NumPy 1.x used &quot;value-based&quot; promotion. It would inspect the actual value of a scalar to decide the output type:</p>
+<pre><code class="lang-python"># NumPy 1.x behavior
+np.result_type(np.int8, 1)    # → int8 (1 fits in int8)
+np.result_type(np.int8, 255)  # → int16 (255 doesn't fit, upcast!)
+</code></pre>
+<p>This was convenient—you rarely got overflow errors. But it was also unpredictable. The same code could produce different types depending on the runtime values, making optimization and type inference nearly impossible.</p>
+<h3 id="the-new-way-numpy-2x">The New Way (NumPy 2.x)</h3>
+<p>NumPy 2.x uses &quot;weak scalar&quot; promotion. Python scalars defer to the array's dtype:</p>
+<pre><code class="lang-python"># NumPy 2.x behavior
+np.uint8(1) + 2    # → uint8(3)
+np.uint8(1) + 255  # → uint8(0) with overflow warning!
+</code></pre>
+<p>The scalar <code>2</code> is &quot;weak&quot;—it takes on whatever type the array has. This is more predictable and enables better optimization, but it can cause overflow where NumPy 1.x would have silently upcasted.</p>
+<h3 id="where-numsharp-stands">Where NumSharp Stands</h3>
+<p>NumSharp currently has mixed behavior. Some operations follow the old value-based rules, others follow NEP 50. We're working on consistent NEP 50 compliance.</p>
+<p><strong>Key Issue:</strong> <a href="https://github.com/SciSharp/NumSharp/issues/529">#529 - Type promotion diverges from NumPy 2.x</a></p>
+<p><strong>What you might see:</strong> If you're porting NumPy code and get unexpected results with mixed types (especially unsigned + signed), this is likely why.</p>
+<hr>
+<h2 id="api-changes-what-got-removed-and-added">API Changes: What Got Removed and Added</h2>
+<h3 id="removed-in-numpy-20-nep-52">Removed in NumPy 2.0 (NEP 52)</h3>
+<p>NumPy 2.0 cleaned house, removing ~100 deprecated functions and aliases. If you're porting old NumPy code, you might need to update these:</p>
+<table>
+<thead>
+<tr>
+<th>Don't Use</th>
+<th>Use Instead</th>
+<th>Why It Changed</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>np.round_</code></td>
+<td><code>np.round</code></td>
+<td>Underscore was to avoid Python keyword conflict (no longer needed)</td>
+</tr>
+<tr>
+<td><code>np.product</code></td>
+<td><code>np.prod</code></td>
+<td>Consistency with <code>sum</code> → <code>prod</code></td>
+</tr>
+<tr>
+<td><code>np.sometrue</code></td>
+<td><code>np.any</code></td>
+<td>Clearer naming</td>
+</tr>
+<tr>
+<td><code>np.alltrue</code></td>
+<td><code>np.all</code></td>
+<td>Clearer naming</td>
+</tr>
+<tr>
+<td><code>np.rank</code></td>
+<td><code>np.ndim</code></td>
+<td><code>rank</code> was confusing (matrix rank vs array rank)</td>
+</tr>
+</tbody>
+</table>
+<p>NumSharp supports the canonical names. We never implemented most deprecated aliases, so this is actually an advantage—less legacy baggage.</p>
+<h3 id="added-in-numpy-20-nep-56">Added in NumPy 2.0 (NEP 56)</h3>
+<p>NumPy 2.0 added Array API Standard functions. These are mostly aliases for existing functions, but some are genuinely new:</p>
+<p><strong>New Aliases</strong> (for Array API compatibility):</p>
+<ul>
+<li><code>np.acos</code>, <code>np.asin</code>, <code>np.atan</code> → aliases for <code>arccos</code>, <code>arcsin</code>, <code>arctan</code></li>
+<li><code>np.concat</code> → alias for <code>concatenate</code></li>
+<li><code>np.permute_dims</code> → alias for <code>transpose</code></li>
+<li><code>np.pow</code> → alias for <code>power</code></li>
+</ul>
+<p><strong>Genuinely New:</strong></p>
+<ul>
+<li><code>np.isdtype(dtype, kind)</code> — Check if dtype belongs to a category</li>
+<li><code>np.unique_values()</code>, <code>np.unique_counts()</code>, <code>np.unique_inverse()</code>, <code>np.unique_all()</code> — Split the overloaded <code>np.unique()</code> into focused functions</li>
+<li><code>ndarray.mT</code> — Matrix transpose (transposes last two dimensions only)</li>
+<li><code>ndarray.device</code> — Returns the device (CPU for NumSharp)</li>
+</ul>
+<p><strong>NumSharp Status:</strong> We have most aliases but are missing <code>isdtype()</code>, the <code>unique_*</code> family, <code>.mT</code>, and <code>.device</code>.</p>
+<hr>
+<h2 id="data-types-what-we-support-and-dont">Data Types: What We Support (and Don't)</h2>
+<p>NumSharp supports 12 numeric types—more than most users need, but not everything NumPy offers.</p>
+<h3 id="fully-supported">Fully Supported</h3>
+<table>
+<thead>
+<tr>
+<th>NumSharp Type</th>
+<th>C# Type</th>
+<th>NumPy Type</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Boolean</td>
+<td><code>bool</code></td>
+<td><code>bool_</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Byte</td>
+<td><code>byte</code></td>
+<td><code>uint8</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Int16</td>
+<td><code>short</code></td>
+<td><code>int16</code></td>
+<td></td>
+</tr>
+<tr>
+<td>UInt16</td>
+<td><code>ushort</code></td>
+<td><code>uint16</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Int32</td>
+<td><code>int</code></td>
+<td><code>int32</code></td>
+<td>Default integer type</td>
+</tr>
+<tr>
+<td>UInt32</td>
+<td><code>uint</code></td>
+<td><code>uint32</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Int64</td>
+<td><code>long</code></td>
+<td><code>int64</code></td>
+<td></td>
+</tr>
+<tr>
+<td>UInt64</td>
+<td><code>ulong</code></td>
+<td><code>uint64</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Single</td>
+<td><code>float</code></td>
+<td><code>float32</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Double</td>
+<td><code>double</code></td>
+<td><code>float64</code></td>
+<td>Default float type</td>
+</tr>
+<tr>
+<td>Char</td>
+<td><code>char</code></td>
+<td>—</td>
+<td>C#-specific, no NumPy equivalent</td>
+</tr>
+<tr>
+<td>Decimal</td>
+<td><code>decimal</code></td>
+<td>—</td>
+<td>C#-specific, 128-bit decimal</td>
+</tr>
+</tbody>
+</table>
+<h3 id="not-yet-supported">Not Yet Supported</h3>
+<p><strong>Complex Numbers</strong> (<code>complex64</code>, <code>complex128</code>)</p>
+<p>This is our biggest gap. Complex numbers are required by the Array API Standard and essential for signal processing, FFT, and many scientific applications. They're also tricky to implement efficiently in C#.</p>
+<p><strong>Why it's hard:</strong> C# has <code>System.Numerics.Complex</code>, but it's always 128-bit (complex128). There's no native complex64. We'd need to implement our own struct for float-based complex numbers.</p>
+<p><strong>DateTime Types</strong> (<code>datetime64</code>, <code>timedelta64</code>)</p>
+<p>NumPy's datetime types (NEP 7) are powerful for time series analysis. We haven't implemented them.</p>
+<p><strong>Why it's hard:</strong> NumPy datetime64 has multiple resolutions (nanoseconds to years) stored in the dtype. C# has <code>DateTime</code> and <code>TimeSpan</code>, but they don't map cleanly to NumPy's model.</p>
+<p><strong>Variable-Width Strings</strong> (<code>StringDType</code>)</p>
+<p>NumPy 2.0 added a new UTF-8 variable-width string type (NEP 55). The old fixed-width strings (<code>S10</code>, <code>U10</code>) wasted memory. We don't support either.</p>
+<hr>
+<h2 id="memory-layout-c-order-only">Memory Layout: C-Order Only</h2>
+<p>Here's a limitation that might surprise NumPy users: <strong>NumSharp only supports C-order (row-major) memory layout.</strong></p>
+<h3 id="what-this-means">What This Means</h3>
+<p>NumPy arrays can be stored in two layouts:</p>
+<ul>
+<li><strong>C-order (row-major):</strong> Last index varies fastest. Default in NumPy.</li>
+<li><strong>F-order (column-major):</strong> First index varies fastest. Default in Fortran, MATLAB.</li>
+</ul>
+<pre><code class="lang-python"># NumPy can do both
+c_array = np.zeros((3, 4), order='C')  # Row-major
+f_array = np.zeros((3, 4), order='F')  # Column-major
+</code></pre>
+<p>NumSharp always uses C-order. The <code>order</code> parameter exists on functions like <code>reshape</code>, <code>ravel</code>, and <code>flatten</code>, but it's ignored—we always use C-order.</p>
+<h3 id="when-this-matters">When This Matters</h3>
+<p>Most of the time, you won't notice. But if you're:</p>
+<ul>
+<li>Interfacing with Fortran libraries (LAPACK, BLAS)</li>
+<li>Reading data written by MATLAB</li>
+<li>Optimizing cache access patterns for column-wise operations</li>
+</ul>
+<p>...you might hit issues. See <a href="https://github.com/SciSharp/NumSharp/issues/546">#546</a> for F-order support tracking.</p>
+<hr>
+<h2 id="array-api-standard">Array API Standard</h2>
+<p>The Array API Standard specifies 133 core functions, 14 data types, and strict type promotion rules. NumSharp currently implements about <strong>74%</strong> of the core specification.</p>
+<table>
+<thead>
+<tr>
+<th>Category</th>
+<th>Required</th>
+<th>NumSharp</th>
+<th>Coverage</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Creation</td>
+<td>16</td>
+<td>13</td>
+<td>81%</td>
+</tr>
+<tr>
+<td>Element-wise</td>
+<td>67</td>
+<td>~50</td>
+<td>75%</td>
+</tr>
+<tr>
+<td>Statistical</td>
+<td>9</td>
+<td>8</td>
+<td>89%</td>
+</tr>
+<tr>
+<td>Manipulation</td>
+<td>14</td>
+<td>11</td>
+<td>79%</td>
+</tr>
+<tr>
+<td>Set</td>
+<td>4</td>
+<td>1</td>
+<td>25%</td>
+</tr>
+<tr>
+<td>Other</td>
+<td>23</td>
+<td>~15</td>
+<td>~65%</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Biggest Gaps:</strong></p>
+<ul>
+<li>Complex number types (<code>complex64</code>, <code>complex128</code>) — blocks FFT and many math functions</li>
+<li>Set functions (<code>unique_all</code>, <code>unique_counts</code>, <code>unique_inverse</code>)</li>
+<li>Array properties (<code>.device</code>, <code>.mT</code>)</li>
+</ul>
+<p>For the complete specification details, function lists, type promotion rules, and extension coverage, see our dedicated <strong><a href="array-api-standard.html">Array API Standard</a></strong> page.</p>
+<hr>
+<h2 id="random-number-generation">Random Number Generation</h2>
+<p>Good news: NumSharp's <code>np.random</code> module provides <strong>1-to-1 seed matching</strong> with NumPy.</p>
+<pre><code class="lang-csharp">// NumSharp
+np.random.seed(42);
+var a = np.random.rand(5);
+// Produces: [0.37454012, 0.95071431, 0.73199394, 0.59865848, 0.15601864]
+
+// Equivalent Python
+np.random.seed(42)
+a = np.random.rand(5)
+# Produces: [0.37454012, 0.95071431, 0.73199394, 0.59865848, 0.15601864]
+</code></pre>
+<p>This is critical for reproducibility. If you're porting ML code that depends on specific random sequences (for testing, debugging, or reproducible experiments), you'll get identical results.</p>
+<h3 id="supported-distributions">Supported Distributions</h3>
+<ul>
+<li><strong>Uniform:</strong> <code>rand</code>, <code>uniform</code>, <code>randint</code></li>
+<li><strong>Normal:</strong> <code>randn</code>, <code>normal</code></li>
+<li><strong>Other:</strong> <code>beta</code>, <code>binomial</code>, <code>gamma</code>, <code>poisson</code>, <code>exponential</code>, <code>geometric</code>, <code>lognormal</code>, <code>chisquare</code>, <code>bernoulli</code></li>
+<li><strong>Utilities:</strong> <code>seed</code>, <code>shuffle</code>, <code>permutation</code>, <code>choice</code></li>
+</ul>
+<hr>
+<h2 id="file-format-interoperability">File Format Interoperability</h2>
+<p>NumSharp can read and write NumPy's <code>.npy</code> file format. This means you can:</p>
+<ol>
+<li>Create arrays in Python, save with <code>np.save()</code>, load in NumSharp</li>
+<li>Create arrays in NumSharp, save with <code>np.save()</code>, load in Python</li>
+<li>Share data files between Python and C# applications</li>
+</ol>
+<pre><code class="lang-csharp">// Save
+var arr = np.arange(100).reshape(10, 10);
+np.save(&quot;mydata.npy&quot;, arr);
+
+// Load
+var loaded = np.load(&quot;mydata.npy&quot;);
+</code></pre>
+<h3 id="npz-archives">.npz Archives</h3>
+<p>NumPy's <code>.npz</code> format stores multiple arrays in a ZIP archive. NumSharp can <strong>read</strong> <code>.npz</code> files but not write them yet.</p>
+<pre><code class="lang-csharp">// Load multiple arrays from .npz
+var archive = np.load(&quot;data.npz&quot;) as NpzDictionary;
+var weights = archive[&quot;weights&quot;];
+var biases = archive[&quot;biases&quot;];
+</code></pre>
+<hr>
+<h2 id="linear-algebra-partial-support">Linear Algebra: Partial Support</h2>
+<p>NumSharp has basic linear algebra operations, but advanced decompositions are incomplete.</p>
+<h3 id="working">Working</h3>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>np.dot</code></td>
+<td>Matrix multiplication</td>
+</tr>
+<tr>
+<td><code>np.matmul</code></td>
+<td>Matrix multiplication (equivalent to <code>@</code> in Python)</td>
+</tr>
+<tr>
+<td><code>np.outer</code></td>
+<td>Outer product</td>
+</tr>
+<tr>
+<td><code>ndarray.T</code></td>
+<td>Transpose</td>
+</tr>
+</tbody>
+</table>
+<h3 id="stubs-return-nulldefault">Stubs (Return null/default)</h3>
+<p>These functions exist but don't work:</p>
+<ul>
+<li><code>np.linalg.inv</code> — Matrix inverse</li>
+<li><code>np.linalg.qr</code> — QR decomposition</li>
+<li><code>np.linalg.svd</code> — Singular value decomposition</li>
+<li><code>np.linalg.lstsq</code> — Least squares</li>
+</ul>
+<p><strong>Why?</strong> These originally used native LAPACK bindings that have been removed. Implementing them in pure C# is possible but significant work.</p>
+<hr>
+<h2 id="whats-next-implementation-roadmap">What's Next: Implementation Roadmap</h2>
+<h3 id="phase-1-core-compatibility-current-focus">Phase 1: Core Compatibility (Current Focus)</h3>
+<ul>
+<li>Fix type promotion to match NEP 50</li>
+<li>Add Array API function aliases</li>
+<li>Implement <code>isdtype()</code>, <code>unique_*</code> family</li>
+<li>Add <code>.mT</code> and <code>.device</code> properties</li>
+</ul>
+<h3 id="phase-2-feature-completeness">Phase 2: Feature Completeness</h3>
+<ul>
+<li>Complex number support (<code>complex64</code>, <code>complex128</code>)</li>
+<li><code>datetime64</code> / <code>timedelta64</code> types</li>
+<li>Complete missing Array API functions</li>
+</ul>
+<h3 id="phase-3-linear-algebra">Phase 3: Linear Algebra</h3>
+<ul>
+<li>Implement matrix decompositions (QR, SVD, etc.)</li>
+<li>Either pure C# or via Math.NET Numerics integration</li>
+</ul>
+<h3 id="phase-4-performance">Phase 4: Performance</h3>
+<ul>
+<li>SIMD optimization for element-wise operations</li>
+<li>Iterator optimization for non-contiguous arrays</li>
+</ul>
+<hr>
+<h2 id="how-you-can-help">How You Can Help</h2>
+<p>NumSharp is open source. Here's how to contribute:</p>
+<ol>
+<li><p><strong>Report incompatibilities.</strong> If NumSharp behaves differently from NumPy, file an issue with both code snippets.</p>
+</li>
+<li><p><strong>Add tests.</strong> Write tests that verify NumPy behavior, then make them pass in NumSharp.</p>
+</li>
+<li><p><strong>Implement missing functions.</strong> Check the milestones for prioritized work.</p>
+</li>
+</ol>
+<h3 id="github-milestones">GitHub Milestones</h3>
+<ul>
+<li><a href="https://github.com/SciSharp/NumSharp/milestone/9">NumPy 2.x Compliance</a> — 7 open issues</li>
+<li><a href="https://github.com/SciSharp/NumSharp/milestone/6">Array API Standard</a> — 1 open issue</li>
+<li><a href="https://github.com/SciSharp/NumSharp/milestone/7">NEP Compliance</a> — 9 open issues</li>
+</ul>
+<hr>
+<h2 id="references">References</h2>
+<ul>
+<li><a href="https://numpy.org/doc/stable/numpy_2_0_migration_guide.html">NumPy 2.0 Migration Guide</a> — What changed in NumPy 2.0</li>
+<li><a href="https://data-apis.org/array-api/latest/">Python Array API Standard</a> — The specification we're implementing</li>
+<li><a href="https://numpy.org/neps/">NumPy Enhancement Proposals</a> — Design documents for NumPy behavior</li>
+<li><a href="https://github.com/numpy/numpy/tree/v2.4.2">NumPy Source (v2.4.2)</a> — Reference implementation (also at <code>src/numpy/</code> in our repo)</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          <span>Copyright &copy; 2025 <a href='https://github.com/SciSharp'>SciSharp STACK</a>. Built with <a href='https://dotnet.github.io/docfx'>DocFX</a>.</span>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

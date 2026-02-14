@@ -1,0 +1,1382 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+      <title>Class Hashset&lt;T&gt; | NumSharp Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class Hashset&lt;T&gt; | NumSharp Documentation ">
+      
+      
+      <link rel="icon" href="../images/numsharp.icon128.png">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../images/numsharp.icon.svg" alt="NumSharp">
+            NumSharp
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="NumSharp.Utilities.Hashset`1">
+
+
+
+  <h1 id="NumSharp_Utilities_Hashset_1" data-uid="NumSharp.Utilities.Hashset`1" class="text-break">
+Class Hashset&lt;T&gt;  
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="NumSharp.html">NumSharp</a>.<a class="xref" href="NumSharp.Utilities.html">Utilities</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>NumSharp.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"></div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">[SuppressMessage(&quot;Microsoft.Naming&quot;, &quot;CA1710:IdentifiersShouldHaveCorrectSuffix&quot;, Justification = &quot;By design&quot;)]
+public class Hashset&lt;T&gt; : ISet&lt;T&gt;, ICollection&lt;T&gt;, IReadOnlyCollection&lt;T&gt;, IEnumerable&lt;T&gt;, IEnumerable</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">Hashset&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.iset-1">ISet</a>&lt;T&gt;</div>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.icollection-1">ICollection</a>&lt;T&gt;</div>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlycollection-1">IReadOnlyCollection</a>&lt;T&gt;</div>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;T&gt;</div>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.ienumerable">IEnumerable</a></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="NumSharp.Extensions.LinqExtensions.html#NumSharp_Extensions_LinqExtensions_Yield__1___0_">LinqExtensions.Yield&lt;T&gt;(T)</a>
+  </div>
+  </dd></dl>
+
+
+
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="NumSharp_Utilities_Hashset_1__ctor_" data-uid="NumSharp.Utilities.Hashset`1.#ctor*"></a>
+
+  <h3 id="NumSharp_Utilities_Hashset_1__ctor" data-uid="NumSharp.Utilities.Hashset`1.#ctor">
+  Hashset()
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Hashset()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Utilities_Hashset_1__ctor_" data-uid="NumSharp.Utilities.Hashset`1.#ctor*"></a>
+
+  <h3 id="NumSharp_Utilities_Hashset_1__ctor_System_Collections_Generic_IEnumerable__0__" data-uid="NumSharp.Utilities.Hashset`1.#ctor(System.Collections.Generic.IEnumerable{`0})">
+  Hashset(IEnumerable&lt;T&gt;)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Hashset(IEnumerable&lt;T&gt; collection)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>collection</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Utilities_Hashset_1__ctor_" data-uid="NumSharp.Utilities.Hashset`1.#ctor*"></a>
+
+  <h3 id="NumSharp_Utilities_Hashset_1__ctor_System_Collections_Generic_IEnumerable__0__System_Collections_Generic_IEqualityComparer__0__" data-uid="NumSharp.Utilities.Hashset`1.#ctor(System.Collections.Generic.IEnumerable{`0},System.Collections.Generic.IEqualityComparer{`0})">
+  Hashset(IEnumerable&lt;T&gt;, IEqualityComparer&lt;T&gt;)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Implementation Notes:
+Since resizes are relatively expensive (require rehashing), this attempts to minimize
+the need to resize by setting the initial capacity based on size of collection.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Hashset(IEnumerable&lt;T&gt; collection, IEqualityComparer&lt;T&gt; comparer)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>collection</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>comparer</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.iequalitycomparer-1">IEqualityComparer</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Utilities_Hashset_1__ctor_" data-uid="NumSharp.Utilities.Hashset`1.#ctor*"></a>
+
+  <h3 id="NumSharp_Utilities_Hashset_1__ctor_System_Collections_Generic_IEqualityComparer__0__" data-uid="NumSharp.Utilities.Hashset`1.#ctor(System.Collections.Generic.IEqualityComparer{`0})">
+  Hashset(IEqualityComparer&lt;T&gt;)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Hashset(IEqualityComparer&lt;T&gt; comparer)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>comparer</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.iequalitycomparer-1">IEqualityComparer</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Utilities_Hashset_1__ctor_" data-uid="NumSharp.Utilities.Hashset`1.#ctor*"></a>
+
+  <h3 id="NumSharp_Utilities_Hashset_1__ctor_System_Int32_" data-uid="NumSharp.Utilities.Hashset`1.#ctor(System.Int32)">
+  Hashset(int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Hashset(int capacity)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>capacity</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Utilities_Hashset_1__ctor_" data-uid="NumSharp.Utilities.Hashset`1.#ctor*"></a>
+
+  <h3 id="NumSharp_Utilities_Hashset_1__ctor_System_Int32_System_Collections_Generic_IEqualityComparer__0__" data-uid="NumSharp.Utilities.Hashset`1.#ctor(System.Int32,System.Collections.Generic.IEqualityComparer{`0})">
+  Hashset(int, IEqualityComparer&lt;T&gt;)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Hashset(int capacity, IEqualityComparer&lt;T&gt; comparer)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>capacity</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>comparer</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.iequalitycomparer-1">IEqualityComparer</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="NumSharp_Utilities_Hashset_1_Comparer_" data-uid="NumSharp.Utilities.Hashset`1.Comparer*"></a>
+
+  <h3 id="NumSharp_Utilities_Hashset_1_Comparer" data-uid="NumSharp.Utilities.Hashset`1.Comparer">
+  Comparer
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the IEqualityComparer that is used to determine equality of keys for
+the HashSet.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IEqualityComparer&lt;T&gt; Comparer { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.iequalitycomparer-1">IEqualityComparer</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Utilities_Hashset_1_Count_" data-uid="NumSharp.Utilities.Hashset`1.Count*"></a>
+
+  <h3 id="NumSharp_Utilities_Hashset_1_Count" data-uid="NumSharp.Utilities.Hashset`1.Count">
+  Count
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Number of elements in this hashset</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int Count { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="NumSharp_Utilities_Hashset_1_Add_" data-uid="NumSharp.Utilities.Hashset`1.Add*"></a>
+
+  <h3 id="NumSharp_Utilities_Hashset_1_Add__0_" data-uid="NumSharp.Utilities.Hashset`1.Add(`0)">
+  Add(T)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Add item to this HashSet. Returns bool indicating whether item was added (won't be
+added if already present)</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool Add(T item)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>item</code> <span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>true if added, false if already present</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Utilities_Hashset_1_Clear_" data-uid="NumSharp.Utilities.Hashset`1.Clear*"></a>
+
+  <h3 id="NumSharp_Utilities_Hashset_1_Clear" data-uid="NumSharp.Utilities.Hashset`1.Clear">
+  Clear()
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Remove all items from this set. This clears the elements but not the underlying
+buckets and slots array. Follow this call by TrimExcess to release these.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Clear()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Utilities_Hashset_1_Contains_" data-uid="NumSharp.Utilities.Hashset`1.Contains*"></a>
+
+  <h3 id="NumSharp_Utilities_Hashset_1_Contains__0_" data-uid="NumSharp.Utilities.Hashset`1.Contains(`0)">
+  Contains(T)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Checks if this hashset contains the item</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool Contains(T item)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>item</code> <span class="xref">T</span></dt>
+    <dd><p>item to check for containment</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>true if item contained; false if not</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Utilities_Hashset_1_CopyTo_" data-uid="NumSharp.Utilities.Hashset`1.CopyTo*"></a>
+
+  <h3 id="NumSharp_Utilities_Hashset_1_CopyTo__0___" data-uid="NumSharp.Utilities.Hashset`1.CopyTo(`0[])">
+  CopyTo(T[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void CopyTo(T[] array)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>array</code> T[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Utilities_Hashset_1_CopyTo_" data-uid="NumSharp.Utilities.Hashset`1.CopyTo*"></a>
+
+  <h3 id="NumSharp_Utilities_Hashset_1_CopyTo__0___System_Int32_" data-uid="NumSharp.Utilities.Hashset`1.CopyTo(`0[],System.Int32)">
+  CopyTo(T[], int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Copy items in this hashset to array, starting at arrayIndex</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void CopyTo(T[] array, int arrayIndex)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>array</code> T[]</dt>
+    <dd><p>array to add items to</p>
+</dd>
+    <dt><code>arrayIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>index to start at</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Utilities_Hashset_1_CopyTo_" data-uid="NumSharp.Utilities.Hashset`1.CopyTo*"></a>
+
+  <h3 id="NumSharp_Utilities_Hashset_1_CopyTo__0___System_Int32_System_Int32_" data-uid="NumSharp.Utilities.Hashset`1.CopyTo(`0[],System.Int32,System.Int32)">
+  CopyTo(T[], int, int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void CopyTo(T[] array, int arrayIndex, int count)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>array</code> T[]</dt>
+    <dd></dd>
+    <dt><code>arrayIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>count</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Utilities_Hashset_1_CopyTo_" data-uid="NumSharp.Utilities.Hashset`1.CopyTo*"></a>
+
+  <h3 id="NumSharp_Utilities_Hashset_1_CopyTo__1_NumSharp_Utilities_Hashset___0__NumSharp_Backends_Unmanaged_ArraySlice___0__" data-uid="NumSharp.Utilities.Hashset`1.CopyTo``1(NumSharp.Utilities.Hashset{``0},NumSharp.Backends.Unmanaged.ArraySlice{``0})">
+  CopyTo&lt;T&gt;(Hashset&lt;T&gt;, ArraySlice&lt;T&gt;)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void CopyTo&lt;T&gt;(Hashset&lt;T&gt; src, ArraySlice&lt;T&gt; array) where T : unmanaged</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>src</code> <a class="xref" href="NumSharp.Utilities.Hashset-1.html">Hashset</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>array</code> <a class="xref" href="NumSharp.Backends.Unmanaged.ArraySlice-1.html">ArraySlice</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Utilities_Hashset_1_CopyTo_" data-uid="NumSharp.Utilities.Hashset`1.CopyTo*"></a>
+
+  <h3 id="NumSharp_Utilities_Hashset_1_CopyTo__1_NumSharp_Utilities_Hashset___0__NumSharp_Backends_Unmanaged_ArraySlice___0__System_Int32_System_Int32_" data-uid="NumSharp.Utilities.Hashset`1.CopyTo``1(NumSharp.Utilities.Hashset{``0},NumSharp.Backends.Unmanaged.ArraySlice{``0},System.Int32,System.Int32)">
+  CopyTo&lt;T&gt;(Hashset&lt;T&gt;, ArraySlice&lt;T&gt;, int, int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void CopyTo&lt;T&gt;(Hashset&lt;T&gt; src, ArraySlice&lt;T&gt; array, int arrayIndex, int count) where T : unmanaged</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>src</code> <a class="xref" href="NumSharp.Utilities.Hashset-1.html">Hashset</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>array</code> <a class="xref" href="NumSharp.Backends.Unmanaged.ArraySlice-1.html">ArraySlice</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>arrayIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>count</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Utilities_Hashset_1_CreateSetComparer_" data-uid="NumSharp.Utilities.Hashset`1.CreateSetComparer*"></a>
+
+  <h3 id="NumSharp_Utilities_Hashset_1_CreateSetComparer" data-uid="NumSharp.Utilities.Hashset`1.CreateSetComparer">
+  CreateSetComparer()
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Used for deep equality of HashSet testing</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IEqualityComparer&lt;Hashset&lt;T&gt;&gt; CreateSetComparer()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.iequalitycomparer-1">IEqualityComparer</a>&lt;<a class="xref" href="NumSharp.Utilities.Hashset-1.html">Hashset</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Utilities_Hashset_1_ExceptWith_" data-uid="NumSharp.Utilities.Hashset`1.ExceptWith*"></a>
+
+  <h3 id="NumSharp_Utilities_Hashset_1_ExceptWith_System_Collections_Generic_IEnumerable__0__" data-uid="NumSharp.Utilities.Hashset`1.ExceptWith(System.Collections.Generic.IEnumerable{`0})">
+  ExceptWith(IEnumerable&lt;T&gt;)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Remove items in other from this set. Modifies this set.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ExceptWith(IEnumerable&lt;T&gt; other)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>other</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;T&gt;</dt>
+    <dd><p>enumerable with items to remove</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Utilities_Hashset_1_GetEnumerator_" data-uid="NumSharp.Utilities.Hashset`1.GetEnumerator*"></a>
+
+  <h3 id="NumSharp_Utilities_Hashset_1_GetEnumerator" data-uid="NumSharp.Utilities.Hashset`1.GetEnumerator">
+  GetEnumerator()
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Hashset&lt;T&gt;.Enumerator GetEnumerator()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Utilities.Hashset-1.html">Hashset</a>&lt;T&gt;.<a class="xref" href="NumSharp.Utilities.Hashset-1.Enumerator.html">Enumerator</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Utilities_Hashset_1_IntersectWith_" data-uid="NumSharp.Utilities.Hashset`1.IntersectWith*"></a>
+
+  <h3 id="NumSharp_Utilities_Hashset_1_IntersectWith_System_Collections_Generic_IEnumerable__0__" data-uid="NumSharp.Utilities.Hashset`1.IntersectWith(System.Collections.Generic.IEnumerable{`0})">
+  IntersectWith(IEnumerable&lt;T&gt;)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Takes the intersection of this set with other. Modifies this set.</p>
+<p>Implementation Notes:
+We get better perf if other is a hashset using same equality comparer, because we
+get constant contains check in other. Resulting cost is O(n1) to iterate over this.</p>
+<p>If we can't go above route, iterate over the other and mark intersection by checking
+contains in this. Then loop over and delete any unmarked elements. Total cost is n2+n1.</p>
+<p>Attempts to return early based on counts alone, using the property that the
+intersection of anything with the empty set is the empty set.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void IntersectWith(IEnumerable&lt;T&gt; other)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>other</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;T&gt;</dt>
+    <dd><p>enumerable with items to add</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Utilities_Hashset_1_IsProperSubsetOf_" data-uid="NumSharp.Utilities.Hashset`1.IsProperSubsetOf*"></a>
+
+  <h3 id="NumSharp_Utilities_Hashset_1_IsProperSubsetOf_System_Collections_Generic_IEnumerable__0__" data-uid="NumSharp.Utilities.Hashset`1.IsProperSubsetOf(System.Collections.Generic.IEnumerable{`0})">
+  IsProperSubsetOf(IEnumerable&lt;T&gt;)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Checks if this is a proper subset of other (i.e. strictly contained in)</p>
+<p>Implementation Notes:
+The following properties are used up-front to avoid element-wise checks:</p>
+<ol>
+<li>If this is the empty set, then it's a proper subset of a set that contains at least
+one element, but it's not a proper subset of the empty set.</li>
+<li>If other has unique elements according to this equality comparer, and this has &gt;=
+the number of elements in other, then this can't be a proper subset.</li>
+</ol>
+<p>Furthermore, if other is a hashset using the same equality comparer, we can use a
+faster element-wise check.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsProperSubsetOf(IEnumerable&lt;T&gt; other)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>other</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>true if this is a proper subset of other; false if not</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Utilities_Hashset_1_IsProperSupersetOf_" data-uid="NumSharp.Utilities.Hashset`1.IsProperSupersetOf*"></a>
+
+  <h3 id="NumSharp_Utilities_Hashset_1_IsProperSupersetOf_System_Collections_Generic_IEnumerable__0__" data-uid="NumSharp.Utilities.Hashset`1.IsProperSupersetOf(System.Collections.Generic.IEnumerable{`0})">
+  IsProperSupersetOf(IEnumerable&lt;T&gt;)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Checks if this is a proper superset of other (i.e. other strictly contained in this)</p>
+<p>Implementation Notes:
+This is slightly more complicated than above because we have to keep track if there
+was at least one element not contained in other.</p>
+<p>The following properties are used up-front to avoid element-wise checks:</p>
+<ol>
+<li>If this is the empty set, then it can't be a proper superset of any set, even if
+other is the empty set.</li>
+<li>If other is an empty set and this contains at least 1 element, then this is a proper
+superset.</li>
+<li>If other has unique elements according to this equality comparer, and other's count
+is greater than or equal to this count, then this can't be a proper superset</li>
+</ol>
+<p>Furthermore, if other has unique elements according to this equality comparer, we can
+use a faster element-wise check.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsProperSupersetOf(IEnumerable&lt;T&gt; other)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>other</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>true if this is a proper superset of other; false if not</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Utilities_Hashset_1_IsSubsetOf_" data-uid="NumSharp.Utilities.Hashset`1.IsSubsetOf*"></a>
+
+  <h3 id="NumSharp_Utilities_Hashset_1_IsSubsetOf_System_Collections_Generic_IEnumerable__0__" data-uid="NumSharp.Utilities.Hashset`1.IsSubsetOf(System.Collections.Generic.IEnumerable{`0})">
+  IsSubsetOf(IEnumerable&lt;T&gt;)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Checks if this is a subset of other.</p>
+<p>Implementation Notes:
+The following properties are used up-front to avoid element-wise checks:</p>
+<ol>
+<li>If this is the empty set, then it's a subset of anything, including the empty set</li>
+<li>If other has unique elements according to this equality comparer, and this has more
+elements than other, then it can't be a subset.</li>
+</ol>
+<p>Furthermore, if other is a hashset using the same equality comparer, we can use a
+faster element-wise check.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsSubsetOf(IEnumerable&lt;T&gt; other)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>other</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>true if this is a subset of other; false if not</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Utilities_Hashset_1_IsSupersetOf_" data-uid="NumSharp.Utilities.Hashset`1.IsSupersetOf*"></a>
+
+  <h3 id="NumSharp_Utilities_Hashset_1_IsSupersetOf_System_Collections_Generic_IEnumerable__0__" data-uid="NumSharp.Utilities.Hashset`1.IsSupersetOf(System.Collections.Generic.IEnumerable{`0})">
+  IsSupersetOf(IEnumerable&lt;T&gt;)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Checks if this is a superset of other</p>
+<p>Implementation Notes:
+The following properties are used up-front to avoid element-wise checks:</p>
+<ol>
+<li>If other has no elements (it's the empty set), then this is a superset, even if this
+is also the empty set.</li>
+<li>If other has unique elements according to this equality comparer, and this has less
+than the number of elements in other, then this can't be a superset</li>
+</ol>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsSupersetOf(IEnumerable&lt;T&gt; other)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>other</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>true if this is a superset of other; false if not</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Utilities_Hashset_1_Overlaps_" data-uid="NumSharp.Utilities.Hashset`1.Overlaps*"></a>
+
+  <h3 id="NumSharp_Utilities_Hashset_1_Overlaps_System_Collections_Generic_IEnumerable__0__" data-uid="NumSharp.Utilities.Hashset`1.Overlaps(System.Collections.Generic.IEnumerable{`0})">
+  Overlaps(IEnumerable&lt;T&gt;)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Checks if this set overlaps other (i.e. they share at least one item)</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool Overlaps(IEnumerable&lt;T&gt; other)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>other</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>true if these have at least one common element; false if disjoint</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Utilities_Hashset_1_Remove_" data-uid="NumSharp.Utilities.Hashset`1.Remove*"></a>
+
+  <h3 id="NumSharp_Utilities_Hashset_1_Remove__0_" data-uid="NumSharp.Utilities.Hashset`1.Remove(`0)">
+  Remove(T)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Remove item from this hashset</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool Remove(T item)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>item</code> <span class="xref">T</span></dt>
+    <dd><p>item to remove</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>true if removed; false if not (i.e. if the item wasn't in the HashSet)</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Utilities_Hashset_1_RemoveWhere_" data-uid="NumSharp.Utilities.Hashset`1.RemoveWhere*"></a>
+
+  <h3 id="NumSharp_Utilities_Hashset_1_RemoveWhere_System_Predicate__0__" data-uid="NumSharp.Utilities.Hashset`1.RemoveWhere(System.Predicate{`0})">
+  RemoveWhere(Predicate&lt;T&gt;)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Remove elements that match specified predicate. Returns the number of elements removed</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int RemoveWhere(Predicate&lt;T&gt; match)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>match</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.predicate-1">Predicate</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Utilities_Hashset_1_SetEquals_" data-uid="NumSharp.Utilities.Hashset`1.SetEquals*"></a>
+
+  <h3 id="NumSharp_Utilities_Hashset_1_SetEquals_System_Collections_Generic_IEnumerable__0__" data-uid="NumSharp.Utilities.Hashset`1.SetEquals(System.Collections.Generic.IEnumerable{`0})">
+  SetEquals(IEnumerable&lt;T&gt;)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Checks if this and other contain the same elements. This is set equality:
+duplicates and order are ignored</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool SetEquals(IEnumerable&lt;T&gt; other)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>other</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Utilities_Hashset_1_SymmetricExceptWith_" data-uid="NumSharp.Utilities.Hashset`1.SymmetricExceptWith*"></a>
+
+  <h3 id="NumSharp_Utilities_Hashset_1_SymmetricExceptWith_System_Collections_Generic_IEnumerable__0__" data-uid="NumSharp.Utilities.Hashset`1.SymmetricExceptWith(System.Collections.Generic.IEnumerable{`0})">
+  SymmetricExceptWith(IEnumerable&lt;T&gt;)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Takes symmetric difference (XOR) with other and this set. Modifies this set.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SymmetricExceptWith(IEnumerable&lt;T&gt; other)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>other</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;T&gt;</dt>
+    <dd><p>enumerable with items to XOR</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Utilities_Hashset_1_TrimExcess_" data-uid="NumSharp.Utilities.Hashset`1.TrimExcess*"></a>
+
+  <h3 id="NumSharp_Utilities_Hashset_1_TrimExcess" data-uid="NumSharp.Utilities.Hashset`1.TrimExcess">
+  TrimExcess()
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the capacity of this list to the size of the list (rounded up to nearest prime),
+unless count is 0, in which case we release references.</p>
+<p>This method can be used to minimize a list's memory overhead once it is known that no
+new elements will be added to the list. To completely clear a list and release all
+memory referenced by the list, execute the following statements:</p>
+<p>list.Clear();
+list.TrimExcess();</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void TrimExcess()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Utilities_Hashset_1_TryGetValue_" data-uid="NumSharp.Utilities.Hashset`1.TryGetValue*"></a>
+
+  <h3 id="NumSharp_Utilities_Hashset_1_TryGetValue__0__0__" data-uid="NumSharp.Utilities.Hashset`1.TryGetValue(`0,`0@)">
+  TryGetValue(T, out T)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Searches the set for a given value and returns the equal value it finds, if any.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool TryGetValue(T equalValue, out T actualValue)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>equalValue</code> <span class="xref">T</span></dt>
+    <dd><p>The value to search for.</p>
+</dd>
+    <dt><code>actualValue</code> <span class="xref">T</span></dt>
+    <dd><p>The value from the set that the search found, or the default value of <code class="typeparamref">T</code> when the search yielded no match.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>A value indicating whether the search was successful.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Utilities_Hashset_1_TryGetValue__0__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This can be useful when you want to reuse a previously stored reference instead of
+a newly constructed one (so that more sharing of references can occur) or to look up
+a value that has more complete data than the value you currently have, although their
+comparer functions indicate they are equal.</p>
+</div>
+
+
+
+
+  <a id="NumSharp_Utilities_Hashset_1_UnionWith_" data-uid="NumSharp.Utilities.Hashset`1.UnionWith*"></a>
+
+  <h3 id="NumSharp_Utilities_Hashset_1_UnionWith_System_Collections_Generic_IEnumerable__0__" data-uid="NumSharp.Utilities.Hashset`1.UnionWith(System.Collections.Generic.IEnumerable{`0})">
+  UnionWith(IEnumerable&lt;T&gt;)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Take the union of this HashSet with other. Modifies this set.</p>
+<p>Implementation note: GetSuggestedCapacity (to increase capacity in advance avoiding
+multiple resizes ended up not being useful in practice; quickly gets to the
+point where it's a wasteful check.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void UnionWith(IEnumerable&lt;T&gt; other)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>other</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;T&gt;</dt>
+    <dd><p>enumerable with items to add</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          <span>Copyright &copy; 2025 <a href='https://github.com/SciSharp'>SciSharp STACK</a>. Built with <a href='https://dotnet.github.io/docfx'>DocFX</a>.</span>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

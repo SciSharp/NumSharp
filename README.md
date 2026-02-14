@@ -1,4 +1,4 @@
-[![NumSharp](docs/images/numsharp.logo.png)](docs/images/numsharp.logo.png)
+[![NumSharp](docs/website/images/numsharp.logo.png)](docs/website/images/numsharp.logo.png)
 
 [![NuGet](https://img.shields.io/nuget/dt/NumSharp.svg)](https://www.nuget.org/packages/NumSharp)
 [![Join the chat at https://gitter.im/publiclab/publiclab](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/sci-sharp/community)
@@ -13,7 +13,7 @@ Is it difficult to translate python machine learning code into .NET? Because too
 NumSharp is the C# version of NumPy, which is as consistent as possible with the NumPy programming interface, including function names and parameter locations. By introducing the NumSharp tool library, you can easily convert from python code to C# or F# code.
 Here is a comparison code between NumSharp and NumPy (left is python, right is C#):
 
-[![comparision](docfx_project/images/python-csharp-comparision.png)](https://raw.githubusercontent.com/SciSharp/NumSharp/master/docfx_project/images/python-csharp-comparision.png)
+[![comparision](docs/website/images/python-csharp-comparision.png)](https://raw.githubusercontent.com/SciSharp/NumSharp/master/docs/website/images/python-csharp-comparision.png)
 
 ### Bold Features
 * Use of Unmanaged Memory and fast unsafe algorithms.

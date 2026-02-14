@@ -1,0 +1,5729 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+      <title>Class UnmanagedStorage | NumSharp Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class UnmanagedStorage | NumSharp Documentation ">
+      
+      <meta name="description" content="Serves as a typed storage for an array.">
+      <link rel="icon" href="../images/numsharp.icon128.png">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../images/numsharp.icon.svg" alt="NumSharp">
+            NumSharp
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="NumSharp.Backends.UnmanagedStorage">
+
+
+
+  <h1 id="NumSharp_Backends_UnmanagedStorage" data-uid="NumSharp.Backends.UnmanagedStorage" class="text-break">
+Class UnmanagedStorage  
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="NumSharp.html">NumSharp</a>.<a class="xref" href="NumSharp.Backends.html">Backends</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>NumSharp.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Serves as a typed storage for an array.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class UnmanagedStorage : ICloneable</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">UnmanagedStorage</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.icloneable">ICloneable</a></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="NumSharp.Extensions.LinqExtensions.html#NumSharp_Extensions_LinqExtensions_Yield__1___0_">LinqExtensions.Yield&lt;T&gt;(T)</a>
+  </div>
+  <div>
+      <a class="xref" href="NumSharp.NDIteratorExtensions.html#NumSharp_NDIteratorExtensions_AsIterator_NumSharp_Backends_UnmanagedStorage_System_Boolean_">NDIteratorExtensions.AsIterator(UnmanagedStorage, bool)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="NumSharp_Backends_UnmanagedStorage_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>Responsible for :<br></p>
+<ul>
+<li>store data type, elements, Shape<br></li>
+<li>offers methods for accessing elements depending on shape<br></li>
+<li>offers methods for casting elements<br></li>
+<li>offers methods for change tensor order<br></li>
+<li>GetData always return reference object to the true storage<br></li>
+<li>GetData{T} and SetData{T} change dtype and cast storage<br></li>
+<li>CloneData always create a clone of storage and return this as reference object<br></li>
+<li>CloneData{T} clone storage and cast this clone <br></li>
+</ul>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage__ctor_" data-uid="NumSharp.Backends.UnmanagedStorage.#ctor*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage__ctor_NumSharp_Backends_Unmanaged_IArraySlice_NumSharp_Shape_" data-uid="NumSharp.Backends.UnmanagedStorage.#ctor(NumSharp.Backends.Unmanaged.IArraySlice,NumSharp.Shape)">
+  UnmanagedStorage(IArraySlice, Shape)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Wraps given <code class="paramref">arraySlice</code> in <a class="xref" href="NumSharp.Backends.UnmanagedStorage.html">UnmanagedStorage</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public UnmanagedStorage(IArraySlice arraySlice, Shape shape)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>arraySlice</code> <a class="xref" href="NumSharp.Backends.Unmanaged.IArraySlice.html">IArraySlice</a></dt>
+    <dd><p>The slice to wrap</p>
+</dd>
+    <dt><code>shape</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage__ctor_" data-uid="NumSharp.Backends.UnmanagedStorage.#ctor*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage__ctor_NumSharp_NPTypeCode_" data-uid="NumSharp.Backends.UnmanagedStorage.#ctor(NumSharp.NPTypeCode)">
+  UnmanagedStorage(NPTypeCode)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates an empty storage of type <code class="paramref">typeCode</code>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public UnmanagedStorage(NPTypeCode typeCode)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>typeCode</code> <a class="xref" href="NumSharp.NPTypeCode.html">NPTypeCode</a></dt>
+    <dd><p>The type of this storage</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Backends_UnmanagedStorage__ctor_NumSharp_NPTypeCode__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Usually <a class="xref" href="NumSharp.Backends.UnmanagedStorage.html#NumSharp_Backends_UnmanagedStorage_Allocate_NumSharp_Shape_System_Type_">Allocate(Shape, Type)</a> is called after this constructor.</p>
+</div>
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage__ctor_" data-uid="NumSharp.Backends.UnmanagedStorage.#ctor*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage__ctor_System_Boolean_" data-uid="NumSharp.Backends.UnmanagedStorage.#ctor(System.Boolean)">
+  UnmanagedStorage(bool)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public UnmanagedStorage(bool scalar)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>scalar</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage__ctor_" data-uid="NumSharp.Backends.UnmanagedStorage.#ctor*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage__ctor_System_Boolean___" data-uid="NumSharp.Backends.UnmanagedStorage.#ctor(System.Boolean[])">
+  UnmanagedStorage(bool[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public UnmanagedStorage(bool[] values)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>values</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage__ctor_" data-uid="NumSharp.Backends.UnmanagedStorage.#ctor*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage__ctor_System_Byte_" data-uid="NumSharp.Backends.UnmanagedStorage.#ctor(System.Byte)">
+  UnmanagedStorage(byte)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public UnmanagedStorage(byte scalar)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>scalar</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage__ctor_" data-uid="NumSharp.Backends.UnmanagedStorage.#ctor*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage__ctor_System_Byte___" data-uid="NumSharp.Backends.UnmanagedStorage.#ctor(System.Byte[])">
+  UnmanagedStorage(byte[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public UnmanagedStorage(byte[] values)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>values</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage__ctor_" data-uid="NumSharp.Backends.UnmanagedStorage.#ctor*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage__ctor_System_Char_" data-uid="NumSharp.Backends.UnmanagedStorage.#ctor(System.Char)">
+  UnmanagedStorage(char)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public UnmanagedStorage(char scalar)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>scalar</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.char">char</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage__ctor_" data-uid="NumSharp.Backends.UnmanagedStorage.#ctor*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage__ctor_System_Char___" data-uid="NumSharp.Backends.UnmanagedStorage.#ctor(System.Char[])">
+  UnmanagedStorage(char[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public UnmanagedStorage(char[] values)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>values</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.char">char</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage__ctor_" data-uid="NumSharp.Backends.UnmanagedStorage.#ctor*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage__ctor_System_Decimal_" data-uid="NumSharp.Backends.UnmanagedStorage.#ctor(System.Decimal)">
+  UnmanagedStorage(decimal)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public UnmanagedStorage(decimal scalar)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>scalar</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage__ctor_" data-uid="NumSharp.Backends.UnmanagedStorage.#ctor*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage__ctor_System_Decimal___" data-uid="NumSharp.Backends.UnmanagedStorage.#ctor(System.Decimal[])">
+  UnmanagedStorage(decimal[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public UnmanagedStorage(decimal[] values)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>values</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage__ctor_" data-uid="NumSharp.Backends.UnmanagedStorage.#ctor*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage__ctor_System_Double_" data-uid="NumSharp.Backends.UnmanagedStorage.#ctor(System.Double)">
+  UnmanagedStorage(double)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public UnmanagedStorage(double scalar)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>scalar</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage__ctor_" data-uid="NumSharp.Backends.UnmanagedStorage.#ctor*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage__ctor_System_Double___" data-uid="NumSharp.Backends.UnmanagedStorage.#ctor(System.Double[])">
+  UnmanagedStorage(double[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public UnmanagedStorage(double[] values)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>values</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage__ctor_" data-uid="NumSharp.Backends.UnmanagedStorage.#ctor*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage__ctor_System_Int16_" data-uid="NumSharp.Backends.UnmanagedStorage.#ctor(System.Int16)">
+  UnmanagedStorage(short)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public UnmanagedStorage(short scalar)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>scalar</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int16">short</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage__ctor_" data-uid="NumSharp.Backends.UnmanagedStorage.#ctor*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage__ctor_System_Int16___" data-uid="NumSharp.Backends.UnmanagedStorage.#ctor(System.Int16[])">
+  UnmanagedStorage(short[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public UnmanagedStorage(short[] values)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>values</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int16">short</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage__ctor_" data-uid="NumSharp.Backends.UnmanagedStorage.#ctor*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage__ctor_System_Int32_" data-uid="NumSharp.Backends.UnmanagedStorage.#ctor(System.Int32)">
+  UnmanagedStorage(int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public UnmanagedStorage(int scalar)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>scalar</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage__ctor_" data-uid="NumSharp.Backends.UnmanagedStorage.#ctor*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage__ctor_System_Int32___" data-uid="NumSharp.Backends.UnmanagedStorage.#ctor(System.Int32[])">
+  UnmanagedStorage(int[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public UnmanagedStorage(int[] values)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>values</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage__ctor_" data-uid="NumSharp.Backends.UnmanagedStorage.#ctor*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage__ctor_System_Int64_" data-uid="NumSharp.Backends.UnmanagedStorage.#ctor(System.Int64)">
+  UnmanagedStorage(long)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public UnmanagedStorage(long scalar)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>scalar</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage__ctor_" data-uid="NumSharp.Backends.UnmanagedStorage.#ctor*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage__ctor_System_Int64___" data-uid="NumSharp.Backends.UnmanagedStorage.#ctor(System.Int64[])">
+  UnmanagedStorage(long[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public UnmanagedStorage(long[] values)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>values</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage__ctor_" data-uid="NumSharp.Backends.UnmanagedStorage.#ctor*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage__ctor_System_Single_" data-uid="NumSharp.Backends.UnmanagedStorage.#ctor(System.Single)">
+  UnmanagedStorage(float)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public UnmanagedStorage(float scalar)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>scalar</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage__ctor_" data-uid="NumSharp.Backends.UnmanagedStorage.#ctor*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage__ctor_System_Single___" data-uid="NumSharp.Backends.UnmanagedStorage.#ctor(System.Single[])">
+  UnmanagedStorage(float[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public UnmanagedStorage(float[] values)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>values</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage__ctor_" data-uid="NumSharp.Backends.UnmanagedStorage.#ctor*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage__ctor_System_Type_" data-uid="NumSharp.Backends.UnmanagedStorage.#ctor(System.Type)">
+  UnmanagedStorage(Type)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates an empty storage of type <code class="paramref">dtype</code>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public UnmanagedStorage(Type dtype)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dtype</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.type">Type</a></dt>
+    <dd><p>The type of this storage</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Backends_UnmanagedStorage__ctor_System_Type__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Usually <a class="xref" href="NumSharp.Backends.UnmanagedStorage.html#NumSharp_Backends_UnmanagedStorage_Allocate_NumSharp_Shape_System_Type_">Allocate(Shape, Type)</a> is called after this constructor.</p>
+</div>
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage__ctor_" data-uid="NumSharp.Backends.UnmanagedStorage.#ctor*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage__ctor_System_UInt16_" data-uid="NumSharp.Backends.UnmanagedStorage.#ctor(System.UInt16)">
+  UnmanagedStorage(ushort)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public UnmanagedStorage(ushort scalar)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>scalar</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint16">ushort</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage__ctor_" data-uid="NumSharp.Backends.UnmanagedStorage.#ctor*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage__ctor_System_UInt16___" data-uid="NumSharp.Backends.UnmanagedStorage.#ctor(System.UInt16[])">
+  UnmanagedStorage(ushort[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public UnmanagedStorage(ushort[] values)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>values</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint16">ushort</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage__ctor_" data-uid="NumSharp.Backends.UnmanagedStorage.#ctor*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage__ctor_System_UInt32_" data-uid="NumSharp.Backends.UnmanagedStorage.#ctor(System.UInt32)">
+  UnmanagedStorage(uint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public UnmanagedStorage(uint scalar)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>scalar</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage__ctor_" data-uid="NumSharp.Backends.UnmanagedStorage.#ctor*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage__ctor_System_UInt32___" data-uid="NumSharp.Backends.UnmanagedStorage.#ctor(System.UInt32[])">
+  UnmanagedStorage(uint[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public UnmanagedStorage(uint[] values)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>values</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage__ctor_" data-uid="NumSharp.Backends.UnmanagedStorage.#ctor*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage__ctor_System_UInt64_" data-uid="NumSharp.Backends.UnmanagedStorage.#ctor(System.UInt64)">
+  UnmanagedStorage(ulong)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public UnmanagedStorage(ulong scalar)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>scalar</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint64">ulong</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage__ctor_" data-uid="NumSharp.Backends.UnmanagedStorage.#ctor*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage__ctor_System_UInt64___" data-uid="NumSharp.Backends.UnmanagedStorage.#ctor(System.UInt64[])">
+  UnmanagedStorage(ulong[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public UnmanagedStorage(ulong[] values)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>values</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint64">ulong</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="fields">Fields
+</h2>
+
+
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_Address" data-uid="NumSharp.Backends.UnmanagedStorage.Address">
+  Address
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public byte* Address</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>*</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_Count" data-uid="NumSharp.Backends.UnmanagedStorage.Count">
+  Count
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int Count</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_InternalArray" data-uid="NumSharp.Backends.UnmanagedStorage.InternalArray">
+  InternalArray
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IArraySlice InternalArray</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Backends.Unmanaged.IArraySlice.html">IArraySlice</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage__arrayBoolean" data-uid="NumSharp.Backends.UnmanagedStorage._arrayBoolean">
+  _arrayBoolean
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected ArraySlice&lt;bool&gt; _arrayBoolean</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Backends.Unmanaged.ArraySlice-1.html">ArraySlice</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage__arrayByte" data-uid="NumSharp.Backends.UnmanagedStorage._arrayByte">
+  _arrayByte
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected ArraySlice&lt;byte&gt; _arrayByte</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Backends.Unmanaged.ArraySlice-1.html">ArraySlice</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage__arrayChar" data-uid="NumSharp.Backends.UnmanagedStorage._arrayChar">
+  _arrayChar
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected ArraySlice&lt;char&gt; _arrayChar</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Backends.Unmanaged.ArraySlice-1.html">ArraySlice</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.char">char</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage__arrayDecimal" data-uid="NumSharp.Backends.UnmanagedStorage._arrayDecimal">
+  _arrayDecimal
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected ArraySlice&lt;decimal&gt; _arrayDecimal</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Backends.Unmanaged.ArraySlice-1.html">ArraySlice</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage__arrayDouble" data-uid="NumSharp.Backends.UnmanagedStorage._arrayDouble">
+  _arrayDouble
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected ArraySlice&lt;double&gt; _arrayDouble</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Backends.Unmanaged.ArraySlice-1.html">ArraySlice</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage__arrayInt16" data-uid="NumSharp.Backends.UnmanagedStorage._arrayInt16">
+  _arrayInt16
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected ArraySlice&lt;short&gt; _arrayInt16</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Backends.Unmanaged.ArraySlice-1.html">ArraySlice</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int16">short</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage__arrayInt32" data-uid="NumSharp.Backends.UnmanagedStorage._arrayInt32">
+  _arrayInt32
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected ArraySlice&lt;int&gt; _arrayInt32</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Backends.Unmanaged.ArraySlice-1.html">ArraySlice</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage__arrayInt64" data-uid="NumSharp.Backends.UnmanagedStorage._arrayInt64">
+  _arrayInt64
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected ArraySlice&lt;long&gt; _arrayInt64</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Backends.Unmanaged.ArraySlice-1.html">ArraySlice</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage__arraySingle" data-uid="NumSharp.Backends.UnmanagedStorage._arraySingle">
+  _arraySingle
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected ArraySlice&lt;float&gt; _arraySingle</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Backends.Unmanaged.ArraySlice-1.html">ArraySlice</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage__arrayUInt16" data-uid="NumSharp.Backends.UnmanagedStorage._arrayUInt16">
+  _arrayUInt16
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected ArraySlice&lt;ushort&gt; _arrayUInt16</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Backends.Unmanaged.ArraySlice-1.html">ArraySlice</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint16">ushort</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage__arrayUInt32" data-uid="NumSharp.Backends.UnmanagedStorage._arrayUInt32">
+  _arrayUInt32
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected ArraySlice&lt;uint&gt; _arrayUInt32</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Backends.Unmanaged.ArraySlice-1.html">ArraySlice</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage__arrayUInt64" data-uid="NumSharp.Backends.UnmanagedStorage._arrayUInt64">
+  _arrayUInt64
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected ArraySlice&lt;ulong&gt; _arrayUInt64</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Backends.Unmanaged.ArraySlice-1.html">ArraySlice</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint64">ulong</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage__dtype" data-uid="NumSharp.Backends.UnmanagedStorage._dtype">
+  _dtype
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected Type _dtype</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.type">Type</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage__shape" data-uid="NumSharp.Backends.UnmanagedStorage._shape">
+  _shape
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected Shape _shape</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage__typecode" data-uid="NumSharp.Backends.UnmanagedStorage._typecode">
+  _typecode
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected NPTypeCode _typecode</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.NPTypeCode.html">NPTypeCode</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_DType_" data-uid="NumSharp.Backends.UnmanagedStorage.DType*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_DType" data-uid="NumSharp.Backends.UnmanagedStorage.DType">
+  DType
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>The data type of internal storage array.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Type DType { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.type">Type</a></dt>
+    <dd><p>numpys equal dtype</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="NumSharp_Backends_UnmanagedStorage_DType_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Has to be compliant with <a class="xref" href="NumSharp.NPTypeCode.html">NPTypeCode</a>.</p>
+</div>
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_DTypeSize_" data-uid="NumSharp.Backends.UnmanagedStorage.DTypeSize*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_DTypeSize" data-uid="NumSharp.Backends.UnmanagedStorage.DTypeSize">
+  DTypeSize
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>The size in bytes of a single value of <a class="xref" href="NumSharp.Backends.UnmanagedStorage.html#NumSharp_Backends_UnmanagedStorage_DType">DType</a></p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int DTypeSize { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="NumSharp_Backends_UnmanagedStorage_DTypeSize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Computed by <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">SizeOf(object)</a></p>
+</div>
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_Engine_" data-uid="NumSharp.Backends.UnmanagedStorage.Engine*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_Engine" data-uid="NumSharp.Backends.UnmanagedStorage.Engine">
+  Engine
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>The engine that was used to create this IStorage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TensorEngine Engine { get; protected set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.TensorEngine.html">TensorEngine</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_Shape_" data-uid="NumSharp.Backends.UnmanagedStorage.Shape*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_Shape" data-uid="NumSharp.Backends.UnmanagedStorage.Shape">
+  Shape
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>The shape representing the data in this storage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Shape Shape { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_ShapeReference_" data-uid="NumSharp.Backends.UnmanagedStorage.ShapeReference*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_ShapeReference" data-uid="NumSharp.Backends.UnmanagedStorage.ShapeReference">
+  ShapeReference
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>The shape representing the data in this storage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ref Shape ShapeReference { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="NumSharp_Backends_UnmanagedStorage_ShapeReference_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>It is dangerous to set Shape by reference. use Reshape(Shape) instead.</p>
+</div>
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_TypeCode_" data-uid="NumSharp.Backends.UnmanagedStorage.TypeCode*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_TypeCode" data-uid="NumSharp.Backends.UnmanagedStorage.TypeCode">
+  TypeCode
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>The <a class="xref" href="NumSharp.NPTypeCode.html">NPTypeCode</a> of IStorage.DType.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NPTypeCode TypeCode { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.NPTypeCode.html">NPTypeCode</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_Alias_" data-uid="NumSharp.Backends.UnmanagedStorage.Alias*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_Alias" data-uid="NumSharp.Backends.UnmanagedStorage.Alias">
+  Alias()
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates an alias to this UnmanagedStorage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public UnmanagedStorage Alias()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Backends.UnmanagedStorage.html">UnmanagedStorage</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_Alias_" data-uid="NumSharp.Backends.UnmanagedStorage.Alias*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_Alias_NumSharp_Shape_" data-uid="NumSharp.Backends.UnmanagedStorage.Alias(NumSharp.Shape)">
+  Alias(Shape)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates an alias to this UnmanagedStorage with a specific shape.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public UnmanagedStorage Alias(Shape shape)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>shape</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Backends.UnmanagedStorage.html">UnmanagedStorage</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Backends_UnmanagedStorage_Alias_NumSharp_Shape__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Doesn't check if Shape matches the internal storage.</p>
+</div>
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_Alias_" data-uid="NumSharp.Backends.UnmanagedStorage.Alias*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_Alias_NumSharp_Shape__" data-uid="NumSharp.Backends.UnmanagedStorage.Alias(NumSharp.Shape@)">
+  Alias(ref Shape)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates an alias to this UnmanagedStorage with a specific shape.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public UnmanagedStorage Alias(ref Shape shape)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>shape</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Backends.UnmanagedStorage.html">UnmanagedStorage</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Backends_UnmanagedStorage_Alias_NumSharp_Shape___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Doesn't check if Shape matches the internal storage.</p>
+</div>
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_Allocate_" data-uid="NumSharp.Backends.UnmanagedStorage.Allocate*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_Allocate_NumSharp_Backends_Unmanaged_IArraySlice_NumSharp_Shape_System_Boolean_" data-uid="NumSharp.Backends.UnmanagedStorage.Allocate(NumSharp.Backends.Unmanaged.IArraySlice,NumSharp.Shape,System.Boolean)">
+  Allocate(IArraySlice, Shape, bool)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Allocate <code class="paramref">values</code> into memory.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Allocate(IArraySlice values, Shape shape, bool copy = false)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>values</code> <a class="xref" href="NumSharp.Backends.Unmanaged.IArraySlice.html">IArraySlice</a></dt>
+    <dd><p>The array to set as internal data storage</p>
+</dd>
+    <dt><code>shape</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd><p>The shape of the array.</p>
+</dd>
+    <dt><code>copy</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Should perform a copy of <code class="paramref">values</code></p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Backends_UnmanagedStorage_Allocate_NumSharp_Backends_Unmanaged_IArraySlice_NumSharp_Shape_System_Boolean__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Does not copy <code class="paramref">values</code></p>
+</div>
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_Allocate_" data-uid="NumSharp.Backends.UnmanagedStorage.Allocate*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_Allocate_NumSharp_Shape_NumSharp_NPTypeCode_System_Boolean_" data-uid="NumSharp.Backends.UnmanagedStorage.Allocate(NumSharp.Shape,NumSharp.NPTypeCode,System.Boolean)">
+  Allocate(Shape, NPTypeCode, bool)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Allocates a new <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.array">Array</a> into memory.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Allocate(Shape shape, NPTypeCode dtype, bool fillZeros)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>shape</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd><p>The shape of the array.</p>
+</dd>
+    <dt><code>dtype</code> <a class="xref" href="NumSharp.NPTypeCode.html">NPTypeCode</a></dt>
+    <dd><p>The type of the Array, if null <a class="xref" href="NumSharp.Backends.UnmanagedStorage.html#NumSharp_Backends_UnmanagedStorage_DType">DType</a> is used.</p>
+</dd>
+    <dt><code>fillZeros</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_Allocate_" data-uid="NumSharp.Backends.UnmanagedStorage.Allocate*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_Allocate_NumSharp_Shape_System_Type_" data-uid="NumSharp.Backends.UnmanagedStorage.Allocate(NumSharp.Shape,System.Type)">
+  Allocate(Shape, Type)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Allocates a new <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.array">Array</a> into memory.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Allocate(Shape shape, Type dtype = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>shape</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd><p>The shape of the array.</p>
+</dd>
+    <dt><code>dtype</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.type">Type</a></dt>
+    <dd><p>The type of the Array, if null <a class="xref" href="NumSharp.Backends.UnmanagedStorage.html#NumSharp_Backends_UnmanagedStorage_DType">DType</a> is used.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_Allocate_" data-uid="NumSharp.Backends.UnmanagedStorage.Allocate*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_Allocate_NumSharp_Shape_System_Type_System_Boolean_" data-uid="NumSharp.Backends.UnmanagedStorage.Allocate(NumSharp.Shape,System.Type,System.Boolean)">
+  Allocate(Shape, Type, bool)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Allocates a new <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.array">Array</a> into memory.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Allocate(Shape shape, Type dtype, bool fillZeros)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>shape</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd><p>The shape of the array.</p>
+</dd>
+    <dt><code>dtype</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.type">Type</a></dt>
+    <dd><p>The type of the Array, if null <a class="xref" href="NumSharp.Backends.UnmanagedStorage.html#NumSharp_Backends_UnmanagedStorage_DType">DType</a> is used.</p>
+</dd>
+    <dt><code>fillZeros</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_Allocate_" data-uid="NumSharp.Backends.UnmanagedStorage.Allocate*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_Allocate_System_Array_" data-uid="NumSharp.Backends.UnmanagedStorage.Allocate(System.Array)">
+  Allocate(Array)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Allocate <code class="paramref">array</code> into memory.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Allocate(Array array)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>array</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.array">Array</a></dt>
+    <dd><p>The array to set as internal data storage</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Backends_UnmanagedStorage_Allocate_System_Array__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Does not copy <code class="paramref">array</code></p>
+</div>
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_Allocate_" data-uid="NumSharp.Backends.UnmanagedStorage.Allocate*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_Allocate_System_Array_NumSharp_Shape_" data-uid="NumSharp.Backends.UnmanagedStorage.Allocate(System.Array,NumSharp.Shape)">
+  Allocate(Array, Shape)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Allocate <code class="paramref">values</code> into memory.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Allocate(Array values, Shape shape)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>values</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.array">Array</a></dt>
+    <dd><p>The array to set as internal data storage</p>
+</dd>
+    <dt><code>shape</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd><p>The shape of given array</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Backends_UnmanagedStorage_Allocate_System_Array_NumSharp_Shape__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Does not copy <code class="paramref">values</code></p>
+</div>
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_Allocate_" data-uid="NumSharp.Backends.UnmanagedStorage.Allocate*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_Allocate__1_NumSharp_Backends_Unmanaged_ArraySlice___0__NumSharp_Shape_System_Boolean_" data-uid="NumSharp.Backends.UnmanagedStorage.Allocate``1(NumSharp.Backends.Unmanaged.ArraySlice{``0},NumSharp.Shape,System.Boolean)">
+  Allocate&lt;T&gt;(ArraySlice&lt;T&gt;, Shape, bool)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Assign this <a class="xref" href="NumSharp.Backends.Unmanaged.ArraySlice-1.html">ArraySlice&lt;T&gt;</a> as the internal array storage and assign shape to it.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Allocate&lt;T&gt;(ArraySlice&lt;T&gt; values, Shape shape, bool copy = false) where T : unmanaged</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>values</code> <a class="xref" href="NumSharp.Backends.Unmanaged.ArraySlice-1.html">ArraySlice</a>&lt;T&gt;</dt>
+    <dd><p>The array to set as internal data storage</p>
+</dd>
+    <dt><code>shape</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd><p>The shape of the array.</p>
+</dd>
+    <dt><code>copy</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Should perform a copy of <code class="paramref">values</code></p>
+</dd>
+  </dl>
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Backends_UnmanagedStorage_Allocate__1_NumSharp_Backends_Unmanaged_ArraySlice___0__NumSharp_Shape_System_Boolean__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Does not copy <code class="paramref">values</code></p>
+</div>
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_Allocate_" data-uid="NumSharp.Backends.UnmanagedStorage.Allocate*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_Allocate__1___0___" data-uid="NumSharp.Backends.UnmanagedStorage.Allocate``1(``0[])">
+  Allocate&lt;T&gt;(T[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Allocate <code class="paramref">values</code> into memory.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Allocate&lt;T&gt;(T[] values) where T : unmanaged</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>values</code> T[]</dt>
+    <dd><p>The array to set as internal data storage</p>
+</dd>
+  </dl>
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Backends_UnmanagedStorage_Allocate__1___0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Does not copy <code class="paramref">values</code></p>
+</div>
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_AsSpan_" data-uid="NumSharp.Backends.UnmanagedStorage.AsSpan*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_AsSpan__1" data-uid="NumSharp.Backends.UnmanagedStorage.AsSpan``1">
+  AsSpan&lt;T&gt;()
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Spans <a class="xref" href="NumSharp.Backends.UnmanagedStorage.html#NumSharp_Backends_UnmanagedStorage_Address">Address</a> &lt;-&gt; <a class="xref" href="NumSharp.Backends.UnmanagedStorage.html#NumSharp_Backends_UnmanagedStorage_Count">Count</a></p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Span&lt;T&gt; AsSpan&lt;T&gt;()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Backends_UnmanagedStorage_AsSpan__1_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This ignores completely slicing.</p>
+</div>
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_Cast_" data-uid="NumSharp.Backends.UnmanagedStorage.Cast*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_Cast_NumSharp_NPTypeCode_" data-uid="NumSharp.Backends.UnmanagedStorage.Cast(NumSharp.NPTypeCode)">
+  Cast(NPTypeCode)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Return a casted <a class="xref" href="NumSharp.Backends.UnmanagedStorage.html">UnmanagedStorage</a> to a specific dtype.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public UnmanagedStorage Cast(NPTypeCode typeCode)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>typeCode</code> <a class="xref" href="NumSharp.NPTypeCode.html">NPTypeCode</a></dt>
+    <dd><p>The dtype to convert to</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Backends.UnmanagedStorage.html">UnmanagedStorage</a></dt>
+    <dd><p>A copy of this <a class="xref" href="NumSharp.Backends.UnmanagedStorage.html">UnmanagedStorage</a> casted to a specific dtype.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Backends_UnmanagedStorage_Cast_NumSharp_NPTypeCode__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Always copies, If dtype==typeof(T) then a <a class="xref" href="NumSharp.Backends.UnmanagedStorage.html#NumSharp_Backends_UnmanagedStorage_Clone">Clone()</a> is returned.</p>
+</div>
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_Cast_" data-uid="NumSharp.Backends.UnmanagedStorage.Cast*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_Cast_System_Type_" data-uid="NumSharp.Backends.UnmanagedStorage.Cast(System.Type)">
+  Cast(Type)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Return a casted <a class="xref" href="NumSharp.Backends.UnmanagedStorage.html">UnmanagedStorage</a> to a specific dtype.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public UnmanagedStorage Cast(Type dtype)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dtype</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.type">Type</a></dt>
+    <dd><p>The dtype to convert to</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Backends.UnmanagedStorage.html">UnmanagedStorage</a></dt>
+    <dd><p>A copy of this <a class="xref" href="NumSharp.Backends.UnmanagedStorage.html">UnmanagedStorage</a> casted to a specific dtype.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Backends_UnmanagedStorage_Cast_System_Type__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Always copies, If dtype==typeof(T) then a <a class="xref" href="NumSharp.Backends.UnmanagedStorage.html#NumSharp_Backends_UnmanagedStorage_Clone">Clone()</a> is returned.</p>
+</div>
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_CastIfNecessary_" data-uid="NumSharp.Backends.UnmanagedStorage.CastIfNecessary*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_CastIfNecessary_NumSharp_NPTypeCode_" data-uid="NumSharp.Backends.UnmanagedStorage.CastIfNecessary(NumSharp.NPTypeCode)">
+  CastIfNecessary(NPTypeCode)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Return a casted <a class="xref" href="NumSharp.Backends.UnmanagedStorage.html">UnmanagedStorage</a> to a specific dtype only if necessary</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public UnmanagedStorage CastIfNecessary(NPTypeCode typeCode)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>typeCode</code> <a class="xref" href="NumSharp.NPTypeCode.html">NPTypeCode</a></dt>
+    <dd><p>The dtype to convert to</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Backends.UnmanagedStorage.html">UnmanagedStorage</a></dt>
+    <dd><p>A copy of this <a class="xref" href="NumSharp.Backends.UnmanagedStorage.html">UnmanagedStorage</a> casted to a specific dtype.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Backends_UnmanagedStorage_CastIfNecessary_NumSharp_NPTypeCode__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Copies only if dtypes does not match <code class="paramref">typeCode</code></p>
+</div>
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_CastIfNecessary_" data-uid="NumSharp.Backends.UnmanagedStorage.CastIfNecessary*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_CastIfNecessary_System_Type_" data-uid="NumSharp.Backends.UnmanagedStorage.CastIfNecessary(System.Type)">
+  CastIfNecessary(Type)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Return a casted <a class="xref" href="NumSharp.Backends.UnmanagedStorage.html">UnmanagedStorage</a> to a specific dtype.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public UnmanagedStorage CastIfNecessary(Type dtype)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dtype</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.type">Type</a></dt>
+    <dd><p>The dtype to convert to</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Backends.UnmanagedStorage.html">UnmanagedStorage</a></dt>
+    <dd><p>A copy of this <a class="xref" href="NumSharp.Backends.UnmanagedStorage.html">UnmanagedStorage</a> casted to a specific dtype.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Backends_UnmanagedStorage_CastIfNecessary_System_Type__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Copies only if dtypes does not match <code class="paramref">typeCode</code></p>
+</div>
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_CastIfNecessary_" data-uid="NumSharp.Backends.UnmanagedStorage.CastIfNecessary*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_CastIfNecessary__1" data-uid="NumSharp.Backends.UnmanagedStorage.CastIfNecessary``1">
+  CastIfNecessary&lt;T&gt;()
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Return a casted <a class="xref" href="NumSharp.Backends.UnmanagedStorage.html">UnmanagedStorage</a> to a specific dtype only if necessary.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public UnmanagedStorage CastIfNecessary&lt;T&gt;() where T : unmanaged</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Backends.UnmanagedStorage.html">UnmanagedStorage</a></dt>
+    <dd><p>A copy of this <a class="xref" href="NumSharp.Backends.UnmanagedStorage.html">UnmanagedStorage</a> casted to a specific dtype.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The dtype to convert to</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Backends_UnmanagedStorage_CastIfNecessary__1_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Copies only if dtypes does not match <code class="typeparamref">T</code></p>
+</div>
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_Cast_" data-uid="NumSharp.Backends.UnmanagedStorage.Cast*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_Cast__1" data-uid="NumSharp.Backends.UnmanagedStorage.Cast``1">
+  Cast&lt;T&gt;()
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Return a casted <a class="xref" href="NumSharp.Backends.UnmanagedStorage.html">UnmanagedStorage</a> to a specific dtype.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public UnmanagedStorage Cast&lt;T&gt;() where T : unmanaged</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Backends.UnmanagedStorage.html">UnmanagedStorage</a></dt>
+    <dd><p>A copy of this <a class="xref" href="NumSharp.Backends.UnmanagedStorage.html">UnmanagedStorage</a> casted to a specific dtype.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The dtype to convert to</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Backends_UnmanagedStorage_Cast__1_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Always copies, If dtype==typeof(T) then a <a class="xref" href="NumSharp.Backends.UnmanagedStorage.html#NumSharp_Backends_UnmanagedStorage_Clone">Clone()</a> is returned.</p>
+</div>
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_Clone_" data-uid="NumSharp.Backends.UnmanagedStorage.Clone*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_Clone" data-uid="NumSharp.Backends.UnmanagedStorage.Clone">
+  Clone()
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Perform a complete copy of this <a class="xref" href="NumSharp.Backends.UnmanagedStorage.html">UnmanagedStorage</a> and <a class="xref" href="NumSharp.Backends.UnmanagedStorage.html#NumSharp_Backends_UnmanagedStorage_InternalArray">InternalArray</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public UnmanagedStorage Clone()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Backends.UnmanagedStorage.html">UnmanagedStorage</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Backends_UnmanagedStorage_Clone_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>If shape is sliced, discards any slicing properties but copies only the sliced data</p>
+</div>
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_CloneData_" data-uid="NumSharp.Backends.UnmanagedStorage.CloneData*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_CloneData" data-uid="NumSharp.Backends.UnmanagedStorage.CloneData">
+  CloneData()
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Clone internal storage and get reference to it</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IArraySlice CloneData()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Backends.Unmanaged.IArraySlice.html">IArraySlice</a></dt>
+    <dd><p>reference to cloned storage as System.Array</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_CloneData_" data-uid="NumSharp.Backends.UnmanagedStorage.CloneData*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_CloneData__1" data-uid="NumSharp.Backends.UnmanagedStorage.CloneData``1">
+  CloneData&lt;T&gt;()
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Get all elements from cloned storage as <a class="xref" href="NumSharp.Backends.Unmanaged.ArraySlice-1.html">ArraySlice&lt;T&gt;</a> and cast if necessary.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ArraySlice&lt;T&gt; CloneData&lt;T&gt;() where T : unmanaged</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Backends.Unmanaged.ArraySlice-1.html">ArraySlice</a>&lt;T&gt;</dt>
+    <dd><p>reference to cloned storage and casted (if necessary) as <a class="xref" href="NumSharp.Backends.Unmanaged.ArraySlice-1.html">ArraySlice&lt;T&gt;</a></p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>cloned storgae dtype</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_CopyTo_" data-uid="NumSharp.Backends.UnmanagedStorage.CopyTo*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_CopyTo_NumSharp_Backends_Unmanaged_IMemoryBlock_" data-uid="NumSharp.Backends.UnmanagedStorage.CopyTo(NumSharp.Backends.Unmanaged.IMemoryBlock)">
+  CopyTo(IMemoryBlock)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Copies the entire contents of this storage to given address (using <a class="xref" href="NumSharp.Backends.UnmanagedStorage.html#NumSharp_Backends_UnmanagedStorage_Count">Count</a>).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void CopyTo(IMemoryBlock block)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>block</code> <a class="xref" href="NumSharp.Backends.Unmanaged.IMemoryBlock.html">IMemoryBlock</a></dt>
+    <dd><p>The block to copy to.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_CopyTo_" data-uid="NumSharp.Backends.UnmanagedStorage.CopyTo*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_CopyTo_System_IntPtr_" data-uid="NumSharp.Backends.UnmanagedStorage.CopyTo(System.IntPtr)">
+  CopyTo(nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Copies the entire contents of this storage to given address.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void CopyTo(nint ptr)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>ptr</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_CopyTo_" data-uid="NumSharp.Backends.UnmanagedStorage.CopyTo*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_CopyTo_System_Void__" data-uid="NumSharp.Backends.UnmanagedStorage.CopyTo(System.Void*)">
+  CopyTo(void*)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Copies the entire contents of this storage to given address.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void CopyTo(void* address)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>address</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.void">void</a>*</dt>
+    <dd><p>The address to copy to.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_CopyTo_" data-uid="NumSharp.Backends.UnmanagedStorage.CopyTo*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_CopyTo__1_NumSharp_Backends_Unmanaged_IMemoryBlock___0__" data-uid="NumSharp.Backends.UnmanagedStorage.CopyTo``1(NumSharp.Backends.Unmanaged.IMemoryBlock{``0})">
+  CopyTo&lt;T&gt;(IMemoryBlock&lt;T&gt;)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Copies the entire contents of this storage to given address (using <a class="xref" href="NumSharp.Backends.UnmanagedStorage.html#NumSharp_Backends_UnmanagedStorage_Count">Count</a>).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void CopyTo&lt;T&gt;(IMemoryBlock&lt;T&gt; block) where T : unmanaged</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>block</code> <a class="xref" href="NumSharp.Backends.Unmanaged.IMemoryBlock-1.html">IMemoryBlock</a>&lt;T&gt;</dt>
+    <dd><p>The block to copy to.</p>
+</dd>
+  </dl>
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_CopyTo_" data-uid="NumSharp.Backends.UnmanagedStorage.CopyTo*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_CopyTo__1___0__" data-uid="NumSharp.Backends.UnmanagedStorage.CopyTo``1(``0*)">
+  CopyTo&lt;T&gt;(T*)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Copies the entire contents of this storage to given address.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void CopyTo&lt;T&gt;(T* address) where T : unmanaged</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>address</code> T*</dt>
+    <dd><p>The address to copy to.</p>
+</dd>
+  </dl>
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_CopyTo_" data-uid="NumSharp.Backends.UnmanagedStorage.CopyTo*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_CopyTo__1___0___" data-uid="NumSharp.Backends.UnmanagedStorage.CopyTo``1(``0[])">
+  CopyTo&lt;T&gt;(T[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Copies the entire contents of this storage to given array.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void CopyTo&lt;T&gt;(T[] array) where T : unmanaged</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>array</code> T[]</dt>
+    <dd><p>The array to copy to.</p>
+</dd>
+  </dl>
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_CreateBroadcastedUnsafe_" data-uid="NumSharp.Backends.UnmanagedStorage.CreateBroadcastedUnsafe*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_CreateBroadcastedUnsafe_NumSharp_Backends_Unmanaged_IArraySlice_NumSharp_Shape_" data-uid="NumSharp.Backends.UnmanagedStorage.CreateBroadcastedUnsafe(NumSharp.Backends.Unmanaged.IArraySlice,NumSharp.Shape)">
+  CreateBroadcastedUnsafe(IArraySlice, Shape)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Wraps given <code class="paramref">arraySlice</code> in <a class="xref" href="NumSharp.Backends.UnmanagedStorage.html">UnmanagedStorage</a> with a broadcasted shape.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static UnmanagedStorage CreateBroadcastedUnsafe(IArraySlice arraySlice, Shape shape)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>arraySlice</code> <a class="xref" href="NumSharp.Backends.Unmanaged.IArraySlice.html">IArraySlice</a></dt>
+    <dd><p>The slice to wrap</p>
+</dd>
+    <dt><code>shape</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd><p>The shape to represent this storage, can be a broadcast.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Backends.UnmanagedStorage.html">UnmanagedStorage</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Backends_UnmanagedStorage_CreateBroadcastedUnsafe_NumSharp_Backends_Unmanaged_IArraySlice_NumSharp_Shape__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Named unsafe because there it does not perform a check if the shape is valid for this storage size.</p>
+</div>
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_CreateBroadcastedUnsafe_" data-uid="NumSharp.Backends.UnmanagedStorage.CreateBroadcastedUnsafe*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_CreateBroadcastedUnsafe_NumSharp_Backends_UnmanagedStorage_NumSharp_Shape_" data-uid="NumSharp.Backends.UnmanagedStorage.CreateBroadcastedUnsafe(NumSharp.Backends.UnmanagedStorage,NumSharp.Shape)">
+  CreateBroadcastedUnsafe(UnmanagedStorage, Shape)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Wraps given <code class="paramref">storage</code> in <a class="xref" href="NumSharp.Backends.UnmanagedStorage.html">UnmanagedStorage</a> with a broadcasted shape.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static UnmanagedStorage CreateBroadcastedUnsafe(UnmanagedStorage storage, Shape shape)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>storage</code> <a class="xref" href="NumSharp.Backends.UnmanagedStorage.html">UnmanagedStorage</a></dt>
+    <dd><p>The storage to take <a class="xref" href="NumSharp.Backends.UnmanagedStorage.html#NumSharp_Backends_UnmanagedStorage_InternalArray">InternalArray</a> from.</p>
+</dd>
+    <dt><code>shape</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd><p>The shape to represent this storage, can be a broadcast.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Backends.UnmanagedStorage.html">UnmanagedStorage</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Backends_UnmanagedStorage_CreateBroadcastedUnsafe_NumSharp_Backends_UnmanagedStorage_NumSharp_Shape__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Named unsafe because there it does not perform a check if the shape is valid for this storage size.</p>
+</div>
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_ExpandDimension_" data-uid="NumSharp.Backends.UnmanagedStorage.ExpandDimension*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_ExpandDimension_System_Int32_" data-uid="NumSharp.Backends.UnmanagedStorage.ExpandDimension(System.Int32)">
+  ExpandDimension(int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected void ExpandDimension(int axis)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>axis</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_GetAtIndex_" data-uid="NumSharp.Backends.UnmanagedStorage.GetAtIndex*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_GetAtIndex_System_Int32_" data-uid="NumSharp.Backends.UnmanagedStorage.GetAtIndex(System.Int32)">
+  GetAtIndex(int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ValueType GetAtIndex(int index)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>index</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetype">ValueType</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_GetAtIndex_" data-uid="NumSharp.Backends.UnmanagedStorage.GetAtIndex*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_GetAtIndex__1_System_Int32_" data-uid="NumSharp.Backends.UnmanagedStorage.GetAtIndex``1(System.Int32)">
+  GetAtIndex&lt;T&gt;(int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T GetAtIndex&lt;T&gt;(int index) where T : unmanaged</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>index</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_GetBoolean_" data-uid="NumSharp.Backends.UnmanagedStorage.GetBoolean*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_GetBoolean_System_Int32___" data-uid="NumSharp.Backends.UnmanagedStorage.GetBoolean(System.Int32[])">
+  GetBoolean(params int[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Retrieves value of type <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a> from internal storage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool GetBoolean(params int[] indices)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>indices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The shape's indices to get.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.nullreferenceexception">NullReferenceException</a></dt>
+    <dd><p>When <a class="xref" href="NumSharp.Backends.UnmanagedStorage.html#NumSharp_Backends_UnmanagedStorage_DType">DType</a> is not <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></p>
+</dd>
+  </dl>
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_GetByte_" data-uid="NumSharp.Backends.UnmanagedStorage.GetByte*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_GetByte_System_Int32___" data-uid="NumSharp.Backends.UnmanagedStorage.GetByte(System.Int32[])">
+  GetByte(params int[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Retrieves value of type <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a> from internal storage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public byte GetByte(params int[] indices)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>indices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The shape's indices to get.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.nullreferenceexception">NullReferenceException</a></dt>
+    <dd><p>When <a class="xref" href="NumSharp.Backends.UnmanagedStorage.html#NumSharp_Backends_UnmanagedStorage_DType">DType</a> is not <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a></p>
+</dd>
+  </dl>
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_GetChar_" data-uid="NumSharp.Backends.UnmanagedStorage.GetChar*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_GetChar_System_Int32___" data-uid="NumSharp.Backends.UnmanagedStorage.GetChar(System.Int32[])">
+  GetChar(params int[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Retrieves value of type <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.char">char</a> from internal storage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public char GetChar(params int[] indices)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>indices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The shape's indices to get.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.char">char</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.nullreferenceexception">NullReferenceException</a></dt>
+    <dd><p>When <a class="xref" href="NumSharp.Backends.UnmanagedStorage.html#NumSharp_Backends_UnmanagedStorage_DType">DType</a> is not <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.char">char</a></p>
+</dd>
+  </dl>
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_GetData_" data-uid="NumSharp.Backends.UnmanagedStorage.GetData*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_GetData" data-uid="NumSharp.Backends.UnmanagedStorage.GetData">
+  GetData()
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Get reference to internal data storage</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IArraySlice GetData()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Backends.Unmanaged.IArraySlice.html">IArraySlice</a></dt>
+    <dd><p>reference to internal storage as System.Array</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_GetData_" data-uid="NumSharp.Backends.UnmanagedStorage.GetData*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_GetData_System_Int32__System_Int32_" data-uid="NumSharp.Backends.UnmanagedStorage.GetData(System.Int32*,System.Int32)">
+  GetData(int*, int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a subshape based on given <code class="paramref">indices</code>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public UnmanagedStorage GetData(int* dims, int ndims)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dims</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>*</dt>
+    <dd></dd>
+    <dt><code>ndims</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Backends.UnmanagedStorage.html">UnmanagedStorage</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Backends_UnmanagedStorage_GetData_System_Int32__System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Does not copy, returns a <a class="xref" href="NumSharp.Slice.html">Slice</a> or a memory slice</p>
+</div>
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_GetData_" data-uid="NumSharp.Backends.UnmanagedStorage.GetData*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_GetData_System_Int32___" data-uid="NumSharp.Backends.UnmanagedStorage.GetData(System.Int32[])">
+  GetData(params int[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a subshape based on given <code class="paramref">indices</code>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public UnmanagedStorage GetData(params int[] indices)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>indices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Backends.UnmanagedStorage.html">UnmanagedStorage</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Backends_UnmanagedStorage_GetData_System_Int32____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Does not copy, returns a <a class="xref" href="NumSharp.Slice.html">Slice</a> or a memory slice</p>
+</div>
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_GetData_" data-uid="NumSharp.Backends.UnmanagedStorage.GetData*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_GetData__1" data-uid="NumSharp.Backends.UnmanagedStorage.GetData``1">
+  GetData&lt;T&gt;()
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Get reference to internal data storage and cast (also copies) elements to new dtype if necessary</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ArraySlice&lt;T&gt; GetData&lt;T&gt;() where T : unmanaged</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Backends.Unmanaged.ArraySlice-1.html">ArraySlice</a>&lt;T&gt;</dt>
+    <dd><p>reference to internal (casted) storage as T[]</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>new storage data type</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Backends_UnmanagedStorage_GetData__1_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Copies if <code class="typeparamref">T</code> does not equal to <a class="xref" href="NumSharp.Backends.UnmanagedStorage.html#NumSharp_Backends_UnmanagedStorage_DType">DType</a> or if Shape is sliced.</p>
+</div>
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_GetDecimal_" data-uid="NumSharp.Backends.UnmanagedStorage.GetDecimal*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_GetDecimal_System_Int32___" data-uid="NumSharp.Backends.UnmanagedStorage.GetDecimal(System.Int32[])">
+  GetDecimal(params int[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Retrieves value of type <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a> from internal storage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public decimal GetDecimal(params int[] indices)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>indices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The shape's indices to get.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.nullreferenceexception">NullReferenceException</a></dt>
+    <dd><p>When <a class="xref" href="NumSharp.Backends.UnmanagedStorage.html#NumSharp_Backends_UnmanagedStorage_DType">DType</a> is not <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></p>
+</dd>
+  </dl>
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_GetDouble_" data-uid="NumSharp.Backends.UnmanagedStorage.GetDouble*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_GetDouble_System_Int32___" data-uid="NumSharp.Backends.UnmanagedStorage.GetDouble(System.Int32[])">
+  GetDouble(params int[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Retrieves value of type <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a> from internal storage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double GetDouble(params int[] indices)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>indices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The shape's indices to get.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.nullreferenceexception">NullReferenceException</a></dt>
+    <dd><p>When <a class="xref" href="NumSharp.Backends.UnmanagedStorage.html#NumSharp_Backends_UnmanagedStorage_DType">DType</a> is not <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></p>
+</dd>
+  </dl>
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_GetInt16_" data-uid="NumSharp.Backends.UnmanagedStorage.GetInt16*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_GetInt16_System_Int32___" data-uid="NumSharp.Backends.UnmanagedStorage.GetInt16(System.Int32[])">
+  GetInt16(params int[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Retrieves value of type <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int16">short</a> from internal storage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public short GetInt16(params int[] indices)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>indices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The shape's indices to get.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int16">short</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.nullreferenceexception">NullReferenceException</a></dt>
+    <dd><p>When <a class="xref" href="NumSharp.Backends.UnmanagedStorage.html#NumSharp_Backends_UnmanagedStorage_DType">DType</a> is not <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int16">short</a></p>
+</dd>
+  </dl>
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_GetInt32_" data-uid="NumSharp.Backends.UnmanagedStorage.GetInt32*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_GetInt32_System_Int32___" data-uid="NumSharp.Backends.UnmanagedStorage.GetInt32(System.Int32[])">
+  GetInt32(params int[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Retrieves value of type <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a> from internal storage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int GetInt32(params int[] indices)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>indices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The shape's indices to get.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.nullreferenceexception">NullReferenceException</a></dt>
+    <dd><p>When <a class="xref" href="NumSharp.Backends.UnmanagedStorage.html#NumSharp_Backends_UnmanagedStorage_DType">DType</a> is not <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></p>
+</dd>
+  </dl>
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_GetInt64_" data-uid="NumSharp.Backends.UnmanagedStorage.GetInt64*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_GetInt64_System_Int32___" data-uid="NumSharp.Backends.UnmanagedStorage.GetInt64(System.Int32[])">
+  GetInt64(params int[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Retrieves value of type <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a> from internal storage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public long GetInt64(params int[] indices)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>indices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The shape's indices to get.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.nullreferenceexception">NullReferenceException</a></dt>
+    <dd><p>When <a class="xref" href="NumSharp.Backends.UnmanagedStorage.html#NumSharp_Backends_UnmanagedStorage_DType">DType</a> is not <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></p>
+</dd>
+  </dl>
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_GetSingle_" data-uid="NumSharp.Backends.UnmanagedStorage.GetSingle*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_GetSingle_System_Int32___" data-uid="NumSharp.Backends.UnmanagedStorage.GetSingle(System.Int32[])">
+  GetSingle(params int[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Retrieves value of type <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a> from internal storage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public float GetSingle(params int[] indices)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>indices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The shape's indices to get.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.nullreferenceexception">NullReferenceException</a></dt>
+    <dd><p>When <a class="xref" href="NumSharp.Backends.UnmanagedStorage.html#NumSharp_Backends_UnmanagedStorage_DType">DType</a> is not <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></p>
+</dd>
+  </dl>
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_GetUInt16_" data-uid="NumSharp.Backends.UnmanagedStorage.GetUInt16*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_GetUInt16_System_Int32___" data-uid="NumSharp.Backends.UnmanagedStorage.GetUInt16(System.Int32[])">
+  GetUInt16(params int[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Retrieves value of type <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint16">ushort</a> from internal storage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ushort GetUInt16(params int[] indices)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>indices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The shape's indices to get.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint16">ushort</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.nullreferenceexception">NullReferenceException</a></dt>
+    <dd><p>When <a class="xref" href="NumSharp.Backends.UnmanagedStorage.html#NumSharp_Backends_UnmanagedStorage_DType">DType</a> is not <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint16">ushort</a></p>
+</dd>
+  </dl>
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_GetUInt32_" data-uid="NumSharp.Backends.UnmanagedStorage.GetUInt32*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_GetUInt32_System_Int32___" data-uid="NumSharp.Backends.UnmanagedStorage.GetUInt32(System.Int32[])">
+  GetUInt32(params int[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Retrieves value of type <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a> from internal storage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public uint GetUInt32(params int[] indices)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>indices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The shape's indices to get.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.nullreferenceexception">NullReferenceException</a></dt>
+    <dd><p>When <a class="xref" href="NumSharp.Backends.UnmanagedStorage.html#NumSharp_Backends_UnmanagedStorage_DType">DType</a> is not <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></p>
+</dd>
+  </dl>
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_GetUInt64_" data-uid="NumSharp.Backends.UnmanagedStorage.GetUInt64*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_GetUInt64_System_Int32___" data-uid="NumSharp.Backends.UnmanagedStorage.GetUInt64(System.Int32[])">
+  GetUInt64(params int[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Retrieves value of type <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint64">ulong</a> from internal storage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ulong GetUInt64(params int[] indices)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>indices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The shape's indices to get.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint64">ulong</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.nullreferenceexception">NullReferenceException</a></dt>
+    <dd><p>When <a class="xref" href="NumSharp.Backends.UnmanagedStorage.html#NumSharp_Backends_UnmanagedStorage_DType">DType</a> is not <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint64">ulong</a></p>
+</dd>
+  </dl>
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_GetValue_" data-uid="NumSharp.Backends.UnmanagedStorage.GetValue*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_GetValue_System_Int32___" data-uid="NumSharp.Backends.UnmanagedStorage.GetValue(System.Int32[])">
+  GetValue(params int[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Retrieves value of unspecified type (will figure using IStorage.DType).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ValueType GetValue(params int[] indices)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>indices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The shape's indices to get.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetype">ValueType</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.nullreferenceexception">NullReferenceException</a></dt>
+    <dd><p>When IStorage.DType is not <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></p>
+</dd>
+  </dl>
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_GetValue_" data-uid="NumSharp.Backends.UnmanagedStorage.GetValue*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_GetValue__1_System_Int32___" data-uid="NumSharp.Backends.UnmanagedStorage.GetValue``1(System.Int32[])">
+  GetValue&lt;T&gt;(params int[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Get single value from internal storage as type T and cast dtype to T</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T GetValue&lt;T&gt;(params int[] indices) where T : unmanaged</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>indices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>indices</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>element from internal storage</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>new storage data type</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Backends_UnmanagedStorage_GetValue__1_System_Int32____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>If you provide less indices than there are dimensions, the rest are filled with 0.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.nullreferenceexception">NullReferenceException</a></dt>
+    <dd><p>When <code class="typeparamref">T</code> does not equal to <a class="xref" href="NumSharp.Backends.UnmanagedStorage.html#NumSharp_Backends_UnmanagedStorage_DType">DType</a></p>
+</dd>
+  </dl>
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_GetView_" data-uid="NumSharp.Backends.UnmanagedStorage.GetView*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_GetView_NumSharp_Slice___" data-uid="NumSharp.Backends.UnmanagedStorage.GetView(NumSharp.Slice[])">
+  GetView(params Slice[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public UnmanagedStorage GetView(params Slice[] slices)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>slices</code> <a class="xref" href="NumSharp.Slice.html">Slice</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Backends.UnmanagedStorage.html">UnmanagedStorage</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_GetView_" data-uid="NumSharp.Backends.UnmanagedStorage.GetView*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_GetView_System_String_" data-uid="NumSharp.Backends.UnmanagedStorage.GetView(System.String)">
+  GetView(string)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public UnmanagedStorage GetView(string slicing_notation)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>slicing_notation</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Backends.UnmanagedStorage.html">UnmanagedStorage</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_ReplaceData_" data-uid="NumSharp.Backends.UnmanagedStorage.ReplaceData*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_ReplaceData_NumSharp_Backends_Unmanaged_IArraySlice_" data-uid="NumSharp.Backends.UnmanagedStorage.ReplaceData(NumSharp.Backends.Unmanaged.IArraySlice)">
+  ReplaceData(IArraySlice)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets values as the internal data source and changes the internal storage data type to values type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ReplaceData(IArraySlice values)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>values</code> <a class="xref" href="NumSharp.Backends.Unmanaged.IArraySlice.html">IArraySlice</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Backends_UnmanagedStorage_ReplaceData_NumSharp_Backends_Unmanaged_IArraySlice__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Does not copy values and doesn't change shape.</p>
+</div>
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_ReplaceData_" data-uid="NumSharp.Backends.UnmanagedStorage.ReplaceData*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_ReplaceData_NumSharp_Backends_Unmanaged_IArraySlice_NumSharp_Shape_" data-uid="NumSharp.Backends.UnmanagedStorage.ReplaceData(NumSharp.Backends.Unmanaged.IArraySlice,NumSharp.Shape)">
+  ReplaceData(IArraySlice, Shape)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets values as the internal data source and changes the internal storage data type to values type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ReplaceData(IArraySlice values, Shape shape)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>values</code> <a class="xref" href="NumSharp.Backends.Unmanaged.IArraySlice.html">IArraySlice</a></dt>
+    <dd></dd>
+    <dt><code>shape</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd><p>The shape to set in this storage. (without checking if shape matches storage)</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Backends_UnmanagedStorage_ReplaceData_NumSharp_Backends_Unmanaged_IArraySlice_NumSharp_Shape__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Does not copy values and doesn't change shape. Doesn't check if shape size matches.</p>
+</div>
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_ReplaceData_" data-uid="NumSharp.Backends.UnmanagedStorage.ReplaceData*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_ReplaceData_NumSharp_Backends_Unmanaged_IArraySlice_System_Type_" data-uid="NumSharp.Backends.UnmanagedStorage.ReplaceData(NumSharp.Backends.Unmanaged.IArraySlice,System.Type)">
+  ReplaceData(IArraySlice, Type)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets values as the internal data source and changes the internal storage data type to values type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ReplaceData(IArraySlice values, Type dtype)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>values</code> <a class="xref" href="NumSharp.Backends.Unmanaged.IArraySlice.html">IArraySlice</a></dt>
+    <dd></dd>
+    <dt><code>dtype</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.type">Type</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Backends_UnmanagedStorage_ReplaceData_NumSharp_Backends_Unmanaged_IArraySlice_System_Type__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Does not copy values and doesn't change shape.</p>
+</div>
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_ReplaceData_" data-uid="NumSharp.Backends.UnmanagedStorage.ReplaceData*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_ReplaceData_NumSharp_Backends_Unmanaged_IArraySlice_System_Type_NumSharp_Shape_" data-uid="NumSharp.Backends.UnmanagedStorage.ReplaceData(NumSharp.Backends.Unmanaged.IArraySlice,System.Type,NumSharp.Shape)">
+  ReplaceData(IArraySlice, Type, Shape)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets values as the internal data source and changes the internal storage data type to values type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ReplaceData(IArraySlice values, Type dtype, Shape shape)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>values</code> <a class="xref" href="NumSharp.Backends.Unmanaged.IArraySlice.html">IArraySlice</a></dt>
+    <dd></dd>
+    <dt><code>dtype</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.type">Type</a></dt>
+    <dd></dd>
+    <dt><code>shape</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd><p>The shape to set in this storage. (without checking if shape matches storage)</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Backends_UnmanagedStorage_ReplaceData_NumSharp_Backends_Unmanaged_IArraySlice_System_Type_NumSharp_Shape__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Does not copy values and doesn't change shape. Doesn't check if shape size matches.</p>
+</div>
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_ReplaceData_" data-uid="NumSharp.Backends.UnmanagedStorage.ReplaceData*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_ReplaceData_NumSharp_NDArray_" data-uid="NumSharp.Backends.UnmanagedStorage.ReplaceData(NumSharp.NDArray)">
+  ReplaceData(NDArray)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets nd as the internal data storage and changes the internal storage data type to nd type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ReplaceData(NDArray nd)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>nd</code> <a class="xref" href="NumSharp.NDArray.html">NDArray</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Backends_UnmanagedStorage_ReplaceData_NumSharp_NDArray__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Does not copy values and does change shape and dtype.</p>
+</div>
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_ReplaceData_" data-uid="NumSharp.Backends.UnmanagedStorage.ReplaceData*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_ReplaceData_NumSharp_NDArray_NumSharp_Shape_" data-uid="NumSharp.Backends.UnmanagedStorage.ReplaceData(NumSharp.NDArray,NumSharp.Shape)">
+  ReplaceData(NDArray, Shape)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets nd as the internal data storage and changes the internal storage data type to nd type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ReplaceData(NDArray nd, Shape shape)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>nd</code> <a class="xref" href="NumSharp.NDArray.html">NDArray</a></dt>
+    <dd></dd>
+    <dt><code>shape</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd><p>The shape to set in this storage. (without checking if shape matches storage)</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Backends_UnmanagedStorage_ReplaceData_NumSharp_NDArray_NumSharp_Shape__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Does not copy values and does change shape and dtype. Doesn't check if shape size matches.</p>
+</div>
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_ReplaceData_" data-uid="NumSharp.Backends.UnmanagedStorage.ReplaceData*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_ReplaceData_System_Array_" data-uid="NumSharp.Backends.UnmanagedStorage.ReplaceData(System.Array)">
+  ReplaceData(Array)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets values as the internal data source and changes the internal storage data type to values type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ReplaceData(Array values)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>values</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.array">Array</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Backends_UnmanagedStorage_ReplaceData_System_Array__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Copies values only if <code class="paramref">values</code> type does not match <a class="xref" href="NumSharp.Backends.UnmanagedStorage.html#NumSharp_Backends_UnmanagedStorage_DType">DType</a> and doesn't change shape.</p>
+</div>
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_ReplaceData_" data-uid="NumSharp.Backends.UnmanagedStorage.ReplaceData*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_ReplaceData_System_Array_NumSharp_NPTypeCode_" data-uid="NumSharp.Backends.UnmanagedStorage.ReplaceData(System.Array,NumSharp.NPTypeCode)">
+  ReplaceData(Array, NPTypeCode)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Set an Array to internal storage, cast it to new dtype and if necessary change dtype</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ReplaceData(Array values, NPTypeCode typeCode)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>values</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.array">Array</a></dt>
+    <dd></dd>
+    <dt><code>typeCode</code> <a class="xref" href="NumSharp.NPTypeCode.html">NPTypeCode</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Backends_UnmanagedStorage_ReplaceData_System_Array_NumSharp_NPTypeCode__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Does not copy values unless cast is necessary and doesn't change shape.</p>
+</div>
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_ReplaceData_" data-uid="NumSharp.Backends.UnmanagedStorage.ReplaceData*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_ReplaceData_System_Array_NumSharp_NPTypeCode_NumSharp_Shape_" data-uid="NumSharp.Backends.UnmanagedStorage.ReplaceData(System.Array,NumSharp.NPTypeCode,NumSharp.Shape)">
+  ReplaceData(Array, NPTypeCode, Shape)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Set an Array to internal storage, cast it to new dtype and if necessary change dtype</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ReplaceData(Array values, NPTypeCode typeCode, Shape shape)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>values</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.array">Array</a></dt>
+    <dd></dd>
+    <dt><code>typeCode</code> <a class="xref" href="NumSharp.NPTypeCode.html">NPTypeCode</a></dt>
+    <dd></dd>
+    <dt><code>shape</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd><p>The shape to set in this storage. (without checking if shape matches storage)</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Backends_UnmanagedStorage_ReplaceData_System_Array_NumSharp_NPTypeCode_NumSharp_Shape__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Does not copy values unless cast is necessary and doesn't change shape. Doesn't check if shape size matches.</p>
+</div>
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_ReplaceData_" data-uid="NumSharp.Backends.UnmanagedStorage.ReplaceData*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_ReplaceData_System_Array_NumSharp_Shape_" data-uid="NumSharp.Backends.UnmanagedStorage.ReplaceData(System.Array,NumSharp.Shape)">
+  ReplaceData(Array, Shape)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets values as the internal data source and changes the internal storage data type to values type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ReplaceData(Array values, Shape shape)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>values</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.array">Array</a></dt>
+    <dd></dd>
+    <dt><code>shape</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd><p>The shape to set in this storage. (without checking if shape matches storage)</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Backends_UnmanagedStorage_ReplaceData_System_Array_NumSharp_Shape__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Copies values only if <code class="paramref">values</code> type does not match <a class="xref" href="NumSharp.Backends.UnmanagedStorage.html#NumSharp_Backends_UnmanagedStorage_DType">DType</a> and doesn't change shape. Doesn't check if shape size matches.</p>
+</div>
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_ReplaceData_" data-uid="NumSharp.Backends.UnmanagedStorage.ReplaceData*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_ReplaceData_System_Array_System_Type_" data-uid="NumSharp.Backends.UnmanagedStorage.ReplaceData(System.Array,System.Type)">
+  ReplaceData(Array, Type)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Set an Array to internal storage, cast it to new dtype and change dtype</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ReplaceData(Array values, Type dtype)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>values</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.array">Array</a></dt>
+    <dd></dd>
+    <dt><code>dtype</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.type">Type</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Backends_UnmanagedStorage_ReplaceData_System_Array_System_Type__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Does not copy values unless cast in necessary and doesn't change shape.</p>
+</div>
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_ReplaceData_" data-uid="NumSharp.Backends.UnmanagedStorage.ReplaceData*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_ReplaceData_System_Array_System_Type_NumSharp_Shape_" data-uid="NumSharp.Backends.UnmanagedStorage.ReplaceData(System.Array,System.Type,NumSharp.Shape)">
+  ReplaceData(Array, Type, Shape)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Set an Array to internal storage, cast it to new dtype and change dtype</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ReplaceData(Array values, Type dtype, Shape shape)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>values</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.array">Array</a></dt>
+    <dd></dd>
+    <dt><code>dtype</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.type">Type</a></dt>
+    <dd></dd>
+    <dt><code>shape</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd><p>The shape to set in this storage. (without checking if shape matches storage)</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Backends_UnmanagedStorage_ReplaceData_System_Array_System_Type_NumSharp_Shape__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Does not copy values unless cast in necessary and doesn't change shape. Doesn't check if shape size matches.</p>
+</div>
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_Reshape_" data-uid="NumSharp.Backends.UnmanagedStorage.Reshape*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_Reshape_NumSharp_Shape_System_Boolean_" data-uid="NumSharp.Backends.UnmanagedStorage.Reshape(NumSharp.Shape,System.Boolean)">
+  Reshape(Shape, bool)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Changes the shape representing this storage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Reshape(Shape newShape, bool @unsafe = false)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>newShape</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd></dd>
+    <dt><code>unsafe</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.IncorrectShapeException.html">IncorrectShapeException</a></dt>
+    <dd><p>If shape's size mismatches current shape size.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>If <code class="paramref">newShape</code>'s size == 0</p>
+</dd>
+  </dl>
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_Reshape_" data-uid="NumSharp.Backends.UnmanagedStorage.Reshape*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_Reshape_NumSharp_Shape__System_Boolean_" data-uid="NumSharp.Backends.UnmanagedStorage.Reshape(NumSharp.Shape@,System.Boolean)">
+  Reshape(ref Shape, bool)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Changes the shape representing this storage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Reshape(ref Shape newShape, bool @unsafe = false)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>newShape</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd></dd>
+    <dt><code>unsafe</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.IncorrectShapeException.html">IncorrectShapeException</a></dt>
+    <dd><p>If shape's size mismatches current shape size.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>If <code class="paramref">newShape</code>'s size == 0</p>
+</dd>
+  </dl>
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_Reshape_" data-uid="NumSharp.Backends.UnmanagedStorage.Reshape*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_Reshape_System_Int32___" data-uid="NumSharp.Backends.UnmanagedStorage.Reshape(System.Int32[])">
+  Reshape(params int[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Changes the shape representing this storage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Reshape(params int[] dimensions)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dimensions</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.IncorrectShapeException.html">IncorrectShapeException</a></dt>
+    <dd><p>If shape's size mismatches current shape size.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_Reshape_" data-uid="NumSharp.Backends.UnmanagedStorage.Reshape*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_Reshape_System_Int32___System_Boolean_" data-uid="NumSharp.Backends.UnmanagedStorage.Reshape(System.Int32[],System.Boolean)">
+  Reshape(int[], bool)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Changes the shape representing this storage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Reshape(int[] dimensions, bool @unsafe)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dimensions</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+    <dt><code>unsafe</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.IncorrectShapeException.html">IncorrectShapeException</a></dt>
+    <dd><p>If shape's size mismatches current shape size.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>If <code class="paramref">dimensions</code>'s size == 0</p>
+</dd>
+  </dl>
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_Scalar_" data-uid="NumSharp.Backends.UnmanagedStorage.Scalar*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_Scalar_System_Object_" data-uid="NumSharp.Backends.UnmanagedStorage.Scalar(System.Object)">
+  Scalar(object)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static UnmanagedStorage Scalar(object value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Backends.UnmanagedStorage.html">UnmanagedStorage</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_Scalar_" data-uid="NumSharp.Backends.UnmanagedStorage.Scalar*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_Scalar_System_Object_NumSharp_NPTypeCode_" data-uid="NumSharp.Backends.UnmanagedStorage.Scalar(System.Object,NumSharp.NPTypeCode)">
+  Scalar(object, NPTypeCode)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static UnmanagedStorage Scalar(object value, NPTypeCode typeCode)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></dt>
+    <dd></dd>
+    <dt><code>typeCode</code> <a class="xref" href="NumSharp.NPTypeCode.html">NPTypeCode</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Backends.UnmanagedStorage.html">UnmanagedStorage</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_Scalar_" data-uid="NumSharp.Backends.UnmanagedStorage.Scalar*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_Scalar__1___0_" data-uid="NumSharp.Backends.UnmanagedStorage.Scalar``1(``0)">
+  Scalar&lt;T&gt;(T)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static UnmanagedStorage Scalar&lt;T&gt;(T value) where T : unmanaged</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Backends.UnmanagedStorage.html">UnmanagedStorage</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_SetAtIndex_" data-uid="NumSharp.Backends.UnmanagedStorage.SetAtIndex*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_SetAtIndex_System_Object_System_Int32_" data-uid="NumSharp.Backends.UnmanagedStorage.SetAtIndex(System.Object,System.Int32)">
+  SetAtIndex(object, int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SetAtIndex(object value, int index)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></dt>
+    <dd></dd>
+    <dt><code>index</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_SetAtIndexUnsafe_" data-uid="NumSharp.Backends.UnmanagedStorage.SetAtIndexUnsafe*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_SetAtIndexUnsafe_System_ValueType_System_Int32_" data-uid="NumSharp.Backends.UnmanagedStorage.SetAtIndexUnsafe(System.ValueType,System.Int32)">
+  SetAtIndexUnsafe(ValueType, int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs a set of index without calling <a class="xref" href="NumSharp.Shape.html#NumSharp_Shape_TransformOffset_System_Int32_">TransformOffset(int)</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SetAtIndexUnsafe(ValueType value, int index)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetype">ValueType</a></dt>
+    <dd></dd>
+    <dt><code>index</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_SetAtIndexUnsafe_" data-uid="NumSharp.Backends.UnmanagedStorage.SetAtIndexUnsafe*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_SetAtIndexUnsafe__1___0_System_Int32_" data-uid="NumSharp.Backends.UnmanagedStorage.SetAtIndexUnsafe``1(``0,System.Int32)">
+  SetAtIndexUnsafe&lt;T&gt;(T, int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs a set of index without calling <a class="xref" href="NumSharp.Shape.html#NumSharp_Shape_TransformOffset_System_Int32_">TransformOffset(int)</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SetAtIndexUnsafe&lt;T&gt;(T value, int index) where T : unmanaged</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <span class="xref">T</span></dt>
+    <dd></dd>
+    <dt><code>index</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_SetAtIndex_" data-uid="NumSharp.Backends.UnmanagedStorage.SetAtIndex*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_SetAtIndex__1___0_System_Int32_" data-uid="NumSharp.Backends.UnmanagedStorage.SetAtIndex``1(``0,System.Int32)">
+  SetAtIndex&lt;T&gt;(T, int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SetAtIndex&lt;T&gt;(T value, int index) where T : unmanaged</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <span class="xref">T</span></dt>
+    <dd></dd>
+    <dt><code>index</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_SetBoolean_" data-uid="NumSharp.Backends.UnmanagedStorage.SetBoolean*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_SetBoolean_System_Boolean_System_Int32___" data-uid="NumSharp.Backends.UnmanagedStorage.SetBoolean(System.Boolean,System.Int32[])">
+  SetBoolean(bool, params int[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets a bool at specific coordinates.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SetBoolean(bool value, params int[] indices)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>The values to assign</p>
+</dd>
+    <dt><code>indices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The coordinates to set <code class="paramref">value</code> at.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_SetByte_" data-uid="NumSharp.Backends.UnmanagedStorage.SetByte*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_SetByte_System_Byte_System_Int32___" data-uid="NumSharp.Backends.UnmanagedStorage.SetByte(System.Byte,System.Int32[])">
+  SetByte(byte, params int[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets a byte at specific coordinates.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SetByte(byte value, params int[] indices)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a></dt>
+    <dd><p>The values to assign</p>
+</dd>
+    <dt><code>indices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The coordinates to set <code class="paramref">value</code> at.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_SetChar_" data-uid="NumSharp.Backends.UnmanagedStorage.SetChar*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_SetChar_System_Char_System_Int32___" data-uid="NumSharp.Backends.UnmanagedStorage.SetChar(System.Char,System.Int32[])">
+  SetChar(char, params int[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets a char at specific coordinates.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SetChar(char value, params int[] indices)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.char">char</a></dt>
+    <dd><p>The values to assign</p>
+</dd>
+    <dt><code>indices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The coordinates to set <code class="paramref">value</code> at.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_SetData_" data-uid="NumSharp.Backends.UnmanagedStorage.SetData*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_SetData_NumSharp_Backends_Unmanaged_IArraySlice_System_Int32___" data-uid="NumSharp.Backends.UnmanagedStorage.SetData(NumSharp.Backends.Unmanaged.IArraySlice,System.Int32[])">
+  SetData(IArraySlice, params int[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Set a <a class="xref" href="NumSharp.Backends.Unmanaged.IArraySlice.html">IArraySlice</a> at given indices.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SetData(IArraySlice value, params int[] indices)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="NumSharp.Backends.Unmanaged.IArraySlice.html">IArraySlice</a></dt>
+    <dd><p>The value to set</p>
+</dd>
+    <dt><code>indices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Backends_UnmanagedStorage_SetData_NumSharp_Backends_Unmanaged_IArraySlice_System_Int32____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Does not change internal storage data type.<br>
+If <code class="paramref">value</code> does not match <a class="xref" href="NumSharp.Backends.UnmanagedStorage.html#NumSharp_Backends_UnmanagedStorage_DType">DType</a>, <code class="paramref">value</code> will be converted.</p>
+</div>
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_SetData_" data-uid="NumSharp.Backends.UnmanagedStorage.SetData*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_SetData_NumSharp_NDArray_System_Int32___" data-uid="NumSharp.Backends.UnmanagedStorage.SetData(NumSharp.NDArray,System.Int32[])">
+  SetData(NDArray, params int[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Set a <a class="xref" href="NumSharp.NDArray.html">NDArray</a> at given indices.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SetData(NDArray value, params int[] indices)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="NumSharp.NDArray.html">NDArray</a></dt>
+    <dd><p>The value to set</p>
+</dd>
+    <dt><code>indices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Backends_UnmanagedStorage_SetData_NumSharp_NDArray_System_Int32____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Does not change internal storage data type.<br>
+If <code class="paramref">value</code> does not match <a class="xref" href="NumSharp.Backends.UnmanagedStorage.html#NumSharp_Backends_UnmanagedStorage_DType">DType</a>, <code class="paramref">value</code> will be converted.</p>
+</div>
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_SetData_" data-uid="NumSharp.Backends.UnmanagedStorage.SetData*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_SetData_System_Object_System_Int32___" data-uid="NumSharp.Backends.UnmanagedStorage.SetData(System.Object,System.Int32[])">
+  SetData(object, params int[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Set a single value at given indices.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SetData(object value, params int[] indices)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></dt>
+    <dd><p>The value to set</p>
+</dd>
+    <dt><code>indices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Backends_UnmanagedStorage_SetData_System_Object_System_Int32____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Does not change internal storage data type.<br>
+If <code class="paramref">value</code> does not match <a class="xref" href="NumSharp.Backends.UnmanagedStorage.html#NumSharp_Backends_UnmanagedStorage_DType">DType</a>, <code class="paramref">value</code> will be converted.</p>
+</div>
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_SetDecimal_" data-uid="NumSharp.Backends.UnmanagedStorage.SetDecimal*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_SetDecimal_System_Decimal_System_Int32___" data-uid="NumSharp.Backends.UnmanagedStorage.SetDecimal(System.Decimal,System.Int32[])">
+  SetDecimal(decimal, params int[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets a decimal at specific coordinates.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SetDecimal(decimal value, params int[] indices)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd><p>The values to assign</p>
+</dd>
+    <dt><code>indices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The coordinates to set <code class="paramref">value</code> at.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_SetDouble_" data-uid="NumSharp.Backends.UnmanagedStorage.SetDouble*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_SetDouble_System_Double_System_Int32___" data-uid="NumSharp.Backends.UnmanagedStorage.SetDouble(System.Double,System.Int32[])">
+  SetDouble(double, params int[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets a double at specific coordinates.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SetDouble(double value, params int[] indices)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The values to assign</p>
+</dd>
+    <dt><code>indices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The coordinates to set <code class="paramref">value</code> at.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_SetInt16_" data-uid="NumSharp.Backends.UnmanagedStorage.SetInt16*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_SetInt16_System_Int16_System_Int32___" data-uid="NumSharp.Backends.UnmanagedStorage.SetInt16(System.Int16,System.Int32[])">
+  SetInt16(short, params int[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets a short at specific coordinates.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SetInt16(short value, params int[] indices)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int16">short</a></dt>
+    <dd><p>The values to assign</p>
+</dd>
+    <dt><code>indices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The coordinates to set <code class="paramref">value</code> at.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_SetInt32_" data-uid="NumSharp.Backends.UnmanagedStorage.SetInt32*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_SetInt32_System_Int32_System_Int32___" data-uid="NumSharp.Backends.UnmanagedStorage.SetInt32(System.Int32,System.Int32[])">
+  SetInt32(int, params int[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets a int at specific coordinates.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SetInt32(int value, params int[] indices)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The values to assign</p>
+</dd>
+    <dt><code>indices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The coordinates to set <code class="paramref">value</code> at.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_SetInt64_" data-uid="NumSharp.Backends.UnmanagedStorage.SetInt64*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_SetInt64_System_Int64_System_Int32___" data-uid="NumSharp.Backends.UnmanagedStorage.SetInt64(System.Int64,System.Int32[])">
+  SetInt64(long, params int[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets a long at specific coordinates.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SetInt64(long value, params int[] indices)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd><p>The values to assign</p>
+</dd>
+    <dt><code>indices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The coordinates to set <code class="paramref">value</code> at.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_SetInternalArray_" data-uid="NumSharp.Backends.UnmanagedStorage.SetInternalArray*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_SetInternalArray_NumSharp_Backends_Unmanaged_IArraySlice_" data-uid="NumSharp.Backends.UnmanagedStorage.SetInternalArray(NumSharp.Backends.Unmanaged.IArraySlice)">
+  SetInternalArray(IArraySlice)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Replace internal storage array with given array.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected void SetInternalArray(IArraySlice array)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>array</code> <a class="xref" href="NumSharp.Backends.Unmanaged.IArraySlice.html">IArraySlice</a></dt>
+    <dd><p>The array to set as internal storage</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidcastexception">InvalidCastException</a></dt>
+    <dd><p>When type of <code class="paramref">array</code> does not match <a class="xref" href="NumSharp.Backends.UnmanagedStorage.html#NumSharp_Backends_UnmanagedStorage_DType">DType</a> of this storage</p>
+</dd>
+  </dl>
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_SetInternalArray_" data-uid="NumSharp.Backends.UnmanagedStorage.SetInternalArray*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_SetInternalArray_System_Array_" data-uid="NumSharp.Backends.UnmanagedStorage.SetInternalArray(System.Array)">
+  SetInternalArray(Array)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Replace internal storage array with given array.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected void SetInternalArray(Array array)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>array</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.array">Array</a></dt>
+    <dd><p>The array to set as internal storage</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidcastexception">InvalidCastException</a></dt>
+    <dd><p>When type of <code class="paramref">array</code> does not match <a class="xref" href="NumSharp.Backends.UnmanagedStorage.html#NumSharp_Backends_UnmanagedStorage_DType">DType</a> of this storage</p>
+</dd>
+  </dl>
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_SetShapeUnsafe_" data-uid="NumSharp.Backends.UnmanagedStorage.SetShapeUnsafe*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_SetShapeUnsafe_NumSharp_Shape_" data-uid="NumSharp.Backends.UnmanagedStorage.SetShapeUnsafe(NumSharp.Shape)">
+  SetShapeUnsafe(Shape)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Set the shape of this storage without checking if sizes match.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected void SetShapeUnsafe(Shape shape)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>shape</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Backends_UnmanagedStorage_SetShapeUnsafe_NumSharp_Shape__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Used during broadcasting</p>
+</div>
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_SetShapeUnsafe_" data-uid="NumSharp.Backends.UnmanagedStorage.SetShapeUnsafe*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_SetShapeUnsafe_NumSharp_Shape__" data-uid="NumSharp.Backends.UnmanagedStorage.SetShapeUnsafe(NumSharp.Shape@)">
+  SetShapeUnsafe(ref Shape)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Set the shape of this storage without checking if sizes match.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected void SetShapeUnsafe(ref Shape shape)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>shape</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Backends_UnmanagedStorage_SetShapeUnsafe_NumSharp_Shape___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Used during broadcasting</p>
+</div>
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_SetSingle_" data-uid="NumSharp.Backends.UnmanagedStorage.SetSingle*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_SetSingle_System_Single_System_Int32___" data-uid="NumSharp.Backends.UnmanagedStorage.SetSingle(System.Single,System.Int32[])">
+  SetSingle(float, params int[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets a float at specific coordinates.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SetSingle(float value, params int[] indices)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The values to assign</p>
+</dd>
+    <dt><code>indices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The coordinates to set <code class="paramref">value</code> at.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_SetUInt16_" data-uid="NumSharp.Backends.UnmanagedStorage.SetUInt16*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_SetUInt16_System_UInt16_System_Int32___" data-uid="NumSharp.Backends.UnmanagedStorage.SetUInt16(System.UInt16,System.Int32[])">
+  SetUInt16(ushort, params int[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets a ushort at specific coordinates.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SetUInt16(ushort value, params int[] indices)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint16">ushort</a></dt>
+    <dd><p>The values to assign</p>
+</dd>
+    <dt><code>indices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The coordinates to set <code class="paramref">value</code> at.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_SetUInt32_" data-uid="NumSharp.Backends.UnmanagedStorage.SetUInt32*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_SetUInt32_System_UInt32_System_Int32___" data-uid="NumSharp.Backends.UnmanagedStorage.SetUInt32(System.UInt32,System.Int32[])">
+  SetUInt32(uint, params int[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets a uint at specific coordinates.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SetUInt32(uint value, params int[] indices)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The values to assign</p>
+</dd>
+    <dt><code>indices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The coordinates to set <code class="paramref">value</code> at.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_SetUInt64_" data-uid="NumSharp.Backends.UnmanagedStorage.SetUInt64*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_SetUInt64_System_UInt64_System_Int32___" data-uid="NumSharp.Backends.UnmanagedStorage.SetUInt64(System.UInt64,System.Int32[])">
+  SetUInt64(ulong, params int[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets a ulong at specific coordinates.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SetUInt64(ulong value, params int[] indices)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint64">ulong</a></dt>
+    <dd><p>The values to assign</p>
+</dd>
+    <dt><code>indices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The coordinates to set <code class="paramref">value</code> at.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_SetValue_" data-uid="NumSharp.Backends.UnmanagedStorage.SetValue*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_SetValue_System_Object_System_Int32___" data-uid="NumSharp.Backends.UnmanagedStorage.SetValue(System.Object,System.Int32[])">
+  SetValue(object, params int[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Set a single value at given indices.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SetValue(object value, params int[] indices)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></dt>
+    <dd><p>The value to set</p>
+</dd>
+    <dt><code>indices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Backends_UnmanagedStorage_SetValue_System_Object_System_Int32____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Does not change internal storage data type.<br>
+If <code class="paramref">value</code> does not match <a class="xref" href="NumSharp.Backends.UnmanagedStorage.html#NumSharp_Backends_UnmanagedStorage_DType">DType</a>, <code class="paramref">value</code> will be converted.</p>
+</div>
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_SetValue_" data-uid="NumSharp.Backends.UnmanagedStorage.SetValue*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_SetValue__1___0_System_Int32___" data-uid="NumSharp.Backends.UnmanagedStorage.SetValue``1(``0,System.Int32[])">
+  SetValue&lt;T&gt;(T, params int[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Set a single value at given indices.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SetValue&lt;T&gt;(T value, params int[] indices) where T : unmanaged</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <span class="xref">T</span></dt>
+    <dd><p>The value to set</p>
+</dd>
+    <dt><code>indices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The</p>
+</dd>
+  </dl>
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Backends_UnmanagedStorage_SetValue__1___0_System_Int32____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Does not change internal storage data type.<br>
+If <code class="paramref">value</code> does not match <a class="xref" href="NumSharp.Backends.UnmanagedStorage.html#NumSharp_Backends_UnmanagedStorage_DType">DType</a>, <code class="paramref">value</code> will be converted.</p>
+</div>
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage_ToArray_" data-uid="NumSharp.Backends.UnmanagedStorage.ToArray*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage_ToArray__1" data-uid="NumSharp.Backends.UnmanagedStorage.ToArray``1">
+  ToArray&lt;T&gt;()
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T[] ToArray&lt;T&gt;() where T : unmanaged</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>T[]</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage__Allocate_" data-uid="NumSharp.Backends.UnmanagedStorage._Allocate*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage__Allocate_NumSharp_Shape_NumSharp_Backends_Unmanaged_IArraySlice_" data-uid="NumSharp.Backends.UnmanagedStorage._Allocate(NumSharp.Shape,NumSharp.Backends.Unmanaged.IArraySlice)">
+  _Allocate(Shape, IArraySlice)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected void _Allocate(Shape shape, IArraySlice values)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>shape</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd></dd>
+    <dt><code>values</code> <a class="xref" href="NumSharp.Backends.Unmanaged.IArraySlice.html">IArraySlice</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage__ChangeTypeOfArray_" data-uid="NumSharp.Backends.UnmanagedStorage._ChangeTypeOfArray*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage__ChangeTypeOfArray_System_Array_System_Type_" data-uid="NumSharp.Backends.UnmanagedStorage._ChangeTypeOfArray(System.Array,System.Type)">
+  _ChangeTypeOfArray(Array, Type)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Changes the type of <code class="paramref">sourceArray</code> to <code class="paramref">to_dtype</code> if necessary.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">[SuppressMessage(&quot;ReSharper&quot;, &quot;AssignNullToNotNullAttribute&quot;)]
+protected static Array _ChangeTypeOfArray(Array sourceArray, Type to_dtype)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sourceArray</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.array">Array</a></dt>
+    <dd><p>The array to change his type</p>
+</dd>
+    <dt><code>to_dtype</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.type">Type</a></dt>
+    <dd><p>The type to change to.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.array">Array</a></dt>
+    <dd><p>Returns sourceArray or new array with changed type to to_dtype</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Backends_UnmanagedStorage__ChangeTypeOfArray_System_Array_System_Type__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>If the return type is equal to source type, this method does not return a copy.</p>
+</div>
+
+
+
+
+  <a id="NumSharp_Backends_UnmanagedStorage__ChangeTypeOfArray_" data-uid="NumSharp.Backends.UnmanagedStorage._ChangeTypeOfArray*"></a>
+
+  <h3 id="NumSharp_Backends_UnmanagedStorage__ChangeTypeOfArray__1_NumSharp_Backends_Unmanaged_IArraySlice_" data-uid="NumSharp.Backends.UnmanagedStorage._ChangeTypeOfArray``1(NumSharp.Backends.Unmanaged.IArraySlice)">
+  _ChangeTypeOfArray&lt;TOut&gt;(IArraySlice)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Changes the type of <code class="paramref">sourceArray</code> to <code class="paramref">to_dtype</code> if necessary.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">[SuppressMessage(&quot;ReSharper&quot;, &quot;AssignNullToNotNullAttribute&quot;)]
+protected static ArraySlice&lt;TOut&gt; _ChangeTypeOfArray&lt;TOut&gt;(IArraySlice sourceArray) where TOut : unmanaged</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sourceArray</code> <a class="xref" href="NumSharp.Backends.Unmanaged.IArraySlice.html">IArraySlice</a></dt>
+    <dd><p>The array to change his type</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Backends.Unmanaged.ArraySlice-1.html">ArraySlice</a>&lt;TOut&gt;</dt>
+    <dd><p>Returns sourceArray or new array with changed type to to_dtype</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>TOut</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Backends_UnmanagedStorage__ChangeTypeOfArray__1_NumSharp_Backends_Unmanaged_IArraySlice__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>If the return type is equal to source type, this method does not return a copy.</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          <span>Copyright &copy; 2025 <a href='https://github.com/SciSharp'>SciSharp STACK</a>. Built with <a href='https://dotnet.github.io/docfx'>DocFX</a>.</span>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

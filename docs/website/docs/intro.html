@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+      <title>Introduction | NumSharp Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Introduction | NumSharp Documentation ">
+      
+      
+      <link rel="icon" href="../images/numsharp.icon128.png">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../images/numsharp.icon.svg" alt="NumSharp">
+            NumSharp
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="introduction">Introduction</h1>
+
+<p>The following pages are for the users who want to use NumSharp.</p>
+<p>Before you read the code examples you should read this page which explain some basis concepts.
+An other reference can be numpy since we try our best to follow their APIs (<strong>High level - not lower level</strong>).</p>
+<h2 id="ndarray-ndstorgage-and-shape">NDArray, NDStorgage and Shape</h2>
+<p>The 3 main classes in NumSharp are NDArray, NDStorage and Shape.
+If you want to have a better understanding for NumSharp, you can read the following lines to see how all works together.</p>
+<p>Let's start with the question - what is a Tensor?</p>
+<p>From programming point of view a tensor is a multi-dimensional array (scalar, vector, matrix, ...) mostly for numerical data like int32, int64, doubles, ...  which can be accessed via indexes like np[idx], np[idx,jdx], np[idx,jdx,kdx], ... depending on its dimension.</p>
+<p>Ok - in this sentence we got already some properties.</p>
+<ul>
+<li>a tensor is an object for storing (mostly) numerical data</li>
+<li>a tensor has a dimension</li>
+<li>the dimension decides how many indexes are necessary to access the stored data</li>
+</ul>
+<p>Each tensor type (dimension 1 - vector, dimension 2 - matrix, ...) has its own .NET type like double[,].</p>
+<p>NumSharp brings its own tensor / array type called <strong>NDArray</strong>.</p>
+<p>So now the question - .NET offers already multi-dimensional arrays - why a new array type?</p>
+<p>NumSharps NDArray offers the capability of storing any tensor (independent of dimension!) into its internal storage.
+So NumSharps NDArray can store a vector, a matrix or sth with dimension 5 and higher. This is not possible with .NET arrays since each tensor type is a different class. This offers users the possibility to use same methods for different tensor types.</p>
+<p>Now the next question - how a NDArray can do this?</p>
+<p>First of all we need to be a little bit more abstract. Why we use tensors? Because we want to store data and we want to get them. How we get and set them? We get and set via indexes (which are always integers). So just this data are important and the corresponding indexes. That's it. Data + Indexes. :)</p>
+<p>With this in mind we easily can understand the NDStorage of NumSharp.</p>
+<p>NDStorage is an object which stores the data of a tesor in a single 1D array. Since it is a 1D array independend of the tensor dimension NDStorage can be used for all kind of tensors. A vector is stored inside a 1D array, a matrix, a 3 dimensional tensor and so on.</p>
+<p><strong>But hold on! How the data comes into this 1D arrayand how we get them back?</strong></p>
+<p>NDStorage has a property called &quot;shape&quot;. The shape is a small but important class in NumSharp. It stores the dimensions and most important! it determines which element in the 1D array is selected by given indexes.</p>
+<p>To understand the methods for determines 1D internal storage index by NDArray indexes and vice versa we give examples of different tensor types.</p>
+<p><strong>Vector</strong></p>
+<p>Imagine a 1D tensor (a vector). Here it is easy because you can access the data with a single index like 'a = np[idx]'. The internal data store in NDStorage is a 1D array - so index to access is the same index in internal storage.</p>
+<p><strong>Matrix</strong></p>
+<p>Here it is a little bit more tricky. Each data element is stored by 2 indexes like np[idx,jdx] = 5. The internal storage is a 1D array so .... there must be a way to map the 2 indexes [idx,jdx] at NDArray level to a single index [kdx] in NDStorage level.</p>
+<p>Indeed there is!</p>
+<p>Not just in NumSharp but also in many other frameworks, libs or (general spoken) languages it is good style to store the elements of a matrix row wise or column wise into a 1D array. For a more professional description you can check <a href="https://en.wikipedia.org/wiki/Row-_and_column-major_order">https://en.wikipedia.org/wiki/Row-_and_column-major_order</a>. Row wise Layout and column wise layout often also called row major and column major.</p>
+<p>General spoken when imagine a matrix as a table - Row wise means that you start with element [0,0] (as your first element in 1D array) and take elements from columns of 1st row (and store them in the 1D array) until all elements of the 1st row are stored inside the 1D array. You go on with the 2nd row - take element [1,0],[1,1],[1,2],...,[1,n-1]. Go on with this pattern until all elements are inside the 1D array.</p>
+<p>Column wise also starts with the element [0,0] but! it stays in the 1st column and takes elements along the rows until all elements from 1st column is stored. Repeat this with 2nd column, 3rd and so on.</p>
+<p>The image below (taken from <a href="https://en.wikipedia.org/wiki/File:Row_and_column_major_order.svg">https://en.wikipedia.org/wiki/File:Row_and_column_major_order.svg</a>) shows again the 'algorithm' for storing data from matrix to vector.</p>
+<p><img src="../images/rowWise_ColumnWise.png" alt="Row Wise Column Wise"></p>
+<p><strong>N dim tensor</strong></p>
+<p>Now we come to the most tricky question - how to store a general n dimensional tensor inside a 1D array.</p>
+<p>Short anwser - exactly like a matrix - just more generalized.</p>
+<p>First we look again the row wise order.</p>
+<p>[0,0] -&gt; [0,1] -&gt; [0,2] -&gt; [0,3] -&gt; [0,n-1] -&gt; [1,0] -&gt; [1,1] -&gt; [1,2] -&gt; [1,3] -&gt; ...</p>
+<p>So here we stay in one dimension (the first / rows) and fill the other dimensions until the dimension is full.
+After we switch to the next higher level of dimension (so change to next row).</p>
+<p>For higher dimensions like 3D - NumSharp follow this pattern.</p>
+<p>[0,0,0] -&gt; [0,0,1] -&gt; [0,0,2] -&gt; [0,0,3] -&gt; [0,0,n-1] -&gt; [0,1,0] -&gt; [0,1,1] -&gt; [0,1,n-1] -&gt; [0,2,0] -&gt; [0,2,n-1] -&gt; [0,m-1,0] -&gt; ...</p>
+<p>General spoken - you can image it as a <strong>backward filling layout</strong>.</p>
+<p>As you can see the dimensions are filled beginning from last dimension, if one dimension is full, the dimension before is increased.</p>
+<p>Next we look the column wise order.</p>
+<p>[0,0] -&gt; [1,0] -&gt; [2,0] -&gt; [3,0] -&gt; [n-1,0] -&gt; [0,1] -&gt; [1,1] -&gt; [2,1] -&gt; [3,1] -&gt; ...</p>
+<p>Again we stay in one dimension but here in the last / column. The rows are filled until the 1st column is full and next dimension is increased.</p>
+<p>So fill first dimension, increase next, fill again, etc. also in n dimensional tensor.</p>
+<p>[0,0,0] -&gt; [1,0,0] -&gt; [2,0,0] -&gt; [3,0,0] -&gt; [n-1,0,0] -&gt; [0,1,0] -&gt; [1,1,0] -&gt; [n-1,1,0] -&gt; [0,2,0] -&gt; [n-1,2,0] -&gt; [0,m-1,0] -&gt;</p>
+<p>And this you can imagine as <strong>forward filling layout</strong>.</p>
+<p>That's it. Now you have enough knowledge about NDArray, NDStorage and Shape. Check the other chapters for a how to use. :)</p>
+
+</article>
+
+        <div class="contribution d-print-none">
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          <span>Copyright &copy; 2025 <a href='https://github.com/SciSharp'>SciSharp STACK</a>. Built with <a href='https://dotnet.github.io/docfx'>DocFX</a>.</span>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

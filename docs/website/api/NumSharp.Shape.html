@@ -1,691 +1,2729 @@
-﻿<!DOCTYPE html>
-<!--[if IE]><![endif]-->
-<html>
-  
+<!DOCTYPE html>
+<html lang="en">
   <head>
     <meta charset="utf-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
-    <title>Class Shape
-   </title>
-    <meta name="viewport" content="width=device-width">
-    <meta name="title" content="Class Shape
-   ">
-    <meta name="generator" content="docfx 2.40.2.0">
-    
-    <link rel="shortcut icon" href="../favicon.ico">
-    <link rel="stylesheet" href="../styles/docfx.vendor.css">
-    <link rel="stylesheet" href="../styles/docfx.css">
-    <link rel="stylesheet" href="../styles/main.css">
-    <meta property="docfx:navrel" content="../toc.html">
-    <meta property="docfx:tocrel" content="toc.html">
-    
-    
-    
+      <title>Struct Shape | NumSharp Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Struct Shape | NumSharp Documentation ">
+      
+      <meta name="description" content="Represents a shape of an N-D array.">
+      <link rel="icon" href="../images/numsharp.icon128.png">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
   </head>
-  <body data-spy="scroll" data-target="#affix" data-offset="120">
-    <div id="wrapper">
-      <header>
-        
-        <nav id="autocollapse" class="navbar navbar-inverse ng-scope" role="navigation">
-          <div class="container">
-            <div class="navbar-header">
-              <button type="button" class="navbar-toggle" data-toggle="collapse" data-target="#navbar">
-                <span class="sr-only">Toggle navigation</span>
-                <span class="icon-bar"></span>
-                <span class="icon-bar"></span>
-                <span class="icon-bar"></span>
-              </button>
-              
-              <a class="navbar-brand" href="../index.html">
-                <img id="logo" class="svg" src="../logo.svg" alt="">
-              </a>
-            </div>
-            <div class="collapse navbar-collapse" id="navbar">
-              <form class="navbar-form navbar-right" role="search" id="search">
-                <div class="form-group">
-                  <input type="text" class="form-control" id="search-query" placeholder="Search" autocomplete="off">
-                </div>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../images/numsharp.icon.svg" alt="NumSharp">
+            NumSharp
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
               </form>
             </div>
           </div>
-        </nav>
-        
-        <div class="subnav navbar navbar-default">
-          <div class="container hide-when-search" id="breadcrumb">
-            <ul class="breadcrumb">
-              <li></li>
-            </ul>
-          </div>
         </div>
-      </header>
-      <div role="main" class="container body-content hide-when-search">
-        
-        <div class="sidenav hide-when-search">
-          <a class="btn toc-toggle collapse" data-toggle="collapse" href="#sidetoggle" aria-expanded="false" aria-controls="sidetoggle">Show / Hide Table of Contents</a>
-          <div class="sidetoggle collapse" id="sidetoggle">
-            <div id="sidetoc"></div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
           </div>
-        </div>
-        <div class="article row grid-right">
-          <div class="col-md-10">
-            <article class="content wrap" id="_content" data-uid="NumSharp.Shape">
-  
-  
-  <h1 id="NumSharp_Shape" data-uid="NumSharp.Shape" class="text-break">Class Shape
-  </h1>
-  <div class="markdown level0 summary"></div>
-  <div class="markdown level0 conceptual"></div>
-  <div class="inheritance">
-    <h5>Inheritance</h5>
-    <div class="level0"><span class="xref">System.Object</span></div>
-    <div class="level1"><span class="xref">Shape</span></div>
-  </div>
-  <div class="inheritedMembers">
-    <h5>Inherited Members</h5>
-    <div>
-      <span class="xref">System.Object.Equals(System.Object, System.Object)</span>
-    </div>
-    <div>
-      <span class="xref">System.Object.GetType()</span>
-    </div>
-    <div>
-      <span class="xref">System.Object.MemberwiseClone()</span>
-    </div>
-    <div>
-      <span class="xref">System.Object.ReferenceEquals(System.Object, System.Object)</span>
-    </div>
-  </div>
-  <h6><strong>Namespace</strong>: <a class="xref" href="NumSharp.html">NumSharp</a></h6>
-  <h6><strong>Assembly</strong>: NumSharp.dll</h6>
-  <h5 id="NumSharp_Shape_syntax">Syntax</h5>
-  <div class="codewrapper">
-    <pre><code class="lang-csharp hljs">public class Shape</code></pre>
-  </div>
-  <h3 id="constructors">Constructors
-  </h3>
-  <span class="small pull-right mobile-hide">
-    <span class="divider">|</span>
-    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Shape__ctor_System_Collections_Generic_IReadOnlyList_System_Int32__.md&amp;value=---%0Auid%3A%20NumSharp.Shape.%23ctor(System.Collections.Generic.IReadOnlyList%7BSystem.Int32%7D)%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
-  </span>
-  <span class="small pull-right mobile-hide">
-    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp/Shape.cs/#L41">View Source</a>
-  </span>
-  <a id="NumSharp_Shape__ctor_" data-uid="NumSharp.Shape.#ctor*"></a>
-  <h4 id="NumSharp_Shape__ctor_System_Collections_Generic_IReadOnlyList_System_Int32__" data-uid="NumSharp.Shape.#ctor(System.Collections.Generic.IReadOnlyList{System.Int32})">Shape(IReadOnlyList&lt;Int32&gt;)</h4>
-  <div class="markdown level1 summary"></div>
-  <div class="markdown level1 conceptual"></div>
-  <h5 class="decalaration">Declaration</h5>
-  <div class="codewrapper">
-    <pre><code class="lang-csharp hljs">public Shape(IReadOnlyList&lt;int&gt; shape)</code></pre>
-  </div>
-  <h5 class="parameters">Parameters</h5>
-  <table class="table table-bordered table-striped table-condensed">
-    <thead>
-      <tr>
-        <th>Type</th>
-        <th>Name</th>
-        <th>Description</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td><span class="xref">System.Collections.Generic.IReadOnlyList</span>&lt;<span class="xref">System.Int32</span>&gt;</td>
-        <td><span class="parametername">shape</span></td>
-        <td></td>
-      </tr>
-    </tbody>
-  </table>
-  <span class="small pull-right mobile-hide">
-    <span class="divider">|</span>
-    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Shape__ctor_System_Int32___.md&amp;value=---%0Auid%3A%20NumSharp.Shape.%23ctor(System.Int32%5B%5D)%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
-  </span>
-  <span class="small pull-right mobile-hide">
-    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp/Shape.cs/#L27">View Source</a>
-  </span>
-  <a id="NumSharp_Shape__ctor_" data-uid="NumSharp.Shape.#ctor*"></a>
-  <h4 id="NumSharp_Shape__ctor_System_Int32___" data-uid="NumSharp.Shape.#ctor(System.Int32[])">Shape(Int32[])</h4>
-  <div class="markdown level1 summary"></div>
-  <div class="markdown level1 conceptual"></div>
-  <h5 class="decalaration">Declaration</h5>
-  <div class="codewrapper">
-    <pre><code class="lang-csharp hljs">public Shape(params int[] shape)</code></pre>
-  </div>
-  <h5 class="parameters">Parameters</h5>
-  <table class="table table-bordered table-striped table-condensed">
-    <thead>
-      <tr>
-        <th>Type</th>
-        <th>Name</th>
-        <th>Description</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td><span class="xref">System.Int32</span>[]</td>
-        <td><span class="parametername">shape</span></td>
-        <td></td>
-      </tr>
-    </tbody>
-  </table>
-  <h3 id="properties">Properties
-  </h3>
-  <span class="small pull-right mobile-hide">
-    <span class="divider">|</span>
-    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Shape_BiShape.md&amp;value=---%0Auid%3A%20NumSharp.Shape.BiShape%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
-  </span>
-  <span class="small pull-right mobile-hide">
-    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp/Shape.cs/#L61">View Source</a>
-  </span>
-  <a id="NumSharp_Shape_BiShape_" data-uid="NumSharp.Shape.BiShape*"></a>
-  <h4 id="NumSharp_Shape_BiShape" data-uid="NumSharp.Shape.BiShape">BiShape</h4>
-  <div class="markdown level1 summary"></div>
-  <div class="markdown level1 conceptual"></div>
-  <h5 class="decalaration">Declaration</h5>
-  <div class="codewrapper">
-    <pre><code class="lang-csharp hljs">public (int, int)BiShape { get; }</code></pre>
-  </div>
-  <h5 class="propertyValue">Property Value</h5>
-  <table class="table table-bordered table-striped table-condensed">
-    <thead>
-      <tr>
-        <th>Type</th>
-        <th>Description</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td><span class="xref">System.ValueTuple</span>&lt;<span class="xref">System.Int32</span>, <span class="xref">System.Int32</span>&gt;</td>
-        <td></td>
-      </tr>
-    </tbody>
-  </table>
-  <span class="small pull-right mobile-hide">
-    <span class="divider">|</span>
-    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Shape_DimOffset.md&amp;value=---%0Auid%3A%20NumSharp.Shape.DimOffset%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
-  </span>
-  <span class="small pull-right mobile-hide">
-    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp/Shape.cs/#L56">View Source</a>
-  </span>
-  <a id="NumSharp_Shape_DimOffset_" data-uid="NumSharp.Shape.DimOffset*"></a>
-  <h4 id="NumSharp_Shape_DimOffset" data-uid="NumSharp.Shape.DimOffset">DimOffset</h4>
-  <div class="markdown level1 summary"></div>
-  <div class="markdown level1 conceptual"></div>
-  <h5 class="decalaration">Declaration</h5>
-  <div class="codewrapper">
-    <pre><code class="lang-csharp hljs">public IReadOnlyList&lt;int&gt; DimOffset { get; }</code></pre>
-  </div>
-  <h5 class="propertyValue">Property Value</h5>
-  <table class="table table-bordered table-striped table-condensed">
-    <thead>
-      <tr>
-        <th>Type</th>
-        <th>Description</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td><span class="xref">System.Collections.Generic.IReadOnlyList</span>&lt;<span class="xref">System.Int32</span>&gt;</td>
-        <td></td>
-      </tr>
-    </tbody>
-  </table>
-  <span class="small pull-right mobile-hide">
-    <span class="divider">|</span>
-    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Shape_Item_System_Int32_.md&amp;value=---%0Auid%3A%20NumSharp.Shape.Item(System.Int32)%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
-  </span>
-  <span class="small pull-right mobile-hide">
-    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp/Shape.cs/#L25">View Source</a>
-  </span>
-  <a id="NumSharp_Shape_Item_" data-uid="NumSharp.Shape.Item*"></a>
-  <h4 id="NumSharp_Shape_Item_System_Int32_" data-uid="NumSharp.Shape.Item(System.Int32)">Item[Int32]</h4>
-  <div class="markdown level1 summary"></div>
-  <div class="markdown level1 conceptual"></div>
-  <h5 class="decalaration">Declaration</h5>
-  <div class="codewrapper">
-    <pre><code class="lang-csharp hljs">public int this[int dim] { get; }</code></pre>
-  </div>
-  <h5 class="parameters">Parameters</h5>
-  <table class="table table-bordered table-striped table-condensed">
-    <thead>
-      <tr>
-        <th>Type</th>
-        <th>Name</th>
-        <th>Description</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td><span class="xref">System.Int32</span></td>
-        <td><span class="parametername">dim</span></td>
-        <td></td>
-      </tr>
-    </tbody>
-  </table>
-  <h5 class="propertyValue">Property Value</h5>
-  <table class="table table-bordered table-striped table-condensed">
-    <thead>
-      <tr>
-        <th>Type</th>
-        <th>Description</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td><span class="xref">System.Int32</span></td>
-        <td></td>
-      </tr>
-    </tbody>
-  </table>
-  <span class="small pull-right mobile-hide">
-    <span class="divider">|</span>
-    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Shape_Length.md&amp;value=---%0Auid%3A%20NumSharp.Shape.Length%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
-  </span>
-  <span class="small pull-right mobile-hide">
-    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp/Shape.cs/#L55">View Source</a>
-  </span>
-  <a id="NumSharp_Shape_Length_" data-uid="NumSharp.Shape.Length*"></a>
-  <h4 id="NumSharp_Shape_Length" data-uid="NumSharp.Shape.Length">Length</h4>
-  <div class="markdown level1 summary"></div>
-  <div class="markdown level1 conceptual"></div>
-  <h5 class="decalaration">Declaration</h5>
-  <div class="codewrapper">
-    <pre><code class="lang-csharp hljs">public int Length { get; }</code></pre>
-  </div>
-  <h5 class="propertyValue">Property Value</h5>
-  <table class="table table-bordered table-striped table-condensed">
-    <thead>
-      <tr>
-        <th>Type</th>
-        <th>Description</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td><span class="xref">System.Int32</span></td>
-        <td></td>
-      </tr>
-    </tbody>
-  </table>
-  <span class="small pull-right mobile-hide">
-    <span class="divider">|</span>
-    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Shape_Shapes.md&amp;value=---%0Auid%3A%20NumSharp.Shape.Shapes%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
-  </span>
-  <span class="small pull-right mobile-hide">
-    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp/Shape.cs/#L57">View Source</a>
-  </span>
-  <a id="NumSharp_Shape_Shapes_" data-uid="NumSharp.Shape.Shapes*"></a>
-  <h4 id="NumSharp_Shape_Shapes" data-uid="NumSharp.Shape.Shapes">Shapes</h4>
-  <div class="markdown level1 summary"></div>
-  <div class="markdown level1 conceptual"></div>
-  <h5 class="decalaration">Declaration</h5>
-  <div class="codewrapper">
-    <pre><code class="lang-csharp hljs">public IReadOnlyList&lt;int&gt; Shapes { get; }</code></pre>
-  </div>
-  <h5 class="propertyValue">Property Value</h5>
-  <table class="table table-bordered table-striped table-condensed">
-    <thead>
-      <tr>
-        <th>Type</th>
-        <th>Description</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td><span class="xref">System.Collections.Generic.IReadOnlyList</span>&lt;<span class="xref">System.Int32</span>&gt;</td>
-        <td></td>
-      </tr>
-    </tbody>
-  </table>
-  <span class="small pull-right mobile-hide">
-    <span class="divider">|</span>
-    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Shape_Size.md&amp;value=---%0Auid%3A%20NumSharp.Shape.Size%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
-  </span>
-  <span class="small pull-right mobile-hide">
-    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp/Shape.cs/#L12">View Source</a>
-  </span>
-  <a id="NumSharp_Shape_Size_" data-uid="NumSharp.Shape.Size*"></a>
-  <h4 id="NumSharp_Shape_Size" data-uid="NumSharp.Shape.Size">Size</h4>
-  <div class="markdown level1 summary"></div>
-  <div class="markdown level1 conceptual"></div>
-  <h5 class="decalaration">Declaration</h5>
-  <div class="codewrapper">
-    <pre><code class="lang-csharp hljs">public int Size { get; }</code></pre>
-  </div>
-  <h5 class="propertyValue">Property Value</h5>
-  <table class="table table-bordered table-striped table-condensed">
-    <thead>
-      <tr>
-        <th>Type</th>
-        <th>Description</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td><span class="xref">System.Int32</span></td>
-        <td></td>
-      </tr>
-    </tbody>
-  </table>
-  <span class="small pull-right mobile-hide">
-    <span class="divider">|</span>
-    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Shape_TriShape.md&amp;value=---%0Auid%3A%20NumSharp.Shape.TriShape%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
-  </span>
-  <span class="small pull-right mobile-hide">
-    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp/Shape.cs/#L63">View Source</a>
-  </span>
-  <a id="NumSharp_Shape_TriShape_" data-uid="NumSharp.Shape.TriShape*"></a>
-  <h4 id="NumSharp_Shape_TriShape" data-uid="NumSharp.Shape.TriShape">TriShape</h4>
-  <div class="markdown level1 summary"></div>
-  <div class="markdown level1 conceptual"></div>
-  <h5 class="decalaration">Declaration</h5>
-  <div class="codewrapper">
-    <pre><code class="lang-csharp hljs">public (int, int, int)TriShape { get; }</code></pre>
-  </div>
-  <h5 class="propertyValue">Property Value</h5>
-  <table class="table table-bordered table-striped table-condensed">
-    <thead>
-      <tr>
-        <th>Type</th>
-        <th>Description</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td><span class="xref">System.ValueTuple</span>&lt;<span class="xref">System.Int32</span>, <span class="xref">System.Int32</span>, <span class="xref">System.Int32</span>&gt;</td>
-        <td></td>
-      </tr>
-    </tbody>
-  </table>
-  <span class="small pull-right mobile-hide">
-    <span class="divider">|</span>
-    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Shape_UniShape.md&amp;value=---%0Auid%3A%20NumSharp.Shape.UniShape%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
-  </span>
-  <span class="small pull-right mobile-hide">
-    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp/Shape.cs/#L59">View Source</a>
-  </span>
-  <a id="NumSharp_Shape_UniShape_" data-uid="NumSharp.Shape.UniShape*"></a>
-  <h4 id="NumSharp_Shape_UniShape" data-uid="NumSharp.Shape.UniShape">UniShape</h4>
-  <div class="markdown level1 summary"></div>
-  <div class="markdown level1 conceptual"></div>
-  <h5 class="decalaration">Declaration</h5>
-  <div class="codewrapper">
-    <pre><code class="lang-csharp hljs">public int UniShape { get; }</code></pre>
-  </div>
-  <h5 class="propertyValue">Property Value</h5>
-  <table class="table table-bordered table-striped table-condensed">
-    <thead>
-      <tr>
-        <th>Type</th>
-        <th>Description</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td><span class="xref">System.Int32</span></td>
-        <td></td>
-      </tr>
-    </tbody>
-  </table>
-  <h3 id="methods">Methods
-  </h3>
-  <span class="small pull-right mobile-hide">
-    <span class="divider">|</span>
-    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Shape_Equals_System_Object_.md&amp;value=---%0Auid%3A%20NumSharp.Shape.Equals(System.Object)%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
-  </span>
-  <span class="small pull-right mobile-hide">
-    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp/Operations/Shape.Equals.cs/#L20">View Source</a>
-  </span>
-  <a id="NumSharp_Shape_Equals_" data-uid="NumSharp.Shape.Equals*"></a>
-  <h4 id="NumSharp_Shape_Equals_System_Object_" data-uid="NumSharp.Shape.Equals(System.Object)">Equals(Object)</h4>
-  <div class="markdown level1 summary"></div>
-  <div class="markdown level1 conceptual"></div>
-  <h5 class="decalaration">Declaration</h5>
-  <div class="codewrapper">
-    <pre><code class="lang-csharp hljs">public override bool Equals(object obj)</code></pre>
-  </div>
-  <h5 class="parameters">Parameters</h5>
-  <table class="table table-bordered table-striped table-condensed">
-    <thead>
-      <tr>
-        <th>Type</th>
-        <th>Name</th>
-        <th>Description</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td><span class="xref">System.Object</span></td>
-        <td><span class="parametername">obj</span></td>
-        <td></td>
-      </tr>
-    </tbody>
-  </table>
-  <h5 class="returns">Returns</h5>
-  <table class="table table-bordered table-striped table-condensed">
-    <thead>
-      <tr>
-        <th>Type</th>
-        <th>Description</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td><span class="xref">System.Boolean</span></td>
-        <td></td>
-      </tr>
-    </tbody>
-  </table>
-  <h5 class="overrides">Overrides</h5>
-  <div><span class="xref">System.Object.Equals(System.Object)</span></div>
-  <span class="small pull-right mobile-hide">
-    <span class="divider">|</span>
-    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Shape_GetHashCode.md&amp;value=---%0Auid%3A%20NumSharp.Shape.GetHashCode%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
-  </span>
-  <span class="small pull-right mobile-hide">
-    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp/Operations/Shape.Equals.cs/#L27">View Source</a>
-  </span>
-  <a id="NumSharp_Shape_GetHashCode_" data-uid="NumSharp.Shape.GetHashCode*"></a>
-  <h4 id="NumSharp_Shape_GetHashCode" data-uid="NumSharp.Shape.GetHashCode">GetHashCode()</h4>
-  <div class="markdown level1 summary"></div>
-  <div class="markdown level1 conceptual"></div>
-  <h5 class="decalaration">Declaration</h5>
-  <div class="codewrapper">
-    <pre><code class="lang-csharp hljs">public override int GetHashCode()</code></pre>
-  </div>
-  <h5 class="returns">Returns</h5>
-  <table class="table table-bordered table-striped table-condensed">
-    <thead>
-      <tr>
-        <th>Type</th>
-        <th>Description</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td><span class="xref">System.Int32</span></td>
-        <td></td>
-      </tr>
-    </tbody>
-  </table>
-  <h5 class="overrides">Overrides</h5>
-  <div><span class="xref">System.Object.GetHashCode()</span></div>
-  <span class="small pull-right mobile-hide">
-    <span class="divider">|</span>
-    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Shape_ToString.md&amp;value=---%0Auid%3A%20NumSharp.Shape.ToString%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
-  </span>
-  <span class="small pull-right mobile-hide">
-    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp/Operations/Shape.Equals.cs/#L32">View Source</a>
-  </span>
-  <a id="NumSharp_Shape_ToString_" data-uid="NumSharp.Shape.ToString*"></a>
-  <h4 id="NumSharp_Shape_ToString" data-uid="NumSharp.Shape.ToString">ToString()</h4>
-  <div class="markdown level1 summary"></div>
-  <div class="markdown level1 conceptual"></div>
-  <h5 class="decalaration">Declaration</h5>
-  <div class="codewrapper">
-    <pre><code class="lang-csharp hljs">public override string ToString()</code></pre>
-  </div>
-  <h5 class="returns">Returns</h5>
-  <table class="table table-bordered table-striped table-condensed">
-    <thead>
-      <tr>
-        <th>Type</th>
-        <th>Description</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td><span class="xref">System.String</span></td>
-        <td></td>
-      </tr>
-    </tbody>
-  </table>
-  <h5 class="overrides">Overrides</h5>
-  <div><span class="xref">System.Object.ToString()</span></div>
-  <h3 id="operators">Operators
-  </h3>
-  <span class="small pull-right mobile-hide">
-    <span class="divider">|</span>
-    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Shape_op_Equality_NumSharp_Shape_NumSharp_Shape_.md&amp;value=---%0Auid%3A%20NumSharp.Shape.op_Equality(NumSharp.Shape%2CNumSharp.Shape)%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
-  </span>
-  <span class="small pull-right mobile-hide">
-    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp/Operations/Shape.Equals.cs/#L10">View Source</a>
-  </span>
-  <a id="NumSharp_Shape_op_Equality_" data-uid="NumSharp.Shape.op_Equality*"></a>
-  <h4 id="NumSharp_Shape_op_Equality_NumSharp_Shape_NumSharp_Shape_" data-uid="NumSharp.Shape.op_Equality(NumSharp.Shape,NumSharp.Shape)">Equality(Shape, Shape)</h4>
-  <div class="markdown level1 summary"></div>
-  <div class="markdown level1 conceptual"></div>
-  <h5 class="decalaration">Declaration</h5>
-  <div class="codewrapper">
-    <pre><code class="lang-csharp hljs">public static bool operator ==(Shape a, Shape b)</code></pre>
-  </div>
-  <h5 class="parameters">Parameters</h5>
-  <table class="table table-bordered table-striped table-condensed">
-    <thead>
-      <tr>
-        <th>Type</th>
-        <th>Name</th>
-        <th>Description</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td><a class="xref" href="NumSharp.Shape.html">Shape</a></td>
-        <td><span class="parametername">a</span></td>
-        <td></td>
-      </tr>
-      <tr>
-        <td><a class="xref" href="NumSharp.Shape.html">Shape</a></td>
-        <td><span class="parametername">b</span></td>
-        <td></td>
-      </tr>
-    </tbody>
-  </table>
-  <h5 class="returns">Returns</h5>
-  <table class="table table-bordered table-striped table-condensed">
-    <thead>
-      <tr>
-        <th>Type</th>
-        <th>Description</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td><span class="xref">System.Boolean</span></td>
-        <td></td>
-      </tr>
-    </tbody>
-  </table>
-  <span class="small pull-right mobile-hide">
-    <span class="divider">|</span>
-    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Shape_op_Inequality_NumSharp_Shape_NumSharp_Shape_.md&amp;value=---%0Auid%3A%20NumSharp.Shape.op_Inequality(NumSharp.Shape%2CNumSharp.Shape)%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">Improve this Doc</a>
-  </span>
-  <span class="small pull-right mobile-hide">
-    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp/Operations/Shape.Equals.cs/#L15">View Source</a>
-  </span>
-  <a id="NumSharp_Shape_op_Inequality_" data-uid="NumSharp.Shape.op_Inequality*"></a>
-  <h4 id="NumSharp_Shape_op_Inequality_NumSharp_Shape_NumSharp_Shape_" data-uid="NumSharp.Shape.op_Inequality(NumSharp.Shape,NumSharp.Shape)">Inequality(Shape, Shape)</h4>
-  <div class="markdown level1 summary"></div>
-  <div class="markdown level1 conceptual"></div>
-  <h5 class="decalaration">Declaration</h5>
-  <div class="codewrapper">
-    <pre><code class="lang-csharp hljs">public static bool operator !=(Shape a, Shape b)</code></pre>
-  </div>
-  <h5 class="parameters">Parameters</h5>
-  <table class="table table-bordered table-striped table-condensed">
-    <thead>
-      <tr>
-        <th>Type</th>
-        <th>Name</th>
-        <th>Description</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td><a class="xref" href="NumSharp.Shape.html">Shape</a></td>
-        <td><span class="parametername">a</span></td>
-        <td></td>
-      </tr>
-      <tr>
-        <td><a class="xref" href="NumSharp.Shape.html">Shape</a></td>
-        <td><span class="parametername">b</span></td>
-        <td></td>
-      </tr>
-    </tbody>
-  </table>
-  <h5 class="returns">Returns</h5>
-  <table class="table table-bordered table-striped table-condensed">
-    <thead>
-      <tr>
-        <th>Type</th>
-        <th>Description</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td><span class="xref">System.Boolean</span></td>
-        <td></td>
-      </tr>
-    </tbody>
-  </table>
-</article>
-          </div>
-          
-          <div class="hidden-sm col-md-2" role="complementary">
-            <div class="sideaffix">
-              <div class="contribution">
-                <ul class="nav">
-                  <li>
-                    <a href="https://github.com/dotChris90/NumSharp/new/master/apiSpec/new?filename=NumSharp_Shape.md&amp;value=---%0Auid%3A%20NumSharp.Shape%0Asummary%3A%20'*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax'%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A" class="contribution-link">Improve this Doc</a>
-                  </li>
-                  <li>
-                    <a href="https://github.com/dotChris90/NumSharp/blob/master/src/NumSharp/Shape.cs/#L7" class="contribution-link">View Source</a>
-                  </li>
-                </ul>
-              </div>
-              <nav class="bs-docs-sidebar hidden-print hidden-xs hidden-sm affix" id="affix">
-              <!-- <p><a class="back-to-top" href="#top">Back to top</a><p> -->
-              </nav>
-            </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
           </div>
         </div>
       </div>
-      
-      <footer>
-        <div class="grad-bottom"></div>
-        <div class="footer">
-          <div class="container">
-            <span class="pull-right">
-              <a href="#top">Back to top</a>
-            </span>
-            
-            <span>Generated by <strong>DocFX</strong></span>
-          </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
         </div>
-      </footer>
+
+        <article data-uid="NumSharp.Shape">
+
+
+
+  <h1 id="NumSharp_Shape" data-uid="NumSharp.Shape" class="text-break">
+Struct Shape  
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="NumSharp.html">NumSharp</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>NumSharp.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents a shape of an N-D array.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public struct Shape : ICloneable, IEquatable&lt;Shape&gt;</code></pre>
+  </div>
+
+
+
+
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.icloneable">ICloneable</a></div>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.iequatable-1">IEquatable</a>&lt;<a class="xref" href="NumSharp.Shape.html">Shape</a>&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
     </div>
-    
-    <script type="text/javascript" src="../styles/docfx.vendor.js"></script>
-    <script type="text/javascript" src="../styles/docfx.js"></script>
-    <script type="text/javascript" src="../styles/main.js"></script>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="NumSharp.Extensions.LinqExtensions.html#NumSharp_Extensions_LinqExtensions_Yield__1___0_">LinqExtensions.Yield&lt;T&gt;(T)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="NumSharp_Shape_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>Handles slicing, indexing based on coordinates or linear offset and broadcastted indexing.</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="NumSharp_Shape__ctor_" data-uid="NumSharp.Shape.#ctor*"></a>
+
+  <h3 id="NumSharp_Shape__ctor_NumSharp_Shape_" data-uid="NumSharp.Shape.#ctor(NumSharp.Shape)">
+  Shape(Shape)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Shape(Shape other)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>other</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Shape__ctor_" data-uid="NumSharp.Shape.#ctor*"></a>
+
+  <h3 id="NumSharp_Shape__ctor_System_Int32___" data-uid="NumSharp.Shape.#ctor(System.Int32[])">
+  Shape(params int[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Shape(params int[] dims)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dims</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Shape__ctor_" data-uid="NumSharp.Shape.#ctor*"></a>
+
+  <h3 id="NumSharp_Shape__ctor_System_Int32___System_Int32___" data-uid="NumSharp.Shape.#ctor(System.Int32[],System.Int32[])">
+  Shape(int[], int[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Shape(int[] dims, int[] strides)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dims</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+    <dt><code>strides</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Shape__ctor_" data-uid="NumSharp.Shape.#ctor*"></a>
+
+  <h3 id="NumSharp_Shape__ctor_System_Int32___System_Int32___NumSharp_Shape_" data-uid="NumSharp.Shape.#ctor(System.Int32[],System.Int32[],NumSharp.Shape)">
+  Shape(int[], int[], Shape)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Shape(int[] dims, int[] strides, Shape originalShape)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dims</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+    <dt><code>strides</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+    <dt><code>originalShape</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="fields">Fields
+</h2>
+
+
+
+  <h3 id="NumSharp_Shape_IsScalar" data-uid="NumSharp.Shape.IsScalar">
+  IsScalar
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsScalar</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="NumSharp_Shape_ModifiedStrides" data-uid="NumSharp.Shape.ModifiedStrides">
+  ModifiedStrides
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Does this Shape have modified strides, usually in scenarios like np.transpose.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool ModifiedStrides</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="NumSharp_Shape_Scalar" data-uid="NumSharp.Shape.Scalar">
+  Scalar
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Singleton instance of a <a class="xref" href="NumSharp.Shape.html">Shape</a> that represents a scalar.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static readonly Shape Scalar</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="NumSharp_Shape_Dimensions_" data-uid="NumSharp.Shape.Dimensions*"></a>
+
+  <h3 id="NumSharp_Shape_Dimensions" data-uid="NumSharp.Shape.Dimensions">
+  Dimensions
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public readonly int[] Dimensions { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Shape_IsBroadcasted_" data-uid="NumSharp.Shape.IsBroadcasted*"></a>
+
+  <h3 id="NumSharp_Shape_IsBroadcasted" data-uid="NumSharp.Shape.IsBroadcasted">
+  IsBroadcasted
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Is this shape a broadcast and/or has modified strides?</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public readonly bool IsBroadcasted { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Shape_IsContiguous_" data-uid="NumSharp.Shape.IsContiguous*"></a>
+
+  <h3 id="NumSharp_Shape_IsContiguous" data-uid="NumSharp.Shape.IsContiguous">
+  IsContiguous
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Does this Shape represents a non-sliced and non-broadcasted hence contagious unmanaged memory?</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public readonly bool IsContiguous { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Shape_IsEmpty_" data-uid="NumSharp.Shape.IsEmpty*"></a>
+
+  <h3 id="NumSharp_Shape_IsEmpty" data-uid="NumSharp.Shape.IsEmpty">
+  IsEmpty
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>True if the shape is not initialized.
+Note: A scalar shape is not empty.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public readonly bool IsEmpty { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Shape_IsRecursive_" data-uid="NumSharp.Shape.IsRecursive*"></a>
+
+  <h3 id="NumSharp_Shape_IsRecursive" data-uid="NumSharp.Shape.IsRecursive">
+  IsRecursive
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Is this Shape a recusive view? (deeper than 1 view)</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public readonly bool IsRecursive { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Shape_IsSliced_" data-uid="NumSharp.Shape.IsSliced*"></a>
+
+  <h3 id="NumSharp_Shape_IsSliced" data-uid="NumSharp.Shape.IsSliced">
+  IsSliced
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>True if the shape of this array was obtained by a slicing operation that caused the underlying data to be non-contiguous</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public readonly bool IsSliced { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Shape_Item_" data-uid="NumSharp.Shape.Item*"></a>
+
+  <h3 id="NumSharp_Shape_Item_System_Int32_" data-uid="NumSharp.Shape.Item(System.Int32)">
+  this[int]
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public readonly int this[int dim] { get; set; }</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dim</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Shape_NDim_" data-uid="NumSharp.Shape.NDim*"></a>
+
+  <h3 id="NumSharp_Shape_NDim" data-uid="NumSharp.Shape.NDim">
+  NDim
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public readonly int NDim { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Shape_Order_" data-uid="NumSharp.Shape.Order*"></a>
+
+  <h3 id="NumSharp_Shape_Order" data-uid="NumSharp.Shape.Order">
+  Order
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public readonly char Order { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.char">char</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Shape_Size_" data-uid="NumSharp.Shape.Size*"></a>
+
+  <h3 id="NumSharp_Shape_Size" data-uid="NumSharp.Shape.Size">
+  Size
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>The linear size of this shape.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public readonly int Size { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Shape_Strides_" data-uid="NumSharp.Shape.Strides*"></a>
+
+  <h3 id="NumSharp_Shape_Strides" data-uid="NumSharp.Shape.Strides">
+  Strides
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public readonly int[] Strides { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="NumSharp_Shape_ChangeTensorLayout_" data-uid="NumSharp.Shape.ChangeTensorLayout*"></a>
+
+  <h3 id="NumSharp_Shape_ChangeTensorLayout_System_Char_" data-uid="NumSharp.Shape.ChangeTensorLayout(System.Char)">
+  ChangeTensorLayout(char)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ChangeTensorLayout(char order = &#39;C&#39;)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>order</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.char">char</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Shape_Clean_" data-uid="NumSharp.Shape.Clean*"></a>
+
+  <h3 id="NumSharp_Shape_Clean" data-uid="NumSharp.Shape.Clean">
+  Clean()
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns a clean shape based on this.
+Cleans ViewInfo and returns a newly constructed.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public readonly Shape Clean()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Shape_Clone_" data-uid="NumSharp.Shape.Clone*"></a>
+
+  <h3 id="NumSharp_Shape_Clone_System_Boolean_System_Boolean_System_Boolean_" data-uid="NumSharp.Shape.Clone(System.Boolean,System.Boolean,System.Boolean)">
+  Clone(bool, bool, bool)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a complete copy of this Shape.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public readonly Shape Clone(bool deep = true, bool unview = false, bool unbroadcast = false)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>deep</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Should make a complete deep clone or a shallow if false.</p>
+</dd>
+    <dt><code>unview</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+    <dt><code>unbroadcast</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Shape_Deconstruct_" data-uid="NumSharp.Shape.Deconstruct*"></a>
+
+  <h3 id="NumSharp_Shape_Deconstruct_System_Int32__System_Int32__" data-uid="NumSharp.Shape.Deconstruct(System.Int32@,System.Int32@)">
+  Deconstruct(out int, out int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public readonly void Deconstruct(out int dim1, out int dim2)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dim1</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>dim2</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Shape_Deconstruct_" data-uid="NumSharp.Shape.Deconstruct*"></a>
+
+  <h3 id="NumSharp_Shape_Deconstruct_System_Int32__System_Int32__System_Int32__" data-uid="NumSharp.Shape.Deconstruct(System.Int32@,System.Int32@,System.Int32@)">
+  Deconstruct(out int, out int, out int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public readonly void Deconstruct(out int dim1, out int dim2, out int dim3)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dim1</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>dim2</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>dim3</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Shape_Deconstruct_" data-uid="NumSharp.Shape.Deconstruct*"></a>
+
+  <h3 id="NumSharp_Shape_Deconstruct_System_Int32__System_Int32__System_Int32__System_Int32__" data-uid="NumSharp.Shape.Deconstruct(System.Int32@,System.Int32@,System.Int32@,System.Int32@)">
+  Deconstruct(out int, out int, out int, out int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public readonly void Deconstruct(out int dim1, out int dim2, out int dim3, out int dim4)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dim1</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>dim2</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>dim3</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>dim4</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Shape_Deconstruct_" data-uid="NumSharp.Shape.Deconstruct*"></a>
+
+  <h3 id="NumSharp_Shape_Deconstruct_System_Int32__System_Int32__System_Int32__System_Int32__System_Int32__" data-uid="NumSharp.Shape.Deconstruct(System.Int32@,System.Int32@,System.Int32@,System.Int32@,System.Int32@)">
+  Deconstruct(out int, out int, out int, out int, out int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public readonly void Deconstruct(out int dim1, out int dim2, out int dim3, out int dim4, out int dim5)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dim1</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>dim2</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>dim3</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>dim4</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>dim5</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Shape_Deconstruct_" data-uid="NumSharp.Shape.Deconstruct*"></a>
+
+  <h3 id="NumSharp_Shape_Deconstruct_System_Int32__System_Int32__System_Int32__System_Int32__System_Int32__System_Int32__" data-uid="NumSharp.Shape.Deconstruct(System.Int32@,System.Int32@,System.Int32@,System.Int32@,System.Int32@,System.Int32@)">
+  Deconstruct(out int, out int, out int, out int, out int, out int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public readonly void Deconstruct(out int dim1, out int dim2, out int dim3, out int dim4, out int dim5, out int dim6)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dim1</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>dim2</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>dim3</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>dim4</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>dim5</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>dim6</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Shape_Empty_" data-uid="NumSharp.Shape.Empty*"></a>
+
+  <h3 id="NumSharp_Shape_Empty_System_Int32_" data-uid="NumSharp.Shape.Empty(System.Int32)">
+  Empty(int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>An empty shape without any fields set except all are default.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Shape Empty(int ndim)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>ndim</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Shape_Empty_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Used internally.</p>
+</div>
+
+
+
+
+  <a id="NumSharp_Shape_Equals_" data-uid="NumSharp.Shape.Equals*"></a>
+
+  <h3 id="NumSharp_Shape_Equals_NumSharp_Shape_" data-uid="NumSharp.Shape.Equals(NumSharp.Shape)">
+  Equals(Shape)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Indicates whether the current object is equal to another object of the same type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public readonly bool Equals(Shape other)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>other</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd><p>An object to compare with this object.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>true if the current object is equal to the <code class="paramref">other</code> parameter; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Shape_Equals_" data-uid="NumSharp.Shape.Equals*"></a>
+
+  <h3 id="NumSharp_Shape_Equals_System_Object_" data-uid="NumSharp.Shape.Equals(System.Object)">
+  Equals(object)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Indicates whether this instance and a specified object are equal.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override readonly bool Equals(object obj)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>obj</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></dt>
+    <dd><p>The object to compare with the current instance.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p><a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">true</a> if <code class="paramref">obj</code> and this instance are the same type and represent the same value; otherwise, <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">false</a>.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Shape_ExpandDimension_" data-uid="NumSharp.Shape.ExpandDimension*"></a>
+
+  <h3 id="NumSharp_Shape_ExpandDimension_System_Int32_" data-uid="NumSharp.Shape.ExpandDimension(System.Int32)">
+  ExpandDimension(int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Expands a specific <code class="paramref">axis</code> with 1 dimension.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">[SuppressMessage(&quot;ReSharper&quot;, &quot;LocalVariableHidesMember&quot;)]
+public readonly Shape ExpandDimension(int axis)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>axis</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Shape_ExtractShape_" data-uid="NumSharp.Shape.ExtractShape*"></a>
+
+  <h3 id="NumSharp_Shape_ExtractShape_System_Array_" data-uid="NumSharp.Shape.ExtractShape(System.Array)">
+  ExtractShape(Array)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Extracts the shape of given <code class="paramref">array</code>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static int[] ExtractShape(Array array)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>array</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.array">Array</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Shape_ExtractShape_System_Array__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Supports both jagged and multi-dim.</p>
+</div>
+
+
+
+
+  <a id="NumSharp_Shape_GetAxis_" data-uid="NumSharp.Shape.GetAxis*"></a>
+
+  <h3 id="NumSharp_Shape_GetAxis_NumSharp_Shape_System_Int32_" data-uid="NumSharp.Shape.GetAxis(NumSharp.Shape,System.Int32)">
+  GetAxis(Shape, int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static int[] GetAxis(Shape shape, int axis)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>shape</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd></dd>
+    <dt><code>axis</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Shape_GetAxis_" data-uid="NumSharp.Shape.GetAxis*"></a>
+
+  <h3 id="NumSharp_Shape_GetAxis_NumSharp_Shape__System_Int32_" data-uid="NumSharp.Shape.GetAxis(NumSharp.Shape@,System.Int32)">
+  GetAxis(ref Shape, int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static int[] GetAxis(ref Shape shape, int axis)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>shape</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd></dd>
+    <dt><code>axis</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Shape_GetAxis_" data-uid="NumSharp.Shape.GetAxis*"></a>
+
+  <h3 id="NumSharp_Shape_GetAxis_System_Int32___System_Int32_" data-uid="NumSharp.Shape.GetAxis(System.Int32[],System.Int32)">
+  GetAxis(int[], int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static int[] GetAxis(int[] dims, int axis)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dims</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+    <dt><code>axis</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Shape_GetCoordinates_" data-uid="NumSharp.Shape.GetCoordinates*"></a>
+
+  <h3 id="NumSharp_Shape_GetCoordinates_System_Int32_" data-uid="NumSharp.Shape.GetCoordinates(System.Int32)">
+  GetCoordinates(int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets coordinates in this shape from index in this shape (slicing is ignored).
+Example: Shape (2,3)
+0 =&gt; [0, 0]
+1 =&gt; [0, 1]
+...
+6 =&gt; [1, 2]</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public readonly int[] GetCoordinates(int offset)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>offset</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>the index if you would iterate from 0 to shape.size in row major order</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Shape_GetCoordinatesFromAbsoluteIndex_" data-uid="NumSharp.Shape.GetCoordinatesFromAbsoluteIndex*"></a>
+
+  <h3 id="NumSharp_Shape_GetCoordinatesFromAbsoluteIndex_System_Int32_" data-uid="NumSharp.Shape.GetCoordinatesFromAbsoluteIndex(System.Int32)">
+  GetCoordinatesFromAbsoluteIndex(int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Retrievs the coordinates in current shape (potentially sliced and reshaped) from index in original array.<br>
+Note: this is the inverse operation of GetOffset<br>
+Example: Shape a (2,3) =&gt; sliced to b (2,2) by a[:, 1:]<br>
+The absolute indices in a are:<br>
+[0, 1, 2,<br>
+3, 4, 5]<br>
+The absolute indices in b are:<br>
+[1, 2,<br>
+4, 5]<br>
+<br>
+<br>
+Examples:<br>
+a.GetCoordinatesFromAbsoluteIndex(1) returns [0, 1]<br>
+b.GetCoordinatesFromAbsoluteIndex(0) returns [0, 0]<br>
+b.GetCoordinatesFromAbsoluteIndex(0) returns [] because it is out of shape<br></p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public readonly int[] GetCoordinatesFromAbsoluteIndex(int offset)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>offset</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Is the index in the original array before it was sliced and/or reshaped</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Shape_GetCoordinatesFromAbsoluteIndex_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Note: due to slicing the absolute indices (offset in memory) are different from what GetCoordinates would return, which are relative indices in the shape.</p>
+</div>
+
+
+
+
+  <a id="NumSharp_Shape_GetHashCode_" data-uid="NumSharp.Shape.GetHashCode*"></a>
+
+  <h3 id="NumSharp_Shape_GetHashCode" data-uid="NumSharp.Shape.GetHashCode">
+  GetHashCode()
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Serves as the default hash function.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override int GetHashCode()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>A hash code for the current object.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Shape_GetOffset_" data-uid="NumSharp.Shape.GetOffset*"></a>
+
+  <h3 id="NumSharp_Shape_GetOffset_System_Int32__System_Int32_" data-uid="NumSharp.Shape.GetOffset(System.Int32*,System.Int32)">
+  GetOffset(int*, int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Get offset index out of coordinate indices.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public readonly int GetOffset(int* indices, int ndims)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>indices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>*</dt>
+    <dd><p>A pointer to the coordinates to turn into linear offset</p>
+</dd>
+    <dt><code>ndims</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of dimensions</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The index in the memory block that refers to a specific value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Shape_GetOffset_System_Int32__System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Handles sliced indices and broadcasting</p>
+</div>
+
+
+
+
+  <a id="NumSharp_Shape_GetOffset_" data-uid="NumSharp.Shape.GetOffset*"></a>
+
+  <h3 id="NumSharp_Shape_GetOffset_System_Int32___" data-uid="NumSharp.Shape.GetOffset(System.Int32[])">
+  GetOffset(params int[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Get offset index out of coordinate indices.</p>
+<p>The offset is the absolute offset in memory for the given coordinates.
+Even for shapes that were sliced and reshaped after slicing and sliced again (and so forth)
+this returns the absolute memory offset.</p>
+<p>Note: the inverse operation to this is GetCoordinatesFromAbsoluteIndex</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public readonly int GetOffset(params int[] indices)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>indices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The coordinates to turn into linear offset</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The index in the memory block that refers to a specific value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Shape_GetOffset_System_Int32____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Handles sliced indices and broadcasting</p>
+</div>
+
+
+
+
+  <a id="NumSharp_Shape_GetSize_" data-uid="NumSharp.Shape.GetSize*"></a>
+
+  <h3 id="NumSharp_Shape_GetSize_System_Int32___" data-uid="NumSharp.Shape.GetSize(System.Int32[])">
+  GetSize(int[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static int GetSize(int[] dims)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dims</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Shape_GetSubshape_" data-uid="NumSharp.Shape.GetSubshape*"></a>
+
+  <h3 id="NumSharp_Shape_GetSubshape_System_Int32__System_Int32_" data-uid="NumSharp.Shape.GetSubshape(System.Int32*,System.Int32)">
+  GetSubshape(int*, int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the shape based on given indicies and the index offset (C-Contiguous) inside the current storage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public readonly (Shape Shape, int Offset) GetSubshape(int* dims, int ndims)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dims</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>*</dt>
+    <dd></dd>
+    <dt><code>ndims</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="NumSharp.Shape.html">Shape</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-numsharp.shape,system.int32-.shape">Shape</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-numsharp.shape,system.int32-.offset">Offset</a>)</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Shape_GetSubshape_System_Int32__System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Used for slicing, returned shape is the new shape of the slice and offset is the offset from current address.</p>
+</div>
+
+
+
+
+  <a id="NumSharp_Shape_GetSubshape_" data-uid="NumSharp.Shape.GetSubshape*"></a>
+
+  <h3 id="NumSharp_Shape_GetSubshape_System_Int32___" data-uid="NumSharp.Shape.GetSubshape(System.Int32[])">
+  GetSubshape(params int[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the shape based on given indicies and the index offset (C-Contiguous) inside the current storage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public readonly (Shape Shape, int Offset) GetSubshape(params int[] indicies)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>indicies</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The selection of indexes 0 based.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="NumSharp.Shape.html">Shape</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-numsharp.shape,system.int32-.shape">Shape</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-numsharp.shape,system.int32-.offset">Offset</a>)</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Shape_GetSubshape_System_Int32____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Used for slicing, returned shape is the new shape of the slice and offset is the offset from current address.</p>
+</div>
+
+
+
+
+  <a id="NumSharp_Shape_InferNegativeCoordinates_" data-uid="NumSharp.Shape.InferNegativeCoordinates*"></a>
+
+  <h3 id="NumSharp_Shape_InferNegativeCoordinates_System_Int32___System_Int32__System_Int32_" data-uid="NumSharp.Shape.InferNegativeCoordinates(System.Int32[],System.Int32*,System.Int32)">
+  InferNegativeCoordinates(int[], int*, int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Translates coordinates with negative indices, e.g:<br>
+np.arange(9)[-1] == np.arange(9)[8]<br>
+np.arange(9)[-2] == np.arange(9)[7]<br></p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">[SuppressMessage(&quot;ReSharper&quot;, &quot;ParameterHidesMember&quot;)]
+public static void InferNegativeCoordinates(int[] dimensions, int* coords, int coordsCount)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dimensions</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The dimensions these coordinates are targeting</p>
+</dd>
+    <dt><code>coords</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>*</dt>
+    <dd><p>The coordinates.</p>
+</dd>
+    <dt><code>coordsCount</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Shape_InferNegativeCoordinates_" data-uid="NumSharp.Shape.InferNegativeCoordinates*"></a>
+
+  <h3 id="NumSharp_Shape_InferNegativeCoordinates_System_Int32___System_Int32___" data-uid="NumSharp.Shape.InferNegativeCoordinates(System.Int32[],System.Int32[])">
+  InferNegativeCoordinates(int[], int[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Translates coordinates with negative indices, e.g:<br>
+np.arange(9)[-1] == np.arange(9)[8]<br>
+np.arange(9)[-2] == np.arange(9)[7]<br></p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">[SuppressMessage(&quot;ReSharper&quot;, &quot;ParameterHidesMember&quot;)]
+public static int[] InferNegativeCoordinates(int[] dimensions, int[] coords)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dimensions</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The dimensions these coordinates are targeting</p>
+</dd>
+    <dt><code>coords</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The coordinates.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>Coordinates without negative indices.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Shape_Matrix_" data-uid="NumSharp.Shape.Matrix*"></a>
+
+  <h3 id="NumSharp_Shape_Matrix_System_Int32_System_Int32_" data-uid="NumSharp.Shape.Matrix(System.Int32,System.Int32)">
+  Matrix(int, int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Create a shape that represents a matrix.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Shape Matrix(int rows, int cols)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>rows</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>cols</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Shape_Matrix_System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Faster than calling Shape's constructor</p>
+</div>
+
+
+
+
+  <a id="NumSharp_Shape_Reshape_" data-uid="NumSharp.Shape.Reshape*"></a>
+
+  <h3 id="NumSharp_Shape_Reshape_NumSharp_Shape_System_Boolean_" data-uid="NumSharp.Shape.Reshape(NumSharp.Shape,System.Boolean)">
+  Reshape(Shape, bool)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Changes the shape representing this storage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public readonly Shape Reshape(Shape newShape, bool @unsafe = true)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>newShape</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd></dd>
+    <dt><code>unsafe</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>When true, then guards are skipped.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.IncorrectShapeException.html">IncorrectShapeException</a></dt>
+    <dd><p>If shape's size mismatches current shape size.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>If <code class="paramref">newShape</code>'s size == 0</p>
+</dd>
+  </dl>
+
+
+
+  <a id="NumSharp_Shape_SetStridesModified_" data-uid="NumSharp.Shape.SetStridesModified*"></a>
+
+  <h3 id="NumSharp_Shape_SetStridesModified_System_Boolean_" data-uid="NumSharp.Shape.SetStridesModified(System.Boolean)">
+  SetStridesModified(bool)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Flag this shape as stride-modified.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SetStridesModified(bool value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Shape_Slice_" data-uid="NumSharp.Shape.Slice*"></a>
+
+  <h3 id="NumSharp_Shape_Slice_NumSharp_Slice___" data-uid="NumSharp.Shape.Slice(NumSharp.Slice[])">
+  Slice(params Slice[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public readonly Shape Slice(params Slice[] input_slices)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input_slices</code> <a class="xref" href="NumSharp.Slice.html">Slice</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Shape_Slice_" data-uid="NumSharp.Shape.Slice*"></a>
+
+  <h3 id="NumSharp_Shape_Slice_System_String_" data-uid="NumSharp.Shape.Slice(System.String)">
+  Slice(string)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public readonly Shape Slice(string slicing_notation)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>slicing_notation</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Shape_ToString_" data-uid="NumSharp.Shape.ToString*"></a>
+
+  <h3 id="NumSharp_Shape_ToString" data-uid="NumSharp.Shape.ToString">
+  ToString()
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the fully qualified type name of this instance.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override string ToString()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The fully qualified type name.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Shape_TransformOffset_" data-uid="NumSharp.Shape.TransformOffset*"></a>
+
+  <h3 id="NumSharp_Shape_TransformOffset_System_Int32_" data-uid="NumSharp.Shape.TransformOffset(System.Int32)">
+  TransformOffset(int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Retrieve the transformed offset if <a class="xref" href="NumSharp.Shape.html#NumSharp_Shape_IsSliced">IsSliced</a> is true, otherwise returns <code class="paramref">offset</code>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public readonly int TransformOffset(int offset)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>offset</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The offset within the bounds of <span class="xref">NumSharp.Shape.size</span>.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The transformed offset.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Shape_TransformOffset_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Avoid using unless it is unclear if shape is sliced or not.</p>
+</div>
+
+
+
+
+  <a id="NumSharp_Shape_Vector_" data-uid="NumSharp.Shape.Vector*"></a>
+
+  <h3 id="NumSharp_Shape_Vector_System_Int32_" data-uid="NumSharp.Shape.Vector(System.Int32)">
+  Vector(int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Create a shape that represents a vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Shape Vector(int length)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>length</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Shape_Vector_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Faster than calling Shape's constructor</p>
+</div>
+
+
+
+
+  <a id="NumSharp_Shape_Vector_" data-uid="NumSharp.Shape.Vector*"></a>
+
+  <h3 id="NumSharp_Shape_Vector_System_Int32_NumSharp_ViewInfo_" data-uid="NumSharp.Shape.Vector(System.Int32,NumSharp.ViewInfo)">
+  Vector(int, ViewInfo)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Create a shape that represents a vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Shape Vector(int length, ViewInfo viewInfo)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>length</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>viewInfo</code> <a class="xref" href="NumSharp.ViewInfo.html">ViewInfo</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="NumSharp_Shape_Vector_System_Int32_NumSharp_ViewInfo__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Faster than calling Shape's constructor</p>
+</div>
+
+
+
+
+  <h2 class="section" id="operators">Operators
+</h2>
+
+
+  <a id="NumSharp_Shape_op_Equality_" data-uid="NumSharp.Shape.op_Equality*"></a>
+
+  <h3 id="NumSharp_Shape_op_Equality_NumSharp_Shape_NumSharp_Shape_" data-uid="NumSharp.Shape.op_Equality(NumSharp.Shape,NumSharp.Shape)">
+  operator ==(Shape, Shape)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static bool operator ==(Shape a, Shape b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd></dd>
+    <dt><code>b</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Shape_op_Explicit_" data-uid="NumSharp.Shape.op_Explicit*"></a>
+
+  <h3 id="NumSharp_Shape_op_Explicit_NumSharp_Shape__System_Int32" data-uid="NumSharp.Shape.op_Explicit(NumSharp.Shape)~System.Int32">
+  explicit operator int(Shape)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static explicit operator int(Shape shape)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>shape</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Shape_op_Explicit_" data-uid="NumSharp.Shape.op_Explicit*"></a>
+
+  <h3 id="NumSharp_Shape_op_Explicit_NumSharp_Shape__System_Int32__" data-uid="NumSharp.Shape.op_Explicit(NumSharp.Shape)~System.Int32[]">
+  explicit operator int[](Shape)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static explicit operator int[](Shape shape)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>shape</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Shape_op_Explicit_" data-uid="NumSharp.Shape.op_Explicit*"></a>
+
+  <h3 id="NumSharp_Shape_op_Explicit_NumSharp_Shape__System_ValueTuple_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_" data-uid="NumSharp.Shape.op_Explicit(NumSharp.Shape)~System.ValueTuple{System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,System.Int32}">
+  explicit operator (int, int, int, int, int, int)(Shape)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static explicit operator (int, int, int, int, int, int)(Shape shape)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>shape</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>)</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Shape_op_Explicit_" data-uid="NumSharp.Shape.op_Explicit*"></a>
+
+  <h3 id="NumSharp_Shape_op_Explicit_NumSharp_Shape__System_ValueTuple_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_" data-uid="NumSharp.Shape.op_Explicit(NumSharp.Shape)~System.ValueTuple{System.Int32,System.Int32,System.Int32,System.Int32,System.Int32}">
+  explicit operator (int, int, int, int, int)(Shape)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static explicit operator (int, int, int, int, int)(Shape shape)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>shape</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>)</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Shape_op_Explicit_" data-uid="NumSharp.Shape.op_Explicit*"></a>
+
+  <h3 id="NumSharp_Shape_op_Explicit_NumSharp_Shape__System_ValueTuple_System_Int32_System_Int32_System_Int32_System_Int32_" data-uid="NumSharp.Shape.op_Explicit(NumSharp.Shape)~System.ValueTuple{System.Int32,System.Int32,System.Int32,System.Int32}">
+  explicit operator (int, int, int, int)(Shape)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static explicit operator (int, int, int, int)(Shape shape)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>shape</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>)</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Shape_op_Explicit_" data-uid="NumSharp.Shape.op_Explicit*"></a>
+
+  <h3 id="NumSharp_Shape_op_Explicit_NumSharp_Shape__System_ValueTuple_System_Int32_System_Int32_System_Int32_" data-uid="NumSharp.Shape.op_Explicit(NumSharp.Shape)~System.ValueTuple{System.Int32,System.Int32,System.Int32}">
+  explicit operator (int, int, int)(Shape)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static explicit operator (int, int, int)(Shape shape)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>shape</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>)</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Shape_op_Explicit_" data-uid="NumSharp.Shape.op_Explicit*"></a>
+
+  <h3 id="NumSharp_Shape_op_Explicit_NumSharp_Shape__System_ValueTuple_System_Int32_System_Int32_" data-uid="NumSharp.Shape.op_Explicit(NumSharp.Shape)~System.ValueTuple{System.Int32,System.Int32}">
+  explicit operator (int, int)(Shape)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static explicit operator (int, int)(Shape shape)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>shape</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>)</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Shape_op_Explicit_" data-uid="NumSharp.Shape.op_Explicit*"></a>
+
+  <h3 id="NumSharp_Shape_op_Explicit_System_Int32__NumSharp_Shape" data-uid="NumSharp.Shape.op_Explicit(System.Int32)~NumSharp.Shape">
+  explicit operator Shape(int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static explicit operator Shape(int dim)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dim</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Shape_op_Implicit_" data-uid="NumSharp.Shape.op_Implicit*"></a>
+
+  <h3 id="NumSharp_Shape_op_Implicit_System_Int32____NumSharp_Shape" data-uid="NumSharp.Shape.op_Implicit(System.Int32[])~NumSharp.Shape">
+  implicit operator Shape(int[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static implicit operator Shape(int[] dims)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dims</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Shape_op_Implicit_" data-uid="NumSharp.Shape.op_Implicit*"></a>
+
+  <h3 id="NumSharp_Shape_op_Implicit_System_ValueTuple_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32___NumSharp_Shape" data-uid="NumSharp.Shape.op_Implicit(System.ValueTuple{System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,System.Int32})~NumSharp.Shape">
+  implicit operator Shape((int, int, int, int, int, int))
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static implicit operator Shape((int, int, int, int, int, int) dims)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dims</code> (<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>)</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Shape_op_Implicit_" data-uid="NumSharp.Shape.op_Implicit*"></a>
+
+  <h3 id="NumSharp_Shape_op_Implicit_System_ValueTuple_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32___NumSharp_Shape" data-uid="NumSharp.Shape.op_Implicit(System.ValueTuple{System.Int32,System.Int32,System.Int32,System.Int32,System.Int32})~NumSharp.Shape">
+  implicit operator Shape((int, int, int, int, int))
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static implicit operator Shape((int, int, int, int, int) dims)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dims</code> (<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>)</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Shape_op_Implicit_" data-uid="NumSharp.Shape.op_Implicit*"></a>
+
+  <h3 id="NumSharp_Shape_op_Implicit_System_ValueTuple_System_Int32_System_Int32_System_Int32_System_Int32___NumSharp_Shape" data-uid="NumSharp.Shape.op_Implicit(System.ValueTuple{System.Int32,System.Int32,System.Int32,System.Int32})~NumSharp.Shape">
+  implicit operator Shape((int, int, int, int))
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static implicit operator Shape((int, int, int, int) dims)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dims</code> (<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>)</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Shape_op_Implicit_" data-uid="NumSharp.Shape.op_Implicit*"></a>
+
+  <h3 id="NumSharp_Shape_op_Implicit_System_ValueTuple_System_Int32_System_Int32_System_Int32___NumSharp_Shape" data-uid="NumSharp.Shape.op_Implicit(System.ValueTuple{System.Int32,System.Int32,System.Int32})~NumSharp.Shape">
+  implicit operator Shape((int, int, int))
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static implicit operator Shape((int, int, int) dims)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dims</code> (<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>)</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Shape_op_Implicit_" data-uid="NumSharp.Shape.op_Implicit*"></a>
+
+  <h3 id="NumSharp_Shape_op_Implicit_System_ValueTuple_System_Int32_System_Int32___NumSharp_Shape" data-uid="NumSharp.Shape.op_Implicit(System.ValueTuple{System.Int32,System.Int32})~NumSharp.Shape">
+  implicit operator Shape((int, int))
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static implicit operator Shape((int, int) dims)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dims</code> (<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>)</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="NumSharp_Shape_op_Inequality_" data-uid="NumSharp.Shape.op_Inequality*"></a>
+
+  <h3 id="NumSharp_Shape_op_Inequality_NumSharp_Shape_NumSharp_Shape_" data-uid="NumSharp.Shape.op_Inequality(NumSharp.Shape,NumSharp.Shape)">
+  operator !=(Shape, Shape)
+  
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static bool operator !=(Shape a, Shape b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd></dd>
+    <dt><code>b</code> <a class="xref" href="NumSharp.Shape.html">Shape</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          <span>Copyright &copy; 2025 <a href='https://github.com/SciSharp'>SciSharp STACK</a>. Built with <a href='https://dotnet.github.io/docfx'>DocFX</a>.</span>
+        </div>
+      </div>
+    </footer>
   </body>
 </html>

@@ -1,90 +1,424 @@
-﻿
+
 <div id="sidetoggle">
   <div>
     <div class="sidefilter">
       <form class="toc-filter">
         <span class="glyphicon glyphicon-filter filter-icon"></span>
-        <input type="text" id="toc_filter_input" placeholder="Enter here to filter..." onkeypress="if(event.keyCode==13) {return false;}">
+        <span class="glyphicon glyphicon-remove clear-icon" id="toc_filter_clear"></span>
+        <input type="text" id="toc_filter_input" placeholder="Filter by title" onkeypress="if(event.keyCode==13) {return false;}">
       </form>
     </div>
     <div class="sidetoc">
       <div class="toc" id="toc">
-          
+
           <ul class="nav level1">
                 <li>
-                    <span class="expand-stub"></span>
-                    <a href="NumSharp.Core.html" name="" title="NumSharp.Core">NumSharp.Core</a>
-                    
-                    <ul class="nav level2">
-                          <li>
-                              <a href="NumSharp.Core.LAPACK.html" name="" title="LAPACK">LAPACK</a>
-                          </li>
-                          <li>
-                              <a href="NumSharp.Core.matrix.html" name="" title="matrix">matrix</a>
-                          </li>
-                          <li>
-                              <a href="NumSharp.Core.NDArray.html" name="" title="NDArray">NDArray</a>
-                          </li>
-                          <li>
-                              <a href="NumSharp.Core.NDArrayRandomExtensions.html" name="" title="NDArrayRandomExtensions">NDArrayRandomExtensions</a>
-                          </li>
-                          <li>
-                              <a href="NumSharp.Core.NDStorage.html" name="" title="NDStorage">NDStorage</a>
-                          </li>
-                          <li>
-                              <a href="NumSharp.Core.np.html" name="" title="np">np</a>
-                          </li>
-                          <li>
-                              <a href="NumSharp.Core.NumPyRandom.html" name="" title="NumPyRandom">NumPyRandom</a>
-                          </li>
-                          <li>
-                              <a href="NumSharp.Core.Shape.html" name="" title="Shape">Shape</a>
-                          </li>
-                          <li>
-                              <a href="NumSharp.Core.Slice.html" name="" title="Slice">Slice</a>
-                          </li>
-                    </ul>
+                    <a href="index.html" name="" title="API Reference">API Reference</a>
                 </li>
                 <li>
                     <span class="expand-stub"></span>
-                    <a href="NumSharp.Core.Extensions.html" name="" title="NumSharp.Core.Extensions">NumSharp.Core.Extensions</a>
-                    
+                    <a>Core Types</a>
+
                     <ul class="nav level2">
                           <li>
-                              <a href="NumSharp.Core.Extensions.NDArrayExtensions.html" name="" title="NDArrayExtensions">NDArrayExtensions</a>
-                          </li>
-                    </ul>
-                </li>
-                <li>
-                    <span class="expand-stub"></span>
-                    <a href="NumSharp.Core.Interfaces.html" name="" title="NumSharp.Core.Interfaces">NumSharp.Core.Interfaces</a>
-                    
-                    <ul class="nav level2">
-                          <li>
-                              <a href="NumSharp.Core.Interfaces.IShape.html" name="" title="IShape">IShape</a>
+                              <a href="NumSharp.NDArray.html" name="" title="NDArray">NDArray</a>
                           </li>
                           <li>
-                              <a href="NumSharp.Core.Interfaces.IStorage.html" name="" title="IStorage">IStorage</a>
+                              <a href="NumSharp.np.html" name="" title="np (Static API)">np (Static API)</a>
                           </li>
-                    </ul>
-                </li>
-                <li>
-                    <span class="expand-stub"></span>
-                    <a href="NumSharp.Core.Manipulation.html" name="" title="NumSharp.Core.Manipulation">NumSharp.Core.Manipulation</a>
-                    
-                    <ul class="nav level2">
                           <li>
-                              <a href="NumSharp.Core.Manipulation.NumPy.html" name="" title="NumPy">NumPy</a>
+                              <a href="NumSharp.Shape.html" name="" title="Shape">Shape</a>
                           </li>
-                    </ul>
-                </li>
-                <li>
-                    <span class="expand-stub"></span>
-                    <a href="NumSharp.Generic.html" name="" title="NumSharp.Generic">NumSharp.Generic</a>
-                    
-                    <ul class="nav level2">
+                          <li>
+                              <a href="NumSharp.Slice.html" name="" title="Slice">Slice</a>
+                          </li>
+                          <li>
+                              <a href="NumSharp.SliceDef.html" name="" title="SliceDef">SliceDef</a>
+                          </li>
                           <li>
                               <a href="NumSharp.Generic.NDArray-1.html" name="" title="NDArray&lt;T&gt;">NDArray&lt;T&gt;</a>
+                          </li>
+                    </ul>
+                </li>
+                <li>
+                    <span class="expand-stub"></span>
+                    <a>Random Sampling</a>
+
+                    <ul class="nav level2">
+                          <li>
+                              <a href="NumSharp.NumPyRandom.html" name="" title="NumPyRandom (np.random)">NumPyRandom (np.random)</a>
+                          </li>
+                          <li>
+                              <a href="NumSharp.Randomizer.html" name="" title="Randomizer">Randomizer</a>
+                          </li>
+                          <li>
+                              <a href="NumSharp.NativeRandomState.html" name="" title="NativeRandomState">NativeRandomState</a>
+                          </li>
+                    </ul>
+                </li>
+                <li>
+                    <span class="expand-stub"></span>
+                    <a>Linear Algebra</a>
+
+                    <ul class="nav level2">
+                          <li>
+                              <a href="NumSharp.np.linalg.html" name="" title="np.linalg">np.linalg</a>
+                          </li>
+                    </ul>
+                </li>
+                <li>
+                    <span class="expand-stub"></span>
+                    <a>Broadcasting</a>
+
+                    <ul class="nav level2">
+                          <li>
+                              <a href="NumSharp.np.Broadcast.html" name="" title="np.Broadcast">np.Broadcast</a>
+                          </li>
+                          <li>
+                              <a href="NumSharp.BroadcastInfo.html" name="" title="BroadcastInfo">BroadcastInfo</a>
+                          </li>
+                          <li>
+                              <a href="NumSharp.ViewInfo.html" name="" title="ViewInfo">ViewInfo</a>
+                          </li>
+                    </ul>
+                </li>
+                <li>
+                    <span class="expand-stub"></span>
+                    <a>Type System</a>
+
+                    <ul class="nav level2">
+                          <li>
+                              <a href="NumSharp.NPTypeCode.html" name="" title="NPTypeCode">NPTypeCode</a>
+                          </li>
+                          <li>
+                              <a href="NumSharp.NPTypeCodeExtensions.html" name="" title="NPTypeCodeExtensions">NPTypeCodeExtensions</a>
+                          </li>
+                          <li>
+                              <a href="NumSharp.DType.html" name="" title="DType">DType</a>
+                          </li>
+                    </ul>
+                </li>
+                <li>
+                    <span class="expand-stub"></span>
+                    <a>File I/O</a>
+
+                    <ul class="nav level2">
+                          <li>
+                              <a href="NumSharp.NpzDictionary.html" name="" title="NpzDictionary">NpzDictionary</a>
+                          </li>
+                          <li>
+                              <a href="NumSharp.NpzDictionary-1.html" name="" title="NpzDictionary&lt;T&gt;">NpzDictionary&lt;T&gt;</a>
+                          </li>
+                    </ul>
+                </li>
+                <li>
+                    <span class="expand-stub"></span>
+                    <a>Iterators</a>
+
+                    <ul class="nav level2">
+                          <li>
+                              <a href="NumSharp.NDIterator.html" name="" title="NDIterator">NDIterator</a>
+                          </li>
+                          <li>
+                              <a href="NumSharp.NDIterator-1.html" name="" title="NDIterator&lt;T&gt;">NDIterator&lt;T&gt;</a>
+                          </li>
+                          <li>
+                              <a href="NumSharp.NDIteratorExtensions.html" name="" title="NDIteratorExtensions">NDIteratorExtensions</a>
+                          </li>
+                          <li>
+                              <a href="NumSharp.MultiIterator.html" name="" title="MultiIterator">MultiIterator</a>
+                          </li>
+                          <li>
+                              <a href="NumSharp.IteratorType.html" name="" title="IteratorType">IteratorType</a>
+                          </li>
+                          <li>
+                              <a href="NumSharp.MoveNextReferencedDelegate-1.html" name="" title="MoveNextReferencedDelegate&lt;T&gt;">MoveNextReferencedDelegate&lt;T&gt;</a>
+                          </li>
+                    </ul>
+                </li>
+                <li>
+                    <span class="expand-stub"></span>
+                    <a>Exceptions</a>
+
+                    <ul class="nav level2">
+                          <li>
+                              <a href="NumSharp.INumSharpException.html" name="" title="INumSharpException">INumSharpException</a>
+                          </li>
+                          <li>
+                              <a href="NumSharp.NumSharpException.html" name="" title="NumSharpException">NumSharpException</a>
+                          </li>
+                          <li>
+                              <a href="NumSharp.AxisOutOfRangeException.html" name="" title="AxisOutOfRangeException">AxisOutOfRangeException</a>
+                          </li>
+                          <li>
+                              <a href="NumSharp.IncorrectShapeException.html" name="" title="IncorrectShapeException">IncorrectShapeException</a>
+                          </li>
+                          <li>
+                              <a href="NumSharp.IncorrectSizeException.html" name="" title="IncorrectSizeException">IncorrectSizeException</a>
+                          </li>
+                          <li>
+                              <a href="NumSharp.IncorrectTypeException.html" name="" title="IncorrectTypeException">IncorrectTypeException</a>
+                          </li>
+                    </ul>
+                </li>
+                <li>
+                    <span class="expand-stub"></span>
+                    <a>Internals</a>
+
+                    <ul class="nav level2">
+                          <li>
+                              <span class="expand-stub"></span>
+                              <a>Backends</a>
+
+                              <ul class="nav level3">
+                                    <li>
+                                        <a href="NumSharp.TensorEngine.html" name="" title="TensorEngine">TensorEngine</a>
+                                    </li>
+                                    <li>
+                                        <a href="NumSharp.Backends.DefaultEngine.html" name="" title="DefaultEngine">DefaultEngine</a>
+                                    </li>
+                                    <li>
+                                        <a href="NumSharp.Backends.UnmanagedStorage.html" name="" title="UnmanagedStorage">UnmanagedStorage</a>
+                                    </li>
+                                    <li>
+                                        <a href="NumSharp.Backends.BackendFactory.html" name="" title="BackendFactory">BackendFactory</a>
+                                    </li>
+                                    <li>
+                                        <a href="NumSharp.BackendType.html" name="" title="BackendType">BackendType</a>
+                                    </li>
+                                    <li>
+                                        <a href="NumSharp.StorageType.html" name="" title="StorageType">StorageType</a>
+                                    </li>
+                              </ul>
+                          </li>
+                          <li>
+                              <span class="expand-stub"></span>
+                              <a>Unmanaged Memory</a>
+
+                              <ul class="nav level3">
+                                    <li>
+                                        <a href="NumSharp.Backends.Unmanaged.ArraySlice.html" name="" title="ArraySlice">ArraySlice</a>
+                                    </li>
+                                    <li>
+                                        <a href="NumSharp.Backends.Unmanaged.ArraySlice-1.html" name="" title="ArraySlice&lt;T&gt;">ArraySlice&lt;T&gt;</a>
+                                    </li>
+                                    <li>
+                                        <a href="NumSharp.Backends.Unmanaged.IArraySlice.html" name="" title="IArraySlice">IArraySlice</a>
+                                    </li>
+                                    <li>
+                                        <a href="NumSharp.Backends.Unmanaged.IMemoryBlock.html" name="" title="IMemoryBlock">IMemoryBlock</a>
+                                    </li>
+                                    <li>
+                                        <a href="NumSharp.Backends.Unmanaged.IMemoryBlock-1.html" name="" title="IMemoryBlock&lt;T&gt;">IMemoryBlock&lt;T&gt;</a>
+                                    </li>
+                                    <li>
+                                        <a href="NumSharp.Backends.Unmanaged.IUnmanagedMemoryBlock.html" name="" title="IUnmanagedMemoryBlock">IUnmanagedMemoryBlock</a>
+                                    </li>
+                                    <li>
+                                        <a href="NumSharp.Backends.Unmanaged.UnmanagedMemoryBlock.html" name="" title="UnmanagedMemoryBlock">UnmanagedMemoryBlock</a>
+                                    </li>
+                                    <li>
+                                        <a href="NumSharp.Backends.Unmanaged.UnmanagedMemoryBlock-1.html" name="" title="UnmanagedMemoryBlock&lt;T&gt;">UnmanagedMemoryBlock&lt;T&gt;</a>
+                                    </li>
+                                    <li>
+                                        <a href="NumSharp.Backends.Unmanaged.UnmanagedHelper.html" name="" title="UnmanagedHelper">UnmanagedHelper</a>
+                                    </li>
+                              </ul>
+                          </li>
+                          <li>
+                              <span class="expand-stub"></span>
+                              <a>Memory Pools</a>
+
+                              <ul class="nav level3">
+                                    <li>
+                                        <a href="NumSharp.Unmanaged.Memory.ScalarMemoryPool.html" name="" title="ScalarMemoryPool">ScalarMemoryPool</a>
+                                    </li>
+                                    <li>
+                                        <a href="NumSharp.Unmanaged.Memory.StackedMemoryPool.html" name="" title="StackedMemoryPool">StackedMemoryPool</a>
+                                    </li>
+                              </ul>
+                          </li>
+                          <li>
+                              <span class="expand-stub"></span>
+                              <a>NDArray Internals</a>
+
+                              <ul class="nav level3">
+                                    <li>
+                                        <a href="NumSharp.NDArray._Unsafe.html" name="" title="NDArray._Unsafe">NDArray._Unsafe</a>
+                                    </li>
+                                    <li>
+                                        <a href="NumSharp.NDArray._Unsafe._Pinning.html" name="" title="NDArray._Unsafe._Pinning">NDArray._Unsafe._Pinning</a>
+                                    </li>
+                                    <li>
+                                        <a href="NumSharp.IIndex.html" name="" title="IIndex">IIndex</a>
+                                    </li>
+                                    <li>
+                                        <a href="NumSharp.Kwargs.html" name="" title="Kwargs">Kwargs</a>
+                                    </li>
+                              </ul>
+                          </li>
+                    </ul>
+                </li>
+                <li>
+                    <span class="expand-stub"></span>
+                    <a>Utilities</a>
+
+                    <ul class="nav level2">
+                          <li>
+                              <span class="expand-stub"></span>
+                              <a>Type Conversion</a>
+
+                              <ul class="nav level3">
+                                    <li>
+                                        <a href="NumSharp.Utilities.Converts.html" name="" title="Converts">Converts</a>
+                                    </li>
+                                    <li>
+                                        <a href="NumSharp.Utilities.Converts-1.html" name="" title="Converts&lt;T&gt;">Converts&lt;T&gt;</a>
+                                    </li>
+                                    <li>
+                                        <a href="NumSharp.Utilities.NonGenericConvert.html" name="" title="NonGenericConvert">NonGenericConvert</a>
+                                    </li>
+                                    <li>
+                                        <a href="NumSharp.Utilities.TypelessConvert.html" name="" title="TypelessConvert">TypelessConvert</a>
+                                    </li>
+                                    <li>
+                                        <a href="NumSharp.Utilities.TypelessConvertDelegate.html" name="" title="TypelessConvertDelegate">TypelessConvertDelegate</a>
+                                    </li>
+                                    <li>
+                                        <a href="NumSharp.Utilities.ArrayConvert.html" name="" title="ArrayConvert">ArrayConvert</a>
+                                    </li>
+                              </ul>
+                          </li>
+                          <li>
+                              <span class="expand-stub"></span>
+                              <a>Type Info</a>
+
+                              <ul class="nav level3">
+                                    <li>
+                                        <a href="NumSharp.Utilities.InfoOf-1.html" name="" title="InfoOf&lt;T&gt;">InfoOf&lt;T&gt;</a>
+                                    </li>
+                                    <li>
+                                        <a href="NumSharp.Utilities.NumberInfo.html" name="" title="NumberInfo">NumberInfo</a>
+                                    </li>
+                              </ul>
+                          </li>
+                          <li>
+                              <span class="expand-stub"></span>
+                              <a>Arrays</a>
+
+                              <ul class="nav level3">
+                                    <li>
+                                        <a href="NumSharp.Utilities.Arrays.html" name="" title="Arrays">Arrays</a>
+                                    </li>
+                                    <li>
+                                        <a href="NumSharp.Utilities.ArraysExtensions.html" name="" title="ArraysExtensions">ArraysExtensions</a>
+                                    </li>
+                              </ul>
+                          </li>
+                          <li>
+                              <span class="expand-stub"></span>
+                              <a>Coordinate Incrementors</a>
+
+                              <ul class="nav level3">
+                                    <li>
+                                        <a href="NumSharp.Utilities.NDCoordinatesIncrementor.html" name="" title="NDCoordinatesIncrementor">NDCoordinatesIncrementor</a>
+                                    </li>
+                                    <li>
+                                        <a href="NumSharp.Utilities.NDCoordinatesIncrementorAutoResetting.html" name="" title="NDCoordinatesIncrementorAutoResetting">NDCoordinatesIncrementorAutoResetting</a>
+                                    </li>
+                                    <li>
+                                        <a href="NumSharp.Utilities.NDCoordinatesAxisIncrementor.html" name="" title="NDCoordinatesAxisIncrementor">NDCoordinatesAxisIncrementor</a>
+                                    </li>
+                                    <li>
+                                        <a href="NumSharp.Utilities.NDCoordinatesLeftToAxisIncrementor.html" name="" title="NDCoordinatesLeftToAxisIncrementor">NDCoordinatesLeftToAxisIncrementor</a>
+                                    </li>
+                                    <li>
+                                        <a href="NumSharp.Utilities.NDExtendedCoordinatesIncrementor.html" name="" title="NDExtendedCoordinatesIncrementor">NDExtendedCoordinatesIncrementor</a>
+                                    </li>
+                                    <li>
+                                        <a href="NumSharp.Utilities.NDOffsetIncrementor.html" name="" title="NDOffsetIncrementor">NDOffsetIncrementor</a>
+                                    </li>
+                                    <li>
+                                        <a href="NumSharp.Utilities.NDOffsetIncrementorAutoresetting.html" name="" title="NDOffsetIncrementorAutoresetting">NDOffsetIncrementorAutoresetting</a>
+                                    </li>
+                                    <li>
+                                        <a href="NumSharp.Utilities.ValueCoordinatesIncrementor.html" name="" title="ValueCoordinatesIncrementor">ValueCoordinatesIncrementor</a>
+                                    </li>
+                                    <li>
+                                        <a href="NumSharp.Utilities.ValueCoordinatesIncrementor.EndCallbackHandler.html" name="" title="ValueCoordinatesIncrementor.EndCallbackHandler">ValueCoordinatesIncrementor.EndCallbackHandler</a>
+                                    </li>
+                                    <li>
+                                        <a href="NumSharp.Utilities.ValueCoordinatesIncrementorAutoResetting.html" name="" title="ValueCoordinatesIncrementorAutoResetting">ValueCoordinatesIncrementorAutoResetting</a>
+                                    </li>
+                                    <li>
+                                        <a href="NumSharp.Utilities.ValueOffsetIncrementor.html" name="" title="ValueOffsetIncrementor">ValueOffsetIncrementor</a>
+                                    </li>
+                                    <li>
+                                        <a href="NumSharp.Utilities.ValueOffsetIncrementorAutoresetting.html" name="" title="ValueOffsetIncrementorAutoresetting">ValueOffsetIncrementorAutoresetting</a>
+                                    </li>
+                              </ul>
+                          </li>
+                          <li>
+                              <span class="expand-stub"></span>
+                              <a>Collections</a>
+
+                              <ul class="nav level3">
+                                    <li>
+                                        <a href="NumSharp.Utilities.Hashset-1.html" name="" title="Hashset&lt;T&gt;">Hashset&lt;T&gt;</a>
+                                    </li>
+                                    <li>
+                                        <a href="NumSharp.Utilities.Hashset-1.Enumerator.html" name="" title="Hashset&lt;T&gt;.Enumerator">Hashset&lt;T&gt;.Enumerator</a>
+                                    </li>
+                                    <li>
+                                        <a href="NumSharp.Utilities.ConcurrentHashset-1.html" name="" title="ConcurrentHashset&lt;T&gt;">ConcurrentHashset&lt;T&gt;</a>
+                                    </li>
+                              </ul>
+                          </li>
+                          <li>
+                              <span class="expand-stub"></span>
+                              <a>LINQ Extensions</a>
+
+                              <ul class="nav level3">
+                                    <li>
+                                        <a href="NumSharp.Utilities.Linq.IEnumeratorExtensions.html" name="" title="IEnumeratorExtensions">IEnumeratorExtensions</a>
+                                    </li>
+                                    <li>
+                                        <a href="NumSharp.Utilities.Linq.IExtremaEnumerable-1.html" name="" title="IExtremaEnumerable&lt;T&gt;">IExtremaEnumerable&lt;T&gt;</a>
+                                    </li>
+                              </ul>
+                          </li>
+                          <li>
+                              <span class="expand-stub"></span>
+                              <a>Other</a>
+
+                              <ul class="nav level3">
+                                    <li>
+                                        <a href="NumSharp.Utilities.SteppingExtension.html" name="" title="SteppingExtension">SteppingExtension</a>
+                                    </li>
+                                    <li>
+                                        <a href="NumSharp.Utilities.py.html" name="" title="py">py</a>
+                                    </li>
+                              </ul>
+                          </li>
+                    </ul>
+                </li>
+                <li>
+                    <span class="expand-stub"></span>
+                    <a>Extensions</a>
+
+                    <ul class="nav level2">
+                          <li>
+                              <a href="NumSharp.Extensions.LinqExtensions.html" name="" title="LinqExtensions">LinqExtensions</a>
+                          </li>
+                    </ul>
+                </li>
+                <li>
+                    <span class="expand-stub"></span>
+                    <a>External</a>
+
+                    <ul class="nav level2">
+                          <li>
+                              <a href="DecimalMath.DecimalEx.html" name="" title="DecimalEx (DecimalMath)">DecimalEx (DecimalMath)</a>
                           </li>
                     </ul>
                 </li>
