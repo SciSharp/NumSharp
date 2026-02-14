@@ -48,7 +48,9 @@ namespace NumSharp.Backends
             {
                 //if the given div axis is 1 and can be squeezed out.
                 if (keepdims)
+                {
                     return new NDArray(arr.Storage.Alias());
+                }
                 return np.squeeze_fast(arr, axis);
             }
 
