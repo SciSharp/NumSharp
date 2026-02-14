@@ -48,7 +48,9 @@ namespace NumSharp
                     case object[] objs:
                         return this[objs];
                     case string slicesStr:
+                    {
                         return new NDArray(Storage.GetView(Slice.ParseSlices(slicesStr)));
+                    }
                     case null: throw new ArgumentNullException($"The 1th dimension in given indices is null.");
                     //no default
                 }
@@ -109,7 +111,9 @@ namespace NumSharp
                 return new NDArray(dtype);
             }
 
-            return new NDArray(Storage.GetView(slices));
+            {
+                return new NDArray(Storage.GetView(slices));
+            }
 
             //handle complex ndarrays indexing
             _NDArrayFound:

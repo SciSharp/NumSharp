@@ -58,7 +58,10 @@ namespace NumSharp
         /// <returns>A sliced view</returns>
         public NDArray this[string slice]
         {
-            get => new NDArray(Storage.GetView(Slice.ParseSlices(slice)));
+            get
+            {
+                return new NDArray(Storage.GetView(Slice.ParseSlices(slice)));
+            }
             set { ThrowIfNotWriteable(); Storage.GetView(Slice.ParseSlices(slice)).SetData(value); }
         }
 
@@ -70,7 +73,10 @@ namespace NumSharp
         /// <returns>A sliced view</returns>
         public NDArray this[params Slice[] slice]
         {
-            get => new NDArray(Storage.GetView(slice));
+            get
+            {
+                return new NDArray(Storage.GetView(slice));
+            }
             set { ThrowIfNotWriteable(); Storage.GetView(slice).SetData(value); }
         }
 

@@ -42,6 +42,51 @@ namespace NumSharp
     {
         protected TensorEngine tensorEngine;
 
+        /// <summary>
+        /// Gets the array owning the memory, or <c>null</c> if this array owns its data.
+        /// </summary>
+        /// <value>
+        /// An <see cref="NDArray"/> wrapping the base storage for views, or <c>null</c> for arrays
+        /// that own their data (e.g., created via <c>np.arange</c>, <c>np.zeros</c>, or <c>copy()</c>).
+        /// </value>
+        /// <remarks>
+        /// <para>
+        /// <b>NumPy Compatibility:</b> This property mirrors NumPy's <c>ndarray.base</c> attribute.
+        /// All views chain to the ultimate owner (not intermediate views).
+        /// </para>
+        /// <para>
+        /// <b>Example:</b>
+        /// <code>
+        /// var a = np.arange(10);    // a.@base == null (owns data)
+        /// var b = a["2:5"];         // b.@base.Storage == a.Storage (view)
+        /// var c = b["1:2"];         // c.@base.Storage == a.Storage (chains to original!)
+        /// var d = a.copy();         // d.@base == null (copy owns data)
+        /// var e = a.reshape(2, 5);  // e.@base.Storage == a.Storage (view)
+        /// </code>
+        /// </para>
+        /// <para>
+        /// <b>View Detection:</b> Use <c>arr.@base != null</c> or <c>arr.Storage.IsView</c> to
+        /// detect if an array is a view. Note that <c>arr.@base != null</c> may trigger NDArray's
+        /// operator overloading for element-wise comparison. Prefer <c>arr.Storage.IsView</c> for
+        /// simple boolean checks.
+        /// </para>
+        /// <para>
+        /// <b>Semantic Difference from NumPy:</b> In NumPy, <c>c.base is a</c> returns <c>True</c>
+        /// (object identity). In NumSharp, <c>c.@base</c> creates a new wrapper each call, so
+        /// <c>ReferenceEquals(c.@base, a)</c> is <c>false</c>. However, the underlying storage
+        /// is the same: <c>c.@base.Storage == a.Storage</c> is <c>true</c>.
+        /// </para>
+        /// <para>
+        /// <b>Memory Safety:</b> The underlying memory is kept alive by the shared Disposer
+        /// in the MemoryBlock, not by this property. Views remain valid even if the original
+        /// array reference is garbage collected.
+        /// </para>
+        /// </remarks>
+        /// <seealso href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.base.html"/>
+        /// <seealso cref="UnmanagedStorage.BaseStorage"/>
+        /// <seealso cref="UnmanagedStorage.IsView"/>
+        public NDArray? @base => Storage._baseStorage is { } bs ? new NDArray(bs) : null;
+
         #region Constructors
 
         /// <summary>
@@ -464,7 +509,12 @@ namespace NumSharp
         public NDArray view(Type dtype = null)
         {
             //TODO! this shouldnt be a cast in case dtype != null, it should be an unsafe reinterpret (see remarks).
-            return dtype == null || dtype == this.dtype ? new NDArray(Storage.Alias()) : new NDArray(Storage.Cast(dtype));
+            if (dtype == null || dtype == this.dtype)
+            {
+                return new NDArray(Storage.Alias());
+            }
+            // Cast creates a copy, not a view - no base needed
+            return new NDArray(Storage.Cast(dtype));
         }
 
         /// <summary>

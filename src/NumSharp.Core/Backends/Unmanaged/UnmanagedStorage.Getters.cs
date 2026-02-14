@@ -80,11 +80,37 @@ namespace NumSharp.Backends
         public unsafe T GetAtIndex<T>(int index) where T : unmanaged => *((T*)Address + _shape.TransformOffset(index));
 
         /// <summary>
-        ///     Gets a subshape based on given <paramref name="indices"/>.
+        /// Gets a sub-array based on the given indices, returning a view that shares memory.
         /// </summary>
-        /// <param name="indices"></param>
-        /// <returns></returns>
-        /// <remarks>Does not copy, returns a <see cref="Slice"/> or a memory slice</remarks>
+        /// <param name="indices">
+        /// The indices specifying which dimensions to select. Negative indices are supported
+        /// and are converted to positive indices relative to the dimension size.
+        /// </param>
+        /// <returns>
+        /// A new <see cref="UnmanagedStorage"/> representing the sub-array. This is a view
+        /// that shares memory with the original storage. The returned storage's
+        /// <see cref="_baseStorage"/> points to the ultimate owner.
+        /// </returns>
+        /// <remarks>
+        /// <para>
+        /// <b>Memory Sharing:</b> The returned storage shares memory with this storage.
+        /// Modifications through either storage affect the same underlying data.
+        /// </para>
+        /// <para>
+        /// <b>Base Tracking:</b> Sets <c>_baseStorage</c> to chain to the ultimate owner,
+        /// ensuring all views in a chain point to the original storage, not intermediate views.
+        /// </para>
+        /// <para>
+        /// <b>Code Paths:</b>
+        /// <list type="bullet">
+        ///   <item><b>Broadcasted shapes:</b> Creates a broadcasted view with base tracking</item>
+        ///   <item><b>Non-contiguous shapes:</b> Delegates to <see cref="GetView(Slice[])"/> which uses <see cref="Alias(Shape)"/></item>
+        ///   <item><b>Contiguous shapes:</b> Creates a direct memory slice with base tracking</item>
+        /// </list>
+        /// </para>
+        /// </remarks>
+        /// <seealso cref="GetView(Slice[])"/>
+        /// <seealso cref="Alias()"/>
         [MethodImpl((MethodImplOptions)768)]
         public UnmanagedStorage GetData(params int[] indices)
         {
@@ -97,7 +123,9 @@ namespace NumSharp.Backends
                 var (shape, offset) = this_shape.GetSubshape(indices);
                 // NumPy-aligned: use bufferSize instead of BroadcastInfo.OriginalShape.size
                 int sliceSize = shape.BufferSize > 0 ? shape.BufferSize : shape.size;
-                return UnmanagedStorage.CreateBroadcastedUnsafe(InternalArray.Slice(offset, sliceSize), shape);
+                var view = UnmanagedStorage.CreateBroadcastedUnsafe(InternalArray.Slice(offset, sliceSize), shape);
+                view._baseStorage = _baseStorage ?? this;
+                return view;
             }
             else if (!this_shape.IsContiguous)
             {
@@ -110,16 +138,41 @@ namespace NumSharp.Backends
                 // Contiguous shape: can take a direct memory slice.
                 // GetSubshape computes the correct offset accounting for shape.offset.
                 var (shape, offset) = this_shape.GetSubshape(indices);
-                return new UnmanagedStorage(InternalArray.Slice(offset, shape.Size), shape);
+                var view = new UnmanagedStorage(InternalArray.Slice(offset, shape.Size), shape);
+                view._baseStorage = _baseStorage ?? this;
+                return view;
             }
         }
 
         /// <summary>
-        ///     Gets a subshape based on given <paramref name="indices"/>.
+        /// Gets a sub-array based on the given indices (pointer version), returning a view that shares memory.
         /// </summary>
-        /// <param name="indices"></param>
-        /// <returns></returns>
-        /// <remarks>Does not copy, returns a <see cref="Slice"/> or a memory slice</remarks>
+        /// <param name="dims">Pointer to an array of dimension indices.</param>
+        /// <param name="ndims">The number of indices in the array.</param>
+        /// <returns>
+        /// A new <see cref="UnmanagedStorage"/> representing the sub-array. This is a view
+        /// that shares memory with the original storage. The returned storage's
+        /// <see cref="_baseStorage"/> points to the ultimate owner.
+        /// </returns>
+        /// <remarks>
+        /// <para>
+        /// <b>Memory Sharing:</b> The returned storage shares memory with this storage.
+        /// Modifications through either storage affect the same underlying data.
+        /// </para>
+        /// <para>
+        /// <b>Base Tracking:</b> Sets <c>_baseStorage</c> to chain to the ultimate owner,
+        /// ensuring all views in a chain point to the original storage, not intermediate views.
+        /// </para>
+        /// <para>
+        /// <b>Code Paths:</b>
+        /// <list type="bullet">
+        ///   <item><b>Broadcasted shapes:</b> Creates a broadcasted view with base tracking</item>
+        ///   <item><b>Non-contiguous shapes:</b> Delegates to <see cref="GetView(Slice[])"/> which uses <see cref="Alias(Shape)"/></item>
+        ///   <item><b>Contiguous shapes:</b> Creates a direct memory slice with base tracking</item>
+        /// </list>
+        /// </para>
+        /// </remarks>
+        /// <seealso cref="GetData(int[])"/>
         [MethodImpl((MethodImplOptions)768)]
         public unsafe UnmanagedStorage GetData(int* dims, int ndims)
         {
@@ -132,7 +185,9 @@ namespace NumSharp.Backends
                 var (shape, offset) = this_shape.GetSubshape(dims, ndims);
                 // NumPy-aligned: use bufferSize instead of BroadcastInfo.OriginalShape.size
                 int sliceSize = shape.BufferSize > 0 ? shape.BufferSize : shape.size;
-                return UnmanagedStorage.CreateBroadcastedUnsafe(InternalArray.Slice(offset, sliceSize), shape);
+                var view = UnmanagedStorage.CreateBroadcastedUnsafe(InternalArray.Slice(offset, sliceSize), shape);
+                view._baseStorage = _baseStorage ?? this;
+                return view;
             }
             else if (!this_shape.IsContiguous)
             {
@@ -151,7 +206,9 @@ namespace NumSharp.Backends
                 // Contiguous shape: can take a direct memory slice.
                 // GetSubshape computes the correct offset accounting for shape.offset.
                 var (shape, offset) = this_shape.GetSubshape(dims, ndims);
-                return new UnmanagedStorage(InternalArray.Slice(offset, shape.Size), shape);
+                var view = new UnmanagedStorage(InternalArray.Slice(offset, shape.Size), shape);
+                view._baseStorage = _baseStorage ?? this;
+                return view;
             }
         }
 

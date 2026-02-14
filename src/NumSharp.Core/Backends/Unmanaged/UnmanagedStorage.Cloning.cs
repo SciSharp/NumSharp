@@ -9,8 +9,27 @@ namespace NumSharp.Backends
         #region Aliasing
 
         /// <summary>
-        ///     Creates an alias to this UnmanagedStorage.
+        /// Creates an alias (view) of this storage that shares the same underlying memory.
         /// </summary>
+        /// <returns>
+        /// A new <see cref="UnmanagedStorage"/> that shares memory with this storage.
+        /// The returned storage's <see cref="_baseStorage"/> points to the ultimate owner.
+        /// </returns>
+        /// <remarks>
+        /// <para>
+        /// <b>Memory Sharing:</b> The alias shares the same <see cref="InternalArray"/> and
+        /// underlying memory. Modifications through the alias affect the original data.
+        /// </para>
+        /// <para>
+        /// <b>Base Tracking:</b> Sets <c>_baseStorage</c> to chain to the ultimate owner:
+        /// <list type="bullet">
+        ///   <item>If this storage owns its data: <c>alias._baseStorage = this</c></item>
+        ///   <item>If this storage is a view: <c>alias._baseStorage = this._baseStorage</c></item>
+        /// </list>
+        /// This ensures all views in a chain point to the original owner, not intermediate views.
+        /// </para>
+        /// </remarks>
+        /// <seealso cref="Clone"/>
         public UnmanagedStorage Alias()
         {
             var r = new UnmanagedStorage();
@@ -20,13 +39,33 @@ namespace NumSharp.Backends
             if (InternalArray != null)
                 r.SetInternalArray(InternalArray);
             r.Count = _shape.size; //incase shape is sliced
+            r._baseStorage = _baseStorage ?? this;
             return r;
         }
 
         /// <summary>
-        ///     Creates an alias to this UnmanagedStorage with a specific shape.
+        /// Creates an alias (view) of this storage with a different shape.
         /// </summary>
-        /// <remarks>Doesn't check if Shape matches the internal storage.</remarks>
+        /// <param name="shape">The shape for the alias. Should be compatible with the storage size (not validated).</param>
+        /// <returns>
+        /// A new <see cref="UnmanagedStorage"/> that shares memory with this storage but has
+        /// the specified shape. The returned storage's <see cref="_baseStorage"/> points to
+        /// the ultimate owner.
+        /// </returns>
+        /// <remarks>
+        /// <para>
+        /// <b>Memory Sharing:</b> The alias shares the same <see cref="InternalArray"/> and
+        /// underlying memory. Modifications through the alias affect the original data.
+        /// </para>
+        /// <para>
+        /// <b>Shape Compatibility:</b> This method does NOT validate that the shape is
+        /// compatible with the storage size. Use with caution.
+        /// </para>
+        /// <para>
+        /// <b>Base Tracking:</b> Sets <c>_baseStorage</c> to chain to the ultimate owner.
+        /// </para>
+        /// </remarks>
+        /// <seealso cref="Clone"/>
         public UnmanagedStorage Alias(Shape shape)
         {
             var r = new UnmanagedStorage();
@@ -37,13 +76,33 @@ namespace NumSharp.Backends
 
             r._shape = shape;
             r.Count = shape.size; //incase shape is sliced
+            r._baseStorage = _baseStorage ?? this;
             return r;
         }
 
         /// <summary>
-        ///     Creates an alias to this UnmanagedStorage with a specific shape.
+        /// Creates an alias (view) of this storage with a different shape (by reference).
         /// </summary>
-        /// <remarks>Doesn't check if Shape matches the internal storage.</remarks>
+        /// <param name="shape">The shape for the alias. Should be compatible with the storage size (not validated).</param>
+        /// <returns>
+        /// A new <see cref="UnmanagedStorage"/> that shares memory with this storage but has
+        /// the specified shape. The returned storage's <see cref="_baseStorage"/> points to
+        /// the ultimate owner.
+        /// </returns>
+        /// <remarks>
+        /// <para>
+        /// <b>Memory Sharing:</b> The alias shares the same <see cref="InternalArray"/> and
+        /// underlying memory. Modifications through the alias affect the original data.
+        /// </para>
+        /// <para>
+        /// <b>Shape Compatibility:</b> This method does NOT validate that the shape is
+        /// compatible with the storage size. Use with caution.
+        /// </para>
+        /// <para>
+        /// <b>Base Tracking:</b> Sets <c>_baseStorage</c> to chain to the ultimate owner.
+        /// </para>
+        /// </remarks>
+        /// <seealso cref="Clone"/>
         public UnmanagedStorage Alias(ref Shape shape)
         {
             var r = new UnmanagedStorage();
@@ -53,6 +112,7 @@ namespace NumSharp.Backends
             if (InternalArray != null)
                 r.SetInternalArray(InternalArray);
             r.Count = shape.size; //incase shape is sliced
+            r._baseStorage = _baseStorage ?? this;
             return r;
         }
 
