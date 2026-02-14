@@ -43,7 +43,7 @@ namespace NumSharp
             return result;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         private int knuth(double lambda)
         {
             // Knuth, 1969.

@@ -60,7 +60,7 @@ namespace NumSharp
         /// <returns>The input array, but with all or a subset of the dimensions of length 1 removed. This is always a itself or a view into a.</returns>
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.squeeze.html</remarks>
         /// <exception cref="IncorrectShapeException">If axis is not None, and an axis being squeezed is not of length 1</exception>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         internal static NDArray squeeze_fast(NDArray a, int axis)
         {
             return a.reshape(squeeze_fast(a.Shape, axis));
@@ -74,7 +74,7 @@ namespace NumSharp
         /// <returns>The input array, but with all or a subset of the dimensions of length 1 removed. This is always a itself or a view into a.</returns>
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.squeeze.html</remarks>
         /// <exception cref="IncorrectShapeException">If axis is not None, and an axis being squeezed is not of length 1</exception>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         internal static Shape squeeze_fast(Shape a, int axis)
         {
             var r = a.dimensions.RemoveAt(axis);

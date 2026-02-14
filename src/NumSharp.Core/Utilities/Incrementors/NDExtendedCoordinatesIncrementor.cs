@@ -42,7 +42,7 @@ namespace NumSharp.Utilities
             subcursor = resetto;
         }
 
-        [MethodImpl((MethodImplOptions)512)]
+        [MethodImpl(Optimize)]
         public int[] Next()
         {
             if (subcursor <= -1)
@@ -75,7 +75,7 @@ namespace NumSharp.Utilities
             return Index;
         }
 
-        [MethodImpl((MethodImplOptions)512)]
+        [MethodImpl(Optimize)]
         public int[] Next(params int[] extendedIndices)
         {
             if (subcursor <= -1)

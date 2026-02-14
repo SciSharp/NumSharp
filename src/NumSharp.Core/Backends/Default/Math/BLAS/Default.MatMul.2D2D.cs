@@ -19,7 +19,7 @@ namespace NumSharp.Backends
 #else
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.multiply.html</remarks>
         [SuppressMessage("ReSharper", "JoinDeclarationAndInitializer")]
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         protected static NDArray MultiplyMatrix(NDArray left, NDArray right, NDArray @out = null)
         {
             Debug.Assert(left.Shape.NDim == 2);

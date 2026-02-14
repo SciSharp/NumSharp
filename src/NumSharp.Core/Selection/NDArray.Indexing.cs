@@ -18,7 +18,7 @@ namespace NumSharp
         ///     Throws if this NDArray is not writeable (e.g., broadcast arrays).
         ///     NumPy raises: ValueError: assignment destination is read-only
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         private void ThrowIfNotWriteable()
         {
             NumSharpException.ThrowIfNotWriteable(Shape);

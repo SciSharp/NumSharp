@@ -15,14 +15,14 @@ namespace NumSharp
         /// </summary>
         /// <param name="str"></param>
         /// <returns></returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static NDArray FromString(string str) => np.array(str);
 
         /// <summary>
         ///     Converts the entire <see cref="NDArray"/> to a string.
         /// </summary>
         /// <remarks>Performs a copy due to String .net-framework limitations.</remarks>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static string AsString(NDArray arr)
         {
             unsafe

@@ -25,7 +25,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="obj">The object to convert to <see cref="#1"/></param>
         /// <returns>A <see cref="#1"/></returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static #2 To#1(T obj) => _to#1(obj);
+        [MethodImpl(Inline)] public static #2 To#1(T obj) => _to#1(obj);
 		private static readonly Func<T, #2> _to#1 = Converts.FindConverter<T, #2>();
 
 		%
@@ -34,7 +34,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="obj">The object to convert to <see cref="String"/></param>
         /// <returns>A <see cref="String"/></returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static String ToString(T obj) => _toString(obj);
+        [MethodImpl(Inline)] public static String ToString(T obj) => _toString(obj);
 		private static readonly Func<T, string> _toString = Converts.FindConverter<T, string>();
         #endregion
 #else
@@ -46,7 +46,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="obj">The object to convert to <see cref="bool"/></param>
         /// <returns>A <see cref="bool"/></returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static bool ToBoolean(T obj) => _toBoolean(obj);
 
         private static readonly Func<T, bool> _toBoolean = Converts.FindConverter<T, bool>();
@@ -56,7 +56,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="obj">The object to convert to <see cref="Byte"/></param>
         /// <returns>A <see cref="Byte"/></returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static byte ToByte(T obj) => _toByte(obj);
 
         private static readonly Func<T, byte> _toByte = Converts.FindConverter<T, byte>();
@@ -66,7 +66,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="obj">The object to convert to <see cref="Int16"/></param>
         /// <returns>A <see cref="Int16"/></returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static short ToInt16(T obj) => _toInt16(obj);
 
         private static readonly Func<T, short> _toInt16 = Converts.FindConverter<T, short>();
@@ -76,7 +76,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="obj">The object to convert to <see cref="UInt16"/></param>
         /// <returns>A <see cref="UInt16"/></returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static ushort ToUInt16(T obj) => _toUInt16(obj);
 
         private static readonly Func<T, ushort> _toUInt16 = Converts.FindConverter<T, ushort>();
@@ -86,7 +86,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="obj">The object to convert to <see cref="Int32"/></param>
         /// <returns>A <see cref="Int32"/></returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static int ToInt32(T obj) => _toInt32(obj);
 
         private static readonly Func<T, int> _toInt32 = Converts.FindConverter<T, int>();
@@ -96,7 +96,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="obj">The object to convert to <see cref="UInt32"/></param>
         /// <returns>A <see cref="UInt32"/></returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static uint ToUInt32(T obj) => _toUInt32(obj);
 
         private static readonly Func<T, uint> _toUInt32 = Converts.FindConverter<T, uint>();
@@ -106,7 +106,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="obj">The object to convert to <see cref="Int64"/></param>
         /// <returns>A <see cref="Int64"/></returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static long ToInt64(T obj) => _toInt64(obj);
 
         private static readonly Func<T, long> _toInt64 = Converts.FindConverter<T, long>();
@@ -116,7 +116,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="obj">The object to convert to <see cref="UInt64"/></param>
         /// <returns>A <see cref="UInt64"/></returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static ulong ToUInt64(T obj) => _toUInt64(obj);
 
         private static readonly Func<T, ulong> _toUInt64 = Converts.FindConverter<T, ulong>();
@@ -126,7 +126,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="obj">The object to convert to <see cref="Char"/></param>
         /// <returns>A <see cref="Char"/></returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static char ToChar(T obj) => _toChar(obj);
 
         private static readonly Func<T, char> _toChar = Converts.FindConverter<T, char>();
@@ -136,7 +136,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="obj">The object to convert to <see cref="Double"/></param>
         /// <returns>A <see cref="Double"/></returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static double ToDouble(T obj) => _toDouble(obj);
 
         private static readonly Func<T, double> _toDouble = Converts.FindConverter<T, double>();
@@ -146,7 +146,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="obj">The object to convert to <see cref="Single"/></param>
         /// <returns>A <see cref="Single"/></returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static float ToSingle(T obj) => _toSingle(obj);
 
         private static readonly Func<T, float> _toSingle = Converts.FindConverter<T, float>();
@@ -156,7 +156,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="obj">The object to convert to <see cref="Decimal"/></param>
         /// <returns>A <see cref="Decimal"/></returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static decimal ToDecimal(T obj) => _toDecimal(obj);
 
         private static readonly Func<T, decimal> _toDecimal = Converts.FindConverter<T, decimal>();
@@ -166,7 +166,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="obj">The object to convert to <see cref="String"/></param>
         /// <returns>A <see cref="String"/></returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static String ToString(T obj) => _toString(obj);
 
         private static readonly Func<T, string> _toString = Converts.FindConverter<T, string>();
@@ -183,7 +183,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="obj">The object to convert to <typeparamref name="T"/> from <see cref="#1"/></param>
         /// <returns>A <typeparamref name="T"/></returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static T From(#2 obj) => _from#1(obj);
+        [MethodImpl(Inline)] public static T From(#2 obj) => _from#1(obj);
 		private static readonly Func<#2, T> _from#1 = Converts.FindConverter<#2, T>();
 
 		%
@@ -192,7 +192,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="obj">The object to convert to <typeparamref name="T"/> from <see cref="String"/></param>
         /// <returns>A <typeparamref name="T"/></returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static T From(string obj) => _fromString(obj);
+        [MethodImpl(Inline)] public static T From(string obj) => _fromString(obj);
         private static readonly Func<string, T> _fromString = Converts.FindConverter<string, T>();
 		#endregion
 #else
@@ -203,7 +203,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="obj">The object to convert to <typeparamref name="T"/> from <see cref="Boolean"/></param>
         /// <returns>A <typeparamref name="T"/></returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static T From(bool obj) => _fromBoolean(obj);
+        [MethodImpl(Inline)] public static T From(bool obj) => _fromBoolean(obj);
 		private static readonly Func<bool, T> _fromBoolean = Converts.FindConverter<bool, T>();
 
         /// <summary>
@@ -211,7 +211,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="obj">The object to convert to <typeparamref name="T"/> from <see cref="Byte"/></param>
         /// <returns>A <typeparamref name="T"/></returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static T From(byte obj) => _fromByte(obj);
+        [MethodImpl(Inline)] public static T From(byte obj) => _fromByte(obj);
 		private static readonly Func<byte, T> _fromByte = Converts.FindConverter<byte, T>();
 
         /// <summary>
@@ -219,7 +219,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="obj">The object to convert to <typeparamref name="T"/> from <see cref="Int16"/></param>
         /// <returns>A <typeparamref name="T"/></returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static T From(short obj) => _fromInt16(obj);
+        [MethodImpl(Inline)] public static T From(short obj) => _fromInt16(obj);
 		private static readonly Func<short, T> _fromInt16 = Converts.FindConverter<short, T>();
 
         /// <summary>
@@ -227,7 +227,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="obj">The object to convert to <typeparamref name="T"/> from <see cref="UInt16"/></param>
         /// <returns>A <typeparamref name="T"/></returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static T From(ushort obj) => _fromUInt16(obj);
+        [MethodImpl(Inline)] public static T From(ushort obj) => _fromUInt16(obj);
 		private static readonly Func<ushort, T> _fromUInt16 = Converts.FindConverter<ushort, T>();
 
         /// <summary>
@@ -235,7 +235,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="obj">The object to convert to <typeparamref name="T"/> from <see cref="Int32"/></param>
         /// <returns>A <typeparamref name="T"/></returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static T From(int obj) => _fromInt32(obj);
+        [MethodImpl(Inline)] public static T From(int obj) => _fromInt32(obj);
 		private static readonly Func<int, T> _fromInt32 = Converts.FindConverter<int, T>();
 
         /// <summary>
@@ -243,7 +243,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="obj">The object to convert to <typeparamref name="T"/> from <see cref="UInt32"/></param>
         /// <returns>A <typeparamref name="T"/></returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static T From(uint obj) => _fromUInt32(obj);
+        [MethodImpl(Inline)] public static T From(uint obj) => _fromUInt32(obj);
 		private static readonly Func<uint, T> _fromUInt32 = Converts.FindConverter<uint, T>();
 
         /// <summary>
@@ -251,7 +251,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="obj">The object to convert to <typeparamref name="T"/> from <see cref="Int64"/></param>
         /// <returns>A <typeparamref name="T"/></returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static T From(long obj) => _fromInt64(obj);
+        [MethodImpl(Inline)] public static T From(long obj) => _fromInt64(obj);
 		private static readonly Func<long, T> _fromInt64 = Converts.FindConverter<long, T>();
 
         /// <summary>
@@ -259,7 +259,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="obj">The object to convert to <typeparamref name="T"/> from <see cref="UInt64"/></param>
         /// <returns>A <typeparamref name="T"/></returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static T From(ulong obj) => _fromUInt64(obj);
+        [MethodImpl(Inline)] public static T From(ulong obj) => _fromUInt64(obj);
 		private static readonly Func<ulong, T> _fromUInt64 = Converts.FindConverter<ulong, T>();
 
         /// <summary>
@@ -267,7 +267,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="obj">The object to convert to <typeparamref name="T"/> from <see cref="Char"/></param>
         /// <returns>A <typeparamref name="T"/></returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static T From(char obj) => _fromChar(obj);
+        [MethodImpl(Inline)] public static T From(char obj) => _fromChar(obj);
 		private static readonly Func<char, T> _fromChar = Converts.FindConverter<char, T>();
 
         /// <summary>
@@ -275,7 +275,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="obj">The object to convert to <typeparamref name="T"/> from <see cref="Double"/></param>
         /// <returns>A <typeparamref name="T"/></returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static T From(double obj) => _fromDouble(obj);
+        [MethodImpl(Inline)] public static T From(double obj) => _fromDouble(obj);
 		private static readonly Func<double, T> _fromDouble = Converts.FindConverter<double, T>();
 
         /// <summary>
@@ -283,7 +283,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="obj">The object to convert to <typeparamref name="T"/> from <see cref="Single"/></param>
         /// <returns>A <typeparamref name="T"/></returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static T From(float obj) => _fromSingle(obj);
+        [MethodImpl(Inline)] public static T From(float obj) => _fromSingle(obj);
 		private static readonly Func<float, T> _fromSingle = Converts.FindConverter<float, T>();
 
         /// <summary>
@@ -291,7 +291,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="obj">The object to convert to <typeparamref name="T"/> from <see cref="Decimal"/></param>
         /// <returns>A <typeparamref name="T"/></returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static T From(decimal obj) => _fromDecimal(obj);
+        [MethodImpl(Inline)] public static T From(decimal obj) => _fromDecimal(obj);
 		private static readonly Func<decimal, T> _fromDecimal = Converts.FindConverter<decimal, T>();
 
         /// <summary>
@@ -299,7 +299,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="obj">The object to convert to <typeparamref name="T"/> from <see cref="String"/></param>
         /// <returns>A <typeparamref name="T"/></returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static T From(string obj) => _fromString(obj);
+        [MethodImpl(Inline)] public static T From(string obj) => _fromString(obj);
         private static readonly Func<string, T> _fromString = Converts.FindConverter<string, T>();
 		#endregion
 #endif

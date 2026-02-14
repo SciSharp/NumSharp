@@ -128,7 +128,7 @@ namespace NumSharp.Unmanaged.Memory
 
         #region Garbage Collection
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         private void tryStartGC()
         {
             //try start GC
@@ -139,7 +139,7 @@ namespace NumSharp.Unmanaged.Memory
             _runGC(GarbageCollectionDelay);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         private void _runGC(int delay, int restarts = 0)
         {
             //assinging to prevent GC from collecting.

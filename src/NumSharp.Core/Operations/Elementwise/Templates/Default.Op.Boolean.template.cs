@@ -21,7 +21,7 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         [SuppressMessage("ReSharper", "JoinDeclarationAndInitializer")]
         [SuppressMessage("ReSharper", "CompareOfFloatsByEqualityOperator")]
         public unsafe NDArray<bool> Equals__1__(in NDArray lhs, in NDArray rhs)

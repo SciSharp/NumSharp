@@ -25,7 +25,7 @@ namespace NumSharp.Utilities
         /// <exception cref="T:System.FormatException"><paramref name="value">value</paramref> is not in a format recognized by the <paramref name="typeCode">typeCode</paramref> type.</exception>
         /// <exception cref="T:System.OverflowException"><paramref name="value">value</paramref> represents a number that is out of the range of the <paramref name="typeCode">typeCode</paramref> type.</exception>
         /// <exception cref="T:System.ArgumentException"><paramref name="typeCode">typeCode</paramref> is invalid.</exception>
-        [MethodImpl((MethodImplOptions)512)]
+        [MethodImpl(Optimize)]
         public static TOut ChangeType<TOut>(Object value)
         {
             if (value == null)
@@ -84,7 +84,7 @@ namespace NumSharp.Utilities
         /// <exception cref="T:System.FormatException"><paramref name="value">value</paramref> is not in a format recognized by the <paramref name="typeCode">typeCode</paramref> type.</exception>
         /// <exception cref="T:System.OverflowException"><paramref name="value">value</paramref> represents a number that is out of the range of the <paramref name="typeCode">typeCode</paramref> type.</exception>
         /// <exception cref="T:System.ArgumentException"><paramref name="typeCode">typeCode</paramref> is invalid.</exception>
-        [MethodImpl((MethodImplOptions)512)]
+        [MethodImpl(Optimize)]
         public static Object ChangeType(Object value, NPTypeCode typeCode)
         {
             if (value == null && (typeCode == NPTypeCode.Empty || typeCode == NPTypeCode.String))
@@ -142,7 +142,7 @@ namespace NumSharp.Utilities
         /// <exception cref="T:System.FormatException"><paramref name="value">value</paramref> is not in a format recognized by the <paramref name="typeCode">typeCode</paramref> type.</exception>
         /// <exception cref="T:System.OverflowException"><paramref name="value">value</paramref> represents a number that is out of the range of the <paramref name="typeCode">typeCode</paramref> type.</exception>
         /// <exception cref="T:System.ArgumentException"><paramref name="typeCode">typeCode</paramref> is invalid.</exception>
-        [MethodImpl((MethodImplOptions)512)]
+        [MethodImpl(Optimize)]
         public static Object ChangeType<T>(T value, NPTypeCode typeCode) where T : IConvertible
         {
             if (value == null && (typeCode == NPTypeCode.Empty || typeCode == NPTypeCode.String))
@@ -409,7 +409,7 @@ namespace NumSharp.Utilities
         /// <exception cref="T:System.FormatException"><paramref name="value">value</paramref> is not in a format recognized by the <paramref name="typeCode">typeCode</paramref> type.</exception>
         /// <exception cref="T:System.OverflowException"><paramref name="value">value</paramref> represents a number that is out of the range of the <paramref name="typeCode">typeCode</paramref> type.</exception>
         /// <exception cref="T:System.ArgumentException"><paramref name="typeCode">typeCode</paramref> is invalid.</exception>
-        [MethodImpl((MethodImplOptions)512)]
+        [MethodImpl(Optimize)]
         public static TOut ChangeType<TIn, TOut>(TIn value) where TIn : IConvertible where TOut : IConvertible
         {
             // This line is invalid for things like Enums that return a NPTypeCode
@@ -686,7 +686,7 @@ namespace NumSharp.Utilities
         /// <exception cref="T:System.FormatException"><paramref name="value">value</paramref> is not in a format recognized by the <paramref name="typeCode">typeCode</paramref> type.</exception>
         /// <exception cref="T:System.OverflowException"><paramref name="value">value</paramref> represents a number that is out of the range of the <paramref name="typeCode">typeCode</paramref> type.</exception>
         /// <exception cref="T:System.ArgumentException"><paramref name="typeCode">typeCode</paramref> is invalid.</exception>
-        [MethodImpl((MethodImplOptions)512)]
+        [MethodImpl(Optimize)]
         public static Object ChangeType(Object value, NPTypeCode typeCode, IFormatProvider provider)
         {
             if (value == null && (typeCode == NPTypeCode.Empty || typeCode == NPTypeCode.String))
@@ -1647,7 +1647,7 @@ namespace NumSharp.Utilities
 #region Compute
 
 		%foreach supported_dtypes,supported_dtypes_lowercase%
-		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		[MethodImpl(Inline)]
         public static #2 To#1(NDArray nd)
         {
             if (nd.size != 1)
@@ -1662,7 +1662,7 @@ namespace NumSharp.Utilities
 
 #region Compute
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static bool ToBoolean(NDArray nd)
         {
             if (nd.size != 1)
@@ -1671,7 +1671,7 @@ namespace NumSharp.Utilities
             return nd.typecode == NPTypeCode.Boolean ? nd.GetAtIndex<bool>(0) : Converts.ToBoolean(nd.GetAtIndex(0));
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static byte ToByte(NDArray nd)
         {
             if (nd.size != 1)
@@ -1680,7 +1680,7 @@ namespace NumSharp.Utilities
             return nd.typecode == NPTypeCode.Byte ? nd.GetAtIndex<byte>(0) : Converts.ToByte(nd.GetAtIndex(0));
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static short ToInt16(NDArray nd)
         {
             if (nd.size != 1)
@@ -1689,7 +1689,7 @@ namespace NumSharp.Utilities
             return nd.typecode == NPTypeCode.Int16 ? nd.GetAtIndex<short>(0) : Converts.ToInt16(nd.GetAtIndex(0));
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static ushort ToUInt16(NDArray nd)
         {
             if (nd.size != 1)
@@ -1698,7 +1698,7 @@ namespace NumSharp.Utilities
             return nd.typecode == NPTypeCode.UInt16 ? nd.GetAtIndex<ushort>(0) : Converts.ToUInt16(nd.GetAtIndex(0));
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static int ToInt32(NDArray nd)
         {
             if (nd.size != 1)
@@ -1707,7 +1707,7 @@ namespace NumSharp.Utilities
             return nd.typecode == NPTypeCode.Int32 ? nd.GetAtIndex<int>(0) : Converts.ToInt32(nd.GetAtIndex(0));
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static uint ToUInt32(NDArray nd)
         {
             if (nd.size != 1)
@@ -1716,7 +1716,7 @@ namespace NumSharp.Utilities
             return nd.typecode == NPTypeCode.UInt32 ? nd.GetAtIndex<uint>(0) : Converts.ToUInt32(nd.GetAtIndex(0));
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static long ToInt64(NDArray nd)
         {
             if (nd.size != 1)
@@ -1725,7 +1725,7 @@ namespace NumSharp.Utilities
             return nd.typecode == NPTypeCode.Int64 ? nd.GetAtIndex<long>(0) : Converts.ToInt64(nd.GetAtIndex(0));
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static ulong ToUInt64(NDArray nd)
         {
             if (nd.size != 1)
@@ -1734,7 +1734,7 @@ namespace NumSharp.Utilities
             return nd.typecode == NPTypeCode.UInt64 ? nd.GetAtIndex<ulong>(0) : Converts.ToUInt64(nd.GetAtIndex(0));
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static char ToChar(NDArray nd)
         {
             if (nd.size != 1)
@@ -1743,7 +1743,7 @@ namespace NumSharp.Utilities
             return nd.typecode == NPTypeCode.Char ? nd.GetAtIndex<char>(0) : Converts.ToChar(nd.GetAtIndex(0));
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static double ToDouble(NDArray nd)
         {
             if (nd.size != 1)
@@ -1752,7 +1752,7 @@ namespace NumSharp.Utilities
             return nd.typecode == NPTypeCode.Double ? nd.GetAtIndex<double>(0) : Converts.ToDouble(nd.GetAtIndex(0));
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static float ToSingle(NDArray nd)
         {
             if (nd.size != 1)
@@ -1761,7 +1761,7 @@ namespace NumSharp.Utilities
             return nd.typecode == NPTypeCode.Single ? nd.GetAtIndex<float>(0) : Converts.ToSingle(nd.GetAtIndex(0));
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static decimal ToDecimal(NDArray nd)
         {
             if (nd.size != 1)

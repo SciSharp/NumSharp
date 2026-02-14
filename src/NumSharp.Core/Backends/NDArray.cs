@@ -301,7 +301,7 @@ namespace NumSharp
         /// </summary>
         internal NPTypeCode GetTypeCode
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(Inline)]
             get => Storage.TypeCode;
         }
 
@@ -310,7 +310,7 @@ namespace NumSharp
         /// </summary>
         protected internal unsafe void* Address
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(Inline)]
             get => Storage.Address;
         }
 
@@ -371,9 +371,9 @@ namespace NumSharp
         /// </summary>
         public Shape Shape
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(Inline)]
             get => Storage.Shape;
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(Inline)]
             set => Storage.Reshape(value);
         }
 
@@ -408,7 +408,7 @@ namespace NumSharp
         /// <remarks>Setting does not replace internal storage array.</remarks>
         protected internal IArraySlice Array
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(Inline)]
             get => Storage.InternalArray;
         }
 
@@ -605,7 +605,7 @@ namespace NumSharp
         /// <param name="indices">The shape's indices to get.</param>
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="bool"/></exception>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public bool GetBoolean(params int[] indices) => Storage.GetBoolean(indices);
 
         /// <summary>
@@ -614,7 +614,7 @@ namespace NumSharp
         /// <param name="indices">The shape's indices to get.</param>
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="byte"/></exception>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public byte GetByte(params int[] indices) => Storage.GetByte(indices);
 
         /// <summary>
@@ -623,7 +623,7 @@ namespace NumSharp
         /// <param name="indices">The shape's indices to get.</param>
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="char"/></exception>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public char GetChar(params int[] indices) => Storage.GetChar(indices);
 
         /// <summary>
@@ -632,7 +632,7 @@ namespace NumSharp
         /// <param name="indices">The shape's indices to get.</param>
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="decimal"/></exception>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public decimal GetDecimal(params int[] indices) => Storage.GetDecimal(indices);
 
         /// <summary>
@@ -641,7 +641,7 @@ namespace NumSharp
         /// <param name="indices">The shape's indices to get.</param>
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="double"/></exception>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public double GetDouble(params int[] indices) => Storage.GetDouble(indices);
 
         /// <summary>
@@ -650,7 +650,7 @@ namespace NumSharp
         /// <param name="indices">The shape's indices to get.</param>
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="short"/></exception>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public short GetInt16(params int[] indices) => Storage.GetInt16(indices);
 
         /// <summary>
@@ -659,7 +659,7 @@ namespace NumSharp
         /// <param name="indices">The shape's indices to get.</param>
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="int"/></exception>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public int GetInt32(params int[] indices) => Storage.GetInt32(indices);
 
         /// <summary>
@@ -668,7 +668,7 @@ namespace NumSharp
         /// <param name="indices">The shape's indices to get.</param>
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="long"/></exception>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public long GetInt64(params int[] indices) => Storage.GetInt64(indices);
 
         /// <summary>
@@ -677,7 +677,7 @@ namespace NumSharp
         /// <param name="indices">The shape's indices to get.</param>
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="float"/></exception>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public float GetSingle(params int[] indices) => Storage.GetSingle(indices);
 
         /// <summary>
@@ -686,7 +686,7 @@ namespace NumSharp
         /// <param name="indices">The shape's indices to get.</param>
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="ushort"/></exception>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public ushort GetUInt16(params int[] indices) => Storage.GetUInt16(indices);
 
         /// <summary>
@@ -695,7 +695,7 @@ namespace NumSharp
         /// <param name="indices">The shape's indices to get.</param>
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="uint"/></exception>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public uint GetUInt32(params int[] indices) => Storage.GetUInt32(indices);
 
         /// <summary>
@@ -704,7 +704,7 @@ namespace NumSharp
         /// <param name="indices">The shape's indices to get.</param>
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="ulong"/></exception>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public ulong GetUInt64(params int[] indices) => Storage.GetUInt64(indices);
 
         /// <summary>
@@ -713,7 +713,7 @@ namespace NumSharp
         /// <param name="indices">The shape's indices to get.</param>
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="object"/></exception>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public ValueType GetValue(params int[] indices) => Storage.GetValue(indices);
 
         /// <summary>
@@ -722,7 +722,7 @@ namespace NumSharp
         /// <param name="indices">The shape's indices to get.</param>
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="object"/></exception>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public T GetValue<T>(params int[] indices) where T : unmanaged => Storage.GetValue<T>(indices);
 
         /// <summary>
@@ -730,7 +730,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="index"></param>
         /// <returns></returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public ValueType GetAtIndex(int index) => Storage.GetAtIndex(index);
 
         /// <summary>
@@ -738,7 +738,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="index"></param>
         /// <returns></returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public T GetAtIndex<T>(int index) where T : unmanaged => Storage.GetAtIndex<T>(index);
 
         #endregion
@@ -898,7 +898,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="index"></param>
         /// <returns></returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public void SetAtIndex(object obj, int index) => Storage.SetAtIndex(obj, index);
 
         /// <summary>
@@ -906,7 +906,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="index"></param>
         /// <returns></returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public void SetAtIndex<T>(T value, int index) where T : unmanaged => Storage.SetAtIndex(value, index);
 
 #if _REGEN
@@ -916,7 +916,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public void Set#1(#2 value, params int[] indices) => Storage.Set#1(value, indices);
 
     %
@@ -926,7 +926,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public void SetBoolean(bool value, params int[] indices) => Storage.SetBoolean(value, indices);
 
         /// <summary>
@@ -934,7 +934,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public void SetByte(byte value, params int[] indices) => Storage.SetByte(value, indices);
 
         /// <summary>
@@ -942,7 +942,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public void SetInt16(short value, params int[] indices) => Storage.SetInt16(value, indices);
 
         /// <summary>
@@ -950,7 +950,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public void SetUInt16(ushort value, params int[] indices) => Storage.SetUInt16(value, indices);
 
         /// <summary>
@@ -958,7 +958,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public void SetInt32(int value, params int[] indices) => Storage.SetInt32(value, indices);
 
         /// <summary>
@@ -966,7 +966,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public void SetUInt32(uint value, params int[] indices) => Storage.SetUInt32(value, indices);
 
         /// <summary>
@@ -974,7 +974,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public void SetInt64(long value, params int[] indices) => Storage.SetInt64(value, indices);
 
         /// <summary>
@@ -982,7 +982,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public void SetUInt64(ulong value, params int[] indices) => Storage.SetUInt64(value, indices);
 
         /// <summary>
@@ -990,7 +990,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public void SetChar(char value, params int[] indices) => Storage.SetChar(value, indices);
 
         /// <summary>
@@ -998,7 +998,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public void SetDouble(double value, params int[] indices) => Storage.SetDouble(value, indices);
 
         /// <summary>
@@ -1006,7 +1006,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public void SetSingle(float value, params int[] indices) => Storage.SetSingle(value, indices);
 
         /// <summary>
@@ -1014,7 +1014,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public void SetDecimal(decimal value, params int[] indices) => Storage.SetDecimal(value, indices);
 #endif
 

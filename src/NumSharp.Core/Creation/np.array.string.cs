@@ -17,7 +17,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="strArray"></param>
         /// <returns></returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static NDArray array(string[] strArray)
         {
             if (strArray == null)

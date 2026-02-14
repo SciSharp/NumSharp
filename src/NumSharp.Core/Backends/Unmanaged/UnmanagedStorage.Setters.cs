@@ -15,7 +15,7 @@ namespace NumSharp.Backends
         ///     Throws if the underlying shape is not writeable (e.g., broadcast arrays).
         ///     NumPy raises: ValueError: assignment destination is read-only
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         private void ThrowIfNotWriteable()
         {
             NumSharpException.ThrowIfNotWriteable(_shape);
@@ -325,7 +325,7 @@ namespace NumSharp.Backends
         /// </summary>
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public void Set#1(#2 value, params int[] indices)         
         {
             unsafe {
@@ -340,7 +340,7 @@ namespace NumSharp.Backends
         /// </summary>
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public void SetBoolean(bool value, params int[] indices)
         {
             ThrowIfNotWriteable();
@@ -355,7 +355,7 @@ namespace NumSharp.Backends
         /// </summary>
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public void SetByte(byte value, params int[] indices)
         {
             ThrowIfNotWriteable();
@@ -370,7 +370,7 @@ namespace NumSharp.Backends
         /// </summary>
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public void SetInt16(short value, params int[] indices)
         {
             ThrowIfNotWriteable();
@@ -385,7 +385,7 @@ namespace NumSharp.Backends
         /// </summary>
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public void SetUInt16(ushort value, params int[] indices)
         {
             ThrowIfNotWriteable();
@@ -400,7 +400,7 @@ namespace NumSharp.Backends
         /// </summary>
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public void SetInt32(int value, params int[] indices)
         {
             ThrowIfNotWriteable();
@@ -415,7 +415,7 @@ namespace NumSharp.Backends
         /// </summary>
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public void SetUInt32(uint value, params int[] indices)
         {
             ThrowIfNotWriteable();
@@ -430,7 +430,7 @@ namespace NumSharp.Backends
         /// </summary>
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public void SetInt64(long value, params int[] indices)
         {
             ThrowIfNotWriteable();
@@ -445,7 +445,7 @@ namespace NumSharp.Backends
         /// </summary>
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public void SetUInt64(ulong value, params int[] indices)
         {
             ThrowIfNotWriteable();
@@ -460,7 +460,7 @@ namespace NumSharp.Backends
         /// </summary>
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public void SetChar(char value, params int[] indices)
         {
             ThrowIfNotWriteable();
@@ -475,7 +475,7 @@ namespace NumSharp.Backends
         /// </summary>
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public void SetDouble(double value, params int[] indices)
         {
             ThrowIfNotWriteable();
@@ -490,7 +490,7 @@ namespace NumSharp.Backends
         /// </summary>
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public void SetSingle(float value, params int[] indices)
         {
             ThrowIfNotWriteable();
@@ -505,7 +505,7 @@ namespace NumSharp.Backends
         /// </summary>
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public void SetDecimal(decimal value, params int[] indices)
         {
             ThrowIfNotWriteable();
@@ -523,7 +523,7 @@ namespace NumSharp.Backends
         /// </summary>
         /// <param name="values"></param>
         /// <remarks>Copies values only if <paramref name="values"/> type does not match <see cref="DType"/> and doesn't change shape.</remarks>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public void ReplaceData(Array values)
         {
             if (values == null)
@@ -637,7 +637,7 @@ namespace NumSharp.Backends
         /// <param name="values"></param>
         /// <param name="shape">The shape to set in this storage. (without checking if shape matches storage)</param>
         /// <remarks>Copies values only if <paramref name="values"/> type does not match <see cref="DType"/> and doesn't change shape. Doesn't check if shape size matches.</remarks>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public void ReplaceData(Array values, Shape shape)
         {
             if (values == null)

@@ -15,7 +15,7 @@ namespace NumSharp.Utilities
         ///     Slice an array.
         /// </summary>
         /// <remarks>Supports negative <paramref name="end"/> index</remarks>
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         public static int[] CloneArray(this int[] source)
             => (int[])source.Clone();
     }

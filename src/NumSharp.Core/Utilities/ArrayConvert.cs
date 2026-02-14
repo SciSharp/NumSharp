@@ -863,7 +863,7 @@ namespace NumSharp.Utilities
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type #1</returns>
         /// <remarks>Based on benchmark ArrayCopying</remarks>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static #1[] To#1(#1[] sourceArray)
         {
             if (sourceArray == null)
@@ -885,7 +885,7 @@ namespace NumSharp.Utilities
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Boolean</returns>
         /// <remarks>Based on benchmark ArrayCopying</remarks>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Boolean[] ToBoolean(Boolean[] sourceArray)
         {
             if (sourceArray == null)
@@ -904,7 +904,7 @@ namespace NumSharp.Utilities
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Byte</returns>
         /// <remarks>Based on benchmark ArrayCopying</remarks>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Byte[] ToByte(Byte[] sourceArray)
         {
             if (sourceArray == null)
@@ -923,7 +923,7 @@ namespace NumSharp.Utilities
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Int16</returns>
         /// <remarks>Based on benchmark ArrayCopying</remarks>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Int16[] ToInt16(Int16[] sourceArray)
         {
             if (sourceArray == null)
@@ -942,7 +942,7 @@ namespace NumSharp.Utilities
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type UInt16</returns>
         /// <remarks>Based on benchmark ArrayCopying</remarks>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static UInt16[] ToUInt16(UInt16[] sourceArray)
         {
             if (sourceArray == null)
@@ -961,7 +961,7 @@ namespace NumSharp.Utilities
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Int32</returns>
         /// <remarks>Based on benchmark ArrayCopying</remarks>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Int32[] ToInt32(Int32[] sourceArray)
         {
             if (sourceArray == null)
@@ -980,7 +980,7 @@ namespace NumSharp.Utilities
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type UInt32</returns>
         /// <remarks>Based on benchmark ArrayCopying</remarks>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static UInt32[] ToUInt32(UInt32[] sourceArray)
         {
             if (sourceArray == null)
@@ -999,7 +999,7 @@ namespace NumSharp.Utilities
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Int64</returns>
         /// <remarks>Based on benchmark ArrayCopying</remarks>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Int64[] ToInt64(Int64[] sourceArray)
         {
             if (sourceArray == null)
@@ -1018,7 +1018,7 @@ namespace NumSharp.Utilities
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type UInt64</returns>
         /// <remarks>Based on benchmark ArrayCopying</remarks>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static UInt64[] ToUInt64(UInt64[] sourceArray)
         {
             if (sourceArray == null)
@@ -1037,7 +1037,7 @@ namespace NumSharp.Utilities
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Char</returns>
         /// <remarks>Based on benchmark ArrayCopying</remarks>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Char[] ToChar(Char[] sourceArray)
         {
             if (sourceArray == null)
@@ -1056,7 +1056,7 @@ namespace NumSharp.Utilities
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Double</returns>
         /// <remarks>Based on benchmark ArrayCopying</remarks>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Double[] ToDouble(Double[] sourceArray)
         {
             if (sourceArray == null)
@@ -1075,7 +1075,7 @@ namespace NumSharp.Utilities
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Single</returns>
         /// <remarks>Based on benchmark ArrayCopying</remarks>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Single[] ToSingle(Single[] sourceArray)
         {
             if (sourceArray == null)
@@ -1094,7 +1094,7 @@ namespace NumSharp.Utilities
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Decimal</returns>
         /// <remarks>Based on benchmark ArrayCopying</remarks>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Decimal[] ToDecimal(Decimal[] sourceArray)
         {
             if (sourceArray == null)
@@ -1113,7 +1113,7 @@ namespace NumSharp.Utilities
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type String</returns>
         /// <remarks>Based on benchmark ArrayCopying</remarks>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static String[] ToString(String[] sourceArray)
         {
             if (sourceArray == null)
@@ -1132,7 +1132,7 @@ namespace NumSharp.Utilities
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Complex</returns>
         /// <remarks>Based on benchmark ArrayCopying</remarks>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Complex[] ToComplex(Complex[] sourceArray)
         {
             if (sourceArray == null)
@@ -1157,7 +1157,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type #2</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static #2[] To#2(#1[] sourceArray)
         {
             if (sourceArray == null)
@@ -1180,7 +1180,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Byte</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Byte[] ToByte(Boolean[] sourceArray)
         {
             if (sourceArray == null)
@@ -1197,7 +1197,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Int16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Int16[] ToInt16(Boolean[] sourceArray)
         {
             if (sourceArray == null)
@@ -1214,7 +1214,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type UInt16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static UInt16[] ToUInt16(Boolean[] sourceArray)
         {
             if (sourceArray == null)
@@ -1231,7 +1231,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Int32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Int32[] ToInt32(Boolean[] sourceArray)
         {
             if (sourceArray == null)
@@ -1248,7 +1248,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type UInt32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static UInt32[] ToUInt32(Boolean[] sourceArray)
         {
             if (sourceArray == null)
@@ -1265,7 +1265,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Int64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Int64[] ToInt64(Boolean[] sourceArray)
         {
             if (sourceArray == null)
@@ -1282,7 +1282,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type UInt64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static UInt64[] ToUInt64(Boolean[] sourceArray)
         {
             if (sourceArray == null)
@@ -1299,7 +1299,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Char</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Char[] ToChar(Boolean[] sourceArray)
         {
             if (sourceArray == null)
@@ -1316,7 +1316,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Double</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Double[] ToDouble(Boolean[] sourceArray)
         {
             if (sourceArray == null)
@@ -1333,7 +1333,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Single</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Single[] ToSingle(Boolean[] sourceArray)
         {
             if (sourceArray == null)
@@ -1350,7 +1350,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Decimal</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Decimal[] ToDecimal(Boolean[] sourceArray)
         {
             if (sourceArray == null)
@@ -1367,7 +1367,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type String</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static String[] ToString(Boolean[] sourceArray)
         {
             if (sourceArray == null)
@@ -1384,7 +1384,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Boolean</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Boolean[] ToBoolean(Byte[] sourceArray)
         {
             if (sourceArray == null)
@@ -1401,7 +1401,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Int16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Int16[] ToInt16(Byte[] sourceArray)
         {
             if (sourceArray == null)
@@ -1418,7 +1418,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type UInt16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static UInt16[] ToUInt16(Byte[] sourceArray)
         {
             if (sourceArray == null)
@@ -1435,7 +1435,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Int32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Int32[] ToInt32(Byte[] sourceArray)
         {
             if (sourceArray == null)
@@ -1452,7 +1452,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type UInt32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static UInt32[] ToUInt32(Byte[] sourceArray)
         {
             if (sourceArray == null)
@@ -1469,7 +1469,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Int64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Int64[] ToInt64(Byte[] sourceArray)
         {
             if (sourceArray == null)
@@ -1486,7 +1486,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type UInt64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static UInt64[] ToUInt64(Byte[] sourceArray)
         {
             if (sourceArray == null)
@@ -1503,7 +1503,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Char</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Char[] ToChar(Byte[] sourceArray)
         {
             if (sourceArray == null)
@@ -1520,7 +1520,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Double</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Double[] ToDouble(Byte[] sourceArray)
         {
             if (sourceArray == null)
@@ -1537,7 +1537,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Single</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Single[] ToSingle(Byte[] sourceArray)
         {
             if (sourceArray == null)
@@ -1554,7 +1554,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Decimal</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Decimal[] ToDecimal(Byte[] sourceArray)
         {
             if (sourceArray == null)
@@ -1571,7 +1571,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type String</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static String[] ToString(Byte[] sourceArray)
         {
             if (sourceArray == null)
@@ -1588,7 +1588,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Boolean</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Boolean[] ToBoolean(Int16[] sourceArray)
         {
             if (sourceArray == null)
@@ -1605,7 +1605,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Byte</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Byte[] ToByte(Int16[] sourceArray)
         {
             if (sourceArray == null)
@@ -1622,7 +1622,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type UInt16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static UInt16[] ToUInt16(Int16[] sourceArray)
         {
             if (sourceArray == null)
@@ -1639,7 +1639,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Int32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Int32[] ToInt32(Int16[] sourceArray)
         {
             if (sourceArray == null)
@@ -1656,7 +1656,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type UInt32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static UInt32[] ToUInt32(Int16[] sourceArray)
         {
             if (sourceArray == null)
@@ -1673,7 +1673,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Int64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Int64[] ToInt64(Int16[] sourceArray)
         {
             if (sourceArray == null)
@@ -1690,7 +1690,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type UInt64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static UInt64[] ToUInt64(Int16[] sourceArray)
         {
             if (sourceArray == null)
@@ -1707,7 +1707,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Char</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Char[] ToChar(Int16[] sourceArray)
         {
             if (sourceArray == null)
@@ -1724,7 +1724,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Double</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Double[] ToDouble(Int16[] sourceArray)
         {
             if (sourceArray == null)
@@ -1741,7 +1741,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Single</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Single[] ToSingle(Int16[] sourceArray)
         {
             if (sourceArray == null)
@@ -1758,7 +1758,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Decimal</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Decimal[] ToDecimal(Int16[] sourceArray)
         {
             if (sourceArray == null)
@@ -1775,7 +1775,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type String</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static String[] ToString(Int16[] sourceArray)
         {
             if (sourceArray == null)
@@ -1792,7 +1792,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Boolean</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Boolean[] ToBoolean(UInt16[] sourceArray)
         {
             if (sourceArray == null)
@@ -1809,7 +1809,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Byte</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Byte[] ToByte(UInt16[] sourceArray)
         {
             if (sourceArray == null)
@@ -1826,7 +1826,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Int16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Int16[] ToInt16(UInt16[] sourceArray)
         {
             if (sourceArray == null)
@@ -1843,7 +1843,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Int32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Int32[] ToInt32(UInt16[] sourceArray)
         {
             if (sourceArray == null)
@@ -1860,7 +1860,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type UInt32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static UInt32[] ToUInt32(UInt16[] sourceArray)
         {
             if (sourceArray == null)
@@ -1877,7 +1877,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Int64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Int64[] ToInt64(UInt16[] sourceArray)
         {
             if (sourceArray == null)
@@ -1894,7 +1894,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type UInt64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static UInt64[] ToUInt64(UInt16[] sourceArray)
         {
             if (sourceArray == null)
@@ -1911,7 +1911,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Char</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Char[] ToChar(UInt16[] sourceArray)
         {
             if (sourceArray == null)
@@ -1928,7 +1928,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Double</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Double[] ToDouble(UInt16[] sourceArray)
         {
             if (sourceArray == null)
@@ -1945,7 +1945,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Single</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Single[] ToSingle(UInt16[] sourceArray)
         {
             if (sourceArray == null)
@@ -1962,7 +1962,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Decimal</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Decimal[] ToDecimal(UInt16[] sourceArray)
         {
             if (sourceArray == null)
@@ -1979,7 +1979,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type String</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static String[] ToString(UInt16[] sourceArray)
         {
             if (sourceArray == null)
@@ -1996,7 +1996,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Boolean</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Boolean[] ToBoolean(Int32[] sourceArray)
         {
             if (sourceArray == null)
@@ -2013,7 +2013,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Byte</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Byte[] ToByte(Int32[] sourceArray)
         {
             if (sourceArray == null)
@@ -2030,7 +2030,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Int16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Int16[] ToInt16(Int32[] sourceArray)
         {
             if (sourceArray == null)
@@ -2047,7 +2047,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type UInt16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static UInt16[] ToUInt16(Int32[] sourceArray)
         {
             if (sourceArray == null)
@@ -2064,7 +2064,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type UInt32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static UInt32[] ToUInt32(Int32[] sourceArray)
         {
             if (sourceArray == null)
@@ -2081,7 +2081,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Int64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Int64[] ToInt64(Int32[] sourceArray)
         {
             if (sourceArray == null)
@@ -2098,7 +2098,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type UInt64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static UInt64[] ToUInt64(Int32[] sourceArray)
         {
             if (sourceArray == null)
@@ -2115,7 +2115,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Char</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Char[] ToChar(Int32[] sourceArray)
         {
             if (sourceArray == null)
@@ -2132,7 +2132,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Double</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Double[] ToDouble(Int32[] sourceArray)
         {
             if (sourceArray == null)
@@ -2149,7 +2149,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Single</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Single[] ToSingle(Int32[] sourceArray)
         {
             if (sourceArray == null)
@@ -2166,7 +2166,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Decimal</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Decimal[] ToDecimal(Int32[] sourceArray)
         {
             if (sourceArray == null)
@@ -2183,7 +2183,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type String</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static String[] ToString(Int32[] sourceArray)
         {
             if (sourceArray == null)
@@ -2200,7 +2200,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Boolean</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Boolean[] ToBoolean(UInt32[] sourceArray)
         {
             if (sourceArray == null)
@@ -2217,7 +2217,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Byte</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Byte[] ToByte(UInt32[] sourceArray)
         {
             if (sourceArray == null)
@@ -2234,7 +2234,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Int16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Int16[] ToInt16(UInt32[] sourceArray)
         {
             if (sourceArray == null)
@@ -2251,7 +2251,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type UInt16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static UInt16[] ToUInt16(UInt32[] sourceArray)
         {
             if (sourceArray == null)
@@ -2268,7 +2268,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Int32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Int32[] ToInt32(UInt32[] sourceArray)
         {
             if (sourceArray == null)
@@ -2285,7 +2285,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Int64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Int64[] ToInt64(UInt32[] sourceArray)
         {
             if (sourceArray == null)
@@ -2302,7 +2302,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type UInt64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static UInt64[] ToUInt64(UInt32[] sourceArray)
         {
             if (sourceArray == null)
@@ -2319,7 +2319,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Char</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Char[] ToChar(UInt32[] sourceArray)
         {
             if (sourceArray == null)
@@ -2336,7 +2336,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Double</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Double[] ToDouble(UInt32[] sourceArray)
         {
             if (sourceArray == null)
@@ -2353,7 +2353,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Single</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Single[] ToSingle(UInt32[] sourceArray)
         {
             if (sourceArray == null)
@@ -2370,7 +2370,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Decimal</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Decimal[] ToDecimal(UInt32[] sourceArray)
         {
             if (sourceArray == null)
@@ -2387,7 +2387,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type String</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static String[] ToString(UInt32[] sourceArray)
         {
             if (sourceArray == null)
@@ -2404,7 +2404,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Boolean</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Boolean[] ToBoolean(Int64[] sourceArray)
         {
             if (sourceArray == null)
@@ -2421,7 +2421,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Byte</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Byte[] ToByte(Int64[] sourceArray)
         {
             if (sourceArray == null)
@@ -2438,7 +2438,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Int16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Int16[] ToInt16(Int64[] sourceArray)
         {
             if (sourceArray == null)
@@ -2455,7 +2455,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type UInt16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static UInt16[] ToUInt16(Int64[] sourceArray)
         {
             if (sourceArray == null)
@@ -2472,7 +2472,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Int32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Int32[] ToInt32(Int64[] sourceArray)
         {
             if (sourceArray == null)
@@ -2489,7 +2489,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type UInt32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static UInt32[] ToUInt32(Int64[] sourceArray)
         {
             if (sourceArray == null)
@@ -2506,7 +2506,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type UInt64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static UInt64[] ToUInt64(Int64[] sourceArray)
         {
             if (sourceArray == null)
@@ -2523,7 +2523,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Char</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Char[] ToChar(Int64[] sourceArray)
         {
             if (sourceArray == null)
@@ -2540,7 +2540,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Double</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Double[] ToDouble(Int64[] sourceArray)
         {
             if (sourceArray == null)
@@ -2557,7 +2557,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Single</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Single[] ToSingle(Int64[] sourceArray)
         {
             if (sourceArray == null)
@@ -2574,7 +2574,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Decimal</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Decimal[] ToDecimal(Int64[] sourceArray)
         {
             if (sourceArray == null)
@@ -2591,7 +2591,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type String</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static String[] ToString(Int64[] sourceArray)
         {
             if (sourceArray == null)
@@ -2608,7 +2608,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Boolean</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Boolean[] ToBoolean(UInt64[] sourceArray)
         {
             if (sourceArray == null)
@@ -2625,7 +2625,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Byte</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Byte[] ToByte(UInt64[] sourceArray)
         {
             if (sourceArray == null)
@@ -2642,7 +2642,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Int16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Int16[] ToInt16(UInt64[] sourceArray)
         {
             if (sourceArray == null)
@@ -2659,7 +2659,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type UInt16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static UInt16[] ToUInt16(UInt64[] sourceArray)
         {
             if (sourceArray == null)
@@ -2676,7 +2676,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Int32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Int32[] ToInt32(UInt64[] sourceArray)
         {
             if (sourceArray == null)
@@ -2693,7 +2693,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type UInt32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static UInt32[] ToUInt32(UInt64[] sourceArray)
         {
             if (sourceArray == null)
@@ -2710,7 +2710,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Int64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Int64[] ToInt64(UInt64[] sourceArray)
         {
             if (sourceArray == null)
@@ -2727,7 +2727,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Char</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Char[] ToChar(UInt64[] sourceArray)
         {
             if (sourceArray == null)
@@ -2744,7 +2744,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Double</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Double[] ToDouble(UInt64[] sourceArray)
         {
             if (sourceArray == null)
@@ -2761,7 +2761,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Single</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Single[] ToSingle(UInt64[] sourceArray)
         {
             if (sourceArray == null)
@@ -2778,7 +2778,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Decimal</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Decimal[] ToDecimal(UInt64[] sourceArray)
         {
             if (sourceArray == null)
@@ -2795,7 +2795,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type String</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static String[] ToString(UInt64[] sourceArray)
         {
             if (sourceArray == null)
@@ -2812,7 +2812,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Boolean</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Boolean[] ToBoolean(Char[] sourceArray)
         {
             if (sourceArray == null)
@@ -2829,7 +2829,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Byte</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Byte[] ToByte(Char[] sourceArray)
         {
             if (sourceArray == null)
@@ -2846,7 +2846,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Int16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Int16[] ToInt16(Char[] sourceArray)
         {
             if (sourceArray == null)
@@ -2863,7 +2863,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type UInt16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static UInt16[] ToUInt16(Char[] sourceArray)
         {
             if (sourceArray == null)
@@ -2880,7 +2880,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Int32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Int32[] ToInt32(Char[] sourceArray)
         {
             if (sourceArray == null)
@@ -2897,7 +2897,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type UInt32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static UInt32[] ToUInt32(Char[] sourceArray)
         {
             if (sourceArray == null)
@@ -2914,7 +2914,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Int64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Int64[] ToInt64(Char[] sourceArray)
         {
             if (sourceArray == null)
@@ -2931,7 +2931,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type UInt64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static UInt64[] ToUInt64(Char[] sourceArray)
         {
             if (sourceArray == null)
@@ -2948,7 +2948,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Double</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Double[] ToDouble(Char[] sourceArray)
         {
             if (sourceArray == null)
@@ -2965,7 +2965,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Single</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Single[] ToSingle(Char[] sourceArray)
         {
             if (sourceArray == null)
@@ -2982,7 +2982,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Decimal</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Decimal[] ToDecimal(Char[] sourceArray)
         {
             if (sourceArray == null)
@@ -2999,7 +2999,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type String</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static String[] ToString(Char[] sourceArray)
         {
             if (sourceArray == null)
@@ -3016,7 +3016,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Boolean</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Boolean[] ToBoolean(Double[] sourceArray)
         {
             if (sourceArray == null)
@@ -3033,7 +3033,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Byte</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Byte[] ToByte(Double[] sourceArray)
         {
             if (sourceArray == null)
@@ -3050,7 +3050,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Int16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Int16[] ToInt16(Double[] sourceArray)
         {
             if (sourceArray == null)
@@ -3067,7 +3067,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type UInt16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static UInt16[] ToUInt16(Double[] sourceArray)
         {
             if (sourceArray == null)
@@ -3084,7 +3084,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Int32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Int32[] ToInt32(Double[] sourceArray)
         {
             if (sourceArray == null)
@@ -3101,7 +3101,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type UInt32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static UInt32[] ToUInt32(Double[] sourceArray)
         {
             if (sourceArray == null)
@@ -3118,7 +3118,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Int64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Int64[] ToInt64(Double[] sourceArray)
         {
             if (sourceArray == null)
@@ -3135,7 +3135,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type UInt64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static UInt64[] ToUInt64(Double[] sourceArray)
         {
             if (sourceArray == null)
@@ -3152,7 +3152,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Char</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Char[] ToChar(Double[] sourceArray)
         {
             if (sourceArray == null)
@@ -3169,7 +3169,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Single</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Single[] ToSingle(Double[] sourceArray)
         {
             if (sourceArray == null)
@@ -3186,7 +3186,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Decimal</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Decimal[] ToDecimal(Double[] sourceArray)
         {
             if (sourceArray == null)
@@ -3203,7 +3203,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type String</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static String[] ToString(Double[] sourceArray)
         {
             if (sourceArray == null)
@@ -3220,7 +3220,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Boolean</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Boolean[] ToBoolean(Single[] sourceArray)
         {
             if (sourceArray == null)
@@ -3237,7 +3237,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Byte</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Byte[] ToByte(Single[] sourceArray)
         {
             if (sourceArray == null)
@@ -3254,7 +3254,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Int16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Int16[] ToInt16(Single[] sourceArray)
         {
             if (sourceArray == null)
@@ -3271,7 +3271,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type UInt16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static UInt16[] ToUInt16(Single[] sourceArray)
         {
             if (sourceArray == null)
@@ -3288,7 +3288,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Int32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Int32[] ToInt32(Single[] sourceArray)
         {
             if (sourceArray == null)
@@ -3305,7 +3305,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type UInt32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static UInt32[] ToUInt32(Single[] sourceArray)
         {
             if (sourceArray == null)
@@ -3322,7 +3322,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Int64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Int64[] ToInt64(Single[] sourceArray)
         {
             if (sourceArray == null)
@@ -3339,7 +3339,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type UInt64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static UInt64[] ToUInt64(Single[] sourceArray)
         {
             if (sourceArray == null)
@@ -3356,7 +3356,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Char</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Char[] ToChar(Single[] sourceArray)
         {
             if (sourceArray == null)
@@ -3373,7 +3373,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Double</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Double[] ToDouble(Single[] sourceArray)
         {
             if (sourceArray == null)
@@ -3390,7 +3390,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Decimal</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Decimal[] ToDecimal(Single[] sourceArray)
         {
             if (sourceArray == null)
@@ -3407,7 +3407,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type String</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static String[] ToString(Single[] sourceArray)
         {
             if (sourceArray == null)
@@ -3424,7 +3424,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Boolean</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Boolean[] ToBoolean(Decimal[] sourceArray)
         {
             if (sourceArray == null)
@@ -3441,7 +3441,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Byte</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Byte[] ToByte(Decimal[] sourceArray)
         {
             if (sourceArray == null)
@@ -3458,7 +3458,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Int16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Int16[] ToInt16(Decimal[] sourceArray)
         {
             if (sourceArray == null)
@@ -3475,7 +3475,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type UInt16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static UInt16[] ToUInt16(Decimal[] sourceArray)
         {
             if (sourceArray == null)
@@ -3492,7 +3492,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Int32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Int32[] ToInt32(Decimal[] sourceArray)
         {
             if (sourceArray == null)
@@ -3509,7 +3509,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type UInt32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static UInt32[] ToUInt32(Decimal[] sourceArray)
         {
             if (sourceArray == null)
@@ -3526,7 +3526,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Int64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Int64[] ToInt64(Decimal[] sourceArray)
         {
             if (sourceArray == null)
@@ -3543,7 +3543,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type UInt64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static UInt64[] ToUInt64(Decimal[] sourceArray)
         {
             if (sourceArray == null)
@@ -3560,7 +3560,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Char</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Char[] ToChar(Decimal[] sourceArray)
         {
             if (sourceArray == null)
@@ -3577,7 +3577,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Double</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Double[] ToDouble(Decimal[] sourceArray)
         {
             if (sourceArray == null)
@@ -3594,7 +3594,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Single</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Single[] ToSingle(Decimal[] sourceArray)
         {
             if (sourceArray == null)
@@ -3611,7 +3611,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type String</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static String[] ToString(Decimal[] sourceArray)
         {
             if (sourceArray == null)
@@ -3628,7 +3628,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Boolean</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Boolean[] ToBoolean(String[] sourceArray)
         {
             if (sourceArray == null)
@@ -3645,7 +3645,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Byte</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Byte[] ToByte(String[] sourceArray)
         {
             if (sourceArray == null)
@@ -3662,7 +3662,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Int16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Int16[] ToInt16(String[] sourceArray)
         {
             if (sourceArray == null)
@@ -3679,7 +3679,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type UInt16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static UInt16[] ToUInt16(String[] sourceArray)
         {
             if (sourceArray == null)
@@ -3696,7 +3696,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Int32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Int32[] ToInt32(String[] sourceArray)
         {
             if (sourceArray == null)
@@ -3713,7 +3713,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type UInt32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static UInt32[] ToUInt32(String[] sourceArray)
         {
             if (sourceArray == null)
@@ -3730,7 +3730,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Int64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Int64[] ToInt64(String[] sourceArray)
         {
             if (sourceArray == null)
@@ -3747,7 +3747,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type UInt64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static UInt64[] ToUInt64(String[] sourceArray)
         {
             if (sourceArray == null)
@@ -3764,7 +3764,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Char</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Char[] ToChar(String[] sourceArray)
         {
             if (sourceArray == null)
@@ -3781,7 +3781,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Double</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Double[] ToDouble(String[] sourceArray)
         {
             if (sourceArray == null)
@@ -3798,7 +3798,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Single</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Single[] ToSingle(String[] sourceArray)
         {
             if (sourceArray == null)
@@ -3815,7 +3815,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Decimal</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Decimal[] ToDecimal(String[] sourceArray)
         {
             if (sourceArray == null)
@@ -3841,7 +3841,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Complex</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Complex[] ToComplex(#1[] sourceArray)
         {
             if (sourceArray == null)
@@ -3863,7 +3863,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Complex</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Complex[] ToComplex(Boolean[] sourceArray)
         {
             if (sourceArray == null)
@@ -3881,7 +3881,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Complex</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Complex[] ToComplex(Byte[] sourceArray)
         {
             if (sourceArray == null)
@@ -3899,7 +3899,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Complex</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Complex[] ToComplex(Int16[] sourceArray)
         {
             if (sourceArray == null)
@@ -3917,7 +3917,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Complex</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Complex[] ToComplex(UInt16[] sourceArray)
         {
             if (sourceArray == null)
@@ -3935,7 +3935,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Complex</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Complex[] ToComplex(Int32[] sourceArray)
         {
             if (sourceArray == null)
@@ -3953,7 +3953,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Complex</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Complex[] ToComplex(UInt32[] sourceArray)
         {
             if (sourceArray == null)
@@ -3971,7 +3971,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Complex</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Complex[] ToComplex(Int64[] sourceArray)
         {
             if (sourceArray == null)
@@ -3989,7 +3989,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Complex</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Complex[] ToComplex(UInt64[] sourceArray)
         {
             if (sourceArray == null)
@@ -4007,7 +4007,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Complex</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Complex[] ToComplex(Char[] sourceArray)
         {
             if (sourceArray == null)
@@ -4025,7 +4025,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Complex</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Complex[] ToComplex(Double[] sourceArray)
         {
             if (sourceArray == null)
@@ -4043,7 +4043,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Complex</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Complex[] ToComplex(Single[] sourceArray)
         {
             if (sourceArray == null)
@@ -4061,7 +4061,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Complex</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Complex[] ToComplex(Decimal[] sourceArray)
         {
             if (sourceArray == null)
@@ -4080,7 +4080,7 @@ namespace NumSharp.Utilities
         /// <param name="sourceArray">The array to convert</param>
         /// <returns>Converted array of type Complex</returns>
         /// <exception cref="FormatException">A string in sourceArray has an invalid complex format</exception>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Complex[] ToComplex(String[] sourceArray)
         {
             if (sourceArray == null)

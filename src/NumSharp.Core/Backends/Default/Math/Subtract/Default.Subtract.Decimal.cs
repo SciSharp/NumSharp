@@ -20,7 +20,7 @@ namespace NumSharp.Backends
     //v2
     public partial class DefaultEngine
     {
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         [SuppressMessage("ReSharper", "JoinDeclarationAndInitializer")]
         [SuppressMessage("ReSharper", "CompareOfFloatsByEqualityOperator")]
         public unsafe NDArray SubtractDecimal(in NDArray lhs, in NDArray rhs)

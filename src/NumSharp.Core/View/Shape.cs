@@ -55,7 +55,7 @@ namespace NumSharp
         /// </summary>
         public readonly bool IsSliced
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(Inline)]
             get => offset != 0 || (bufferSize > 0 && bufferSize != size) || !IsContiguous;
         }
 
@@ -71,7 +71,7 @@ namespace NumSharp
         /// </remarks>
         public readonly bool IsContiguous
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(Inline)]
             get => (_flags & (int)ArrayFlags.C_CONTIGUOUS) != 0;
         }
 
@@ -80,7 +80,7 @@ namespace NumSharp
         /// <summary>
         ///     Computes array flags from dimensions and strides (static for readonly struct).
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         private static int ComputeFlagsStatic(int[] dims, int[] strides)
         {
             int flags = 0;
@@ -109,7 +109,7 @@ namespace NumSharp
         /// <summary>
         ///     Computes whether any dimension is broadcast (stride=0 with dim > 1).
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         private static bool ComputeIsBroadcastedStatic(int[] dims, int[] strides)
         {
             if (strides == null || strides.Length == 0)
@@ -123,7 +123,7 @@ namespace NumSharp
         /// <summary>
         ///     Computes C-contiguity from stride values (NumPy algorithm).
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         private static bool ComputeIsContiguousStatic(int[] dims, int[] strides)
         {
             if (dims == null || dims.Length == 0)
@@ -148,7 +148,7 @@ namespace NumSharp
         /// <summary>
         ///     Computes size and hash from dimensions.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         private static (int size, int hash) ComputeSizeAndHash(int[] dims)
         {
             if (dims == null || dims.Length == 0)
@@ -170,7 +170,7 @@ namespace NumSharp
         /// <summary>
         ///     Computes C-contiguous strides for given dimensions.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         private static int[] ComputeContiguousStrides(int[] dims)
         {
             if (dims == null || dims.Length == 0)
@@ -192,7 +192,7 @@ namespace NumSharp
         /// </summary>
         public readonly bool IsSimpleSlice
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(Inline)]
             get => IsSliced && !IsBroadcasted;
         }
 
@@ -230,7 +230,7 @@ namespace NumSharp
         /// </summary>
         public readonly bool IsBroadcasted
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(Inline)]
             get => (_flags & (int)ArrayFlags.BROADCASTED) != 0;
         }
 
@@ -240,7 +240,7 @@ namespace NumSharp
         /// </summary>
         public readonly bool IsWriteable
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(Inline)]
             get => (_flags & (int)ArrayFlags.WRITEABLE) != 0;
         }
 
@@ -251,7 +251,7 @@ namespace NumSharp
         /// </summary>
         public readonly bool OwnsData
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(Inline)]
             get => (_flags & (int)ArrayFlags.OWNDATA) != 0;
         }
 
@@ -261,7 +261,7 @@ namespace NumSharp
         /// </summary>
         public readonly ArrayFlags Flags
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(Inline)]
             get => (ArrayFlags)_flags;
         }
 
@@ -272,7 +272,7 @@ namespace NumSharp
         /// </summary>
         public readonly bool IsScalarBroadcast
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(Inline)]
             get
             {
                 if (strides == null || strides.Length == 0)
@@ -294,7 +294,7 @@ namespace NumSharp
         /// </summary>
         public readonly int OriginalSize
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(Inline)]
             get
             {
                 if (strides == null || strides.Length == 0)
@@ -331,7 +331,7 @@ namespace NumSharp
         /// <summary>
         ///     Create a new scalar shape
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         internal static Shape NewScalar()
         {
             return new Shape();
@@ -358,19 +358,19 @@ namespace NumSharp
 
         public readonly int NDim
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(Inline)]
             get => dimensions.Length;
         }
 
         public readonly int[] Dimensions
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(Inline)]
             get => dimensions;
         }
 
         public readonly int[] Strides
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(Inline)]
             get => strides;
         }
 
@@ -379,7 +379,7 @@ namespace NumSharp
         /// </summary>
         public readonly int Size
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(Inline)]
             get => size;
         }
 
@@ -390,7 +390,7 @@ namespace NumSharp
         /// </summary>
         public readonly int Offset
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(Inline)]
             get => offset;
         }
 
@@ -401,7 +401,7 @@ namespace NumSharp
         /// </summary>
         public readonly int BufferSize
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(Inline)]
             get => bufferSize > 0 ? bufferSize : size;
         }
 
@@ -533,7 +533,7 @@ namespace NumSharp
             this._flags = ComputeFlagsStatic(dims, strides);
         }
 
-        [MethodImpl((MethodImplOptions)512)]
+        [MethodImpl(Optimize)]
         public Shape(params int[] dims)
         {
             if (dims == null)
@@ -555,7 +555,7 @@ namespace NumSharp
         ///     An empty shape without any fields set (all dimensions are 0).
         /// </summary>
         /// <remarks>Used internally for building shapes that will be filled in.</remarks>
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         public static Shape Empty(int ndim)
         {
             // Create shape with zero dimensions and zero strides
@@ -564,9 +564,9 @@ namespace NumSharp
 
         public readonly int this[int dim]
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(Inline)]
             get => dimensions[dim < 0 ? dimensions.Length + dim : dim];
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(Inline)]
             set => dimensions[dim < 0 ? dimensions.Length + dim : dim] = value;
         }
 
@@ -577,7 +577,7 @@ namespace NumSharp
         /// <param name="offset">The offset within the bounds of <see cref="size"/>.</param>
         /// <returns>The transformed offset.</returns>
         /// <remarks>For contiguous shapes, returns offset directly. For non-contiguous, translates through coordinates.</remarks>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public readonly int TransformOffset(int offset)
         {
             // For contiguous shapes, direct return
@@ -594,7 +594,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="indices">The coordinates to turn into linear offset</param>
         /// <returns>The index in the memory block that refers to a specific value.</returns>
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         public readonly int GetOffset(params int[] indices)
         {
             // Scalar with single index: direct offset access
@@ -611,7 +611,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="index">The 1D coordinate to turn into linear offset</param>
         /// <returns>The index in the memory block that refers to a specific value.</returns>
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         internal readonly int GetOffset_1D(int index)
         {
             // Scalar case: direct offset access
@@ -629,7 +629,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="indices">The coordinates to turn into linear offset</param>
         /// <returns>The index in the memory block that refers to a specific value.</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         internal readonly int GetOffsetSimple(params int[] indices)
         {
             int off = offset;
@@ -644,7 +644,7 @@ namespace NumSharp
         /// <summary>
         ///     Simplified offset calculation for 1D access.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         internal readonly int GetOffsetSimple(int index)
         {
             // Scalar case: direct offset access
@@ -656,7 +656,7 @@ namespace NumSharp
         /// <summary>
         ///     Simplified offset calculation for 2D access.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         internal readonly int GetOffsetSimple(int i, int j)
         {
             return offset + i * strides[0] + j * strides[1];
@@ -665,7 +665,7 @@ namespace NumSharp
         /// <summary>
         ///     Simplified offset calculation for 3D access.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         internal readonly int GetOffsetSimple(int i, int j, int k)
         {
             return offset + i * strides[0] + j * strides[1] + k * strides[2];
@@ -678,7 +678,7 @@ namespace NumSharp
         /// <param name="indicies">The selection of indexes 0 based.</param>
         /// <returns></returns>
         /// <remarks>Used for slicing, returned shape is the new shape of the slice and offset is the offset from current address.</remarks>
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         public readonly (Shape Shape, int Offset) GetSubshape(params int[] indicies)
         {
             if (indicies.Length == 0)
@@ -751,7 +751,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="offset">the index if you would iterate from 0 to shape.size in row major order</param>
         /// <returns></returns>
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         public readonly int[] GetCoordinates(int offset)
         {
             // For non-contiguous shapes (transposed, stepped slices, broadcast), strides
@@ -805,7 +805,7 @@ namespace NumSharp
             return coords2;
         }
 
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         public static int GetSize(int[] dims)
         {
             int size = 1;
@@ -847,7 +847,7 @@ namespace NumSharp
         ///     Extracts the shape of given <paramref name="array"/>.
         /// </summary>
         /// <remarks>Supports both jagged and multi-dim.</remarks>
-        [MethodImpl((MethodImplOptions)512)]
+        [MethodImpl(Optimize)]
         public static int[] ExtractShape(Array array)
         {
             if (array == null)
@@ -885,11 +885,11 @@ namespace NumSharp
 
         #region Slicing support
 
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         public readonly Shape Slice(string slicing_notation) =>
             this.Slice(NumSharp.Slice.ParseSlices(slicing_notation));
 
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         public readonly Shape Slice(params Slice[] input_slices)
         {
             if (IsEmpty)
@@ -1139,7 +1139,7 @@ namespace NumSharp
         /// <param name="dimensions">The dimensions these coordinates are targeting</param>
         /// <param name="coords">The coordinates.</param>
         /// <returns>Coordinates without negative indices.</returns>
-        [SuppressMessage("ReSharper", "ParameterHidesMember"), MethodImpl((MethodImplOptions)512)]
+        [SuppressMessage("ReSharper", "ParameterHidesMember"), MethodImpl(Optimize)]
         public static int[] InferNegativeCoordinates(int[] dimensions, int[] coords)
         {
             for (int i = 0; i < coords.Length; i++)

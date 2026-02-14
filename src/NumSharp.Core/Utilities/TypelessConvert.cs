@@ -197,7 +197,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="#1"/> and then converted to <see cref="#2"/></param>
         /// <returns>#2</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object From#1To#2(object input)
         {
             return Converts.To#2((#1)input);
@@ -211,7 +211,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Boolean"/> and then converted to <see cref="Byte"/></param>
         /// <returns>Byte</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromBooleanToByte(object input)
         {
             return Converts.ToByte((Boolean)input);
@@ -222,7 +222,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Boolean"/> and then converted to <see cref="Int16"/></param>
         /// <returns>Int16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromBooleanToInt16(object input)
         {
             return Converts.ToInt16((Boolean)input);
@@ -233,7 +233,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Boolean"/> and then converted to <see cref="UInt16"/></param>
         /// <returns>UInt16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromBooleanToUInt16(object input)
         {
             return Converts.ToUInt16((Boolean)input);
@@ -244,7 +244,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Boolean"/> and then converted to <see cref="Int32"/></param>
         /// <returns>Int32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromBooleanToInt32(object input)
         {
             return Converts.ToInt32((Boolean)input);
@@ -255,7 +255,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Boolean"/> and then converted to <see cref="UInt32"/></param>
         /// <returns>UInt32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromBooleanToUInt32(object input)
         {
             return Converts.ToUInt32((Boolean)input);
@@ -266,7 +266,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Boolean"/> and then converted to <see cref="Int64"/></param>
         /// <returns>Int64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromBooleanToInt64(object input)
         {
             return Converts.ToInt64((Boolean)input);
@@ -277,7 +277,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Boolean"/> and then converted to <see cref="UInt64"/></param>
         /// <returns>UInt64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromBooleanToUInt64(object input)
         {
             return Converts.ToUInt64((Boolean)input);
@@ -288,7 +288,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Boolean"/> and then converted to <see cref="Char"/></param>
         /// <returns>Char</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromBooleanToChar(object input)
         {
             return Converts.ToChar((Boolean)input);
@@ -299,7 +299,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Boolean"/> and then converted to <see cref="Double"/></param>
         /// <returns>Double</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromBooleanToDouble(object input)
         {
             return Converts.ToDouble((Boolean)input);
@@ -310,7 +310,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Boolean"/> and then converted to <see cref="Single"/></param>
         /// <returns>Single</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromBooleanToSingle(object input)
         {
             return Converts.ToSingle((Boolean)input);
@@ -321,7 +321,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Boolean"/> and then converted to <see cref="Decimal"/></param>
         /// <returns>Decimal</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromBooleanToDecimal(object input)
         {
             return Converts.ToDecimal((Boolean)input);
@@ -332,7 +332,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Boolean"/> and then converted to <see cref="String"/></param>
         /// <returns>String</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromBooleanToString(object input)
         {
             return Converts.ToString((Boolean)input);
@@ -343,7 +343,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Byte"/> and then converted to <see cref="Boolean"/></param>
         /// <returns>Boolean</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromByteToBoolean(object input)
         {
             return Converts.ToBoolean((Byte)input);
@@ -354,7 +354,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Byte"/> and then converted to <see cref="Int16"/></param>
         /// <returns>Int16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromByteToInt16(object input)
         {
             return Converts.ToInt16((Byte)input);
@@ -365,7 +365,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Byte"/> and then converted to <see cref="UInt16"/></param>
         /// <returns>UInt16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromByteToUInt16(object input)
         {
             return Converts.ToUInt16((Byte)input);
@@ -376,7 +376,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Byte"/> and then converted to <see cref="Int32"/></param>
         /// <returns>Int32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromByteToInt32(object input)
         {
             return Converts.ToInt32((Byte)input);
@@ -387,7 +387,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Byte"/> and then converted to <see cref="UInt32"/></param>
         /// <returns>UInt32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromByteToUInt32(object input)
         {
             return Converts.ToUInt32((Byte)input);
@@ -398,7 +398,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Byte"/> and then converted to <see cref="Int64"/></param>
         /// <returns>Int64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromByteToInt64(object input)
         {
             return Converts.ToInt64((Byte)input);
@@ -409,7 +409,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Byte"/> and then converted to <see cref="UInt64"/></param>
         /// <returns>UInt64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromByteToUInt64(object input)
         {
             return Converts.ToUInt64((Byte)input);
@@ -420,7 +420,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Byte"/> and then converted to <see cref="Char"/></param>
         /// <returns>Char</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromByteToChar(object input)
         {
             return Converts.ToChar((Byte)input);
@@ -431,7 +431,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Byte"/> and then converted to <see cref="Double"/></param>
         /// <returns>Double</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromByteToDouble(object input)
         {
             return Converts.ToDouble((Byte)input);
@@ -442,7 +442,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Byte"/> and then converted to <see cref="Single"/></param>
         /// <returns>Single</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromByteToSingle(object input)
         {
             return Converts.ToSingle((Byte)input);
@@ -453,7 +453,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Byte"/> and then converted to <see cref="Decimal"/></param>
         /// <returns>Decimal</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromByteToDecimal(object input)
         {
             return Converts.ToDecimal((Byte)input);
@@ -464,7 +464,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Byte"/> and then converted to <see cref="String"/></param>
         /// <returns>String</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromByteToString(object input)
         {
             return Converts.ToString((Byte)input);
@@ -475,7 +475,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Int16"/> and then converted to <see cref="Boolean"/></param>
         /// <returns>Boolean</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromInt16ToBoolean(object input)
         {
             return Converts.ToBoolean((Int16)input);
@@ -486,7 +486,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Int16"/> and then converted to <see cref="Byte"/></param>
         /// <returns>Byte</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromInt16ToByte(object input)
         {
             return Converts.ToByte((Int16)input);
@@ -497,7 +497,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Int16"/> and then converted to <see cref="UInt16"/></param>
         /// <returns>UInt16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromInt16ToUInt16(object input)
         {
             return Converts.ToUInt16((Int16)input);
@@ -508,7 +508,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Int16"/> and then converted to <see cref="Int32"/></param>
         /// <returns>Int32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromInt16ToInt32(object input)
         {
             return Converts.ToInt32((Int16)input);
@@ -519,7 +519,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Int16"/> and then converted to <see cref="UInt32"/></param>
         /// <returns>UInt32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromInt16ToUInt32(object input)
         {
             return Converts.ToUInt32((Int16)input);
@@ -530,7 +530,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Int16"/> and then converted to <see cref="Int64"/></param>
         /// <returns>Int64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromInt16ToInt64(object input)
         {
             return Converts.ToInt64((Int16)input);
@@ -541,7 +541,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Int16"/> and then converted to <see cref="UInt64"/></param>
         /// <returns>UInt64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromInt16ToUInt64(object input)
         {
             return Converts.ToUInt64((Int16)input);
@@ -552,7 +552,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Int16"/> and then converted to <see cref="Char"/></param>
         /// <returns>Char</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromInt16ToChar(object input)
         {
             return Converts.ToChar((Int16)input);
@@ -563,7 +563,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Int16"/> and then converted to <see cref="Double"/></param>
         /// <returns>Double</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromInt16ToDouble(object input)
         {
             return Converts.ToDouble((Int16)input);
@@ -574,7 +574,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Int16"/> and then converted to <see cref="Single"/></param>
         /// <returns>Single</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromInt16ToSingle(object input)
         {
             return Converts.ToSingle((Int16)input);
@@ -585,7 +585,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Int16"/> and then converted to <see cref="Decimal"/></param>
         /// <returns>Decimal</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromInt16ToDecimal(object input)
         {
             return Converts.ToDecimal((Int16)input);
@@ -596,7 +596,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Int16"/> and then converted to <see cref="String"/></param>
         /// <returns>String</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromInt16ToString(object input)
         {
             return Converts.ToString((Int16)input);
@@ -607,7 +607,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="UInt16"/> and then converted to <see cref="Boolean"/></param>
         /// <returns>Boolean</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromUInt16ToBoolean(object input)
         {
             return Converts.ToBoolean((UInt16)input);
@@ -618,7 +618,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="UInt16"/> and then converted to <see cref="Byte"/></param>
         /// <returns>Byte</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromUInt16ToByte(object input)
         {
             return Converts.ToByte((UInt16)input);
@@ -629,7 +629,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="UInt16"/> and then converted to <see cref="Int16"/></param>
         /// <returns>Int16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromUInt16ToInt16(object input)
         {
             return Converts.ToInt16((UInt16)input);
@@ -640,7 +640,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="UInt16"/> and then converted to <see cref="Int32"/></param>
         /// <returns>Int32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromUInt16ToInt32(object input)
         {
             return Converts.ToInt32((UInt16)input);
@@ -651,7 +651,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="UInt16"/> and then converted to <see cref="UInt32"/></param>
         /// <returns>UInt32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromUInt16ToUInt32(object input)
         {
             return Converts.ToUInt32((UInt16)input);
@@ -662,7 +662,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="UInt16"/> and then converted to <see cref="Int64"/></param>
         /// <returns>Int64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromUInt16ToInt64(object input)
         {
             return Converts.ToInt64((UInt16)input);
@@ -673,7 +673,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="UInt16"/> and then converted to <see cref="UInt64"/></param>
         /// <returns>UInt64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromUInt16ToUInt64(object input)
         {
             return Converts.ToUInt64((UInt16)input);
@@ -684,7 +684,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="UInt16"/> and then converted to <see cref="Char"/></param>
         /// <returns>Char</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromUInt16ToChar(object input)
         {
             return Converts.ToChar((UInt16)input);
@@ -695,7 +695,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="UInt16"/> and then converted to <see cref="Double"/></param>
         /// <returns>Double</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromUInt16ToDouble(object input)
         {
             return Converts.ToDouble((UInt16)input);
@@ -706,7 +706,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="UInt16"/> and then converted to <see cref="Single"/></param>
         /// <returns>Single</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromUInt16ToSingle(object input)
         {
             return Converts.ToSingle((UInt16)input);
@@ -717,7 +717,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="UInt16"/> and then converted to <see cref="Decimal"/></param>
         /// <returns>Decimal</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromUInt16ToDecimal(object input)
         {
             return Converts.ToDecimal((UInt16)input);
@@ -728,7 +728,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="UInt16"/> and then converted to <see cref="String"/></param>
         /// <returns>String</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromUInt16ToString(object input)
         {
             return Converts.ToString((UInt16)input);
@@ -739,7 +739,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Int32"/> and then converted to <see cref="Boolean"/></param>
         /// <returns>Boolean</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromInt32ToBoolean(object input)
         {
             return Converts.ToBoolean((Int32)input);
@@ -750,7 +750,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Int32"/> and then converted to <see cref="Byte"/></param>
         /// <returns>Byte</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromInt32ToByte(object input)
         {
             return Converts.ToByte((Int32)input);
@@ -761,7 +761,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Int32"/> and then converted to <see cref="Int16"/></param>
         /// <returns>Int16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromInt32ToInt16(object input)
         {
             return Converts.ToInt16((Int32)input);
@@ -772,7 +772,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Int32"/> and then converted to <see cref="UInt16"/></param>
         /// <returns>UInt16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromInt32ToUInt16(object input)
         {
             return Converts.ToUInt16((Int32)input);
@@ -783,7 +783,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Int32"/> and then converted to <see cref="UInt32"/></param>
         /// <returns>UInt32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromInt32ToUInt32(object input)
         {
             return Converts.ToUInt32((Int32)input);
@@ -794,7 +794,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Int32"/> and then converted to <see cref="Int64"/></param>
         /// <returns>Int64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromInt32ToInt64(object input)
         {
             return Converts.ToInt64((Int32)input);
@@ -805,7 +805,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Int32"/> and then converted to <see cref="UInt64"/></param>
         /// <returns>UInt64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromInt32ToUInt64(object input)
         {
             return Converts.ToUInt64((Int32)input);
@@ -816,7 +816,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Int32"/> and then converted to <see cref="Char"/></param>
         /// <returns>Char</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromInt32ToChar(object input)
         {
             return Converts.ToChar((Int32)input);
@@ -827,7 +827,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Int32"/> and then converted to <see cref="Double"/></param>
         /// <returns>Double</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromInt32ToDouble(object input)
         {
             return Converts.ToDouble((Int32)input);
@@ -838,7 +838,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Int32"/> and then converted to <see cref="Single"/></param>
         /// <returns>Single</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromInt32ToSingle(object input)
         {
             return Converts.ToSingle((Int32)input);
@@ -849,7 +849,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Int32"/> and then converted to <see cref="Decimal"/></param>
         /// <returns>Decimal</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromInt32ToDecimal(object input)
         {
             return Converts.ToDecimal((Int32)input);
@@ -860,7 +860,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Int32"/> and then converted to <see cref="String"/></param>
         /// <returns>String</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromInt32ToString(object input)
         {
             return Converts.ToString((Int32)input);
@@ -871,7 +871,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="UInt32"/> and then converted to <see cref="Boolean"/></param>
         /// <returns>Boolean</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromUInt32ToBoolean(object input)
         {
             return Converts.ToBoolean((UInt32)input);
@@ -882,7 +882,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="UInt32"/> and then converted to <see cref="Byte"/></param>
         /// <returns>Byte</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromUInt32ToByte(object input)
         {
             return Converts.ToByte((UInt32)input);
@@ -893,7 +893,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="UInt32"/> and then converted to <see cref="Int16"/></param>
         /// <returns>Int16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromUInt32ToInt16(object input)
         {
             return Converts.ToInt16((UInt32)input);
@@ -904,7 +904,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="UInt32"/> and then converted to <see cref="UInt16"/></param>
         /// <returns>UInt16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromUInt32ToUInt16(object input)
         {
             return Converts.ToUInt16((UInt32)input);
@@ -915,7 +915,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="UInt32"/> and then converted to <see cref="Int32"/></param>
         /// <returns>Int32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromUInt32ToInt32(object input)
         {
             return Converts.ToInt32((UInt32)input);
@@ -926,7 +926,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="UInt32"/> and then converted to <see cref="Int64"/></param>
         /// <returns>Int64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromUInt32ToInt64(object input)
         {
             return Converts.ToInt64((UInt32)input);
@@ -937,7 +937,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="UInt32"/> and then converted to <see cref="UInt64"/></param>
         /// <returns>UInt64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromUInt32ToUInt64(object input)
         {
             return Converts.ToUInt64((UInt32)input);
@@ -948,7 +948,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="UInt32"/> and then converted to <see cref="Char"/></param>
         /// <returns>Char</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromUInt32ToChar(object input)
         {
             return Converts.ToChar((UInt32)input);
@@ -959,7 +959,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="UInt32"/> and then converted to <see cref="Double"/></param>
         /// <returns>Double</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromUInt32ToDouble(object input)
         {
             return Converts.ToDouble((UInt32)input);
@@ -970,7 +970,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="UInt32"/> and then converted to <see cref="Single"/></param>
         /// <returns>Single</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromUInt32ToSingle(object input)
         {
             return Converts.ToSingle((UInt32)input);
@@ -981,7 +981,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="UInt32"/> and then converted to <see cref="Decimal"/></param>
         /// <returns>Decimal</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromUInt32ToDecimal(object input)
         {
             return Converts.ToDecimal((UInt32)input);
@@ -992,7 +992,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="UInt32"/> and then converted to <see cref="String"/></param>
         /// <returns>String</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromUInt32ToString(object input)
         {
             return Converts.ToString((UInt32)input);
@@ -1003,7 +1003,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Int64"/> and then converted to <see cref="Boolean"/></param>
         /// <returns>Boolean</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromInt64ToBoolean(object input)
         {
             return Converts.ToBoolean((Int64)input);
@@ -1014,7 +1014,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Int64"/> and then converted to <see cref="Byte"/></param>
         /// <returns>Byte</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromInt64ToByte(object input)
         {
             return Converts.ToByte((Int64)input);
@@ -1025,7 +1025,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Int64"/> and then converted to <see cref="Int16"/></param>
         /// <returns>Int16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromInt64ToInt16(object input)
         {
             return Converts.ToInt16((Int64)input);
@@ -1036,7 +1036,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Int64"/> and then converted to <see cref="UInt16"/></param>
         /// <returns>UInt16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromInt64ToUInt16(object input)
         {
             return Converts.ToUInt16((Int64)input);
@@ -1047,7 +1047,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Int64"/> and then converted to <see cref="Int32"/></param>
         /// <returns>Int32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromInt64ToInt32(object input)
         {
             return Converts.ToInt32((Int64)input);
@@ -1058,7 +1058,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Int64"/> and then converted to <see cref="UInt32"/></param>
         /// <returns>UInt32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromInt64ToUInt32(object input)
         {
             return Converts.ToUInt32((Int64)input);
@@ -1069,7 +1069,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Int64"/> and then converted to <see cref="UInt64"/></param>
         /// <returns>UInt64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromInt64ToUInt64(object input)
         {
             return Converts.ToUInt64((Int64)input);
@@ -1080,7 +1080,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Int64"/> and then converted to <see cref="Char"/></param>
         /// <returns>Char</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromInt64ToChar(object input)
         {
             return Converts.ToChar((Int64)input);
@@ -1091,7 +1091,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Int64"/> and then converted to <see cref="Double"/></param>
         /// <returns>Double</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromInt64ToDouble(object input)
         {
             return Converts.ToDouble((Int64)input);
@@ -1102,7 +1102,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Int64"/> and then converted to <see cref="Single"/></param>
         /// <returns>Single</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromInt64ToSingle(object input)
         {
             return Converts.ToSingle((Int64)input);
@@ -1113,7 +1113,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Int64"/> and then converted to <see cref="Decimal"/></param>
         /// <returns>Decimal</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromInt64ToDecimal(object input)
         {
             return Converts.ToDecimal((Int64)input);
@@ -1124,7 +1124,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Int64"/> and then converted to <see cref="String"/></param>
         /// <returns>String</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromInt64ToString(object input)
         {
             return Converts.ToString((Int64)input);
@@ -1135,7 +1135,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="UInt64"/> and then converted to <see cref="Boolean"/></param>
         /// <returns>Boolean</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromUInt64ToBoolean(object input)
         {
             return Converts.ToBoolean((UInt64)input);
@@ -1146,7 +1146,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="UInt64"/> and then converted to <see cref="Byte"/></param>
         /// <returns>Byte</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromUInt64ToByte(object input)
         {
             return Converts.ToByte((UInt64)input);
@@ -1157,7 +1157,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="UInt64"/> and then converted to <see cref="Int16"/></param>
         /// <returns>Int16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromUInt64ToInt16(object input)
         {
             return Converts.ToInt16((UInt64)input);
@@ -1168,7 +1168,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="UInt64"/> and then converted to <see cref="UInt16"/></param>
         /// <returns>UInt16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromUInt64ToUInt16(object input)
         {
             return Converts.ToUInt16((UInt64)input);
@@ -1179,7 +1179,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="UInt64"/> and then converted to <see cref="Int32"/></param>
         /// <returns>Int32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromUInt64ToInt32(object input)
         {
             return Converts.ToInt32((UInt64)input);
@@ -1190,7 +1190,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="UInt64"/> and then converted to <see cref="UInt32"/></param>
         /// <returns>UInt32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromUInt64ToUInt32(object input)
         {
             return Converts.ToUInt32((UInt64)input);
@@ -1201,7 +1201,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="UInt64"/> and then converted to <see cref="Int64"/></param>
         /// <returns>Int64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromUInt64ToInt64(object input)
         {
             return Converts.ToInt64((UInt64)input);
@@ -1212,7 +1212,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="UInt64"/> and then converted to <see cref="Char"/></param>
         /// <returns>Char</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromUInt64ToChar(object input)
         {
             return Converts.ToChar((UInt64)input);
@@ -1223,7 +1223,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="UInt64"/> and then converted to <see cref="Double"/></param>
         /// <returns>Double</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromUInt64ToDouble(object input)
         {
             return Converts.ToDouble((UInt64)input);
@@ -1234,7 +1234,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="UInt64"/> and then converted to <see cref="Single"/></param>
         /// <returns>Single</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromUInt64ToSingle(object input)
         {
             return Converts.ToSingle((UInt64)input);
@@ -1245,7 +1245,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="UInt64"/> and then converted to <see cref="Decimal"/></param>
         /// <returns>Decimal</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromUInt64ToDecimal(object input)
         {
             return Converts.ToDecimal((UInt64)input);
@@ -1256,7 +1256,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="UInt64"/> and then converted to <see cref="String"/></param>
         /// <returns>String</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromUInt64ToString(object input)
         {
             return Converts.ToString((UInt64)input);
@@ -1267,7 +1267,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Char"/> and then converted to <see cref="Boolean"/></param>
         /// <returns>Boolean</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromCharToBoolean(object input)
         {
             return Converts.ToBoolean((Char)input);
@@ -1278,7 +1278,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Char"/> and then converted to <see cref="Byte"/></param>
         /// <returns>Byte</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromCharToByte(object input)
         {
             return Converts.ToByte((Char)input);
@@ -1289,7 +1289,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Char"/> and then converted to <see cref="Int16"/></param>
         /// <returns>Int16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromCharToInt16(object input)
         {
             return Converts.ToInt16((Char)input);
@@ -1300,7 +1300,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Char"/> and then converted to <see cref="UInt16"/></param>
         /// <returns>UInt16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromCharToUInt16(object input)
         {
             return Converts.ToUInt16((Char)input);
@@ -1311,7 +1311,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Char"/> and then converted to <see cref="Int32"/></param>
         /// <returns>Int32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromCharToInt32(object input)
         {
             return Converts.ToInt32((Char)input);
@@ -1322,7 +1322,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Char"/> and then converted to <see cref="UInt32"/></param>
         /// <returns>UInt32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromCharToUInt32(object input)
         {
             return Converts.ToUInt32((Char)input);
@@ -1333,7 +1333,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Char"/> and then converted to <see cref="Int64"/></param>
         /// <returns>Int64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromCharToInt64(object input)
         {
             return Converts.ToInt64((Char)input);
@@ -1344,7 +1344,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Char"/> and then converted to <see cref="UInt64"/></param>
         /// <returns>UInt64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromCharToUInt64(object input)
         {
             return Converts.ToUInt64((Char)input);
@@ -1355,7 +1355,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Char"/> and then converted to <see cref="Double"/></param>
         /// <returns>Double</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromCharToDouble(object input)
         {
             return Converts.ToDouble((Char)input);
@@ -1366,7 +1366,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Char"/> and then converted to <see cref="Single"/></param>
         /// <returns>Single</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromCharToSingle(object input)
         {
             return Converts.ToSingle((Char)input);
@@ -1377,7 +1377,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Char"/> and then converted to <see cref="Decimal"/></param>
         /// <returns>Decimal</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromCharToDecimal(object input)
         {
             return Converts.ToDecimal((Char)input);
@@ -1388,7 +1388,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Char"/> and then converted to <see cref="String"/></param>
         /// <returns>String</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromCharToString(object input)
         {
             return Converts.ToString((Char)input);
@@ -1399,7 +1399,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Double"/> and then converted to <see cref="Boolean"/></param>
         /// <returns>Boolean</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromDoubleToBoolean(object input)
         {
             return Converts.ToBoolean((Double)input);
@@ -1410,7 +1410,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Double"/> and then converted to <see cref="Byte"/></param>
         /// <returns>Byte</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromDoubleToByte(object input)
         {
             return Converts.ToByte((Double)input);
@@ -1421,7 +1421,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Double"/> and then converted to <see cref="Int16"/></param>
         /// <returns>Int16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromDoubleToInt16(object input)
         {
             return Converts.ToInt16((Double)input);
@@ -1432,7 +1432,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Double"/> and then converted to <see cref="UInt16"/></param>
         /// <returns>UInt16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromDoubleToUInt16(object input)
         {
             return Converts.ToUInt16((Double)input);
@@ -1443,7 +1443,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Double"/> and then converted to <see cref="Int32"/></param>
         /// <returns>Int32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromDoubleToInt32(object input)
         {
             return Converts.ToInt32((Double)input);
@@ -1454,7 +1454,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Double"/> and then converted to <see cref="UInt32"/></param>
         /// <returns>UInt32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromDoubleToUInt32(object input)
         {
             return Converts.ToUInt32((Double)input);
@@ -1465,7 +1465,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Double"/> and then converted to <see cref="Int64"/></param>
         /// <returns>Int64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromDoubleToInt64(object input)
         {
             return Converts.ToInt64((Double)input);
@@ -1476,7 +1476,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Double"/> and then converted to <see cref="UInt64"/></param>
         /// <returns>UInt64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromDoubleToUInt64(object input)
         {
             return Converts.ToUInt64((Double)input);
@@ -1487,7 +1487,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Double"/> and then converted to <see cref="Char"/></param>
         /// <returns>Char</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromDoubleToChar(object input)
         {
             return Converts.ToChar((Double)input);
@@ -1498,7 +1498,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Double"/> and then converted to <see cref="Single"/></param>
         /// <returns>Single</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromDoubleToSingle(object input)
         {
             return Converts.ToSingle((Double)input);
@@ -1509,7 +1509,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Double"/> and then converted to <see cref="Decimal"/></param>
         /// <returns>Decimal</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromDoubleToDecimal(object input)
         {
             return Converts.ToDecimal((Double)input);
@@ -1520,7 +1520,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Double"/> and then converted to <see cref="String"/></param>
         /// <returns>String</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromDoubleToString(object input)
         {
             return Converts.ToString((Double)input);
@@ -1531,7 +1531,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Single"/> and then converted to <see cref="Boolean"/></param>
         /// <returns>Boolean</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromSingleToBoolean(object input)
         {
             return Converts.ToBoolean((Single)input);
@@ -1542,7 +1542,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Single"/> and then converted to <see cref="Byte"/></param>
         /// <returns>Byte</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromSingleToByte(object input)
         {
             return Converts.ToByte((Single)input);
@@ -1553,7 +1553,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Single"/> and then converted to <see cref="Int16"/></param>
         /// <returns>Int16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromSingleToInt16(object input)
         {
             return Converts.ToInt16((Single)input);
@@ -1564,7 +1564,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Single"/> and then converted to <see cref="UInt16"/></param>
         /// <returns>UInt16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromSingleToUInt16(object input)
         {
             return Converts.ToUInt16((Single)input);
@@ -1575,7 +1575,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Single"/> and then converted to <see cref="Int32"/></param>
         /// <returns>Int32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromSingleToInt32(object input)
         {
             return Converts.ToInt32((Single)input);
@@ -1586,7 +1586,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Single"/> and then converted to <see cref="UInt32"/></param>
         /// <returns>UInt32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromSingleToUInt32(object input)
         {
             return Converts.ToUInt32((Single)input);
@@ -1597,7 +1597,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Single"/> and then converted to <see cref="Int64"/></param>
         /// <returns>Int64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromSingleToInt64(object input)
         {
             return Converts.ToInt64((Single)input);
@@ -1608,7 +1608,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Single"/> and then converted to <see cref="UInt64"/></param>
         /// <returns>UInt64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromSingleToUInt64(object input)
         {
             return Converts.ToUInt64((Single)input);
@@ -1619,7 +1619,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Single"/> and then converted to <see cref="Char"/></param>
         /// <returns>Char</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromSingleToChar(object input)
         {
             return Converts.ToChar((Single)input);
@@ -1630,7 +1630,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Single"/> and then converted to <see cref="Double"/></param>
         /// <returns>Double</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromSingleToDouble(object input)
         {
             return Converts.ToDouble((Single)input);
@@ -1641,7 +1641,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Single"/> and then converted to <see cref="Decimal"/></param>
         /// <returns>Decimal</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromSingleToDecimal(object input)
         {
             return Converts.ToDecimal((Single)input);
@@ -1652,7 +1652,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Single"/> and then converted to <see cref="String"/></param>
         /// <returns>String</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromSingleToString(object input)
         {
             return Converts.ToString((Single)input);
@@ -1663,7 +1663,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Decimal"/> and then converted to <see cref="Boolean"/></param>
         /// <returns>Boolean</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromDecimalToBoolean(object input)
         {
             return Converts.ToBoolean((Decimal)input);
@@ -1674,7 +1674,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Decimal"/> and then converted to <see cref="Byte"/></param>
         /// <returns>Byte</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromDecimalToByte(object input)
         {
             return Converts.ToByte((Decimal)input);
@@ -1685,7 +1685,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Decimal"/> and then converted to <see cref="Int16"/></param>
         /// <returns>Int16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromDecimalToInt16(object input)
         {
             return Converts.ToInt16((Decimal)input);
@@ -1696,7 +1696,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Decimal"/> and then converted to <see cref="UInt16"/></param>
         /// <returns>UInt16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromDecimalToUInt16(object input)
         {
             return Converts.ToUInt16((Decimal)input);
@@ -1707,7 +1707,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Decimal"/> and then converted to <see cref="Int32"/></param>
         /// <returns>Int32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromDecimalToInt32(object input)
         {
             return Converts.ToInt32((Decimal)input);
@@ -1718,7 +1718,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Decimal"/> and then converted to <see cref="UInt32"/></param>
         /// <returns>UInt32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromDecimalToUInt32(object input)
         {
             return Converts.ToUInt32((Decimal)input);
@@ -1729,7 +1729,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Decimal"/> and then converted to <see cref="Int64"/></param>
         /// <returns>Int64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromDecimalToInt64(object input)
         {
             return Converts.ToInt64((Decimal)input);
@@ -1740,7 +1740,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Decimal"/> and then converted to <see cref="UInt64"/></param>
         /// <returns>UInt64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromDecimalToUInt64(object input)
         {
             return Converts.ToUInt64((Decimal)input);
@@ -1751,7 +1751,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Decimal"/> and then converted to <see cref="Char"/></param>
         /// <returns>Char</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromDecimalToChar(object input)
         {
             return Converts.ToChar((Decimal)input);
@@ -1762,7 +1762,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Decimal"/> and then converted to <see cref="Double"/></param>
         /// <returns>Double</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromDecimalToDouble(object input)
         {
             return Converts.ToDouble((Decimal)input);
@@ -1773,7 +1773,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Decimal"/> and then converted to <see cref="Single"/></param>
         /// <returns>Single</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromDecimalToSingle(object input)
         {
             return Converts.ToSingle((Decimal)input);
@@ -1784,7 +1784,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="Decimal"/> and then converted to <see cref="String"/></param>
         /// <returns>String</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromDecimalToString(object input)
         {
             return Converts.ToString((Decimal)input);
@@ -1795,7 +1795,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="String"/> and then converted to <see cref="Boolean"/></param>
         /// <returns>Boolean</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromStringToBoolean(object input)
         {
             return Converts.ToBoolean((String)input);
@@ -1806,7 +1806,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="String"/> and then converted to <see cref="Byte"/></param>
         /// <returns>Byte</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromStringToByte(object input)
         {
             return Converts.ToByte((String)input);
@@ -1817,7 +1817,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="String"/> and then converted to <see cref="Int16"/></param>
         /// <returns>Int16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromStringToInt16(object input)
         {
             return Converts.ToInt16((String)input);
@@ -1828,7 +1828,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="String"/> and then converted to <see cref="UInt16"/></param>
         /// <returns>UInt16</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromStringToUInt16(object input)
         {
             return Converts.ToUInt16((String)input);
@@ -1839,7 +1839,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="String"/> and then converted to <see cref="Int32"/></param>
         /// <returns>Int32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromStringToInt32(object input)
         {
             return Converts.ToInt32((String)input);
@@ -1850,7 +1850,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="String"/> and then converted to <see cref="UInt32"/></param>
         /// <returns>UInt32</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromStringToUInt32(object input)
         {
             return Converts.ToUInt32((String)input);
@@ -1861,7 +1861,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="String"/> and then converted to <see cref="Int64"/></param>
         /// <returns>Int64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromStringToInt64(object input)
         {
             return Converts.ToInt64((String)input);
@@ -1872,7 +1872,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="String"/> and then converted to <see cref="UInt64"/></param>
         /// <returns>UInt64</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromStringToUInt64(object input)
         {
             return Converts.ToUInt64((String)input);
@@ -1883,7 +1883,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="String"/> and then converted to <see cref="Char"/></param>
         /// <returns>Char</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromStringToChar(object input)
         {
             return Converts.ToChar((String)input);
@@ -1894,7 +1894,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="String"/> and then converted to <see cref="Double"/></param>
         /// <returns>Double</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromStringToDouble(object input)
         {
             return Converts.ToDouble((String)input);
@@ -1905,7 +1905,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="String"/> and then converted to <see cref="Single"/></param>
         /// <returns>Single</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromStringToSingle(object input)
         {
             return Converts.ToSingle((String)input);
@@ -1916,7 +1916,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="input">The object that will be casted to <see cref="String"/> and then converted to <see cref="Decimal"/></param>
         /// <returns>Decimal</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static object FromStringToDecimal(object input)
         {
             return Converts.ToDecimal((String)input);

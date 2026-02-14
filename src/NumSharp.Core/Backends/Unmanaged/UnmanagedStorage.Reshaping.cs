@@ -51,7 +51,7 @@ namespace NumSharp.Backends
         /// </summary>
         /// <exception cref="IncorrectShapeException">If shape's size mismatches current shape size.</exception>
         /// <exception cref="ArgumentException">If <paramref name="newShape"/>'s size == 0</exception>
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         public void Reshape(Shape newShape, bool @unsafe = false)
         {
             Reshape(ref newShape, @unsafe);
@@ -62,7 +62,7 @@ namespace NumSharp.Backends
         /// </summary>
         /// <exception cref="IncorrectShapeException">If shape's size mismatches current shape size.</exception>
         /// <exception cref="ArgumentException">If <paramref name="newShape"/>'s size == 0</exception>
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         public void Reshape(ref Shape newShape, bool @unsafe = false)
         {
             // NumPy behavior: non-contiguous arrays require a copy when reshaping

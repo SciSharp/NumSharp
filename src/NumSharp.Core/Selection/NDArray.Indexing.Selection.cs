@@ -40,7 +40,7 @@ namespace NumSharp
         /// <param name="slice"></param>
         /// <param name="axis"></param>
         /// <returns></returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         protected internal static NDArray<int> GetIndicesFromSlice(Shape shape, Slice slice, int axis)
         {
             return GetIndicesFromSlice(shape.dimensions, slice, axis);
@@ -53,7 +53,7 @@ namespace NumSharp
         /// <param name="slice"></param>
         /// <param name="axis"></param>
         /// <returns></returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         protected internal static NDArray<int> GetIndicesFromSlice(int[] shape, Slice slice, int axis)
         {
             var dim = shape[axis];

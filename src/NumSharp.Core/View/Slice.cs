@@ -79,7 +79,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="index"></param>
         /// <returns></returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Slice Index(int index) => new Slice(index, index + 1) { IsIndex = true };
 
         ///// <summary>
@@ -87,7 +87,7 @@ namespace NumSharp
         ///// </summary>
         ///// <param name="index_array_or_mask"></param>
         ///// <returns></returns>
-        //[MethodImpl(MethodImplOptions.AggressiveInlining)]
+        //[MethodImpl(Inline)]
         //public static Slice Select(NDArray index_array_or_mask) => new Slice(null, null) { Selection=index_array_or_mask };
 
         public int? Start;
@@ -261,7 +261,7 @@ namespace NumSharp
 
         // return the size of the slice, given the data dimension on this axis
         // note: this works only with sanitized shapes!
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public int GetSize()
         {
             var astep = Math.Abs(Step);
@@ -273,7 +273,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="dim"></param>
         /// <returns></returns>
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         public SliceDef ToSliceDef(int dim)
         {
             if (IsIndex)
@@ -394,14 +394,14 @@ namespace NumSharp
 
         public bool IsIndex
         {
-            [MethodImpl((MethodImplOptions)768)] get => Count == -1;
+            [MethodImpl(OptimizeAndInline)] get => Count == -1;
         }
 
         /// <summary>
         /// reverts the order of the slice sequence
         /// </summary>
         /// <returns></returns>
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         public SliceDef Invert()
         {
             return new SliceDef() {Count = Count, Start = (Start + Step * Count), Step = -Step};
@@ -419,7 +419,7 @@ namespace NumSharp
         /// <summary>
         /// Merge calculates the resulting one-time slice on the original data if it is sliced repeatedly
         /// </summary>
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         public SliceDef Merge(SliceDef other)
         {
             if (other.Count == 0)

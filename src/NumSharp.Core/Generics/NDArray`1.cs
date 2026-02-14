@@ -146,9 +146,9 @@ namespace NumSharp.Generic
         /// <value></value>
         protected internal new ArraySlice<TDType> Array
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(Inline)]
             get => Storage.GetData<TDType>();
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(Inline)]
             set => Storage.ReplaceData(value);
         }
 
@@ -157,13 +157,13 @@ namespace NumSharp.Generic
         /// </summary>
         protected internal new unsafe TDType* Address
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(Inline)]
             get => (TDType*)Storage.Address;
         }
 
         public new TDType this[params int[] indices]
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(Inline)]
             get
             {
                 if (Shape.IsScalar && indices.Length != 1 || !Shape.IsScalar && indices.Length != ndim)
@@ -171,7 +171,7 @@ namespace NumSharp.Generic
 
                 return Storage.GetValue<TDType>(indices);
             }
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(Inline)]
             set
             {
                 if (Shape.IsScalar && indices.Length != 1 || !Shape.IsScalar && indices.Length != ndim)
@@ -187,13 +187,13 @@ namespace NumSharp.Generic
         /// <value></value>
         public new NDArray<TDType> this[string slice]
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(Inline)]
             get
             {
                 return base[slice].MakeGeneric<TDType>();
             }
 
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(Inline)]
             set
             {
                 base[slice] = value;
@@ -206,10 +206,10 @@ namespace NumSharp.Generic
         /// <value></value>
         public new NDArray<TDType> this[params Slice[] slices]
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(Inline)]
             get => base[slices].MakeGeneric<TDType>();
 
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(Inline)]
             set => base[slices] = value;
         }
 
@@ -248,10 +248,10 @@ namespace NumSharp.Generic
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static implicit operator ArraySlice<TDType>(NDArray<TDType> nd) => nd.Array;
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static explicit operator NDArray<TDType>(TDType[] tArray) => new NDArray(tArray).MakeGeneric<TDType>();
 
     }
