@@ -44,21 +44,20 @@ jobs:
     # NOTE: Test project currently only targets net10.0. See TODO in NumSharp.UnitTest.csproj
     # to re-enable net8.0 when TUnit compatibility is resolved.
     #
-    # Test filtering:
+    # Test filtering (using dotnet test --filter with MSTest-style syntax):
     #   - OpenBugs: excluded on all platforms (known-failing bug reproductions)
     #   - WindowsOnly: excluded on non-Windows (require GDI+/System.Drawing.Common)
     - name: Test (net10.0)
       shell: bash
       run: |
         if [[ "$RUNNER_OS" == "Windows" ]]; then
-          FILTER='/*/*/*/*[Category!=OpenBugs]'
+          FILTER='TestCategory!=OpenBugs'
         else
-          # Combine filters with separate brackets (TUnit syntax for AND)
-          FILTER='/*/*/*/*[Category!=OpenBugs][Category!=WindowsOnly]'
+          FILTER='TestCategory!=OpenBugs & TestCategory!=WindowsOnly'
         fi
-        dotnet run --project test/NumSharp.UnitTest/NumSharp.UnitTest.csproj \
+        dotnet test test/NumSharp.UnitTest/NumSharp.UnitTest.csproj \
           --configuration Release --no-build --framework net10.0 \
-          -- --treenode-filter "$FILTER" --report-trx
+          --filter "$FILTER" --logger trx
 
     - name: Upload Test Results
       uses: actions/upload-artifact@v4
