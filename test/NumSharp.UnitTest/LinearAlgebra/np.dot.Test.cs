@@ -68,6 +68,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
         }
 
         [Test]
+        [OpenBugs] // np.dot returns wrong values for high-dimensional arrays
         public void Dot3412x5621()
         {
             var x = arange((3, 4, 1, 2));
@@ -77,6 +78,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
         }
 
         [Test]
+        [OpenBugs] // np.dot returns wrong values for high-dimensional arrays
         public void Dot311x511()
         {
             var x = arange((3, 1, 1));

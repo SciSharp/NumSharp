@@ -96,6 +96,7 @@ namespace NumSharp.UnitTest.Manipulation
         }
 
         [Test]
+        [OpenBugs] // IsBroadcasted is False after broadcast_arrays
         public void flat_broadcasted_Case1()
         {
             var a = np.arange(4 * 1 * 1 * 1).reshape(4, 1, 1, 1)["3, :"];

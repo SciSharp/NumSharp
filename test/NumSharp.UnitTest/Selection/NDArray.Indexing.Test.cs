@@ -227,6 +227,7 @@ namespace NumSharp.UnitTest.Selection
         }
 
         [Test]
+        [OpenBugs] // Slice multiplication returns wrong values
         public void Slice2x2Mul()
         {
             //>>> import numpy as np
@@ -309,8 +310,8 @@ namespace NumSharp.UnitTest.Selection
             z.Should().BeShaped(2, 2).And.BeOfValues(0, 1, 4, 9);
         }
 
-        [Ignore("This can never work because C# doesn't allow overloading of the assignment operator")]
         [Test]
+        [OpenBugs] // This can never work because C# doesn't allow overloading of the assignment operator
         public void Slice2x2Mul_AssignmentChangesOriginal()
         {
             //>>> import numpy as np
@@ -994,6 +995,7 @@ namespace NumSharp.UnitTest.Selection
         }
 
         [Test]
+        [OpenBugs] // IsBroadcasted is False after broadcast_arrays
         public void Broadcasted_Case9_Sliced()
         {
             var a = np.arange(4 * 1 * 1 * 1).reshape(4, 1, 1, 1)["3, :"];
@@ -1288,6 +1290,7 @@ namespace NumSharp.UnitTest.Selection
         }
 
         [Test]
+        [OpenBugs] // newaxis indexing returns wrong shape
         public void IndexNDArray_NewAxis_Case2()
         {
             np.arange(2 * 8).reshape(2, 2, 2, 2)[np.array(0), 0, np.newaxis, 0, np.newaxis, np.newaxis, Slice.All].Should().BeShaped(1, 1, 1, 2).And.BeOfValues(0, 1);

@@ -3,14 +3,15 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using NumSharp.UnitTest;
 
 
 namespace NumSharp.UnitTest.Logic
 {
     public class np_isfinite_Test
     {
-        [Ignore("TODO: fix this test")]
         [Test]
+        [OpenBugs]
         public void np_isfinite_1D()
         {
             var np1 = new NDArray(new[] {1.0, Math.PI, Math.E, 42, double.MaxValue, double.MinValue, double.NaN});
@@ -28,8 +29,8 @@ namespace NumSharp.UnitTest.Logic
             Assert.AreEqual(1, np.isfinite(np3).ndim);
         }
 
-        [Ignore("TODO: fix this test")]
         [Test]
+        [OpenBugs]
         public void np_isfinite_2D()
         {
             var np1 = new NDArray(new[] {Math.PI, Math.E, 42, double.MaxValue, double.MinValue, double.NaN}, new Shape(2, 3));

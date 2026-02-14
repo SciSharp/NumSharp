@@ -7,13 +7,13 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 namespace NumSharp.UnitTest
 {
     /// <summary>
-    /// Test concolve with standard example from 
+    /// Test concolve with standard example from
     /// https://www.numpy.org/devdocs/reference/generated/numpy.convolve.html
     /// </summary>
     public class NdArrayConvolveTest
     {
-        [Ignore("TODO: fix this test")]
         [Test]
+        [OpenBugs]
         public void ConvoleFull()
         {
             var series1 = np.array(new double[] {1, 2, 3});
@@ -26,8 +26,8 @@ namespace NumSharp.UnitTest
             Assert.IsTrue(Enumerable.SequenceEqual(series3.Data<double>(), expectedResult));
         }
 
-        [Ignore("TODO: fix this test")]
         [Test]
+        [OpenBugs]
         public void ConvoleValid()
         {
             var series1 = np.array(new double[] {1, 2, 3});
@@ -40,8 +40,8 @@ namespace NumSharp.UnitTest
             Assert.IsTrue(Enumerable.SequenceEqual(series3.Data<double>(), expectedResult));
         }
 
-        [Ignore("TODO: fix this test")]
         [Test]
+        [OpenBugs]
         public void ConvoleSame()
         {
             var series1 = np.array(new double[] {1, 2, 3});

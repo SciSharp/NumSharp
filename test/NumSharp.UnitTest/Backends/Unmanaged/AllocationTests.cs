@@ -22,8 +22,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             }
         }
 
-        [Ignore("Fails expectedly. Int32 can not address this size any more")]
         [Test]
+        [OpenBugs]
         public void Allocate_2GB()
         {
             lock (_lock)
@@ -34,8 +34,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             }
         }
 
-        [Ignore("Fails expectedly. Int32 can not address this size any more")]
         [Test]
+        [OpenBugs]
         public void Allocate_4GB()
         {
             lock (_lock)
@@ -46,8 +46,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             }
         }
 
-        [Ignore("Fails expectedly. Int32 can not address this size any more")]
         [Test]
+        [OpenBugs]
         public void Allocate_44GB()
         {
             lock (_lock)
