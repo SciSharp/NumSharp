@@ -3,6 +3,7 @@
 # Only JSON and CSV are ignored as intermediate/machine-readable outputs
 /benchmark-report.json
 /benchmark-report.csv
+/numpy-results.json
 
 # Benchmark run outputs
 *.txt

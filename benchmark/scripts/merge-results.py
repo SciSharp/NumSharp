@@ -9,7 +9,7 @@ Outputs:
 
 Usage:
   python merge-results.py
-  python merge-results.py --numpy ../benchmark-report.json --csharp ../NumSharp.Benchmark.GraphEngine/BenchmarkDotNet.Artifacts/results/
+  python merge-results.py --numpy ../benchmark-report.json --csharp ../NumSharp.Benchmark.Core/BenchmarkDotNet.Artifacts/results/
   python merge-results.py --format csv
 
 Note: This script is typically invoked from run-benchmarks.ps1 with explicit paths.
@@ -384,8 +384,8 @@ def generate_markdown(results: List[UnifiedResult], output_path: str):
 
 def main():
     parser = argparse.ArgumentParser(description='Merge NumPy and NumSharp benchmark results')
-    parser.add_argument('--numpy', default='benchmark-report.json', help='Path to NumPy results JSON')
-    parser.add_argument('--csharp', default='NumSharp.Benchmark.GraphEngine/BenchmarkDotNet.Artifacts/results',
+    parser.add_argument('--numpy', default='numpy-results.json', help='Path to NumPy results JSON')
+    parser.add_argument('--csharp', default='NumSharp.Benchmark.Core/BenchmarkDotNet.Artifacts/results',
                        help='Path to BenchmarkDotNet artifacts directory')
     parser.add_argument('--output', default='benchmark-report', help='Output file base name (without extension)')
     parser.add_argument('--format', choices=['all', 'json', 'csv', 'md'], default='all',

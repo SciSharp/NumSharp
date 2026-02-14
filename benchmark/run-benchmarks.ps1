@@ -122,7 +122,7 @@ $report += "`n"
 # =============================================================================
 
 $pythonResults = @()
-$pythonJsonPath = Join-Path $ScriptDir "benchmark-report.json"
+$pythonJsonPath = Join-Path $ScriptDir "numpy-results.json"
 
 if (-not $SkipPython) {
     Write-Status "Running Python/NumPy benchmarks..."

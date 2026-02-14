@@ -22,7 +22,7 @@ namespace NumSharp.Benchmark.Core;
 /// - All existing tests pass with DynamicMethod enabled
 /// - Generated code files can be deleted
 ///
-/// Related: #544 (this issue), #541 (successor - GraphEngine with fusion)
+/// Related: #544 (this issue), #541 (successor - benchmark suite with fusion)
 /// </summary>
 [MemoryDiagnoser]
 [Orderer(SummaryOrderPolicy.FastestToSlowest)]
