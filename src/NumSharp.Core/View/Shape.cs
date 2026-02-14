@@ -49,20 +49,14 @@ namespace NumSharp
         internal readonly int _flags;
 
         /// <summary>
-        ///     Does this Shape have modified strides, usually in scenarios like np.transpose.
-        /// </summary>
-        /// <remarks>DEPRECATED: Will be removed. Use !IsContiguous instead.</remarks>
-        public readonly bool ModifiedStrides;
-
-        /// <summary>
         ///     True if this shape represents a view (sliced) into underlying data.
         ///     A shape is "sliced" if it doesn't represent the full original buffer.
-        ///     This includes: non-zero offset, different size than buffer, or modified strides.
+        ///     This includes: non-zero offset, different size than buffer, or non-contiguous strides.
         /// </summary>
         public readonly bool IsSliced
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            get => offset != 0 || (bufferSize > 0 && bufferSize != size) || ModifiedStrides;
+            get => offset != 0 || (bufferSize > 0 && bufferSize != size) || !IsContiguous;
         }
 
         /// <summary>
@@ -103,8 +97,11 @@ namespace NumSharp
             // ALIGNED is always true for managed memory
             flags |= (int)ArrayFlags.ALIGNED;
 
-            // WRITEABLE defaults to true, cleared for broadcast views via WithFlags()
-            flags |= (int)ArrayFlags.WRITEABLE;
+            // WRITEABLE is true unless this is a broadcast shape (NumPy behavior).
+            // Broadcast arrays have stride=0 dimensions where multiple logical positions
+            // map to the same physical memory - writing would corrupt shared data.
+            if (!isBroadcasted)
+                flags |= (int)ArrayFlags.WRITEABLE;
 
             return flags;
         }
@@ -337,7 +334,7 @@ namespace NumSharp
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static Shape NewScalar()
         {
-            return new Shape(Array.Empty<int>());
+            return new Shape();
         }
 
         /// <summary>
@@ -411,6 +408,26 @@ namespace NumSharp
         #region Constructors
 
         /// <summary>
+        ///     Creates a scalar shape (ndim=0, size=1).
+        ///     Equivalent to NumPy's empty tuple shape ().
+        /// </summary>
+        /// <remarks>
+        ///     In NumPy: np.array(42).shape == ()
+        ///     In NumSharp: new Shape() creates a scalar shape.
+        /// </remarks>
+        public Shape()
+        {
+            this.dimensions = Array.Empty<int>();
+            this.strides = Array.Empty<int>();
+            this.offset = 0;
+            this.bufferSize = 1;
+            this.size = 1;
+            this._hashCode = int.MinValue; // Scalar hash
+            this.IsScalar = true;
+            this._flags = (int)(ArrayFlags.C_CONTIGUOUS | ArrayFlags.ALIGNED | ArrayFlags.WRITEABLE);
+        }
+
+        /// <summary>
         ///     Complete constructor for views/broadcasts (NumPy-aligned).
         ///     All parameters are set explicitly, flags computed from dims/strides.
         /// </summary>
@@ -418,14 +435,12 @@ namespace NumSharp
         /// <param name="strides">Stride values (not cloned - caller must provide fresh array)</param>
         /// <param name="offset">Offset into underlying buffer</param>
         /// <param name="bufferSize">Size of underlying buffer</param>
-        /// <param name="modifiedStrides">Whether strides were modified (deprecated, use false)</param>
-        internal Shape(int[] dims, int[] strides, int offset, int bufferSize, bool modifiedStrides = false)
+        internal Shape(int[] dims, int[] strides, int offset, int bufferSize)
         {
             this.dimensions = dims ?? Array.Empty<int>();
             this.strides = strides ?? Array.Empty<int>();
             this.offset = offset;
             this.bufferSize = bufferSize;
-            this.ModifiedStrides = modifiedStrides;
 
             (this.size, this._hashCode) = ComputeSizeAndHash(dims);
             this.IsScalar = size == 1 && (dims == null || dims.Length == 0);
@@ -438,19 +453,18 @@ namespace NumSharp
         public Shape WithFlags(ArrayFlags flagsToSet = ArrayFlags.None, ArrayFlags flagsToClear = ArrayFlags.None)
         {
             int newFlags = (_flags | (int)flagsToSet) & ~(int)flagsToClear;
-            return new Shape(dimensions, strides, offset, bufferSize, ModifiedStrides, newFlags);
+            return new Shape(dimensions, strides, offset, bufferSize, newFlags);
         }
 
         /// <summary>
         ///     Internal constructor with explicit flags (for WithFlags).
         /// </summary>
-        private Shape(int[] dims, int[] strides, int offset, int bufferSize, bool modifiedStrides, int flags)
+        private Shape(int[] dims, int[] strides, int offset, int bufferSize, int flags)
         {
             this.dimensions = dims;
             this.strides = strides;
             this.offset = offset;
             this.bufferSize = bufferSize;
-            this.ModifiedStrides = modifiedStrides;
             this._flags = flags;
 
             (this.size, this._hashCode) = ComputeSizeAndHash(dims);
@@ -473,7 +487,6 @@ namespace NumSharp
             this.strides = (int[])other.strides.Clone();
             this.offset = other.offset;
             this.IsScalar = other.IsScalar;
-            this.ModifiedStrides = other.ModifiedStrides;
             this._flags = other._flags; // Copy cached flags
         }
 
@@ -491,7 +504,6 @@ namespace NumSharp
             this.dimensions = dims;
             this.strides = strides;
             this.offset = 0;
-            this.ModifiedStrides = false;
 
             (this.size, this._hashCode) = ComputeSizeAndHash(dims);
             this.bufferSize = size;
@@ -513,7 +525,6 @@ namespace NumSharp
             this.dimensions = dims;
             this.strides = strides;
             this.offset = 0;
-            this.ModifiedStrides = false;
 
             (this.size, this._hashCode) = ComputeSizeAndHash(dims);
             // For broadcast shapes, bufferSize is the original (pre-broadcast) size
@@ -531,7 +542,6 @@ namespace NumSharp
             this.dimensions = dims;
             this.strides = ComputeContiguousStrides(dims);
             this.offset = 0;
-            this.ModifiedStrides = false;
 
             (this.size, this._hashCode) = ComputeSizeAndHash(dims);
             this.bufferSize = size;
@@ -752,7 +762,7 @@ namespace NumSharp
             // which uses factors (product of trailing dimensions) rather than strides.
             // This correctly maps linear index 0..size-1 to logical coordinates regardless
             // of the actual memory layout.
-            if (!IsContiguous || ModifiedStrides)
+            if (!IsContiguous)
             {
                 var coords = new int[dimensions.Length];
                 int remaining = offset;

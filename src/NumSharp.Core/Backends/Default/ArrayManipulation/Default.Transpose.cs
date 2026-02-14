@@ -184,9 +184,9 @@ namespace NumSharp.Backends
             }
 
             // Create the transposed shape via constructor (immutable)
-            // modifiedStrides=true so iteration uses coordinate-based access
+            // IsContiguous is computed from strides and will be false for transposed arrays
             int bufSize = shape.bufferSize > 0 ? shape.bufferSize : shape.size;
-            var newShape = new Shape(permutedDims, permutedStrides, shape.offset, bufSize, modifiedStrides: true);
+            var newShape = new Shape(permutedDims, permutedStrides, shape.offset, bufSize);
 
             // Return an alias (view) with the permuted shape
             return new NDArray(nd.Storage.Alias(newShape));

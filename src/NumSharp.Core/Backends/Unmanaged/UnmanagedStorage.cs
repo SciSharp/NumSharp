@@ -1312,15 +1312,17 @@ namespace NumSharp.Backends
             if (typeof(T) != _dtype)
                 throw new InvalidCastException("Unable to perform CopyTo when T does not match dtype, use non-generic overload instead.");
 
-            if (!Shape.IsContiguous || Shape.ModifiedStrides)
+            if (!Shape.IsContiguous)
             {
                 var dst = ArraySlice.Wrap<T>(address, Count);
                 MultiIterator.Assign(new UnmanagedStorage(dst, Shape.Clean()), this);
                 return;
             }
 
+            // Fast path for contiguous - account for offset (sliced views)
             var bytesCount = Count * InfoOf<T>.Size;
-            Buffer.MemoryCopy(Address, address, bytesCount, bytesCount);
+            var srcAddress = Address + Shape.offset * InfoOf<T>.Size;
+            Buffer.MemoryCopy(srcAddress, address, bytesCount, bytesCount);
         }
 
         /// <summary>
@@ -1340,8 +1342,7 @@ namespace NumSharp.Backends
 
             fixed (T* dst = array)
             {
-                var bytesCount = Count * InfoOf<T>.Size;
-                Buffer.MemoryCopy(Address, dst, bytesCount, bytesCount);
+                CopyTo<T>(dst);
             }
         }
 

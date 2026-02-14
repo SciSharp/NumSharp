@@ -32,18 +32,36 @@ namespace NumSharp
 
             if (!@unsafe)
             {
-                if (newShape.size == 0 && size != 0)
-                    throw new ArgumentException("Value cannot be an empty collection.", nameof(newShape));
+                // Check if this is a scalar reshape (ndim=0 shape from default constructor or empty dims)
+                bool isScalarShape = (newShape.dimensions == null || newShape.dimensions.Length == 0);
 
-                if (size != newShape.size)
-                    throw new IncorrectShapeException($"Given shape size ({newShape.size}) does not match the size of the given storage size ({size})");
+                if (isScalarShape)
+                {
+                    // Scalar shapes are valid only when reshaping from size 1
+                    if (size != 1)
+                        throw new IncorrectShapeException($"Cannot reshape array of size {size} into scalar shape");
+                }
+                else
+                {
+                    // For non-scalar shapes, check for empty collection and size match
+                    if (newShape.size == 0 && size != 0)
+                        throw new ArgumentException("Value cannot be an empty collection.", nameof(newShape));
+
+                    if (size != newShape.size)
+                        throw new IncorrectShapeException($"Given shape size ({newShape.size}) does not match the size of the given storage size ({size})");
+                }
             }
 
             // NumPy-aligned: Create new shape with preserved offset and bufferSize
             int bufSize = bufferSize > 0 ? bufferSize : size;
+
+            // Handle scalar shape (null/empty dimensions from default constructor)
+            var newDims = newShape.dimensions ?? Array.Empty<int>();
+            var newStrides = newShape.strides ?? Array.Empty<int>();
+
             return new Shape(
-                (int[])newShape.dimensions.Clone(),
-                (int[])newShape.strides.Clone(),
+                newDims.Length > 0 ? (int[])newDims.Clone() : newDims,
+                newStrides.Length > 0 ? (int[])newStrides.Clone() : newStrides,
                 offset,
                 bufSize
             );
@@ -60,18 +78,36 @@ namespace NumSharp
 
             if (!@unsafe)
             {
-                if (newShape.size == 0 && size != 0)
-                    throw new ArgumentException("Value cannot be an empty collection.", nameof(newShape));
+                // Check if this is a scalar reshape (ndim=0 shape from default constructor or empty dims)
+                bool isScalarShape = (newShape.dimensions == null || newShape.dimensions.Length == 0);
 
-                if (size != newShape.size)
-                    throw new IncorrectShapeException($"Given shape size ({newShape.size}) does not match the size of the given storage size ({size})");
+                if (isScalarShape)
+                {
+                    // Scalar shapes are valid only when reshaping from size 1
+                    if (size != 1)
+                        throw new IncorrectShapeException($"Cannot reshape array of size {size} into scalar shape");
+                }
+                else
+                {
+                    // For non-scalar shapes, check for empty collection and size match
+                    if (newShape.size == 0 && size != 0)
+                        throw new ArgumentException("Value cannot be an empty collection.", nameof(newShape));
+
+                    if (size != newShape.size)
+                        throw new IncorrectShapeException($"Given shape size ({newShape.size}) does not match the size of the given storage size ({size})");
+                }
             }
 
             // NumPy-aligned: preserve bufferSize from original shape for broadcast tracking
             int bufSize = bufferSize > 0 ? bufferSize : size;
+
+            // Handle scalar shape (null/empty dimensions from default constructor)
+            var newDims = newShape.dimensions ?? Array.Empty<int>();
+            var newStrides = newShape.strides ?? Array.Empty<int>();
+
             return new Shape(
-                (int[])newShape.dimensions.Clone(),
-                (int[])newShape.strides.Clone(),
+                newDims.Length > 0 ? (int[])newDims.Clone() : newDims,
+                newStrides.Length > 0 ? (int[])newStrides.Clone() : newStrides,
                 0,
                 bufSize
             );
@@ -83,6 +119,10 @@ namespace NumSharp
         [SuppressMessage("ReSharper", "ParameterHidesMember")]
         private readonly Shape _inferMissingDimension(Shape shape)
         {
+            // Handle uninitialized shape (from default constructor) or scalar shapes
+            if (shape.dimensions == null || shape.dimensions.Length == 0)
+                return shape;
+
             var indexOfNegOne = -1;
             int product = 1;
             for (int i = 0; i < shape.NDim; i++)
@@ -153,7 +193,20 @@ namespace NumSharp
                 }
 
                 Arrays.Insert(ref newDims, axis, 1);
-                Arrays.Insert(ref newStrides, axis, 0);
+
+                // Calculate proper stride for C-contiguous layout
+                int newStride;
+                if (axis >= dimensions.Length)
+                {
+                    // Appending at the end - use 1 (innermost stride)
+                    newStride = 1;
+                }
+                else
+                {
+                    // Inserting before existing dimension
+                    newStride = dimensions[axis] * strides[axis];
+                }
+                Arrays.Insert(ref newStrides, axis, newStride);
             }
 
             // Create new shape with preserved bufferSize
