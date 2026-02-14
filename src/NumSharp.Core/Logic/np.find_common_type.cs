@@ -8,6 +8,82 @@ using NumSharp.Backends;
 
 namespace NumSharp
 {
+    // ================================================================================
+    // TYPE PROMOTION SYSTEM
+    // ================================================================================
+    //
+    // This file implements NumPy-compatible type promotion for arithmetic operations.
+    // When two arrays (or an array and a scalar) are combined, this system determines
+    // the result dtype.
+    //
+    // ARCHITECTURE
+    // ============
+    //
+    // Four lookup tables are used (two pairs for Type and NPTypeCode access):
+    //
+    //   _typemap_arr_arr      / _nptypemap_arr_arr      - Array + Array promotion
+    //   _typemap_arr_scalar   / _nptypemap_arr_scalar   - Array + Scalar promotion
+    //
+    // The tables are FrozenDictionary<(T1, T2), TResult> for O(1) lookup.
+    //
+    // WHEN EACH TABLE IS USED
+    // =======================
+    //
+    // The _FindCommonType(NDArray, NDArray) method decides which table to use:
+    //
+    //   if (both are non-scalar arrays)  → _typemap_arr_arr
+    //   if (both are scalar arrays)      → _FindCommonScalarType (uses arr_arr rules)
+    //   if (one is array, one is scalar) → _typemap_arr_scalar
+    //
+    // This matters because scalar promotion follows different rules than array promotion.
+    //
+    // KIND HIERARCHY
+    // ==============
+    //
+    // Types are grouped into "kinds" with a promotion hierarchy:
+    //
+    //   boolean < integer < floating-point < complex
+    //
+    // When operands are of different kinds, the result promotes to the higher kind:
+    //
+    //   int32 + float32  → float64  (int promotes to float)
+    //   float32 + complex → complex  (float promotes to complex)
+    //
+    // WITHIN-KIND PROMOTION
+    // =====================
+    //
+    // When operands are the same kind, promotion depends on the operation type:
+    //
+    // Array + Array (both non-scalar):
+    //   - Result is the "larger" type that can hold both ranges
+    //   - uint8 + int16 → int16 (int16 can hold uint8 range + negatives)
+    //   - uint32 + int32 → int64 (need 64-bit to hold both ranges)
+    //   - uint64 + int64 → float64 (no integer type can hold both!)
+    //
+    // Array + Scalar (NEP 50 behavior):
+    //   - Array dtype wins when scalar is same-kind (e.g., both integers)
+    //   - uint8_array + int32_scalar → uint8 (array wins)
+    //   - float32_array + int32_scalar → float32 (array wins, same effective kind)
+    //
+    // EXAMPLES
+    // ========
+    //
+    //   var a = np.array(new byte[] {1, 2, 3});      // uint8
+    //   var b = np.array(new int[] {4, 5, 6});       // int32
+    //
+    //   (a + b).dtype == np.int32                     // arr+arr: promotes to int32
+    //   (a + 5).dtype == np.uint8                     // arr+scalar: array wins (NEP 50)
+    //   (a + 5.0).dtype == np.float64                 // cross-kind: float wins
+    //
+    // REFERENCES
+    // ==========
+    //
+    // - NumPy type promotion: https://numpy.org/doc/stable/reference/ufuncs.html#type-casting-rules
+    // - NEP 50 (scalar promotion): https://numpy.org/neps/nep-0050-scalar-promotion.html
+    // - Array API type promotion: https://data-apis.org/array-api/latest/API_specification/type_promotion.html
+    //
+    // ================================================================================
+
     [SuppressMessage("ReSharper", "StaticMemberInitializerReferesToMemberBelow")]
     public static partial class np
     {
@@ -49,6 +125,39 @@ namespace NumSharp
         static np()
         {
             #region arr_arr
+
+            // ============================================================================
+            // ARRAY-ARRAY TYPE PROMOTION TABLE
+            // ============================================================================
+            //
+            // This table defines type promotion when TWO ARRAYS are combined.
+            // The key is (LeftArrayType, RightArrayType), the value is the result type.
+            //
+            // PROMOTION RULES:
+            //
+            // 1. Same type: result is that type
+            //    int32 + int32 → int32
+            //
+            // 2. Same kind, different size: result is larger type
+            //    int16 + int32 → int32
+            //    float32 + float64 → float64
+            //
+            // 3. Signed + Unsigned (same size): result is next-larger signed type
+            //    int16 + uint16 → int32 (need more bits for both ranges)
+            //    int32 + uint32 → int64
+            //    int64 + uint64 → float64 (no larger integer exists!)
+            //
+            // 4. Cross-kind: result is the higher kind
+            //    int32 + float32 → float64 (int32 needs float64 precision)
+            //    uint8 + float32 → float32 (uint8 fits in float32)
+            //
+            // 5. Complex: absorbs everything
+            //    float32 + complex64 → complex64
+            //    int32 + complex64 → complex128 (int32 needs float64 precision)
+            //
+            // This table matches NumPy 2.x arr+arr behavior exactly.
+            //
+            // ============================================================================
 
             var typemap_arr_arr = new Dictionary<(Type, Type), Type>(180);
             typemap_arr_arr.Add((np.@bool, np.@bool), np.@bool);
