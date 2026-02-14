@@ -4,14 +4,13 @@ using System.Numerics;
 using System.Collections.Generic;
 using System.Text;
 using System.Linq;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.Backends;
 using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp.UnitTest
 {
-    [TestClass]
     public class StorageTester
     {
         public UnmanagedStorage strg1D;
@@ -33,7 +32,7 @@ namespace NumSharp.UnitTest
             strg2DNonFull.ReplaceData(new float[] {0, 1, 2, 3, 4, 5, 6, 7, 8, 9});
         }
 
-        [TestMethod]
+        [Test]
         public void Creation()
         {
             Assert.IsNotNull(strg1D);
@@ -41,7 +40,7 @@ namespace NumSharp.UnitTest
             Assert.IsNotNull(strg2DNonFull);
         }
 
-        [TestMethod]
+        [Test]
         public void InternalArrayCheck()
         {
             Assert.IsTrue(strg1D.GetData().Count == 10);
@@ -49,7 +48,7 @@ namespace NumSharp.UnitTest
             Assert.IsTrue(strg2DNonFull.GetData().Count == 10);
         }
 
-        [TestMethod]
+        [Test]
         public void IndexingCheck()
         {
             var element1D = strg1D.GetValue<double>(0);
@@ -61,7 +60,7 @@ namespace NumSharp.UnitTest
             }
         }
 
-        [TestMethod]
+        [Test]
         public unsafe void CloneCheck()
         {
             var l = strg1D;
@@ -74,7 +73,7 @@ namespace NumSharp.UnitTest
             l.Shape.Should().Be(r.Shape);
         }
 
-        [TestMethod, Ignore("Transpose is not implemented")]
+        [Test, Skip("Transpose is not implemented")]
         public void ReshapeLayout2d()
         {
             //var x = np.arange(6).MakeGeneric<int>();
@@ -91,7 +90,7 @@ namespace NumSharp.UnitTest
             //Assert.AreEqual(y[1, 0], 3);
         }
 
-        [TestMethod, Ignore("Transpose is not implemented")]
+        [Test, Skip("Transpose is not implemented")]
         public void ReshapeLayout3d()
         {
             //var x = np.arange(12).MakeGeneric<int>();
@@ -107,7 +106,7 @@ namespace NumSharp.UnitTest
             //Assert.AreEqual(y[0, 1], 4);
         }
 
-        [TestMethod]
+        [Test]
         public void CastingViaGet()
         {
             new Action(() =>
@@ -117,8 +116,8 @@ namespace NumSharp.UnitTest
             }).Should().NotThrow();
         }
 
-        [Ignore]
-        [TestMethod]
+        [Skip("Ignored")]
+        [Test]
         public void CheckChangeTensorLayout2D()
         {
             var strg2DCpy = (UnmanagedStorage)strg2D.Clone();

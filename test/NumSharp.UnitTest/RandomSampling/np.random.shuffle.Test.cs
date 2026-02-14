@@ -9,10 +9,9 @@ using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.RandomSampling
 {
-    [TestClass]
     public class NpRandomShuffleTest : TestClass
     {
-        [TestMethod]
+        [Test]
         public void Base1DTest()
         {
             var rnd = np.random.RandomState(42);
@@ -24,7 +23,7 @@ namespace NumSharp.UnitTest.RandomSampling
             nd.Should().BeOfValues(5, 6, 7, 3, 4, 1, 0, 5, 2, 9);
         }
 
-        [TestMethod]
+        [Test]
         public void Base4DTest()
         {
             var rnd = np.random.RandomState(42);

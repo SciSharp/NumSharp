@@ -1,16 +1,15 @@
 ﻿using System;
 using System.Linq;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.Backends;
 using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp.UnitTest.Backends.Unmanaged.Math
 {
-    [TestClass]
     public class np_power_tests
     {
-        [TestMethod]
+        [Test]
         public void Power_1()
         {
             var arr = np.zeros(new Shape(5, 5)) + 5d;
@@ -23,7 +22,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             ret.GetData<double>().All(d => d==25).Should().BeTrue();
         }
 
-        [TestMethod]
+        [Test]
         public void Power_2()
         {
             var arr = np.ones(new Shape(5, 5));
@@ -36,7 +35,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             ret.GetData<double>().All(d => d == 1).Should().BeTrue();
         }
 
-        [TestMethod]
+        [Test]
         public void PowerUpcast()
         {
             var right = np.zeros(new Shape(5, 5)).astype(NPTypeCode.Int32)+5;
@@ -50,7 +49,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             }
         }
 
-        [TestMethod]
+        [Test]
         public void PowerDowncast()
         {
             var right = np.zeros(new Shape(5, 5)).astype(NPTypeCode.Double) + 5;

@@ -9,7 +9,6 @@ using System.Numerics;
 
 namespace NumSharp.UnitTest.Creation
 {
-    [TestClass]
     public class NdArrayMGridTest
     {
         // These C# NDArray declarations were generated using ndarray-generatory.py,
@@ -71,7 +70,7 @@ namespace NumSharp.UnitTest.Creation
             0, 1, 2, 3, 4
             }, new Shape(new int[] { 5, 5 }));
 
-        [TestMethod]
+        [Test]
         public void BaseTest()
         {
             var V53 = np.arange(0, 5, 1).mgrid(np.arange(0, 3, 1));

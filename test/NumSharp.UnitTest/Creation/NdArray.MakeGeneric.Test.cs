@@ -7,10 +7,9 @@ using NumSharp;
 
 namespace NumSharp.UnitTest.Creation
 {
-    [TestClass]
     public class NdArrayMakeGenericTester
     {
-        [TestMethod]
+        [Test]
         public void Array1DimGeneric()
         {
             var list = new double[] {1.1, 2.2, 3.3};

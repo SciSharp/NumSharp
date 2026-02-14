@@ -1,4 +1,5 @@
 ﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
+using NumSharp.UnitTest;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -6,10 +7,9 @@ using System.Text;
 
 namespace NumSharp.UnitTest.RandomSampling
 {
-    [TestClass]
     public class NpRandomChoiceTests : TestClass
     {
-        [TestMethod]
+        [Test]
         public void UniformOneSample()
         {
             // Generate a uniform random sample from np.arange(5) of size 1:
@@ -30,7 +30,7 @@ namespace NumSharp.UnitTest.RandomSampling
             }
         }
 
-        [TestMethod]
+        [Test]
         public void UniformMultipleSample()
         {
             // Generate a uniform random sample from np.arange(5) of size 3:
@@ -51,7 +51,7 @@ namespace NumSharp.UnitTest.RandomSampling
             }
         }
 
-        [TestMethod]
+        [Test]
         public void NonUniformSample()
         {
             // Generate a non-uniform random sample from np.arange(5) of size 3:
@@ -74,16 +74,16 @@ namespace NumSharp.UnitTest.RandomSampling
             }
         }
 
-        [TestMethod]
-        [Ignore("Choice without replacement not implemented yet")]
+        [Test]
+        [OpenBugs] // Choice without replacement not implemented yet
         public void UniformSampleWithoutReplace()
         {
             NDArray actual = np.random.choice(5, (Shape)3, replace: false);
             Assert.Fail("Not implemented");
         }
 
-        [TestMethod]
-        [Ignore("Choice without replacement not implemented yet")]
+        [Test]
+        [OpenBugs] // Choice without replacement not implemented yet
         public void NonUniformSampleWithoutReplace()
         {
             double[] probabilities = new double[] {0.1, 0, 0.3, 0.6, 0};
@@ -91,8 +91,8 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.Fail("Not implemented");
         }
 
-        [TestMethod]
-        [Ignore("Choice with string arrays not implemented yet")]
+        [Test]
+        [Skip("Choice with string arrays not implemented yet")]
         public void StringArraySample1()
         {
             //int nrSamples = 5;
@@ -111,7 +111,7 @@ namespace NumSharp.UnitTest.RandomSampling
             //}
         }
 
-        [TestMethod]
+        [Test]
         public void IntegerArraySample()
         {
             int nrSamples = 5;

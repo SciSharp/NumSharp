@@ -39,8 +39,11 @@ namespace NumSharp.Backends
                 return np.squeeze_fast(arr, axis);
             }
 
-            //prepare ret
-            var ret = new NDArray(typeCode ?? (arr.GetTypeCode.GetAccumulatingType()), shape, false);
+            //prepare ret — use Clean() to strip broadcast metadata so that ret[slices]
+            //doesn't trigger GetViewInternal's IsBroadcasted clone path (which would
+            //cause writes to go to a detached clone instead of the actual output array).
+            var retShape = shape.IsBroadcasted ? shape.Clean() : shape;
+            var ret = new NDArray(typeCode ?? (arr.GetTypeCode.GetAccumulatingType()), retShape, false);
             var iterAxis = new NDCoordinatesAxisIncrementor(ref shape, axis);
             var slices = iterAxis.Slices;
 

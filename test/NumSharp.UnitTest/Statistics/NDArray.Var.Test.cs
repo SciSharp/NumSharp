@@ -1,20 +1,19 @@
 ﻿using System;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace NumSharp.UnitTest.Statistics
 {
-    [TestClass]
     public class np_var_tests
     {
-        [TestMethod]
+        [Test]
         public void Case1()
         {
             var nd1 = np.arange(4).reshape(2, 2);
             nd1.var().Data<double>()[0].Should().BeApproximately(1.25D, 0.0001);
         }
 
-        [TestMethod]
+        [Test]
         public void Case2()
         {
             var a = np.zeros((2, 4 * 4), dtype: np.float32);
@@ -24,7 +23,7 @@ namespace NumSharp.UnitTest.Statistics
             ret.GetValue<float>(0).Should().BeApproximately(0.2025F, 0.001f);
         }
 
-        [TestMethod]
+        [Test]
         public void Case3()
         {
             var nd1 = np.arange(4).reshape(2, 2);
@@ -34,7 +33,7 @@ namespace NumSharp.UnitTest.Statistics
             ret.ToArray<double>().Should().AllBeEquivalentTo(1);
         }
 
-        [TestMethod]
+        [Test]
         public void Case4()
         {
             var nd1 = np.arange(4).reshape(2, 2);
@@ -44,7 +43,7 @@ namespace NumSharp.UnitTest.Statistics
             ret.ToArray<double>().Should().AllBeEquivalentTo(0.5d * 0.5d);
         }
 
-        [TestMethod]
+        [Test]
         public void Case5()
         {
             var nd1 = np.arange(4).reshape(2, 2);
@@ -55,7 +54,7 @@ namespace NumSharp.UnitTest.Statistics
             ret.ToArray<double>()[1].Should().BeApproximately(2, 0.0001d);
         }
 
-        [TestMethod]
+        [Test]
         public void Case6()
         {
             var nd1 = np.arange(4).reshape(2, 2);
@@ -66,7 +65,7 @@ namespace NumSharp.UnitTest.Statistics
             ret.ToArray<double>()[1].Should().BeApproximately(0.5, 0.0001d);
         }
 
-        [TestMethod]
+        [Test]
         public void Case7()
         {
             var nd1 = np.arange(4).reshape(2, 2);

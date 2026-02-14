@@ -1,16 +1,15 @@
 ﻿using System;
 using System.Runtime.CompilerServices;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.UnitTest.Utilities;
 using static NumSharp.Slice;
 
 namespace NumSharp.UnitTest.Manipulation
 {
-    [TestClass]
     public class NdArrayReShapeTest
     {
-        [TestMethod]
+        [Test]
         public void ReShape()
         {
             var nd = np.arange(6);
@@ -44,7 +43,7 @@ namespace NumSharp.UnitTest.Manipulation
         /// It simply means that it is an unknown dimension and we want numpy to figure it out. 
         /// And numpy will figure this by looking at the 'length of the array and remaining dimensions' and making sure it satisfies the above mentioned criteria
         /// </summary>
-        [TestMethod]
+        [Test]
         public void ReshapeNegative()
         {
             NDArray nd;
@@ -84,7 +83,7 @@ namespace NumSharp.UnitTest.Manipulation
             Assert.IsTrue(np.shape[1] == 3);*/
         }
 
-        [TestMethod]
+        [Test]
         public void ValueTest()
         {
             var x = np.arange(4).MakeGeneric<int>();
@@ -93,21 +92,21 @@ namespace NumSharp.UnitTest.Manipulation
             Assert.AreEqual(x[1], y[0, 1]);
         }
 
-        [TestMethod]
+        [Test]
         public void TwoNegativeMinusOne()
         {
             var x = np.arange(9).reshape(3, 1, 1, 3);
             new Action(() => x.reshape(-1, 3, -1)).Should().Throw<ArgumentException>();
         }
 
-        [TestMethod]
+        [Test]
         public void Case1_negativeone()
         {
             var x = np.full(2, (3, 3, 1, 1, 3));
-            x.reshape((-1, 3)).shape.Should().BeEquivalentTo(9, 3);
+            x.reshape((-1, 3)).shape.Should().BeEquivalentTo(new[] { 9, 3 });
         }
 
-        [TestMethod]
+        [Test]
         public void Case2_Slice()
         {
             var a = arange((3, 2, 2));
@@ -119,7 +118,7 @@ namespace NumSharp.UnitTest.Manipulation
             a[0, 2].Should().BeScalar(2);
         }
 
-        [TestMethod, Ignore("Broadcasting and then using -1 during resahping is not supported (has TODO).")]
+        [Test, Skip("Broadcasting and then using -1 during resahping is not supported (has TODO).")]
         public void Case2_Slice_Broadcast()
         {
             //alloc
@@ -140,7 +139,7 @@ namespace NumSharp.UnitTest.Manipulation
             a.Should().BeShaped(1, 8);
         }
 
-        [TestMethod]
+        [Test]
         public void Case3_Slice_Broadcast()
         {
             //alloc
@@ -163,7 +162,7 @@ namespace NumSharp.UnitTest.Manipulation
             resh.Should().BeShaped(1, 4).And.BeOfValues(0, 1, 2, 3);
         }
 
-        [TestMethod]
+        [Test]
         public void Case4_Slice_Broadcast()
         {
             //alloc
@@ -185,7 +184,7 @@ namespace NumSharp.UnitTest.Manipulation
             resh.Should().BeShaped(1, 4).And.BeOfValues(4, 5, 6, 7);
         }
 
-        [TestMethod]
+        [Test]
         public void Case5_Slice_Broadcast()
         {
             //alloc

@@ -20,6 +20,8 @@ namespace NumSharp
             if (src == null)
                 throw new ArgumentNullException(nameof(src));
 
+            NumSharpException.ThrowIfNotWriteable(dst.Shape);
+
             //try to perform memory copy
             if (dst.Shape.IsContiguous && src.Shape.IsContiguous && dst.dtype == src.dtype && src.size == dst.size)
             {

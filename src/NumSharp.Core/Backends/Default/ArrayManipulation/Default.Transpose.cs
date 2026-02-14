@@ -18,9 +18,10 @@ namespace NumSharp.Backends
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static int check_and_adjust_axis(int ndims, int axis)
         {
-            if (axis >= 0)
-                return axis;
-            return ndims + axis;
+            int adjusted = axis >= 0 ? axis : ndims + axis;
+            if (adjusted < 0 || adjusted >= ndims)
+                throw new AxisOutOfRangeException(ndims, axis);
+            return adjusted;
         }
 
         /// <summary>
@@ -108,7 +109,7 @@ namespace NumSharp.Backends
                 start -= 1;
 
             if (axis == start)
-                return nd.Clone();
+                return nd;  // NumPy returns the array itself for identity case
 
             var premutes = new List<int>(n);
             for (int i = 0; i < n; i++) 
@@ -153,26 +154,42 @@ namespace NumSharp.Backends
                 }
             }
 
-            UnmanagedStorage src;
-            if (nd.Shape.IsContiguous)
-                src = nd.Storage.Alias(nd.Shape.Clone());
-            else
-                src = nd.Storage.Clone();
-
-            for (i = 0; i < n; i++)
+            // Handle empty arrays: just create a new array with permuted dimensions, no data copy needed
+            if (nd.Shape.size == 0)
             {
-                src.Shape.dimensions[i] = nd.Shape.dimensions[permutation[i]];
-                src.Shape.strides[i] = nd.Shape.strides[permutation[i]];
+                var emptyDims = new int[n];
+                for (i = 0; i < n; i++)
+                    emptyDims[i] = nd.Shape.dimensions[permutation[i]];
+                return new NDArray(nd.dtype, emptyDims);
             }
 
-            src.ShapeReference.SetStridesModified(true);
+            // NumPy-aligned: Transpose returns a VIEW by permuting strides.
+            // For contiguous arrays, this is a simple stride permutation.
+            // For non-contiguous arrays (sliced, already transposed), we need to
+            // permute the CURRENT strides, which already encode the view's layout.
+            //
+            // No data copy is needed - transpose is always O(1).
+            // The transposed shape shares memory with the original.
+            var shape = nd.Shape;
+            var srcDims = shape.dimensions;
+            var srcStrides = shape.strides;
 
-            //Linear copy of all the sliced items.
+            // Permute dimensions and strides
+            var permutedDims = new int[n];
+            var permutedStrides = new int[n];
+            for (i = 0; i < n; i++)
+            {
+                permutedDims[i] = srcDims[permutation[i]];
+                permutedStrides[i] = srcStrides[permutation[i]];
+            }
 
-            var dst = new UnmanagedStorage(ArraySlice.Allocate(src.TypeCode, src.Shape.size, false), new Shape((int[])src.Shape.dimensions.Clone()));
-            MultiIterator.Assign(dst, src);
+            // Create the transposed shape via constructor (immutable)
+            // IsContiguous is computed from strides and will be false for transposed arrays
+            int bufSize = shape.bufferSize > 0 ? shape.bufferSize : shape.size;
+            var newShape = new Shape(permutedDims, permutedStrides, shape.offset, bufSize);
 
-            return new NDArray(dst);
+            // Return an alias (view) with the permuted shape
+            return new NDArray(nd.Storage.Alias(newShape));
         }
     }
 }

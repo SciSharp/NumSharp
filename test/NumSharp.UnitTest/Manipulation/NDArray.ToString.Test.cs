@@ -1,16 +1,15 @@
 ﻿using System;
 using System.Runtime.CompilerServices;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.UnitTest.Utilities;
 using static NumSharp.Slice;
 
 namespace NumSharp.UnitTest.Manipulation
 {
-    [TestClass]
     public class NdArrayToStringTest : TestClass
     {
-        [TestMethod]
+        [Test]
         public void ReShape()
         {
             var nd = np.arange(6);

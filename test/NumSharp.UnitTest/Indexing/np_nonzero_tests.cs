@@ -1,17 +1,16 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp;
 using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.Indexing
 {
-    [TestClass]
     public class np_nonzero_tests : TestClass
     {
-        [TestMethod]
+        [Test]
         public void Case1()
         {
             var x = np.array(3, 0, 0, 0, 4, 0, 5, 6, 0).reshape(3, 3);
@@ -21,7 +20,7 @@ namespace NumSharp.UnitTest.Indexing
             x[np.nonzero(x)].Should().BeOfValues(3, 4, 5, 6).And.BeShaped(4);
         }
 
-        [TestMethod]
+        [Test]
         public void Case2()
         {
             var x = np.arange(9).reshape(3, 3);

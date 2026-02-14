@@ -1,15 +1,14 @@
 ﻿using System;
 using System.Linq;
 using System.Numerics;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace NumSharp.UnitTest.Creation
 {
-    [TestClass]
     public class np_dtype_tests
     {
-        [TestMethod]
+        [Test]
         public void Case1()
         {
             np.dtype("?").type.Should().Be<bool>();

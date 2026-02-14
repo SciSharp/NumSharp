@@ -6,15 +6,14 @@ using System.Text;
 using System.Linq;
 using NumSharp;
 using NumSharp.Generic;
+using NumSharp.UnitTest;
 
 namespace NumSharp.UnitTest.Operations
 {
-    [TestClass]
     public class NDArrayAndTest
     {
-
-        [Ignore("TODO: fix this test")]
-        [TestMethod]
+        [Test]
+        [OpenBugs]
         public void BoolTwo1D_NDArrayAND()
         {
             var np1 = new NDArray(new[] {true, true, false, false}, new Shape(4));
@@ -25,8 +24,8 @@ namespace NumSharp.UnitTest.Operations
             Assert.IsTrue(Enumerable.SequenceEqual(new[] {true, false, false, false}, np3.Data<bool>()));
         }
 
-        [Ignore("TODO: fix this test")]
-        [TestMethod]
+        [Test]
+        [OpenBugs]
         public void BoolTwo2D_NDArrayAND()
         {
             var np1 = new NDArray(typeof(bool), new Shape(2, 3));
@@ -43,8 +42,8 @@ namespace NumSharp.UnitTest.Operations
             Assert.IsTrue(Enumerable.SequenceEqual(np3.Data<bool>(), np4));
         }
 
-        [Ignore("TODO: fix this test")]
-        [TestMethod]
+        [Test]
+        [OpenBugs]
         public void Byte1D_NDArrayAND()
         {
             var np1 = new NDArray(new[] {1, 2, 3, 4}, new Shape(4));

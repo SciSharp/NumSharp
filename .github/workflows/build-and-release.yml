@@ -18,24 +18,12 @@ env:
   # NU5048: PackageIconUrl deprecated — cosmetic NuGet warning
   DOTNET_NOWARN: CS1570%3BCS1571%3BCS1572%3BCS1573%3BCS1574%3BCS1587%3BCS1591%3BCS1711%3BCS1734%3BCS8981%3BNU5048
 
-  # Exclude tests by category. Tag tests with [TestCategory("...")] instead of
-  # adding individual Name!= exclusions here.
-  #   OpenBugs    — known-failing bug reproductions (pass when fixed, then remove category)
-  #   WindowsOnly — require GDI+/System.Drawing.Common (excluded on Linux/macOS)
-  TEST_FILTER: TestCategory!=OpenBugs
-
 jobs:
   test:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: windows-latest
-            extra_filter: ''
-          - os: ubuntu-latest
-            extra_filter: '& TestCategory!=WindowsOnly'
-          - os: macos-latest
-            extra_filter: '& TestCategory!=WindowsOnly'
+        os: [ windows-latest, ubuntu-latest, macos-latest ]
 
     runs-on: ${{ matrix.os }}
 
@@ -53,8 +41,18 @@ jobs:
     - name: Build
       run: dotnet build test/NumSharp.UnitTest/NumSharp.UnitTest.csproj --configuration Release -p:NoWarn=${{ env.DOTNET_NOWARN }}
 
-    - name: Test
-      run: dotnet test test/NumSharp.UnitTest/NumSharp.UnitTest.csproj --configuration Release --no-build --verbosity normal --logger trx --filter "${{ env.TEST_FILTER }} ${{ matrix.extra_filter }}"
+    # NOTE: Test project currently only targets net10.0. See TODO in NumSharp.UnitTest.csproj
+    # to re-enable net8.0 when TUnit compatibility is resolved.
+    #
+    # Test filtering:
+    #   - OpenBugs: excluded via --treenode-filter (known-failing bug reproductions)
+    #   - WindowsOnly: auto-skipped at runtime via [SkipOnNonWindows] attribute
+    - name: Test (net10.0)
+      shell: bash
+      run: |
+        dotnet run --project test/NumSharp.UnitTest/NumSharp.UnitTest.csproj \
+          --configuration Release --no-build --framework net10.0 \
+          -- --treenode-filter '/*/*/*/*[Category!=OpenBugs]' --report-trx
 
     - name: Upload Test Results
       uses: actions/upload-artifact@v4

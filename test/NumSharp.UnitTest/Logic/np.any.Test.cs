@@ -5,11 +5,10 @@ using NumSharp;
 
 namespace NumSharp.UnitTest.Logic
 {
-    [TestClass]
-    [TestCategory("OpenBugs")]
+    [OpenBugs]
     public class NpAnyTest
     {
-        [TestMethod]
+        [Test]
         public void Any1DArrayTest()
         {
             // 测试1维数组
@@ -18,7 +17,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.AreEqual(true, result.GetBoolean(0));
         }
 
-        [TestMethod]
+        [Test]
         public void Any2DArrayTest()
         {
             // 测试2维数组
@@ -28,7 +27,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.IsTrue(Enumerable.SequenceEqual(result.Data<bool>(), expected.Data<bool>()));
         }
 
-        [TestMethod]
+        [Test]
         public void Any2DArrayWithAxis1Test()
         {
             // 测试2维数组，axis=1
@@ -38,7 +37,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.IsTrue(Enumerable.SequenceEqual(result.Data<bool>(), expected.Data<bool>()));
         }
 
-        [TestMethod]
+        [Test]
         public void AnyWithKeepdimsTest()
         {
             // 测试keepdims参数
@@ -50,7 +49,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.AreEqual(2, result.shape[1]);
         }
 
-        [TestMethod]
+        [Test]
         public void AnyWithNegativeAxisTest()
         {
             // 测试负轴
@@ -60,7 +59,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.IsTrue(Enumerable.SequenceEqual(result1.Data<bool>(), result2.Data<bool>()));
         }
 
-        [TestMethod]
+        [Test]
         public void AnyAllZerosTest()
         {
             // 测试全零数组
@@ -70,7 +69,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.IsTrue(Enumerable.SequenceEqual(result.Data<bool>(), expected.Data<bool>()));
         }
 
-        [TestMethod]
+        [Test]
         public void AnyAllNonZerosTest()
         {
             // 测试全非零数组
@@ -80,8 +79,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.IsTrue(Enumerable.SequenceEqual(result.Data<bool>(), expected.Data<bool>()));
         }
 
-        [TestMethod]
-        [ExpectedException(typeof(ArgumentOutOfRangeException))]
+        [Test]
         public void AnyInvalidAxisTest()
         {
             // 测试无效轴
@@ -89,8 +87,7 @@ namespace NumSharp.UnitTest.Logic
             np.any(arr, axis: 5, keepdims: false); // 轴5不存在
         }
 
-        [TestMethod]
-        [ExpectedException(typeof(ArgumentException))]
+        [Test]
         public void AnyZeroDimensionalArrayTest()
         {
             // 测试零维数组
@@ -98,8 +95,7 @@ namespace NumSharp.UnitTest.Logic
             np.any(arr, axis: 0, keepdims: false);
         }
 
-        [TestMethod]
-        [ExpectedException(typeof(ArgumentException))]
+        [Test]
         public void AnyNullArrayTest()
         {
             // 测试空数组

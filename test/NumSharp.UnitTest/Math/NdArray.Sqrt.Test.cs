@@ -10,17 +10,16 @@ using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.Maths
 {
-    [TestClass]
     public class NDArraySqrtTest
     {
-        [TestMethod]
+        [Test]
         public void Case1()
         {
             var nd = np.array(new double[] {1, 4, 9});
             np.sqrt(nd).Should().BeOfType<double>().And.BeOfValues(1, 2, 3);
         }
 
-        /*[TestMethod]
+        /*[Test]
         public void ComplexSqrtTest()
         {
             var np = new NDArray(typeof(Complex),3);

@@ -10,7 +10,7 @@
 //    [TestClass]
 //    public class ViewStorageTest : TestClass
 //    {
-//        [TestMethod]
+//        [Test]
 //        public void GetData_1D()
 //        {
 //            var data = new TypedArrayStorage(new int[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 });
@@ -57,7 +57,7 @@
 //            AssertAreEqual(new[] { 9 }, view.GetData());
 //        }
 
-//        [TestMethod]
+//        [Test]
 //        public void Indexing_1D()
 //        {
 //            var data = new TypedArrayStorage(new int[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 });
@@ -117,7 +117,7 @@
 //            Assert.AreEqual(9, view.GetData<int>(0));
 //        }
 
-//        [TestMethod]
+//        [Test]
 //        public void NestedView_1D()
 //        {
 //            var data = new TypedArrayStorage(new int[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 });
@@ -152,7 +152,7 @@
 //            AssertAreEqual(new int[] { 22, 88 }, view3.GetData());
 //        }
 
-//        [TestMethod]
+//        [Test]
 //        public void GetData_2D()
 //        {
 //            //>>> x = np.arange(9).reshape(3, 3)
@@ -246,7 +246,7 @@
 //            AssertAreEqual(new int[] { 8, 6, 5, 3, 2, 0 }, view.GetData());
 //        }
 
-//        [TestMethod]
+//        [Test]
 //        public void NestedView_2D()
 //        {
 //            var data = new TypedArrayStorage(new int[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 });
@@ -302,7 +302,7 @@
 //            AssertAreEqual(new int[] { 22, 88, 222, 888 }, view3.GetData());
 //        }
 
-//        [TestMethod]
+//        [Test]
 //        public void Reduce_1D_to_Scalar()
 //        {
 //            var data = new TypedArrayStorage(new int[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 });
@@ -313,7 +313,7 @@
 //            AssertAreEqual(new int[] { 7 }, view.GetData());
 //        }
 
-//        [TestMethod]
+//        [Test]
 //        public void Reduce_2D_to_1D_and_0D()
 //        {
 //            //>>> x = np.arange(9).reshape(3, 3)
@@ -347,7 +347,7 @@
 //            AssertAreEqual(new int[] { 8 }, view.GetData());
 //        }
 
-//        [TestMethod]
+//        [Test]
 //        public void NestedDimensionalityReduction()
 //        {
 //            var data = new TypedArrayStorage(new int[] { 0, 1, 2, 3, 4, 5, 6, 7, 8 });
@@ -364,7 +364,7 @@
 //            AssertAreEqual(new int[] { 7, 6 }, view2.GetData());
 //        }
 
-//        [TestMethod]
+//        [Test]
 //        public void ToStringTest()
 //        {
 //            var data = new TypedArrayStorage(new int[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 });
@@ -383,7 +383,7 @@
 //            Assert.AreEqual("[[[0, 1], [2, 3]], [[4, 5], [6, 7]]]", view.ToString(flat: true));
 //        }
 
-//        [TestMethod]
+//        [Test]
 //        public void ToString_NonFlatTest()
 //        {
 //            var data = new TypedArrayStorage(new int[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 });

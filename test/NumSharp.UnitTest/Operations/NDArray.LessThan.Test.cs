@@ -1,11 +1,10 @@
 ﻿
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using FluentAssertions;
+using AwesomeAssertions;
 using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.Operations
 {
-    [TestClass]
     public class NDArrayLessThanTest : TestClass
     {
         private void PerformLessThanTests(NDArray nd)
@@ -15,28 +14,28 @@ namespace NumSharp.UnitTest.Operations
             (nd < 7).Should().BeOfValues(true, true, true, true, true, true);
         }
 
-        [TestMethod]
+        [Test]
         public void DoublesLessThanTest()
         {
             NDArray nd = new double[,] { { 1, 2, 3 }, { 4, 5, 6 } };
             PerformLessThanTests(nd);
         }
 
-        [TestMethod]
+        [Test]
         public void FloatsLessThanTest()
         {
             NDArray nd = new float[,] { { 1, 2, 3 }, { 4, 5, 6 } };
             PerformLessThanTests(nd);
         }
 
-        [TestMethod]
+        [Test]
         public void IntsLessThanTest()
         {
             NDArray nd = new int[,] { { 1, 2, 3 }, { 4, 5, 6 } };
             PerformLessThanTests(nd);
         }
 
-        [TestMethod]
+        [Test]
         public void LongsLessThanTest()
         {
             NDArray nd = new long[,] { { 1, 2, 3 }, { 4, 5, 6 } };

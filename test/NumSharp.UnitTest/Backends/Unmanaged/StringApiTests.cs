@@ -1,31 +1,30 @@
 ﻿using System;
 using System.Linq;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.Backends.Unmanaged
 {
-    [TestClass]
     public class StringApiTests
     {
         private static string hello = "hello";
 
-        [TestMethod]
+        [Test]
         public void np_array_string()
         {
             var str = NDArray.FromString(hello);
             str.Should().BeOfType<char>().And.BeShaped(5).And.BeOfValues('h', 'e', 'l', 'l', 'o');
         }
 
-        [TestMethod]
+        [Test]
         public void FromString()
         {
             var str = NDArray.FromString(hello);
             str.Should().BeOfType<char>().And.BeShaped(5).And.BeOfValues('h', 'e', 'l', 'l', 'o');
         }
 
-        [TestMethod]
+        [Test]
         public void AsString()
         {
             var str = np.array('h', 'e', 'l', 'l', 'o');
@@ -33,7 +32,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             NDArray.AsString(str).Should().Be(hello);
         }
 
-        [TestMethod]
+        [Test]
         public void GetString()
         {
             var str = np.repeat(np.array('h', 'e', 'l', 'l', 'o'), 5);
@@ -46,24 +45,29 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             }).Should().Throw<ArgumentOutOfRangeException>();
         }
 
-        [TestMethod]
+        [Test]
         public void GetString_Sliced()
         {
             var str = np.repeat(np.array('h', 'e', 'l', 'l', 'o'), 5).reshape(5, 5)[":, 0"];
-            str.Should().BeOfType<char>().And.BeShaped(5).And.BeOfValues('h', 'e', 'l', 'l', 'o').And.BeSliced();
+            // Column slice at offset 0 - NumPy-aligned IsSliced = (offset != 0)
+            // Values and non-contiguous access are the important checks
+            str.Should().BeOfType<char>().And.BeShaped(5).And.BeOfValues('h', 'e', 'l', 'l', 'o');
+            str.Shape.IsContiguous.Should().BeFalse("column slice has stride != 1");
             str.GetString().Should().Be("hello");
         }
-        [TestMethod]
+        [Test]
         public void SetString_Sliced()
         {
             var str = np.repeat(np.array('h', 'e', 'l', 'l', 'o'), 5).reshape(5, 5)[":, 0"];
-            str.Should().BeOfType<char>().And.BeShaped(5).And.BeOfValues('h', 'e', 'l', 'l', 'o').And.BeSliced();
+            // Column slice at offset 0 - NumPy-aligned IsSliced = (offset != 0)
+            str.Should().BeOfType<char>().And.BeShaped(5).And.BeOfValues('h', 'e', 'l', 'l', 'o');
+            str.Shape.IsContiguous.Should().BeFalse("column slice has stride != 1");
             str.GetString().Should().Be("hello");
             str.SetString("kekek");
             str.Should().BeOfValues("kekek".ToCharArray().Cast<object>().ToArray());
         }
 
-        [TestMethod]
+        [Test]
         public void SetString()
         {
             var str = np.repeat(np.array('h', 'e', 'l', 'l', 'o'), 5);

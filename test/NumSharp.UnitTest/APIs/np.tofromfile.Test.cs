@@ -7,10 +7,9 @@ using System.Linq;
 
 namespace NumSharp.UnitTest.APIs
 {
-    [TestClass]
     public class NumpyToFromFileTest : TestClass
     {
-        [TestMethod]
+        [Test]
         public void NumpyToFromFileTestByte1()
         {
             var testString = "Hallo World!";
@@ -28,7 +27,7 @@ namespace NumSharp.UnitTest.APIs
             AssertAreEqual(rawData, loadedArray.Array);
         }
 
-        [TestMethod]
+        [Test]
         public void NumpyToFromFileTestUShort1()
         {
             var testString = "Hallo World!";
@@ -37,7 +36,7 @@ namespace NumSharp.UnitTest.APIs
 
             NDArray ndArray = new NDArray(testArray);
 
-            var testFileName = @"test." + nameof(NumpyToFromFileTestByte1);
+            var testFileName = @"test." + nameof(NumpyToFromFileTestUShort1);
             ndArray.tofile(testFileName);
             var loadedArray = np.fromfile(testFileName, np.uint16);
 

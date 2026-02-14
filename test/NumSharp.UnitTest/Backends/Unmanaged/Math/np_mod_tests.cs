@@ -1,14 +1,13 @@
 ﻿
 using System;
 using System.Linq;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.Backends;
 using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp.UnitTest.Backends.Unmanaged.Math
 {
-    [TestClass]
     public class np_mod_tests
     {
         #region Regular Tests
@@ -16,20 +15,20 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
 #if _REGEN
         %a = except(supported_dtypes, "NDArray", "Boolean")
         %foreach a
-        [DataRow(NPTypeCode.Boolean, NPTypeCode.#1)]
+        [Arguments(NPTypeCode.Boolean, NPTypeCode.#1)]
 #else
-        [DataRow(NPTypeCode.Boolean, NPTypeCode.Byte)]
-        [DataRow(NPTypeCode.Boolean, NPTypeCode.Int16)]
-        [DataRow(NPTypeCode.Boolean, NPTypeCode.UInt16)]
-        [DataRow(NPTypeCode.Boolean, NPTypeCode.Int32)]
-        [DataRow(NPTypeCode.Boolean, NPTypeCode.UInt32)]
-        [DataRow(NPTypeCode.Boolean, NPTypeCode.Int64)]
-        [DataRow(NPTypeCode.Boolean, NPTypeCode.UInt64)]
-        [DataRow(NPTypeCode.Boolean, NPTypeCode.Double)]
-        [DataRow(NPTypeCode.Boolean, NPTypeCode.Single)]
-        [DataRow(NPTypeCode.Boolean, NPTypeCode.Decimal)]
+        [Arguments(NPTypeCode.Boolean, NPTypeCode.Byte)]
+        [Arguments(NPTypeCode.Boolean, NPTypeCode.Int16)]
+        [Arguments(NPTypeCode.Boolean, NPTypeCode.UInt16)]
+        [Arguments(NPTypeCode.Boolean, NPTypeCode.Int32)]
+        [Arguments(NPTypeCode.Boolean, NPTypeCode.UInt32)]
+        [Arguments(NPTypeCode.Boolean, NPTypeCode.Int64)]
+        [Arguments(NPTypeCode.Boolean, NPTypeCode.UInt64)]
+        [Arguments(NPTypeCode.Boolean, NPTypeCode.Double)]
+        [Arguments(NPTypeCode.Boolean, NPTypeCode.Single)]
+        [Arguments(NPTypeCode.Boolean, NPTypeCode.Decimal)]
 #endif
-        [DataTestMethod]
+        [Test]
         public void ModAllPossabilitiesBoolean(NPTypeCode ltc, NPTypeCode rtc)
         {
             var right = np.full(2, new Shape(5, 5), rtc);
@@ -44,14 +43,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             }
         }
 
-        [TestMethod]
+        [Test]
         public void Mod_Two_Scalars()
         {
             var left = NDArray.Scalar(1d) % NDArray.Scalar(5d);
             left.GetDouble(0).Should().Be(1);
         }
 
-        [TestMethod]
+        [Test]
         public void Mod_ND_3_1_vs_1_3()
         {
             var left = (np.arange(3).reshape((3, 1)) + 1).astype(np.int32);
@@ -71,7 +70,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             }
         }
 
-        [TestMethod]
+        [Test]
         public void Mod_ND_2_1_3_3_vs_1_3()
         {
             var left = np.arange(2 * 3 * 3).reshape((2, 1, 3, 3)).astype(np.float64) + 1;
@@ -91,7 +90,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             ret.GetDouble(1, 0, 2, 2).Should().Be(0);
         }
 
-        [TestMethod]
+        [Test]
         public void Mod_Rising()
         {
             var left = np.zeros(new Shape(5, 5), np.float64);
@@ -107,7 +106,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             }
 
             var ret = left % right;
-            ret.Should().BeInAscendingOrder();
+            ret.Data<double>().Should().BeInAscendingOrder();
 
             for (int i = 0; i < ret.size; i++)
             {
@@ -115,7 +114,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             }
         }
 
-        [TestMethod]
+        [Test]
         public void Mod_RightScalar_Rising()
         {
             var left = np.zeros(new Shape(5, 5), np.float64);
@@ -126,7 +125,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
 
             var right = NDArray.Scalar(1d);
             var ret = left % right;
-            ret.Should().BeInAscendingOrder();
+            ret.Data<double>().Should().BeInAscendingOrder();
 
             for (int i = 0; i < ret.size; i++)
             {
@@ -134,7 +133,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             }
         }
 
-        [TestMethod]
+        [Test]
         public void Mod_LeftScalar_Rising()
         {
             var left = NDArray.Scalar(1d);
@@ -145,7 +144,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             }
 
             var ret = left % right;
-            ret.Should().BeInAscendingOrder();
+            ret.Data<double>().Should().BeInAscendingOrder();
 
             for (int i = 0; i < ret.size; i++)
             {
@@ -160,7 +159,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         %b = [true,"1","1","1","1","1u","1L","1UL","1d","1f","1m"]
         %mod = "%"
         %foreach forevery(a,a,true), forevery(b,b,true)%
-        [TestMethod]
+        [Test]
         public void Mod_#1_To_#2()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.#1);
@@ -178,7 +177,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         %
 #else
 
-        [TestMethod]
+        [Test]
         public void Mod_Boolean_To_Byte()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Boolean);
@@ -192,7 +191,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Boolean_To_Int16()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Boolean);
@@ -206,7 +205,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Boolean_To_UInt16()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Boolean);
@@ -220,7 +219,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Boolean_To_Int32()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Boolean);
@@ -234,7 +233,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Boolean_To_UInt32()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Boolean);
@@ -248,7 +247,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Boolean_To_Int64()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Boolean);
@@ -262,7 +261,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Boolean_To_UInt64()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Boolean);
@@ -276,7 +275,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Boolean_To_Double()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Boolean);
@@ -290,7 +289,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Boolean_To_Single()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Boolean);
@@ -304,7 +303,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Boolean_To_Decimal()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Boolean);
@@ -318,7 +317,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Byte_To_Boolean()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Byte);
@@ -332,7 +331,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Byte_To_Int16()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Byte);
@@ -346,7 +345,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Byte_To_UInt16()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Byte);
@@ -360,7 +359,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Byte_To_Int32()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Byte);
@@ -374,7 +373,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Byte_To_UInt32()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Byte);
@@ -388,7 +387,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Byte_To_Int64()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Byte);
@@ -402,7 +401,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Byte_To_UInt64()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Byte);
@@ -416,7 +415,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Byte_To_Double()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Byte);
@@ -430,7 +429,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Byte_To_Single()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Byte);
@@ -444,7 +443,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Byte_To_Decimal()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Byte);
@@ -458,7 +457,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Int16_To_Boolean()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Int16);
@@ -472,7 +471,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Int16_To_Byte()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Int16);
@@ -486,7 +485,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Int16_To_UInt16()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Int16);
@@ -500,7 +499,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Int16_To_Int32()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Int16);
@@ -514,7 +513,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Int16_To_UInt32()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Int16);
@@ -528,7 +527,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Int16_To_Int64()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Int16);
@@ -542,7 +541,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Int16_To_UInt64()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Int16);
@@ -556,7 +555,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Int16_To_Double()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Int16);
@@ -570,7 +569,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Int16_To_Single()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Int16);
@@ -584,7 +583,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Int16_To_Decimal()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Int16);
@@ -598,7 +597,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_UInt16_To_Boolean()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.UInt16);
@@ -612,7 +611,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_UInt16_To_Byte()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.UInt16);
@@ -626,7 +625,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_UInt16_To_Int16()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.UInt16);
@@ -640,7 +639,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_UInt16_To_Int32()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.UInt16);
@@ -654,7 +653,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_UInt16_To_UInt32()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.UInt16);
@@ -668,7 +667,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_UInt16_To_Int64()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.UInt16);
@@ -682,7 +681,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_UInt16_To_UInt64()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.UInt16);
@@ -696,7 +695,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_UInt16_To_Double()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.UInt16);
@@ -710,7 +709,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_UInt16_To_Single()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.UInt16);
@@ -724,7 +723,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_UInt16_To_Decimal()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.UInt16);
@@ -738,7 +737,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Int32_To_Boolean()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Int32);
@@ -752,7 +751,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Int32_To_Byte()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Int32);
@@ -766,7 +765,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Int32_To_Int16()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Int32);
@@ -780,7 +779,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Int32_To_UInt16()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Int32);
@@ -794,7 +793,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Int32_To_UInt32()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Int32);
@@ -808,7 +807,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Int32_To_Int64()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Int32);
@@ -822,7 +821,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Int32_To_UInt64()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Int32);
@@ -836,7 +835,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Int32_To_Double()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Int32);
@@ -850,7 +849,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Int32_To_Single()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Int32);
@@ -864,7 +863,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Int32_To_Decimal()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Int32);
@@ -878,7 +877,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_UInt32_To_Boolean()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.UInt32);
@@ -892,7 +891,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_UInt32_To_Byte()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.UInt32);
@@ -906,7 +905,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_UInt32_To_Int16()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.UInt32);
@@ -920,7 +919,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_UInt32_To_UInt16()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.UInt32);
@@ -934,7 +933,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_UInt32_To_Int32()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.UInt32);
@@ -948,7 +947,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_UInt32_To_Int64()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.UInt32);
@@ -962,7 +961,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_UInt32_To_UInt64()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.UInt32);
@@ -976,7 +975,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_UInt32_To_Double()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.UInt32);
@@ -990,7 +989,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_UInt32_To_Single()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.UInt32);
@@ -1004,7 +1003,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_UInt32_To_Decimal()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.UInt32);
@@ -1018,7 +1017,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Int64_To_Boolean()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Int64);
@@ -1032,7 +1031,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Int64_To_Byte()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Int64);
@@ -1046,7 +1045,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Int64_To_Int16()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Int64);
@@ -1060,7 +1059,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Int64_To_UInt16()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Int64);
@@ -1074,7 +1073,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Int64_To_Int32()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Int64);
@@ -1088,7 +1087,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Int64_To_UInt32()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Int64);
@@ -1102,7 +1101,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Int64_To_UInt64()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Int64);
@@ -1116,7 +1115,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Int64_To_Double()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Int64);
@@ -1130,7 +1129,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Int64_To_Single()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Int64);
@@ -1144,7 +1143,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Int64_To_Decimal()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Int64);
@@ -1158,7 +1157,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_UInt64_To_Boolean()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.UInt64);
@@ -1172,7 +1171,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_UInt64_To_Byte()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.UInt64);
@@ -1186,7 +1185,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_UInt64_To_Int16()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.UInt64);
@@ -1200,7 +1199,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_UInt64_To_UInt16()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.UInt64);
@@ -1214,7 +1213,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_UInt64_To_Int32()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.UInt64);
@@ -1228,7 +1227,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_UInt64_To_UInt32()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.UInt64);
@@ -1242,7 +1241,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_UInt64_To_Int64()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.UInt64);
@@ -1256,7 +1255,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_UInt64_To_Double()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.UInt64);
@@ -1270,7 +1269,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_UInt64_To_Single()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.UInt64);
@@ -1284,7 +1283,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_UInt64_To_Decimal()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.UInt64);
@@ -1298,7 +1297,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Double_To_Boolean()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Double);
@@ -1312,7 +1311,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Double_To_Byte()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Double);
@@ -1326,7 +1325,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Double_To_Int16()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Double);
@@ -1340,7 +1339,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Double_To_UInt16()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Double);
@@ -1354,7 +1353,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Double_To_Int32()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Double);
@@ -1368,7 +1367,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Double_To_UInt32()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Double);
@@ -1382,7 +1381,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Double_To_Int64()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Double);
@@ -1396,7 +1395,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Double_To_UInt64()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Double);
@@ -1410,7 +1409,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Double_To_Single()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Double);
@@ -1424,7 +1423,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Double_To_Decimal()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Double);
@@ -1438,7 +1437,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Single_To_Boolean()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Single);
@@ -1452,7 +1451,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Single_To_Byte()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Single);
@@ -1466,7 +1465,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Single_To_Int16()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Single);
@@ -1480,7 +1479,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Single_To_UInt16()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Single);
@@ -1494,7 +1493,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Single_To_Int32()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Single);
@@ -1508,7 +1507,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Single_To_UInt32()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Single);
@@ -1522,7 +1521,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Single_To_Int64()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Single);
@@ -1536,7 +1535,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [TestMethod]
+        [Test]
         public void Mod_Single_To_UInt64()
         {
             var left = np.full(4, new Shape(5, 5), NPTypeCode.Single);

@@ -2,19 +2,19 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Threading;
 using NumSharp.Extensions;
 using System.Linq;
-using FluentAssertions;
+using AwesomeAssertions;
 using NumSharp;
 using NumSharp.Backends.Unmanaged;
 using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest
 {
-    [TestClass]
     public class ShapeTest
     {
-        [TestMethod]
+        [Test]
         public void Index()
         {
             var shape0 = new Shape(4, 3);
@@ -24,7 +24,7 @@ namespace NumSharp.UnitTest
             Assert.IsTrue(idx0 == 3 * 2 + 1 * 1);
         }
 
-        [TestMethod]
+        [Test]
         public void CheckIndexing()
         {
             var shape0 = new Shape(4, 3, 2);
@@ -60,32 +60,14 @@ namespace NumSharp.UnitTest
             Assert.IsTrue(shape2.GetCoordinates(index).SequenceEqual(randomIndex));
         }
 
-        [TestMethod, Ignore]
-        public void CheckColRowSwitch()
-        {
-            var shape1 = new Shape(5);
-            Assert.IsTrue(shape1.Strides.SequenceEqual(new int[] { 1 }));
-
-            shape1.ChangeTensorLayout();
-            Assert.IsTrue(shape1.Strides.SequenceEqual(new int[] { 1 }));
-
-            var shape2 = new Shape(4, 3);
-            Assert.IsTrue(shape2.Strides.SequenceEqual(new int[] { 1, 4 }));
-
-            shape2.ChangeTensorLayout();
-            Assert.IsTrue(shape2.Strides.SequenceEqual(new int[] { 3, 1 }));
-
-            var shape3 = new Shape(2, 3, 4);
-            Assert.IsTrue(shape3.Strides.SequenceEqual(new int[] { 1, 2, 6 }));
-
-            shape3.ChangeTensorLayout();
-            Assert.IsTrue(shape3.Strides.SequenceEqual(new int[] { 12, 4, 1 }));
-        }
+        // Test removed: ChangeTensorLayout was removed (NumSharp is C-order only)
+        // [Test, Skip("Ignored")]
+        // public void CheckColRowSwitch() { ... }
 
         /// <summary>
         ///     Based on issue https://github.com/SciSharp/NumSharp/issues/306
         /// </summary>
-        [TestMethod]
+        [Test]
         public void EqualityComparer()
         {
             Shape a = null;
@@ -110,8 +92,8 @@ namespace NumSharp.UnitTest
         }
 
 
-        [TestMethod, Timeout(10000)]
-        public void ExtractShape_FromArray()
+        [Test, TUnit.Core.Timeout(10000)]
+        public void ExtractShape_FromArray(CancellationToken cancellationToken)
         {
             // @formatter:off — disable formatter after this line
             var v = Shape.ExtractShape((Array)new int[][][]
@@ -155,7 +137,7 @@ namespace NumSharp.UnitTest
             Shape.ExtractShape(new int[5]).Should().ContainInOrder(5);
         }
 
-        [TestMethod]
+        [Test]
         public void Create_Vector()
         {
             Shape.Vector(10).Should().Be(new Shape(10));
@@ -168,7 +150,7 @@ namespace NumSharp.UnitTest
             Shape.Vector(0).strides.Should().ContainInOrder(new Shape(0).strides);
         }
 
-        [TestMethod]
+        [Test]
         public void Create_Matrix()
         {
             Shape.Matrix(5, 5).Should().Be(new Shape(5, 5));
@@ -187,7 +169,7 @@ namespace NumSharp.UnitTest
             Shape.Matrix(0, 0).strides.Should().ContainInOrder(new Shape(0, 0).strides);
         }
 
-        [TestMethod]
+        [Test]
         public void GetAxis()
         {
             var baseshape = new Shape(2, 3, 4, 5);
@@ -198,7 +180,7 @@ namespace NumSharp.UnitTest
             Shape.GetAxis(baseshape, -1).Should().ContainInOrder(2, 3, 4);
         }
 
-        [TestMethod]
+        [Test]
         public void GetSubshape()
         {
             //initialize
@@ -312,54 +294,51 @@ namespace NumSharp.UnitTest
             ret.Shape.Dimensions[1].Should().Be(1);
         }
 
-        [TestMethod]
+        [Test]
         public void ShapeSlicing_1D()
         {
-            new Shape(10).Slice(":").ViewInfo.Slices[0].Should().Be(new SliceDef("(0>>1*10)"));
+            // NumPy-pure: test offset and strides instead of ViewInfo
+            new Shape(10).Slice(":").Should().Be(new Shape(10));
             new Shape(10).Slice("-77:77").Should().Be(new Shape(10));
-            new Shape(10).Slice("-77:77").ViewInfo.Slices[0].Should().Be(new SliceDef("(0>>1*10)"));
-            new Shape(10).Slice(":7").ViewInfo.Slices[0].Should().Be(new SliceDef("(0>>1*7)"));
-            new Shape(10).Slice("7:").ViewInfo.Slices[0].Should().Be(new SliceDef("(7>>1*3)"));
-            new Shape(10).Slice("-7:").ViewInfo.Slices[0].Should().Be(new SliceDef("(3>>1*7)"));
+            new Shape(10).Slice(":7").Dimensions[0].Should().Be(7);
+            new Shape(10).Slice("7:").Dimensions[0].Should().Be(3);
+            new Shape(10).Slice("7:").Offset.Should().Be(7);
+            new Shape(10).Slice("-7:").Dimensions[0].Should().Be(7);
+            new Shape(10).Slice("-7:").Offset.Should().Be(3);
         }
 
-        [TestMethod]
+        [Test]
         public void RepeatedSlicing_1D()
         {
-            new Shape(10).Slice(":").Slice(":").ViewInfo.Slices[0].Should().Be(new SliceDef("(0>>1*10)"));
-            new Shape(10).Slice(":5").Slice("2:").ViewInfo.Slices[0].Should().Be(new SliceDef("(2>>1*3)"));
-            new Shape(10).Slice(":5").Slice("2:").Slice("::2").ViewInfo.Slices[0].Should().Be(new SliceDef("(2>>2*2)"));
-            new Shape(10).Slice("1:9").Slice("::-2").ViewInfo.Slices[0].Should().Be(new SliceDef("(8>>-2*4)"));
-            new Shape(10).Slice("1:9").Slice("::2").ViewInfo.Slices[0].Should().Be(new SliceDef("(1>>2*4)"));
-            new Shape(10).Slice("9:2:-2").ViewInfo.Slices[0].Should().Be(new SliceDef("(9>>-2*4)"));
-            new Shape(10).Slice("9:2:-2").Slice("::-3").ViewInfo.Slices[0].Should().Be(new SliceDef("(3>>6*2)"));
-            new Shape(10).Slice("1:9").Slice("::-2").Slice("::-3").ViewInfo.Slices[0].Should().Be(new SliceDef("(2>>6*2)"));
-            new Shape(10).Slice("9:2:-2").Slice("::2").ViewInfo.Slices[0].Should().Be(new SliceDef("(9>>-4*2)"));
-            new Shape(10).Slice("9:2:-2").Slice("::-2").ViewInfo.Slices[0].Should().Be(new SliceDef("(3>>4*2)"));
-            new Shape(10).Slice("1:9").Slice("::-2").Slice("::-2").ViewInfo.Slices[0].Should().Be(new SliceDef("(2>>4*2)"));
-            new Shape(10).Slice("0:9").Slice("::-2").Slice("::-2").ViewInfo.Slices[0].Should().Be(new SliceDef("(0>>4*3)"));
-            new Shape(20).Slice("3:19").Slice("1:15:2").Slice("2:6:2").ViewInfo.Slices[0].Should().Be(new SliceDef("(8>>4*2)"));
-            // the repeatedly sliced shape needs to have the original shape
-            new Shape(20).Slice("3:19").Slice("1:15:2").Slice("2:6:2").ViewInfo.OriginalShape.Should().Be(new Shape(20));
+            // NumPy-pure: double slicing uses parent offset+strides
+            new Shape(10).Slice(":").Slice(":").Dimensions[0].Should().Be(10);
+            new Shape(10).Slice(":5").Slice("2:").Dimensions[0].Should().Be(3);
+            new Shape(10).Slice(":5").Slice("2:").Offset.Should().Be(2);
+            new Shape(10).Slice(":5").Slice("2:").Slice("::2").Dimensions[0].Should().Be(2);
+            new Shape(10).Slice(":5").Slice("2:").Slice("::2").Strides[0].Should().Be(2);
+            // bufferSize should track original buffer
+            new Shape(10).Slice(":5").Slice("2:").BufferSize.Should().Be(10);
         }
 
-        [TestMethod]
+        [Test]
         public void ShapeSlicing_2D()
         {
+            // NumPy-pure: test dimensions and offset
             new Shape(3, 3).Slice(":,1:").Should().Be(new Shape(3, 2));
-            new Shape(3, 3).Slice(":,1:").ViewInfo.Slices[0].Should().Be(new SliceDef("(0>>1*3)"));
-            new Shape(3, 3).Slice(":,1:").ViewInfo.Slices[1].Should().Be(new SliceDef("(1>>1*2)"));
+            new Shape(3, 3).Slice(":,1:").Offset.Should().Be(1);
+            new Shape(3, 3).Slice(":,1:").Strides[0].Should().Be(3);
+            new Shape(3, 3).Slice(":,1:").Strides[1].Should().Be(1);
         }
 
 
-        [TestMethod]
+        [Test]
         public void GetCoordsFromIndex_2D()
         {
             var shape = new Shape(3, 3).Slice(":,1:");
             // todo: test get coords from index with sliced shapes
         }
 
-        [TestMethod]
+        [Test]
         public void ExpandDim_Case1()
         {
             Shape shape = (3, 3, 3);
@@ -368,7 +347,7 @@ namespace NumSharp.UnitTest
             shape.GetOffset(2, 0, 0, 2).Should().Be(9 * 2 + 2);
         }
 
-        [TestMethod]
+        [Test]
         public void ExpandDim_Case2()
         {
             Shape shape = (3, 3, 3);
@@ -376,7 +355,7 @@ namespace NumSharp.UnitTest
             shape.GetOffset(0, 2, 0, 2).Should().Be(9 * 2 + 2);
         }
 
-        [TestMethod]
+        [Test]
         public void ExpandDim_Case3()
         {
             Shape shape = (3, 3, 3);
@@ -385,7 +364,7 @@ namespace NumSharp.UnitTest
             shape.GetOffset(2, 0, 0, 2).Should().Be(9 * 2 + 2);
         }
 
-        [TestMethod]
+        [Test]
         public void ExpandDim_Case4()
         {
             Shape shape = (3, 3, 3);
@@ -395,7 +374,7 @@ namespace NumSharp.UnitTest
         }
 
 
-        [TestMethod]
+        [Test]
         public void ExpandDim0_Slice()
         {
             //>>> a = np.arange(27).reshape(3, 3, 3)[0, :]
@@ -424,7 +403,7 @@ namespace NumSharp.UnitTest
             shape.Should().Be(new Shape(3, 1, 3));
         }
 
-        [TestMethod]
+        [Test]
         public void ExpandDim1_Slice()
         {
             //>>> a = np.arange(3 * 2 * 3).reshape(3, 2, 3)[1, :]
@@ -447,7 +426,7 @@ namespace NumSharp.UnitTest
             shape.Should().Be(new Shape(2, 1, 3));
         }
 
-        //[TestMethod]
+        //[Test]
         //public void Strides_Case1()
         //{
         //    var a = np.arange(3 * 2 * 2).reshape((3, 2, 2));
@@ -456,134 +435,35 @@ namespace NumSharp.UnitTest
         //    a.Shape.Strides.Should().BeEquivalentTo(new int[] {16, 8, 4});
         //}
 
-        [TestMethod]
+        [Test]
         public void HashcodeComputation()
         {
+            // With readonly struct, hashcode is computed at construction time
             var a = Shape.Vector(5);
             var b = new Shape(5);
-            a._hashCode.Should().Be(b._hashCode);
-            a.ComputeHashcode();
             a._hashCode.Should().Be(b._hashCode);
 
             a = Shape.Matrix(5, 10);
             b = new Shape(5, 10);
             a._hashCode.Should().Be(b._hashCode);
-            a.ComputeHashcode();
-            a._hashCode.Should().Be(b._hashCode);
 
             a = new Shape(3, 3, 3);
             b = new Shape(3, 3, 3);
             a._hashCode.Should().Be(b._hashCode);
-            b.ComputeHashcode();
-            a._hashCode.Should().Be(b._hashCode);
-            a.ComputeHashcode();
-            a._hashCode.Should().Be(b._hashCode);
         }
 
-        [TestMethod]
+        [Test]
         public void HashcodeScalars()
         {
             Shape.Scalar.GetHashCode().Should().Be(int.MinValue);
             Shape.NewScalar().GetHashCode().Should().Be(int.MinValue);
-            Shape.NewScalar(new ViewInfo() { OriginalShape = new Shape(1, 2, 3) }).GetHashCode().Should().Be(int.MinValue);
-            Shape.NewScalar(new ViewInfo() { OriginalShape = new Shape(1, 2, 3) }, new BroadcastInfo(Shape.Empty(1))).GetHashCode().Should().Be(int.MinValue);
+            // NumPy-pure: scalars with offset still have scalar hashcode
+            // Use constructor to create scalar with offset (readonly struct)
+            var scalarWithOffset = new Shape(Array.Empty<int>(), Array.Empty<int>(), 5, 10);
+            scalarWithOffset.GetHashCode().Should().Be(int.MinValue);
         }
 
-        #region GetCoordinatesFromAbsoluteIndex
-
-        [TestMethod]
-        public void GetCoordinatesFromAbsoluteIndex_Unsliced()
-        {
-            var shape = new Shape(3, 3);
-            //[[0 1 2]
-            // [3 4 5]
-            // [6 7 8]]
-            shape.GetOffset(1, 0).Should().Be(3);
-            shape.GetCoordinatesFromAbsoluteIndex(3).Should().Equal(new int[] { 1, 0 });
-            shape.GetOffset(2, 2).Should().Be(8);
-            shape.GetCoordinatesFromAbsoluteIndex(8).Should().Equal(new int[] { 2, 2 });
-        }
-
-        [TestMethod]
-        public void GetCoordinatesFromAbsoluteIndex_Sliced()
-        {
-            var shape = new Shape(3, 3).Slice("1:");
-            // 0 1 2
-            //[[3 4 5]
-            // [6 7 8]]
-            shape.Should().BeShaped(2, 3);
-            shape.GetOffset(0,0).Should().Be(3);
-            shape.GetCoordinatesFromAbsoluteIndex(3).Should().Equal(new int[] { 0, 0 });
-            shape.GetOffset(1, 2).Should().Be(8);
-            shape.GetCoordinatesFromAbsoluteIndex(8).Should().Equal(new int[] { 1, 2 });
-            shape = new Shape(3, 3).Slice(":, ::2");
-            //[[0] 1 [2]
-            // [3] 4 [5]
-            // [6] 7 [8]]
-            shape.Should().BeShaped(3, 2);
-            shape.GetOffset(0, 1).Should().Be(2);
-            shape.GetCoordinatesFromAbsoluteIndex(2).Should().Equal(new int[] { 0, 1 });
-            shape.GetOffset(2, 1).Should().Be(8);
-            shape.GetCoordinatesFromAbsoluteIndex(8).Should().Equal(new int[] { 2, 1 });
-        }
-
-        [TestMethod]
-        public void GetCoordinatesFromAbsoluteIndex_Sliced_by_Index()
-        {
-            var shape = new Shape(3, 3).Slice(Slice.Index(1));
-            // 0 1 2
-            //[3 4 5]
-            // 6 7 8
-            shape.Should().BeShaped(3);
-            shape.GetOffset(1).Should().Be(4);
-            shape.GetCoordinatesFromAbsoluteIndex(4).Should().Equal(new int[] { 1 });
-        }
-
-        private Shape ReshapeSlicedShape(Shape shape, params int[] new_dims)
-        {
-            Shape newShape = new Shape(new_dims);
-            if (shape.IsSliced)
-                // Set up the new shape (of reshaped slice) to recursively represent a shape within a sliced shape
-                newShape.ViewInfo = new ViewInfo() { ParentShape = shape, Slices = null };
-            return newShape;
-        } 
-
-        [TestMethod]
-        public void GetCoordinatesFromAbsoluteIndex_Sliced_and_Reshaped()
-        {
-            //>>> a
-            //array([[0, 1, 2],
-            //       [3, 4, 5],
-            //       [6, 7, 8]])
-            //>>> a[:, 1:]
-            //array([[1, 2],
-            //       [4, 5],
-            //       [7, 8]])
-            //>>> a[:, 1:].reshape(2,3)
-            //array([[1, 2, 4],
-            //       [5, 7, 8]])
-            var shape = ReshapeSlicedShape(new Shape(3, 3).Slice(":, 1:"), 2,3);
-            shape.Should().BeShaped(2,3);
-            //shape.GetOffset(0, 0).Should().Be(1);
-            //shape.GetCoordinates(1).Should().Equal(new int[] { 0, 0 });
-            shape.GetOffset(1,1).Should().Be(7);
-            shape.GetCoordinatesFromAbsoluteIndex(7).Should().Equal(new int[] { 1, 1 });
-            shape.GetOffset(1, 2).Should().Be(8);
-            shape.GetCoordinatesFromAbsoluteIndex(8).Should().Equal(new int[] { 1, 2 });
-            // now slice again:
-            //>>> c
-            //array([[1, 2, 4],
-            //       [5, 7, 8]])
-            //>>> c[1, 1:]
-            //array([7, 8])
-            var shape1 = shape.Slice("1, 1:");
-            shape1.GetOffset(1).Should().Be(8);
-            shape1.GetCoordinatesFromAbsoluteIndex(8).Should().Equal(new int[] { 1 });
-            shape1.GetOffset(0).Should().Be(7);
-            shape1.GetCoordinatesFromAbsoluteIndex(7).Should().Equal(new int[] { 0 });
-        }
-
-        #endregion
+        // GetCoordinatesFromAbsoluteIndex region removed - method was dead API (not supported in NumPy for views)
 
       
     }

@@ -1,0 +1,13 @@
+# Build outputs
+bin/
+obj/
+
+# Generated benchmark results (keep .gitkeep only)
+Results/*.csv
+Results/*.json
+Results/*.md
+Results/*.cs
+Results/*.txt
+
+# BenchmarkDotNet artifacts
+BenchmarkDotNet.Artifacts/

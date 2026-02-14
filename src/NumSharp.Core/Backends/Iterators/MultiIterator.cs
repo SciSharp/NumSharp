@@ -10,8 +10,10 @@ namespace NumSharp
         ///     Assigns rhs values to lhs.
         /// </summary>
         /// <remarks>Stops at first iterator stop.</remarks>
+        /// <exception cref="NumSharpException">If lhs is not writeable (e.g., broadcast array).</exception>
         public static void Assign(NDArray lhs, NDArray rhs)
         {
+            NumSharpException.ThrowIfNotWriteable(lhs.Shape);
             Assign(lhs.Storage, rhs.Storage);
         }
         
@@ -19,8 +21,10 @@ namespace NumSharp
         ///     Assigns rhs values to lhs.
         /// </summary>
         /// <remarks>Stops at first iterator stop.</remarks>
+        /// <exception cref="NumSharpException">If lhs is not writeable (e.g., broadcast array).</exception>
         public static void Assign(UnmanagedStorage lhs, UnmanagedStorage rhs)
         {
+            NumSharpException.ThrowIfNotWriteable(lhs.Shape);
 #if _REGEN
             #region Compute
 		    switch (lhs.TypeCode)

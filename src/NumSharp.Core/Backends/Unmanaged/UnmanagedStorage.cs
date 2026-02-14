@@ -51,6 +51,78 @@ namespace NumSharp.Backends
         protected Shape _shape;
 
         /// <summary>
+        /// The original storage this is a view of, or <c>null</c> if this storage owns its data.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// <b>Memory Model:</b> All views chain to the ultimate owner (not intermediate views).
+        /// When storage B is a view of A, and C is a view of B, then both B._baseStorage and
+        /// C._baseStorage point to A (not C → B → A).
+        /// </para>
+        /// <para>
+        /// <b>Memory Safety:</b> The underlying memory is kept alive by the shared Disposer
+        /// class reference in the UnmanagedMemoryBlock. This field provides semantic tracking
+        /// for the NumPy-compatible <see cref="NDArray.@base"/> property, not GC safety.
+        /// </para>
+        /// <para>
+        /// <b>Set by:</b> All three <see cref="Alias()"/> overloads,
+        /// <see cref="CreateBroadcastedUnsafe(UnmanagedStorage, Shape)"/>,
+        /// and both <see cref="GetData(int[])"/> overloads when creating views.
+        /// </para>
+        /// </remarks>
+        /// <seealso cref="BaseStorage"/>
+        /// <seealso cref="IsView"/>
+        internal UnmanagedStorage? _baseStorage;
+
+        /// <summary>
+        /// Gets the original storage this is a view of, or <c>null</c> if this storage owns its data.
+        /// </summary>
+        /// <value>
+        /// The ultimate owner storage for views, or <c>null</c> for owned data.
+        /// </value>
+        /// <remarks>
+        /// <para>
+        /// NumPy-compatible: All views chain to the ultimate owner (not intermediate views).
+        /// </para>
+        /// <para>
+        /// <b>Example:</b>
+        /// <code>
+        /// var a = np.arange(10);           // a.Storage.BaseStorage == null (owns data)
+        /// var b = a["2:5"];                // b.Storage.BaseStorage == a.Storage
+        /// var c = b["1:2"];                // c.Storage.BaseStorage == a.Storage (chains to original!)
+        /// </code>
+        /// </para>
+        /// <para>
+        /// <b>Note:</b> This property is read-only by design. Allowing external modification would
+        /// risk breaking the memory ownership chain and could lead to use-after-free bugs.
+        /// </para>
+        /// </remarks>
+        /// <seealso href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.base.html"/>
+        public UnmanagedStorage? BaseStorage => _baseStorage;
+
+        /// <summary>
+        /// Gets a value indicating whether this storage is a view of another storage.
+        /// </summary>
+        /// <value>
+        /// <c>true</c> if this storage shares memory with another storage (does not own its data);
+        /// <c>false</c> if this storage owns its data.
+        /// </value>
+        /// <remarks>
+        /// <para>
+        /// Equivalent to checking <c>BaseStorage != null</c>.
+        /// </para>
+        /// <para>
+        /// <b>Use cases:</b>
+        /// <list type="bullet">
+        ///   <item>Determine if an array can be safely modified without affecting other arrays</item>
+        ///   <item>Optimize copy-on-write patterns</item>
+        ///   <item>Debug memory sharing issues</item>
+        /// </list>
+        /// </para>
+        /// </remarks>
+        public bool IsView => _baseStorage != null;
+
+        /// <summary>
         ///     The data type of internal storage array.
         /// </summary>
         /// <value>numpys equal dtype</value>
@@ -127,11 +199,26 @@ namespace NumSharp.Backends
         public static UnmanagedStorage Scalar(object value, NPTypeCode typeCode) => new UnmanagedStorage(ArraySlice.Scalar(value, typeCode));
 
         /// <summary>
-        ///     Wraps given <paramref name="arraySlice"/> in <see cref="UnmanagedStorage"/> with a broadcasted shape.
+        /// Creates a new storage with a broadcasted shape from an array slice.
         /// </summary>
-        /// <param name="arraySlice">The slice to wrap </param>
-        /// <param name="shape">The shape to represent this storage, can be a broadcast.</param>
-        /// <remarks>Named unsafe because there it does not perform a check if the shape is valid for this storage size.</remarks>
+        /// <param name="arraySlice">The array slice to wrap.</param>
+        /// <param name="shape">The broadcasted shape to represent this storage.</param>
+        /// <returns>
+        /// A new <see cref="UnmanagedStorage"/> that owns the data (not a view).
+        /// The returned storage's <see cref="_baseStorage"/> is <c>null</c>.
+        /// </returns>
+        /// <remarks>
+        /// <para>
+        /// <b>Named "Unsafe":</b> This method does not validate that the shape is compatible
+        /// with the array slice size.
+        /// </para>
+        /// <para>
+        /// <b>Ownership:</b> This overload creates owned storage (not a view) because it
+        /// receives raw data without storage context. Compare with the
+        /// <see cref="CreateBroadcastedUnsafe(UnmanagedStorage, Shape)"/> overload which
+        /// preserves base tracking.
+        /// </para>
+        /// </remarks>
         public static UnmanagedStorage CreateBroadcastedUnsafe(IArraySlice arraySlice, Shape shape)
         {
             var ret = new UnmanagedStorage();
@@ -140,15 +227,37 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     Wraps given <paramref name="storage"/> in <see cref="UnmanagedStorage"/> with a broadcasted shape.
+        /// Creates a broadcasted view of an existing storage with a new shape.
         /// </summary>
-        /// <param name="storage">The storage to take <see cref="InternalArray"/> from.</param>
-        /// <param name="shape">The shape to represent this storage, can be a broadcast.</param>
-        /// <remarks>Named unsafe because there it does not perform a check if the shape is valid for this storage size.</remarks>
+        /// <param name="storage">The source storage to take <see cref="InternalArray"/> from.</param>
+        /// <param name="shape">The broadcasted shape to represent this storage.</param>
+        /// <returns>
+        /// A new <see cref="UnmanagedStorage"/> that shares memory with the source storage.
+        /// The returned storage's <see cref="_baseStorage"/> points to the ultimate owner.
+        /// </returns>
+        /// <remarks>
+        /// <para>
+        /// <b>Named "Unsafe":</b> This method does not validate that the shape is compatible
+        /// with the storage size.
+        /// </para>
+        /// <para>
+        /// <b>Base Tracking:</b> Sets <c>_baseStorage</c> to chain to the ultimate owner:
+        /// <list type="bullet">
+        ///   <item>If source storage owns its data: <c>result._baseStorage = storage</c></item>
+        ///   <item>If source storage is a view: <c>result._baseStorage = storage._baseStorage</c></item>
+        /// </list>
+        /// </para>
+        /// <para>
+        /// <b>Used By:</b> <c>np.broadcast_to()</c>, <c>np.broadcast_arrays()</c>, and
+        /// internal broadcasting operations.
+        /// </para>
+        /// </remarks>
+        /// <seealso cref="Alias()"/>
         public static UnmanagedStorage CreateBroadcastedUnsafe(UnmanagedStorage storage, Shape shape)
         {
             var ret = new UnmanagedStorage();
             ret._Allocate(shape, storage.InternalArray);
+            ret._baseStorage = storage._baseStorage ?? storage;
             return ret;
         }
 
@@ -1312,15 +1421,17 @@ namespace NumSharp.Backends
             if (typeof(T) != _dtype)
                 throw new InvalidCastException("Unable to perform CopyTo when T does not match dtype, use non-generic overload instead.");
 
-            if (!Shape.IsContiguous || Shape.ModifiedStrides)
+            if (!Shape.IsContiguous)
             {
                 var dst = ArraySlice.Wrap<T>(address, Count);
                 MultiIterator.Assign(new UnmanagedStorage(dst, Shape.Clean()), this);
                 return;
             }
 
+            // Fast path for contiguous - account for offset (sliced views)
             var bytesCount = Count * InfoOf<T>.Size;
-            Buffer.MemoryCopy(Address, address, bytesCount, bytesCount);
+            var srcAddress = Address + Shape.offset * InfoOf<T>.Size;
+            Buffer.MemoryCopy(srcAddress, address, bytesCount, bytesCount);
         }
 
         /// <summary>
@@ -1340,8 +1451,7 @@ namespace NumSharp.Backends
 
             fixed (T* dst = array)
             {
-                var bytesCount = Count * InfoOf<T>.Size;
-                Buffer.MemoryCopy(Address, dst, bytesCount, bytesCount);
+                CopyTo<T>(dst);
             }
         }
 
@@ -1354,12 +1464,16 @@ namespace NumSharp.Backends
             var src = (T*)Address;
             var ret = new T[Shape.Size];
 
+            // NumPy-aligned: For contiguous shapes, use fast memory copy.
+            // Must account for shape.offset which indicates the starting position in the buffer.
             if (Shape.IsContiguous)
             {
+                // Adjust source pointer by offset for sliced views
+                var srcWithOffset = src + Shape.offset;
                 fixed (T* dst = ret)
                 {
                     var len = sizeof(T) * ret.Length;
-                    Buffer.MemoryCopy(src, dst, len, len);
+                    Buffer.MemoryCopy(srcWithOffset, dst, len, len);
                 }
             }
             else

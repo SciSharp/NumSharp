@@ -1,14 +1,14 @@
 ﻿using System;
 using System.Drawing;
 using System.Drawing.Imaging;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest
 {
-    [TestClass]
-    [TestCategory("WindowsOnly")]
+    [WindowsOnly]
+    [SkipOnNonWindows]
     public class BitmapExtensionsTests : TestClass
     {
         // ================================================================
@@ -39,7 +39,7 @@ namespace NumSharp.UnitTest
 
         #region ToNDArray — dtype and contiguity
 
-        [TestMethod]
+        [Test]
         public void ToNDArray_Copy_ReturnsContiguousByteArray()
         {
             var bitmap = EmbeddedBitmap("captcha-a");
@@ -48,7 +48,7 @@ namespace NumSharp.UnitTest
             nd.Shape.IsContiguous.Should().BeTrue("copy mode should produce contiguous memory");
         }
 
-        [TestMethod]
+        [Test]
         public void ToNDArray_NoCopy_ReturnsByteArray()
         {
             var bitmap = EmbeddedBitmap("captcha-a");
@@ -60,7 +60,7 @@ namespace NumSharp.UnitTest
 
         #region ToNDArray — size consistency
 
-        [TestMethod]
+        [Test]
         public void ToNDArray_Copy_TotalSizeMatchesDimensions()
         {
             var bitmap = EmbeddedBitmap("captcha-a");
@@ -68,7 +68,7 @@ namespace NumSharp.UnitTest
             nd.size.Should().Be(nd.shape[0] * nd.shape[1] * nd.shape[2] * nd.shape[3]);
         }
 
-        [TestMethod]
+        [Test]
         public void ToNDArray_NoCopy_TotalSizeMatchesDimensions()
         {
             var bitmap = EmbeddedBitmap("captcha-a");
@@ -80,13 +80,12 @@ namespace NumSharp.UnitTest
 
         #region ToNDArray — discardAlpha reduces 4th dimension
 
-        [TestMethod]
+        [Test]
         public void ToNDArray_Copy_DiscardAlpha_Reduces4thDimFrom4To3()
         {
             var bitmap = EmbeddedBitmap("captcha-a");
             var withAlpha = bitmap.ToNDArray(copy: true, discardAlpha: false);
-            var bitmap2 = EmbeddedBitmap("captcha-a");
-            var noAlpha = bitmap2.ToNDArray(copy: true, discardAlpha: true);
+            var noAlpha = bitmap.ToNDArray(copy: true, discardAlpha: true);
 
             withAlpha.shape[3].Should().Be(4, "captcha-a is 32bpp ARGB");
             noAlpha.shape[3].Should().Be(3, "discardAlpha should strip alpha channel");
@@ -94,7 +93,7 @@ namespace NumSharp.UnitTest
             noAlpha.shape[2].Should().Be(withAlpha.shape[2], "width unchanged");
         }
 
-        [TestMethod]
+        [Test]
         public void ToNDArray_NoCopy_DiscardAlpha_Reduces4thDimFrom4To3()
         {
             // Must use separate bitmaps because copy:false holds the lock
@@ -111,7 +110,7 @@ namespace NumSharp.UnitTest
 
         #region ToNDArray — flat output
 
-        [TestMethod]
+        [Test]
         public void ToNDArray_Flat_Copy_Is1D()
         {
             var bitmap = EmbeddedBitmap("captcha-a");
@@ -119,7 +118,7 @@ namespace NumSharp.UnitTest
             nd.ndim.Should().Be(1, "flat=true should produce 1-d array");
         }
 
-        [TestMethod]
+        [Test]
         public void ToNDArray_Flat_NoCopy_Is1D()
         {
             var bitmap = EmbeddedBitmap("captcha-a");
@@ -127,13 +126,12 @@ namespace NumSharp.UnitTest
             nd.ndim.Should().Be(1);
         }
 
-        [TestMethod]
+        [Test]
         public void ToNDArray_Flat_SizeMatchesShaped()
         {
-            var bitmap1 = EmbeddedBitmap("captcha-a");
-            var shaped = bitmap1.ToNDArray(flat: false, copy: true, discardAlpha: true);
-            var bitmap2 = EmbeddedBitmap("captcha-a");
-            var flat = bitmap2.ToNDArray(flat: true, copy: true, discardAlpha: true);
+            var bitmap = EmbeddedBitmap("captcha-a");
+            var shaped = bitmap.ToNDArray(flat: false, copy: true, discardAlpha: true);
+            var flat = bitmap.ToNDArray(flat: true, copy: true, discardAlpha: true);
             flat.size.Should().Be(shaped.size, "flat and shaped should have same total elements");
         }
 
@@ -141,7 +139,7 @@ namespace NumSharp.UnitTest
 
         #region ToNDArray — pixel data correctness
 
-        [TestMethod]
+        [Test]
         public void ToNDArray_Copy_And_NoCopy_ProduceSameData()
         {
             var bitmap1 = EmbeddedBitmap("captcha-a");
@@ -163,31 +161,30 @@ namespace NumSharp.UnitTest
             np.array_equal(rowN_copy, rowN_wrap).Should().BeTrue("last row should be identical between copy and no-copy");
         }
 
-        [TestMethod]
+        [Test]
         public void ToNDArray_PixelValues_AreInByteRange()
         {
             var bitmap = EmbeddedBitmap("captcha-a");
             var nd = bitmap.ToNDArray(copy: true, discardAlpha: true, flat: true);
             var max = np.amax(nd).GetByte();
             var min = np.amin(nd).GetByte();
-            max.Should().BeLessOrEqualTo(255);
-            min.Should().BeGreaterOrEqualTo((byte)0);
+            max.Should().BeLessThanOrEqualTo(255);
+            min.Should().BeGreaterThanOrEqualTo((byte)0);
         }
 
-        [TestMethod]
+        [Test]
         public void ToNDArray_DiscardAlpha_PixelDataMatchesFirstThreeChannels()
         {
-            var bitmap1 = EmbeddedBitmap("captcha-a");
-            var full = bitmap1.ToNDArray(copy: true, discardAlpha: false);
-            var bitmap2 = EmbeddedBitmap("captcha-a");
-            var trimmed = bitmap2.ToNDArray(copy: true, discardAlpha: true);
+            var bitmap = EmbeddedBitmap("captcha-a");
+            var full = bitmap.ToNDArray(copy: true, discardAlpha: false);
+            var trimmed = bitmap.ToNDArray(copy: true, discardAlpha: true);
 
             // The trimmed array should match the first 3 channels of the full array
             var fullRgb = full[Slice.All, Slice.All, Slice.All, new Slice(stop: 3)];
             np.array_equal(trimmed, fullRgb).Should().BeTrue("discardAlpha should be equivalent to slicing [:,:,:,:3]");
         }
 
-        [TestMethod]
+        [Test]
         public void ToNDArray_NotAllZeros()
         {
             var bitmap = EmbeddedBitmap("captcha-a");
@@ -200,7 +197,7 @@ namespace NumSharp.UnitTest
 
         #region ToNDArray — odd width (stride padding)
 
-        [TestMethod]
+        [Test]
         public void ToNDArray_OddWidth_NoCopy_ShapeMatchesBitmap()
         {
             // copy:false uses ReshapeFlatData which handles stride padding correctly
@@ -210,7 +207,7 @@ namespace NumSharp.UnitTest
             nd.shape[2].Should().Be(bitmap.Width);
         }
 
-        [TestMethod]
+        [Test]
         public void ToNDArray_OddWidth_NoCopy_Flat_Is1D()
         {
             var bitmap = EmbeddedBitmap("odd-width");
@@ -223,7 +220,7 @@ namespace NumSharp.UnitTest
 
         #region ToBitmap — round-trip with 32bpp (no stride padding issues)
 
-        [TestMethod]
+        [Test]
         public void ToBitmap_RoundTrip_32bpp_PreservesPixelData()
         {
             // 32bpp ARGB: 4 bytes per pixel, stride is always width*4 (no padding)
@@ -241,7 +238,7 @@ namespace NumSharp.UnitTest
             np.array_equal(pixels, recovered).Should().BeTrue("32bpp round-trip should preserve all channels including alpha");
         }
 
-        [TestMethod]
+        [Test]
         public void ToBitmap_RoundTrip_24bpp_EvenWidth()
         {
             // Use width=4 (multiple of 4) to avoid stride padding issues
@@ -257,7 +254,7 @@ namespace NumSharp.UnitTest
             np.array_equal(pixels, recovered).Should().BeTrue("24bpp round-trip with even width should preserve data");
         }
 
-        [TestMethod]
+        [Test]
         public void ToBitmap_RoundTrip_FromEmbedded_32bpp()
         {
             var bitmap = EmbeddedBitmap("captcha-a");
@@ -272,7 +269,7 @@ namespace NumSharp.UnitTest
             np.array_equal(nd, nd2).Should().BeTrue("embedded image round-trip should be lossless");
         }
 
-        [TestMethod]
+        [Test]
         public void ToBitmap_RoundTrip_OddWidth_NoCopy()
         {
             // Use copy:false to avoid stride padding bug in copy path
@@ -287,7 +284,7 @@ namespace NumSharp.UnitTest
 
         #region ToBitmap — auto format detection
 
-        [TestMethod]
+        [Test]
         public void ToBitmap_DontCare_3Channel_Infers24bpp()
         {
             var nd = np.zeros(1, 4, 4, 3).astype(NPTypeCode.Byte);
@@ -295,7 +292,7 @@ namespace NumSharp.UnitTest
             bmp.PixelFormat.Should().Be(PixelFormat.Format24bppRgb);
         }
 
-        [TestMethod]
+        [Test]
         public void ToBitmap_DontCare_4Channel_Infers32bpp()
         {
             var nd = np.zeros(1, 4, 4, 4).astype(NPTypeCode.Byte);
@@ -303,7 +300,7 @@ namespace NumSharp.UnitTest
             bmp.PixelFormat.Should().Be(PixelFormat.Format32bppArgb);
         }
 
-        [TestMethod]
+        [Test]
         public void ToBitmap_WithExplicitFormat_Uses24bpp()
         {
             // Use 4-pixel width to avoid stride padding
@@ -314,7 +311,7 @@ namespace NumSharp.UnitTest
             bmp.Height.Should().Be(3);
         }
 
-        [TestMethod]
+        [Test]
         public void ToBitmap_WithExplicitFormat_Uses32bpp()
         {
             var nd = np.arange(0, 3 * 3 * 4).reshape(1, 3, 3, 4).astype(NPTypeCode.Byte);
@@ -326,7 +323,7 @@ namespace NumSharp.UnitTest
 
         #region ToBitmap — flat input with explicit format
 
-        [TestMethod]
+        [Test]
         public void ToBitmap_FlatInput_WithFormat_ReshapesCorrectly()
         {
             // 4x3 image, 32bpp = 48 bytes (no stride padding for 32bpp)
@@ -342,7 +339,7 @@ namespace NumSharp.UnitTest
 
         #region ToBitmap — error handling
 
-        [TestMethod]
+        [Test]
         public void ToBitmap_NullNDArray_ThrowsArgumentNull()
         {
             NDArray nd = null;
@@ -350,7 +347,7 @@ namespace NumSharp.UnitTest
             act.Should().Throw<ArgumentNullException>();
         }
 
-        [TestMethod]
+        [Test]
         public void ToBitmap_WrongNdim_ThrowsArgumentException()
         {
             var nd = np.zeros(3, 3, 3).astype(NPTypeCode.Byte);
@@ -358,7 +355,7 @@ namespace NumSharp.UnitTest
             act.Should().Throw<ArgumentException>();
         }
 
-        [TestMethod]
+        [Test]
         public void ToBitmap_MultiplePictures_ThrowsArgumentException()
         {
             var nd = np.zeros(2, 3, 3, 3).astype(NPTypeCode.Byte);
@@ -366,7 +363,7 @@ namespace NumSharp.UnitTest
             act.Should().Throw<ArgumentException>();
         }
 
-        [TestMethod]
+        [Test]
         public void ToBitmap_FormatMismatch_ThrowsArgumentException()
         {
             // 3-channel data but requesting 32bpp (4 channels)
@@ -379,7 +376,7 @@ namespace NumSharp.UnitTest
 
         #region ToNDArray — error handling
 
-        [TestMethod]
+        [Test]
         public void ToNDArray_NullBitmap_ThrowsArgumentNull()
         {
             Bitmap bmp = null;
@@ -387,7 +384,7 @@ namespace NumSharp.UnitTest
             act.Should().Throw<ArgumentNullException>();
         }
 
-        [TestMethod]
+        [Test]
         public void ToNDArray_NullImage_ThrowsArgumentNull()
         {
             Image img = null;
@@ -399,13 +396,13 @@ namespace NumSharp.UnitTest
 
         #region Image.ToNDArray — delegates to Bitmap
 
-        [TestMethod]
+        [Test]
         public void ImageToNDArray_ProducesSameResultAsBitmapToNDArray()
         {
             var bitmap = EmbeddedBitmap("captcha-a");
             var fromBitmap = bitmap.ToNDArray(copy: true, discardAlpha: false);
 
-            Image image = EmbeddedBitmap("captcha-a");
+            Image image = bitmap; // Bitmap inherits from Image
             var fromImage = image.ToNDArray(copy: true, discardAlpha: false);
 
             fromImage.Should().BeShaped(fromBitmap.shape[0], fromBitmap.shape[1], fromBitmap.shape[2], fromBitmap.shape[3]);
@@ -416,7 +413,7 @@ namespace NumSharp.UnitTest
 
         #region AsNDArray — BitmapData wrapper
 
-        [TestMethod]
+        [Test]
         public unsafe void AsNDArray_WrapsLockBitsWithoutCopy()
         {
             var bitmap = EmbeddedBitmap("captcha-a");
@@ -438,7 +435,7 @@ namespace NumSharp.UnitTest
             }
         }
 
-        [TestMethod]
+        [Test]
         public unsafe void AsNDArray_Shaped_DiscardAlpha()
         {
             var bitmap = EmbeddedBitmap("captcha-a");
@@ -458,7 +455,7 @@ namespace NumSharp.UnitTest
             }
         }
 
-        [TestMethod]
+        [Test]
         public void AsNDArray_NullBitmapData_ThrowsArgumentNull()
         {
             BitmapData bmpData = null;
@@ -470,49 +467,49 @@ namespace NumSharp.UnitTest
 
         #region ToBytesPerPixel
 
-        [TestMethod]
+        [Test]
         public void ToBytesPerPixel_24bppRgb_Returns3()
         {
             PixelFormat.Format24bppRgb.ToBytesPerPixel().Should().Be(3);
         }
 
-        [TestMethod]
+        [Test]
         public void ToBytesPerPixel_32bppArgb_Returns4()
         {
             PixelFormat.Format32bppArgb.ToBytesPerPixel().Should().Be(4);
         }
 
-        [TestMethod]
+        [Test]
         public void ToBytesPerPixel_32bppPArgb_Returns4()
         {
             PixelFormat.Format32bppPArgb.ToBytesPerPixel().Should().Be(4);
         }
 
-        [TestMethod]
+        [Test]
         public void ToBytesPerPixel_32bppRgb_Returns4()
         {
             PixelFormat.Format32bppRgb.ToBytesPerPixel().Should().Be(4);
         }
 
-        [TestMethod]
+        [Test]
         public void ToBytesPerPixel_48bppRgb_Returns6()
         {
             PixelFormat.Format48bppRgb.ToBytesPerPixel().Should().Be(6);
         }
 
-        [TestMethod]
+        [Test]
         public void ToBytesPerPixel_64bppArgb_Returns8()
         {
             PixelFormat.Format64bppArgb.ToBytesPerPixel().Should().Be(8);
         }
 
-        [TestMethod]
+        [Test]
         public void ToBytesPerPixel_64bppPArgb_Returns8()
         {
             PixelFormat.Format64bppPArgb.ToBytesPerPixel().Should().Be(8);
         }
 
-        [TestMethod]
+        [Test]
         public void ToBytesPerPixel_16bppFormats_Return2()
         {
             PixelFormat.Format16bppGrayScale.ToBytesPerPixel().Should().Be(2);
@@ -521,14 +518,14 @@ namespace NumSharp.UnitTest
             PixelFormat.Format16bppArgb1555.ToBytesPerPixel().Should().Be(2);
         }
 
-        [TestMethod]
+        [Test]
         public void ToBytesPerPixel_IndexedFormat_ThrowsArgumentException()
         {
             Action act = () => PixelFormat.Format8bppIndexed.ToBytesPerPixel();
             act.Should().Throw<ArgumentException>();
         }
 
-        [TestMethod]
+        [Test]
         public void ToBytesPerPixel_DontCare_ThrowsArgumentException()
         {
             Action act = () => PixelFormat.DontCare.ToBytesPerPixel();
@@ -539,7 +536,7 @@ namespace NumSharp.UnitTest
 
         #region Multiple embedded resources
 
-        [TestMethod]
+        [Test]
         public void ToNDArray_DifferentImages_HaveDifferentShapes()
         {
             var captcha = EmbeddedBitmap("captcha-a");
@@ -566,7 +563,7 @@ namespace NumSharp.UnitTest
                 .Should().BeFalse("different images should have different dimensions");
         }
 
-        [TestMethod]
+        [Test]
         public void ToNDArray_AllCaptchaImages_Load()
         {
             // Verify all 4 captcha images can be loaded and converted
@@ -586,7 +583,7 @@ namespace NumSharp.UnitTest
 
         #region Zeros and ones images
 
-        [TestMethod]
+        [Test]
         public void ToBitmap_AllBlack_RoundTripsCorrectly()
         {
             var black = np.zeros(1, 8, 8, 3).astype(NPTypeCode.Byte);
@@ -595,7 +592,7 @@ namespace NumSharp.UnitTest
             recovered.Should().AllValuesBe((byte)0);
         }
 
-        [TestMethod]
+        [Test]
         public void ToBitmap_AllWhite_RoundTripsCorrectly()
         {
             var white = (np.zeros(1, 8, 8, 3) + 255).astype(NPTypeCode.Byte);
@@ -604,7 +601,7 @@ namespace NumSharp.UnitTest
             recovered.Should().AllValuesBe((byte)255);
         }
 
-        [TestMethod]
+        [Test]
         public void ToBitmap_32bpp_AllBlack_RoundTripsCorrectly()
         {
             var black = np.zeros(1, 8, 8, 4).astype(NPTypeCode.Byte);
@@ -614,7 +611,7 @@ namespace NumSharp.UnitTest
             recovered.Should().AllValuesBe((byte)0);
         }
 
-        [TestMethod]
+        [Test]
         public void ToBitmap_32bpp_AllWhite_RoundTripsCorrectly()
         {
             var white = (np.zeros(1, 8, 8, 4) + 255).astype(NPTypeCode.Byte);
@@ -628,7 +625,7 @@ namespace NumSharp.UnitTest
 
         #region ToBitmap — specific pixel values
 
-        [TestMethod]
+        [Test]
         public void ToBitmap_32bpp_SpecificPixels_RoundTrip()
         {
             // Create a 2x2 image with known BGRA values
@@ -651,7 +648,7 @@ namespace NumSharp.UnitTest
             }
         }
 
-        [TestMethod]
+        [Test]
         public void ToBitmap_SizeProperty_MatchesDimensions()
         {
             var nd = np.zeros(1, 10, 20, 4).astype(NPTypeCode.Byte);

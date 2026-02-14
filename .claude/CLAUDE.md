@@ -44,9 +44,44 @@ np                Static API class (like `import numpy as np`)
 | Decision | Rationale |
 |----------|-----------|
 | Unmanaged memory | Benchmarked fastest ~5y ago; Span/Memory immature then |
+| C-order only | Only row-major (C-order) memory layout. Uses `ArrayFlags.C_CONTIGUOUS` flag. No F-order/column-major support. The `order` parameter on `ravel`, `flatten`, `copy`, `reshape` is accepted but ignored. |
 | Regen templating | ~200K lines generated for type-specific code |
 | TensorEngine abstract | Future GPU/SIMD backends possible |
 | View semantics | Slicing returns views (shared memory), not copies |
+| Shape readonly struct | Immutable after construction (NumPy-aligned). Contains `ArrayFlags` for cached O(1) property access |
+| Broadcast write protection | Broadcast views are read-only (`IsWriteable = false`), matching NumPy behavior |
+
+## Shape Architecture (NumPy-Aligned)
+
+Shape is a `readonly struct` with cached `ArrayFlags` computed at construction:
+
+```csharp
+public readonly partial struct Shape
+{
+    internal readonly int[] dimensions;  // Dimension sizes
+    internal readonly int[] strides;     // Stride values (0 = broadcast dimension)
+    internal readonly int offset;        // Base offset into storage
+    internal readonly int bufferSize;    // Size of underlying buffer
+    internal readonly int _flags;        // Cached ArrayFlags bitmask
+}
+```
+
+**ArrayFlags enum** (matches NumPy's `ndarraytypes.h`):
+| Flag | Value | Meaning |
+|------|-------|---------|
+| `C_CONTIGUOUS` | 0x0001 | Data is row-major contiguous |
+| `F_CONTIGUOUS` | 0x0002 | Reserved (always false for NumSharp) |
+| `OWNDATA` | 0x0004 | Array owns its data buffer |
+| `ALIGNED` | 0x0100 | Always true for managed allocations |
+| `WRITEABLE` | 0x0400 | False for broadcast views |
+| `BROADCASTED` | 0x1000 | Has stride=0 with dim > 1 |
+
+**Key Shape properties:**
+- `IsContiguous` — O(1) check via `C_CONTIGUOUS` flag
+- `IsBroadcasted` — O(1) check via `BROADCASTED` flag
+- `IsWriteable` — False for broadcast views (prevents corruption)
+- `IsSliced` — True if offset != 0, different size, or non-contiguous
+- `IsSimpleSlice` — IsSliced && !IsBroadcasted (fast offset path)
 
 ## Critical: View Semantics
 
@@ -109,9 +144,12 @@ nd["..., -1"]     // Ellipsis fills dimensions
 ### Math Functions (`Math/`)
 | Function | File |
 |----------|------|
+| `np.add`, `np.subtract`, `np.multiply`, `np.divide` | `np.math.cs` |
+| `np.mod`, `np.true_divide` | `np.math.cs` |
+| `np.positive`, `np.negative`, `np.convolve` | `np.math.cs` |
 | `np.sum` | `np.sum.cs` |
-| `np.prod` | `NDArray.prod.cs` |
-| `np.cumsum` | `NDArray.cumsum.cs` |
+| `np.prod`, `nd.prod()` | `np.math.cs`, `NDArray.prod.cs` |
+| `np.cumsum`, `nd.cumsum()` | `APIs/np.cumsum.cs`, `Math/NDArray.cumsum.cs` |
 | `np.power` | `np.power.cs` |
 | `np.sqrt` | `np.sqrt.cs` |
 | `np.abs`, `np.absolute` | `np.absolute.cs` |
@@ -131,9 +169,9 @@ nd["..., -1"]     // Ellipsis fills dimensions
 | `np.mean`, `nd.mean()` | `np.mean.cs`, `NDArray.mean.cs` |
 | `np.std`, `nd.std()` | `np.std.cs`, `NDArray.std.cs` |
 | `np.var`, `nd.var()` | `np.var.cs`, `NDArray.var.cs` |
-| `np.amax`, `nd.amax()` | `Sorting/np.amax.cs`, `NDArray.amax.cs` |
-| `np.amin`, `nd.amin()` | `Sorting/np.min.cs`, `NDArray.amin.cs` |
-| `np.argmax`, `nd.argmax()` | `Sorting/np.argmax.cs`, `NDArray.argmax.cs` |
+| `np.amax`, `nd.amax()` | `Sorting_Searching_Counting/np.amax.cs`, `NDArray.amax.cs` |
+| `np.amin`, `nd.amin()` | `Sorting_Searching_Counting/np.min.cs`, `NDArray.amin.cs` |
+| `np.argmax`, `nd.argmax()` | `Sorting_Searching_Counting/np.argmax.cs`, `NDArray.argmax.cs` |
 | `np.argmin`, `nd.argmin()` | `Sorting_Searching_Counting/np.argmax.cs`, `NDArray.argmin.cs` |
 
 ### Sorting & Searching (`Sorting_Searching_Counting/`)
@@ -168,7 +206,7 @@ nd["..., -1"]     // Ellipsis fills dimensions
 | `np.swapaxes` | `np.swapaxes.cs`, `NdArray.swapaxes.cs` |
 | `np.moveaxis` | `np.moveaxis.cs` |
 | `np.rollaxis` | `np.rollaxis.cs` |
-| `nd.roll()` | `NDArray.roll.cs` | Partial: only Int32/Single/Double with axis; no-axis returns null |
+| `np.roll`, `nd.roll()` | `np.roll.cs`, `NDArray.roll.cs` | Fully implemented (all dtypes, with/without axis) |
 | `np.atleast_1d/2d/3d` | `np.atleastd.cs` |
 | `np.unique`, `nd.unique()` | `np.unique.cs`, `NDArray.unique.cs` |
 | `np.repeat` | `np.repeat.cs` |
@@ -244,7 +282,6 @@ nd["..., -1"]     // Ellipsis fills dimensions
 | Function | File |
 |----------|------|
 | `np.size` | `np.size.cs` |
-| `np.cumsum` | `np.cumsum.cs` |
 
 ---
 
@@ -334,22 +371,97 @@ Create issues on `SciSharp/NumSharp` via `gh issue create`. `GH_TOKEN` is availa
 ## Build & Test
 
 ```bash
+# Build (silent, errors only)
 dotnet build -v q --nologo "-clp:NoSummary;ErrorsOnly" -p:WarningLevel=0
-dotnet test -v q --nologo "-clp:ErrorsOnly" test/NumSharp.UnitTest/NumSharp.UnitTest.csproj
+```
+
+### Running Tests
+
+Tests use **TUnit** framework with source-generated test discovery.
+
+```bash
+# Run from test directory
+cd test/NumSharp.UnitTest
+
+# All tests (includes OpenBugs - expected failures)
+dotnet test --no-build
+
+# Exclude OpenBugs (CI-style - only real failures)
+dotnet test --no-build -- --treenode-filter "/*/*/*/*[Category!=OpenBugs]"
+
+# Run ONLY OpenBugs tests
+dotnet test --no-build -- --treenode-filter "/*/*/*/*[Category=OpenBugs]"
+```
+
+### Output Formatting
+
+```bash
+# Results only (no messages, no stack traces)
+dotnet test --no-build 2>&1 | grep -E "^(failed|skipped|Test run|  total:|  failed:|  succeeded:|  skipped:|  duration:)"
+
+# Results with messages (no stack traces)
+dotnet test --no-build 2>&1 | grep -v "^    at " | grep -v "^     at " | grep -v "^    ---" | grep -v "^  from K:" | sed 's/TUnit.Engine.Exceptions.TestFailedException: //' | sed 's/AssertFailedException: //'
+
+# Detailed output (shows passed tests too)
+dotnet test --no-build -- --output Detailed
 ```
 
 ## Test Categories
 
-Tests are filtered by `[TestCategory]` attributes. Adding new bug reproductions or platform-specific tests only requires the right attribute — no CI workflow changes.
+Tests use typed category attributes defined in `TestCategory.cs`. Adding new bug reproductions or platform-specific tests only requires the right attribute — no CI workflow changes.
 
-| Category | Purpose | CI filter |
-|----------|---------|-----------|
-| `OpenBugs` | Known-failing bug reproductions. Remove category when fixed. | `TestCategory!=OpenBugs` (all platforms) |
-| `WindowsOnly` | Requires GDI+/System.Drawing.Common | `TestCategory!=WindowsOnly` (Linux/macOS) |
+| Category | Attribute | Purpose | CI Behavior |
+|----------|-----------|---------|-------------|
+| `OpenBugs` | `[OpenBugs]` | Known-failing bug reproductions. Remove when fixed. | **EXCLUDED** via filter |
+| `Misaligned` | `[Misaligned]` | Documents NumSharp vs NumPy behavioral differences. | Runs (tests pass) |
+| `WindowsOnly` | `[WindowsOnly]` | Requires GDI+/System.Drawing.Common | Runtime platform check |
 
-Apply at class level (`[TestClass][TestCategory("OpenBugs")]`) or individual method level (`[TestMethod][TestCategory("OpenBugs")]`).
+### How CI Excludes OpenBugs
 
-**OpenBugs files**: `OpenBugs.cs` (broadcast bugs), `OpenBugs.Bitmap.cs` (bitmap bugs). When a bug is fixed, the test starts passing — remove the `OpenBugs` category and move to a permanent test class.
+The CI pipeline (`.github/workflows/build-and-release.yml`) uses TUnit's `--treenode-filter` to exclude `OpenBugs`:
+
+```yaml
+env:
+  TEST_FILTER: '/*/*/*/*[Category!=OpenBugs]'
+
+- name: Test
+  run: dotnet run ... -- --treenode-filter "${{ env.TEST_FILTER }}"
+```
+
+This filter excludes all tests with `[OpenBugs]` or `[Category("OpenBugs")]` from CI runs. Tests pass locally when the bug is fixed — then remove the `[OpenBugs]` attribute.
+
+### Usage
+
+```csharp
+// Class-level (all tests in class)
+[OpenBugs]
+public class BroadcastBugTests { ... }
+
+// Method-level
+[Test]
+[OpenBugs]
+public async Task BroadcastWriteCorruptsData() { ... }
+
+// Documenting behavioral differences (NOT excluded from CI)
+[Test]
+[Misaligned]
+public void BroadcastSlice_MaterializesInNumSharp() { ... }
+```
+
+### Local Filtering
+
+```bash
+# Exclude OpenBugs (same as CI)
+dotnet test -- --treenode-filter "/*/*/*/*[Category!=OpenBugs]"
+
+# Run ONLY OpenBugs tests (to verify fixes)
+dotnet test -- --treenode-filter "/*/*/*/*[Category=OpenBugs]"
+
+# Run ONLY Misaligned tests
+dotnet test -- --treenode-filter "/*/*/*/*[Category=Misaligned]"
+```
+
+**OpenBugs files**: `OpenBugs.cs` (general bugs), `OpenBugs.Bitmap.cs` (bitmap bugs), `OpenBugs.ApiAudit.cs` (API audit failures).
 
 ## CI Pipeline
 
@@ -387,9 +499,14 @@ NumSharp uses unsafe in many places, hence include `#:property AllowUnsafeBlocks
 |--------|----------------|
 | `shape.dimensions` | Raw int[] of dimension sizes |
 | `shape.strides` | Raw int[] of stride values |
-| `shape.size` | Total element count |
-| `shape.ViewInfo` | Slice/view metadata (null if not a view) |
-| `shape.BroadcastInfo` | Broadcast metadata (null if not broadcast) |
+| `shape.size` | Internal field: total element count |
+| `shape.offset` | Base offset into storage (NumPy-aligned) |
+| `shape.bufferSize` | Size of underlying buffer |
+| `shape._flags` | Cached ArrayFlags bitmask |
+| `shape.IsWriteable` | False for broadcast views (NumPy behavior) |
+| `shape.IsBroadcasted` | Has any stride=0 with dimension > 1 |
+| `shape.IsSimpleSlice` | IsSliced && !IsBroadcasted |
+| `shape.OriginalSize` | Product of non-broadcast dimensions |
 | `arr.Storage` | Underlying `UnmanagedStorage` |
 | `arr.GetTypeCode` | `NPTypeCode` of the array |
 | `arr.Array` | `IArraySlice` — raw data access |
@@ -399,7 +516,18 @@ NumSharp uses unsafe in many places, hence include `#:property AllowUnsafeBlocks
 | `NPTypeCode.GetPriority()` | Type priority for promotion |
 | `NPTypeCode.AsNumpyDtypeName()` | NumPy dtype name (e.g. "int32") |
 | `Shape.NewScalar()` | Create scalar shapes |
-| `Shape.ComputeHashcode()` | Recalculate shape hash |
+
+### Common Public NDArray Properties
+
+| Property | Description |
+|----------|-------------|
+| `nd.shape` | Dimensions as `int[]` |
+| `nd.ndim` | Number of dimensions |
+| `nd.size` | Total element count |
+| `nd.dtype` | Element type as `Type` |
+| `nd.typecode` | Element type as `NPTypeCode` |
+| `nd.T` | Transpose (swaps axes) |
+| `nd.flat` | 1D iterator over elements |
 
 ## Adding New Features
 
@@ -433,7 +561,7 @@ A: Yes, 1-to-1 matching.
 A: Anything that can use the capabilities - porting Python ML code, standalone .NET scientific computing, integration with TensorFlow.NET/ML.NET.
 
 **Q: Are there areas of known fragility?**
-A: Slicing/broadcasting system is complex with ViewInfo and BroadcastInfo interactions - fragile but working.
+A: Slicing/broadcasting system is complex — offset/stride calculations with contiguity detection require careful handling. The `readonly struct Shape` with `ArrayFlags` simplifies this but edge cases remain.
 
 **Q: How is NumPy compatibility validated?**
 A: Written by hand based on NumPy docs and original tests. Testing philosophy: run actual NumPy code, observe output, replicate 1-to-1 in C#.
@@ -455,7 +583,7 @@ A: Implementations that differ from original NumPy 2.x behavior. A comprehensive
 A: `NDArray` (user-facing API), `UnmanagedStorage` (raw memory management), and `Shape` (dimensions, strides, coordinate translation). They work together: NDArray wraps Storage which uses Shape for offset calculations.
 
 **Q: What is Shape responsible for?**
-A: Dimensions, strides, coordinate-to-offset translation, contiguity tracking, and slice/broadcast info. Key properties: `IsScalar`, `IsContiguous`, `IsSliced`, `IsBroadcasted`. Methods: `GetOffset(coords)`, `GetCoordinates(offset)`.
+A: Shape is a `readonly struct` containing dimensions, strides, offset, bufferSize, and cached `ArrayFlags`. Key properties: `IsScalar`, `IsContiguous`, `IsSliced`, `IsBroadcasted`, `IsWriteable`, `IsSimpleSlice`. Methods: `GetOffset(coords)`, `GetCoordinates(offset)`. NumPy-aligned: broadcast views are read-only (`IsWriteable = false`).
 
 **Q: How does slicing work internally?**
 A: The `Slice` class parses Python notation (e.g., "1:5:2") into `Start`, `Stop`, `Step`. It converts to `SliceDef` (absolute indices) for computation. `SliceDef.Merge()` handles recursive slicing (slice of a slice).
@@ -502,10 +630,10 @@ A: Core ops (`dot`, `matmul`) in `LinearAlgebra/`. Advanced decompositions (`inv
 ## Q&A - Development
 
 **Q: What's in the test suite?**
-A: MSTest framework in `test/NumSharp.UnitTest/`. Many tests adapted from NumPy's own test suite. Decent coverage but gaps in edge cases.
+A: TUnit framework in `test/NumSharp.UnitTest/`. Many tests adapted from NumPy's own test suite. Decent coverage but gaps in edge cases. Uses source-generated test discovery (no special flags needed).
 
 **Q: What .NET version is targeted?**
-A: Library and tests multi-target `net8.0` and `net10.0`. Dropped `netstandard2.0` in the dotnet810 branch upgrade.
+A: Library multi-targets `net8.0` and `net10.0`. Tests currently target `net10.0` only (TUnit requires .NET 9+ runtime). Dropped `netstandard2.0` in the dotnet810 branch upgrade.
 
 **Q: What are the main dependencies?**
 A: No external runtime dependencies. `System.Memory` and `System.Runtime.CompilerServices.Unsafe` (previously NuGet packages) are built into the .NET 8+ runtime.

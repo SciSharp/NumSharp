@@ -8,10 +8,9 @@ using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest
 {
-    [TestClass]
     public class LogTest
     {
-        [TestMethod]
+        [Test]
         public void Case1()
         {
             var np1 = np.array(new double[] {1, Math.E, Math.E * Math.E, 0}); // .MakeGeneric<double>();

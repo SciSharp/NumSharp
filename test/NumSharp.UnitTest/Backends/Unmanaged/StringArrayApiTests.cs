@@ -1,17 +1,16 @@
 ﻿using System;
 using System.Linq;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.Backends.Unmanaged
 {
-    [TestClass]
     public class StringArrayApiTests
     {
         private static string[] strArray = new string[] { "Hello,", " SciSharp Team!"};
 
-        [TestMethod]
+        [Test]
         public void StringArrayConverting()
         {
             var nd = np.array(strArray);

@@ -1,17 +1,16 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.Memory.Pooling;
 using NumSharp.Unmanaged.Memory;
 
 namespace NumSharp.UnitTest.Utilities
 {
-    [TestClass]
     public class StackedMemoryPoolTests
     {
-        [TestMethod]
+        [Test]
         public void TakeExceedStored()
         {
             var pool = new StackedMemoryPool(4, 10);

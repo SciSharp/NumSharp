@@ -11,17 +11,16 @@ namespace NumSharp.UnitTest.RandomSampling
     /// same seed is applied. No testing of the actual output from the random state is expected here. Just test
     /// the consistent output after repeatedly setting the same seed value.
     /// </summary>
-    [TestClass]
     public class NpRandomSeedTests : TestClass
     {
-        [TestMethod]
+        [Test]
         public void SeedTest()
         {
             NumPyRandom rando = np.random.RandomState(1000);
             Assert.AreEqual(1000, rando.Seed, "The seed value given in the ctor does not match the seed value attribute.");
         }
 
-        [TestMethod]
+        [Test]
         public void UniformOneSample()
         {
             NumPyRandom rando = np.random.RandomState(1000);
@@ -40,7 +39,7 @@ namespace NumSharp.UnitTest.RandomSampling
 
         }
 
-        [TestMethod]
+        [Test]
         public void UniformMultipleSample()
         {
             NumPyRandom rando = np.random.RandomState(1000);
@@ -61,7 +60,7 @@ namespace NumSharp.UnitTest.RandomSampling
             }
         }
 
-        [TestMethod]
+        [Test]
         public void NonUniformSample()
         {
             NumPyRandom rando = np.random.RandomState(1000);
@@ -83,7 +82,7 @@ namespace NumSharp.UnitTest.RandomSampling
         }
 
 
-        [TestMethod]
+        [Test]
         public void IntegerArraySample()
         {
             NumPyRandom rando = np.random.RandomState(1000);

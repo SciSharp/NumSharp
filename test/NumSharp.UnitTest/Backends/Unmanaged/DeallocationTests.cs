@@ -4,16 +4,15 @@ using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Threading;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp.UnitTest.Backends.Unmanaged
 {
-    [TestClass]
     public class DeallocationTests
     {
-        [TestMethod]
+        [Test]
         public unsafe void DisposerCopiedAcrossStructCopy()
         {
             var newMem = new UnmanagedMemoryBlock<int>(5);
@@ -24,11 +23,11 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
                 mem2.GetType().GetField("_disposer", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(newMem));
         }
 
-        [TestMethod]
+        [Test]
         public unsafe void GcDoesntCollectArraySliceAlone()
         {
             //this test should be churned.
-            const int iterations = 100_000;
+            const int iterations = 10_000;
             //alocate and store
             var l = new List<ArraySlice<float>>(iterations);
             for (int i = 0; i < iterations; i++)

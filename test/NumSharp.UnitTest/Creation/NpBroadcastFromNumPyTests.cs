@@ -1,7 +1,7 @@
 ﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.Linq;
-using FluentAssertions;
+using AwesomeAssertions;
 using NumSharp;
 using NumSharp.Backends;
 
@@ -14,7 +14,6 @@ namespace NumSharp.UnitTest.Creation
     ///       - numpy/_core/tests/test_numeric.py (np.broadcast class)
     ///     Verifies NumSharp's broadcasting against NumPy 2.x behavior.
     /// </summary>
-    [TestClass]
     public class NpBroadcastFromNumPyTests : TestClass
     {
         #region Helpers
@@ -61,7 +60,7 @@ namespace NumSharp.UnitTest.Creation
         ///     >>> np.array_equal(a, x) and np.array_equal(b, x)
         ///     True
         /// </summary>
-        [TestMethod]
+        [Test]
         public void BroadcastArrays_Same()
         {
             var x = np.array(new int[,] { { 1, 2, 3 } }); // shape (1,3)
@@ -87,7 +86,7 @@ namespace NumSharp.UnitTest.Creation
         ///            [2, 2, 2],
         ///            [3, 3, 3]])
         /// </summary>
-        [TestMethod]
+        [Test]
         public void BroadcastArrays_OneOff()
         {
             var x = np.array(new int[,] { { 1, 2, 3 } });    // shape (1,3)
@@ -114,7 +113,7 @@ namespace NumSharp.UnitTest.Creation
         ///     Shapes tested: (1,), (3,), (1,3), (3,1), (3,3)
         ///     (Omitting zero-size shapes since they require special handling)
         /// </summary>
-        [TestMethod]
+        [Test]
         public void BroadcastArrays_SameInputShapes()
         {
             var shapes = new[]
@@ -149,7 +148,7 @@ namespace NumSharp.UnitTest.Creation
         ///
         ///     Tests both (a,b) and (b,a) orderings for symmetry.
         /// </summary>
-        [TestMethod]
+        [Test]
         public void BroadcastArrays_CompatibleByOnes()
         {
             // (input1_shape, input2_shape, expected_output_shape)
@@ -193,7 +192,7 @@ namespace NumSharp.UnitTest.Creation
         ///
         ///     Tests both (a,b) and (b,a) orderings for symmetry.
         /// </summary>
-        [TestMethod]
+        [Test]
         public void BroadcastArrays_CompatibleByPrependingOnes()
         {
             // (input1_shape, input2_shape, expected_output_shape)
@@ -239,7 +238,7 @@ namespace NumSharp.UnitTest.Creation
         ///     >>> np.broadcast_arrays(np.ones(3), np.ones(4))
         ///     ValueError: shape mismatch
         /// </summary>
-        [TestMethod]
+        [Test]
         public void BroadcastArrays_IncompatibleShapesThrow()
         {
             var incompatible_pairs = new[]
@@ -270,7 +269,7 @@ namespace NumSharp.UnitTest.Creation
         ///     >>> np.broadcast_arrays(np.ones(3), np.ones(3), np.ones(4))
         ///     ValueError: shape mismatch
         /// </summary>
-        [TestMethod]
+        [Test]
         public void BroadcastArrays_ThreeWayIncompatibleThrows()
         {
             var x1 = np.ones(new Shape(3));
@@ -307,7 +306,7 @@ namespace NumSharp.UnitTest.Creation
         ///       np.broadcast_to(np.arange(3), (1,3)) -> shape (1,3)
         ///       np.broadcast_to(np.arange(3), (2,3)) -> shape (2,3)
         /// </summary>
-        [TestMethod]
+        [Test]
         public void BroadcastTo_Succeeds()
         {
             // Scalar to various shapes
@@ -343,7 +342,7 @@ namespace NumSharp.UnitTest.Creation
         ///     >>> np.broadcast_to(np.ones((2,1)), (2,0)).shape
         ///     (2, 0)
         /// </summary>
-        [TestMethod]
+        [Test]
         public void BroadcastTo_ZeroSizeShapes()
         {
             AssertShapeEqual(np.broadcast_to(np.ones(new Shape(1)), new Shape(0)), 0);
@@ -361,7 +360,7 @@ namespace NumSharp.UnitTest.Creation
         ///     >>> np.broadcast_to(np.ones(3), (4,))
         ///     ValueError: ...
         /// </summary>
-        [TestMethod]
+        [Test]
         public void BroadcastTo_Raises()
         {
             // (3,) -> (2,) incompatible: dimension 3 vs 2, neither is 1
@@ -375,37 +374,28 @@ namespace NumSharp.UnitTest.Creation
 
         /// <summary>
         ///     NumPy's broadcast_to is one-directional: source dims can only be 1 or match target.
-        ///     NumSharp's broadcast_to uses bilateral Broadcast, so it allows cases NumPy rejects.
+        ///     broadcast_to uses unilateral semantics matching NumPy: only stretches source
+        ///     dimensions that are size 1. Cases where the source has a dimension larger than
+        ///     the target are rejected.
         ///
-        ///     Known discrepancies documented here:
-        ///
-        ///     NumPy rejects (3,) -> (1,) but NumSharp resolves it as bilateral broadcast to (3,):
         ///     >>> np.broadcast_to(np.ones(3), (1,))  # NumPy: ValueError
-        ///
-        ///     NumPy rejects (1,2) -> (2,1) but NumSharp resolves it to (2,2):
         ///     >>> np.broadcast_to(np.ones((1,2)), (2,1))  # NumPy: ValueError
-        ///
-        ///     NumPy rejects (1,1) -> (1,) but NumSharp allows it:
-        ///     >>> np.broadcast_to(np.ones((1,1)), (1,))  # NumPy: ValueError
+        ///     >>> np.broadcast_to(np.ones((1,1)), (1,))  # NumPy: ValueError (ndim mismatch)
         /// </summary>
-        [TestMethod]
-        public void BroadcastTo_BilateralBroadcast_KnownDiscrepancy()
+        [Test]
+        public void BroadcastTo_UnilateralSemantics_RejectsInvalidCases()
         {
-            // NumSharp's broadcast_to uses bilateral broadcasting (DefaultEngine.Broadcast)
-            // rather than NumPy's one-directional broadcast_to semantics.
-            // These cases would throw in NumPy but succeed in NumSharp.
+            // (3,) -> (1,): source dim 3 != target dim 1 and != 1 → must throw
+            new Action(() => np.broadcast_to(np.ones(new Shape(3)), new Shape(1)))
+                .Should().Throw<IncorrectShapeException>();
 
-            // (3,) -> (1,): NumSharp broadcasts 1->3, result shape is (3,)
-            var r1 = np.broadcast_to(np.ones(new Shape(3)), new Shape(1));
-            AssertShapeEqual(r1, 3);
+            // (1,2) -> (2,1): source dim 2 != target dim 1 and != 1 → must throw
+            new Action(() => np.broadcast_to(np.ones(new Shape(1, 2)), new Shape(2, 1)))
+                .Should().Throw<IncorrectShapeException>();
 
-            // (1,2) -> (2,1): NumSharp broadcasts both, result shape is (2,2)
-            var r2 = np.broadcast_to(np.ones(new Shape(1, 2)), new Shape(2, 1));
-            AssertShapeEqual(r2, 2, 2);
-
-            // (1,1) -> (1,): NumSharp resolves this via bilateral broadcast
-            var r3 = np.broadcast_to(np.ones(new Shape(1, 1)), new Shape(1));
-            r3.Should().NotBeNull();
+            // (1,1) -> (1,): source has more dims than target → must throw
+            new Action(() => np.broadcast_to(np.ones(new Shape(1, 1)), new Shape(1)))
+                .Should().Throw<IncorrectShapeException>();
         }
 
         /// <summary>
@@ -417,7 +407,7 @@ namespace NumSharp.UnitTest.Creation
         ///     >>> y.base is x  # (shares memory)
         ///     True
         /// </summary>
-        [TestMethod]
+        [Test]
         public void BroadcastTo_IsView()
         {
             var x = np.array(new int[] { 1, 2, 3 });
@@ -443,7 +433,7 @@ namespace NumSharp.UnitTest.Creation
         ///     array([[0, 1, 2],
         ///            [0, 1, 2]])
         /// </summary>
-        [TestMethod]
+        [Test]
         public void BroadcastTo_ValuesCorrect()
         {
             var x = np.arange(3); // [0, 1, 2]
@@ -461,7 +451,7 @@ namespace NumSharp.UnitTest.Creation
         ///     array([[5, 5, 5],
         ///            [5, 5, 5]])
         /// </summary>
-        [TestMethod]
+        [Test]
         public void BroadcastTo_ScalarValues()
         {
             var scalar = NDArray.Scalar(5);
@@ -481,7 +471,7 @@ namespace NumSharp.UnitTest.Creation
         ///            [2, 2, 2],
         ///            [3, 3, 3]])
         /// </summary>
-        [TestMethod]
+        [Test]
         public void BroadcastTo_ColumnToMatrix()
         {
             var x = np.array(new int[,] { { 1 }, { 2 }, { 3 } }); // shape (3,1)
@@ -510,7 +500,7 @@ namespace NumSharp.UnitTest.Creation
         ///
         ///     From test_stride_tricks.py test_same_as_ufunc.
         /// </summary>
-        [TestMethod]
+        [Test]
         public void BroadcastArrays_SameAsUfunc()
         {
             var cases = new[]
@@ -565,7 +555,7 @@ namespace NumSharp.UnitTest.Creation
         ///     >>> b.size
         ///     6
         /// </summary>
-        [TestMethod]
+        [Test]
         public void Broadcast_Properties()
         {
             var arr1 = np.arange(6).reshape(2, 3);
@@ -588,7 +578,7 @@ namespace NumSharp.UnitTest.Creation
         ///     >>> b.size
         ///     6
         /// </summary>
-        [TestMethod]
+        [Test]
         public void Broadcast_BroadcastedShape()
         {
             var arr1 = np.ones(new Shape(2, 1));
@@ -607,7 +597,7 @@ namespace NumSharp.UnitTest.Creation
         ///     >>> b.shape
         ///     (2, 3)
         /// </summary>
-        [TestMethod]
+        [Test]
         public void Broadcast_WithScalar()
         {
             var arr = np.arange(6).reshape(2, 3);
@@ -626,7 +616,7 @@ namespace NumSharp.UnitTest.Creation
         ///     >>> b.size
         ///     1680
         /// </summary>
-        [TestMethod]
+        [Test]
         public void Broadcast_4D()
         {
             var arr1 = np.ones(new Shape(8, 1, 6, 1));
@@ -644,7 +634,7 @@ namespace NumSharp.UnitTest.Creation
         ///     >>> len(b.iters)
         ///     2
         /// </summary>
-        [TestMethod]
+        [Test]
         public void Broadcast_HasIters()
         {
             var arr1 = np.arange(3);
@@ -670,7 +660,7 @@ namespace NumSharp.UnitTest.Creation
         ///     >>> np.array([1, 2, 3]) + np.int32(10)
         ///     array([11, 12, 13])
         /// </summary>
-        [TestMethod]
+        [Test]
         public void Add_ScalarAndArray()
         {
             var arr = np.array(new int[] { 1, 2, 3 });
@@ -692,7 +682,7 @@ namespace NumSharp.UnitTest.Creation
         ///     array([[0, 2, 4],
         ///            [3, 5, 7]])
         /// </summary>
-        [TestMethod]
+        [Test]
         public void Add_1DTo2D()
         {
             var a = np.arange(6).reshape(2, 3); // [[0,1,2],[3,4,5]]
@@ -711,7 +701,7 @@ namespace NumSharp.UnitTest.Creation
         ///            [1, 2, 3],
         ///            [2, 3, 4]])
         /// </summary>
-        [TestMethod]
+        [Test]
         public void Add_ColumnPlusRow()
         {
             var col = np.array(new int[,] { { 0 }, { 1 }, { 2 } }); // shape (3,1)
@@ -729,7 +719,7 @@ namespace NumSharp.UnitTest.Creation
         ///     >>> (np.ones((8,1,6,1)) + np.ones((7,1,5))).shape
         ///     (8, 7, 6, 5)
         /// </summary>
-        [TestMethod]
+        [Test]
         public void Add_4DBroadcast()
         {
             var a = np.ones(new Shape(8, 1, 6, 1));
@@ -749,7 +739,7 @@ namespace NumSharp.UnitTest.Creation
         ///     array([[0, 0, 0],
         ///            [3, 3, 3]])
         /// </summary>
-        [TestMethod]
+        [Test]
         public void Subtract_Broadcast()
         {
             var a = np.arange(6).reshape(2, 3); // [[0,1,2],[3,4,5]]
@@ -767,7 +757,7 @@ namespace NumSharp.UnitTest.Creation
         ///     array([[ 0,  2,  6],
         ///            [ 3,  8, 15]])
         /// </summary>
-        [TestMethod]
+        [Test]
         public void Multiply_Broadcast()
         {
             var a = np.arange(6).reshape(2, 3); // [[0,1,2],[3,4,5]]
@@ -788,7 +778,7 @@ namespace NumSharp.UnitTest.Creation
         ///     array([[False, False,  True],
         ///            [ True,  True,  True]])
         /// </summary>
-        [TestMethod]
+        [Test]
         public void Comparison_Broadcast()
         {
             var a = np.arange(6).reshape(2, 3); // [[0,1,2],[3,4,5]]
@@ -818,7 +808,7 @@ namespace NumSharp.UnitTest.Creation
         ///            [1., 1., 1., 1.],
         ///            [1., 1., 1., 1.]])
         /// </summary>
-        [TestMethod]
+        [Test]
         public void BroadcastTo_ScalarToShape()
         {
             var scalar = NDArray.Scalar(1.0);
@@ -851,7 +841,7 @@ namespace NumSharp.UnitTest.Creation
         ///
         ///     Verify that a/b reflect the original data.
         /// </summary>
-        [TestMethod]
+        [Test]
         public void BroadcastArrays_ReturnsViews()
         {
             var x = np.array(new int[] { 1, 2, 3 });      // shape (3,)
@@ -888,7 +878,7 @@ namespace NumSharp.UnitTest.Creation
         ///            [4, 4, 4, 4],
         ///            [8, 8, 8, 8]])
         /// </summary>
-        [TestMethod]
+        [Test]
         public void Broadcast_SlicedInput()
         {
             var x = np.arange(12).reshape(3, 4);
@@ -917,7 +907,7 @@ namespace NumSharp.UnitTest.Creation
         ///            [ 8,  9, 10, 11],
         ///            [16, 17, 18, 19]])
         /// </summary>
-        [TestMethod]
+        [Test]
         public void Broadcast_SlicedInputArithmetic()
         {
             var x = np.arange(12).reshape(3, 4);
@@ -941,7 +931,7 @@ namespace NumSharp.UnitTest.Creation
         ///     >>> (a + b).shape
         ///     (2, 4, 3, 6, 5)
         /// </summary>
-        [TestMethod]
+        [Test]
         public void Broadcast_HighDimensional()
         {
             var a = np.ones(new Shape(2, 1, 3, 1, 5));
@@ -962,7 +952,7 @@ namespace NumSharp.UnitTest.Creation
         ///     >>> (a + b).shape
         ///     (5, 2, 6, 3, 7, 4)
         /// </summary>
-        [TestMethod]
+        [Test]
         public void Broadcast_6D()
         {
             var a = np.ones(new Shape(1, 2, 1, 3, 1, 4));
@@ -982,7 +972,7 @@ namespace NumSharp.UnitTest.Creation
         ///     >>> [x.shape for x in r]
         ///     [(2, 3), (2, 3), (2, 3)]
         /// </summary>
-        [TestMethod]
+        [Test]
         public void BroadcastArrays_ThreeInputs()
         {
             var a = np.ones(new Shape(2, 1));
@@ -1005,7 +995,7 @@ namespace NumSharp.UnitTest.Creation
         ///     >>> [x.shape for x in r]
         ///     [(5, 6, 7), (5, 6, 7), (5, 6, 7), (5, 6, 7)]
         /// </summary>
-        [TestMethod]
+        [Test]
         public void BroadcastArrays_FourInputs()
         {
             var a = np.ones(new Shape(6, 7));
@@ -1023,7 +1013,7 @@ namespace NumSharp.UnitTest.Creation
         ///     ResolveReturnShape: classic broadcasting examples from NumPy docs.
         ///     Validates the low-level shape resolution.
         /// </summary>
-        [TestMethod]
+        [Test]
         public void ResolveReturnShape_ClassicExamples()
         {
             // (256,256,3) + (3,) -> (256,256,3)
@@ -1050,7 +1040,7 @@ namespace NumSharp.UnitTest.Creation
         /// <summary>
         ///     are_broadcastable returns true for compatible and false for incompatible shapes.
         /// </summary>
-        [TestMethod]
+        [Test]
         public void AreBroadcastable_CompatibleAndIncompatible()
         {
             // Compatible pairs
@@ -1070,7 +1060,7 @@ namespace NumSharp.UnitTest.Creation
         ///     >>> np.float64(2.5) + np.array([1.0, 2.0, 3.0])
         ///     array([3.5, 4.5, 5.5])
         /// </summary>
-        [TestMethod]
+        [Test]
         public void Add_BroadcastFloat()
         {
             var scalar = NDArray.Scalar(2.5);
@@ -1090,7 +1080,7 @@ namespace NumSharp.UnitTest.Creation
         ///     >>> y[0]
         ///     42
         /// </summary>
-        [TestMethod]
+        [Test]
         public void BroadcastTo_IdentityShape()
         {
             var x = np.array(new int[] { 42 });
@@ -1107,7 +1097,7 @@ namespace NumSharp.UnitTest.Creation
         ///            [ 4.,  5.,  6.],
         ///            [ 7.,  8.,  9.]])
         /// </summary>
-        [TestMethod]
+        [Test]
         public void Add_1x1_Plus_3x3()
         {
             var a = np.ones(new Shape(1, 1));           // [[1.0]]
@@ -1129,7 +1119,7 @@ namespace NumSharp.UnitTest.Creation
         ///     >>> y.strides
         ///     (0, 4)  # (0 bytes for first dim since it's broadcasted, 4 bytes for int32)
         /// </summary>
-        [TestMethod]
+        [Test]
         public void BroadcastTo_StridesCorrect()
         {
             var x = np.array(new int[] { 1, 2, 3 }); // shape (3,)
@@ -1158,7 +1148,7 @@ namespace NumSharp.UnitTest.Creation
         ///     >>> by.strides
         ///     (0, 8)   # 0 for broadcast rows, 8 bytes stride for cols
         /// </summary>
-        [TestMethod]
+        [Test]
         public void BroadcastArrays_StridesCorrect()
         {
             var x = np.ones(new Shape(3, 1));
@@ -1188,7 +1178,7 @@ namespace NumSharp.UnitTest.Creation
         ///     array([[2, 1, 0],
         ///            [2, 1, 0]])
         /// </summary>
-        [TestMethod]
+        [Test]
         public void BroadcastTo_ReversedSlice()
         {
             var rev = np.arange(3)["::-1"]; // [2, 1, 0]
@@ -1222,7 +1212,7 @@ namespace NumSharp.UnitTest.Creation
         ///     array([[0, 2, 4],
         ///            [0, 2, 4]])
         /// </summary>
-        [TestMethod]
+        [Test]
         public void BroadcastTo_StepSlice()
         {
             var stepped = np.arange(6)["::2"]; // [0, 2, 4]
@@ -1256,7 +1246,7 @@ namespace NumSharp.UnitTest.Creation
         ///            [5, 5, 5],
         ///            [9, 9, 9]])
         /// </summary>
-        [TestMethod]
+        [Test]
         public void BroadcastTo_SlicedColumn()
         {
             var x = np.arange(12).reshape(3, 4);
@@ -1285,7 +1275,7 @@ namespace NumSharp.UnitTest.Creation
         ///     array([[0, 0, 0, 0],
         ///            [8, 8, 8, 8]])
         /// </summary>
-        [TestMethod]
+        [Test]
         public void BroadcastTo_DoubleSliced()
         {
             var x = np.arange(12).reshape(3, 4);
@@ -1310,7 +1300,7 @@ namespace NumSharp.UnitTest.Creation
         ///     array([[3, 2, 1],
         ///            [3, 2, 1]])
         /// </summary>
-        [TestMethod]
+        [Test]
         public void Add_ReversedSliceBroadcast()
         {
             var rev = np.arange(3)["::-1"];
@@ -1335,7 +1325,7 @@ namespace NumSharp.UnitTest.Creation
         ///     >>> np.sum(bc, axis=1)
         ///     array([10, 30, 50])
         /// </summary>
-        [TestMethod]
+        [Test]
         public void Sum_SlicedBroadcast()
         {
             var x = np.arange(12).reshape(3, 4);
@@ -1369,7 +1359,7 @@ namespace NumSharp.UnitTest.Creation
         ///     array([[2, 1, 0],
         ///            [2, 1, 0]])
         /// </summary>
-        [TestMethod]
+        [Test]
         public void FlattenAndCopy_SlicedBroadcast()
         {
             var rev = np.arange(3)["::-1"];
@@ -1398,32 +1388,29 @@ namespace NumSharp.UnitTest.Creation
         #region Group 7: Stress Tests & Bug Probes
 
         /// <summary>
-        ///     broadcast_to result allows write-through to original (no read-only protection).
+        ///     broadcast_to result is read-only (matches NumPy).
         ///     NumPy raises ValueError: assignment destination is read-only.
         ///
-        ///     Known NumSharp bug: broadcast_to does not enforce read-only semantics.
-        ///     Writing to the broadcast view modifies the original array.
+        ///     NumSharp now correctly enforces read-only semantics on broadcast views.
+        ///     Writing to the broadcast view throws NumSharpException.
         ///
         ///     >>> x = np.array([1, 2, 3, 4])
         ///     >>> y = np.broadcast_to(x, (2, 4))
         ///     >>> y[0, 0] = 999  # NumPy: ValueError
         /// </summary>
-        [TestMethod]
-        public void BroadcastTo_WriteThrough_KnownBug()
+        [Test]
+        public void BroadcastTo_WriteThrough_ThrowsReadOnly()
         {
             var x = np.array(new int[] { 1, 2, 3, 4 });
             var bx = np.broadcast_to(x, new Shape(2, 4));
 
-            // NumSharp allows writing through broadcast view to original.
-            // This is a known bug — NumPy would throw.
-            // We document the current behavior: SetInt32 modifies original.
-            bx.SetInt32(999, 0, 0);
-            Assert.AreEqual(999, x.GetInt32(0),
-                "NumSharp bug: broadcast_to write-through modifies original. " +
-                "NumPy would throw ValueError: assignment destination is read-only.");
+            // NumSharp correctly prevents writing to broadcast views (like NumPy).
+            Action write = () => bx.SetInt32(999, 0, 0);
+            write.Should().Throw<NumSharpException>()
+                .WithMessage("assignment destination is read-only");
 
-            // Restore for safety
-            x.SetInt32(1, 0);
+            // Verify original was not modified
+            x.GetInt32(0).Should().Be(1);
         }
 
         /// <summary>
@@ -1433,7 +1420,7 @@ namespace NumSharp.UnitTest.Creation
         ///
         ///     This is inconsistent behavior.
         /// </summary>
-        [TestMethod]
+        [Test]
         public void BroadcastArrays_AlreadyBroadcasted_Succeeds()
         {
             var x = np.ones(new Shape(1, 3));
@@ -1447,16 +1434,20 @@ namespace NumSharp.UnitTest.Creation
         }
 
         /// <summary>
-        ///     broadcast_to on an already-broadcasted array throws NotSupportedException.
+        ///     Re-broadcasting an already-broadcasted array should work (matching NumPy).
+        ///     NumPy: broadcast_to(broadcast_to(ones((1,3)), (4,3)), (2,4,3)) → shape (2,4,3).
+        ///     The IsBroadcasted guard was removed in Bug 4 fix (Phase 3).
         /// </summary>
-        [TestMethod]
-        public void BroadcastTo_AlreadyBroadcasted_Throws()
+        [Test]
+        public void BroadcastTo_AlreadyBroadcasted_Works()
         {
             var x = np.ones(new Shape(1, 3));
             var bx = np.broadcast_to(x, new Shape(4, 3));
 
-            new Action(() => np.broadcast_to(bx, new Shape(2, 4, 3)))
-                .Should().Throw<NotSupportedException>();
+            var result = np.broadcast_to(bx, new Shape(2, 4, 3));
+            result.shape.Should().BeEquivalentTo(new[] { 2, 4, 3 });
+            result.GetDouble(0, 0, 0).Should().Be(1.0);
+            result.GetDouble(1, 3, 2).Should().Be(1.0);
         }
 
         /// <summary>
@@ -1464,7 +1455,7 @@ namespace NumSharp.UnitTest.Creation
         ///     >>> np.broadcast_arrays(np.ones((0, 3)), np.ones((1, 3)))
         ///     Both shapes become (0, 3).
         /// </summary>
-        [TestMethod]
+        [Test]
         public void BroadcastArrays_ZeroSizeDimension()
         {
             var z = np.ones(new Shape(0, 3));
@@ -1480,7 +1471,7 @@ namespace NumSharp.UnitTest.Creation
         ///     >>> np.broadcast_arrays(np.ones((0, 3)), np.ones((2, 3)))
         ///     ValueError: shape mismatch
         /// </summary>
-        [TestMethod]
+        [Test]
         public void BroadcastArrays_ZeroVsNonZeroDim_Throws()
         {
             var z = np.ones(new Shape(0, 3));
@@ -1494,7 +1485,7 @@ namespace NumSharp.UnitTest.Creation
         ///     All 12 dtypes can broadcast via arithmetic (shape correctness).
         ///     (1,3) + (3,1) -> (3,3) for every supported type.
         /// </summary>
-        [TestMethod]
+        [Test]
         public void Add_BroadcastAllDtypes()
         {
             var dtypes = new NPTypeCode[]
@@ -1518,7 +1509,7 @@ namespace NumSharp.UnitTest.Creation
         ///     >>> np.array([1, 2, 3]) + np.array([0.5])
         ///     array([1.5, 2.5, 3.5])
         /// </summary>
-        [TestMethod]
+        [Test]
         public void Add_MixedDtypeBroadcast()
         {
             var i32 = np.array(new int[] { 1, 2, 3 });
@@ -1538,7 +1529,7 @@ namespace NumSharp.UnitTest.Creation
         ///     array([[  7,   8,   9,  10,  11,  12,  13],
         ///            [-13, -12, -11, -10,  -9,  -8,  -7]])
         /// </summary>
-        [TestMethod]
+        [Test]
         public void Add_NegativeValuesBroadcast()
         {
             var a = np.array(new int[] { -3, -2, -1, 0, 1, 2, 3 });
@@ -1558,7 +1549,7 @@ namespace NumSharp.UnitTest.Creation
         ///     array([[2, 5, 3],
         ///            [4, 5, 4]])
         /// </summary>
-        [TestMethod]
+        [Test]
         public void Maximum_Broadcast()
         {
             var a = np.array(new int[] { 1, 5, 3 });
@@ -1583,7 +1574,7 @@ namespace NumSharp.UnitTest.Creation
         ///            [23, 24, 25, 26, 27],
         ///            [28, 29, 30, 31, 32]])
         /// </summary>
-        [TestMethod]
+        [Test]
         public void Add_SlicedColPlusSlicedRow()
         {
             var x = np.arange(20).reshape(4, 5);
@@ -1606,7 +1597,7 @@ namespace NumSharp.UnitTest.Creation
         ///     array([[10, 20, 30],
         ///            [10, 20, 30]])
         /// </summary>
-        [TestMethod]
+        [Test]
         public void BroadcastTo_ThenSlice()
         {
             var x = np.array(new int[] { 10, 20, 30 });
@@ -1628,7 +1619,7 @@ namespace NumSharp.UnitTest.Creation
         ///     >>> y[-1]
         ///     array([10, 20, 30])
         /// </summary>
-        [TestMethod]
+        [Test]
         public void BroadcastTo_ThenIntegerIndex()
         {
             var bx = np.broadcast_to(np.array(new int[] { 10, 20, 30 }), new Shape(4, 3));
@@ -1652,7 +1643,7 @@ namespace NumSharp.UnitTest.Creation
         ///            [1, 2, 3],
         ///            [2, 3, 4]])
         /// </summary>
-        [TestMethod]
+        [Test]
         public void BroadcastResult_Transpose()
         {
             var c = np.arange(3).reshape(1, 3) + np.arange(3).reshape(3, 1);
@@ -1673,7 +1664,7 @@ namespace NumSharp.UnitTest.Creation
         ///            [5, 4],
         ///            [6, 8]])
         /// </summary>
-        [TestMethod]
+        [Test]
         public void BroadcastResult_Reshape()
         {
             var c = np.arange(6).reshape(2, 3) + np.array(new int[] { 1, 2, 3 });
@@ -1695,7 +1686,7 @@ namespace NumSharp.UnitTest.Creation
         ///     >>> np.sum(c, axis=0, keepdims=True)
         ///     array([[8., 8., 8.]])
         /// </summary>
-        [TestMethod]
+        [Test]
         public void Sum_Keepdims_BroadcastResult()
         {
             var c = np.ones(new Shape(1, 3)) + np.ones(new Shape(4, 1));
@@ -1713,7 +1704,7 @@ namespace NumSharp.UnitTest.Creation
         ///     >>> np.mean(c)
         ///     11.0
         /// </summary>
-        [TestMethod]
+        [Test]
         public void Mean_BroadcastResult()
         {
             var c = np.arange(3).reshape(1, 3) + np.ones(new Shape(4, 1), NPTypeCode.Int32) * 10;
@@ -1728,7 +1719,7 @@ namespace NumSharp.UnitTest.Creation
         ///     >>> np.int32(5) + np.int32(3)
         ///     8
         /// </summary>
-        [TestMethod]
+        [Test]
         public void Add_ScalarPlusScalar()
         {
             var c = NDArray.Scalar(5) + NDArray.Scalar(3);
@@ -1740,7 +1731,7 @@ namespace NumSharp.UnitTest.Creation
         ///     >>> (np.ones((1,2,1,3,1,4,1)) + np.ones((5,1,6,1,7,1,8))).shape
         ///     (5, 2, 6, 3, 7, 4, 8)
         /// </summary>
-        [TestMethod]
+        [Test]
         public void Broadcast_7D()
         {
             var a = np.ones(new Shape(1, 2, 1, 3, 1, 4, 1));
@@ -1757,7 +1748,7 @@ namespace NumSharp.UnitTest.Creation
         ///     array([[ 0, -1, -2],
         ///            [-1, -2, -3]])
         /// </summary>
-        [TestMethod]
+        [Test]
         public void UnaryMinus_BroadcastResult()
         {
             var c = np.arange(3).reshape(1, 3) + np.arange(2).reshape(2, 1);
@@ -1776,7 +1767,7 @@ namespace NumSharp.UnitTest.Creation
         ///     array([[1., 2., 3.],
         ///            [1., 2., 3.]])
         /// </summary>
-        [TestMethod]
+        [Test]
         public void Sqrt_BroadcastResult()
         {
             var c = np.array(new double[] { 1.0, 4.0, 9.0 }) + np.zeros(new Shape(2, 1));
@@ -1793,7 +1784,7 @@ namespace NumSharp.UnitTest.Creation
         ///     >>> (np.ones((100, 1)) + np.ones((1, 200))).shape
         ///     (100, 200)
         /// </summary>
-        [TestMethod]
+        [Test]
         public void Broadcast_LargeAsymmetric()
         {
             var a = np.ones(new Shape(100, 1));
@@ -1811,7 +1802,7 @@ namespace NumSharp.UnitTest.Creation
         ///     >>> np.broadcast_to(np.float64(1.0), (10000,))
         ///     All elements should be 1.0.
         /// </summary>
-        [TestMethod]
+        [Test]
         public void BroadcastTo_ScalarToLargeShape()
         {
             var scalar = np.array(new double[] { 1.0 });
@@ -1831,7 +1822,7 @@ namespace NumSharp.UnitTest.Creation
         ///     >>> np.sum(d)
         ///     48
         /// </summary>
-        [TestMethod]
+        [Test]
         public void ChainedBroadcast_AddSquareSum()
         {
             var a = np.arange(3).reshape(1, 3);
@@ -1849,7 +1840,7 @@ namespace NumSharp.UnitTest.Creation
         ///     >>> np.broadcast_arrays(np.array([True, False, True]), np.array([[True], [False]]))
         ///     Results should preserve boolean values across broadcast dimensions.
         /// </summary>
-        [TestMethod]
+        [Test]
         public void BroadcastArrays_BoolDtype()
         {
             var a = np.array(new bool[] { true, false, true });
@@ -1870,6 +1861,156 @@ namespace NumSharp.UnitTest.Creation
             Assert.AreEqual(true, bb.GetBoolean(0, 2));
             Assert.AreEqual(false, bb.GetBoolean(1, 0));
             Assert.AreEqual(false, bb.GetBoolean(1, 2));
+        }
+
+        #endregion
+
+        // ================================================================
+        //  Re-broadcasting and broadcast path consistency tests
+        // ================================================================
+
+        #region Re-broadcasting (2-arg path)
+
+        /// <summary>
+        ///     Re-broadcasting an already-broadcast array through the 2-arg Broadcast path.
+        ///     Verifies that the IsBroadcasted guard was removed and re-broadcast produces
+        ///     correct values.
+        ///
+        ///     >>> a = np.broadcast_to(np.array([1,2,3]), (3,3))
+        ///     >>> b = np.broadcast_to(a, (3,3))
+        ///     >>> b
+        ///     array([[1, 2, 3], [1, 2, 3], [1, 2, 3]])
+        /// </summary>
+        [Test]
+        public void ReBroadcast_2Arg_SameShape()
+        {
+            var a = np.broadcast_to(np.array(new int[] { 1, 2, 3 }), new Shape(3, 3));
+            var b = np.broadcast_to(a, new Shape(3, 3));
+
+            AssertShapeEqual(b, 3, 3);
+            for (int r = 0; r < 3; r++)
+            {
+                b.GetInt32(r, 0).Should().Be(1);
+                b.GetInt32(r, 1).Should().Be(2);
+                b.GetInt32(r, 2).Should().Be(3);
+            }
+        }
+
+        /// <summary>
+        ///     Re-broadcasting to a higher-dimensional shape through the 2-arg path.
+        ///
+        ///     >>> a = np.broadcast_to(np.array([[1],[2],[3]]), (3,3))
+        ///     >>> b = np.broadcast_to(a, (2,3,3))
+        ///     >>> b[0]
+        ///     array([[1, 1, 1], [2, 2, 2], [3, 3, 3]])
+        ///     >>> b[1]
+        ///     array([[1, 1, 1], [2, 2, 2], [3, 3, 3]])
+        /// </summary>
+        [Test]
+        public void ReBroadcast_2Arg_HigherDim()
+        {
+            var col = np.array(new int[,] { { 1 }, { 2 }, { 3 } });
+            var a = np.broadcast_to(col, new Shape(3, 3));
+            var b = np.broadcast_to(a, new Shape(2, 3, 3));
+
+            AssertShapeEqual(b, 2, 3, 3);
+            for (int d = 0; d < 2; d++)
+                for (int r = 0; r < 3; r++)
+                    for (int c = 0; c < 3; c++)
+                        b.GetInt32(d, r, c).Should().Be(r + 1,
+                            $"b[{d},{r},{c}] should be {r + 1}");
+        }
+
+        /// <summary>
+        ///     np.clip on a broadcast array requires re-broadcasting internally.
+        ///     This was Bug 4 variant — clip broadcasts inputs together, hitting the guard.
+        ///
+        ///     >>> np.clip(np.broadcast_to(np.array([1.,5.,9.]), (2,3)), 2., 7.)
+        ///     array([[2., 5., 7.], [2., 5., 7.]])
+        /// </summary>
+        [Test]
+        public void ReBroadcast_2Arg_ClipOnBroadcast()
+        {
+            var a = np.broadcast_to(np.array(new double[] { 1.0, 5.0, 9.0 }), new Shape(2, 3));
+            var result = np.clip(a, 2.0, 7.0);
+
+            AssertShapeEqual(result, 2, 3);
+            result.GetDouble(0, 0).Should().Be(2.0);
+            result.GetDouble(0, 1).Should().Be(5.0);
+            result.GetDouble(0, 2).Should().Be(7.0);
+            result.GetDouble(1, 0).Should().Be(2.0);
+            result.GetDouble(1, 1).Should().Be(5.0);
+            result.GetDouble(1, 2).Should().Be(7.0);
+        }
+
+        #endregion
+
+        #region N-arg path consistency with sliced inputs
+
+        /// <summary>
+        ///     N-arg Broadcast with a sliced input produces correct values.
+        ///     Before the fix, the N-arg path did not set ViewInfo for sliced inputs,
+        ///     causing GetOffset to resolve wrong memory offsets.
+        ///
+        ///     >>> x = np.arange(12).reshape(3,4)
+        ///     >>> col = x[:, 1:2]           # (3,1): [[1],[5],[9]]
+        ///     >>> r = np.broadcast_arrays(col, np.ones((3,3), dtype=int))
+        ///     >>> r[0]
+        ///     array([[1, 1, 1], [5, 5, 5], [9, 9, 9]])
+        /// </summary>
+        [Test]
+        public void BroadcastArrays_NArg_SlicedInput_CorrectValues()
+        {
+            var x = np.arange(12).reshape(3, 4);
+            var col = x[":, 1:2"]; // (3,1): [[1],[5],[9]]
+            var target = np.ones(new Shape(3, 3), np.int32);
+
+            var result = np.broadcast_arrays(new NDArray[] { col, target });
+
+            AssertShapeEqual(result[0], 3, 3);
+            result[0].GetInt32(0, 0).Should().Be(1, "row 0 = value from x[0,1]=1");
+            result[0].GetInt32(0, 1).Should().Be(1);
+            result[0].GetInt32(0, 2).Should().Be(1);
+            result[0].GetInt32(1, 0).Should().Be(5, "row 1 = value from x[1,1]=5");
+            result[0].GetInt32(1, 1).Should().Be(5);
+            result[0].GetInt32(1, 2).Should().Be(5);
+            result[0].GetInt32(2, 0).Should().Be(9, "row 2 = value from x[2,1]=9");
+            result[0].GetInt32(2, 1).Should().Be(9);
+            result[0].GetInt32(2, 2).Should().Be(9);
+        }
+
+        /// <summary>
+        ///     Verifies N-arg and 2-arg broadcast paths produce identical results
+        ///     for the same sliced input.
+        ///
+        ///     >>> x = np.arange(6).reshape(2,3)
+        ///     >>> row = x[0:1, :]  # (1,3): [[0,1,2]]
+        ///     >>> # 2-arg: broadcast_to
+        ///     >>> np.broadcast_to(row, (3,3))
+        ///     array([[0, 1, 2], [0, 1, 2], [0, 1, 2]])
+        ///     >>> # N-arg: broadcast_arrays
+        ///     >>> np.broadcast_arrays(row, np.ones((3,3), dtype=int))[0]
+        ///     array([[0, 1, 2], [0, 1, 2], [0, 1, 2]])
+        /// </summary>
+        [Test]
+        public void BroadcastPaths_2Arg_vs_NArg_SlicedInput_Identical()
+        {
+            var x = np.arange(6).reshape(2, 3);
+            var row = x["0:1, :"]; // (1,3): [[0,1,2]]
+
+            // 2-arg path via broadcast_to
+            var via2arg = np.broadcast_to(row, new Shape(3, 3));
+
+            // N-arg path via broadcast_arrays
+            var viaNarg = np.broadcast_arrays(new NDArray[] { row, np.ones(new Shape(3, 3), np.int32) });
+
+            AssertShapeEqual(via2arg, 3, 3);
+            AssertShapeEqual(viaNarg[0], 3, 3);
+
+            for (int r = 0; r < 3; r++)
+                for (int c = 0; c < 3; c++)
+                    viaNarg[0].GetInt32(r, c).Should().Be(via2arg.GetInt32(r, c),
+                        $"N-arg[{r},{c}] should equal 2-arg[{r},{c}]={via2arg.GetInt32(r, c)}");
         }
 
         #endregion

@@ -3,14 +3,14 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using NumSharp.UnitTest;
 
 namespace NumSharp.UnitTest.Logic
 {
-    [TestClass]
     public class np_allclose_Test
     {
-        [Ignore("TODO: fix this test")]
-        [TestMethod]
+        [Test]
+        [OpenBugs]
         public void np_allclose_1D()
         {
             //>>> np.allclose([1e10, 1e-7], [1.00001e10,1e-8])

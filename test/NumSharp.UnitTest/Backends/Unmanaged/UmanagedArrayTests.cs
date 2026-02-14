@@ -1,16 +1,15 @@
 ﻿using System.Linq;
 using System.Runtime.InteropServices;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.Backends;
 using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp.UnitTest.Backends.Unmanaged
 {
-    [TestClass]
     public class UmanagedArrayTests
     {
-        [TestMethod]
+        [Test]
         public void Slice()
         {
             var mem = new UnmanagedMemoryBlock<int>(1000);
@@ -34,7 +33,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             }
         }
 
-        [TestMethod]
+        [Test]
         public void Fill()
         {
             var mem = new UnmanagedMemoryBlock<int>(1000);
@@ -58,7 +57,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             }
         }
 
-        [TestMethod]
+        [Test]
         public void AllocateExpand()
         {
             var mem = new UnmanagedMemoryBlock<int>(10);
@@ -83,7 +82,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             }
         }
 
-        [TestMethod]
+        [Test]
         public void AllocateExpandFill()
         {
             var mem = new UnmanagedMemoryBlock<int>(10);
@@ -107,7 +106,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             }
         }
 
-        [TestMethod]
+        [Test]
         public void AllocateShrinkFill()
         {
             var mem = new UnmanagedMemoryBlock<int>(10);
@@ -129,7 +128,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             }
         }
 
-        [TestMethod]
+        [Test]
         public void AllocateShrink()
         {
             var mem = new UnmanagedMemoryBlock<int>(10);
@@ -150,7 +149,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             }
         }
 
-        [TestMethod]
+        [Test]
         public void FromManaged()
         {
             var arr = Enumerable.Range(0, 10).ToArray();
@@ -171,7 +170,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             }
         }
 
-        [TestMethod]
+        [Test]
         public void FromManaged_Copy()
         {
             var arr = Enumerable.Range(0, 10).ToArray();
@@ -193,7 +192,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         }
 
 
-        [TestMethod]
+        [Test]
         public void Cast()
         {
             var arr = UnmanagedMemoryBlock<int>.FromArray(Enumerable.Range(0, 10).ToArray());
@@ -211,7 +210,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             }
         }
 
-        [TestMethod]
+        [Test]
         public unsafe void Wrap()
         {
             var mem = np.arange(100).astype(NPTypeCode.Double);
@@ -225,7 +224,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             }
         }
 
-        [TestMethod]
+        [Test]
         public unsafe void Wrap_Case2()
         {
             var mem = np.arange(100).astype(NPTypeCode.Double);

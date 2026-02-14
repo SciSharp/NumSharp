@@ -8,10 +8,9 @@ using NumSharp;
 
 namespace NumSharp.UnitTest
 {
-    [TestClass]
     public class PowerTest
     {
-        [TestMethod]
+        [Test]
         public void PowerWithSingleValue()
         {
             var nd = np.arange(3);

@@ -43,8 +43,8 @@ namespace NumSharp.Backends
                     var rhs_address = (#2*)rhs.Address;
                     var retShape = leftshape.Clean();
                     var ret = new NDArray(ret_type, retShape, false);
-                    var leftLinear = !leftshape.IsBroadcasted && !leftshape.IsSliced;
-                    var rightLinear = !rightshape.IsBroadcasted && !rightshape.IsSliced;
+                    var leftLinear = leftshape.IsContiguous && !leftshape.IsBroadcasted;
+                    var rightLinear = rightshape.IsContiguous && !rightshape.IsBroadcasted;
                     var len = ret.size;
                     switch (ret_type) {
                         %foreach supported_dtypes,supported_dtypes_lowercase%
@@ -55,10 +55,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = #(caster)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = #(caster)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -70,7 +70,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = #(caster)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -83,7 +83,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = #(caster)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -127,8 +127,8 @@ namespace NumSharp.Backends
                     var rhs_address = (bool*)rhs.Address;
                     var retShape = leftshape.Clean();
                     var ret = new NDArray(ret_type, retShape, false);
-                    var leftLinear = !leftshape.IsBroadcasted && !leftshape.IsSliced;
-                    var rightLinear = !rightshape.IsBroadcasted && !rightshape.IsSliced;
+                    var leftLinear = leftshape.IsContiguous && !leftshape.IsBroadcasted;
+                    var rightLinear = rightshape.IsContiguous && !rightshape.IsBroadcasted;
                     var len = ret.size;
                     switch (ret_type) {
 	                    case NPTypeCode.Boolean: {
@@ -136,10 +136,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToBoolean(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToBoolean(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -151,7 +151,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToBoolean(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -164,7 +164,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToBoolean(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -192,10 +192,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToByte(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToByte(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -207,7 +207,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToByte(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -220,7 +220,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToByte(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -248,10 +248,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToInt16(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToInt16(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -263,7 +263,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToInt16(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -276,7 +276,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToInt16(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -304,10 +304,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToUInt16(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToUInt16(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -319,7 +319,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToUInt16(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -332,7 +332,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToUInt16(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -360,10 +360,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToInt32(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToInt32(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -375,7 +375,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToInt32(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -388,7 +388,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToInt32(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -416,10 +416,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToUInt32(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToUInt32(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -431,7 +431,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToUInt32(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -444,7 +444,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToUInt32(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -472,10 +472,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToInt64(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToInt64(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -487,7 +487,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToInt64(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -500,7 +500,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToInt64(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -528,10 +528,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToUInt64(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToUInt64(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -543,7 +543,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToUInt64(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -556,7 +556,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToUInt64(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -584,10 +584,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToChar(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToChar(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -599,7 +599,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToChar(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -612,7 +612,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToChar(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -640,10 +640,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToDouble(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToDouble(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -655,7 +655,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToDouble(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -668,7 +668,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToDouble(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -696,10 +696,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToSingle(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToSingle(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -711,7 +711,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToSingle(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -724,7 +724,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToSingle(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -752,10 +752,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToDecimal(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToDecimal(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -767,7 +767,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToDecimal(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -780,7 +780,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToDecimal(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -818,8 +818,8 @@ namespace NumSharp.Backends
                     var rhs_address = (byte*)rhs.Address;
                     var retShape = leftshape.Clean();
                     var ret = new NDArray(ret_type, retShape, false);
-                    var leftLinear = !leftshape.IsBroadcasted && !leftshape.IsSliced;
-                    var rightLinear = !rightshape.IsBroadcasted && !rightshape.IsSliced;
+                    var leftLinear = leftshape.IsContiguous && !leftshape.IsBroadcasted;
+                    var rightLinear = rightshape.IsContiguous && !rightshape.IsBroadcasted;
                     var len = ret.size;
                     switch (ret_type) {
 	                    case NPTypeCode.Boolean: {
@@ -827,10 +827,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToBoolean(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToBoolean(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -842,7 +842,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToBoolean(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -855,7 +855,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToBoolean(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -883,10 +883,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (byte)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (byte)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -898,7 +898,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (byte)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -911,7 +911,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (byte)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -939,10 +939,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (short)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (short)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -954,7 +954,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (short)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -967,7 +967,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (short)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -995,10 +995,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ushort)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ushort)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -1010,7 +1010,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ushort)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -1023,7 +1023,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ushort)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -1051,10 +1051,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (int)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (int)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -1066,7 +1066,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (int)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -1079,7 +1079,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (int)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -1107,10 +1107,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (uint)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (uint)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -1122,7 +1122,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (uint)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -1135,7 +1135,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (uint)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -1163,10 +1163,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (long)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (long)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -1178,7 +1178,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (long)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -1191,7 +1191,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (long)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -1219,10 +1219,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ulong)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ulong)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -1234,7 +1234,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ulong)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -1247,7 +1247,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ulong)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -1275,10 +1275,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (char)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (char)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -1290,7 +1290,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (char)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -1303,7 +1303,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (char)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -1331,10 +1331,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (double)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (double)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -1346,7 +1346,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (double)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -1359,7 +1359,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (double)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -1387,10 +1387,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (float)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (float)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -1402,7 +1402,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (float)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -1415,7 +1415,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (float)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -1443,10 +1443,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (decimal)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (decimal)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -1458,7 +1458,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (decimal)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -1471,7 +1471,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (decimal)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -1509,8 +1509,8 @@ namespace NumSharp.Backends
                     var rhs_address = (short*)rhs.Address;
                     var retShape = leftshape.Clean();
                     var ret = new NDArray(ret_type, retShape, false);
-                    var leftLinear = !leftshape.IsBroadcasted && !leftshape.IsSliced;
-                    var rightLinear = !rightshape.IsBroadcasted && !rightshape.IsSliced;
+                    var leftLinear = leftshape.IsContiguous && !leftshape.IsBroadcasted;
+                    var rightLinear = rightshape.IsContiguous && !rightshape.IsBroadcasted;
                     var len = ret.size;
                     switch (ret_type) {
 	                    case NPTypeCode.Boolean: {
@@ -1518,10 +1518,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToBoolean(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToBoolean(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -1533,7 +1533,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToBoolean(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -1546,7 +1546,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToBoolean(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -1574,10 +1574,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (byte)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (byte)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -1589,7 +1589,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (byte)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -1602,7 +1602,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (byte)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -1630,10 +1630,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (short)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (short)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -1645,7 +1645,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (short)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -1658,7 +1658,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (short)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -1686,10 +1686,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ushort)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ushort)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -1701,7 +1701,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ushort)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -1714,7 +1714,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ushort)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -1742,10 +1742,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (int)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (int)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -1757,7 +1757,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (int)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -1770,7 +1770,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (int)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -1798,10 +1798,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (uint)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (uint)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -1813,7 +1813,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (uint)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -1826,7 +1826,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (uint)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -1854,10 +1854,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (long)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (long)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -1869,7 +1869,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (long)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -1882,7 +1882,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (long)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -1910,10 +1910,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ulong)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ulong)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -1925,7 +1925,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ulong)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -1938,7 +1938,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ulong)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -1966,10 +1966,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (char)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (char)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -1981,7 +1981,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (char)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -1994,7 +1994,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (char)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -2022,10 +2022,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (double)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (double)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -2037,7 +2037,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (double)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -2050,7 +2050,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (double)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -2078,10 +2078,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (float)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (float)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -2093,7 +2093,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (float)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -2106,7 +2106,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (float)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -2134,10 +2134,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (decimal)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (decimal)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -2149,7 +2149,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (decimal)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -2162,7 +2162,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (decimal)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -2200,8 +2200,8 @@ namespace NumSharp.Backends
                     var rhs_address = (ushort*)rhs.Address;
                     var retShape = leftshape.Clean();
                     var ret = new NDArray(ret_type, retShape, false);
-                    var leftLinear = !leftshape.IsBroadcasted && !leftshape.IsSliced;
-                    var rightLinear = !rightshape.IsBroadcasted && !rightshape.IsSliced;
+                    var leftLinear = leftshape.IsContiguous && !leftshape.IsBroadcasted;
+                    var rightLinear = rightshape.IsContiguous && !rightshape.IsBroadcasted;
                     var len = ret.size;
                     switch (ret_type) {
 	                    case NPTypeCode.Boolean: {
@@ -2209,10 +2209,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToBoolean(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToBoolean(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -2224,7 +2224,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToBoolean(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -2237,7 +2237,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToBoolean(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -2265,10 +2265,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (byte)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (byte)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -2280,7 +2280,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (byte)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -2293,7 +2293,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (byte)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -2321,10 +2321,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (short)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (short)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -2336,7 +2336,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (short)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -2349,7 +2349,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (short)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -2377,10 +2377,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ushort)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ushort)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -2392,7 +2392,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ushort)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -2405,7 +2405,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ushort)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -2433,10 +2433,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (int)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (int)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -2448,7 +2448,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (int)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -2461,7 +2461,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (int)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -2489,10 +2489,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (uint)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (uint)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -2504,7 +2504,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (uint)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -2517,7 +2517,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (uint)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -2545,10 +2545,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (long)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (long)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -2560,7 +2560,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (long)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -2573,7 +2573,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (long)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -2601,10 +2601,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ulong)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ulong)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -2616,7 +2616,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ulong)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -2629,7 +2629,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ulong)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -2657,10 +2657,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (char)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (char)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -2672,7 +2672,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (char)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -2685,7 +2685,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (char)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -2713,10 +2713,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (double)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (double)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -2728,7 +2728,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (double)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -2741,7 +2741,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (double)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -2769,10 +2769,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (float)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (float)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -2784,7 +2784,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (float)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -2797,7 +2797,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (float)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -2825,10 +2825,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (decimal)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (decimal)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -2840,7 +2840,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (decimal)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -2853,7 +2853,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (decimal)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -2891,8 +2891,8 @@ namespace NumSharp.Backends
                     var rhs_address = (int*)rhs.Address;
                     var retShape = leftshape.Clean();
                     var ret = new NDArray(ret_type, retShape, false);
-                    var leftLinear = !leftshape.IsBroadcasted && !leftshape.IsSliced;
-                    var rightLinear = !rightshape.IsBroadcasted && !rightshape.IsSliced;
+                    var leftLinear = leftshape.IsContiguous && !leftshape.IsBroadcasted;
+                    var rightLinear = rightshape.IsContiguous && !rightshape.IsBroadcasted;
                     var len = ret.size;
                     switch (ret_type) {
 	                    case NPTypeCode.Boolean: {
@@ -2900,10 +2900,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToBoolean(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToBoolean(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -2915,7 +2915,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToBoolean(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -2928,7 +2928,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToBoolean(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -2956,10 +2956,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (byte)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (byte)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -2971,7 +2971,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (byte)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -2984,7 +2984,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (byte)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -3012,10 +3012,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (short)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (short)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -3027,7 +3027,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (short)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -3040,7 +3040,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (short)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -3068,10 +3068,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ushort)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ushort)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -3083,7 +3083,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ushort)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -3096,7 +3096,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ushort)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -3124,10 +3124,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (int)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (int)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -3139,7 +3139,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (int)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -3152,7 +3152,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (int)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -3180,10 +3180,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (uint)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (uint)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -3195,7 +3195,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (uint)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -3208,7 +3208,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (uint)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -3236,10 +3236,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (long)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (long)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -3251,7 +3251,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (long)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -3264,7 +3264,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (long)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -3292,10 +3292,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ulong)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ulong)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -3307,7 +3307,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ulong)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -3320,7 +3320,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ulong)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -3348,10 +3348,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (char)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (char)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -3363,7 +3363,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (char)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -3376,7 +3376,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (char)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -3404,10 +3404,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (double)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (double)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -3419,7 +3419,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (double)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -3432,7 +3432,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (double)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -3460,10 +3460,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (float)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (float)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -3475,7 +3475,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (float)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -3488,7 +3488,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (float)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -3516,10 +3516,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (decimal)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (decimal)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -3531,7 +3531,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (decimal)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -3544,7 +3544,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (decimal)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -3582,8 +3582,8 @@ namespace NumSharp.Backends
                     var rhs_address = (uint*)rhs.Address;
                     var retShape = leftshape.Clean();
                     var ret = new NDArray(ret_type, retShape, false);
-                    var leftLinear = !leftshape.IsBroadcasted && !leftshape.IsSliced;
-                    var rightLinear = !rightshape.IsBroadcasted && !rightshape.IsSliced;
+                    var leftLinear = leftshape.IsContiguous && !leftshape.IsBroadcasted;
+                    var rightLinear = rightshape.IsContiguous && !rightshape.IsBroadcasted;
                     var len = ret.size;
                     switch (ret_type) {
 	                    case NPTypeCode.Boolean: {
@@ -3591,10 +3591,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToBoolean(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToBoolean(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -3606,7 +3606,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToBoolean(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -3619,7 +3619,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToBoolean(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -3647,10 +3647,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (byte)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (byte)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -3662,7 +3662,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (byte)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -3675,7 +3675,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (byte)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -3703,10 +3703,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (short)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (short)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -3718,7 +3718,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (short)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -3731,7 +3731,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (short)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -3759,10 +3759,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ushort)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ushort)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -3774,7 +3774,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ushort)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -3787,7 +3787,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ushort)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -3815,10 +3815,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (int)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (int)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -3830,7 +3830,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (int)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -3843,7 +3843,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (int)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -3871,10 +3871,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (uint)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (uint)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -3886,7 +3886,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (uint)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -3899,7 +3899,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (uint)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -3927,10 +3927,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (long)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (long)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -3942,7 +3942,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (long)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -3955,7 +3955,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (long)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -3983,10 +3983,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ulong)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ulong)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -3998,7 +3998,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ulong)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -4011,7 +4011,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ulong)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -4039,10 +4039,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (char)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (char)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -4054,7 +4054,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (char)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -4067,7 +4067,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (char)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -4095,10 +4095,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (double)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (double)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -4110,7 +4110,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (double)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -4123,7 +4123,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (double)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -4151,10 +4151,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (float)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (float)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -4166,7 +4166,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (float)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -4179,7 +4179,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (float)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -4207,10 +4207,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (decimal)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (decimal)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -4222,7 +4222,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (decimal)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -4235,7 +4235,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (decimal)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -4273,8 +4273,8 @@ namespace NumSharp.Backends
                     var rhs_address = (long*)rhs.Address;
                     var retShape = leftshape.Clean();
                     var ret = new NDArray(ret_type, retShape, false);
-                    var leftLinear = !leftshape.IsBroadcasted && !leftshape.IsSliced;
-                    var rightLinear = !rightshape.IsBroadcasted && !rightshape.IsSliced;
+                    var leftLinear = leftshape.IsContiguous && !leftshape.IsBroadcasted;
+                    var rightLinear = rightshape.IsContiguous && !rightshape.IsBroadcasted;
                     var len = ret.size;
                     switch (ret_type) {
 	                    case NPTypeCode.Boolean: {
@@ -4282,10 +4282,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToBoolean(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToBoolean(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -4297,7 +4297,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToBoolean(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -4310,7 +4310,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToBoolean(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -4338,10 +4338,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (byte)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (byte)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -4353,7 +4353,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (byte)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -4366,7 +4366,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (byte)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -4394,10 +4394,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (short)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (short)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -4409,7 +4409,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (short)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -4422,7 +4422,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (short)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -4450,10 +4450,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ushort)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ushort)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -4465,7 +4465,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ushort)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -4478,7 +4478,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ushort)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -4506,10 +4506,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (int)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (int)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -4521,7 +4521,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (int)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -4534,7 +4534,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (int)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -4562,10 +4562,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (uint)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (uint)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -4577,7 +4577,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (uint)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -4590,7 +4590,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (uint)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -4618,10 +4618,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (long)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (long)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -4633,7 +4633,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (long)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -4646,7 +4646,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (long)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -4674,10 +4674,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ulong)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ulong)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -4689,7 +4689,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ulong)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -4702,7 +4702,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ulong)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -4730,10 +4730,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (char)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (char)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -4745,7 +4745,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (char)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -4758,7 +4758,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (char)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -4786,10 +4786,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (double)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (double)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -4801,7 +4801,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (double)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -4814,7 +4814,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (double)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -4842,10 +4842,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (float)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (float)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -4857,7 +4857,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (float)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -4870,7 +4870,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (float)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -4898,10 +4898,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (decimal)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (decimal)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -4913,7 +4913,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (decimal)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -4926,7 +4926,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (decimal)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -4964,8 +4964,8 @@ namespace NumSharp.Backends
                     var rhs_address = (ulong*)rhs.Address;
                     var retShape = leftshape.Clean();
                     var ret = new NDArray(ret_type, retShape, false);
-                    var leftLinear = !leftshape.IsBroadcasted && !leftshape.IsSliced;
-                    var rightLinear = !rightshape.IsBroadcasted && !rightshape.IsSliced;
+                    var leftLinear = leftshape.IsContiguous && !leftshape.IsBroadcasted;
+                    var rightLinear = rightshape.IsContiguous && !rightshape.IsBroadcasted;
                     var len = ret.size;
                     switch (ret_type) {
 	                    case NPTypeCode.Boolean: {
@@ -4973,10 +4973,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToBoolean(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToBoolean(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -4988,7 +4988,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToBoolean(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -5001,7 +5001,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToBoolean(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -5029,10 +5029,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (byte)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (byte)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -5044,7 +5044,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (byte)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -5057,7 +5057,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (byte)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -5085,10 +5085,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (short)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (short)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -5100,7 +5100,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (short)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -5113,7 +5113,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (short)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -5141,10 +5141,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ushort)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ushort)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -5156,7 +5156,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ushort)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -5169,7 +5169,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ushort)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -5197,10 +5197,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (int)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (int)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -5212,7 +5212,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (int)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -5225,7 +5225,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (int)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -5253,10 +5253,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (uint)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (uint)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -5268,7 +5268,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (uint)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -5281,7 +5281,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (uint)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -5309,10 +5309,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (long)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (long)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -5324,7 +5324,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (long)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -5337,7 +5337,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (long)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -5365,10 +5365,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ulong)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ulong)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -5380,7 +5380,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ulong)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -5393,7 +5393,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ulong)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -5421,10 +5421,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (char)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (char)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -5436,7 +5436,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (char)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -5449,7 +5449,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (char)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -5477,10 +5477,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (double)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (double)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -5492,7 +5492,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (double)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -5505,7 +5505,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (double)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -5533,10 +5533,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (float)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (float)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -5548,7 +5548,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (float)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -5561,7 +5561,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (float)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -5589,10 +5589,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (decimal)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (decimal)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -5604,7 +5604,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (decimal)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -5617,7 +5617,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (decimal)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -5655,8 +5655,8 @@ namespace NumSharp.Backends
                     var rhs_address = (char*)rhs.Address;
                     var retShape = leftshape.Clean();
                     var ret = new NDArray(ret_type, retShape, false);
-                    var leftLinear = !leftshape.IsBroadcasted && !leftshape.IsSliced;
-                    var rightLinear = !rightshape.IsBroadcasted && !rightshape.IsSliced;
+                    var leftLinear = leftshape.IsContiguous && !leftshape.IsBroadcasted;
+                    var rightLinear = rightshape.IsContiguous && !rightshape.IsBroadcasted;
                     var len = ret.size;
                     switch (ret_type) {
 	                    case NPTypeCode.Boolean: {
@@ -5664,10 +5664,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToBoolean(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToBoolean(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -5679,7 +5679,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToBoolean(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -5692,7 +5692,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToBoolean(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -5720,10 +5720,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (byte)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (byte)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -5735,7 +5735,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (byte)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -5748,7 +5748,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (byte)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -5776,10 +5776,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (short)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (short)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -5791,7 +5791,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (short)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -5804,7 +5804,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (short)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -5832,10 +5832,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ushort)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ushort)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -5847,7 +5847,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ushort)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -5860,7 +5860,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ushort)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -5888,10 +5888,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (int)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (int)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -5903,7 +5903,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (int)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -5916,7 +5916,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (int)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -5944,10 +5944,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (uint)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (uint)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -5959,7 +5959,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (uint)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -5972,7 +5972,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (uint)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -6000,10 +6000,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (long)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (long)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -6015,7 +6015,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (long)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -6028,7 +6028,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (long)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -6056,10 +6056,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ulong)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ulong)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -6071,7 +6071,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ulong)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -6084,7 +6084,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ulong)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -6112,10 +6112,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (char)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (char)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -6127,7 +6127,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (char)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -6140,7 +6140,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (char)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -6168,10 +6168,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (double)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (double)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -6183,7 +6183,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (double)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -6196,7 +6196,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (double)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -6224,10 +6224,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (float)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (float)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -6239,7 +6239,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (float)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -6252,7 +6252,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (float)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -6280,10 +6280,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (decimal)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (decimal)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -6295,7 +6295,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (decimal)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -6308,7 +6308,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (decimal)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -6346,8 +6346,8 @@ namespace NumSharp.Backends
                     var rhs_address = (double*)rhs.Address;
                     var retShape = leftshape.Clean();
                     var ret = new NDArray(ret_type, retShape, false);
-                    var leftLinear = !leftshape.IsBroadcasted && !leftshape.IsSliced;
-                    var rightLinear = !rightshape.IsBroadcasted && !rightshape.IsSliced;
+                    var leftLinear = leftshape.IsContiguous && !leftshape.IsBroadcasted;
+                    var rightLinear = rightshape.IsContiguous && !rightshape.IsBroadcasted;
                     var len = ret.size;
                     switch (ret_type) {
 	                    case NPTypeCode.Boolean: {
@@ -6355,10 +6355,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToBoolean(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToBoolean(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -6370,7 +6370,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToBoolean(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -6383,7 +6383,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToBoolean(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -6411,10 +6411,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (byte)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (byte)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -6426,7 +6426,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (byte)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -6439,7 +6439,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (byte)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -6467,10 +6467,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (short)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (short)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -6482,7 +6482,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (short)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -6495,7 +6495,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (short)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -6523,10 +6523,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ushort)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ushort)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -6538,7 +6538,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ushort)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -6551,7 +6551,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ushort)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -6579,10 +6579,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (int)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (int)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -6594,7 +6594,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (int)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -6607,7 +6607,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (int)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -6635,10 +6635,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (uint)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (uint)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -6650,7 +6650,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (uint)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -6663,7 +6663,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (uint)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -6691,10 +6691,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (long)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (long)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -6706,7 +6706,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (long)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -6719,7 +6719,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (long)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -6747,10 +6747,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ulong)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ulong)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -6762,7 +6762,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ulong)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -6775,7 +6775,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ulong)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -6803,10 +6803,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (char)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (char)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -6818,7 +6818,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (char)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -6831,7 +6831,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (char)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -6859,10 +6859,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (double)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (double)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -6874,7 +6874,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (double)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -6887,7 +6887,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (double)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -6915,10 +6915,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (float)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (float)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -6930,7 +6930,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (float)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -6943,7 +6943,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (float)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -6971,10 +6971,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (decimal)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (decimal)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -6986,7 +6986,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (decimal)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -6999,7 +6999,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (decimal)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -7037,8 +7037,8 @@ namespace NumSharp.Backends
                     var rhs_address = (float*)rhs.Address;
                     var retShape = leftshape.Clean();
                     var ret = new NDArray(ret_type, retShape, false);
-                    var leftLinear = !leftshape.IsBroadcasted && !leftshape.IsSliced;
-                    var rightLinear = !rightshape.IsBroadcasted && !rightshape.IsSliced;
+                    var leftLinear = leftshape.IsContiguous && !leftshape.IsBroadcasted;
+                    var rightLinear = rightshape.IsContiguous && !rightshape.IsBroadcasted;
                     var len = ret.size;
                     switch (ret_type) {
 	                    case NPTypeCode.Boolean: {
@@ -7046,10 +7046,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToBoolean(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToBoolean(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -7061,7 +7061,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToBoolean(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -7074,7 +7074,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToBoolean(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -7102,10 +7102,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (byte)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (byte)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -7117,7 +7117,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (byte)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -7130,7 +7130,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (byte)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -7158,10 +7158,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (short)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (short)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -7173,7 +7173,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (short)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -7186,7 +7186,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (short)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -7214,10 +7214,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ushort)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ushort)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -7229,7 +7229,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ushort)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -7242,7 +7242,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ushort)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -7270,10 +7270,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (int)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (int)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -7285,7 +7285,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (int)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -7298,7 +7298,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (int)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -7326,10 +7326,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (uint)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (uint)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -7341,7 +7341,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (uint)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -7354,7 +7354,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (uint)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -7382,10 +7382,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (long)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (long)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -7397,7 +7397,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (long)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -7410,7 +7410,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (long)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -7438,10 +7438,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ulong)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ulong)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -7453,7 +7453,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ulong)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -7466,7 +7466,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ulong)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -7494,10 +7494,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (char)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (char)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -7509,7 +7509,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (char)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -7522,7 +7522,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (char)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -7550,10 +7550,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (double)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (double)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -7565,7 +7565,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (double)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -7578,7 +7578,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (double)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -7606,10 +7606,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (float)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (float)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -7621,7 +7621,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (float)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -7634,7 +7634,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (float)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -7662,10 +7662,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (decimal)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (decimal)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -7677,7 +7677,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (decimal)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -7690,7 +7690,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (decimal)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -7728,8 +7728,8 @@ namespace NumSharp.Backends
                     var rhs_address = (decimal*)rhs.Address;
                     var retShape = leftshape.Clean();
                     var ret = new NDArray(ret_type, retShape, false);
-                    var leftLinear = !leftshape.IsBroadcasted && !leftshape.IsSliced;
-                    var rightLinear = !rightshape.IsBroadcasted && !rightshape.IsSliced;
+                    var leftLinear = leftshape.IsContiguous && !leftshape.IsBroadcasted;
+                    var rightLinear = rightshape.IsContiguous && !rightshape.IsBroadcasted;
                     var len = ret.size;
                     switch (ret_type) {
 	                    case NPTypeCode.Boolean: {
@@ -7737,10 +7737,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToBoolean(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToBoolean(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -7752,7 +7752,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToBoolean(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -7765,7 +7765,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = Converts.ToBoolean(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -7793,10 +7793,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (byte)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (byte)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -7808,7 +7808,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (byte)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -7821,7 +7821,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (byte)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -7849,10 +7849,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (short)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (short)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -7864,7 +7864,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (short)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -7877,7 +7877,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (short)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -7905,10 +7905,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ushort)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ushort)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -7920,7 +7920,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ushort)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -7933,7 +7933,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ushort)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -7961,10 +7961,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (int)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (int)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -7976,7 +7976,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (int)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -7989,7 +7989,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (int)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -8017,10 +8017,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (uint)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (uint)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -8032,7 +8032,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (uint)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -8045,7 +8045,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (uint)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -8073,10 +8073,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (long)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (long)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -8088,7 +8088,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (long)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -8101,7 +8101,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (long)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -8129,10 +8129,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ulong)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ulong)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -8144,7 +8144,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ulong)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -8157,7 +8157,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (ulong)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -8185,10 +8185,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (char)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (char)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -8200,7 +8200,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (char)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -8213,7 +8213,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (char)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -8241,10 +8241,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (double)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (double)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -8256,7 +8256,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (double)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -8269,7 +8269,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (double)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -8297,10 +8297,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (float)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (float)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -8312,7 +8312,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (float)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -8325,7 +8325,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (float)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -8353,10 +8353,10 @@ namespace NumSharp.Backends
                             
                             if (leftLinear && rightLinear) {
                                 Debug.Assert(leftshape.size == len && rightshape.size == len);
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (decimal)(Operator.Multiply((lhs_address[i]), rval));
-                                } else if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                } else if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (decimal)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {
@@ -8368,7 +8368,7 @@ namespace NumSharp.Backends
 
                             ValueCoordinatesIncrementor incr;
                             if (leftLinear) { // && !rightLinear
-                                if (rightshape.IsBroadcasted && rightshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (rightshape.IsBroadcasted && rightshape.IsScalarBroadcast) {
                                     var rval = *rhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (decimal)(Operator.Multiply((lhs_address[i]), rval));
                                 } else {
@@ -8381,7 +8381,7 @@ namespace NumSharp.Backends
                                     } while (incr.Next() != null);
                                 }
                             } else if (rightLinear) { // !leftLinear && 
-                                if (leftshape.IsBroadcasted && leftshape.BroadcastInfo.OriginalShape.IsScalar) {
+                                if (leftshape.IsBroadcasted && leftshape.IsScalarBroadcast) {
                                     var lval = *lhs_address;
                                     for (int i = 0; i < len; i++) ret_address[i] = (decimal)(Operator.Multiply(lval, (rhs_address[i])));
                                 } else {

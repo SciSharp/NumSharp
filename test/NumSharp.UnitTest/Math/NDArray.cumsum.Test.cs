@@ -3,16 +3,15 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using FluentAssertions;
+using AwesomeAssertions;
 using NumSharp.Backends;
 using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.Maths
 {
-    [TestClass]
     public class NDArrayCumsumTest : TestClass
     {
-        [TestMethod]
+        [Test]
         public void CumsumStaticFunction()
         {
             NDArray arr = new double[] {0, 1, 4, 2, 5, 6, 2};
@@ -21,7 +20,7 @@ namespace NumSharp.UnitTest.Maths
             np.cumsum(arr).Should().Be(expected);
         }
 
-        [TestMethod]
+        [Test]
         public void CumsumMemberFunction()
         {
             NDArray arr = new double[] {0, 1, 4, 2, 5, 6, 2};
@@ -30,7 +29,7 @@ namespace NumSharp.UnitTest.Maths
             arr.cumsum().Should().Be(expected);
         }
 
-        [TestMethod]
+        [Test]
         public void Cumsum2d()
         {
             NDArray arr = new int[,] {{1, 2, 3}, {4, 5, 6}};
@@ -39,7 +38,7 @@ namespace NumSharp.UnitTest.Maths
             np.cumsum(arr).Should().Be(expected);
         }
 
-        [TestMethod]
+        [Test]
         public void Cumsum2dDtype()
         {
             NDArray arr = new int[,] {{1, 2, 3}, {4, 5, 6}};
@@ -48,7 +47,7 @@ namespace NumSharp.UnitTest.Maths
             np.cumsum(arr, typeCode: NPTypeCode.Single).Should().Be(expected);
         }
 
-        [TestMethod]
+        [Test]
         public void Cumsum2dAxisRows()
         {
             NDArray arr = new int[,] {{1, 2, 3}, {4, 5, 6}};
@@ -57,7 +56,7 @@ namespace NumSharp.UnitTest.Maths
             np.cumsum(arr, axis: 0).Should().Be(expected);
         }        
         
-        [TestMethod]
+        [Test]
         public void Cumsum2dAxisCols()
         {
             NDArray arr = new int[,] {{1, 2, 3}, {4, 5, 6}};

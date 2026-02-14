@@ -1,12 +1,11 @@
-﻿using FluentAssertions;
+﻿using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace NumSharp.UnitTest.Manipulation
 {
-    [TestClass]
     public class np_atleast_tests
     {
-        [TestMethod]
+        [Test]
         public void alteast_3d()
         {
             var a = np.atleast_3d(3.0);
@@ -26,7 +25,7 @@ namespace NumSharp.UnitTest.Manipulation
             a.Shape.Should().BeEquivalentTo(new Shape(4, 3, 1));
         }
 
-        [TestMethod]
+        [Test]
         public void alteast_2d()
         {
             var a = np.atleast_2d(3.0);
@@ -42,7 +41,7 @@ namespace NumSharp.UnitTest.Manipulation
             a.Shape.Should().BeEquivalentTo(new Shape(1, 3));
         }
 
-        [TestMethod]
+        [Test]
         public void alteast_1d()
         {
             var a = np.atleast_1d(3.0);

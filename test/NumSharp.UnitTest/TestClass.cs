@@ -103,10 +103,10 @@ namespace NumSharp.UnitTest
             Console.WriteLine(_tostring(obj));
         }
 
-        public static string EmbeddedString(string resourceName, Assembly assembly = null)
+        public static string EmbeddedString(string resourceName, System.Reflection.Assembly assembly = null)
         {
             if (assembly == null)
-                assembly = Assembly.GetExecutingAssembly();
+                assembly = System.Reflection.Assembly.GetExecutingAssembly();
 
             resourceName = assembly.GetManifestResourceNames().Single(s => s.Contains(resourceName));
             using (var resourceStream = assembly.GetManifestResourceStream(resourceName))
@@ -119,10 +119,10 @@ namespace NumSharp.UnitTest
             }
         }
 
-        public static byte[] EmbeddedBytes(string resourceName, Assembly assembly = null)
+        public static byte[] EmbeddedBytes(string resourceName, System.Reflection.Assembly assembly = null)
         {
             if (assembly == null)
-                assembly = Assembly.GetExecutingAssembly();
+                assembly = System.Reflection.Assembly.GetExecutingAssembly();
 
             resourceName = assembly.GetManifestResourceNames().Single(s => s.Contains(resourceName));
             using (var resourceStream = assembly.GetManifestResourceStream(resourceName))
@@ -134,10 +134,10 @@ namespace NumSharp.UnitTest
             }
         }
 
-        public static Bitmap EmbeddedBitmap(string resourceName, Assembly assembly = null)
+        public static Bitmap EmbeddedBitmap(string resourceName, System.Reflection.Assembly assembly = null)
         {
             if (assembly == null)
-                assembly = Assembly.GetExecutingAssembly();
+                assembly = System.Reflection.Assembly.GetExecutingAssembly();
 
             resourceName = assembly.GetManifestResourceNames().Single(s => s.Contains(resourceName));
             using (var resourceStream = assembly.GetManifestResourceStream(resourceName))

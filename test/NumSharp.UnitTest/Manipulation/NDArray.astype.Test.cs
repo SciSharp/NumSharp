@@ -1,14 +1,13 @@
 ﻿using System;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.Backends;
 
 namespace NumSharp.UnitTest.Manipulation
 {
-    [TestClass]
     public class astypeTests
     {
-        [TestMethod]
+        [Test]
         public void Upcasting()
         {
             var nd = np.ones(np.int32, 3, 3);
@@ -22,7 +21,7 @@ namespace NumSharp.UnitTest.Manipulation
             int64.GetTypeCode.Should().Be(NPTypeCode.Int64);
         }
 
-        [TestMethod]
+        [Test]
         public void UpcastingByteToLong()
         {
             var nd = np.ones(np.uint8, 3, 3);
@@ -36,7 +35,7 @@ namespace NumSharp.UnitTest.Manipulation
             int64.GetTypeCode.Should().Be(NPTypeCode.Int64);
         }
 
-        [TestMethod]
+        [Test]
         public void UpcastingCharsToLong()
         {
             var nd = np.ones(np.@char, 3, 3);
@@ -50,7 +49,7 @@ namespace NumSharp.UnitTest.Manipulation
             int64.GetTypeCode.Should().Be(NPTypeCode.Int64);
         }
 
-        [TestMethod]
+        [Test]
         public void DowncastingIntToShort()
         {
             var nd = np.ones(np.int32, 3, 3);
@@ -64,7 +63,7 @@ namespace NumSharp.UnitTest.Manipulation
             int16.GetTypeCode.Should().Be(NPTypeCode.Int16);
         }
 
-        [TestMethod]
+        [Test]
         public void DowncastingDoubleToInt()
         {
             var nd = np.ones(np.float64, 3, 3);
@@ -88,7 +87,7 @@ namespace NumSharp.UnitTest.Manipulation
             }
         }
 
-        [TestMethod]
+        [Test]
         public void DowncastingIntToUShort()
         {
             var nd = np.ones(np.int32, 3, 3);
@@ -97,13 +96,13 @@ namespace NumSharp.UnitTest.Manipulation
             var int16 = nd.astype(np.uint16, false);
 
             //test copying
-            int16_copied.Array.Should().Equal(nd.Array);
-            int16.Array.Should().Equal(nd.Array);
+            int16_copied.Should().Be(nd);
+            int16.Should().Be(nd);
             int16_copied.GetTypeCode.Should().Be(NPTypeCode.UInt16);
             int16.GetTypeCode.Should().Be(NPTypeCode.UInt16);
         }
 
-        [TestMethod]
+        [Test]
         public void CastEmptyNDArray()
         {
             var nd = new NDArray(NPTypeCode.Int32);
@@ -112,7 +111,7 @@ namespace NumSharp.UnitTest.Manipulation
             int16_copied.Shape.IsEmpty.Should().BeTrue();
         }
 
-        [TestMethod, Ignore("String dtype is not supported")]
+        [Test, Skip("String dtype is not supported")]
         public void CastingStringToByte()
         {
             throw new NotSupportedException();
@@ -128,7 +127,7 @@ namespace NumSharp.UnitTest.Manipulation
             //output.Array.GetType().GetElementType().Should().Be<byte>();
         }
 
-        [TestMethod, Ignore("String dtype is not supported")]
+        [Test, Skip("String dtype is not supported")]
         public void CastingByteToString()
         {
             throw new NotSupportedException();
@@ -147,7 +146,7 @@ namespace NumSharp.UnitTest.Manipulation
         }
 
 
-        [TestMethod, Ignore("Complex dtype is not supported yet")] //TODO!
+        [Test, Skip("Complex dtype is not supported yet")] //TODO!
         public void CastingIntToComplex()
         {
             //var nd = np.ones(np.int32, 3, 3);

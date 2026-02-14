@@ -2,7 +2,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.Drawing;
 using System.Drawing.Imaging;
-using FluentAssertions;
+using AwesomeAssertions;
 using NumSharp;
 using NumSharp.Backends;
 using NumSharp.UnitTest.Utilities;
@@ -54,9 +54,9 @@ namespace NumSharp.UnitTest
     ///
     ///     Total: 8 distinct bugs, 10 test methods.
     /// </summary>
-    [TestClass]
-    [TestCategory("OpenBugs")]
-    [TestCategory("WindowsOnly")]
+    [OpenBugs]
+    [WindowsOnly]
+    [SkipOnNonWindows]
     public class OpenBugsBitmap : TestClass
     {
 
@@ -93,7 +93,7 @@ namespace NumSharp.UnitTest
         ///     stride=12, width=3, stride/width=4 → shape (1,2,3,4) instead of (1,2,3,3).
         ///     The image has 3 channels (RGB) but gets reshaped as 4 channels.
         /// </summary>
-        [TestMethod]
+        [Test]
         public void Bug1a_ToNDArray_CopyTrue_OddWidth24bpp_WrongShape()
         {
             var bmp = new Bitmap(3, 2, PixelFormat.Format24bppRgb);
@@ -116,7 +116,7 @@ namespace NumSharp.UnitTest
         ///     The division happens to give 3 (correct bpp), but stride*height=32
         ///     does not equal height*width*3=30, so the reshape may produce wrong data.
         /// </summary>
-        [TestMethod]
+        [Test]
         public void Bug1b_ToNDArray_CopyTrue_5pxWide24bpp_ExtraPaddingBytes()
         {
             var bmp = new Bitmap(5, 2, PixelFormat.Format24bppRgb);
@@ -159,7 +159,7 @@ namespace NumSharp.UnitTest
         ///     stride=8, width=2, stride/width=4 → shape (1,2,2,4) instead of (1,2,2,3).
         ///     Round-trip pixel values are corrupted because channel boundaries shift.
         /// </summary>
-        [TestMethod]
+        [Test]
         public void Bug2_ToNDArray_CopyTrue_2pxWide24bpp_WrongBpp()
         {
             var bmp = new Bitmap(2, 2, PixelFormat.Format24bppRgb);
@@ -195,7 +195,7 @@ namespace NumSharp.UnitTest
         /// <summary>
         ///     BUG 3a: AsNDArray(flat:true) crashes accessing shape[3] on 1-d array.
         /// </summary>
-        [TestMethod]
+        [Test]
         public void Bug3a_AsNDArray_FlatTrue_IndexOutOfRange()
         {
             var bmp = new Bitmap(4, 4, PixelFormat.Format32bppArgb);
@@ -222,7 +222,7 @@ namespace NumSharp.UnitTest
         ///     BUG 3b: AsNDArray(flat:true, discardAlpha:true) crashes the same way.
         ///     The discardAlpha path also accesses shape[3] before reshaping.
         /// </summary>
-        [TestMethod]
+        [Test]
         public void Bug3b_AsNDArray_FlatTrue_DiscardAlpha_IndexOutOfRange()
         {
             var bmp = new Bitmap(4, 4, PixelFormat.Format32bppArgb);
@@ -270,7 +270,7 @@ namespace NumSharp.UnitTest
         ///     BUG 4: ToBitmap with sliced (non-contiguous) NDArray throws
         ///     IncorrectShapeException from MultiIterator broadcast.
         /// </summary>
-        [TestMethod]
+        [Test]
         public void Bug4_ToBitmap_SlicedNDArray_BroadcastMismatch()
         {
             var full = np.arange(0, 4 * 4 * 4).reshape(1, 4, 4, 4).astype(NPTypeCode.Byte);
@@ -311,7 +311,7 @@ namespace NumSharp.UnitTest
         ///     BUG 5: ToBitmap with int32 NDArray throws cryptic InvalidCastException
         ///     instead of a helpful error or auto-converting to byte.
         /// </summary>
-        [TestMethod]
+        [Test]
         public void Bug5_ToBitmap_NonByteDtype_InvalidCastException()
         {
             var nd = np.arange(0, 1 * 3 * 4 * 3).reshape(1, 3, 4, 3); // int32
@@ -358,7 +358,7 @@ namespace NumSharp.UnitTest
         ///     BUG 6a: ToBitmap crashes on 1px wide 24bpp image.
         ///     stride=4 (1*3=3, padded to 4), width*bpp=3 → concat triggers.
         /// </summary>
-        [TestMethod]
+        [Test]
         public void Bug6a_ToBitmap_1pxWide24bpp_StridePaddingCrash()
         {
             var nd = np.ones(1, 2, 1, 3).astype(NPTypeCode.Byte);
@@ -381,7 +381,7 @@ namespace NumSharp.UnitTest
         ///     BUG 6b: ToBitmap crashes on 5px wide 24bpp image.
         ///     stride=16 (5*3=15, padded to 16), width*bpp=15 → concat triggers.
         /// </summary>
-        [TestMethod]
+        [Test]
         public void Bug6b_ToBitmap_5pxWide24bpp_StridePaddingCrash()
         {
             var nd = np.ones(1, 2, 5, 3).astype(NPTypeCode.Byte);
@@ -423,7 +423,7 @@ namespace NumSharp.UnitTest
         /// <summary>
         ///     BUG 7: Round-trip 24bpp 2px wide — pixel values corrupted.
         /// </summary>
-        [TestMethod]
+        [Test]
         public void Bug7_ToNDArray_CopyTrue_2pxWide24bpp_RoundTripCorruption()
         {
             var bmp = new Bitmap(2, 2, PixelFormat.Format24bppRgb);
@@ -465,7 +465,7 @@ namespace NumSharp.UnitTest
         ///     BUG 8: ToBitmap with 2-channel NDArray throws unhelpful GDI+ error.
         ///     extractFormatNumber() doesn't handle bbp=2, leaving format as DontCare.
         /// </summary>
-        [TestMethod]
+        [Test]
         public void Bug8_ToBitmap_UnsupportedBpp_UnhelpfulError()
         {
             var nd = np.zeros(1, 2, 2, 2).astype(NPTypeCode.Byte);

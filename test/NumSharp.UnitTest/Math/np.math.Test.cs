@@ -3,15 +3,14 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using FluentAssertions;
+using AwesomeAssertions;
 using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.Maths
 {
-    [TestClass]
     public class ApiMathTest
     {
-        [TestMethod]
+        [Test]
         public void AddInt32()
         {
             var x = np.arange(3);
@@ -25,7 +24,7 @@ namespace NumSharp.UnitTest.Maths
             z.Should().BeOfValues(0, 2, 4, 6, 8, 10, 12, 14, 16);
         }
 
-        [TestMethod]
+        [Test]
         public void DivideInt32()
         {
             var x = np.arange(1, 4);
@@ -39,7 +38,7 @@ namespace NumSharp.UnitTest.Maths
             z.Should().BeOfValues(1, 1, 1, 1, 1, 1, 1, 1, 1);
         }
 
-        [TestMethod]
+        [Test]
         public void Sum2x2Int32()
         {
             var data = new int[,] {{0, 1}, {0, 5}};
@@ -57,7 +56,7 @@ namespace NumSharp.UnitTest.Maths
             s1.Should().BeOfValues(1, 5).And.BeShaped(2); ;
         }
 
-        [TestMethod]
+        [Test]
         public void Sum2x3x2Int32()
         {
             var data = np.arange(12).reshape(2, 3, 2);
@@ -78,7 +77,7 @@ namespace NumSharp.UnitTest.Maths
             s3.Should().BeOfValues(1, 5, 9, 13, 17, 21).And.BeShaped(2,3);
         }
 
-        [TestMethod]
+        [Test]
         public void AddUInt8()
         {
             var x = np.arange(3).astype(np.uint8);
@@ -92,7 +91,7 @@ namespace NumSharp.UnitTest.Maths
             z.Should().BeOfValues(0, 2, 4, 6, 8, 10, 12, 14, 16);
         }
 
-        [TestMethod]
+        [Test]
         public void DivideUInt8()
         {
             var x = np.arange(1, 4).astype(np.uint8);
@@ -106,7 +105,7 @@ namespace NumSharp.UnitTest.Maths
             z.Should().BeOfValues(1, 1, 1, 1, 1, 1, 1, 1, 1);
         }
 
-        [TestMethod]
+        [Test]
         public void AddUInt16()
         {
             var x = np.arange(3).astype(np.uint16);
@@ -120,7 +119,7 @@ namespace NumSharp.UnitTest.Maths
             z.Should().BeOfValues(0, 2, 4, 6, 8, 10, 12, 14, 16);
         }
 
-        [TestMethod]
+        [Test]
         public void DivideUInt16()
         {
             var x = np.arange(1, 4).astype(np.uint16);
@@ -134,7 +133,7 @@ namespace NumSharp.UnitTest.Maths
             z.Should().BeOfValues(1, 1, 1, 1, 1, 1, 1, 1, 1);
         }
 
-        [TestMethod]
+        [Test]
         public void Minimum_Slice()
         {
             //>>> boxes1 = np.array([12.875, 14.125, 39.75, 49]).reshape(1, 4)
@@ -166,7 +165,7 @@ namespace NumSharp.UnitTest.Maths
             z.Should().BeOfValues(27.125, 32.3125, 27.5, 33.375, 28.5625, 32.9375).And.BeShaped(3, 2);
         }
 
-        [TestMethod]
+        [Test]
         public void Maximum_Slice()
         {
             //>>> boxes1 = np.array([12.875, 14.125, 39.75, 49]).reshape(1, 4)

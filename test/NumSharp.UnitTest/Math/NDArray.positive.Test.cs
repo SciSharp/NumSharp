@@ -9,10 +9,9 @@ using NumSharp;
 
 namespace NumSharp.UnitTest.Maths
 {
-    [TestClass]
     public class NDArrayPoisitiveTest
     {
-        [TestMethod]
+        [Test]
         public void PositiveAllNegatives()
         {
             var nd = new NDArray(np.float32, 3);

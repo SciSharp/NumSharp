@@ -5,25 +5,26 @@ using System.Collections.Generic;
 using System.Text;
 using NumSharp.Extensions;
 using System.Linq;
-using FluentAssertions;
+using AwesomeAssertions;
 using NumSharp;
 using NumSharp.Generic;
 
 namespace NumSharp.UnitTest.LinearAlgebra
 {
-    [TestClass]
     public class TransposeTest
     {
-        [TestMethod]
+        [Test]
         public void TransposeVector()
         {
+            // NumPy: transpose of 1D array returns the array itself (view semantics)
+            // Modifying x should also modify y since they share memory
             var x = np.arange(4);
             var y = np.transpose(x);
             x[0] = 3;
-            Assert.IsFalse(Enumerable.SequenceEqual(x.Data<int>(), y.Data<int>()), "Transpose in NumSharp produces a copy");
+            Assert.IsTrue(Enumerable.SequenceEqual(x.Data<int>(), y.Data<int>()), "Transpose should share memory with original (view semantics)");
         }
 
-        [TestMethod]
+        [Test]
         public void Transpose3x2()
         {
             var x = np.arange(6).reshape(3, 2).MakeGeneric<int>();

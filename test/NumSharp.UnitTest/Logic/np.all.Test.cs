@@ -7,10 +7,9 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace NumSharp.UnitTest.Logic
 {
-    [TestClass]
     public class np_all_Test
     {
-        [TestMethod]
+        [Test]
         public void np_all_1D()
         {
             var np1 = new NDArray(new[] {true, true, false, false}, new Shape(4));
@@ -21,7 +20,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.IsTrue(np.all(np3));
         }
 
-        [TestMethod]
+        [Test]
         public void np_all_2D()
         {
             var np1 = new NDArray(new bool[] {true, true, false, false, true, false}, new Shape(2, 3));

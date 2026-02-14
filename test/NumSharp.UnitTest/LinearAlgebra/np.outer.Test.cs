@@ -4,15 +4,14 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using FluentAssertions;
+using AwesomeAssertions;
 using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.LinearAlgebra
 {
-    [TestClass]
     public class np_outer_test
     {
-        [TestMethod]
+        [Test]
         public void Case1()
         {
             np.outer(np.ones(5), np.linspace(-2, 2, 5))

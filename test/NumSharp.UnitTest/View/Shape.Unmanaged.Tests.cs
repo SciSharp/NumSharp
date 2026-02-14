@@ -7,12 +7,11 @@ using System.Diagnostics;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading;
-using FluentAssertions;
+using AwesomeAssertions;
 using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.View
 {
-    [TestClass]
     public class ShapeUnmanagedTests
     {
         private unsafe void TestGetOffset(Shape shape, int[] indices)
@@ -24,7 +23,7 @@ namespace NumSharp.UnitTest.View
             }
         }
 
-        [TestMethod]
+        [Test]
         public void GetOffsetTest_unsliced()
         {
             // unsliced shape
@@ -37,7 +36,7 @@ namespace NumSharp.UnitTest.View
 
         }
 
-        [TestMethod]
+        [Test]
         public void GetOffsetTest_sliced()
         {
             new Shape(10, 10, 10).Slice("2:8, ::-2, 7").Should().Be(new Shape(6, 5));

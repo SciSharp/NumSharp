@@ -13,10 +13,9 @@ namespace NumSharp.UnitTest.LinearAlgebra
     /// Test concolve with standard example from 
     /// https://www.numpy.org/devdocs/reference/generated/numpy.convolve.html
     /// </summary>
-    [TestClass]
     public class NdArrayQRTest
     {
-        //[TestMethod]
+        //[Test]
         public void FullMatrix()
         {
             var nd1 = np.array(new double[] {1, 1, 0, 1, 0, 1, 0, 1, 1}).reshape(3, 3);

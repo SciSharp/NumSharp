@@ -3,15 +3,14 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Linq;
-using FluentAssertions;
+using AwesomeAssertions;
 using NumSharp;
 
 namespace NumSharp.UnitTest.Selection
 {
-    [TestClass]
     public class EnumeratorTest
     {
-        [TestMethod]
+        [Test]
         public void Enumerate()
         {
             var nd = np.arange(12).reshape(2, 3, 2);

@@ -61,9 +61,11 @@ namespace NumSharp.Backends
         [SuppressMessage("ReSharper", "PossibleInvalidOperationException")]
         private UnmanagedStorage GetViewInternal(params Slice[] slices)
         {
-            // NOTE: GetViewInternal can not deal with Slice.Ellipsis or Slice.NewAxis! 
-            //handle memory slice if possible
-            if (!_shape.IsSliced)
+            // NOTE: GetViewInternal can not deal with Slice.Ellipsis or Slice.NewAxis!
+            // For contiguous shapes, if all slices are indices, we can use GetData to get
+            // a direct memory slice. For non-contiguous shapes (stepped, transposed), we
+            // must go through the full slice path to create a proper view.
+            if (_shape.IsContiguous)
             {
                 var indices = new int[slices.Length];
                 for (var i = 0; i < slices.Length; i++)
@@ -91,9 +93,8 @@ namespace NumSharp.Backends
             //perform a regular slicing
             _perform_slice:
 
-            // In case the slices selected are all ":"
-            // ReSharper disable once ConvertIfStatementToReturnStatement
-            if (!_shape.IsRecursive && slices.All(s => Equals(Slice.All, s)))
+            // In case the slices selected are all ":" - just return an alias
+            if (slices.All(s => Equals(Slice.All, s)))
                 return Alias();
 
             //handle broadcasted shape: materialize broadcast data into contiguous memory,
@@ -107,7 +108,12 @@ namespace NumSharp.Backends
                 return new UnmanagedStorage(clonedData, cleanShape).GetViewInternal(slices);
             }
 
-            return Alias(_shape.Slice(slices));
+            var slicedShape = _shape.Slice(slices);
+
+            // NumPy-aligned: All slices return views (aliases) that share memory with the original.
+            // The slicedShape contains the correct offset and strides computed by Shape.Slice().
+            // Views with non-zero offset or non-standard strides use coordinate-based access.
+            return Alias(slicedShape);
         }
 
         private IEnumerable<Slice> ExpandEllipsis(Slice[] slices)
