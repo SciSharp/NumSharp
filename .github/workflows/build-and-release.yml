@@ -48,6 +48,7 @@ jobs:
     #   - OpenBugs: excluded via --treenode-filter (known-failing bug reproductions)
     #   - WindowsOnly: auto-skipped at runtime via [SkipOnNonWindows] attribute
     - name: Test (net10.0)
+      shell: bash
       run: |
         dotnet run --project test/NumSharp.UnitTest/NumSharp.UnitTest.csproj \
           --configuration Release --no-build --framework net10.0 \
