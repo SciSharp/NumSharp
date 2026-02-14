@@ -12,6 +12,16 @@ namespace NumSharp.Backends
         #region Setters
 
         /// <summary>
+        ///     Throws if the underlying shape is not writeable (e.g., broadcast arrays).
+        ///     NumPy raises: ValueError: assignment destination is read-only
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void ThrowIfNotWriteable()
+        {
+            NumSharpException.ThrowIfNotWriteable(_shape);
+        }
+
+        /// <summary>
         ///     Performs a set of index without calling <see cref="Shape.TransformOffset(int)"/>.
         /// </summary>
         public void SetAtIndexUnsafe(ValueType value, int index)
@@ -32,11 +42,13 @@ namespace NumSharp.Backends
 
         public unsafe void SetAtIndex<T>(T value, int index) where T : unmanaged
         {
+            ThrowIfNotWriteable();
             *((T*)Address + _shape.TransformOffset(index)) = value;
         }
 
         public unsafe void SetAtIndex(object value, int index)
         {
+            ThrowIfNotWriteable();
             switch (_typecode)
             {
 #if _REGEN
@@ -103,7 +115,10 @@ namespace NumSharp.Backends
         ///     If <paramref name="value"/> does not match <see cref="DType"/>, <paramref name="value"/> will be converted.
         /// </remarks>
         public unsafe void SetValue<T>(T value, params int[] indices) where T : unmanaged
-            => *((T*)Address + _shape.GetOffset(indices)) = value;
+        {
+            ThrowIfNotWriteable();
+            *((T*)Address + _shape.GetOffset(indices)) = value;
+        }
 
         /// <summary>
         ///     Set a single value at given <see cref="indices"/>.
@@ -116,6 +131,7 @@ namespace NumSharp.Backends
         /// </remarks>
         public unsafe void SetValue(object value, params int[] indices)
         {
+            ThrowIfNotWriteable();
             switch (_typecode)
             {
 #if _REGEN
@@ -183,6 +199,7 @@ namespace NumSharp.Backends
         /// </remarks>
         public void SetData(object value, params int[] indices)
         {
+            ThrowIfNotWriteable();
             switch (value)
             {
                 case NDArray nd:
@@ -212,6 +229,7 @@ namespace NumSharp.Backends
         /// </remarks>
         public void SetData(NDArray value, params int[] indices)
         {
+            ThrowIfNotWriteable();
             if (ReferenceEquals(value, null))
                 throw new ArgumentNullException(nameof(value));
 
@@ -275,6 +293,7 @@ namespace NumSharp.Backends
         /// </remarks>
         public void SetData(IArraySlice value, params int[] indices)
         {
+            ThrowIfNotWriteable();
             if (value == null)
                 throw new ArgumentNullException(nameof(value));
 
@@ -324,6 +343,7 @@ namespace NumSharp.Backends
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void SetBoolean(bool value, params int[] indices)
         {
+            ThrowIfNotWriteable();
             unsafe
             {
                 *((bool*)Address + _shape.GetOffset(indices)) = value;
@@ -338,6 +358,7 @@ namespace NumSharp.Backends
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void SetByte(byte value, params int[] indices)
         {
+            ThrowIfNotWriteable();
             unsafe
             {
                 *((byte*)Address + _shape.GetOffset(indices)) = value;
@@ -352,6 +373,7 @@ namespace NumSharp.Backends
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void SetInt16(short value, params int[] indices)
         {
+            ThrowIfNotWriteable();
             unsafe
             {
                 *((short*)Address + _shape.GetOffset(indices)) = value;
@@ -366,6 +388,7 @@ namespace NumSharp.Backends
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void SetUInt16(ushort value, params int[] indices)
         {
+            ThrowIfNotWriteable();
             unsafe
             {
                 *((ushort*)Address + _shape.GetOffset(indices)) = value;
@@ -380,6 +403,7 @@ namespace NumSharp.Backends
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void SetInt32(int value, params int[] indices)
         {
+            ThrowIfNotWriteable();
             unsafe
             {
                 *((int*)Address + _shape.GetOffset(indices)) = value;
@@ -394,6 +418,7 @@ namespace NumSharp.Backends
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void SetUInt32(uint value, params int[] indices)
         {
+            ThrowIfNotWriteable();
             unsafe
             {
                 *((uint*)Address + _shape.GetOffset(indices)) = value;
@@ -408,6 +433,7 @@ namespace NumSharp.Backends
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void SetInt64(long value, params int[] indices)
         {
+            ThrowIfNotWriteable();
             unsafe
             {
                 *((long*)Address + _shape.GetOffset(indices)) = value;
@@ -422,6 +448,7 @@ namespace NumSharp.Backends
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void SetUInt64(ulong value, params int[] indices)
         {
+            ThrowIfNotWriteable();
             unsafe
             {
                 *((ulong*)Address + _shape.GetOffset(indices)) = value;
@@ -436,6 +463,7 @@ namespace NumSharp.Backends
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void SetChar(char value, params int[] indices)
         {
+            ThrowIfNotWriteable();
             unsafe
             {
                 *((char*)Address + _shape.GetOffset(indices)) = value;
@@ -450,6 +478,7 @@ namespace NumSharp.Backends
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void SetDouble(double value, params int[] indices)
         {
+            ThrowIfNotWriteable();
             unsafe
             {
                 *((double*)Address + _shape.GetOffset(indices)) = value;
@@ -464,6 +493,7 @@ namespace NumSharp.Backends
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void SetSingle(float value, params int[] indices)
         {
+            ThrowIfNotWriteable();
             unsafe
             {
                 *((float*)Address + _shape.GetOffset(indices)) = value;
@@ -478,6 +508,7 @@ namespace NumSharp.Backends
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void SetDecimal(decimal value, params int[] indices)
         {
+            ThrowIfNotWriteable();
             unsafe
             {
                 *((decimal*)Address + _shape.GetOffset(indices)) = value;

@@ -19,8 +19,10 @@ namespace NumSharp
         /// <remarks>https://docs.scipy.org/doc/numpy-1.17.0/user/basics.indexing.html</remarks>
         /// <exception cref="IndexOutOfRangeException">When one of the indices exceeds limits.</exception>
         /// <exception cref="ArgumentException">indices must be of Int type (byte, u/short, u/int, u/long).</exception>
+        /// <exception cref="NumSharpException">If this array is not writeable (e.g., broadcast array).</exception>
         public void SetIndices(NDArray values, NDArray[] indices)
         {
+            NumSharpException.ThrowIfNotWriteable(Shape);
             SetIndices(this, indices, values);
         }
 
@@ -540,10 +542,10 @@ namespace NumSharp
             T* valuesAddr = values.Address;
             T* dstAddr = dst.Address;
             int copySize = subShapeSize * InfoOf<T>.Size;
-            if (values.Shape.IsContiguous && !values.Shape.ModifiedStrides)
+            if (values.Shape.IsContiguous)
             {
                 //linear
-                for (int i = 0; i < offsetsSize; i++) 
+                for (int i = 0; i < offsetsSize; i++)
                     Buffer.MemoryCopy(valuesAddr + i * subShapeSize, dstAddr + *(offsetAddr + i), copySize, copySize);
             }
             else

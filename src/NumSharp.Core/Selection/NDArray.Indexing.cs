@@ -15,6 +15,16 @@ namespace NumSharp
     public partial class NDArray
     {
         /// <summary>
+        ///     Throws if this NDArray is not writeable (e.g., broadcast arrays).
+        ///     NumPy raises: ValueError: assignment destination is read-only
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void ThrowIfNotWriteable()
+        {
+            NumSharpException.ThrowIfNotWriteable(Shape);
+        }
+
+        /// <summary>
         ///     Used to perform selection based on given indices.
         /// </summary>
         /// <param name="dims">The pointer to the dimensions</param>
@@ -22,7 +32,7 @@ namespace NumSharp
         public unsafe NDArray this[int* dims, int ndims]
         {
             get => new NDArray(Storage.GetData(dims, ndims));
-            set => Storage.GetData(dims, ndims).SetData(value);
+            set { ThrowIfNotWriteable(); Storage.GetData(dims, ndims).SetData(value); }
         }
 
         /// <summary>
@@ -36,6 +46,7 @@ namespace NumSharp
             get => FetchIndices(this, selection.Select(array => (NDArray)array).ToArray(), null, true);
             set
             {
+                ThrowIfNotWriteable();
                 SetIndices(this, selection, value);
             }
         }
@@ -48,7 +59,7 @@ namespace NumSharp
         public NDArray this[string slice]
         {
             get => new NDArray(Storage.GetView(Slice.ParseSlices(slice)));
-            set => Storage.GetView(Slice.ParseSlices(slice)).SetData(value);
+            set { ThrowIfNotWriteable(); Storage.GetView(Slice.ParseSlices(slice)).SetData(value); }
         }
 
 
@@ -60,7 +71,7 @@ namespace NumSharp
         public NDArray this[params Slice[] slice]
         {
             get => new NDArray(Storage.GetView(slice));
-            set => Storage.GetView(slice).SetData(value);
+            set { ThrowIfNotWriteable(); Storage.GetView(slice).SetData(value); }
         }
 
         ///// <summary>
@@ -88,6 +99,7 @@ namespace NumSharp
             }
             set
             {
+                ThrowIfNotWriteable();
                 SetIndices(indicesObjects, value);
             }
         }

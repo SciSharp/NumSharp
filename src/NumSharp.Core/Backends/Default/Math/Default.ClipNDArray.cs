@@ -22,8 +22,12 @@ namespace NumSharp.Backends
 
             if (@out is null)
                 @out = Cast(lhs, typeCode ?? lhs.typecode, copy: true);
-            else if (@out.Shape != lhs.Shape)
-                throw new ArgumentException($"@out's shape ({@out.Shape}) must match lhs's shape ({lhs.Shape}).'");
+            else
+            {
+                NumSharpException.ThrowIfNotWriteable(@out.Shape);
+                if (@out.Shape != lhs.Shape)
+                    throw new ArgumentException($"@out's shape ({@out.Shape}) must match lhs's shape ({lhs.Shape}).'");
+            }
                 
             var len = @out.size;
             if (!(min is null) && !(max is null))
