@@ -1,4 +1,5 @@
 ﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
+using NumSharp.UnitTest;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -74,7 +75,7 @@ namespace NumSharp.UnitTest.RandomSampling
         }
 
         [Test]
-        [Ignore("Choice without replacement not implemented yet")]
+        [OpenBugs] // Choice without replacement not implemented yet
         public void UniformSampleWithoutReplace()
         {
             NDArray actual = np.random.choice(5, (Shape)3, replace: false);
@@ -82,7 +83,7 @@ namespace NumSharp.UnitTest.RandomSampling
         }
 
         [Test]
-        [Ignore("Choice without replacement not implemented yet")]
+        [OpenBugs] // Choice without replacement not implemented yet
         public void NonUniformSampleWithoutReplace()
         {
             double[] probabilities = new double[] {0.1, 0, 0.3, 0.6, 0};
@@ -91,7 +92,7 @@ namespace NumSharp.UnitTest.RandomSampling
         }
 
         [Test]
-        [Ignore("Choice with string arrays not implemented yet")]
+        [Skip("Choice with string arrays not implemented yet")]
         public void StringArraySample1()
         {
             //int nrSamples = 5;
