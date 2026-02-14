@@ -380,8 +380,7 @@ namespace NumSharp.UnitTest.View
         #region Fix validation: IsContiguous should be true for contiguous slices
 
         [Test]
-        [Category("Option2Fix")]
-        public void IsContiguous_Step1Slice1D()
+                public void IsContiguous_Step1Slice1D()
         {
             // NumPy: a[2:7].flags['C_CONTIGUOUS'] = True
             var a = np.arange(10);
@@ -391,8 +390,7 @@ namespace NumSharp.UnitTest.View
         }
 
         [Test]
-        [Category("Option2Fix")]
-        public void IsContiguous_RowSlice2D()
+                public void IsContiguous_RowSlice2D()
         {
             // NumPy: a[1:3].flags['C_CONTIGUOUS'] = True
             var a = np.arange(12).reshape(3, 4);
@@ -402,8 +400,7 @@ namespace NumSharp.UnitTest.View
         }
 
         [Test]
-        [Category("Option2Fix")]
-        public void IsContiguous_SingleRow2D()
+                public void IsContiguous_SingleRow2D()
         {
             // NumPy: a[1:2].flags['C_CONTIGUOUS'] = True
             var a = np.arange(12).reshape(3, 4);
@@ -413,8 +410,7 @@ namespace NumSharp.UnitTest.View
         }
 
         [Test]
-        [Category("Option2Fix")]
-        public void IsContiguous_SingleRowPartialCol2D()
+                public void IsContiguous_SingleRowPartialCol2D()
         {
             // NumPy: a[1:2,1:3].flags['C_CONTIGUOUS'] = True
             var a = np.arange(12).reshape(3, 4);
@@ -424,8 +420,7 @@ namespace NumSharp.UnitTest.View
         }
 
         [Test]
-        [Category("Option2Fix")]
-        public void IsContiguous_SingleElement1D()
+                public void IsContiguous_SingleElement1D()
         {
             // NumPy: a[3:4].flags['C_CONTIGUOUS'] = True
             var a = np.arange(10);
@@ -435,8 +430,7 @@ namespace NumSharp.UnitTest.View
         }
 
         [Test]
-        [Category("Option2Fix")]
-        public void IsContiguous_3D_RowSlice()
+                public void IsContiguous_3D_RowSlice()
         {
             // NumPy: a[0:1].flags['C_CONTIGUOUS'] = True
             var a = np.arange(24).reshape(2, 3, 4);
@@ -446,8 +440,7 @@ namespace NumSharp.UnitTest.View
         }
 
         [Test]
-        [Category("Option2Fix")]
-        public void IsContiguous_3D_SingleRowPartialCol()
+                public void IsContiguous_3D_SingleRowPartialCol()
         {
             // NumPy: a[0:1,1:3,:].flags['C_CONTIGUOUS'] = True
             var a = np.arange(24).reshape(2, 3, 4);
@@ -457,8 +450,7 @@ namespace NumSharp.UnitTest.View
         }
 
         [Test]
-        [Category("Option2Fix")]
-        public void IsContiguous_SliceOfContiguousSlice()
+                public void IsContiguous_SliceOfContiguousSlice()
         {
             // np.arange(10)[2:8][1:4] — merged step-1, contiguous
             var a = np.arange(10);
@@ -468,8 +460,7 @@ namespace NumSharp.UnitTest.View
         }
 
         [Test]
-        [Category("Option2Fix")]
-        public void IsContiguous_SliceOfSteppedSlice_SingleElement()
+                public void IsContiguous_SliceOfSteppedSlice_SingleElement()
         {
             // np.arange(10)[::2][0:1] — merged step=2 but count=1 (contiguous)
             var a = np.arange(10);
@@ -556,8 +547,7 @@ namespace NumSharp.UnitTest.View
         #region Fix validation: Contiguous slices should share memory (view semantics)
 
         [Test]
-        [Category("Option2Fix")]
-        public void ViewSemantics_Step1Slice1D_MutationPropagates()
+                public void ViewSemantics_Step1Slice1D_MutationPropagates()
         {
             // NumPy: s = a[2:7]; s[0] = 999; a[2] == 999
             var a = np.arange(10);
@@ -568,8 +558,7 @@ namespace NumSharp.UnitTest.View
         }
 
         [Test]
-        [Category("Option2Fix")]
-        public void ViewSemantics_RowSlice2D_MutationPropagates()
+                public void ViewSemantics_RowSlice2D_MutationPropagates()
         {
             // NumPy: s = a[1:3]; s[0,0] = 999; a[1,0] == 999
             var a = np.arange(12).reshape(3, 4);
@@ -580,8 +569,7 @@ namespace NumSharp.UnitTest.View
         }
 
         [Test]
-        [Category("Option2Fix")]
-        public void ViewSemantics_SingleRowPartialCol_MutationPropagates()
+                public void ViewSemantics_SingleRowPartialCol_MutationPropagates()
         {
             // NumPy: s = a[1:2,1:3]; s[0,0] = 999; a[1,1] == 999
             var a = np.arange(12).reshape(3, 4);
@@ -592,8 +580,7 @@ namespace NumSharp.UnitTest.View
         }
 
         [Test]
-        [Category("Option2Fix")]
-        public void ViewSemantics_SliceOfContiguousSlice_MutationPropagates()
+                public void ViewSemantics_SliceOfContiguousSlice_MutationPropagates()
         {
             // NumPy: s = a[2:8][1:4]; s[0] = 999; a[3] == 999
             var a = np.arange(10);
@@ -635,8 +622,7 @@ namespace NumSharp.UnitTest.View
         #region Fix validation: Ravel of contiguous slice should be a view
 
         [Test]
-        [Category("Option2Fix")]
-        public void Ravel_ContiguousSlice1D_IsView()
+                public void Ravel_ContiguousSlice1D_IsView()
         {
             // NumPy: r = np.ravel(a[2:7]); r is a view
             var a = np.arange(10);
@@ -648,8 +634,7 @@ namespace NumSharp.UnitTest.View
         }
 
         [Test]
-        [Category("Option2Fix")]
-        public void Ravel_ContiguousRowSlice2D_IsView()
+                public void Ravel_ContiguousRowSlice2D_IsView()
         {
             // NumPy: r = np.ravel(a[1:3]); r is a view
             var a = np.arange(12).reshape(3, 4);
@@ -665,8 +650,7 @@ namespace NumSharp.UnitTest.View
         #region Fix validation: Downstream consumers — copyto, unique
 
         [Test]
-        [Category("Option2Fix")]
-        public void Copyto_ContiguousSlice_FastPath()
+                public void Copyto_ContiguousSlice_FastPath()
         {
             // np.copyto with contiguous slices should use fast memcpy path
             var src = np.arange(10)["2:7"]; // [2,3,4,5,6]
@@ -681,8 +665,7 @@ namespace NumSharp.UnitTest.View
         #region Fix validation: Multiple dtypes through contiguous slice path
 
         [Test]
-        [Category("Option2Fix")]
-        public void ContiguousSlice_Float64_Values()
+                public void ContiguousSlice_Float64_Values()
         {
             var a = np.arange(10.0); // float64
             var s = a["2:7"];
@@ -692,8 +675,7 @@ namespace NumSharp.UnitTest.View
         }
 
         [Test]
-        [Category("Option2Fix")]
-        public void ContiguousSlice_Float32_Values()
+                public void ContiguousSlice_Float32_Values()
         {
             var a = np.arange(10).astype(np.float32);
             var s = a["2:7"];
@@ -703,8 +685,7 @@ namespace NumSharp.UnitTest.View
         }
 
         [Test]
-        [Category("Option2Fix")]
-        public void ContiguousSlice_Byte_Values()
+                public void ContiguousSlice_Byte_Values()
         {
             var a = np.arange(10).astype(np.uint8);
             var s = a["2:7"];
@@ -714,8 +695,7 @@ namespace NumSharp.UnitTest.View
         }
 
         [Test]
-        [Category("Option2Fix")]
-        public void ContiguousSlice_Int64_Values()
+                public void ContiguousSlice_Int64_Values()
         {
             var a = np.arange(10).astype(np.int64);
             var s = a["2:7"];
@@ -738,8 +718,7 @@ namespace NumSharp.UnitTest.View
         }
 
         [Test]
-        [Category("Option2Fix")]
-        public void FullSlice_IsContiguous()
+                public void FullSlice_IsContiguous()
         {
             // np.arange(10)[:] should be contiguous (it's all elements)
             var a = np.arange(10);
@@ -750,8 +729,7 @@ namespace NumSharp.UnitTest.View
         }
 
         [Test]
-        [Category("Option2Fix")]
-        public void ContiguousSlice_ThenReshape_Values()
+                public void ContiguousSlice_ThenReshape_Values()
         {
             // np.arange(12)[2:10].reshape(2,4) should work and be contiguous
             var a = np.arange(12);
