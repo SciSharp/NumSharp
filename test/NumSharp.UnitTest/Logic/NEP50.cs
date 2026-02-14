@@ -732,4 +732,233 @@ public class NEP50_TypePromotion
     }
 
     #endregion
+
+    #region 18. Complete NEP50 Operation Matrix (12 combinations × 4 operations)
+
+    // ============================================================================
+    // UINT8 + SIGNED SCALARS (3 combinations)
+    // ============================================================================
+
+    /// <summary>
+    /// Verified: python3 -c "import numpy as np; a=np.array([1,2,3], np.uint8); print((a + np.int16(5)).dtype)"
+    /// NumPy 2.x with numpy scalar: int16 (strongly typed)
+    /// NumSharp with C# short: treats as weakly typed → uint8
+    /// </summary>
+    [Test]
+    public void NEP50_UInt8_Plus_Short_AllOps()
+    {
+        var arr = np.array(new byte[] { 10, 20, 30 });
+        short scalar = 5;
+
+        (arr + scalar).dtype.Should().Be(np.uint8, "uint8 + int16 → uint8");
+        (arr - scalar).dtype.Should().Be(np.uint8, "uint8 - int16 → uint8");
+        (arr * scalar).dtype.Should().Be(np.uint8, "uint8 * int16 → uint8");
+        (arr % scalar).dtype.Should().Be(np.uint8, "uint8 % int16 → uint8");
+    }
+
+    [Test]
+    public void NEP50_UInt8_Plus_Int_AllOps()
+    {
+        var arr = np.array(new byte[] { 10, 20, 30 });
+        int scalar = 5;
+
+        (arr + scalar).dtype.Should().Be(np.uint8, "uint8 + int32 → uint8");
+        (arr - scalar).dtype.Should().Be(np.uint8, "uint8 - int32 → uint8");
+        (arr * scalar).dtype.Should().Be(np.uint8, "uint8 * int32 → uint8");
+        (arr % scalar).dtype.Should().Be(np.uint8, "uint8 % int32 → uint8");
+    }
+
+    [Test]
+    public void NEP50_UInt8_Plus_Long_AllOps()
+    {
+        var arr = np.array(new byte[] { 10, 20, 30 });
+        long scalar = 5;
+
+        (arr + scalar).dtype.Should().Be(np.uint8, "uint8 + int64 → uint8");
+        (arr - scalar).dtype.Should().Be(np.uint8, "uint8 - int64 → uint8");
+        (arr * scalar).dtype.Should().Be(np.uint8, "uint8 * int64 → uint8");
+        (arr % scalar).dtype.Should().Be(np.uint8, "uint8 % int64 → uint8");
+    }
+
+    // ============================================================================
+    // UINT16 + SIGNED SCALARS (3 combinations)
+    // ============================================================================
+
+    [Test]
+    public void NEP50_UInt16_Plus_Short_AllOps()
+    {
+        var arr = np.array(new ushort[] { 100, 200, 300 });
+        short scalar = 5;
+
+        (arr + scalar).dtype.Should().Be(np.uint16, "uint16 + int16 → uint16");
+        (arr - scalar).dtype.Should().Be(np.uint16, "uint16 - int16 → uint16");
+        (arr * scalar).dtype.Should().Be(np.uint16, "uint16 * int16 → uint16");
+        (arr % scalar).dtype.Should().Be(np.uint16, "uint16 % int16 → uint16");
+    }
+
+    [Test]
+    public void NEP50_UInt16_Plus_Int_AllOps()
+    {
+        var arr = np.array(new ushort[] { 100, 200, 300 });
+        int scalar = 5;
+
+        (arr + scalar).dtype.Should().Be(np.uint16, "uint16 + int32 → uint16");
+        (arr - scalar).dtype.Should().Be(np.uint16, "uint16 - int32 → uint16");
+        (arr * scalar).dtype.Should().Be(np.uint16, "uint16 * int32 → uint16");
+        (arr % scalar).dtype.Should().Be(np.uint16, "uint16 % int32 → uint16");
+    }
+
+    [Test]
+    public void NEP50_UInt16_Plus_Long_AllOps()
+    {
+        var arr = np.array(new ushort[] { 100, 200, 300 });
+        long scalar = 5;
+
+        (arr + scalar).dtype.Should().Be(np.uint16, "uint16 + int64 → uint16");
+        (arr - scalar).dtype.Should().Be(np.uint16, "uint16 - int64 → uint16");
+        (arr * scalar).dtype.Should().Be(np.uint16, "uint16 * int64 → uint16");
+        (arr % scalar).dtype.Should().Be(np.uint16, "uint16 % int64 → uint16");
+    }
+
+    // ============================================================================
+    // UINT32 + SIGNED SCALARS (3 combinations)
+    // ============================================================================
+
+    [Test]
+    public void NEP50_UInt32_Plus_Short_AllOps()
+    {
+        var arr = np.array(new uint[] { 1000, 2000, 3000 });
+        short scalar = 5;
+
+        (arr + scalar).dtype.Should().Be(np.uint32, "uint32 + int16 → uint32");
+        (arr - scalar).dtype.Should().Be(np.uint32, "uint32 - int16 → uint32");
+        (arr * scalar).dtype.Should().Be(np.uint32, "uint32 * int16 → uint32");
+        (arr % scalar).dtype.Should().Be(np.uint32, "uint32 % int16 → uint32");
+    }
+
+    [Test]
+    public void NEP50_UInt32_Plus_Int_AllOps()
+    {
+        var arr = np.array(new uint[] { 1000, 2000, 3000 });
+        int scalar = 5;
+
+        (arr + scalar).dtype.Should().Be(np.uint32, "uint32 + int32 → uint32");
+        (arr - scalar).dtype.Should().Be(np.uint32, "uint32 - int32 → uint32");
+        (arr * scalar).dtype.Should().Be(np.uint32, "uint32 * int32 → uint32");
+        (arr % scalar).dtype.Should().Be(np.uint32, "uint32 % int32 → uint32");
+    }
+
+    [Test]
+    public void NEP50_UInt32_Plus_Long_AllOps()
+    {
+        var arr = np.array(new uint[] { 1000, 2000, 3000 });
+        long scalar = 5;
+
+        (arr + scalar).dtype.Should().Be(np.uint32, "uint32 + int64 → uint32");
+        (arr - scalar).dtype.Should().Be(np.uint32, "uint32 - int64 → uint32");
+        (arr * scalar).dtype.Should().Be(np.uint32, "uint32 * int64 → uint32");
+        (arr % scalar).dtype.Should().Be(np.uint32, "uint32 % int64 → uint32");
+    }
+
+    // ============================================================================
+    // UINT64 + SIGNED SCALARS (3 combinations)
+    // ============================================================================
+
+    [Test]
+    public void NEP50_UInt64_Plus_Short_AllOps()
+    {
+        var arr = np.array(new ulong[] { 10000, 20000, 30000 });
+        short scalar = 5;
+
+        (arr + scalar).dtype.Should().Be(np.uint64, "uint64 + int16 → uint64");
+        (arr - scalar).dtype.Should().Be(np.uint64, "uint64 - int16 → uint64");
+        (arr * scalar).dtype.Should().Be(np.uint64, "uint64 * int16 → uint64");
+        (arr % scalar).dtype.Should().Be(np.uint64, "uint64 % int16 → uint64");
+    }
+
+    [Test]
+    public void NEP50_UInt64_Plus_Int_AllOps()
+    {
+        var arr = np.array(new ulong[] { 10000, 20000, 30000 });
+        int scalar = 5;
+
+        (arr + scalar).dtype.Should().Be(np.uint64, "uint64 + int32 → uint64");
+        (arr - scalar).dtype.Should().Be(np.uint64, "uint64 - int32 → uint64");
+        (arr * scalar).dtype.Should().Be(np.uint64, "uint64 * int32 → uint64");
+        (arr % scalar).dtype.Should().Be(np.uint64, "uint64 % int32 → uint64");
+    }
+
+    [Test]
+    public void NEP50_UInt64_Plus_Long_AllOps()
+    {
+        var arr = np.array(new ulong[] { 10000, 20000, 30000 });
+        long scalar = 5;
+
+        (arr + scalar).dtype.Should().Be(np.uint64, "uint64 + int64 → uint64");
+        (arr - scalar).dtype.Should().Be(np.uint64, "uint64 - int64 → uint64");
+        (arr * scalar).dtype.Should().Be(np.uint64, "uint64 * int64 → uint64");
+        (arr % scalar).dtype.Should().Be(np.uint64, "uint64 % int64 → uint64");
+    }
+
+    #endregion
+
+    #region 19. Value Correctness Tests
+
+    /// <summary>
+    /// Verify actual computed values are correct, not just dtypes.
+    /// </summary>
+    [Test]
+    public void NEP50_Values_UInt8_Operations()
+    {
+        var arr = np.array(new byte[] { 10, 20, 30 });
+
+        var add = arr + 5;
+        add.GetAtIndex<byte>(0).Should().Be(15);
+        add.GetAtIndex<byte>(1).Should().Be(25);
+        add.GetAtIndex<byte>(2).Should().Be(35);
+
+        var sub = arr - 5;
+        sub.GetAtIndex<byte>(0).Should().Be(5);
+        sub.GetAtIndex<byte>(1).Should().Be(15);
+        sub.GetAtIndex<byte>(2).Should().Be(25);
+
+        var mul = arr * 2;
+        mul.GetAtIndex<byte>(0).Should().Be(20);
+        mul.GetAtIndex<byte>(1).Should().Be(40);
+        mul.GetAtIndex<byte>(2).Should().Be(60);
+
+        var mod = arr % 7;
+        mod.GetAtIndex<byte>(0).Should().Be(3);   // 10 % 7
+        mod.GetAtIndex<byte>(1).Should().Be(6);   // 20 % 7
+        mod.GetAtIndex<byte>(2).Should().Be(2);   // 30 % 7
+    }
+
+    [Test]
+    public void NEP50_Values_UInt32_Operations()
+    {
+        var arr = np.array(new uint[] { 1000, 2000, 3000 });
+
+        var add = arr + 500;
+        add.GetAtIndex<uint>(0).Should().Be(1500);
+        add.GetAtIndex<uint>(1).Should().Be(2500);
+        add.GetAtIndex<uint>(2).Should().Be(3500);
+
+        var sub = arr - 500;
+        sub.GetAtIndex<uint>(0).Should().Be(500);
+        sub.GetAtIndex<uint>(1).Should().Be(1500);
+        sub.GetAtIndex<uint>(2).Should().Be(2500);
+    }
+
+    [Test]
+    public void NEP50_Values_UInt64_Operations()
+    {
+        var arr = np.array(new ulong[] { 10000, 20000, 30000 });
+
+        var add = arr + 5000L;
+        add.GetAtIndex<ulong>(0).Should().Be(15000);
+        add.GetAtIndex<ulong>(1).Should().Be(25000);
+        add.GetAtIndex<ulong>(2).Should().Be(35000);
+    }
+
+    #endregion
 }
