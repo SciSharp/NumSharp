@@ -366,7 +366,7 @@ namespace NumSharp.Benchmark.Unmanaged
         ///     this was stolen from Vector{T}
         ///     This is fast because typeof vs typeof is evaluation during compilation time or as soon as JIT optimizes it.
         /// </summary>
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         public static T ScalarAdd<T>(T left, T right) where T : IComparable
         {
             if (typeof(T) == typeof(byte))
@@ -405,7 +405,7 @@ namespace NumSharp.Benchmark.Unmanaged
         ///     this was stolen from Vector{T}
         ///     This is fast because typeof vs typeof is evaluation during compilation time or as soon as JIT optimizes it.
         /// </summary>
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         public static T ScalarAddSwitch<T>(T left, T right) where T : IComparable
         {
             //if (typeof(T) == typeof(byte))
@@ -493,7 +493,7 @@ namespace NumSharp.Benchmark.Unmanaged
         ///     this was stolen from Vector{T}
         ///     This is fast because T vs T is evaluation during compilation time or as soon as JIT optimizes it.
         /// </summary>
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         public static object ScalarAddBoxed(object left, object right)
         {
             var T = left.GetType();
@@ -524,19 +524,19 @@ namespace NumSharp.Benchmark.Unmanaged
         {
             public T Value;
 
-            [MethodImpl((MethodImplOptions)768)]
+            [MethodImpl(OptimizeAndInline)]
             public MathComputer(T val)
             {
                 Value = val;
             }
 
-            [MethodImpl((MethodImplOptions)768)]
+            [MethodImpl(OptimizeAndInline)]
             public static T operator +(MathComputer<T> lhs, T rhs)
             {
                 return lhs + new MathComputer<T>(rhs);
             }
 
-            [MethodImpl((MethodImplOptions)768)]
+            [MethodImpl(OptimizeAndInline)]
             public static T operator +(MathComputer<T> left, MathComputer<T> right)
             {
                 if (typeof(T) == typeof(byte))

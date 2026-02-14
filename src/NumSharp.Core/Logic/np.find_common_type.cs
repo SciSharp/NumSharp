@@ -600,7 +600,7 @@ namespace NumSharp
         ///     Resolves to which type should the output be.
         /// </summary>
         /// <remarks>This function relys on <see cref="NPTypeCode"/> being ordered numerically by size.</remarks>
-        [MethodImpl((MethodImplOptions)512)]
+        [MethodImpl(Optimize)]
         internal static NPTypeCode _FindCommonType(NPTypeCode[] array_types, NPTypeCode[] scalar_types)
         {
             NPTypeCode maxa = _can_coerce_all(array_types);
@@ -634,7 +634,7 @@ namespace NumSharp
         ///     Resolves to which type should the output be.
         /// </summary>
         /// <remarks>This function relys on <see cref="NPTypeCode"/> being ordered numerically by size.</remarks>
-        [MethodImpl((MethodImplOptions)512)]
+        [MethodImpl(Optimize)]
         internal static NPTypeCode _FindCommonType(List<NPTypeCode> array_types, List<NPTypeCode> scalar_types)
         {
             NPTypeCode maxa = _can_coerce_all(array_types);
@@ -668,7 +668,7 @@ namespace NumSharp
         ///     Resolves to which type should the output be.
         /// </summary>
         /// <remarks>This function relys on <see cref="NPTypeCode"/> being ordered numerically by size.</remarks>
-        [MethodImpl((MethodImplOptions)512)]
+        [MethodImpl(Optimize)]
         internal static NPTypeCode _FindCommonType_Scalar(params NPTypeCode[] scalar_types)
         {
             return _can_coerce_all(scalar_types);
@@ -678,7 +678,7 @@ namespace NumSharp
         ///     Resolves to which type should the output be.
         /// </summary>
         /// <remarks>This function relys on <see cref="NPTypeCode"/> being ordered numerically by size.</remarks>
-        [MethodImpl((MethodImplOptions)512)]
+        [MethodImpl(Optimize)]
         internal static NPTypeCode _FindCommonType_Array(params NPTypeCode[] array_types)
         {
             return _can_coerce_all(array_types);
@@ -688,7 +688,7 @@ namespace NumSharp
         ///     Resolves to which type should the output be.
         /// </summary>
         /// <remarks>This function relys on <see cref="NPTypeCode"/> being ordered numerically by size.</remarks>
-        [MethodImpl((MethodImplOptions)512)]
+        [MethodImpl(Optimize)]
         internal static NPTypeCode _FindCommonType(params NDArray[] involvedArrays)
         {
             List<NPTypeCode> scalar = new List<NPTypeCode>(involvedArrays.Length);
@@ -707,7 +707,7 @@ namespace NumSharp
         /// <summary>
         ///     Resolves to which type should the output be.
         /// </summary>
-        [MethodImpl((MethodImplOptions)512)]
+        [MethodImpl(Optimize)]
         public static NPTypeCode find_common_type(params string[] involvedTypes)
         {
             return _can_coerce_all(involvedTypes.Select(s => dtype(s).typecode).ToArray());
@@ -717,7 +717,7 @@ namespace NumSharp
         ///     Resolves to which type should the output be.
         /// </summary>
         /// <remarks>This function relys on <see cref="NPTypeCode"/> being ordered numerically by size.</remarks>
-        [MethodImpl((MethodImplOptions)512)]
+        [MethodImpl(Optimize)]
         internal static NPTypeCode _FindCommonType(NDArray firstNDArray, NDArray secondNDArray)
         {
             var lscalar = firstNDArray.Shape.IsScalar;
@@ -737,7 +737,7 @@ namespace NumSharp
 
         #region Private of find_common_type
 
-        [MethodImpl((MethodImplOptions)512)]
+        [MethodImpl(Optimize)]
         private static NPTypeCode _can_coerce_all(NPTypeCode[] dtypelist)
         {
             int N = dtypelist.Length;
@@ -761,7 +761,7 @@ namespace NumSharp
             return ret;
         }
 
-        [MethodImpl((MethodImplOptions)512)]
+        [MethodImpl(Optimize)]
         private static NPTypeCode _can_coerce_all(List<NPTypeCode> dtypelist)
         {
             int N = dtypelist.Count;
@@ -786,7 +786,7 @@ namespace NumSharp
             return ret;
         }
 
-        [MethodImpl((MethodImplOptions)512)]
+        [MethodImpl(Optimize)]
         private static NPTypeCode _can_coerce_all(NPTypeCode[] dtypelist, int start)
         {
             int N = dtypelist.Length;
@@ -818,7 +818,7 @@ namespace NumSharp
             return ret;
         }
 
-        [MethodImpl((MethodImplOptions)512)]
+        [MethodImpl(Optimize)]
         private static NPTypeCode _can_coerce_all(List<NPTypeCode> dtypelist, int start)
         {
             int N = dtypelist.Count;

@@ -14,7 +14,7 @@ namespace NumSharp.Backends.Unmanaged
         /// <param name="to">The type to cast this memory block to.</param>
         /// <returns></returns>
         /// <remarks>Returns a copy.</remarks>
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         public static IMemoryBlock CastTo(this IMemoryBlock source, NPTypeCode to)
         {
             switch (to)
@@ -63,7 +63,7 @@ namespace NumSharp.Backends.Unmanaged
         /// <param name="source"></param>
         /// <returns></returns>
         /// <remarks>Returns a copy.</remarks>
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         public static IMemoryBlock<TOut> CastTo<TOut>(this IMemoryBlock source) where TOut : unmanaged
         {
             switch (source.TypeCode)
@@ -99,7 +99,7 @@ namespace NumSharp.Backends.Unmanaged
         /// <param name="source"></param>
         /// <returns></returns>
         /// <remarks>Returns a copy.</remarks>
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         public static IMemoryBlock<TOut> CastTo<TIn, TOut>(this IMemoryBlock<TIn> source) where TIn : unmanaged where TOut : unmanaged
         {
             unsafe
@@ -124,7 +124,7 @@ namespace NumSharp.Backends.Unmanaged
         /// <param name="source"></param>
         /// <returns></returns>
         /// <remarks>Returns a copy.</remarks>
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         public static IMemoryBlock<TOut> CastTo<TIn, TOut>(this IMemoryBlock source) where TIn : unmanaged where TOut : unmanaged
         {
             unsafe
@@ -1180,7 +1180,7 @@ namespace NumSharp.Backends.Unmanaged
         /// <param name="out"></param>
         /// <returns></returns>
         /// <remarks>Returns a copy.</remarks>
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         public static unsafe void CastTo(this IMemoryBlock source, IMemoryBlock @out, int? bytesOffset = null, int? countOffset = null)
         {
             var len = source.Count;

@@ -116,7 +116,7 @@ namespace NumSharp.Utilities
         /// <param name="source">The array to remove <paramref name="index"/> from.</param>
         /// <param name="index">The index to remove.</param>
         /// <returns>A copy of <see cref="source"/> without given <paramref name="index"/></returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static T[] RemoveAt<T>(this T[] source, int index)
         {
             var dest = new T[source.Length - 1];
@@ -132,7 +132,7 @@ namespace NumSharp.Utilities
         /// <param name="destinition">The copying destinition</param>
         /// <param name="destOffset">The <paramref name="destinition"/>'s offset</param>
         /// <returns>A copy of <see cref="source"/> without given <paramref name="index"/></returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static void CopyToExceptAt<T>(this T[] source, int index, T[] destinition, int destOffset = 0)
         {
             if (index > 0)
@@ -151,7 +151,7 @@ namespace NumSharp.Utilities
         /// <param name="destinition">The copying destinition</param>
         /// <param name="destOffset">The <paramref name="destinition"/>'s offset</param>
         /// <returns>A copy of <see cref="source"/> without given <paramref name="index"/></returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static void CopyToExceptAt<T>(this T[] source, int sourceOffset, int index, T[] destinition, int destOffset = 0)
         {
             if (sourceOffset + index > 0)
@@ -194,7 +194,7 @@ namespace NumSharp.Utilities
         /// <typeparam name="T"></typeparam>
         /// <param name="arrays"></param>
         /// <returns></returns>
-        [MethodImpl((MethodImplOptions)512)]
+        [MethodImpl(Optimize)]
         public static T[] Concat<T>(params T[][] arrays)
         {
             int sum = 0;
@@ -222,7 +222,7 @@ namespace NumSharp.Utilities
         /// <typeparam name="T"></typeparam>
         /// <param name="arrays"></param>
         /// <returns></returns>
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         public static T[] Concat<T>(T[] left, T[] right)
         {
             T[] ret = new T[left.Length + right.Length];
@@ -237,7 +237,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="arr"></param>
         /// <returns></returns>
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         public static Type ResolveElementType(this Array arr)
         {
             if (arr == null)
@@ -255,7 +255,7 @@ namespace NumSharp.Utilities
         ///     Resolves <see cref="Array"/>'s rank, supports both jagged array and multidim array.
         /// </summary>
         /// <returns>The number of ranks <paramref name="arr"/> has</returns>
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         public static int ResolveRank(this Array arr)
         {
             if (arr == null)
@@ -279,7 +279,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="array"></param>
         /// <remarks>Supports multi-dim and jagged arrays.</remarks>
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         public static (Shape Shape, Type Type) ResolveShapeAndType(this Array array)
         {
             //get lengths incase it is multi-dimensional
@@ -318,7 +318,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="array"></param>
         /// <remarks>Supports multi-dim and jagged arrays.</remarks>
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         public static Shape ResolveShape(this Array array)
         {
             Shape shape;
@@ -360,7 +360,7 @@ namespace NumSharp.Utilities
         /// <param name="type">The type to create this array.</param>
         /// <param name="length">The length of the array</param>
         /// <remarks>Do not use this if you are trying to create jagged or multidimensional array.</remarks>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Array Create(Type type, IEnumerable enumerable)
         {
             // ReSharper disable once PossibleNullReferenceException
@@ -380,7 +380,7 @@ namespace NumSharp.Utilities
         /// <param name="type">The type to create this array.</param>
         /// <param name="length">The length of the array</param>
         /// <remarks>Do not use this if you are trying to create jagged or multidimensional array.</remarks>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Array Create(Type type, int length)
         {
             // ReSharper disable once PossibleNullReferenceException
@@ -395,7 +395,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="type">The type to create this array.</param>
         /// <param name="length">The length of the array</param>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static Array Create(Type type, int[] length)
         {
             // ReSharper disable once PossibleNullReferenceException
@@ -410,7 +410,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <typeparam name="T">The type of the array</typeparam>
         /// <param name="length">The length of the array</param>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static T[] Create<T>(int length)
         {
             return new T[length];

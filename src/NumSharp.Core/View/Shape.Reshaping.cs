@@ -19,7 +19,7 @@ namespace NumSharp
         /// <exception cref="IncorrectShapeException">If shape's size mismatches current shape size.</exception>
         /// <exception cref="ArgumentException">If <paramref name="newShape"/>'s size == 0</exception>
         /// <param name="unsafe">When true, then guards are skipped.</param>
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         public readonly Shape Reshape(Shape newShape, bool @unsafe = true)
         {
             if (IsBroadcasted)
@@ -70,7 +70,7 @@ namespace NumSharp
         /// <summary>
         ///     Changes the shape representing this storage (broadcast version).
         /// </summary>
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         private readonly Shape _reshapeBroadcast(Shape newShape, bool @unsafe = true)
         {
             // Handle -1 in reshape

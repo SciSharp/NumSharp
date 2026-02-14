@@ -27,7 +27,7 @@ namespace NumSharp.Utilities
             hasNext = true;
         }
 
-        [MethodImpl((MethodImplOptions)512)]
+        [MethodImpl(Optimize)]
         public int Next()
         {
             if (!hasNext)
@@ -77,7 +77,7 @@ namespace NumSharp.Utilities
             incr.Reset();
         }
 
-        [MethodImpl((MethodImplOptions)512)]
+        [MethodImpl(Optimize)]
         public int Next()
         {
             int offset = 0;

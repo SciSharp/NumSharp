@@ -23,7 +23,7 @@ namespace NumSharp.Utilities
         // Otherwise, the result is the type code of the object, as determined by
         // the object's implementation of IConvertible.
         [Pure]
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static TypeCode GetTypeCode(object value)
         {
             if (value == null) return TypeCode.Empty;
@@ -38,7 +38,7 @@ namespace NumSharp.Utilities
         // Returns true if the given object is a database null. This operation
         // corresponds to "value.GetTypeCode() == TypeCode.DBNull".
         [Pure]
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static bool IsDBNull(object value)
         {
             if (value == System.DBNull.Value) return true;
@@ -57,13 +57,13 @@ namespace NumSharp.Utilities
         // object already has the given type code, in which case the object is
         // simply returned. Otherwise, the appropriate ToXXX() is invoked on the
         // object's implementation of IConvertible.
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static object ChangeType(object value, TypeCode typeCode)
         {
             return ChangeType(value, typeCode, Thread.CurrentThread.CurrentCulture);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static object ChangeType(object value, TypeCode typeCode, IFormatProvider provider)
         {
             if (value == null && (typeCode == TypeCode.Empty || typeCode == TypeCode.String || typeCode == TypeCode.Object))
@@ -119,27 +119,27 @@ namespace NumSharp.Utilities
         }
 
         // Conversions to Boolean
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static bool ToBoolean(object value)
         {
             return value != null && ((IConvertible)value).ToBoolean(null);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static bool ToBoolean(object value, IFormatProvider provider)
         {
             return value != null && ((IConvertible)value).ToBoolean(provider);
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static bool ToBoolean(bool value)
         {
             return value;
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static bool ToBoolean(sbyte value)
         {
             return value != 0;
@@ -147,59 +147,59 @@ namespace NumSharp.Utilities
 
         // To be consistent with IConvertible in the base data types else we get different semantics
         // with widening operations. Without this operator this widen succeeds,with this API the widening throws.
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static bool ToBoolean(char value)
         {
             return ((IConvertible)value).ToBoolean(null);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static bool ToBoolean(byte value)
         {
             return value != 0;
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static bool ToBoolean(short value)
         {
             return value != 0;
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static bool ToBoolean(ushort value)
         {
             return value != 0;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static bool ToBoolean(int value)
         {
             return value != 0;
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static bool ToBoolean(uint value)
         {
             return value != 0;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static bool ToBoolean(long value)
         {
             return value != 0;
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static bool ToBoolean(ulong value)
         {
             return value != 0;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static bool ToBoolean(string value)
         {
             if (value == null)
@@ -207,7 +207,7 @@ namespace NumSharp.Utilities
             return bool.Parse(value);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static bool ToBoolean(string value, IFormatProvider provider)
         {
             if (value == null)
@@ -215,62 +215,62 @@ namespace NumSharp.Utilities
             return bool.Parse(value);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static bool ToBoolean(float value)
         {
             return value != 0;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static bool ToBoolean(double value)
         {
             return value != 0;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static bool ToBoolean(decimal value)
         {
             return value != 0;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static bool ToBoolean(DateTime value)
         {
             return ((IConvertible)value).ToBoolean(null);
         }
 
         // Disallowed conversions to Boolean
-        // [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions) 512)] public static bool ToBoolean(TimeSpan value)
+        // [MethodImpl(OptimizeAndInline)] public static bool ToBoolean(TimeSpan value)
 
         // Conversions to Char
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static char ToChar(object value)
         {
             return value == null ? (char)0 : ((IConvertible)value).ToChar(null);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static char ToChar(object value, IFormatProvider provider)
         {
             return value == null ? (char)0 : ((IConvertible)value).ToChar(provider);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static char ToChar(bool value)
         {
             return ((IConvertible)value).ToChar(null);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static char ToChar(char value)
         {
             return value;
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static char ToChar(sbyte value)
         {
             if (value < 0) throw new OverflowException(("Overflow_Char"));
@@ -278,13 +278,13 @@ namespace NumSharp.Utilities
             return (char)value;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static char ToChar(byte value)
         {
             return (char)value;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static char ToChar(short value)
         {
             if (value < 0) throw new OverflowException(("Overflow_Char"));
@@ -293,13 +293,13 @@ namespace NumSharp.Utilities
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static char ToChar(ushort value)
         {
             return (char)value;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static char ToChar(int value)
         {
             if (value < 0 || value > char.MaxValue) throw new OverflowException(("Overflow_Char"));
@@ -308,7 +308,7 @@ namespace NumSharp.Utilities
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static char ToChar(uint value)
         {
             if (value > char.MaxValue) throw new OverflowException(("Overflow_Char"));
@@ -316,7 +316,7 @@ namespace NumSharp.Utilities
             return (char)value;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static char ToChar(long value)
         {
             if (value < 0 || value > char.MaxValue) throw new OverflowException(("Overflow_Char"));
@@ -325,7 +325,7 @@ namespace NumSharp.Utilities
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static char ToChar(ulong value)
         {
             if (value > char.MaxValue) throw new OverflowException(("Overflow_Char"));
@@ -337,13 +337,13 @@ namespace NumSharp.Utilities
         // @VariantSwitch
         // Remove FormatExceptions;
         //
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static char ToChar(string value)
         {
             return ToChar(value, null);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static char ToChar(string value, IFormatProvider provider)
         {
             if (value == null)
@@ -358,7 +358,7 @@ namespace NumSharp.Utilities
 
         // To be consistent with IConvertible in the base data types else we get different semantics
         // with widening operations. Without this operator this widen succeeds,with this API the widening throws.
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static char ToChar(float value)
         {
             return ((IConvertible)value).ToChar(null);
@@ -366,7 +366,7 @@ namespace NumSharp.Utilities
 
         // To be consistent with IConvertible in the base data types else we get different semantics
         // with widening operations. Without this operator this widen succeeds,with this API the widening throws.
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static char ToChar(double value)
         {
             return ((IConvertible)value).ToChar(null);
@@ -374,13 +374,13 @@ namespace NumSharp.Utilities
 
         // To be consistent with IConvertible in the base data types else we get different semantics
         // with widening operations. Without this operator this widen succeeds,with this API the widening throws.
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static char ToChar(decimal value)
         {
             return ((IConvertible)value).ToChar(null);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static char ToChar(DateTime value)
         {
             return ((IConvertible)value).ToChar(null);
@@ -388,40 +388,40 @@ namespace NumSharp.Utilities
 
 
         // Disallowed conversions to Char
-        // [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions) 512)] public static char ToChar(TimeSpan value)
+        // [MethodImpl(OptimizeAndInline)] public static char ToChar(TimeSpan value)
 
         // Conversions to SByte
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static sbyte ToSByte(object value)
         {
             return value == null ? (sbyte)0 : ((IConvertible)value).ToSByte(null);
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static sbyte ToSByte(object value, IFormatProvider provider)
         {
             return value == null ? (sbyte)0 : ((IConvertible)value).ToSByte(provider);
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static sbyte ToSByte(bool value)
         {
             return value ? (sbyte)1 : (sbyte)0;
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static sbyte ToSByte(sbyte value)
         {
             return value;
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static sbyte ToSByte(char value)
         {
             if (value > sbyte.MaxValue) throw new OverflowException(("Overflow_SByte"));
@@ -430,7 +430,7 @@ namespace NumSharp.Utilities
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static sbyte ToSByte(byte value)
         {
             if (value > sbyte.MaxValue) throw new OverflowException(("Overflow_SByte"));
@@ -439,7 +439,7 @@ namespace NumSharp.Utilities
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static sbyte ToSByte(short value)
         {
             if (value < sbyte.MinValue || value > sbyte.MaxValue) throw new OverflowException(("Overflow_SByte"));
@@ -448,7 +448,7 @@ namespace NumSharp.Utilities
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static sbyte ToSByte(ushort value)
         {
             if (value > sbyte.MaxValue) throw new OverflowException(("Overflow_SByte"));
@@ -457,7 +457,7 @@ namespace NumSharp.Utilities
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static sbyte ToSByte(int value)
         {
             if (value < sbyte.MinValue || value > sbyte.MaxValue) throw new OverflowException(("Overflow_SByte"));
@@ -466,7 +466,7 @@ namespace NumSharp.Utilities
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static sbyte ToSByte(uint value)
         {
             if (value > sbyte.MaxValue) throw new OverflowException(("Overflow_SByte"));
@@ -475,7 +475,7 @@ namespace NumSharp.Utilities
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static sbyte ToSByte(long value)
         {
             if (value < sbyte.MinValue || value > sbyte.MaxValue) throw new OverflowException(("Overflow_SByte"));
@@ -484,7 +484,7 @@ namespace NumSharp.Utilities
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static sbyte ToSByte(ulong value)
         {
             if (value > (ulong)sbyte.MaxValue) throw new OverflowException(("Overflow_SByte"));
@@ -493,28 +493,28 @@ namespace NumSharp.Utilities
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static sbyte ToSByte(float value)
         {
             return ToSByte((double)value);
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static sbyte ToSByte(double value)
         {
             return ToSByte(ToInt32(value));
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static sbyte ToSByte(decimal value)
         {
             return decimal.ToSByte(decimal.Round(value, 0));
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static sbyte ToSByte(string value)
         {
             if (value == null)
@@ -523,49 +523,49 @@ namespace NumSharp.Utilities
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static sbyte ToSByte(string value, IFormatProvider provider)
         {
             return sbyte.Parse(value, NumberStyles.Integer, provider);
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static sbyte ToSByte(DateTime value)
         {
             return ((IConvertible)value).ToSByte(null);
         }
 
         // Disallowed conversions to SByte
-        // [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions) 512)] public static sbyte ToSByte(TimeSpan value)
+        // [MethodImpl(OptimizeAndInline)] public static sbyte ToSByte(TimeSpan value)
 
         // Conversions to Byte
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static byte ToByte(object value)
         {
             return value == null ? (byte)0 : ((IConvertible)value).ToByte(null);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static byte ToByte(object value, IFormatProvider provider)
         {
             return value == null ? (byte)0 : ((IConvertible)value).ToByte(provider);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static byte ToByte(bool value)
         {
             return value ? (byte)1 : (byte)0;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static byte ToByte(byte value)
         {
             return value;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static byte ToByte(char value)
         {
             if (value > byte.MaxValue) throw new OverflowException(("Overflow_Byte"));
@@ -574,7 +574,7 @@ namespace NumSharp.Utilities
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static byte ToByte(sbyte value)
         {
             if (value < byte.MinValue) throw new OverflowException(("Overflow_Byte"));
@@ -582,7 +582,7 @@ namespace NumSharp.Utilities
             return (byte)value;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static byte ToByte(short value)
         {
             if (value < byte.MinValue || value > byte.MaxValue) throw new OverflowException(("Overflow_Byte"));
@@ -591,7 +591,7 @@ namespace NumSharp.Utilities
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static byte ToByte(ushort value)
         {
             if (value > byte.MaxValue) throw new OverflowException(("Overflow_Byte"));
@@ -599,7 +599,7 @@ namespace NumSharp.Utilities
             return (byte)value;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static byte ToByte(int value)
         {
             if (value < byte.MinValue || value > byte.MaxValue) throw new OverflowException(("Overflow_Byte"));
@@ -608,7 +608,7 @@ namespace NumSharp.Utilities
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static byte ToByte(uint value)
         {
             if (value > byte.MaxValue) throw new OverflowException(("Overflow_Byte"));
@@ -616,7 +616,7 @@ namespace NumSharp.Utilities
             return (byte)value;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static byte ToByte(long value)
         {
             if (value < byte.MinValue || value > byte.MaxValue) throw new OverflowException(("Overflow_Byte"));
@@ -625,7 +625,7 @@ namespace NumSharp.Utilities
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static byte ToByte(ulong value)
         {
             if (value > byte.MaxValue) throw new OverflowException(("Overflow_Byte"));
@@ -633,25 +633,25 @@ namespace NumSharp.Utilities
             return (byte)value;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static byte ToByte(float value)
         {
             return ToByte((double)value);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static byte ToByte(double value)
         {
             return ToByte(ToInt32(value));
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static byte ToByte(decimal value)
         {
             return decimal.ToByte(decimal.Round(value, 0));
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static byte ToByte(string value)
         {
             if (value == null)
@@ -659,7 +659,7 @@ namespace NumSharp.Utilities
             return byte.Parse(value, CultureInfo.CurrentCulture);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static byte ToByte(string value, IFormatProvider provider)
         {
             if (value == null)
@@ -667,7 +667,7 @@ namespace NumSharp.Utilities
             return byte.Parse(value, NumberStyles.Integer, provider);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static byte ToByte(DateTime value)
         {
             return ((IConvertible)value).ToByte(null);
@@ -675,29 +675,29 @@ namespace NumSharp.Utilities
 
 
         // Disallowed conversions to Byte
-        // [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions) 512)] public static byte ToByte(TimeSpan value)
+        // [MethodImpl(OptimizeAndInline)] public static byte ToByte(TimeSpan value)
 
         // Conversions to Int16
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static short ToInt16(object value)
         {
             return value == null ? (short)0 : ((IConvertible)value).ToInt16(null);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static short ToInt16(object value, IFormatProvider provider)
         {
             return value == null ? (short)0 : ((IConvertible)value).ToInt16(provider);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static short ToInt16(bool value)
         {
             return value ? (short)1 : (short)0;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static short ToInt16(char value)
         {
             if (value > short.MaxValue) throw new OverflowException(("Overflow_Int16"));
@@ -706,20 +706,20 @@ namespace NumSharp.Utilities
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static short ToInt16(sbyte value)
         {
             return value;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static short ToInt16(byte value)
         {
             return value;
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static short ToInt16(ushort value)
         {
             if (value > short.MaxValue) throw new OverflowException(("Overflow_Int16"));
@@ -727,7 +727,7 @@ namespace NumSharp.Utilities
             return (short)value;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static short ToInt16(int value)
         {
             if (value < short.MinValue || value > short.MaxValue) throw new OverflowException(("Overflow_Int16"));
@@ -736,7 +736,7 @@ namespace NumSharp.Utilities
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static short ToInt16(uint value)
         {
             if (value > short.MaxValue) throw new OverflowException(("Overflow_Int16"));
@@ -744,13 +744,13 @@ namespace NumSharp.Utilities
             return (short)value;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static short ToInt16(short value)
         {
             return value;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static short ToInt16(long value)
         {
             if (value < short.MinValue || value > short.MaxValue) throw new OverflowException(("Overflow_Int16"));
@@ -759,7 +759,7 @@ namespace NumSharp.Utilities
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static short ToInt16(ulong value)
         {
             if (value > (ulong)short.MaxValue) throw new OverflowException(("Overflow_Int16"));
@@ -767,25 +767,25 @@ namespace NumSharp.Utilities
             return (short)value;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static short ToInt16(float value)
         {
             return ToInt16((double)value);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static short ToInt16(double value)
         {
             return ToInt16(ToInt32(value));
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static short ToInt16(decimal value)
         {
             return decimal.ToInt16(decimal.Round(value, 0));
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static short ToInt16(string value)
         {
             if (value == null)
@@ -793,7 +793,7 @@ namespace NumSharp.Utilities
             return short.Parse(value, CultureInfo.CurrentCulture);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static short ToInt16(string value, IFormatProvider provider)
         {
             if (value == null)
@@ -801,7 +801,7 @@ namespace NumSharp.Utilities
             return short.Parse(value, NumberStyles.Integer, provider);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static short ToInt16(DateTime value)
         {
             return ((IConvertible)value).ToInt16(null);
@@ -809,39 +809,39 @@ namespace NumSharp.Utilities
 
 
         // Disallowed conversions to Int16
-        // [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions) 512)] public static short ToInt16(TimeSpan value)
+        // [MethodImpl(OptimizeAndInline)] public static short ToInt16(TimeSpan value)
 
         // Conversions to UInt16
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static ushort ToUInt16(object value)
         {
             return value == null ? (ushort)0 : ((IConvertible)value).ToUInt16(null);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static ushort ToUInt16(object value, IFormatProvider provider)
         {
             return value == null ? (ushort)0 : ((IConvertible)value).ToUInt16(provider);
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static ushort ToUInt16(bool value)
         {
             return value ? (ushort)1 : (ushort)0;
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static ushort ToUInt16(char value)
         {
             return value;
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static ushort ToUInt16(sbyte value)
         {
             if (value < 0) throw new OverflowException(("Overflow_UInt16"));
@@ -850,14 +850,14 @@ namespace NumSharp.Utilities
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static ushort ToUInt16(byte value)
         {
             return value;
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static ushort ToUInt16(short value)
         {
             if (value < 0) throw new OverflowException(("Overflow_UInt16"));
@@ -866,7 +866,7 @@ namespace NumSharp.Utilities
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static ushort ToUInt16(int value)
         {
             if (value < 0 || value > ushort.MaxValue) throw new OverflowException(("Overflow_UInt16"));
@@ -875,14 +875,14 @@ namespace NumSharp.Utilities
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static ushort ToUInt16(ushort value)
         {
             return value;
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static ushort ToUInt16(uint value)
         {
             if (value > ushort.MaxValue) throw new OverflowException(("Overflow_UInt16"));
@@ -891,7 +891,7 @@ namespace NumSharp.Utilities
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static ushort ToUInt16(long value)
         {
             if (value < 0 || value > ushort.MaxValue) throw new OverflowException(("Overflow_UInt16"));
@@ -900,7 +900,7 @@ namespace NumSharp.Utilities
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static ushort ToUInt16(ulong value)
         {
             if (value > ushort.MaxValue) throw new OverflowException(("Overflow_UInt16"));
@@ -909,28 +909,28 @@ namespace NumSharp.Utilities
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static ushort ToUInt16(float value)
         {
             return ToUInt16((double)value);
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static ushort ToUInt16(double value)
         {
             return ToUInt16(ToInt32(value));
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static ushort ToUInt16(decimal value)
         {
             return decimal.ToUInt16(decimal.Round(value, 0));
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static ushort ToUInt16(string value)
         {
             if (value == null)
@@ -939,7 +939,7 @@ namespace NumSharp.Utilities
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static ushort ToUInt16(string value, IFormatProvider provider)
         {
             if (value == null)
@@ -948,70 +948,70 @@ namespace NumSharp.Utilities
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static ushort ToUInt16(DateTime value)
         {
             return ((IConvertible)value).ToUInt16(null);
         }
 
         // Disallowed conversions to UInt16
-        // [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions) 512)] public static ushort ToUInt16(TimeSpan value)
+        // [MethodImpl(OptimizeAndInline)] public static ushort ToUInt16(TimeSpan value)
 
         // Conversions to Int32
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static int ToInt32(object value)
         {
             return value == null ? 0 : ((IConvertible)value).ToInt32(null);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static int ToInt32(object value, IFormatProvider provider)
         {
             return value == null ? 0 : ((IConvertible)value).ToInt32(provider);
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static int ToInt32(bool value)
         {
             return value ? 1 : 0;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static int ToInt32(char value)
         {
             return value;
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static int ToInt32(sbyte value)
         {
             return value;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static int ToInt32(byte value)
         {
             return value;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static int ToInt32(short value)
         {
             return value;
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static int ToInt32(ushort value)
         {
             return value;
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static int ToInt32(uint value)
         {
             if (value > int.MaxValue) throw new OverflowException(("Overflow_Int32"));
@@ -1019,13 +1019,13 @@ namespace NumSharp.Utilities
             return (int)value;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static int ToInt32(int value)
         {
             return value;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static int ToInt32(long value)
         {
             if (value < int.MinValue || value > int.MaxValue) throw new OverflowException(("Overflow_Int32"));
@@ -1034,7 +1034,7 @@ namespace NumSharp.Utilities
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static int ToInt32(ulong value)
         {
             if (value > int.MaxValue) throw new OverflowException(("Overflow_Int32"));
@@ -1042,13 +1042,13 @@ namespace NumSharp.Utilities
             return (int)value;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static int ToInt32(float value)
         {
             return ToInt32((double)value);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static int ToInt32(double value)
         {
             if (value >= 0)
@@ -1076,13 +1076,13 @@ namespace NumSharp.Utilities
         }
 
         [System.Security.SecuritySafeCritical] // auto-generated
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static int ToInt32(decimal value)
         {
             return Converts.ToInt32(value);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static int ToInt32(string value)
         {
             if (value == null)
@@ -1090,7 +1090,7 @@ namespace NumSharp.Utilities
             return int.Parse(value, CultureInfo.CurrentCulture);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static int ToInt32(string value, IFormatProvider provider)
         {
             if (value == null)
@@ -1098,7 +1098,7 @@ namespace NumSharp.Utilities
             return int.Parse(value, NumberStyles.Integer, provider);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static int ToInt32(DateTime value)
         {
             return ((IConvertible)value).ToInt32(null);
@@ -1106,40 +1106,40 @@ namespace NumSharp.Utilities
 
 
         // Disallowed conversions to Int32
-        // [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions) 512)] public static int ToInt32(TimeSpan value)
+        // [MethodImpl(OptimizeAndInline)] public static int ToInt32(TimeSpan value)
 
         // Conversions to UInt32
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static uint ToUInt32(object value)
         {
             return value == null ? 0 : ((IConvertible)value).ToUInt32(null);
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static uint ToUInt32(object value, IFormatProvider provider)
         {
             return value == null ? 0 : ((IConvertible)value).ToUInt32(provider);
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static uint ToUInt32(bool value)
         {
             return value ? 1u : 0u;
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static uint ToUInt32(char value)
         {
             return value;
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static uint ToUInt32(sbyte value)
         {
             if (value < 0) throw new OverflowException(("Overflow_UInt32"));
@@ -1148,14 +1148,14 @@ namespace NumSharp.Utilities
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static uint ToUInt32(byte value)
         {
             return value;
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static uint ToUInt32(short value)
         {
             if (value < 0) throw new OverflowException(("Overflow_UInt32"));
@@ -1164,14 +1164,14 @@ namespace NumSharp.Utilities
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static uint ToUInt32(ushort value)
         {
             return value;
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static uint ToUInt32(int value)
         {
             if (value < 0) throw new OverflowException(("Overflow_UInt32"));
@@ -1180,14 +1180,14 @@ namespace NumSharp.Utilities
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static uint ToUInt32(uint value)
         {
             return value;
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static uint ToUInt32(long value)
         {
             if (value < 0 || value > uint.MaxValue) throw new OverflowException(("Overflow_UInt32"));
@@ -1196,7 +1196,7 @@ namespace NumSharp.Utilities
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static uint ToUInt32(ulong value)
         {
             if (value > uint.MaxValue) throw new OverflowException(("Overflow_UInt32"));
@@ -1205,14 +1205,14 @@ namespace NumSharp.Utilities
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static uint ToUInt32(float value)
         {
             return ToUInt32((double)value);
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static uint ToUInt32(double value)
         {
             if (value >= -0.5 && value < 4294967295.5)
@@ -1227,14 +1227,14 @@ namespace NumSharp.Utilities
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static uint ToUInt32(decimal value)
         {
             return decimal.ToUInt32(decimal.Round(value, 0));
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static uint ToUInt32(string value)
         {
             if (value == null)
@@ -1243,7 +1243,7 @@ namespace NumSharp.Utilities
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static uint ToUInt32(string value, IFormatProvider provider)
         {
             if (value == null)
@@ -1252,83 +1252,83 @@ namespace NumSharp.Utilities
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static uint ToUInt32(DateTime value)
         {
             return ((IConvertible)value).ToUInt32(null);
         }
 
         // Disallowed conversions to UInt32
-        // [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions) 512)] public static uint ToUInt32(TimeSpan value)
+        // [MethodImpl(OptimizeAndInline)] public static uint ToUInt32(TimeSpan value)
 
         // Conversions to Int64
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static long ToInt64(object value)
         {
             return value == null ? 0 : ((IConvertible)value).ToInt64(null);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static long ToInt64(object value, IFormatProvider provider)
         {
             return value == null ? 0 : ((IConvertible)value).ToInt64(provider);
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static long ToInt64(bool value)
         {
             return value ? 1L : 0L;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static long ToInt64(char value)
         {
             return value;
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static long ToInt64(sbyte value)
         {
             return value;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static long ToInt64(byte value)
         {
             return value;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static long ToInt64(short value)
         {
             return value;
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static long ToInt64(ushort value)
         {
             return value;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static long ToInt64(int value)
         {
             return value;
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static long ToInt64(uint value)
         {
             return value;
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static long ToInt64(ulong value)
         {
             if (value > long.MaxValue) throw new OverflowException(("Overflow_Int64"));
@@ -1336,32 +1336,32 @@ namespace NumSharp.Utilities
             return (long)value;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static long ToInt64(long value)
         {
             return value;
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static long ToInt64(float value)
         {
             return ToInt64((double)value);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static long ToInt64(double value)
         {
             return checked((long)Math.Round(value));
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static long ToInt64(decimal value)
         {
             return decimal.ToInt64(decimal.Round(value, 0));
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static long ToInt64(string value)
         {
             if (value == null)
@@ -1369,7 +1369,7 @@ namespace NumSharp.Utilities
             return long.Parse(value, CultureInfo.CurrentCulture);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static long ToInt64(string value, IFormatProvider provider)
         {
             if (value == null)
@@ -1377,47 +1377,47 @@ namespace NumSharp.Utilities
             return long.Parse(value, NumberStyles.Integer, provider);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static long ToInt64(DateTime value)
         {
             return ((IConvertible)value).ToInt64(null);
         }
 
         // Disallowed conversions to Int64
-        // [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions) 512)] public static long ToInt64(TimeSpan value)
+        // [MethodImpl(OptimizeAndInline)] public static long ToInt64(TimeSpan value)
 
         // Conversions to UInt64
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static ulong ToUInt64(object value)
         {
             return value == null ? 0 : ((IConvertible)value).ToUInt64(null);
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static ulong ToUInt64(object value, IFormatProvider provider)
         {
             return value == null ? 0 : ((IConvertible)value).ToUInt64(provider);
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static ulong ToUInt64(bool value)
         {
             return value ? 1ul : 0ul;
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static ulong ToUInt64(char value)
         {
             return value;
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static ulong ToUInt64(sbyte value)
         {
             if (value < 0) throw new OverflowException(("Overflow_UInt64"));
@@ -1426,14 +1426,14 @@ namespace NumSharp.Utilities
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static ulong ToUInt64(byte value)
         {
             return value;
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static ulong ToUInt64(short value)
         {
             if (value < 0) throw new OverflowException(("Overflow_UInt64"));
@@ -1442,14 +1442,14 @@ namespace NumSharp.Utilities
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static ulong ToUInt64(ushort value)
         {
             return value;
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static ulong ToUInt64(int value)
         {
             if (value < 0) throw new OverflowException(("Overflow_UInt64"));
@@ -1458,14 +1458,14 @@ namespace NumSharp.Utilities
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static ulong ToUInt64(uint value)
         {
             return value;
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static ulong ToUInt64(long value)
         {
             if (value < 0) throw new OverflowException(("Overflow_UInt64"));
@@ -1474,35 +1474,35 @@ namespace NumSharp.Utilities
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static ulong ToUInt64(ulong value)
         {
             return value;
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static ulong ToUInt64(float value)
         {
             return ToUInt64((double)value);
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static ulong ToUInt64(double value)
         {
             return checked((ulong)Math.Round(value));
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static ulong ToUInt64(decimal value)
         {
             return decimal.ToUInt64(decimal.Round(value, 0));
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static ulong ToUInt64(string value)
         {
             if (value == null)
@@ -1511,7 +1511,7 @@ namespace NumSharp.Utilities
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static ulong ToUInt64(string value, IFormatProvider provider)
         {
             if (value == null)
@@ -1520,106 +1520,106 @@ namespace NumSharp.Utilities
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static ulong ToUInt64(DateTime value)
         {
             return ((IConvertible)value).ToUInt64(null);
         }
 
         // Disallowed conversions to UInt64
-        // [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions) 512)] public static ulong ToUInt64(TimeSpan value)
+        // [MethodImpl(OptimizeAndInline)] public static ulong ToUInt64(TimeSpan value)
 
         // Conversions to Single
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static float ToSingle(object value)
         {
             return value == null ? 0 : ((IConvertible)value).ToSingle(null);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static float ToSingle(object value, IFormatProvider provider)
         {
             return value == null ? 0 : ((IConvertible)value).ToSingle(provider);
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static float ToSingle(sbyte value)
         {
             return value;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static float ToSingle(byte value)
         {
             return value;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static float ToSingle(char value)
         {
             return ((IConvertible)value).ToSingle(null);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static float ToSingle(short value)
         {
             return value;
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static float ToSingle(ushort value)
         {
             return value;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static float ToSingle(int value)
         {
             return value;
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static float ToSingle(uint value)
         {
             return value;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static float ToSingle(long value)
         {
             return value;
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static float ToSingle(ulong value)
         {
             return value;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static float ToSingle(float value)
         {
             return value;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static float ToSingle(double value)
         {
             return (float)value;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static float ToSingle(decimal value)
         {
             return (float)value;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static float ToSingle(string value)
         {
             if (value == null)
@@ -1627,7 +1627,7 @@ namespace NumSharp.Utilities
             return float.Parse(value, CultureInfo.CurrentCulture);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static float ToSingle(string value, IFormatProvider provider)
         {
             if (value == null)
@@ -1636,112 +1636,112 @@ namespace NumSharp.Utilities
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static float ToSingle(bool value)
         {
             return value ? 1f : 0f;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static float ToSingle(DateTime value)
         {
             return ((IConvertible)value).ToSingle(null);
         }
 
         // Disallowed conversions to Single
-        // [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions) 512)] public static float ToSingle(TimeSpan value)
+        // [MethodImpl(OptimizeAndInline)] public static float ToSingle(TimeSpan value)
 
         // Conversions to Double
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static double ToDouble(object value)
         {
             return value == null ? 0 : ((IConvertible)value).ToDouble(null);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static double ToDouble(object value, IFormatProvider provider)
         {
             return value == null ? 0 : ((IConvertible)value).ToDouble(provider);
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static double ToDouble(sbyte value)
         {
             return value;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static double ToDouble(byte value)
         {
             return value;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static double ToDouble(short value)
         {
             return value;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static double ToDouble(char value)
         {
             return ((IConvertible)value).ToDouble(null);
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static double ToDouble(ushort value)
         {
             return value;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static double ToDouble(int value)
         {
             return value;
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static double ToDouble(uint value)
         {
             return value;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static double ToDouble(long value)
         {
             return value;
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static double ToDouble(ulong value)
         {
             return value;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static double ToDouble(float value)
         {
             return value;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static double ToDouble(double value)
         {
             return value;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static double ToDouble(decimal value)
         {
             return (double)value;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static double ToDouble(string value)
         {
             if (value == null)
@@ -1749,7 +1749,7 @@ namespace NumSharp.Utilities
             return double.Parse(value, CultureInfo.CurrentCulture);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static double ToDouble(string value, IFormatProvider provider)
         {
             if (value == null)
@@ -1757,106 +1757,106 @@ namespace NumSharp.Utilities
             return double.Parse(value, NumberStyles.Float | NumberStyles.AllowThousands, provider);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static double ToDouble(bool value)
         {
             return value ? 1d : 0d;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static double ToDouble(DateTime value)
         {
             return ((IConvertible)value).ToDouble(null);
         }
 
         // Disallowed conversions to Double
-        // [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions) 512)] public static double ToDouble(TimeSpan value)
+        // [MethodImpl(OptimizeAndInline)] public static double ToDouble(TimeSpan value)
 
         // Conversions to Decimal
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static decimal ToDecimal(object value)
         {
             return value == null ? 0 : ((IConvertible)value).ToDecimal(null);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static decimal ToDecimal(object value, IFormatProvider provider)
         {
             return value == null ? 0 : ((IConvertible)value).ToDecimal(provider);
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static decimal ToDecimal(sbyte value)
         {
             return value;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static decimal ToDecimal(byte value)
         {
             return value;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static decimal ToDecimal(char value)
         {
             return ((IConvertible)value).ToDecimal(null);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static decimal ToDecimal(short value)
         {
             return value;
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static decimal ToDecimal(ushort value)
         {
             return value;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static decimal ToDecimal(int value)
         {
             return value;
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static decimal ToDecimal(uint value)
         {
             return value;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static decimal ToDecimal(long value)
         {
             return value;
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static decimal ToDecimal(ulong value)
         {
             return value;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static decimal ToDecimal(float value)
         {
             return (decimal)value;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static decimal ToDecimal(double value)
         {
             return (decimal)value;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static decimal ToDecimal(string value)
         {
             if (value == null)
@@ -1864,7 +1864,7 @@ namespace NumSharp.Utilities
             return decimal.Parse(value, CultureInfo.CurrentCulture);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static decimal ToDecimal(string value, IFormatProvider provider)
         {
             if (value == null)
@@ -1872,48 +1872,48 @@ namespace NumSharp.Utilities
             return decimal.Parse(value, NumberStyles.Number, provider);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static decimal ToDecimal(decimal value)
         {
             return value;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static decimal ToDecimal(bool value)
         {
             return value ? 1m : 0m;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static decimal ToDecimal(DateTime value)
         {
             return ((IConvertible)value).ToDecimal(null);
         }
 
         // Disallowed conversions to Decimal
-        // [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions) 512)] public static decimal ToDecimal(TimeSpan value)
+        // [MethodImpl(OptimizeAndInline)] public static decimal ToDecimal(TimeSpan value)
 
         // Conversions to DateTime
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static DateTime ToDateTime(DateTime value)
         {
             return value;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static DateTime ToDateTime(object value)
         {
             return value == null ? DateTime.MinValue : ((IConvertible)value).ToDateTime(null);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static DateTime ToDateTime(object value, IFormatProvider provider)
         {
             return value == null ? DateTime.MinValue : ((IConvertible)value).ToDateTime(provider);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static DateTime ToDateTime(string value)
         {
             if (value == null)
@@ -1921,7 +1921,7 @@ namespace NumSharp.Utilities
             return DateTime.Parse(value, CultureInfo.CurrentCulture);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static DateTime ToDateTime(string value, IFormatProvider provider)
         {
             if (value == null)
@@ -1930,99 +1930,99 @@ namespace NumSharp.Utilities
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static DateTime ToDateTime(sbyte value)
         {
             return ((IConvertible)value).ToDateTime(null);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static DateTime ToDateTime(byte value)
         {
             return ((IConvertible)value).ToDateTime(null);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static DateTime ToDateTime(short value)
         {
             return ((IConvertible)value).ToDateTime(null);
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static DateTime ToDateTime(ushort value)
         {
             return ((IConvertible)value).ToDateTime(null);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static DateTime ToDateTime(int value)
         {
             return ((IConvertible)value).ToDateTime(null);
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static DateTime ToDateTime(uint value)
         {
             return ((IConvertible)value).ToDateTime(null);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static DateTime ToDateTime(long value)
         {
             return ((IConvertible)value).ToDateTime(null);
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static DateTime ToDateTime(ulong value)
         {
             return ((IConvertible)value).ToDateTime(null);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static DateTime ToDateTime(bool value)
         {
             return ((IConvertible)value).ToDateTime(null);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static DateTime ToDateTime(char value)
         {
             return ((IConvertible)value).ToDateTime(null);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static DateTime ToDateTime(float value)
         {
             return ((IConvertible)value).ToDateTime(null);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static DateTime ToDateTime(double value)
         {
             return ((IConvertible)value).ToDateTime(null);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static DateTime ToDateTime(decimal value)
         {
             return ((IConvertible)value).ToDateTime(null);
         }
 
         // Disallowed conversions to DateTime
-        // [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions) 512)] public static DateTime ToDateTime(TimeSpan value)
+        // [MethodImpl(OptimizeAndInline)] public static DateTime ToDateTime(TimeSpan value)
 
         // Conversions to String
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static string ToString(object value)
         {
             return ToString(value, null);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static string ToString(object value, IFormatProvider provider)
         {
             switch (value)
@@ -2036,28 +2036,28 @@ namespace NumSharp.Utilities
             }
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static string ToString(bool value)
         {
             Contract.Ensures(Contract.Result<string>() != null);
             return value.ToString();
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static string ToString(bool value, IFormatProvider provider)
         {
             Contract.Ensures(Contract.Result<string>() != null);
             return value.ToString(provider);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static string ToString(char value)
         {
             Contract.Ensures(Contract.Result<string>() != null);
             return char.ToString(value);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static string ToString(char value, IFormatProvider provider)
         {
             Contract.Ensures(Contract.Result<string>() != null);
@@ -2065,7 +2065,7 @@ namespace NumSharp.Utilities
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static string ToString(sbyte value)
         {
             Contract.Ensures(Contract.Result<string>() != null);
@@ -2073,35 +2073,35 @@ namespace NumSharp.Utilities
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static string ToString(sbyte value, IFormatProvider provider)
         {
             Contract.Ensures(Contract.Result<string>() != null);
             return value.ToString(provider);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static string ToString(byte value)
         {
             Contract.Ensures(Contract.Result<string>() != null);
             return value.ToString(CultureInfo.CurrentCulture);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static string ToString(byte value, IFormatProvider provider)
         {
             Contract.Ensures(Contract.Result<string>() != null);
             return value.ToString(provider);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static string ToString(short value)
         {
             Contract.Ensures(Contract.Result<string>() != null);
             return value.ToString(CultureInfo.CurrentCulture);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static string ToString(short value, IFormatProvider provider)
         {
             Contract.Ensures(Contract.Result<string>() != null);
@@ -2109,7 +2109,7 @@ namespace NumSharp.Utilities
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static string ToString(ushort value)
         {
             Contract.Ensures(Contract.Result<string>() != null);
@@ -2117,21 +2117,21 @@ namespace NumSharp.Utilities
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static string ToString(ushort value, IFormatProvider provider)
         {
             Contract.Ensures(Contract.Result<string>() != null);
             return value.ToString(provider);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static string ToString(int value)
         {
             Contract.Ensures(Contract.Result<string>() != null);
             return value.ToString(CultureInfo.CurrentCulture);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static string ToString(int value, IFormatProvider provider)
         {
             Contract.Ensures(Contract.Result<string>() != null);
@@ -2139,7 +2139,7 @@ namespace NumSharp.Utilities
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static string ToString(uint value)
         {
             Contract.Ensures(Contract.Result<string>() != null);
@@ -2147,21 +2147,21 @@ namespace NumSharp.Utilities
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static string ToString(uint value, IFormatProvider provider)
         {
             Contract.Ensures(Contract.Result<string>() != null);
             return value.ToString(provider);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static string ToString(long value)
         {
             Contract.Ensures(Contract.Result<string>() != null);
             return value.ToString(CultureInfo.CurrentCulture);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static string ToString(long value, IFormatProvider provider)
         {
             Contract.Ensures(Contract.Result<string>() != null);
@@ -2169,7 +2169,7 @@ namespace NumSharp.Utilities
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static string ToString(ulong value)
         {
             Contract.Ensures(Contract.Result<string>() != null);
@@ -2177,84 +2177,84 @@ namespace NumSharp.Utilities
         }
 
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static string ToString(ulong value, IFormatProvider provider)
         {
             Contract.Ensures(Contract.Result<string>() != null);
             return value.ToString(provider);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static string ToString(float value)
         {
             Contract.Ensures(Contract.Result<string>() != null);
             return value.ToString(CultureInfo.CurrentCulture);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static string ToString(float value, IFormatProvider provider)
         {
             Contract.Ensures(Contract.Result<string>() != null);
             return value.ToString(provider);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static string ToString(double value)
         {
             Contract.Ensures(Contract.Result<string>() != null);
             return value.ToString(CultureInfo.CurrentCulture);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static string ToString(double value, IFormatProvider provider)
         {
             Contract.Ensures(Contract.Result<string>() != null);
             return value.ToString(provider);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static string ToString(decimal value)
         {
             Contract.Ensures(Contract.Result<string>() != null);
             return value.ToString(CultureInfo.CurrentCulture);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static string ToString(decimal value, IFormatProvider provider)
         {
             Contract.Ensures(Contract.Result<string>() != null);
             return value.ToString(provider);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static string ToString(DateTime value)
         {
             Contract.Ensures(Contract.Result<string>() != null);
             return value.ToString(CultureInfo.InvariantCulture);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static string ToString(DateTime value, IFormatProvider provider)
         {
             Contract.Ensures(Contract.Result<string>() != null);
             return value.ToString(provider);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static string ToString(string value)
         {
             Contract.Ensures(Contract.Result<string>() == value); // We were always skipping the null check here.
             return value;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static string ToString(string value, IFormatProvider provider)
         {
             Contract.Ensures(Contract.Result<string>() == value); // We were always skipping the null check here.
             return value; // avoid the null check
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static int ToBase64CharArray(byte[] inArray, int offsetIn, int length, char[] outArray, int offsetOut)
         {
             Contract.Ensures(Contract.Result<int>() >= 0);
@@ -2266,7 +2266,7 @@ namespace NumSharp.Utilities
 
         [System.Security.SecuritySafeCritical] // auto-generated
         [System.Runtime.InteropServices.ComVisible(false)]
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static unsafe int ToBase64CharArray(byte[] inArray, int offsetIn, int length, char[] outArray, int offsetOut, Base64FormattingOptions options)
         {
             //Do data verfication
@@ -2422,7 +2422,7 @@ namespace NumSharp.Utilities
         /// <param name="s">The string to convert</param>
         /// <returns>The array of bytes represented by the specifed Base64 string.</returns>
         [SecuritySafeCritical]
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static byte[] FromBase64String(string s)
         {
             // "s" is an unfortunate parameter name, but we need to keep it for backward compat.
@@ -2450,7 +2450,7 @@ namespace NumSharp.Utilities
         /// <param name="length">Number of element to convert.</param>
         /// <returns>The array of bytes represented by the specified Base64 encoding characters.</returns>
         [SecuritySafeCritical]
-        [MethodImpl(MethodImplOptions.AggressiveInlining | (MethodImplOptions)512)]
+        [MethodImpl(OptimizeAndInline)]
         public static byte[] FromBase64CharArray(char[] inArray, int offset, int length)
         {
             if (inArray == null)

@@ -20,7 +20,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="nd"></param>
         /// <param name="copy">If <paramref name="copy"/> is true then returns a clone.</param>
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         public static NDArray array(NDArray nd, bool copy = false) => copy ? new NDArray(nd.Storage.Clone()) : new NDArray(nd.Storage);
 
         /// <summary>
@@ -30,7 +30,7 @@ namespace NumSharp
         /// <param name="copy">Always copies if the array is larger than 1-d.</param>
         /// <param name="order">Not used.</param>
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.array.html</remarks>
-        [MethodImpl((MethodImplOptions)512)]
+        [MethodImpl(Optimize)]
         [SuppressMessage("ReSharper", "InvalidXmlDocComment")]
         public static NDArray array(Array array, Type dtype = null, int ndmin = 1, bool copy = true, char order = 'C')
         {
@@ -127,7 +127,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="chars"></param>
         /// <returns></returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static NDArray array(string chars)
         {
             if (chars == null)
@@ -159,7 +159,7 @@ namespace NumSharp
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.array.html <br></br>Always performs a copy.</remarks>
         [SuppressMessage("ReSharper", "SuggestVarOrType_SimpleTypes")]
         [SuppressMessage("ReSharper", "SuggestVarOrType_Elsewhere")]
-        [MethodImpl((MethodImplOptions)512)]
+        [MethodImpl(Optimize)]
         public static NDArray array<T>(T[][] data) where T : unmanaged
         {
             unsafe
@@ -197,7 +197,7 @@ namespace NumSharp
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.array.html <br></br>Always performs a copy.</remarks>
         [SuppressMessage("ReSharper", "SuggestVarOrType_SimpleTypes")]
         [SuppressMessage("ReSharper", "SuggestVarOrType_Elsewhere")]
-        [MethodImpl((MethodImplOptions)512)]
+        [MethodImpl(Optimize)]
         public static NDArray array<T>(T[][][] data) where T : unmanaged
         {
             unsafe
@@ -242,7 +242,7 @@ namespace NumSharp
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.array.html <br></br>Always performs a copy.</remarks>
         [SuppressMessage("ReSharper", "SuggestVarOrType_SimpleTypes")]
         [SuppressMessage("ReSharper", "SuggestVarOrType_Elsewhere")]
-        [MethodImpl((MethodImplOptions)512)]
+        [MethodImpl(Optimize)]
         public static NDArray array<T>(T[][][][] data) where T : unmanaged
         {
             unsafe
@@ -294,7 +294,7 @@ namespace NumSharp
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.array.html <br></br>Always performs a copy.</remarks>
         [SuppressMessage("ReSharper", "SuggestVarOrType_SimpleTypes")]
         [SuppressMessage("ReSharper", "SuggestVarOrType_Elsewhere")]
-        [MethodImpl((MethodImplOptions)512)]
+        [MethodImpl(Optimize)]
         public static NDArray array<T>(T[][][][][] data) where T : unmanaged
         {
             unsafe

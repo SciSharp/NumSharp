@@ -54,7 +54,7 @@ namespace NumSharp.Utilities
             subcursor = resetto;
         }
 
-        [MethodImpl((MethodImplOptions)512)]
+        [MethodImpl(Optimize)]
         public int[] Next()
         {
             if (subcursor <= -1)
@@ -125,7 +125,7 @@ namespace NumSharp.Utilities
             subcursor = resetto;
         }
 
-        [MethodImpl((MethodImplOptions)512)]
+        [MethodImpl(Optimize)]
         public int[] Next()
         {
             if (++Index[subcursor] >= dimensions[subcursor])

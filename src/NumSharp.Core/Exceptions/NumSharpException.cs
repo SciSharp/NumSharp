@@ -34,7 +34,7 @@ namespace NumSharp
         ///     NumPy raises: ValueError: assignment destination is read-only
         ///     NumSharp raises: NumSharpException: assignment destination is read-only
         /// </remarks>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static void ThrowIfNotWriteable(in Shape shape, string name = "assignment destination")
         {
             if (!shape.IsWriteable)

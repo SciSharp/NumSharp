@@ -43,7 +43,7 @@ namespace NumSharp.Backends.Unmanaged
 
         public int ItemLength
         {
-            [MethodImpl((MethodImplOptions)768)] get => InfoOf<T>.Size;
+            [MethodImpl(OptimizeAndInline)] get => InfoOf<T>.Size;
         }
 
         #region Construction
@@ -124,13 +124,13 @@ namespace NumSharp.Backends.Unmanaged
         /// <returns></returns>
         public T this[int index]
         {
-            [MethodImpl((MethodImplOptions)768)]
+            [MethodImpl(OptimizeAndInline)]
             get
             {
                 Debug.Assert(index < Count, "index < Count, Memory corruption expected.");
                 return *(Address + index);
             }
-            [MethodImpl((MethodImplOptions)768)]
+            [MethodImpl(OptimizeAndInline)]
             set
             {
                 Debug.Assert(index < Count, "index < Count, Memory corruption expected.");
@@ -138,20 +138,20 @@ namespace NumSharp.Backends.Unmanaged
             }
         }
 
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         public T GetIndex(int index)
         {
             return *(Address + index);
         }
 
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         public void SetIndex(int index, object value)
         {
             Debug.Assert(index < Count, "index < Count, Memory corruption expected.");
             *(Address + index) = (T)value;
         }
 
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         public void SetIndex(int index, T value)
         {
             Debug.Assert(index < Count, "index < Count, Memory corruption expected.");
@@ -160,7 +160,7 @@ namespace NumSharp.Backends.Unmanaged
 
         #endregion
 
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         public bool Contains(T item)
         {
             bool equals = false;
@@ -179,7 +179,7 @@ namespace NumSharp.Backends.Unmanaged
         }
 
         /// <param name="value"></param>
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         public void Fill(T value)
         {
             if (Unsafe.SizeOf<T>() == 1)
@@ -233,7 +233,7 @@ namespace NumSharp.Backends.Unmanaged
 
         /// <param name="start"></param>
         /// <returns></returns>
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         public ArraySlice<T> Slice(int start)
         {
             if ((uint)start > (uint)Count)
@@ -245,7 +245,7 @@ namespace NumSharp.Backends.Unmanaged
         /// <param name="start"></param>
         /// <param name="length"></param>
         /// <returns></returns>
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         public ArraySlice<T> Slice(int start, int length)
         {
 #if BIT64
@@ -275,7 +275,7 @@ namespace NumSharp.Backends.Unmanaged
         }
 
         /// <param name="destination"></param>
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         public void CopyTo(Span<T> destination)
         {
             if ((uint)Count <= (uint)destination.Length)
@@ -293,7 +293,7 @@ namespace NumSharp.Backends.Unmanaged
         /// </summary>
         /// <param name="dst">The address to copy to</param>
         /// <remarks>The destiniton has to be atleast the size of this array, otherwise memory corruption is likely to occur.</remarks>
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         public void CopyTo(IntPtr dst)
         {
             // Using "if (!TryCopyTo(...))" results in two branches: one for the length
@@ -308,7 +308,7 @@ namespace NumSharp.Backends.Unmanaged
         /// </summary>
         /// <param name="dst">The address to copy to</param>
         /// <remarks>The destiniton has to be atleast the size of this array, otherwise memory corruption is likely to occur.</remarks>
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         public void CopyTo(IntPtr dst, int sourceOffset, int sourceCount)
         {
             // Using "if (!TryCopyTo(...))" results in two branches: one for the length
@@ -320,7 +320,7 @@ namespace NumSharp.Backends.Unmanaged
 
         /// <param name="destination"></param>
         /// <param name="sourceOffset">offset of source via count (not bytes)</param>
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         public void CopyTo(Span<T> destination, int sourceOffset)
         {
             CopyTo(destination, sourceOffset, Count - sourceOffset);
@@ -329,18 +329,18 @@ namespace NumSharp.Backends.Unmanaged
         /// <param name="destination"></param>
         /// <param name="sourceOffset">offset of source via count (not bytes)</param>
         /// <param name="sourceLength">How many items to copy</param>
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         public void CopyTo(Span<T> destination, int sourceOffset, int sourceLength)
         {
             CopyTo(destination, sourceOffset, sourceLength);
         }
 
         [EditorBrowsable(EditorBrowsableState.Never)]
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public ref T GetPinnableReference() => ref Unsafe.AsRef<T>(Address);
 
 
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         public ArraySlice<T> Clone() => new ArraySlice<T>(UnmanagedMemoryBlock<T>.Copy(Address, Count));
 
 
@@ -353,14 +353,14 @@ namespace NumSharp.Backends.Unmanaged
             return new Span<T1>(VoidAddress, Count);
         }
 
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         TRet IArraySlice.GetIndex<TRet>(int index)
         {
             Debug.Assert(InfoOf<TRet>.Size == InfoOf<T>.Size);
             return *((TRet*)VoidAddress + index);
         }
 
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         void IArraySlice.SetIndex<TVal>(int index, TVal value)
         {
             Debug.Assert(InfoOf<TVal>.Size == InfoOf<T>.Size);
@@ -368,7 +368,7 @@ namespace NumSharp.Backends.Unmanaged
             *((TVal*)VoidAddress + index) = value;
         }
 
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         object IArraySlice.GetIndex(int index)
         {
             Debug.Assert(index < Count, "index < Count, Memory corruption expected.");
@@ -412,7 +412,7 @@ namespace NumSharp.Backends.Unmanaged
         /// </summary>
         ref T1 IArraySlice.GetPinnableReference<T1>() => ref Unsafe.AsRef<T1>(VoidAddress);
 
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         IArraySlice IArraySlice.Clone() => new ArraySlice<T>(UnmanagedMemoryBlock<T>.Copy(Address, Count));
 
         ArraySlice<T1> IArraySlice.Clone<T1>() => new ArraySlice<T1>(UnmanagedMemoryBlock<T1>.Copy(Address, Count));
@@ -424,7 +424,7 @@ namespace NumSharp.Backends.Unmanaged
         /// </summary>
         unsafe void* IMemoryBlock.Address
         {
-            [MethodImpl((MethodImplOptions)768)] get => VoidAddress;
+            [MethodImpl(OptimizeAndInline)] get => VoidAddress;
         }
 
         /// <summary>
@@ -433,7 +433,7 @@ namespace NumSharp.Backends.Unmanaged
         /// <remarks></remarks>
         long IMemoryBlock.Count
         {
-            [MethodImpl((MethodImplOptions)768)] get => Count;
+            [MethodImpl(OptimizeAndInline)] get => Count;
         }
 
         /// <summary>
@@ -442,7 +442,7 @@ namespace NumSharp.Backends.Unmanaged
         /// <remarks>Calculated by <see cref="IMemoryBlock.Count"/>*<see cref="IMemoryBlock.ItemLength"/></remarks>
         long IMemoryBlock.BytesLength
         {
-            [MethodImpl((MethodImplOptions)768)] get => Count * InfoOf<T>.Size;
+            [MethodImpl(OptimizeAndInline)] get => Count * InfoOf<T>.Size;
         }
 
         /// <summary>
@@ -450,12 +450,12 @@ namespace NumSharp.Backends.Unmanaged
         /// </summary>
         NPTypeCode IMemoryBlock.TypeCode
         {
-            [MethodImpl((MethodImplOptions)768)] get => TypeCode;
+            [MethodImpl(OptimizeAndInline)] get => TypeCode;
         }
 
         IMemoryBlock IArraySlice.MemoryBlock
         {
-            [MethodImpl((MethodImplOptions)768)] get => MemoryBlock;
+            [MethodImpl(OptimizeAndInline)] get => MemoryBlock;
         }
 
         /// <summary>
@@ -486,7 +486,7 @@ namespace NumSharp.Backends.Unmanaged
         /// allocates, so should generally be avoided, however it is sometimes
         /// necessary to bridge the gap with APIs written in terms of arrays.
         /// </summary>
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         public T[] ToArray()
         {
             if (Count == 0)

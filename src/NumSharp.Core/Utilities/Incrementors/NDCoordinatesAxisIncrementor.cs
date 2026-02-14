@@ -90,7 +90,7 @@ namespace NumSharp.Utilities
             subcursor = resetto;
         }
 
-        [MethodImpl((MethodImplOptions)512)]
+        [MethodImpl(Optimize)]
         public Slice[] Next()
         {
             if (subcursor <= -1)

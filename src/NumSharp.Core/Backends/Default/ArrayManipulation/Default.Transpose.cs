@@ -9,13 +9,13 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static int check_and_adjust_axis(NDArray nd, int axis)
         {
             return check_and_adjust_axis(nd.ndim, axis);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static int check_and_adjust_axis(int ndims, int axis)
         {
             int adjusted = axis >= 0 ? axis : ndims + axis;

@@ -90,116 +90,116 @@ namespace NumSharp.Backends.Unmanaged
             return new ArraySlice<T>(UnmanagedMemoryBlock<T>.FromPool(_buffer)) {[0] = val};
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static ArraySlice<T> FromArray<T>(T[] array, bool copy = false) where T : unmanaged
         {
             return new ArraySlice<T>(UnmanagedMemoryBlock<T>.FromArray(array, copy));
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static ArraySlice<T> FromArray<T>(T[,] array, bool copy = false) where T : unmanaged
         {
             return new ArraySlice<T>(UnmanagedMemoryBlock<T>.FromArray(array, copy));
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static ArraySlice<T> FromArray<T>(T[,,] array, bool copy = false) where T : unmanaged
         {
             return new ArraySlice<T>(UnmanagedMemoryBlock<T>.FromArray(array, copy));
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static ArraySlice<T> FromArray<T>(T[,,,] array, bool copy = false) where T : unmanaged
         {
             return new ArraySlice<T>(UnmanagedMemoryBlock<T>.FromArray(array, copy));
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static ArraySlice<T> FromArray<T>(T[,,,,] array, bool copy = false) where T : unmanaged
         {
             return new ArraySlice<T>(UnmanagedMemoryBlock<T>.FromArray(array, copy));
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static ArraySlice<T> FromArray<T>(T[,,,,,] array, bool copy = false) where T : unmanaged
         {
             return new ArraySlice<T>(UnmanagedMemoryBlock<T>.FromArray(array, copy));
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static ArraySlice<T> FromArray<T>(T[,,,,,,] array, bool copy = false) where T : unmanaged
         {
             return new ArraySlice<T>(UnmanagedMemoryBlock<T>.FromArray(array, copy));
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static ArraySlice<T> FromArray<T>(T[,,,,,,,] array, bool copy = false) where T : unmanaged
         {
             return new ArraySlice<T>(UnmanagedMemoryBlock<T>.FromArray(array, copy));
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static ArraySlice<T> FromArray<T>(T[,,,,,,,,] array, bool copy = false) where T : unmanaged
         {
             return new ArraySlice<T>(UnmanagedMemoryBlock<T>.FromArray(array, copy));
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static ArraySlice<T> FromArray<T>(T[,,,,,,,,,] array, bool copy = false) where T : unmanaged
         {
             return new ArraySlice<T>(UnmanagedMemoryBlock<T>.FromArray(array, copy));
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static ArraySlice<T> FromArray<T>(T[,,,,,,,,,,] array, bool copy = false) where T : unmanaged
         {
             return new ArraySlice<T>(UnmanagedMemoryBlock<T>.FromArray(array, copy));
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static ArraySlice<T> FromArray<T>(T[,,,,,,,,,,,] array, bool copy = false) where T : unmanaged
         {
             return new ArraySlice<T>(UnmanagedMemoryBlock<T>.FromArray(array, copy));
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static ArraySlice<T> FromArray<T>(T[,,,,,,,,,,,,] array, bool copy = false) where T : unmanaged
         {
             return new ArraySlice<T>(UnmanagedMemoryBlock<T>.FromArray(array, copy));
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static ArraySlice<T> FromArray<T>(T[,,,,,,,,,,,,,] array, bool copy = false) where T : unmanaged
         {
             return new ArraySlice<T>(UnmanagedMemoryBlock<T>.FromArray(array, copy));
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static ArraySlice<T> FromArray<T>(T[,,,,,,,,,,,,,,] array, bool copy = false) where T : unmanaged
         {
             return new ArraySlice<T>(UnmanagedMemoryBlock<T>.FromArray(array, copy));
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static ArraySlice<T> FromArray<T>(T[,,,,,,,,,,,,,,,] array, bool copy = false) where T : unmanaged
         {
             return new ArraySlice<T>(UnmanagedMemoryBlock<T>.FromArray(array, copy));
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static ArraySlice<T> FromBuffer<T>(byte[] arr, bool copy = false) where T : unmanaged
         {
             return new ArraySlice<T>(UnmanagedMemoryBlock<T>.FromBuffer(arr, copy));
         }
 
         /// <param name="count">The length in objects of <typeparamref name="T"/> and not in bytes.</param>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static ArraySlice<T> FromPool<T>(StackedMemoryPool pool) where T : unmanaged
         {
             return new ArraySlice<T>(UnmanagedMemoryBlock<T>.FromPool(pool));
         }
 
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         public static IArraySlice FromArray(Array arr, bool copy = false)
         {
             var elementType = arr.GetType().GetElementType();
@@ -235,7 +235,7 @@ namespace NumSharp.Backends.Unmanaged
             }
         }
 
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         public static IArraySlice FromMemoryBlock(IMemoryBlock block, bool copy = false)
         {
             if (block is IArraySlice arr)

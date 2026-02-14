@@ -94,39 +94,39 @@ namespace NumSharp.Benchmark.Unmanaged
             return ret;
         }
 
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         private double Function<T>(T value)
         {
             return FastCast<double>(value);
         }
 
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         private double FunctionB<T>(T value)
         {
             return (double)(object)value;
         }
 
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         private double FunctionC<T>(T value) where T : struct
         {
             return (double)(ValueType)value;
         }
 
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         private double FunctionD<T>(T value) where T : IComparable
         {
             return (double)(IComparable)value;
         }
 
 
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         private double FunctionE<T>(T value) where T : IComparable
         {
             return Unsafe.As<T, double>(ref value);
         }
 
 
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         private TOut FastCast<TOut>(object @in)
         {
             return (TOut)@in;

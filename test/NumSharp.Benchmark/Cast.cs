@@ -60,7 +60,7 @@ namespace NumSharp.Benchmark
             return 0;
         }
 
-        [MethodImpl((MethodImplOptions)512)]
+        [MethodImpl(Optimize)]
         static unsafe TDest ReinterpretCast<TSource, TDest>(TSource source)
         {
             var tr = __makeref(source);

@@ -14,7 +14,7 @@ namespace NumSharp
         /// <typeparam name="T"></typeparam>
         /// <param name="nd">The ndarray to iterate.</param>
         /// <param name="autoreset">Should this iterator loop forever?</param>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static NDIterator<T> AsIterator<T>(this NDArray nd, bool autoreset = false) where T : unmanaged
         {
             return new NDIterator<T>(nd, autoreset);

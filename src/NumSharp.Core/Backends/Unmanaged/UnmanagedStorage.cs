@@ -1455,7 +1455,7 @@ namespace NumSharp.Backends
             }
         }
 
-        [MethodImpl((MethodImplOptions)512)]
+        [MethodImpl(Optimize)]
         public unsafe T[] ToArray<T>() where T : unmanaged
         {
             if (typeof(T).GetTypeCode() != InternalArray.TypeCode)

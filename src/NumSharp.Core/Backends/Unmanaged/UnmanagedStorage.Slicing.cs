@@ -11,10 +11,10 @@ namespace NumSharp.Backends
     {
         #region Slicing
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public UnmanagedStorage GetView(string slicing_notation) => GetView(Slice.ParseSlices(slicing_notation));
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public UnmanagedStorage GetView(params Slice[] slices)
         {
             if (slices == null)
@@ -57,7 +57,7 @@ namespace NumSharp.Backends
             return GetViewInternal(slices);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         [SuppressMessage("ReSharper", "PossibleInvalidOperationException")]
         private UnmanagedStorage GetViewInternal(params Slice[] slices)
         {

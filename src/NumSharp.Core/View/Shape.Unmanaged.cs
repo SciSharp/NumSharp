@@ -15,7 +15,7 @@ namespace NumSharp
         /// <param name="indices">A pointer to the coordinates to turn into linear offset</param>
         /// <param name="ndims">The number of dimensions</param>
         /// <returns>The index in the memory block that refers to a specific value.</returns>
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         public readonly unsafe int GetOffset(int* indices, int ndims)
         {
             // Scalar case
@@ -38,7 +38,7 @@ namespace NumSharp
         /// <param name="indicies">The selection of indexes 0 based.</param>
         /// <returns></returns>
         /// <remarks>Used for slicing, returned shape is the new shape of the slice and offset is the offset from current address.</remarks>
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         public readonly unsafe (Shape Shape, int Offset) GetSubshape(int* dims, int ndims)
         {
             if (ndims == 0)
@@ -110,7 +110,7 @@ namespace NumSharp
         /// <param name="dimensions">The dimensions these coordinates are targeting</param>
         /// <param name="coords">The coordinates.</param>
         /// <returns>Coordinates without negative indices.</returns>
-        [SuppressMessage("ReSharper", "ParameterHidesMember"), MethodImpl((MethodImplOptions)512)]
+        [SuppressMessage("ReSharper", "ParameterHidesMember"), MethodImpl(Optimize)]
         public static unsafe void InferNegativeCoordinates(int[] dimensions, int* coords, int coordsCount)
         {
             for (int i = 0; i < coordsCount; i++)

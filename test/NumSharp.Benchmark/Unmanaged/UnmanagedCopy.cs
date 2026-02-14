@@ -121,7 +121,7 @@
 //        public static extern int MemCopy(void* dest, void* src, UIntPtr count);
 
 
-//        [MethodImpl((MethodImplOptions)768)]
+//        [MethodImpl(OptimizeAndInline)]
 //        public static UnmanagedMemoryBlock<T> Copy3<T>(UnmanagedMemoryBlock<T> source) where T : unmanaged
 //        {
 //            var len = source.Count * sizeof(T);
@@ -132,7 +132,7 @@
 //            return ret;
 //        }
 
-//        [MethodImpl((MethodImplOptions)768)]
+//        [MethodImpl(OptimizeAndInline)]
 //        public static UnmanagedMemoryBlock<T> Copy2<T>(UnmanagedMemoryBlock<T> source) where T : unmanaged
 //        {
 //            var len = source.Count * sizeof(T);
@@ -143,7 +143,7 @@
 //            return ret;
 //        }
 
-//        [MethodImpl((MethodImplOptions)768)]
+//        [MethodImpl(OptimizeAndInline)]
 //        public static UnmanagedMemoryBlock<T> Copy1<T>(UnmanagedMemoryBlock<T> source) where T : unmanaged
 //        {
 //            var ret = new UnmanagedMemoryBlock<T>(source.Count);
@@ -153,7 +153,7 @@
 //            return ret;
 //        }
 
-//        [MethodImpl((MethodImplOptions)768)]
+//        [MethodImpl(OptimizeAndInline)]
 //        public static UnmanagedMemoryBlock<T> Copy<T>(UnmanagedMemoryBlock<T> source) where T : unmanaged
 //        {
 //            var ret = new UnmanagedMemoryBlock<T>(source.Count);

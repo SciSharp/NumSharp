@@ -14,7 +14,7 @@ namespace NumSharp
         /// <param name="dtype">The type of the scalar.</param>
         /// <returns></returns>
         /// <remarks>In case when <see cref="value"/> is not <see cref="dtype"/>, <see cref="Converts.ChangeType(object,System.Type)"/> will be called.</remarks>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static NDArray Scalar(object value, Type dtype)
         {
             return new NDArray(UnmanagedStorage.Scalar(Converts.ChangeType(value, dtype.GetTypeCode())));
@@ -26,7 +26,7 @@ namespace NumSharp
         /// <param name="value">The value of the scalar</param>
         /// <returns></returns>
         /// <remarks>In case when <see cref="value"/> is not <see cref="dtype"/>, <see cref="Converts.ChangeType(object,System.Type)"/> will be called.</remarks>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static NDArray Scalar(object value)
         {
             return new NDArray(UnmanagedStorage.Scalar(value));
@@ -38,7 +38,7 @@ namespace NumSharp
         /// <param name="value">The value of the scalar</param>
         /// <returns></returns>
         /// <remarks>In case when <see cref="value"/> is not <see cref="dtype"/>, <see cref="Converts.ChangeType(object,System.Type)"/> will be called.</remarks>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static NDArray Scalar(ValueType value)
         {
             return new NDArray(UnmanagedStorage.Scalar(value));
@@ -50,7 +50,7 @@ namespace NumSharp
         /// <param name="value">The value of the scalar</param>
         /// <returns></returns>
         /// <remarks>In case when <see cref="value"/> is not <see cref="dtype"/>, <see cref="Converts.ChangeType(object,System.Type)"/> will be called.</remarks>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static NDArray Scalar<T>(T value) where T : unmanaged
         {
             return new NDArray(UnmanagedStorage.Scalar(value));
@@ -62,7 +62,7 @@ namespace NumSharp
         /// <param name="value">The value of the scalar, attempt to convert will be performed</param>
         /// <returns></returns>
         /// <remarks>In case when <see cref="value"/> is not <see cref="dtype"/>, <see cref="Converts.ChangeType(object,System.Type)"/> will be called.</remarks>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static NDArray Scalar<T>(object value) where T : unmanaged
         {
             return new NDArray(UnmanagedStorage.Scalar(value as T? ?? Converts.ChangeType<T>(value)));
@@ -75,7 +75,7 @@ namespace NumSharp
         /// <param name="typeCode">The type code of the scalar.</param>
         /// <returns></returns>
         /// <remarks>In case when <see cref="value"/> is not <see cref="dtype"/>, <see cref="Converts.ChangeType(object,System.Type)"/> will be called.</remarks>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public static NDArray Scalar(object value, NPTypeCode typeCode)
         {
             return new NDArray(UnmanagedStorage.Scalar(value, typeCode));

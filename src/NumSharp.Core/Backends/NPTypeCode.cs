@@ -120,7 +120,7 @@ namespace NumSharp
         /// <param name="typeCode"></param>
         /// <returns></returns>
         [DebuggerNonUserCode]
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         public static Type AsType(this NPTypeCode typeCode)
         {
             switch (typeCode)
@@ -156,7 +156,7 @@ namespace NumSharp
         ///     Checks if given <see cref="Type"/> has a match in <see cref="NPTypeCode"/>.
         /// </summary>
         [DebuggerNonUserCode]
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         public static bool IsValidNPType(this Type type)
         {
             return type.GetTypeCode() != NPTypeCode.Empty;
@@ -169,7 +169,7 @@ namespace NumSharp
         /// <returns></returns>
         /// <remarks>The size is computed by <see cref="Marshal.SizeOf{T}()"/></remarks>
         [DebuggerNonUserCode]
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         public static int SizeOf(this NPTypeCode typeCode)
         {
             switch (typeCode)
@@ -205,7 +205,7 @@ namespace NumSharp
         ///     Is <paramref name="typeCode"/> a float, double, complex or decimal?
         /// </summary>
         [DebuggerNonUserCode]
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         public static bool IsRealNumber(this NPTypeCode typeCode)
         {
             switch (typeCode)
@@ -241,7 +241,7 @@ namespace NumSharp
         ///     Is <paramref name="typeCode"/> a uint, byte, ulong and so on.
         /// </summary>
         [DebuggerNonUserCode]
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         public static bool IsUnsigned(this NPTypeCode typeCode)
         {
             switch (typeCode)
@@ -277,7 +277,7 @@ namespace NumSharp
         ///     Is <paramref name="typeCode"/> a float, double, complex or decimal?
         /// </summary>
         [DebuggerNonUserCode]
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         public static bool IsSigned(this NPTypeCode typeCode)
         {
             switch (typeCode)
@@ -313,7 +313,7 @@ namespace NumSharp
         ///     Is <paramref name="typeCode"/> a float, double, complex or decimal?
         /// </summary>
         [DebuggerNonUserCode]
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         internal static int GetGroup(this NPTypeCode typeCode)
         {
             switch (typeCode)
@@ -355,7 +355,7 @@ namespace NumSharp
         ///     Is <paramref name="typeCode"/> a float, double, complex or decimal?
         /// </summary>
         [DebuggerNonUserCode]
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         internal static int GetPriority(this NPTypeCode typeCode)
         {
             switch (typeCode)
@@ -395,7 +395,7 @@ namespace NumSharp
         ///     Gets NumSharp's <see cref="NPTypeCode"/> equivalent of <paramref name="typeCode"/>
         /// </summary>
         [DebuggerNonUserCode]
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         internal static NPTypeCode ToTypeCode(this NPY_TYPECHAR typeCode)
         {
             switch (typeCode)
@@ -465,7 +465,7 @@ namespace NumSharp
         ///     Gets NumSharp's <see cref="NPTypeCode"/> equivalent of <paramref name="typeCode"/>
         /// </summary>
         [DebuggerNonUserCode]
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         internal static NPY_TYPECHAR ToTYPECHAR(this NPTypeCode typeCode)
         {
             switch (typeCode)

@@ -5,10 +5,10 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         public NPTypeCode ResolveUnaryReturnType(in NDArray nd, Type @override) => ResolveUnaryReturnType(nd, @override?.GetTypeCode());
 
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         public NPTypeCode ResolveUnaryReturnType(in NDArray nd, NPTypeCode? @override)
         {
             if (!@override.HasValue)

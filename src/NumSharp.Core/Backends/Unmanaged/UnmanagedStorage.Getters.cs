@@ -76,7 +76,7 @@ namespace NumSharp.Backends
 #endif
         }
 
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         public unsafe T GetAtIndex<T>(int index) where T : unmanaged => *((T*)Address + _shape.TransformOffset(index));
 
         /// <summary>
@@ -111,7 +111,7 @@ namespace NumSharp.Backends
         /// </remarks>
         /// <seealso cref="GetView(Slice[])"/>
         /// <seealso cref="Alias()"/>
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         public UnmanagedStorage GetData(params int[] indices)
         {
             var this_shape = Shape;
@@ -173,7 +173,7 @@ namespace NumSharp.Backends
         /// </para>
         /// </remarks>
         /// <seealso cref="GetData(int[])"/>
-        [MethodImpl((MethodImplOptions)768)]
+        [MethodImpl(OptimizeAndInline)]
         public unsafe UnmanagedStorage GetData(int* dims, int ndims)
         {
             var this_shape = Shape;
@@ -253,7 +253,7 @@ namespace NumSharp.Backends
         /// Get reference to internal data storage
         /// </summary>
         /// <returns>reference to internal storage as System.Array</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(Inline)]
         public IArraySlice GetData() => InternalArray;
 #if _REGEN
         #region Direct Getters
