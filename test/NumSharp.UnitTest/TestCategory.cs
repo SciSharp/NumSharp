@@ -128,9 +128,14 @@ public static class TestCategory
     ///
     /// <para><b>CI Behavior:</b></para>
     /// <para>
-    /// Should be excluded on non-Windows runners. Can use runtime platform checks
-    /// in test base class to auto-skip, or filter with:
-    /// <c>--treenode-filter "/*/*/*/*[Category!=WindowsOnly]"</c>
+    /// Automatically excluded on non-Windows runners (Ubuntu, macOS) via CI workflow.
+    /// The workflow computes the filter at runtime based on <c>RUNNER_OS</c>.
+    /// </para>
+    ///
+    /// <para><b>Local Development:</b></para>
+    /// <para>
+    /// When running tests locally on non-Windows, use the filter:
+    /// <c>dotnet test -- --treenode-filter "/*/*/*/*[Category!=WindowsOnly]"</c>
     /// </para>
     ///
     /// <para><b>Note:</b></para>

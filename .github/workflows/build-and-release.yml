@@ -18,13 +18,6 @@ env:
   # NU5048: PackageIconUrl deprecated — cosmetic NuGet warning
   DOTNET_NOWARN: CS1570%3BCS1571%3BCS1572%3BCS1573%3BCS1574%3BCS1587%3BCS1591%3BCS1711%3BCS1734%3BCS8981%3BNU5048
 
-  # Exclude tests by category. Tag tests with [Category("...")] (TUnit) instead of
-  # adding individual Name!= exclusions here.
-  #   OpenBugs    — known-failing bug reproductions (pass when fixed, then remove category)
-  #   WindowsOnly — require GDI+/System.Drawing.Common; auto-skipped on non-Windows via
-  #                 runtime platform check in test base class
-  TEST_FILTER: '/*/*/*/*[Category!=OpenBugs]'
-
 jobs:
   test:
     strategy:
@@ -50,12 +43,21 @@ jobs:
 
     # NOTE: Test project currently only targets net10.0. See TODO in NumSharp.UnitTest.csproj
     # to re-enable net8.0 when TUnit compatibility is resolved.
+    #
+    # Test filtering:
+    #   - OpenBugs: excluded on all platforms (known-failing bug reproductions)
+    #   - WindowsOnly: excluded on non-Windows (require GDI+/System.Drawing.Common)
     - name: Test (net10.0)
       shell: bash
       run: |
+        FILTER='/*/*/*/*[Category!=OpenBugs'
+        if [[ "$RUNNER_OS" != "Windows" ]]; then
+          FILTER="$FILTER & Category!=WindowsOnly"
+        fi
+        FILTER="$FILTER]"
         dotnet run --project test/NumSharp.UnitTest/NumSharp.UnitTest.csproj \
           --configuration Release --no-build --framework net10.0 \
-          -- --treenode-filter "${{ env.TEST_FILTER }}" --report-trx
+          -- --treenode-filter "$FILTER" --report-trx
 
     - name: Upload Test Results
       uses: actions/upload-artifact@v4
