@@ -87,275 +87,26 @@
         <article data-uid="">
 <h1 id="broadcasting">Broadcasting</h1>
 
-<p>If you've ever wanted to add a single number to every element of an array, or subtract a row from every row of a matrix, you've wanted broadcasting. It's one of NumPy's most powerful features, and understanding it will change how you think about array operations.</p>
+<p>Broadcasting allows arithmetic operations between arrays of different shapes. When you add a <code>(3, 4)</code> matrix to a <code>(4,)</code> vector, NumSharp automatically &quot;broadcasts&quot; the vector across each row—no explicit loops or copying required.</p>
 <hr>
-<h2 id="the-problem-broadcasting-solves">The Problem Broadcasting Solves</h2>
-<p>Let's say you have a matrix of test scores for 100 students across 5 subjects, and you want to subtract the class average from each student's scores. In a traditional programming language, you'd write nested loops:</p>
-<pre><code class="lang-csharp">// The painful way (don't do this)
-for (int student = 0; student &lt; 100; student++)
-{
-    for (int subject = 0; subject &lt; 5; subject++)
-    {
-        scores[student, subject] -= average[subject];
-    }
-}
-</code></pre>
-<p>With broadcasting, it's one line:</p>
-<pre><code class="lang-csharp">var centered = scores - average;  // Just works!
-</code></pre>
-<p>But wait—<code>scores</code> is shape <code>(100, 5)</code> and <code>average</code> is shape <code>(5,)</code>. How does NumSharp know what to do? That's broadcasting.</p>
-<hr>
-<h2 id="the-core-idea">The Core Idea</h2>
-<p>Broadcasting is NumPy's way of making arrays with different shapes work together in arithmetic operations. Instead of requiring you to explicitly copy data to make shapes match, it &quot;stretches&quot; the smaller array to fit the larger one—without actually copying the data.</p>
-<p>Think of it like this: when you add a scalar to an array, the scalar conceptually becomes an array of the same shape, filled with that value:</p>
-<pre><code class="lang-csharp">var a = np.array(new[] {1, 2, 3});
-var b = a + 10;
-// Conceptually: [1, 2, 3] + [10, 10, 10] = [11, 12, 13]
-// But no [10, 10, 10] array is actually created!
-</code></pre>
-<p>Broadcasting generalizes this to any dimension where stretching makes sense.</p>
-<hr>
-<h2 id="the-three-rules">The Three Rules</h2>
-<p>Broadcasting follows three simple rules. If these rules can be satisfied, the arrays are &quot;broadcastable.&quot; If not, you get a shape error.</p>
-<h3 id="rule-1-align-from-the-right">Rule 1: Align from the Right</h3>
-<p>When comparing shapes, start from the rightmost dimension and work left. If one array has fewer dimensions, prepend 1s to its shape until they match.</p>
-<pre><code>Array A: (    3, 4)    → treated as (1, 3, 4)
-Array B: (2, 3, 4)
-</code></pre>
-<h3 id="rule-2-dimensions-must-match-or-be-1">Rule 2: Dimensions Must Match OR Be 1</h3>
-<p>For each dimension, the sizes must either:</p>
-<ul>
-<li>Be equal, OR</li>
-<li>One of them must be 1</li>
-</ul>
-<pre><code>(5, 4) and (1, 4)  ✓  (5 vs 1, 4 vs 4)
-(5, 4) and (   4)  ✓  (treated as (1, 4): 5 vs 1, 4 vs 4)
-(5, 4) and (5, 1)  ✓  (5 vs 5, 4 vs 1)
-(5, 4) and (3, 4)  ✗  (5 vs 3 — neither is 1!)
-</code></pre>
-<h3 id="rule-3-stretch-the-1s">Rule 3: Stretch the 1s</h3>
-<p>Dimensions of size 1 are &quot;stretched&quot; to match the larger size. The element at that position is repeated as many times as needed.</p>
-<pre><code class="lang-csharp">var a = np.array(new[,] {{1}, {2}, {3}});  // Shape: (3, 1)
-var b = np.array(new[] {10, 20, 30, 40});  // Shape: (4,)
-
-var c = a + b;  // Result shape: (3, 4)
-
-// a is stretched horizontally:     b is stretched vertically:
-// [[1, 1, 1, 1],                   [[10, 20, 30, 40],
-//  [2, 2, 2, 2],        +           [10, 20, 30, 40],
-//  [3, 3, 3, 3]]                    [10, 20, 30, 40]]
-//
-// = [[11, 21, 31, 41],
-//    [12, 22, 32, 42],
-//    [13, 23, 33, 43]]
-</code></pre>
-<hr>
-<h2 id="visual-examples">Visual Examples</h2>
-<p>Let's work through some common cases.</p>
-<h3 id="scalar--array">Scalar + Array</h3>
-<p>The simplest broadcast. A scalar (0-dimensional) broadcasts to any shape.</p>
-<pre><code class="lang-csharp">var a = np.array(new[] {1, 2, 3, 4, 5});
-var b = a * 2;  // [2, 4, 6, 8, 10]
-</code></pre>
-<pre><code>Shape of a:     (5,)
-Shape of 2:     ()     → treated as (1,) → stretched to (5,)
-Result shape:   (5,)
-</code></pre>
-<h3 id="row-vector--column-vector">Row Vector + Column Vector</h3>
-<p>This is the classic outer product pattern.</p>
-<pre><code class="lang-csharp">var row = np.array(new[] {1, 2, 3});           // Shape: (3,)
-var col = np.array(new[,] {{10}, {20}, {30}}); // Shape: (3, 1)
-
-var result = row + col;  // Shape: (3, 3)
-// [[11, 12, 13],
-//  [21, 22, 23],
-//  [31, 32, 33]]
-</code></pre>
-<pre><code>Shape of row:  (   3)  → treated as (1, 3)
-Shape of col:  (3, 1)
-               ------
-Result shape:  (3, 3)  ← max of each dimension
-</code></pre>
-<h3 id="matrix--row-vector">Matrix + Row Vector</h3>
-<p>This is your &quot;subtract the mean from each row&quot; pattern.</p>
-<pre><code class="lang-csharp">var matrix = np.arange(12).reshape(3, 4);
-// [[ 0,  1,  2,  3],
-//  [ 4,  5,  6,  7],
-//  [ 8,  9, 10, 11]]
-
-var row_means = np.array(new[] {1, 2, 3, 4});  // Shape: (4,)
-
-var centered = matrix - row_means;
-// [[-1, -1, -1, -1],
-//  [ 3,  3,  3,  3],
-//  [ 7,  7,  7,  7]]
-</code></pre>
-<pre><code>Shape of matrix:     (3, 4)
-Shape of row_means:  (   4) → treated as (1, 4)
-                     ------
-Result shape:        (3, 4)
-</code></pre>
-<p>The row vector is broadcast across all rows of the matrix.</p>
-<h3 id="matrix--column-vector">Matrix + Column Vector</h3>
-<p>Want to subtract from columns instead? Use a column vector.</p>
-<pre><code class="lang-csharp">var matrix = np.arange(12).reshape(3, 4);
-var col_offsets = np.array(new[,] {{0}, {4}, {8}});  // Shape: (3, 1)
-
-var result = matrix - col_offsets;
-// [[0, 1, 2, 3],
-//  [0, 1, 2, 3],
-//  [0, 1, 2, 3]]
-</code></pre>
-<pre><code>Shape of matrix:      (3, 4)
-Shape of col_offsets: (3, 1)
-                      ------
-Result shape:         (3, 4)
-</code></pre>
-<h3 id="higher-dimensions-batched-operations">Higher Dimensions: Batched Operations</h3>
-<p>Broadcasting really shines with batched data. Say you have a batch of 32 images, each 28x28 pixels:</p>
-<pre><code class="lang-csharp">var images = np.random.rand(32, 28, 28);      // Shape: (32, 28, 28)
-var pixel_mean = np.mean(images, axis: 0);    // Shape: (28, 28)
-
-var normalized = images - pixel_mean;         // Shape: (32, 28, 28)
-</code></pre>
-<p>The <code>(28, 28)</code> mean is broadcast across all 32 images.</p>
-<hr>
-<h2 id="numsharp-broadcasting-functions">NumSharp Broadcasting Functions</h2>
-<h3 id="npbroadcast_toarray-shape"><code>np.broadcast_to(array, shape)</code></h3>
-<p>Explicitly broadcast an array to a specific shape. Returns a view (not a copy).</p>
-<pre><code class="lang-csharp">var a = np.array(new[] {1, 2, 3});
-var b = np.broadcast_to(a, (4, 3));
-// [[1, 2, 3],
-//  [1, 2, 3],
-//  [1, 2, 3],
-//  [1, 2, 3]]
-
-// This is a VIEW - no data is copied!
-// b.Shape.IsBroadcasted == true
-</code></pre>
-<p><strong>Important:</strong> The source shape must be compatible with the target. You can only stretch dimensions of size 1:</p>
-<pre><code class="lang-csharp">np.broadcast_to(np.array(new[] {1, 2}), (3, 3));  // ERROR! (2,) can't become (3,3)
-np.broadcast_to(np.array(new[] {1, 2}), (3, 2));  // OK! (2,) → (1,2) → (3,2)
-</code></pre>
-<h3 id="npbroadcast_arraysarray1-array2-"><code>np.broadcast_arrays(array1, array2, ...)</code></h3>
-<p>Broadcast multiple arrays against each other, returning views with matching shapes.</p>
-<pre><code class="lang-csharp">var a = np.array(new[] {1, 2, 3});              // Shape: (3,)
-var b = np.array(new[,] {{1}, {2}});            // Shape: (2, 1)
-
-var (a_bc, b_bc) = np.broadcast_arrays(a, b);
-// Both now have shape (2, 3)
-
-// a_bc:          b_bc:
-// [[1, 2, 3],    [[1, 1, 1],
-//  [1, 2, 3]]     [2, 2, 2]]
-</code></pre>
-<p>This is useful when you need to iterate over aligned arrays or pass them to functions that don't broadcast internally.</p>
-<h3 id="implicit-broadcasting">Implicit Broadcasting</h3>
-<p>Most arithmetic operations broadcast automatically:</p>
-<pre><code class="lang-csharp">var a = np.ones((3, 4));
-var b = np.array(new[] {1, 2, 3, 4});
-
-var c = a + b;  // Broadcasting happens automatically
-var d = a * b;  // Works with all operators
-var e = a - b;
-var f = a / b;
-</code></pre>
-<hr>
-<h2 id="why-views-matter">Why Views Matter</h2>
-<p>Here's something crucial: <strong>broadcasting creates views, not copies</strong>.</p>
-<pre><code class="lang-csharp">var small = np.array(new[] {1, 2, 3});
-var big = np.broadcast_to(small, (1000000, 3));
-
-// big.Shape: (1000000, 3)
-// big.size: 3,000,000 elements
-// BUT: Only 3 values are actually stored!
-</code></pre>
-<p>The broadcasted array <code>big</code> looks like it has 3 million elements, but it's just pointing to the same 3 values with clever stride tricks. This is why broadcasting is so memory-efficient.</p>
-<p>But there's a catch: <strong>broadcasted arrays are read-only in NumPy</strong>. If you try to modify them, you'll affect multiple &quot;virtual&quot; positions. NumSharp follows the same principle—if you need to modify a broadcasted array, make a copy first:</p>
-<pre><code class="lang-csharp">var writable = big.copy();  // Now you have a real 3M element array
-</code></pre>
-<hr>
-<h2 id="common-pitfalls">Common Pitfalls</h2>
-<h3 id="pitfall-1-shape-mismatch-errors">Pitfall 1: Shape Mismatch Errors</h3>
-<p>The most common error is shapes that don't align:</p>
-<pre><code class="lang-csharp">var a = np.ones((3, 4));
-var b = np.ones((3,));
-
-var c = a + b;  // ERROR! (3, 4) and (3,) don't broadcast
-</code></pre>
-<p>Why? Let's check the rules:</p>
-<pre><code>a: (3, 4)
-b: (   3) → (1, 3)
-   ------
-   (3, 4) vs (1, 3)
-   4 ≠ 3 and neither is 1 → FAIL
-</code></pre>
-<p><strong>Fix:</strong> Reshape <code>b</code> to be a column vector:</p>
-<pre><code class="lang-csharp">var c = a + b.reshape(3, 1);  // Now it works!
-</code></pre>
-<h3 id="pitfall-2-row-vs-column-confusion">Pitfall 2: Row vs Column Confusion</h3>
-<p>This bites everyone at some point:</p>
-<pre><code class="lang-csharp">var a = np.array(new[] {1, 2, 3});  // Shape: (3,) - NOT (1, 3)!
-</code></pre>
-<p>A 1-D array of shape <code>(3,)</code> is neither a row nor column vector—it's just a 1-D array. When broadcast, it becomes <code>(1, 3)</code> (a row). If you want column behavior, explicitly reshape:</p>
-<pre><code class="lang-csharp">var col = a.reshape(3, 1);  // Now shape (3, 1)
-// or
-var col = a[np.newaxis].T;  // Another way
-</code></pre>
-<h3 id="pitfall-3-accidentally-broadcasting">Pitfall 3: Accidentally Broadcasting</h3>
-<p>Sometimes broadcasting does something you didn't intend:</p>
-<pre><code class="lang-csharp">var a = np.ones((10, 1));
-var b = np.ones((1, 10));
-
-var c = a + b;  // Shape: (10, 10) — probably not what you wanted!
-</code></pre>
-<p>You might have expected element-wise addition of two 10-element arrays, but broadcasting created a 10x10 matrix. Always check your shapes.</p>
-<h3 id="pitfall-4-memory-explosion">Pitfall 4: Memory Explosion</h3>
-<p>Broadcasting is memory-efficient for views, but operations that materialize the broadcast can explode:</p>
-<pre><code class="lang-csharp">var a = np.ones((1000, 1));
-var b = np.ones((1, 1000));
-
-// This is fine - just views
-var (a_bc, b_bc) = np.broadcast_arrays(a, b);
-
-// This allocates 1,000,000 elements!
-var result = a + b;  // The result must be materialized
-</code></pre>
-<hr>
-<h2 id="performance-considerations">Performance Considerations</h2>
-<h3 id="when-broadcasting-is-fast">When Broadcasting is Fast</h3>
-<p>Broadcasting is fastest when:</p>
-<ul>
-<li>One operand is contiguous and the other has stride-0 dimensions</li>
-<li>The operation can use SIMD on the contiguous parts</li>
-<li>You're avoiding the allocation of intermediate copies</li>
-</ul>
-<h3 id="when-broadcasting-can-be-slower">When Broadcasting Can Be Slower</h3>
-<p>Broadcasting can have performance costs when:</p>
-<ul>
-<li>Both arrays are non-contiguous after broadcasting (cache-unfriendly access)</li>
-<li>The stride pattern prevents vectorization</li>
-<li>You're doing many small broadcasts instead of one large operation</li>
-</ul>
-<p>For performance-critical code, consider whether explicit <code>np.tile()</code> or pre-allocated loops might be faster (profile first!).</p>
-<hr>
-<h2 id="how-numsharp-implements-broadcasting">How NumSharp Implements Broadcasting</h2>
-<p>Internally, NumSharp uses stride manipulation to achieve broadcasting without copying data.</p>
-<p>When you broadcast a shape like <code>(3,)</code> to <code>(4, 3)</code>:</p>
+<h2 id="how-broadcasting-works">How Broadcasting Works</h2>
+<p>NumSharp follows NumPy's broadcasting rules exactly:</p>
 <ol>
-<li>The shape becomes <code>(4, 3)</code></li>
-<li>The strides become <code>(0, 1)</code> — the first dimension has stride 0!</li>
+<li><p><strong>Shapes align from the right.</strong> If arrays have different numbers of dimensions, prepend 1s to the shorter shape.</p>
+</li>
+<li><p><strong>Dimensions must be equal or 1.</strong> For each dimension, sizes must match OR one must be 1.</p>
+</li>
+<li><p><strong>Size-1 dimensions stretch.</strong> A dimension of size 1 expands to match the other array's size in that dimension.</p>
+</li>
 </ol>
-<p>A stride of 0 means &quot;don't move in memory when you increment this index.&quot; The same 3 elements are accessed for every row.</p>
-<pre><code class="lang-csharp">var a = np.array(new[] {1, 2, 3});
-var b = np.broadcast_to(a, (4, 3));
-
-// b.Shape.dimensions: [4, 3]
-// b.Shape.strides:    [0, 1]  ← First stride is 0!
+<pre><code class="lang-csharp">// (3, 4) + (4,) → (3, 4) + (1, 4) → (3, 4)
+var matrix = np.ones((3, 4));
+var row = np.array(new[] {1, 2, 3, 4});
+var result = matrix + row;  // Shape: (3, 4)
 </code></pre>
-<p>This is tracked internally via <code>Shape.IsBroadcasted</code> and <code>BroadcastInfo</code>.</p>
+<p>Broadcasting creates <strong>views, not copies</strong>. The stretched array doesn't allocate new memory—it uses stride tricks to repeat values virtually.</p>
 <hr>
-<h2 id="quick-reference">Quick Reference</h2>
+<h2 id="shape-compatibility">Shape Compatibility</h2>
 <h3 id="compatible-shapes">Compatible Shapes</h3>
 <table>
 <thead>
@@ -363,7 +114,7 @@ var b = np.broadcast_to(a, (4, 3));
 <th>Shape A</th>
 <th>Shape B</th>
 <th>Result</th>
-<th>Why</th>
+<th>Notes</th>
 </tr>
 </thead>
 <tbody>
@@ -375,39 +126,39 @@ var b = np.broadcast_to(a, (4, 3));
 </tr>
 <tr>
 <td><code>(5,)</code></td>
-<td><code>(1,)</code></td>
-<td><code>(5,)</code></td>
-<td>1 stretches to 5</td>
-</tr>
-<tr>
-<td><code>(5,)</code></td>
 <td><code>()</code></td>
 <td><code>(5,)</code></td>
-<td>Scalar broadcasts</td>
+<td>Scalar broadcasts to any shape</td>
 </tr>
 <tr>
 <td><code>(3, 4)</code></td>
 <td><code>(4,)</code></td>
 <td><code>(3, 4)</code></td>
-<td>(4,) → (1, 4) → (3, 4)</td>
+<td>Row vector broadcasts across rows</td>
 </tr>
 <tr>
 <td><code>(3, 4)</code></td>
 <td><code>(3, 1)</code></td>
 <td><code>(3, 4)</code></td>
-<td>1 stretches to 4</td>
+<td>Column vector broadcasts across columns</td>
 </tr>
 <tr>
 <td><code>(3, 1)</code></td>
 <td><code>(1, 4)</code></td>
 <td><code>(3, 4)</code></td>
-<td>Both stretch</td>
+<td>Both arrays stretch</td>
 </tr>
 <tr>
 <td><code>(2, 3, 4)</code></td>
 <td><code>(3, 4)</code></td>
 <td><code>(2, 3, 4)</code></td>
-<td>Prepend 1, then stretch</td>
+<td>Lower-dimensional array broadcasts</td>
+</tr>
+<tr>
+<td><code>(8, 1, 6, 1)</code></td>
+<td><code>(7, 1, 5)</code></td>
+<td><code>(8, 7, 6, 5)</code></td>
+<td>Complex case with multiple stretch dimensions</td>
 </tr>
 </tbody>
 </table>
@@ -417,7 +168,7 @@ var b = np.broadcast_to(a, (4, 3));
 <tr>
 <th>Shape A</th>
 <th>Shape B</th>
-<th>Why It Fails</th>
+<th>Error</th>
 </tr>
 </thead>
 <tbody>
@@ -429,16 +180,130 @@ var b = np.broadcast_to(a, (4, 3));
 <tr>
 <td><code>(3, 4)</code></td>
 <td><code>(3,)</code></td>
-<td>4 ≠ 3, neither is 1</td>
+<td>Trailing dimensions 4 ≠ 3</td>
 </tr>
 <tr>
 <td><code>(2, 3)</code></td>
 <td><code>(3, 2)</code></td>
-<td>No alignment works</td>
+<td>No valid alignment</td>
 </tr>
 </tbody>
 </table>
-<h3 id="functions">Functions</h3>
+<p>Incompatible shapes throw <code>IncorrectShapeException</code>.</p>
+<hr>
+<h2 id="broadcasting-functions">Broadcasting Functions</h2>
+<h3 id="npbroadcast_toarray-shape"><code>np.broadcast_to(array, shape)</code></h3>
+<p>Broadcasts an array to a specific shape. Returns a read-only view.</p>
+<pre><code class="lang-csharp">var a = np.array(new[] {1, 2, 3});
+var b = np.broadcast_to(a, (4, 3));
+// b.shape: (4, 3)
+// b[0]: [1, 2, 3]
+// b[1]: [1, 2, 3]  (same data, not copied)
+</code></pre>
+<p><strong>Constraints:</strong> The source shape must be unilaterally broadcastable to the target. You can only stretch dimensions that are size 1:</p>
+<pre><code class="lang-csharp">np.broadcast_to(np.ones((2,)), (3, 3));   // Error: can't stretch 2 to 3
+np.broadcast_to(np.ones((1, 3)), (4, 3)); // OK: stretches 1 to 4
+</code></pre>
+<h3 id="npbroadcast_arraysarray1-array2-"><code>np.broadcast_arrays(array1, array2, ...)</code></h3>
+<p>Broadcasts multiple arrays against each other, returning views with a common shape.</p>
+<pre><code class="lang-csharp">var a = np.array(new[] {1, 2, 3});        // (3,)
+var b = np.array(new[,] {{1}, {2}});      // (2, 1)
+
+var (a_bc, b_bc) = np.broadcast_arrays(a, b);
+// Both now (2, 3)
+</code></pre>
+<p>Also available as:</p>
+<pre><code class="lang-csharp">NDArray[] results = np.broadcast_arrays(arr1, arr2, arr3);
+</code></pre>
+<h3 id="implicit-broadcasting">Implicit Broadcasting</h3>
+<p>All arithmetic operators broadcast automatically:</p>
+<pre><code class="lang-csharp">var a = np.ones((3, 4));
+var b = np.array(new[] {1, 2, 3, 4});
+
+a + b;   // (3, 4)
+a - b;   // (3, 4)
+a * b;   // (3, 4)
+a / b;   // (3, 4)
+</code></pre>
+<hr>
+<h2 id="memory-behavior">Memory Behavior</h2>
+<p>Broadcasted arrays are <strong>views</strong> that share memory with the original:</p>
+<pre><code class="lang-csharp">var small = np.array(new[] {1, 2, 3});           // 3 elements
+var big = np.broadcast_to(small, (1000000, 3));  // Appears as 3M elements
+
+// big.size == 3_000_000
+// Actual memory: still just 3 elements
+// big.Shape.IsBroadcasted == true
+</code></pre>
+<p><strong>Important:</strong> Broadcasted arrays should be treated as read-only. Writing to a broadcasted position affects all positions that share that memory. If you need to modify a broadcasted array, copy it first:</p>
+<pre><code class="lang-csharp">var writable = big.copy();  // Allocates full 3M elements
+</code></pre>
+<hr>
+<h2 id="implementation-details">Implementation Details</h2>
+<p>NumSharp implements broadcasting through stride manipulation. When a dimension is broadcast:</p>
+<ul>
+<li>The <strong>shape</strong> shows the expanded size</li>
+<li>The <strong>stride</strong> for that dimension is set to 0</li>
+</ul>
+<p>A stride of 0 means the index doesn't advance in memory—the same element is read repeatedly.</p>
+<pre><code class="lang-csharp">var a = np.array(new[] {1, 2, 3});
+var b = np.broadcast_to(a, (4, 3));
+
+// b's internal representation:
+// Shape:   (4, 3)
+// Strides: (0, 1)  ← stride 0 in first dimension
+</code></pre>
+<p>This is tracked via <code>Shape.IsBroadcasted</code> and <code>BroadcastInfo</code>.</p>
+<hr>
+<h2 id="common-patterns">Common Patterns</h2>
+<h3 id="centering-data-subtract-mean">Centering Data (subtract mean)</h3>
+<pre><code class="lang-csharp">var data = np.random.rand(100, 5);           // 100 samples, 5 features
+var mean = np.mean(data, axis: 0);           // (5,)
+var centered = data - mean;                  // (100, 5) - broadcasts
+</code></pre>
+<h3 id="normalizing-divide-by-std">Normalizing (divide by std)</h3>
+<pre><code class="lang-csharp">var std = np.std(data, axis: 0);             // (5,)
+var normalized = centered / std;             // (100, 5)
+</code></pre>
+<h3 id="outer-product">Outer Product</h3>
+<pre><code class="lang-csharp">var row = np.array(new[] {1, 2, 3});         // (3,)
+var col = np.array(new[,] {{10}, {20}});     // (2, 1)
+var outer = row * col;                       // (2, 3)
+</code></pre>
+<h3 id="batch-operations">Batch Operations</h3>
+<pre><code class="lang-csharp">var batch = np.random.rand(32, 28, 28);      // 32 images
+var mean_image = np.mean(batch, axis: 0);    // (28, 28)
+var normalized = batch - mean_image;         // (32, 28, 28)
+</code></pre>
+<hr>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<h3 id="shape-mismatch-objects-cannot-be-broadcast">&quot;shape mismatch: objects cannot be broadcast&quot;</h3>
+<p>Shapes don't follow broadcasting rules. Check alignment:</p>
+<pre><code class="lang-csharp">// Wrong
+var a = np.ones((3, 4));
+var b = np.ones((3,));    // Trailing dim 4 ≠ 3
+var c = a + b;            // Error
+
+// Fix: reshape to column vector
+var c = a + b.reshape(3, 1);  // Now (3, 4) + (3, 1) works
+</code></pre>
+<h3 id="unexpected-output-shape">Unexpected Output Shape</h3>
+<p>If you get a larger shape than expected, you may have accidentally broadcast:</p>
+<pre><code class="lang-csharp">var a = np.ones((10, 1));
+var b = np.ones((1, 10));
+var c = a + b;  // (10, 10) — both stretched!
+</code></pre>
+<h3 id="row-vs-column-vector">Row vs Column Vector</h3>
+<p>A 1-D array <code>(n,)</code> broadcasts as a <strong>row</strong> <code>(1, n)</code>, not a column:</p>
+<pre><code class="lang-csharp">var vec = np.array(new[] {1, 2, 3});  // (3,) — not (1, 3) or (3, 1)
+
+// To broadcast as column:
+var col = vec.reshape(3, 1);          // (3, 1)
+// or
+var col = vec[np.newaxis].T;          // (3, 1)
+</code></pre>
+<hr>
+<h2 id="api-reference">API Reference</h2>
 <table>
 <thead>
 <tr>
@@ -448,30 +313,51 @@ var b = np.broadcast_to(a, (4, 3));
 </thead>
 <tbody>
 <tr>
-<td><code>np.broadcast_to(a, shape)</code></td>
-<td>Broadcast <code>a</code> to specific shape (returns view)</td>
+<td><code>np.broadcast_to(arr, shape)</code></td>
+<td>Broadcast array to specific shape (returns view)</td>
 </tr>
 <tr>
-<td><code>np.broadcast_arrays(a, b, ...)</code></td>
-<td>Broadcast multiple arrays to common shape</td>
+<td><code>np.broadcast_arrays(a, b)</code></td>
+<td>Broadcast two arrays to common shape (returns tuple)</td>
 </tr>
 <tr>
-<td><code>a + b</code>, <code>a * b</code>, etc.</td>
-<td>Implicit broadcasting in operations</td>
+<td><code>np.broadcast_arrays(params NDArray[])</code></td>
+<td>Broadcast multiple arrays (returns array)</td>
 </tr>
 </tbody>
 </table>
-<hr>
-<h2 id="summary">Summary</h2>
-<p>Broadcasting is about making array operations work seamlessly across different shapes:</p>
-<ol>
-<li><strong>Shapes align from the right</strong></li>
-<li><strong>Dimensions must match or be 1</strong></li>
-<li><strong>1s are stretched to match</strong></li>
-<li><strong>It's memory-efficient</strong> — views, not copies</li>
-<li><strong>Watch your shapes</strong> — unexpected broadcasts happen silently</li>
-</ol>
-<p>Once you internalize these rules, you'll start seeing opportunities to eliminate loops and express operations more naturally. It's one of those features that, once learned, you can't imagine working without.</p>
+<table>
+<thead>
+<tr>
+<th>Property</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Shape.IsBroadcasted</code></td>
+<td>True if shape has broadcast strides (stride 0)</td>
+</tr>
+<tr>
+<td><code>BroadcastInfo</code></td>
+<td>Internal metadata for broadcast tracking</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>Exception</th>
+<th>When</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>IncorrectShapeException</code></td>
+<td>Shapes cannot be broadcast together</td>
+</tr>
+</tbody>
+</table>
 
 </article>
 
