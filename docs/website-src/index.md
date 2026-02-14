@@ -1,7 +1,3 @@
----
-_layout: landing
----
-
 # Welcome to NumSharp
 
 NumSharp is a .NET port of Python's NumPy library, bringing powerful numerical computing to the .NET ecosystem.
