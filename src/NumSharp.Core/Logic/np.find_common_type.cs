@@ -243,6 +243,45 @@ namespace NumSharp
 
             #region arr_scalar
 
+            // ============================================================================
+            // ARRAY-SCALAR TYPE PROMOTION TABLE
+            // ============================================================================
+            //
+            // This table defines type promotion when an array operates with a scalar value.
+            // The key is (ArrayType, ScalarType), the value is the result type.
+            //
+            // NUMSHARP DESIGN DECISION:
+            // C# primitive scalars (int, short, long, etc.) are treated as "weakly typed"
+            // like Python scalars in NumPy 2.x, NOT like NumPy scalars (np.int32, etc.).
+            //
+            // This means: np.array(new byte[]{1,2,3}) + 5  →  uint8 result (not int32)
+            //
+            // WHY: This matches the natural Python/NumPy user experience where `arr + 5`
+            // preserves the array's dtype when both are integers. This is consistent with
+            // NumPy 2.x behavior under NEP 50 for Python scalar operands.
+            //
+            // NEP 50 (NumPy Enhancement Proposal 50):
+            // https://numpy.org/neps/nep-0050-scalar-promotion.html
+            //
+            // Key rule: When an array operates with a scalar of the same "kind" (e.g., both
+            // are integers), the array dtype wins. Cross-kind operations (int + float) still
+            // promote to the higher kind (float).
+            //
+            // AFFECTED ENTRIES (12 total - all unsigned array + signed scalar):
+            //
+            // | Array Type | Scalar Types      | NumPy 1.x Result | NumPy 2.x Result |
+            // |------------|-------------------|------------------|------------------|
+            // | uint8      | int16/int32/int64 | int16/int32/int64| uint8            |
+            // | uint16     | int16/int32/int64 | int32/int32/int64| uint16           |
+            // | uint32     | int16/int32/int64 | int64/int64/int64| uint32           |
+            // | uint64     | int16/int32/int64 | float64 (!)      | uint64           |
+            //
+            // Verified against NumPy 2.4.2:
+            //   >>> (np.array([1,2,3], np.uint8) + 5).dtype
+            //   dtype('uint8')
+            //
+            // ============================================================================
+
             var typemap_arr_scalar = new Dictionary<(Type, Type), Type>();
             typemap_arr_scalar.Add((np.@bool, np.@bool), np.@bool);
             typemap_arr_scalar.Add((np.@bool, np.uint8), np.uint8);
@@ -259,11 +298,11 @@ namespace NumSharp
             typemap_arr_scalar.Add((np.uint8, np.@bool), np.uint8);
             typemap_arr_scalar.Add((np.uint8, np.uint8), np.uint8);
             typemap_arr_scalar.Add((np.uint8, np.@char), np.uint8);
-            typemap_arr_scalar.Add((np.uint8, np.int16), np.uint8);  // NEP 50: array dtype wins
+            typemap_arr_scalar.Add((np.uint8, np.int16), np.uint8);
             typemap_arr_scalar.Add((np.uint8, np.uint16), np.uint8);
-            typemap_arr_scalar.Add((np.uint8, np.int32), np.uint8);  // NEP 50: array dtype wins
+            typemap_arr_scalar.Add((np.uint8, np.int32), np.uint8);
             typemap_arr_scalar.Add((np.uint8, np.uint32), np.uint8);
-            typemap_arr_scalar.Add((np.uint8, np.int64), np.uint8);  // NEP 50: array dtype wins
+            typemap_arr_scalar.Add((np.uint8, np.int64), np.uint8);
             typemap_arr_scalar.Add((np.uint8, np.uint64), np.uint8);
             typemap_arr_scalar.Add((np.uint8, np.float32), np.float32);
             typemap_arr_scalar.Add((np.uint8, np.float64), np.float64);
@@ -298,11 +337,11 @@ namespace NumSharp
             typemap_arr_scalar.Add((np.uint16, np.@bool), np.uint16);
             typemap_arr_scalar.Add((np.uint16, np.uint8), np.uint16);
             typemap_arr_scalar.Add((np.uint16, np.@char), np.uint16);
-            typemap_arr_scalar.Add((np.uint16, np.int16), np.uint16);  // NEP 50: array dtype wins
+            typemap_arr_scalar.Add((np.uint16, np.int16), np.uint16);
             typemap_arr_scalar.Add((np.uint16, np.uint16), np.uint16);
-            typemap_arr_scalar.Add((np.uint16, np.int32), np.uint16);  // NEP 50: array dtype wins
+            typemap_arr_scalar.Add((np.uint16, np.int32), np.uint16);
             typemap_arr_scalar.Add((np.uint16, np.uint32), np.uint16);
-            typemap_arr_scalar.Add((np.uint16, np.int64), np.uint16);  // NEP 50: array dtype wins
+            typemap_arr_scalar.Add((np.uint16, np.int64), np.uint16);
             typemap_arr_scalar.Add((np.uint16, np.uint64), np.uint16);
             typemap_arr_scalar.Add((np.uint16, np.float32), np.float32);
             typemap_arr_scalar.Add((np.uint16, np.float64), np.float64);
@@ -324,11 +363,11 @@ namespace NumSharp
             typemap_arr_scalar.Add((np.uint32, np.@bool), np.uint32);
             typemap_arr_scalar.Add((np.uint32, np.uint8), np.uint32);
             typemap_arr_scalar.Add((np.uint32, np.@char), np.uint32);
-            typemap_arr_scalar.Add((np.uint32, np.int16), np.uint32);  // NEP 50: array dtype wins
+            typemap_arr_scalar.Add((np.uint32, np.int16), np.uint32);
             typemap_arr_scalar.Add((np.uint32, np.uint16), np.uint32);
-            typemap_arr_scalar.Add((np.uint32, np.int32), np.uint32);  // NEP 50: array dtype wins
+            typemap_arr_scalar.Add((np.uint32, np.int32), np.uint32);
             typemap_arr_scalar.Add((np.uint32, np.uint32), np.uint32);
-            typemap_arr_scalar.Add((np.uint32, np.int64), np.uint32);  // NEP 50: array dtype wins
+            typemap_arr_scalar.Add((np.uint32, np.int64), np.uint32);
             typemap_arr_scalar.Add((np.uint32, np.uint64), np.uint32);
             typemap_arr_scalar.Add((np.uint32, np.float32), np.float64);
             typemap_arr_scalar.Add((np.uint32, np.float64), np.float64);
@@ -350,11 +389,11 @@ namespace NumSharp
             typemap_arr_scalar.Add((np.uint64, np.@bool), np.uint64);
             typemap_arr_scalar.Add((np.uint64, np.uint8), np.uint64);
             typemap_arr_scalar.Add((np.uint64, np.@char), np.uint64);
-            typemap_arr_scalar.Add((np.uint64, np.int16), np.uint64);  // NEP 50: array dtype wins
+            typemap_arr_scalar.Add((np.uint64, np.int16), np.uint64);
             typemap_arr_scalar.Add((np.uint64, np.uint16), np.uint64);
-            typemap_arr_scalar.Add((np.uint64, np.int32), np.uint64);  // NEP 50: array dtype wins
+            typemap_arr_scalar.Add((np.uint64, np.int32), np.uint64);
             typemap_arr_scalar.Add((np.uint64, np.uint32), np.uint64);
-            typemap_arr_scalar.Add((np.uint64, np.int64), np.uint64);  // NEP 50: array dtype wins
+            typemap_arr_scalar.Add((np.uint64, np.int64), np.uint64);
             typemap_arr_scalar.Add((np.uint64, np.uint64), np.uint64);
             typemap_arr_scalar.Add((np.uint64, np.float32), np.float64);
             typemap_arr_scalar.Add((np.uint64, np.float64), np.float64);
