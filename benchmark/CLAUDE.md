@@ -246,12 +246,16 @@ Standard array sizes for consistency.
 ```csharp
 public static class ArraySizeSource
 {
+    public const int Scalar = 1;           // Pure dispatch overhead
+    public const int Tiny = 100;           // Common small collections
     public const int Small = 1_000;        // L1 cache, per-element overhead
     public const int Medium = 100_000;     // L2/L3 cache, typical use
     public const int Large = 10_000_000;   // Memory-bound throughput
 
-    public static IEnumerable<int> StandardSizes;  // All three
+    public static IEnumerable<int> StandardSizes;  // All five
     public static IEnumerable<int> QuickSizes;     // Large only
+    public static IEnumerable<int> OverheadSizes;  // Scalar, Tiny
+    public static IEnumerable<int> CacheTierSizes; // Small, Medium, Large
 
     // 2D/3D size tuples
     public static IEnumerable<(int, int)> Matrix2DSizes;
@@ -269,7 +273,7 @@ Binary arithmetic operations between arrays and scalars.
 
 | File | Operations | Notes |
 |------|------------|-------|
-| `AddBenchmarks.cs` | `+`, `np.add`, scalar add, row/col broadcast | Tests both operator and function syntax |
+| `AddBenchmarks.cs` | `+`, `np.add`, scalar add | Tests operator and function syntax (broadcasting in BroadcastBenchmarks) |
 | `SubtractBenchmarks.cs` | `-`, scalar subtract | Tests both directions (a-b, scalar-a) |
 | `MultiplyBenchmarks.cs` | `*`, square, scalar multiply | Tests self-multiplication |
 | `DivideBenchmarks.cs` | `/`, scalar divide | Uses positive arrays to avoid div-by-zero |
@@ -368,7 +372,13 @@ Comparing 1D, 2D, and 3D array performance.
 
 ```python
 # Configuration
-ARRAY_SIZES = {'small': 1_000, 'medium': 100_000, 'large': 10_000_000}
+ARRAY_SIZES = {
+    'scalar': 1,           # Pure overhead measurement
+    'tiny': 100,           # Common small collections
+    'small': 1_000,        # L1 cache
+    'medium': 100_000,     # L2/L3 cache
+    'large': 10_000_000    # Memory-bound
+}
 DTYPES = {'int32': np.int32, 'float64': np.float64, ...}
 COMMON_DTYPES = ['int32', 'int64', 'float32', 'float64']
 
