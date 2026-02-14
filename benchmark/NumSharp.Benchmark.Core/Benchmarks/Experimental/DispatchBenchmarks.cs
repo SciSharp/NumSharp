@@ -6,7 +6,7 @@ using System.Runtime.Intrinsics;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Order;
 
-namespace NumSharp.Benchmark.Core;
+namespace NumSharp.Benchmark.Core.Experimental;
 
 /// <summary>
 /// Compares different dispatch mechanisms for binary operations.

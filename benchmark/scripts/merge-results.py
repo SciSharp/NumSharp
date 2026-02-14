@@ -78,6 +78,11 @@ def load_csharp_results(artifacts_dir: str) -> List[dict]:
 def parse_bdn_benchmark(bench: dict) -> Optional[dict]:
     """Parse a single BenchmarkDotNet benchmark result."""
     try:
+        # Skip Experimental benchmarks (C# internals, not for NumPy comparison)
+        namespace = bench.get('Namespace', '')
+        if 'Experimental' in namespace:
+            return None
+
         method = bench.get('Method', '')
         method_title = bench.get('MethodTitle', method)
         params = bench.get('Parameters', '')

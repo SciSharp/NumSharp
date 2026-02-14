@@ -2,7 +2,7 @@ using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Order;
 using NumSharp;
 
-namespace NumSharp.Benchmark.Core;
+namespace NumSharp.Benchmark.Core.Experimental;
 
 /// <summary>
 /// Benchmarks NumSharp's actual current performance.

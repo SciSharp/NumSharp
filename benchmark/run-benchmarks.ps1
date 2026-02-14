@@ -38,8 +38,8 @@
 
 param(
     [switch]$Quick,
-    [ValidateSet('all', 'dispatch', 'fusion', 'arithmetic', 'unary', 'reduction',
-                 'broadcast', 'creation', 'manipulation', 'slicing')]
+    [ValidateSet('all', 'arithmetic', 'unary', 'reduction', 'broadcast', 'creation',
+                 'manipulation', 'slicing', 'experimental', 'dispatch', 'fusion')]
     [string]$Suite = 'all',
     [string]$OutputPath = 'benchmark-report.md',
     [switch]$SkipCSharp,
@@ -168,9 +168,8 @@ if (-not $SkipCSharp) {
         $jobType = if ($Quick) { "Short" } else { "Medium" }
 
         # Build filter based on suite
+        # Note: 'dispatch' and 'fusion' are Experimental (C# internals, not for NumPy comparison)
         $filter = switch ($Suite) {
-            'dispatch' { "*Dispatch*" }
-            'fusion' { "*Fusion*" }
             'arithmetic' { "*Arithmetic*" }
             'unary' { "*Unary*,*Math*,*ExpLog*,*Trig*,*Power*" }
             'reduction' { "*Reduction*,*Sum*,*Mean*,*VarStd*,*MinMax*,*Prod*" }
@@ -178,7 +177,10 @@ if (-not $SkipCSharp) {
             'creation' { "*Creation*" }
             'manipulation' { "*Manipulation*,*Reshape*,*Stack*,*Dims*" }
             'slicing' { "*Slice*" }
-            default { "*" }
+            'experimental' { "*Experimental*" }
+            'dispatch' { "*Experimental*Dispatch*" }
+            'fusion' { "*Experimental*Fusion*" }
+            default { "*" }  # 'all' runs everything (merge script filters by operation name match)
         }
 
         # Run and capture output

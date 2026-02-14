@@ -7,7 +7,7 @@ using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Order;
 using NumSharp;
 
-namespace NumSharp.Benchmark.Core;
+namespace NumSharp.Benchmark.Core.Experimental;
 
 /// <summary>
 /// Benchmarks for GitHub Issue #544: Replace ~636K lines of generated math code with DynamicMethod IL emission.
