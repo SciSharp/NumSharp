@@ -156,7 +156,7 @@ $csharpJsonDir = $null
 if (-not $SkipCSharp) {
     Write-Status "Building C# benchmarks..."
 
-    $csharpDir = Join-Path $ScriptDir "NumSharp.Benchmark.GraphEngine"
+    $csharpDir = Join-Path $ScriptDir "NumSharp.Benchmark.Core"
     Push-Location $csharpDir
 
     try {

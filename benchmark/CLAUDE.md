@@ -60,10 +60,10 @@ benchmark/
 ├── NumSharp.Benchmark.Python/             # Python/NumPy benchmarks
 │   └── numpy_benchmark.py                 # NumPy benchmark implementation
 │
-└── NumSharp.Benchmark.GraphEngine/        # C# BenchmarkDotNet project
+└── NumSharp.Benchmark.Core/        # C# BenchmarkDotNet project
     ├── README.md                          # C# benchmark documentation
     ├── Program.cs                         # Entry point with interactive menu
-    ├── NumSharp.Benchmark.GraphEngine.csproj
+    ├── NumSharp.Benchmark.Core.csproj
     │
     ├── Infrastructure/                    # Base classes and configuration
     │   ├── BenchmarkConfig.cs             # BenchmarkDotNet configurations
@@ -474,7 +474,7 @@ class BenchmarkResult:
 ### C# Interactive Menu
 
 ```bash
-cd NumSharp.Benchmark.GraphEngine
+cd NumSharp.Benchmark.Core
 dotnet run -c Release -f net10.0
 ```
 
@@ -534,9 +534,9 @@ python numpy_benchmark.py --type float32 --size medium
 ```csharp
 using BenchmarkDotNet.Attributes;
 using NumSharp;
-using NumSharp.Benchmark.GraphEngine.Infrastructure;
+using NumSharp.Benchmark.Core.Infrastructure;
 
-namespace NumSharp.Benchmark.GraphEngine.Benchmarks.YourCategory;
+namespace NumSharp.Benchmark.Core.Benchmarks.YourCategory;
 
 /// <summary>
 /// Brief description of what this benchmarks.
@@ -799,7 +799,7 @@ np.round_(_a);
 
 ### Build Error: File is locked
 
-**Error**: `The file is locked by: "NumSharp.Benchmark.GraphEngine (PID)"`
+**Error**: `The file is locked by: "NumSharp.Benchmark.Core (PID)"`
 
 **Cause**: Previous benchmark run is still executing
 
@@ -869,7 +869,7 @@ For 10M elements:
 python NumSharp.Benchmark.Python/numpy_benchmark.py --output benchmark-report.json
 
 # C#
-cd NumSharp.Benchmark.GraphEngine
+cd NumSharp.Benchmark.Core
 dotnet run -c Release -- --exporters json
 # Results in BenchmarkDotNet.Artifacts/results/*.json
 ```
@@ -911,7 +911,7 @@ jobs:
 
       - name: Run NumSharp benchmarks
         run: |
-          cd benchmark/NumSharp.Benchmark.GraphEngine
+          cd benchmark/NumSharp.Benchmark.Core
           dotnet run -c Release -- --job Short --exporters json
 
       - name: Upload results
@@ -920,7 +920,7 @@ jobs:
           name: benchmark-results
           path: |
             benchmark/benchmark-report.json
-            benchmark/NumSharp.Benchmark.GraphEngine/BenchmarkDotNet.Artifacts/
+            benchmark/NumSharp.Benchmark.Core/BenchmarkDotNet.Artifacts/
 ```
 
 ### Regression Detection
@@ -964,7 +964,7 @@ def check_regression(current_file, baseline_file, threshold=1.2):
 .\run-benchmarks.ps1 -Suite arithmetic
 
 # C# interactive
-cd NumSharp.Benchmark.GraphEngine && dotnet run -c Release
+cd NumSharp.Benchmark.Core && dotnet run -c Release
 
 # C# specific filter
 dotnet run -c Release -- --filter "*Sum*" --job Short
@@ -977,14 +977,14 @@ python NumSharp.Benchmark.Python/numpy_benchmark.py --suite reduction --type flo
 
 | Item | Location |
 |------|----------|
-| C# benchmarks | `NumSharp.Benchmark.GraphEngine/Benchmarks/` |
-| Infrastructure | `NumSharp.Benchmark.GraphEngine/Infrastructure/` |
+| C# benchmarks | `NumSharp.Benchmark.Core/Benchmarks/` |
+| Infrastructure | `NumSharp.Benchmark.Core/Infrastructure/` |
 | Python benchmarks | `NumSharp.Benchmark.Python/numpy_benchmark.py` |
 | Helper scripts | `scripts/merge-results.py` |
 | Report generator | `run-benchmarks.ps1` |
 | Generated report | `benchmark-report.md` (also `README.md`) |
 | Results JSON | `benchmark-report.json` |
-| C# JSON | `NumSharp.Benchmark.GraphEngine/BenchmarkDotNet.Artifacts/results/` |
+| C# JSON | `NumSharp.Benchmark.Core/BenchmarkDotNet.Artifacts/results/` |
 
 ### Type Shorthand
 
