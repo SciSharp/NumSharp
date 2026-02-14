@@ -1383,15 +1383,16 @@ namespace NumSharp.UnitTest.Selection
         }
 
         [Test]
-        [Category("OpenBugs")]
         public void IndexNDArray_Set_Case8_Broadcasted()
         {
+            // Broadcast arrays are read-only (NumPy behavior).
+            // Writing to a broadcast view should throw NumSharpException.
             var a = np.broadcast_to(np.arange(4).reshape(1, 4), (2, 4));
 
             new Action(() =>
             {
-                a[Slice.Index(1), Slice.All] = np.arange(0, 4, -1);
-                //ValueError: 
+                a[Slice.Index(1), Slice.All] = np.arange(4);
+                // NumPy: ValueError: assignment destination is read-only
             }).Should().Throw<NumSharpException>().WithMessage("assignment destination is read-only");
         }
 

@@ -1388,32 +1388,29 @@ namespace NumSharp.UnitTest.Creation
         #region Group 7: Stress Tests & Bug Probes
 
         /// <summary>
-        ///     broadcast_to result allows write-through to original (no read-only protection).
+        ///     broadcast_to result is read-only (matches NumPy).
         ///     NumPy raises ValueError: assignment destination is read-only.
         ///
-        ///     Known NumSharp bug: broadcast_to does not enforce read-only semantics.
-        ///     Writing to the broadcast view modifies the original array.
+        ///     NumSharp now correctly enforces read-only semantics on broadcast views.
+        ///     Writing to the broadcast view throws NumSharpException.
         ///
         ///     >>> x = np.array([1, 2, 3, 4])
         ///     >>> y = np.broadcast_to(x, (2, 4))
         ///     >>> y[0, 0] = 999  # NumPy: ValueError
         /// </summary>
         [Test]
-        public void BroadcastTo_WriteThrough_KnownBug()
+        public void BroadcastTo_WriteThrough_ThrowsReadOnly()
         {
             var x = np.array(new int[] { 1, 2, 3, 4 });
             var bx = np.broadcast_to(x, new Shape(2, 4));
 
-            // NumSharp allows writing through broadcast view to original.
-            // This is a known bug — NumPy would throw.
-            // We document the current behavior: SetInt32 modifies original.
-            bx.SetInt32(999, 0, 0);
-            Assert.AreEqual(999, x.GetInt32(0),
-                "NumSharp bug: broadcast_to write-through modifies original. " +
-                "NumPy would throw ValueError: assignment destination is read-only.");
+            // NumSharp correctly prevents writing to broadcast views (like NumPy).
+            Action write = () => bx.SetInt32(999, 0, 0);
+            write.Should().Throw<NumSharpException>()
+                .WithMessage("assignment destination is read-only");
 
-            // Restore for safety
-            x.SetInt32(1, 0);
+            // Verify original was not modified
+            x.GetInt32(0).Should().Be(1);
         }
 
         /// <summary>

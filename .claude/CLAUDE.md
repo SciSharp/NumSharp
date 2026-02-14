@@ -341,30 +341,33 @@ dotnet build -v q --nologo "-clp:NoSummary;ErrorsOnly" -p:WarningLevel=0
 
 ### Running Tests
 
-Tests use **TUnit** framework and require `--reflection` mode for test discovery.
+Tests use **TUnit** framework with source-generated test discovery.
 
 ```bash
 # Run from test directory
 cd test/NumSharp.UnitTest
 
 # All tests (includes OpenBugs - expected failures)
-dotnet test --no-build -- --reflection
+dotnet test --no-build
 
 # Exclude OpenBugs (CI-style - only real failures)
-dotnet test --no-build -- --reflection --treenode-filter "/*/*[Category!=OpenBugs]"
+dotnet test --no-build -- --treenode-filter "/*/*[Category!=OpenBugs]"
 
 # Run ONLY OpenBugs tests
-dotnet test --no-build -- --reflection --treenode-filter "/*/*[Category=OpenBugs]"
+dotnet test --no-build -- --treenode-filter "/*/*[Category=OpenBugs]"
 ```
 
 ### Output Formatting
 
 ```bash
 # Results only (no messages, no stack traces)
-dotnet test --no-build -- --reflection 2>&1 | grep -E "^(failed|skipped|Test run|  total:|  failed:|  succeeded:|  skipped:|  duration:)"
+dotnet test --no-build 2>&1 | grep -E "^(failed|skipped|Test run|  total:|  failed:|  succeeded:|  skipped:|  duration:)"
 
 # Results with messages (no stack traces)
-dotnet test --no-build -- --reflection 2>&1 | grep -v "^    at " | grep -v "^     at " | grep -v "^    ---" | grep -v "^  from K:" | sed 's/TUnit.Engine.Exceptions.TestFailedException: //' | sed 's/AssertFailedException: //'
+dotnet test --no-build 2>&1 | grep -v "^    at " | grep -v "^     at " | grep -v "^    ---" | grep -v "^  from K:" | sed 's/TUnit.Engine.Exceptions.TestFailedException: //' | sed 's/AssertFailedException: //'
+
+# Detailed output (shows passed tests too)
+dotnet test --no-build -- --output Detailed
 ```
 
 ## Test Categories
@@ -555,7 +558,7 @@ A: Core ops (`dot`, `matmul`) in `LinearAlgebra/`. Advanced decompositions (`inv
 ## Q&A - Development
 
 **Q: What's in the test suite?**
-A: TUnit framework in `test/NumSharp.UnitTest/`. Many tests adapted from NumPy's own test suite. Decent coverage but gaps in edge cases. Run with `--reflection` mode for test discovery.
+A: TUnit framework in `test/NumSharp.UnitTest/`. Many tests adapted from NumPy's own test suite. Decent coverage but gaps in edge cases. Uses source-generated test discovery (no special flags needed).
 
 **Q: What .NET version is targeted?**
 A: Library and tests multi-target `net8.0` and `net10.0`. Dropped `netstandard2.0` in the dotnet810 branch upgrade.
