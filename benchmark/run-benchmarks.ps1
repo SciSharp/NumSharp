@@ -7,15 +7,14 @@
     collects the results, calculates performance ratios, and generates a comprehensive
     Markdown report for comparison.
 
+    Results are saved to benchmark/results/yyyyMMdd-HHmmss/ and copied to benchmark/.
+
 .PARAMETER Quick
     Run quick benchmarks (fewer iterations, faster but less accurate)
 
 .PARAMETER Suite
     Specific suite to run: 'all', 'dispatch', 'fusion', 'arithmetic', 'unary',
     'reduction', 'broadcast', 'creation', 'manipulation', 'slicing'
-
-.PARAMETER OutputPath
-    Path for the output report (default: benchmark-report.md)
 
 .PARAMETER SkipCSharp
     Skip C# benchmarks
@@ -33,7 +32,7 @@
     .\run-benchmarks.ps1
     .\run-benchmarks.ps1 -Quick
     .\run-benchmarks.ps1 -Suite arithmetic -Type int32
-    .\run-benchmarks.ps1 -Suite all -OutputPath results.md
+    .\run-benchmarks.ps1 -Suite all
 #>
 
 param(
@@ -41,7 +40,6 @@ param(
     [ValidateSet('all', 'arithmetic', 'unary', 'reduction', 'broadcast', 'creation',
                  'manipulation', 'slicing', 'experimental', 'dispatch', 'fusion')]
     [string]$Suite = 'all',
-    [string]$OutputPath = 'benchmark-report.md',
     [switch]$SkipCSharp,
     [switch]$SkipPython,
     [string]$Type = '',
@@ -51,13 +49,34 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$ReportPath = Join-Path $ScriptDir $OutputPath
+$TimestampFolder = Get-Date -Format "yyyyMMdd-HHmmss"
 $Timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
 
-# Colors for console output
-function Write-Status { param($msg) Write-Host "`u{25B6} $msg" -ForegroundColor Cyan }
-function Write-Success { param($msg) Write-Host "`u{2713} $msg" -ForegroundColor Green }
-function Write-Warning { param($msg) Write-Host "`u{26A0} $msg" -ForegroundColor Yellow }
+# =============================================================================
+# Setup Results Directory
+# =============================================================================
+
+$ResultsDir = Join-Path $ScriptDir "results\$TimestampFolder"
+New-Item -ItemType Directory -Path $ResultsDir -Force | Out-Null
+
+$LogFile = Join-Path $ResultsDir "benchmark.log"
+
+# Logging function - writes to both console and log file
+function Write-Log {
+    param($msg, $Color = "White", $NoNewline = $false)
+    $timestamp = Get-Date -Format "HH:mm:ss"
+    $logMsg = "[$timestamp] $msg"
+    Add-Content -Path $LogFile -Value $logMsg
+    if ($NoNewline) {
+        Write-Host $msg -ForegroundColor $Color -NoNewline
+    } else {
+        Write-Host $msg -ForegroundColor $Color
+    }
+}
+
+function Write-Status { param($msg) Write-Log "`u{25B6} $msg" -Color Cyan }
+function Write-Success { param($msg) Write-Log "`u{2713} $msg" -Color Green }
+function Write-Warn { param($msg) Write-Log "`u{26A0} $msg" -Color Yellow }
 
 # Performance status icons
 function Get-StatusIcon {
@@ -68,13 +87,9 @@ function Get-StatusIcon {
     return "`u{1F534}"                               # Red circle - much slower
 }
 
-function Get-StatusText {
-    param([double]$Ratio)
-    if ($Ratio -le 1.0) { return "faster" }
-    if ($Ratio -le 2.0) { return "~2x" }
-    if ($Ratio -le 5.0) { return "$([math]::Round($Ratio, 1))x slower" }
-    return "$([math]::Round($Ratio, 1))x slower"
-}
+# =============================================================================
+# Banner
+# =============================================================================
 
 Write-Host ""
 Write-Host "`u{2554}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2557}" -ForegroundColor Blue
@@ -82,13 +97,20 @@ Write-Host "`u{2551}       NumSharp vs NumPy Comprehensive Benchmark Suite      
 Write-Host "`u{255A}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{255D}" -ForegroundColor Blue
 Write-Host ""
 
-# Initialize report
+Write-Log "Results directory: $ResultsDir"
+Write-Log "Parameters: Suite=$Suite, Quick=$Quick, SkipCSharp=$SkipCSharp, SkipPython=$SkipPython, Type=$Type, Size=$Size"
+
+# =============================================================================
+# Initialize Report
+# =============================================================================
+
 $report = @"
 # NumSharp Performance Benchmark Report
 
 **Generated:** $Timestamp
 **Mode:** $(if ($Quick) { 'Quick (reduced iterations)' } else { 'Full' })
 **Suite:** $Suite
+**Results:** results/$TimestampFolder/
 
 ---
 
@@ -117,33 +139,43 @@ try {
 
 $report += "`n"
 
+Write-Log "Environment: .NET $dotnetVersion, Python $($pythonVersion -replace 'Python ', ''), NumPy $numpyVersion"
+
 # =============================================================================
 # Run Python Benchmarks
 # =============================================================================
 
 $pythonResults = @()
-$pythonJsonPath = Join-Path $ScriptDir "numpy-results.json"
+$numpyJsonPath = Join-Path $ResultsDir "numpy-results.json"
 
 if (-not $SkipPython) {
     Write-Status "Running Python/NumPy benchmarks..."
 
     $pythonScript = Join-Path $ScriptDir "NumSharp.Benchmark.Python\numpy_benchmark.py"
-    $pythonArgs = @($pythonScript, "--output", $pythonJsonPath)
+    $pythonArgs = @($pythonScript, "--output", $numpyJsonPath)
     if ($Quick) { $pythonArgs += "--quick" }
     if ($Suite -ne 'all') { $pythonArgs += "--suite"; $pythonArgs += $Suite }
     if ($Type) { $pythonArgs += "--type"; $pythonArgs += $Type }
     if ($Size) { $pythonArgs += "--size"; $pythonArgs += $Size }
 
-    try {
-        & python @pythonArgs 2>&1 | ForEach-Object { Write-Host "  $_" }
+    Write-Log "Python command: python $($pythonArgs -join ' ')"
 
-        if (Test-Path $pythonJsonPath) {
-            $pythonResults = Get-Content $pythonJsonPath | ConvertFrom-Json
+    try {
+        & python @pythonArgs 2>&1 | ForEach-Object {
+            Write-Host "  $_"
+            Add-Content -Path $LogFile -Value "  [Python] $_"
+        }
+
+        if (Test-Path $numpyJsonPath) {
+            $pythonResults = Get-Content $numpyJsonPath | ConvertFrom-Json
             Write-Success "Python benchmarks complete ($($pythonResults.Count) results)"
         }
     } catch {
-        Write-Warning "Python benchmarks failed: $_"
+        Write-Warn "Python benchmarks failed: $_"
+        Add-Content -Path $LogFile -Value "ERROR: Python benchmarks failed: $_"
     }
+} else {
+    Write-Log "Skipping Python benchmarks (-SkipPython)"
 }
 
 # =============================================================================
@@ -151,7 +183,7 @@ if (-not $SkipPython) {
 # =============================================================================
 
 $csharpResults = @{}
-$csharpJsonDir = $null
+$numsharpJsonPath = Join-Path $ResultsDir "numsharp-results.json"
 
 if (-not $SkipCSharp) {
     Write-Status "Building C# benchmarks..."
@@ -160,7 +192,8 @@ if (-not $SkipCSharp) {
     Push-Location $csharpDir
 
     try {
-        & dotnet build -c Release -v q --nologo 2>$null | Out-Null
+        $buildOutput = & dotnet build -c Release -v q --nologo 2>&1
+        Add-Content -Path $LogFile -Value "Build output: $buildOutput"
         Write-Success "Build complete"
 
         Write-Status "Running C# benchmarks (this may take a few minutes)..."
@@ -183,8 +216,13 @@ if (-not $SkipCSharp) {
             default { "*" }  # 'all' runs everything (merge script filters by operation name match)
         }
 
+        Write-Log "C# command: dotnet run -c Release --no-build -f net10.0 -- --job $jobType --filter $filter --exporters json"
+
         # Run and capture output
         $output = & dotnet run -c Release --no-build -f net10.0 -- --job $jobType --filter $filter --exporters json 2>&1
+
+        # Log all output
+        $output | ForEach-Object { Add-Content -Path $LogFile -Value "  [C#] $_" }
 
         # Parse the summary table from output
         $inTable = $false
@@ -200,17 +238,45 @@ if (-not $SkipCSharp) {
             Write-Success "C# benchmarks complete"
         }
 
-        # Find JSON results directory
+        # Find and consolidate BenchmarkDotNet JSON results
         $artifactsDir = Join-Path $csharpDir "BenchmarkDotNet.Artifacts\results"
         if (Test-Path $artifactsDir) {
-            $csharpJsonDir = $artifactsDir
+            # Consolidate all BDN results into numsharp-results.json
+            $allBenchmarks = @()
+            Get-ChildItem -Path $artifactsDir -Filter "*-report-full-compressed.json" | ForEach-Object {
+                $bdnContent = Get-Content $_.FullName | ConvertFrom-Json
+                if ($bdnContent.Benchmarks) {
+                    $allBenchmarks += $bdnContent.Benchmarks
+                }
+                # Copy original BDN files to results dir
+                Copy-Item $_.FullName -Destination $ResultsDir -Force
+            }
+
+            # Also copy markdown reports
+            Get-ChildItem -Path $artifactsDir -Filter "*-report-github.md" | ForEach-Object {
+                Copy-Item $_.FullName -Destination $ResultsDir -Force
+            }
+
+            # Create consolidated numsharp-results.json
+            if ($allBenchmarks.Count -gt 0) {
+                $consolidatedResults = @{
+                    Title = "NumSharp Benchmark Results"
+                    Timestamp = $Timestamp
+                    Benchmarks = $allBenchmarks
+                }
+                $consolidatedResults | ConvertTo-Json -Depth 10 | Out-File -FilePath $numsharpJsonPath -Encoding UTF8
+                Write-Log "Consolidated $($allBenchmarks.Count) C# benchmark results to numsharp-results.json"
+            }
         }
 
     } catch {
-        Write-Warning "C# benchmarks failed: $_"
+        Write-Warn "C# benchmarks failed: $_"
+        Add-Content -Path $LogFile -Value "ERROR: C# benchmarks failed: $_"
     } finally {
         Pop-Location
     }
+} else {
+    Write-Log "Skipping C# benchmarks (-SkipCSharp)"
 }
 
 # =============================================================================
@@ -230,10 +296,6 @@ $report += @"
 if ($pythonResults.Count -gt 0) {
     # Calculate statistics
     $totalOps = $pythonResults.Count
-    $faster = 0
-    $within2x = 0
-    $slower = 0
-    $muchSlower = 0
 
     # Group by suite for summary
     $suiteStats = @{}
@@ -311,20 +373,21 @@ $report += @"
 
 ## Quick Reference
 
-Ratio = NumSharp / NumPy | ✅ ≤1x | 🟡 ≤2x | 🟠 ≤5x | 🔴 >5x
+Ratio = NumSharp / NumPy | `u{2705} `u{2264}1x | `u{1F7E1} `u{2264}2x | `u{1F7E0} `u{2264}5x | `u{1F534} >5x
 
 **See benchmark-report.md for the full comparison matrix.**
 
 ---
 
 *Generated by run-benchmarks.ps1*
+*Results: results/$TimestampFolder/*
 "@
 
-# Write report
-$report | Out-File -FilePath $ReportPath -Encoding UTF8
+# Write report to results dir
+$reportPath = Join-Path $ResultsDir "benchmark-report.md"
+$report | Out-File -FilePath $reportPath -Encoding UTF8
 
-Write-Host ""
-Write-Success "Report generated: $ReportPath"
+Write-Success "Report generated: $reportPath"
 
 # =============================================================================
 # Generate Unified Comparison (if both results exist)
@@ -332,38 +395,72 @@ Write-Success "Report generated: $ReportPath"
 
 $mergeScript = Join-Path $ScriptDir "scripts\merge-results.py"
 
-if ((Test-Path $pythonJsonPath) -and (Test-Path $mergeScript)) {
+if ((Test-Path $numpyJsonPath) -and (Test-Path $mergeScript)) {
     Write-Status "Generating unified comparison..."
+
+    $mergeOutputBase = Join-Path $ResultsDir "benchmark-report"
+    $csharpArtifacts = Join-Path $ScriptDir "NumSharp.Benchmark.Core\BenchmarkDotNet.Artifacts\results"
+
+    Write-Log "Merge command: python $mergeScript --numpy $numpyJsonPath --csharp $csharpArtifacts --output $mergeOutputBase"
+
     try {
-        $outputBase = Join-Path $ScriptDir "benchmark-report"
-        & python $mergeScript --numpy $pythonJsonPath --output $outputBase 2>&1 | ForEach-Object { Write-Host "  $_" }
+        & python $mergeScript --numpy $numpyJsonPath --csharp $csharpArtifacts --output $mergeOutputBase 2>&1 | ForEach-Object {
+            Write-Host "  $_"
+            Add-Content -Path $LogFile -Value "  [Merge] $_"
+        }
         Write-Success "Unified results generated"
     } catch {
-        Write-Warning "Failed to generate unified results: $_"
+        Write-Warn "Failed to generate unified results: $_"
+        Add-Content -Path $LogFile -Value "ERROR: Merge failed: $_"
     }
 }
 
 # =============================================================================
-# Copy report to README.md (only if README.md already exists)
+# Copy Results to benchmark/ (override existing)
 # =============================================================================
 
-$readmePath = Join-Path $ScriptDir "README.md"
-if (Test-Path $readmePath) {
-    Copy-Item -Path $ReportPath -Destination $readmePath -Force
-    Write-Success "README.md updated with benchmark results"
-} else {
-    Write-Warning "README.md not found - skipping auto-update (create it manually to enable)"
+Write-Status "Copying results to benchmark/..."
+
+# Copy main output files to benchmark/ root
+$filesToCopy = @(
+    "benchmark-report.md",
+    "benchmark-report.json",
+    "benchmark-report.csv",
+    "numpy-results.json",
+    "numsharp-results.json"
+)
+
+foreach ($file in $filesToCopy) {
+    $sourcePath = Join-Path $ResultsDir $file
+    $destPath = Join-Path $ScriptDir $file
+    if (Test-Path $sourcePath) {
+        Copy-Item -Path $sourcePath -Destination $destPath -Force
+        Write-Log "Copied $file to benchmark/"
+    }
 }
 
-Write-Host ""
+# Update README.md if it exists
+$readmePath = Join-Path $ScriptDir "README.md"
+$mergedReportPath = Join-Path $ResultsDir "benchmark-report.md"
+if ((Test-Path $readmePath) -and (Test-Path $mergedReportPath)) {
+    Copy-Item -Path $mergedReportPath -Destination $readmePath -Force
+    Write-Success "README.md updated with benchmark results"
+}
 
-# Display summary
+# =============================================================================
+# Final Summary
+# =============================================================================
+
+Write-Host ""
 Write-Host "`u{2554}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2557}" -ForegroundColor Green
 Write-Host "`u{2551}  Benchmark Complete!                                         `u{2551}" -ForegroundColor Green
 Write-Host "`u{255A}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{255D}" -ForegroundColor Green
 Write-Host ""
-Write-Host "  Report: " -NoNewline; Write-Host $ReportPath -ForegroundColor Yellow
-Write-Host "  README: " -NoNewline; Write-Host $readmePath -ForegroundColor Yellow
-Write-Host "  JSON:   " -NoNewline; Write-Host $pythonJsonPath -ForegroundColor Yellow
-Write-Host "  View:   " -NoNewline; Write-Host "code $ReportPath" -ForegroundColor Cyan
+Write-Host "  Results:  " -NoNewline; Write-Host $ResultsDir -ForegroundColor Yellow
+Write-Host "  Report:   " -NoNewline; Write-Host (Join-Path $ScriptDir "benchmark-report.md") -ForegroundColor Yellow
+Write-Host "  README:   " -NoNewline; Write-Host $readmePath -ForegroundColor Yellow
+Write-Host "  Log:      " -NoNewline; Write-Host $LogFile -ForegroundColor Yellow
+Write-Host ""
+Write-Host "  Files in results/$TimestampFolder/:" -ForegroundColor Cyan
+Get-ChildItem -Path $ResultsDir | ForEach-Object { Write-Host "    - $($_.Name)" }
 Write-Host ""
