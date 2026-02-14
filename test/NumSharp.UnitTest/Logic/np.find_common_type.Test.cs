@@ -162,6 +162,35 @@ namespace NumSharp.UnitTest.Logic
             r.Should().Be(NPTypeCode.Int16);
         }
 
+        /// <summary>
+        /// NEP 50: When an unsigned integer array operates with a signed integer scalar,
+        /// the array dtype wins (no type widening). This matches NumPy 2.x behavior.
+        /// See: https://numpy.org/neps/nep-0050-scalar-promotion.html
+        /// </summary>
+        [Test]
+        public void NEP50_UnsignedArray_SignedScalar_ArrayWins()
+        {
+            // uint8 array + signed scalar → uint8
+            np._FindCommonArrayScalarType(NPTypeCode.Byte, NPTypeCode.Int16).Should().Be(NPTypeCode.Byte);
+            np._FindCommonArrayScalarType(NPTypeCode.Byte, NPTypeCode.Int32).Should().Be(NPTypeCode.Byte);
+            np._FindCommonArrayScalarType(NPTypeCode.Byte, NPTypeCode.Int64).Should().Be(NPTypeCode.Byte);
+
+            // uint16 array + signed scalar → uint16
+            np._FindCommonArrayScalarType(NPTypeCode.UInt16, NPTypeCode.Int16).Should().Be(NPTypeCode.UInt16);
+            np._FindCommonArrayScalarType(NPTypeCode.UInt16, NPTypeCode.Int32).Should().Be(NPTypeCode.UInt16);
+            np._FindCommonArrayScalarType(NPTypeCode.UInt16, NPTypeCode.Int64).Should().Be(NPTypeCode.UInt16);
+
+            // uint32 array + signed scalar → uint32
+            np._FindCommonArrayScalarType(NPTypeCode.UInt32, NPTypeCode.Int16).Should().Be(NPTypeCode.UInt32);
+            np._FindCommonArrayScalarType(NPTypeCode.UInt32, NPTypeCode.Int32).Should().Be(NPTypeCode.UInt32);
+            np._FindCommonArrayScalarType(NPTypeCode.UInt32, NPTypeCode.Int64).Should().Be(NPTypeCode.UInt32);
+
+            // uint64 array + signed scalar → uint64
+            np._FindCommonArrayScalarType(NPTypeCode.UInt64, NPTypeCode.Int16).Should().Be(NPTypeCode.UInt64);
+            np._FindCommonArrayScalarType(NPTypeCode.UInt64, NPTypeCode.Int32).Should().Be(NPTypeCode.UInt64);
+            np._FindCommonArrayScalarType(NPTypeCode.UInt64, NPTypeCode.Int64).Should().Be(NPTypeCode.UInt64);
+        }
+
         [Test, Skip("Ignored")]
         public void gen_typecode_map()
         {
