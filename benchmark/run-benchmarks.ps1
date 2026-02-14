@@ -13,14 +13,18 @@
     Run quick benchmarks (fewer iterations, faster but less accurate)
 
 .PARAMETER Suite
-    Specific suite to run: 'all', 'dispatch', 'fusion', 'arithmetic', 'unary',
-    'reduction', 'broadcast', 'creation', 'manipulation', 'slicing'
+    Specific suite to run: 'all', 'arithmetic', 'unary', 'reduction', 'broadcast',
+    'creation', 'manipulation', 'slicing'
+
+.PARAMETER Experimental
+    Run experimental benchmarks (C# internal research, not for NumPy comparison).
+    Use with -Suite to specify: 'dispatch', 'fusion', or 'all' for all experimental.
 
 .PARAMETER SkipCSharp
     Skip C# benchmarks
 
 .PARAMETER SkipPython
-    Skip Python benchmarks
+    Skip Python benchmarks (recommended with -Experimental since results won't merge)
 
 .PARAMETER Type
     Specific dtype to benchmark (e.g., int32, float64)
@@ -32,14 +36,13 @@
     .\run-benchmarks.ps1
     .\run-benchmarks.ps1 -Quick
     .\run-benchmarks.ps1 -Suite arithmetic -Type int32
-    .\run-benchmarks.ps1 -Suite all
+    .\run-benchmarks.ps1 -Experimental -Suite dispatch -SkipPython
 #>
 
 param(
     [switch]$Quick,
-    [ValidateSet('all', 'arithmetic', 'unary', 'reduction', 'broadcast', 'creation',
-                 'manipulation', 'slicing', 'experimental', 'dispatch', 'fusion')]
     [string]$Suite = 'all',
+    [switch]$Experimental,
     [switch]$SkipCSharp,
     [switch]$SkipPython,
     [string]$Type = '',
@@ -48,6 +51,24 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+
+# Validate -Suite based on -Experimental mode
+$standardSuites = @('all', 'arithmetic', 'unary', 'reduction', 'broadcast', 'creation', 'manipulation', 'slicing')
+$experimentalSuites = @('all', 'dispatch', 'fusion')
+
+if ($Experimental) {
+    if ($Suite -notin $experimentalSuites) {
+        Write-Host "Error: -Experimental mode only supports suites: $($experimentalSuites -join ', ')" -ForegroundColor Red
+        Write-Host "       Use without -Experimental for: $($standardSuites -join ', ')" -ForegroundColor Red
+        exit 1
+    }
+} else {
+    if ($Suite -notin $standardSuites) {
+        Write-Host "Error: Invalid suite '$Suite'. Valid suites: $($standardSuites -join ', ')" -ForegroundColor Red
+        Write-Host "       For experimental suites (dispatch, fusion), use -Experimental flag" -ForegroundColor Red
+        exit 1
+    }
+}
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $TimestampFolder = Get-Date -Format "yyyyMMdd-HHmmss"
 $Timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
@@ -98,7 +119,12 @@ Write-Host "`u{255A}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2550}`u{2
 Write-Host ""
 
 Write-Log "Results directory: $ResultsDir"
-Write-Log "Parameters: Suite=$Suite, Quick=$Quick, SkipCSharp=$SkipCSharp, SkipPython=$SkipPython, Type=$Type, Size=$Size"
+Write-Log "Parameters: Suite=$Suite, Quick=$Quick, Experimental=$Experimental, SkipCSharp=$SkipCSharp, SkipPython=$SkipPython, Type=$Type, Size=$Size"
+
+# Warn if running experimental without skipping Python
+if ($Experimental -and -not $SkipPython) {
+    Write-Warn "Experimental benchmarks don't merge with NumPy results. Consider using -SkipPython."
+}
 
 # =============================================================================
 # Initialize Report
@@ -108,7 +134,7 @@ $report = @"
 # NumSharp Performance Benchmark Report
 
 **Generated:** $Timestamp
-**Mode:** $(if ($Quick) { 'Quick (reduced iterations)' } else { 'Full' })
+**Mode:** $(if ($Quick) { 'Quick (reduced iterations)' } else { 'Full' })$(if ($Experimental) { ' [EXPERIMENTAL]' } else { '' })
 **Suite:** $Suite
 **Results:** results/$TimestampFolder/
 
@@ -200,20 +226,30 @@ if (-not $SkipCSharp) {
 
         $jobType = if ($Quick) { "Short" } else { "Medium" }
 
-        # Build filter based on suite
-        # Note: 'dispatch' and 'fusion' are Experimental (C# internals, not for NumPy comparison)
-        $filter = switch ($Suite) {
-            'arithmetic' { "*Arithmetic*" }
-            'unary' { "*Unary*,*Math*,*ExpLog*,*Trig*,*Power*" }
-            'reduction' { "*Reduction*,*Sum*,*Mean*,*VarStd*,*MinMax*,*Prod*" }
-            'broadcast' { "*Broadcast*" }
-            'creation' { "*Creation*" }
-            'manipulation' { "*Manipulation*,*Reshape*,*Stack*,*Dims*" }
-            'slicing' { "*Slice*" }
-            'experimental' { "*Experimental*" }
-            'dispatch' { "*Experimental*Dispatch*" }
-            'fusion' { "*Experimental*Fusion*" }
-            default { "*" }  # 'all' runs everything (merge script filters by operation name match)
+        # Build filter based on suite and -Experimental flag
+        if ($Experimental) {
+            # Experimental mode: run C# internal research benchmarks
+            $filter = switch ($Suite) {
+                'dispatch' { "*Experimental*Dispatch*" }
+                'fusion' { "*Experimental*Fusion*" }
+                default { "*Experimental*" }  # 'all' runs all experimental
+            }
+        } else {
+            # Standard mode: run NumPy-comparable benchmarks
+            $filter = switch ($Suite) {
+                'arithmetic' { "*Arithmetic*" }
+                'unary' { "*Unary*,*Math*,*ExpLog*,*Trig*,*Power*" }
+                'reduction' { "*Reduction*,*Sum*,*Mean*,*VarStd*,*MinMax*,*Prod*" }
+                'broadcast' { "*Broadcast*" }
+                'creation' { "*Creation*" }
+                'manipulation' { "*Manipulation*,*Reshape*,*Stack*,*Dims*" }
+                'slicing' { "*Slice*" }
+                default { "*" }  # 'all' runs everything except Experimental
+            }
+            # Exclude Experimental from 'all'
+            if ($Suite -eq 'all') {
+                $filter = "*Benchmarks*,!*Experimental*"
+            }
         }
 
         Write-Log "C# command: dotnet run -c Release --no-build -f net10.0 -- --job $jobType --filter $filter --exporters json"
