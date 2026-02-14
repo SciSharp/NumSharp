@@ -19,7 +19,13 @@ namespace NumSharp.Backends
             {
                 var r = typeCode.HasValue ? Cast(arr, typeCode.Value, true) : arr.Clone();
                 if (keepdims)
-                    r.Storage.ExpandDimension(0);
+                {
+                    // NumPy: keepdims preserves the number of dimensions, all set to 1
+                    var keepdimsShape = new int[arr.ndim];
+                    for (int i = 0; i < arr.ndim; i++)
+                        keepdimsShape[i] = 1;
+                    r.Storage.Reshape(new Shape(keepdimsShape));
+                }
                 else if (!r.Shape.IsScalar && r.Shape.size == 1 && r.ndim == 1)
                     r.Storage.Reshape(Shape.Scalar);
 
@@ -30,7 +36,13 @@ namespace NumSharp.Backends
             {
                 var r = NDArray.Scalar(amin_elementwise(arr, typeCode));
                 if (keepdims)
-                    r.Storage.ExpandDimension(0);
+                {
+                    // NumPy: keepdims preserves the number of dimensions, all set to 1
+                    var keepdimsShape = new int[arr.ndim];
+                    for (int i = 0; i < arr.ndim; i++)
+                        keepdimsShape[i] = 1;
+                    r.Storage.Reshape(new Shape(keepdimsShape));
+                }
                 else if (!r.Shape.IsScalar && r.Shape.size == 1 && r.ndim == 1)
                     r.Storage.Reshape(Shape.Scalar);
 
