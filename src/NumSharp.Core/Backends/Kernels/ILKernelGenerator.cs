@@ -594,6 +594,7 @@ namespace NumSharp.Backends.Kernels
 
         /// <summary>
         /// Generate a SimdScalarRight kernel (right operand is scalar).
+        /// Uses SIMD when LHS type equals result type (no per-element conversion needed).
         /// </summary>
         private static MixedTypeKernel GenerateSimdScalarRightKernel(MixedTypeKernelKey key)
         {
@@ -616,7 +617,20 @@ namespace NumSharp.Backends.Kernels
             int rhsSize = GetTypeSize(key.RhsType);
             int resultSize = GetTypeSize(key.ResultType);
 
-            EmitScalarRightLoop(il, key, lhsSize, rhsSize, resultSize);
+            // Use SIMD when: LHS type == Result type (no per-element conversion needed),
+            // result type supports SIMD, and operation has SIMD support
+            bool canUseSimd = key.LhsType == key.ResultType &&
+                              CanUseSimd(key.ResultType) &&
+                              CanUseSimdForOp(key.Op);
+
+            if (canUseSimd)
+            {
+                EmitSimdScalarRightLoop(il, key, resultSize);
+            }
+            else
+            {
+                EmitScalarRightLoop(il, key, lhsSize, rhsSize, resultSize);
+            }
 
             il.Emit(OpCodes.Ret);
             return dm.CreateDelegate<MixedTypeKernel>();
@@ -624,6 +638,7 @@ namespace NumSharp.Backends.Kernels
 
         /// <summary>
         /// Generate a SimdScalarLeft kernel (left operand is scalar).
+        /// Uses SIMD when RHS type equals result type (no per-element conversion needed).
         /// </summary>
         private static MixedTypeKernel GenerateSimdScalarLeftKernel(MixedTypeKernelKey key)
         {
@@ -646,7 +661,20 @@ namespace NumSharp.Backends.Kernels
             int rhsSize = GetTypeSize(key.RhsType);
             int resultSize = GetTypeSize(key.ResultType);
 
-            EmitScalarLeftLoop(il, key, lhsSize, rhsSize, resultSize);
+            // Use SIMD when: RHS type == Result type (no per-element conversion needed),
+            // result type supports SIMD, and operation has SIMD support
+            bool canUseSimd = key.RhsType == key.ResultType &&
+                              CanUseSimd(key.ResultType) &&
+                              CanUseSimdForOp(key.Op);
+
+            if (canUseSimd)
+            {
+                EmitSimdScalarLeftLoop(il, key, resultSize);
+            }
+            else
+            {
+                EmitScalarLeftLoop(il, key, lhsSize, rhsSize, resultSize);
+            }
 
             il.Emit(OpCodes.Ret);
             return dm.CreateDelegate<MixedTypeKernel>();
@@ -1030,6 +1058,278 @@ namespace NumSharp.Backends.Kernels
 
             il.Emit(OpCodes.Br, lblLoop);
             il.MarkLabel(lblLoopEnd);
+        }
+
+        /// <summary>
+        /// Emit SIMD loop for scalar right operand (broadcast scalar to vector).
+        /// Requires: LHS type == Result type (no per-element conversion needed).
+        /// </summary>
+        private static void EmitSimdScalarRightLoop(ILGenerator il, MixedTypeKernelKey key, int elemSize)
+        {
+            // Args: void* lhs (0), void* rhs (1), void* result (2),
+            //       int* lhsStrides (3), int* rhsStrides (4), int* shape (5),
+            //       int ndim (6), int totalSize (7)
+
+            int vectorCount = GetVectorCount(key.ResultType);
+            var clrType = GetClrType(key.ResultType);
+            var vectorType = typeof(Vector256<>).MakeGenericType(clrType);
+
+            var locI = il.DeclareLocal(typeof(int));           // loop counter
+            var locVectorEnd = il.DeclareLocal(typeof(int));   // totalSize - vectorCount
+            var locScalarVec = il.DeclareLocal(vectorType);    // broadcasted scalar vector
+
+            var lblSimdLoop = il.DefineLabel();
+            var lblSimdLoopEnd = il.DefineLabel();
+            var lblTailLoop = il.DefineLabel();
+            var lblTailLoopEnd = il.DefineLabel();
+
+            // === Load scalar, convert to result type, broadcast to vector ===
+            // Load rhs[0] (the scalar)
+            il.Emit(OpCodes.Ldarg_1); // rhs
+            EmitLoadIndirect(il, key.RhsType);
+            // Convert to result type if needed
+            if (key.RhsType != key.ResultType)
+            {
+                EmitConvertTo(il, key.RhsType, key.ResultType);
+            }
+            // Broadcast to Vector256: Vector256.Create(scalar)
+            EmitVectorCreate(il, key.ResultType);
+            il.Emit(OpCodes.Stloc, locScalarVec);
+
+            // vectorEnd = totalSize - vectorCount
+            il.Emit(OpCodes.Ldarg_S, (byte)7); // totalSize
+            il.Emit(OpCodes.Ldc_I4, vectorCount);
+            il.Emit(OpCodes.Sub);
+            il.Emit(OpCodes.Stloc, locVectorEnd);
+
+            // i = 0
+            il.Emit(OpCodes.Ldc_I4_0);
+            il.Emit(OpCodes.Stloc, locI);
+
+            // === SIMD LOOP ===
+            il.MarkLabel(lblSimdLoop);
+
+            // if (i > vectorEnd) goto SimdLoopEnd
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldloc, locVectorEnd);
+            il.Emit(OpCodes.Bgt, lblSimdLoopEnd);
+
+            // Load lhs vector: Vector256.Load(lhs + i * elemSize)
+            il.Emit(OpCodes.Ldarg_0); // lhs
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Ldc_I4, elemSize);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Add);
+            EmitVectorLoad(il, key.LhsType);
+
+            // Load scalar vector
+            il.Emit(OpCodes.Ldloc, locScalarVec);
+
+            // Vector operation: lhsVec op scalarVec
+            EmitVectorOperation(il, key.Op, key.ResultType);
+
+            // Store result vector: Vector256.Store(resultVec, result + i * elemSize)
+            il.Emit(OpCodes.Ldarg_2); // result
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Ldc_I4, elemSize);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Add);
+            EmitVectorStore(il, key.ResultType);
+
+            // i += vectorCount
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldc_I4, vectorCount);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Stloc, locI);
+
+            il.Emit(OpCodes.Br, lblSimdLoop);
+            il.MarkLabel(lblSimdLoopEnd);
+
+            // === TAIL LOOP (scalar remainder) ===
+            // Load scalar value once for tail loop
+            var locScalarVal = il.DeclareLocal(clrType);
+            il.Emit(OpCodes.Ldarg_1); // rhs
+            EmitLoadIndirect(il, key.RhsType);
+            if (key.RhsType != key.ResultType)
+            {
+                EmitConvertTo(il, key.RhsType, key.ResultType);
+            }
+            il.Emit(OpCodes.Stloc, locScalarVal);
+
+            il.MarkLabel(lblTailLoop);
+
+            // if (i >= totalSize) goto end
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldarg_S, (byte)7); // totalSize
+            il.Emit(OpCodes.Bge, lblTailLoopEnd);
+
+            // result[i] = lhs[i] op scalarVal
+            il.Emit(OpCodes.Ldarg_2); // result
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Ldc_I4, elemSize);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Add);
+
+            il.Emit(OpCodes.Ldarg_0); // lhs
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Ldc_I4, elemSize);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Add);
+            EmitLoadIndirect(il, key.LhsType);
+
+            il.Emit(OpCodes.Ldloc, locScalarVal);
+
+            EmitScalarOperation(il, key.Op, key.ResultType);
+            EmitStoreIndirect(il, key.ResultType);
+
+            // i++
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldc_I4_1);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Stloc, locI);
+
+            il.Emit(OpCodes.Br, lblTailLoop);
+            il.MarkLabel(lblTailLoopEnd);
+        }
+
+        /// <summary>
+        /// Emit SIMD loop for scalar left operand (broadcast scalar to vector).
+        /// Requires: RHS type == Result type (no per-element conversion needed).
+        /// </summary>
+        private static void EmitSimdScalarLeftLoop(ILGenerator il, MixedTypeKernelKey key, int elemSize)
+        {
+            // Args: void* lhs (0), void* rhs (1), void* result (2),
+            //       int* lhsStrides (3), int* rhsStrides (4), int* shape (5),
+            //       int ndim (6), int totalSize (7)
+
+            int vectorCount = GetVectorCount(key.ResultType);
+            var clrType = GetClrType(key.ResultType);
+            var vectorType = typeof(Vector256<>).MakeGenericType(clrType);
+
+            var locI = il.DeclareLocal(typeof(int));           // loop counter
+            var locVectorEnd = il.DeclareLocal(typeof(int));   // totalSize - vectorCount
+            var locScalarVec = il.DeclareLocal(vectorType);    // broadcasted scalar vector
+
+            var lblSimdLoop = il.DefineLabel();
+            var lblSimdLoopEnd = il.DefineLabel();
+            var lblTailLoop = il.DefineLabel();
+            var lblTailLoopEnd = il.DefineLabel();
+
+            // === Load scalar, convert to result type, broadcast to vector ===
+            // Load lhs[0] (the scalar)
+            il.Emit(OpCodes.Ldarg_0); // lhs
+            EmitLoadIndirect(il, key.LhsType);
+            // Convert to result type if needed
+            if (key.LhsType != key.ResultType)
+            {
+                EmitConvertTo(il, key.LhsType, key.ResultType);
+            }
+            // Broadcast to Vector256: Vector256.Create(scalar)
+            EmitVectorCreate(il, key.ResultType);
+            il.Emit(OpCodes.Stloc, locScalarVec);
+
+            // vectorEnd = totalSize - vectorCount
+            il.Emit(OpCodes.Ldarg_S, (byte)7); // totalSize
+            il.Emit(OpCodes.Ldc_I4, vectorCount);
+            il.Emit(OpCodes.Sub);
+            il.Emit(OpCodes.Stloc, locVectorEnd);
+
+            // i = 0
+            il.Emit(OpCodes.Ldc_I4_0);
+            il.Emit(OpCodes.Stloc, locI);
+
+            // === SIMD LOOP ===
+            il.MarkLabel(lblSimdLoop);
+
+            // if (i > vectorEnd) goto SimdLoopEnd
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldloc, locVectorEnd);
+            il.Emit(OpCodes.Bgt, lblSimdLoopEnd);
+
+            // Load scalar vector
+            il.Emit(OpCodes.Ldloc, locScalarVec);
+
+            // Load rhs vector: Vector256.Load(rhs + i * elemSize)
+            il.Emit(OpCodes.Ldarg_1); // rhs
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Ldc_I4, elemSize);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Add);
+            EmitVectorLoad(il, key.RhsType);
+
+            // Vector operation: scalarVec op rhsVec
+            EmitVectorOperation(il, key.Op, key.ResultType);
+
+            // Store result vector: Vector256.Store(resultVec, result + i * elemSize)
+            il.Emit(OpCodes.Ldarg_2); // result
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Ldc_I4, elemSize);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Add);
+            EmitVectorStore(il, key.ResultType);
+
+            // i += vectorCount
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldc_I4, vectorCount);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Stloc, locI);
+
+            il.Emit(OpCodes.Br, lblSimdLoop);
+            il.MarkLabel(lblSimdLoopEnd);
+
+            // === TAIL LOOP (scalar remainder) ===
+            // Load scalar value once for tail loop
+            var locScalarVal = il.DeclareLocal(clrType);
+            il.Emit(OpCodes.Ldarg_0); // lhs
+            EmitLoadIndirect(il, key.LhsType);
+            if (key.LhsType != key.ResultType)
+            {
+                EmitConvertTo(il, key.LhsType, key.ResultType);
+            }
+            il.Emit(OpCodes.Stloc, locScalarVal);
+
+            il.MarkLabel(lblTailLoop);
+
+            // if (i >= totalSize) goto end
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldarg_S, (byte)7); // totalSize
+            il.Emit(OpCodes.Bge, lblTailLoopEnd);
+
+            // result[i] = scalarVal op rhs[i]
+            il.Emit(OpCodes.Ldarg_2); // result
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Ldc_I4, elemSize);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Add);
+
+            il.Emit(OpCodes.Ldloc, locScalarVal);
+
+            il.Emit(OpCodes.Ldarg_1); // rhs
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Ldc_I4, elemSize);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Add);
+            EmitLoadIndirect(il, key.RhsType);
+
+            EmitScalarOperation(il, key.Op, key.ResultType);
+            EmitStoreIndirect(il, key.ResultType);
+
+            // i++
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldc_I4_1);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Stloc, locI);
+
+            il.Emit(OpCodes.Br, lblTailLoop);
+            il.MarkLabel(lblTailLoopEnd);
         }
 
         /// <summary>
@@ -1592,6 +1892,27 @@ namespace NumSharp.Backends.Kernels
                 .MakeGenericMethod(clrType);
 
             il.EmitCall(OpCodes.Call, loadMethod, null);
+        }
+
+        /// <summary>
+        /// Emit Vector256.Create for NPTypeCode (broadcasts scalar to all vector elements).
+        /// Stack must have scalar value on top; result is Vector256 on stack.
+        /// </summary>
+        internal static void EmitVectorCreate(ILGenerator il, NPTypeCode type)
+        {
+            var clrType = GetClrType(type);
+            // Vector256.Create<T>(T value) - generic method that takes single scalar
+            var createMethod = typeof(Vector256)
+                .GetMethods(BindingFlags.Public | BindingFlags.Static)
+                .Where(m => m.Name == "Create" && m.IsGenericMethod)
+                .Select(m => m.MakeGenericMethod(clrType))
+                .First(m =>
+                {
+                    var p = m.GetParameters();
+                    return p.Length == 1 && p[0].ParameterType == clrType;
+                });
+
+            il.EmitCall(OpCodes.Call, createMethod, null);
         }
 
         /// <summary>
