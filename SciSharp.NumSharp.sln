@@ -9,9 +9,9 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NumSharp.Benchmark", "test\
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NumSharp.Core", "src\NumSharp.Core\NumSharp.Core.csproj", "{190A2514-31CD-4738-AF20-3492DD47DE8C}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Examples", "Examples", "{FB0CB349-D4C7-4C09-BCC5-679F2ABEC6B4}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Examples", "examples", "{FB0CB349-D4C7-4C09-BCC5-679F2ABEC6B4}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NeuralNetwork.NumSharp", "Examples\NeuralNetwork.NumSharp\NeuralNetwork.NumSharp.csproj", "{B9253A77-0652-4091-A7F5-14E9FE2630FF}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NeuralNetwork.NumSharp", "examples\NeuralNetwork.NumSharp\NeuralNetwork.NumSharp.csproj", "{B9253A77-0652-4091-A7F5-14E9FE2630FF}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NumSharp.Bitmap", "src\NumSharp.Bitmap\NumSharp.Bitmap.csproj", "{16C45DA5-D006-4229-B457-4F5E36D5DC55}"
 EndProject
