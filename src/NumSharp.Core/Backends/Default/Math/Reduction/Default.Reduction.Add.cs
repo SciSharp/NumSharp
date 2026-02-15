@@ -49,13 +49,14 @@ namespace NumSharp.Backends
             //handle element-wise (no axis specified)
             if (axis_ == null)
             {
+                // Use IL-generated kernels for element-wise reduction
                 if (!(@out is null))
                 {
-                    @out.SetAtIndex(sum_elementwise(arr, typeCode), 0);
+                    @out.SetAtIndex(sum_elementwise_il(arr, typeCode), 0);
                     return @out;
                 }
 
-                var r = NDArray.Scalar(sum_elementwise(arr, typeCode));
+                var r = NDArray.Scalar(sum_elementwise_il(arr, typeCode));
                 if (keepdims)
                 {
                     // NumPy: keepdims preserves the number of dimensions, all set to 1

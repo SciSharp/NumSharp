@@ -1,36 +1,80 @@
-﻿using NumSharp.Generic;
-
 namespace NumSharp
 {
     public partial class NDArray
     {
-        public static NDArray<bool> operator &(NDArray lhs, NDArray rhs)
+        /// <summary>
+        /// Element-wise bitwise AND operation.
+        /// For boolean arrays: logical AND.
+        /// For integer arrays: bitwise AND.
+        /// Supports broadcasting.
+        /// </summary>
+        public static NDArray operator &(NDArray lhs, NDArray rhs)
         {
-            return null;
-            //var boolTensor = new NDArray(typeof(bool),lhs.shape);
-            //bool[] bools = boolTensor.Storage.GetData<bool>();
-
-            //bool[] np = lhs.Storage.GetData<bool>();
-            //bool[] obj = rhs.Storage.GetData<bool>();
-
-            // for(int i = 0;i < bools.Length;i++)
-            //    bools[i] = np[i] && obj[i];
-
-            //return boolTensor.MakeGeneric<bool>();
+            return lhs.TensorEngine.BitwiseAnd(lhs, rhs);
         }
 
-        public static NDArray<byte> operator &(NDArray lhs, byte rhs)
+        /// <summary>
+        /// Element-wise bitwise AND with scalar.
+        /// </summary>
+        public static NDArray operator &(NDArray lhs, byte rhs)
         {
-            return null;
-            //var result = new NDArray(typeof(byte), lhs.shape);
-            //byte[] resultBytes = result.Storage.GetData<byte>();
+            return lhs.TensorEngine.BitwiseAnd(lhs, Scalar(rhs));
+        }
 
-            //byte[] lhsValues = lhs.Storage.GetData<byte>();
+        /// <summary>
+        /// Element-wise bitwise AND with scalar.
+        /// </summary>
+        public static NDArray operator &(byte lhs, NDArray rhs)
+        {
+            return rhs.TensorEngine.BitwiseAnd(Scalar(lhs), rhs);
+        }
 
-            //for (int i = 0; i < resultBytes.Length; i++)
-            //    resultBytes[i] = (byte)(lhsValues[i] & rhs);
+        /// <summary>
+        /// Element-wise bitwise AND with scalar.
+        /// </summary>
+        public static NDArray operator &(NDArray lhs, int rhs)
+        {
+            return lhs.TensorEngine.BitwiseAnd(lhs, Scalar(rhs));
+        }
 
-            //return result.MakeGeneric<byte>();
+        /// <summary>
+        /// Element-wise bitwise AND with scalar.
+        /// </summary>
+        public static NDArray operator &(int lhs, NDArray rhs)
+        {
+            return rhs.TensorEngine.BitwiseAnd(Scalar(lhs), rhs);
+        }
+
+        /// <summary>
+        /// Element-wise bitwise AND with scalar.
+        /// </summary>
+        public static NDArray operator &(NDArray lhs, long rhs)
+        {
+            return lhs.TensorEngine.BitwiseAnd(lhs, Scalar(rhs));
+        }
+
+        /// <summary>
+        /// Element-wise bitwise AND with scalar.
+        /// </summary>
+        public static NDArray operator &(long lhs, NDArray rhs)
+        {
+            return rhs.TensorEngine.BitwiseAnd(Scalar(lhs), rhs);
+        }
+
+        /// <summary>
+        /// Element-wise bitwise AND with boolean scalar.
+        /// </summary>
+        public static NDArray operator &(NDArray lhs, bool rhs)
+        {
+            return lhs.TensorEngine.BitwiseAnd(lhs, Scalar(rhs));
+        }
+
+        /// <summary>
+        /// Element-wise bitwise AND with boolean scalar.
+        /// </summary>
+        public static NDArray operator &(bool lhs, NDArray rhs)
+        {
+            return rhs.TensorEngine.BitwiseAnd(Scalar(lhs), rhs);
         }
     }
 }

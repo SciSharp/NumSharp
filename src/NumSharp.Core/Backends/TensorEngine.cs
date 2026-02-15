@@ -110,7 +110,18 @@ namespace NumSharp
 
         #region Logic
 
-        public abstract NDArray<bool> Compare(in NDArray lhs, in NDArray rhs);
+        // Comparison operations - all return NDArray<bool>
+        public abstract NDArray<bool> Compare(in NDArray lhs, in NDArray rhs);  // Equal
+        public abstract NDArray<bool> NotEqual(in NDArray lhs, in NDArray rhs);
+        public abstract NDArray<bool> Less(in NDArray lhs, in NDArray rhs);
+        public abstract NDArray<bool> LessEqual(in NDArray lhs, in NDArray rhs);
+        public abstract NDArray<bool> Greater(in NDArray lhs, in NDArray rhs);
+        public abstract NDArray<bool> GreaterEqual(in NDArray lhs, in NDArray rhs);
+
+        // Bitwise operations
+        public abstract NDArray BitwiseAnd(in NDArray lhs, in NDArray rhs);
+        public abstract NDArray BitwiseOr(in NDArray lhs, in NDArray rhs);
+        public abstract NDArray BitwiseXor(in NDArray lhs, in NDArray rhs);
         public abstract bool All(NDArray nd);
         public abstract NDArray<bool> All(NDArray nd, int axis);
         public abstract bool AllClose(NDArray a, NDArray b, double rtol = 1.0E-5, double atol = 1.0E-8, bool equal_nan = false);

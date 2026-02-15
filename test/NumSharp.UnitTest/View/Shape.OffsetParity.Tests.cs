@@ -516,7 +516,6 @@ namespace NumSharp.UnitTest
         }
 
         [Test]
-        [OpenBugs] // Contiguous slice optimization not working - IsSliced is True
         public void NumPyPurity_ContiguousSlice_Optimized()
         {
             // Contiguous slices are optimized: no ViewInfo, IsSliced=false
