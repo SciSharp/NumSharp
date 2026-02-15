@@ -19,7 +19,8 @@ namespace NumSharp.Backends
                 return NDArray.Scalar(0);
 
             if (axis_ == null)
-                return NDArray.Scalar(argmax_elementwise(arr));
+                // Use IL-generated kernels for element-wise reduction
+                return NDArray.Scalar(argmax_elementwise_il(arr));
 
             var axis = axis_.Value;
             while (axis < 0)

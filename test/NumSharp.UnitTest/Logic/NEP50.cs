@@ -304,38 +304,34 @@ public class NEP50_TypePromotion
     /// NumPy: python3 -c "import numpy as np; print((np.array([10,20,30], np.uint8) / 5).dtype)"
     /// Output: float64
     ///
-    /// NumSharp DIFFERENCE: Uses integer division (like C#'s / operator for integers).
-    /// NumSharp returns array dtype, not float64.
+    /// NumSharp now matches NumPy: true division returns float64.
     /// </summary>
     [Test]
-    [Misaligned]
-    public void UInt8Array_Divide_PythonInt_Returns_UInt8_NumSharpBehavior()
+    public void UInt8Array_Divide_PythonInt_Returns_Float64()
     {
         var arr = np.array(new byte[] { 10, 20, 30 });
         var result = arr / 5;
 
-        // NumSharp uses integer division, preserving array dtype
-        // NumPy would return float64
-        result.dtype.Should().Be(np.uint8, "NumSharp uses integer division");
-        result.GetAtIndex<byte>(0).Should().Be(2);  // 10 / 5 = 2
+        // True division returns float64, matching NumPy
+        result.dtype.Should().Be(np.float64, "True division returns float64");
+        result.GetAtIndex<double>(0).Should().Be(2.0);  // 10 / 5 = 2.0
     }
 
     /// <summary>
     /// NumPy: python3 -c "import numpy as np; print((np.array([10,20,30], np.int32) / 5).dtype)"
     /// Output: float64
     ///
-    /// NumSharp DIFFERENCE: Uses integer division.
+    /// NumSharp now matches NumPy: true division returns float64.
     /// </summary>
     [Test]
-    [Misaligned]
-    public void Int32Array_Divide_PythonInt_Returns_Int32_NumSharpBehavior()
+    public void Int32Array_Divide_PythonInt_Returns_Float64()
     {
         var arr = np.array(new int[] { 10, 20, 30 });
         var result = arr / 5;
 
-        // NumSharp uses integer division, preserving array dtype
-        result.dtype.Should().Be(np.int32, "NumSharp uses integer division");
-        result.GetAtIndex<int>(0).Should().Be(2);  // 10 / 5 = 2
+        // True division returns float64, matching NumPy
+        result.dtype.Should().Be(np.float64, "True division returns float64");
+        result.GetAtIndex<double>(0).Should().Be(2.0);  // 10 / 5 = 2.0
     }
 
     /// <summary>
