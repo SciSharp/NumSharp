@@ -34,7 +34,8 @@ namespace NumSharp.Backends
 
             if (axis_ == null)
             {
-                var r = NDArray.Scalar(amax_elementwise(arr, typeCode));
+                // Use IL-generated kernels for element-wise reduction
+                var r = NDArray.Scalar(max_elementwise_il(arr, typeCode));
                 if (keepdims)
                 {
                     // NumPy: keepdims preserves the number of dimensions, all set to 1
