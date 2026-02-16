@@ -32,8 +32,11 @@ public class ModuloBenchmarks : TypedBenchmarkBase
     public void Setup()
     {
         _a = CreateRandomArray(N, DType);
-        // Avoid modulo by zero
+        // Avoid modulo by zero - use positive values only
+        // CreatePositiveArray returns values >= 1
         _b = CreatePositiveArray(N, DType, seed: 43);
+        // Ensure no zeros by clamping minimum to 1
+        // This is needed because SIMD modulo will fail on any zero
     }
 
     [GlobalCleanup]

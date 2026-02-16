@@ -70,7 +70,8 @@ public abstract class BenchmarkBase
     }
 
     /// <summary>
-    /// Create a positive random array (for operations like log, sqrt).
+    /// Create a positive random array (for operations like log, sqrt, division, modulo).
+    /// Returns values >= 1 to avoid divide-by-zero errors.
     /// </summary>
     protected static NDArray CreatePositiveArray(int n, NPTypeCode dtype, int seed = Seed)
     {
@@ -78,10 +79,21 @@ public abstract class BenchmarkBase
 
         return dtype switch
         {
+            // Floating point: rand() * 100 + 1 gives [1, 101)
             NPTypeCode.Single => (np.random.rand(n) * 100 + 1).astype(np.float32),
             NPTypeCode.Double => np.random.rand(n) * 100 + 1,
             NPTypeCode.Decimal => (np.random.rand(n) * 100 + 1).astype(NPTypeCode.Decimal),
-            _ => CreateRandomArray(n, dtype, seed)  // Other types handled normally
+            // Integers: randint(1, N) gives [1, N) - never zero
+            NPTypeCode.Boolean => np.random.randint(1, 2, new Shape(n)).astype(np.@bool),
+            NPTypeCode.Byte => np.random.randint(1, 256, new Shape(n)).astype(np.uint8),
+            NPTypeCode.Int16 => np.random.randint(1, 1000, new Shape(n)).astype(np.int16),
+            NPTypeCode.UInt16 => np.random.randint(1, 2000, new Shape(n)).astype(np.uint16),
+            NPTypeCode.Int32 => np.random.randint(1, 1000, new Shape(n)),
+            NPTypeCode.UInt32 => np.random.randint(1, 2000, new Shape(n)).astype(np.uint32),
+            NPTypeCode.Int64 => np.random.randint(1, 1000, new Shape(n)).astype(np.int64),
+            NPTypeCode.UInt64 => np.random.randint(1, 2000, new Shape(n)).astype(np.uint64),
+            NPTypeCode.Char => np.random.randint(1, 127, new Shape(n)).astype(NPTypeCode.Char),
+            _ => throw new ArgumentException($"Unsupported type: {dtype}")
         };
     }
 
