@@ -200,23 +200,56 @@ def get_status_icon(status: str) -> str:
 
 
 def normalize_op_name(name: str) -> str:
-    """Normalize operation name for matching."""
-    # Remove dtype suffix like " (int32)"
+    """Normalize operation name for matching.
+
+    Maps C# BDN method titles to Python benchmark names.
+    Both sides include dtype suffix like " (int32)" which is stripped.
+    """
     import re
-    name = re.sub(r'\s*\([^)]*\)\s*$', '', name)
+    # Remove dtype suffix like " (int32)" or " (float64)"
+    # Only remove parentheses that contain dtype names, not descriptive text like "(element-wise)"
+    dtype_pattern = r'\s*\((int32|int64|float32|float64|uint8|int16|uint16|uint32|uint64|bool|decimal)\)\s*$'
+    name = re.sub(dtype_pattern, '', name)
     # Remove quotes
     name = name.strip("'\"")
-    # Normalize common patterns
-    name = name.lower()
+    # Normalize whitespace
     name = re.sub(r'\s+', ' ', name)
-    # Map C# names to NumPy names
+    # Lowercase for comparison
+    name = name.lower()
+
+    # Map C# BDN method titles to Python benchmark names
+    # C# uses titles like "a + b (element-wise)" while Python uses same format
     mappings = {
+        # Arithmetic - Add
+        'a + b (element-wise)': 'a + b (element-wise)',
+        'np.add(a, b)': 'np.add(a, b)',
+        'a + scalar': 'a + scalar',
+        'a + 5 (literal)': 'a + 5 (literal)',
+
+        # Arithmetic - Subtract
+        'a - b (element-wise)': 'a - b (element-wise)',
+        'a - scalar': 'a - scalar',
+        'scalar - a': 'scalar - a',
+
+        # Arithmetic - Multiply
+        'a * b (element-wise)': 'a * b (element-wise)',
+        'a * a (square)': 'a * a (square)',
+        'a * scalar': 'a * scalar',
+        'a * 2 (literal)': 'a * 2 (literal)',
+
+        # Arithmetic - Divide
+        'a / b (element-wise)': 'a / b (element-wise)',
+        'a / scalar': 'a / scalar',
+        'scalar / a': 'scalar / a',
+
+        # Arithmetic - Modulo
+        'a % b (element-wise)': 'a % b (element-wise)',
+        'a % 7 (literal)': 'a % 7 (literal)',
+
+        # Reduction
         'np.sum(a) [full]': 'np.sum',
         'np.sum(a, axis=0)': 'np.sum axis=0',
         'np.sum(a, axis=1)': 'np.sum axis=1',
-        'a + b (element-wise)': 'a + b',
-        'np.add(a, b)': 'a + b',
-        'a + scalar': 'a + scalar',
     }
     return mappings.get(name, name)
 
