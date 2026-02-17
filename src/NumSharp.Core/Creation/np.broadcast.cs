@@ -9,7 +9,7 @@ namespace NumSharp
         ///     Produce an object that mimics broadcasting.
         /// </summary>
         /// <returns>Broadcast the input parameters against one another, and return an object that encapsulates the result. Amongst others, it has shape and nd properties, and may be used as an iterator.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.broadcast.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.broadcast.html</remarks>
         public static Broadcast broadcast(NDArray nd1, NDArray nd2)
         {
             return new Broadcast { shape = DefaultEngine.ResolveReturnShape(nd1.Shape, nd2.Shape), iters = new[] { nd1.AsIterator(), nd2.AsIterator() } };

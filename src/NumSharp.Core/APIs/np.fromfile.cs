@@ -14,7 +14,7 @@ namespace NumSharp
         /// <param name="file">filename.</param>
         /// <param name="dtype">Data type of the returned array. For binary files, it is used to determine the size and byte-order of the items in the file.</param>
         /// <returns></returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.fromfile.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fromfile.html</remarks>
         public static NDArray fromfile(string file, NPTypeCode dtype)
         {
             return fromfile(file, dtype.AsType());
@@ -27,7 +27,7 @@ namespace NumSharp
         /// <param name="file">filename.</param>
         /// <param name="dtype">Data type of the returned array. For binary files, it is used to determine the size and byte-order of the items in the file.</param>
         /// <returns></returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.fromfile.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.fromfile.html</remarks>
         public static NDArray fromfile(string file, Type dtype)
         {
             unsafe

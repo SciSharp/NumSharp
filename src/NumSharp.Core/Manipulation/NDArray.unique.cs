@@ -18,7 +18,7 @@ namespace NumSharp
         ///     * the number of times each unique value comes up in the input array<br></br>
         /// </summary>
         /// <returns>The sorted unique values.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.unique.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.unique.html</remarks>
         public NDArray unique()
         {
             switch (typecode)
@@ -55,7 +55,7 @@ namespace NumSharp
         ///     * the number of times each unique value comes up in the input array<br></br>
         /// </summary>
         /// <returns></returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.unique.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.unique.html</remarks>
         protected NDArray unique<T>() where T : unmanaged
         {
             unsafe

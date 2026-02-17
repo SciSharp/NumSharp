@@ -9,7 +9,7 @@ namespace NumSharp {
         /// </summary>
         /// <param name="a">Input array or object that can be converted to an array.</param>
         /// <returns>A new boolean or ndarray is returned unless out is specified, in which case a reference to out is returned.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.all.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.all.html</remarks>
         public static bool all(NDArray a)
         {
 #if _REGEN
@@ -53,7 +53,7 @@ namespace NumSharp {
         /// <param name="a">Input array or object that can be converted to an array.</param>
         /// <param name="axis">Axis or axes along which a logical AND reduction is performed. The default (axis = None) is to perform a logical OR over all the dimensions of the input array. axis may be negative, in which case it counts from the last to the first axis.</param>
         /// <returns>A new boolean or ndarray is returned unless out is specified, in which case a reference to out is returned.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.all.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.all.html</remarks>
         public static NDArray<bool> all(NDArray nd, int axis, bool keepdims = false)
         {
             if (axis < 0)

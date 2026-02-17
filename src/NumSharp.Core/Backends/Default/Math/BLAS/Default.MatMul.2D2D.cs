@@ -17,7 +17,7 @@ namespace NumSharp.Backends
             return null;
         }
 #else
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.multiply.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.multiply.html</remarks>
         [SuppressMessage("ReSharper", "JoinDeclarationAndInitializer")]
         [MethodImpl(OptimizeAndInline)]
         protected static NDArray MultiplyMatrix(NDArray left, NDArray right, NDArray @out = null)

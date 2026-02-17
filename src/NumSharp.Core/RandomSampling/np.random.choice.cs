@@ -9,7 +9,7 @@
         /// <param name="shape">Output shape. If the given shape is, e.g., (m, n, k), then m * n * k samples are drawn. Default is None, in which case a single value is returned.</param>
         /// <param name="replace">Whether the sample is with or without replacement</param>
         /// <param name="probabilities">The probabilities associated with each entry in a. If not given the sample assumes a uniform distribution over all entries in a.</param>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.random.choice.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.random.choice.html</remarks>
         public NDArray choice(NDArray arr, Shape shape = default, bool replace = true, double[] probabilities = null)
         {
             int arrSize = arr.size;
@@ -24,7 +24,7 @@
         /// <param name="shape">Output shape. If the given shape is, e.g., (m, n, k), then m * n * k samples are drawn. Default is None, in which case a single value is returned.</param>
         /// <param name="replace">Whether the sample is with or without replacement</param>
         /// <param name="probabilities">The probabilities associated with each entry in a. If not given the sample assumes a uniform distribution over all entries in a.</param>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.random.choice.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.random.choice.html</remarks>
         public NDArray choice(int a, Shape shape = default, bool replace = true, double[] probabilities = null)
         {
             if (shape.IsEmpty)

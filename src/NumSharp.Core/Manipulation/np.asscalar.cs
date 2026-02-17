@@ -11,7 +11,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="nd">Input NDArray of size 1.</param>
         /// <returns></returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy-1.16.0/reference/generated/numpy.asscalar.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.asscalar.html</remarks>
         public static T asscalar<T>(NDArray nd) where T : unmanaged
         {
             if (nd.size != 1)
@@ -27,7 +27,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="arr">Input array of size 1.</param>
         /// <returns></returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy-1.16.0/reference/generated/numpy.asscalar.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.asscalar.html</remarks>
         public static T asscalar<T>(Array arr)
         {
             if (arr.Length != 1)
@@ -43,7 +43,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="nd">Input NDArray of size 1.</param>
         /// <returns></returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy-1.16.0/reference/generated/numpy.asscalar.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.asscalar.html</remarks>
         public static ValueType asscalar(NDArray nd)
         {
             if (nd.size != 1)
@@ -56,7 +56,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="arr">Input array of size 1.</param>
         /// <returns></returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy-1.16.0/reference/generated/numpy.asscalar.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.asscalar.html</remarks>
         public static ValueType asscalar(Array arr)
         {
             if (arr.Length != 1)
@@ -69,7 +69,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="arr">Input array of size 1.</param>
         /// <returns></returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy-1.16.0/reference/generated/numpy.asscalar.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.asscalar.html</remarks>
         public static T asscalar<T>(ArraySlice<T> arr) where T : unmanaged
         {
             if (arr.Count != 1)
@@ -82,7 +82,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="arr">Input array of size 1.</param>
         /// <returns></returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy-1.16.0/reference/generated/numpy.asscalar.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.asscalar.html</remarks>
         public static T asscalar<T>(IArraySlice arr) where T : unmanaged
         {
             if (arr.Count != 1)

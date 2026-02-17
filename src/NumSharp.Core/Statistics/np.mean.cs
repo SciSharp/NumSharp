@@ -13,7 +13,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="a">Array containing numbers whose mean is desired. If a is not an array, a conversion is attempted.</param>
         /// <returns> returns a new array containing the mean values, otherwise a reference to the output array is returned.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.mean.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.mean.html</remarks>
         public static NDArray mean(in NDArray a)
             => a.TensorEngine.Mean(a);
 
@@ -26,7 +26,7 @@ namespace NumSharp
         /// <param name="a">Array containing numbers whose mean is desired. If a is not an array, a conversion is attempted.</param>
         /// <param name="axis">Axis or axes along which the means are computed. The default is to compute the mean of the flattened array.</param>
         /// <returns> returns a new array containing the mean values, otherwise a reference to the output array is returned.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.mean.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.mean.html</remarks>
         public static NDArray mean(in NDArray a, int axis)
             => a.TensorEngine.Mean(a, axis);
 
@@ -42,7 +42,7 @@ namespace NumSharp
         ///     If the default value is passed, then keepdims will not be passed through to the mean method of sub-classes of ndarray, however any non-default value will be.If the sub-class’ method does not implement keepdims any exceptions will be raised.
         /// </param>
         /// <returns> returns a new array containing the mean values, otherwise a reference to the output array is returned.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.mean.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.mean.html</remarks>
         public static NDArray mean(in NDArray a, bool keepdims)
             => a.TensorEngine.Mean(a, null, null, keepdims);
 
@@ -60,7 +60,7 @@ namespace NumSharp
         ///     If the default value is passed, then keepdims will not be passed through to the mean method of sub-classes of ndarray, however any non-default value will be.If the sub-class’ method does not implement keepdims any exceptions will be raised.
         /// </param>
         /// <returns> returns a new array containing the mean values, otherwise a reference to the output array is returned.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.mean.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.mean.html</remarks>
         public static NDArray mean(in NDArray a, int axis, Type dtype, bool keepdims = false)
             => a.TensorEngine.Mean(a, axis, dtype, keepdims);
 
@@ -78,7 +78,7 @@ namespace NumSharp
         ///     If the default value is passed, then keepdims will not be passed through to the mean method of sub-classes of ndarray, however any non-default value will be.If the sub-class’ method does not implement keepdims any exceptions will be raised.
         /// </param>
         /// <returns> returns a new array containing the mean values, otherwise a reference to the output array is returned.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.mean.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.mean.html</remarks>
         public static NDArray mean(in NDArray a, int axis, NPTypeCode type, bool keepdims = false)
             => a.TensorEngine.Mean(a, axis, type, keepdims);
 

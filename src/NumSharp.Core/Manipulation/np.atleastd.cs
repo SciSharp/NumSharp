@@ -9,7 +9,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="arys">One or more array-like sequences. Non-array inputs are converted to arrays. Arrays that already have three or more dimensions are preserved.</param>
         /// <returns>An array, or list of arrays, each with a.ndim >= 3. Copies are avoided where possible, and views with three or more dimensions are returned. For example, a 1-D array of shape (N,) becomes a view of shape (1, N, 1), and a 2-D array of shape (M, N) becomes a view of shape (M, N, 1).</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.atleast_3d.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.atleast_3d.html</remarks>
         public static NDArray atleast_3d(object arys)
         {
             if (arys == null)
@@ -33,7 +33,7 @@ namespace NumSharp
         ///     View inputs as arrays with at least three dimensions.
         /// </summary>
         /// <returns>An array, or list of arrays, each with a.ndim >= 3. Copies are avoided where possible, and views with three or more dimensions are returned. For example, a 1-D array of shape (N,) becomes a view of shape (1, N, 1), and a 2-D array of shape (M, N) becomes a view of shape (M, N, 1).</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.atleast_3d.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.atleast_3d.html</remarks>
         public static NDArray atleast_3d(NDArray arr)
         {
             if (arr == null)
@@ -57,7 +57,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="arys">One or more array-like sequences. Non-array inputs are converted to arrays. Arrays that already have three or more dimensions are preserved.</param>
         /// <returns>An array, or list of arrays, each with a.ndim >= 3. Copies are avoided where possible, and views with three or more dimensions are returned. For example, a 1-D array of shape (N,) becomes a view of shape (1, N, 1), and a 2-D array of shape (M, N) becomes a view of shape (M, N, 1).</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.atleast_3d.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.atleast_3d.html</remarks>
         public static NDArray[] atleast_3d(params object[] arys)
         {
             if (arys == null)
@@ -95,7 +95,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="arys">One or more array-like sequences. Non-array inputs are converted to arrays. Arrays that already have three or more dimensions are preserved.</param>
         /// <returns>An array, or list of arrays, each with a.ndim >= 3. Copies are avoided where possible, and views with three or more dimensions are returned. For example, a 1-D array of shape (N,) becomes a view of shape (1, N, 1), and a 2-D array of shape (M, N) becomes a view of shape (M, N, 1).</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.atleast_3d.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.atleast_3d.html</remarks>
         public static NDArray[] atleast_3d(params NDArray[] arys)
         {
             if (arys == null)
@@ -133,7 +133,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="arys">One or more array-like sequences. Non-array inputs are converted to arrays. Arrays that already have two or more dimensions are preserved.</param>
         /// <returns>An array, or list of arrays, each with a.ndim >= 2. Copies are avoided where possible, and views with two or more dimensions are returned.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.atleast_2d.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.atleast_2d.html</remarks>
         public static NDArray atleast_2d(object arys)
         {
             if (arys == null)
@@ -156,7 +156,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="arr">One or more array-like sequences. Non-array inputs are converted to arrays. Arrays that already have two or more dimensions are preserved.</param>
         /// <returns>An array, or list of arrays, each with a.ndim >= 2. Copies are avoided where possible, and views with two or more dimensions are returned.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.atleast_2d.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.atleast_2d.html</remarks>
         public static NDArray atleast_2d(NDArray arr)
         {
             if (arr == null)
@@ -178,7 +178,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="arys">One or more array-like sequences. Non-array inputs are converted to arrays. Arrays that already have two or more dimensions are preserved.</param>
         /// <returns>An array, or list of arrays, each with a.ndim >= 2. Copies are avoided where possible, and views with two or more dimensions are returned.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.atleast_2d.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.atleast_2d.html</remarks>
         public static NDArray[] atleast_2d(params object[] arys)
         {
             if (arys == null)
@@ -212,7 +212,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="arys">One or more array-like sequences. Non-array inputs are converted to arrays. Arrays that already have two or more dimensions are preserved.</param>
         /// <returns>An array, or list of arrays, each with a.ndim >= 2. Copies are avoided where possible, and views with two or more dimensions are returned.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.atleast_2d.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.atleast_2d.html</remarks>
         public static NDArray[] atleast_2d(params NDArray[] arys)
         {
             if (arys == null)
@@ -248,7 +248,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="arys">One or more input arrays.</param>
         /// <returns>An array, or list of arrays, each with a.ndim >= 1. Copies are made only if necessary.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.atleast_1d.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.atleast_1d.html</remarks>
         public static NDArray atleast_1d(object arys)
         {
             if (arys == null)
@@ -269,7 +269,7 @@ namespace NumSharp
         ///     Scalar inputs are converted to 1-dimensional arrays, whilst higher-dimensional inputs are preserved.
         /// </summary>
         /// <returns>An array, or list of arrays, each with a.ndim >= 1. Copies are made only if necessary.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.atleast_1d.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.atleast_1d.html</remarks>
         public static NDArray atleast_1d(NDArray arr)
         {
             if (arr == null)
@@ -290,7 +290,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="arys">One or more input arrays.</param>
         /// <returns>An array, or list of arrays, each with a.ndim >= 1. Copies are made only if necessary.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.atleast_1d.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.atleast_1d.html</remarks>
         public static NDArray[] atleast_1d(params object[] arys)
         {
             if (arys == null)
@@ -323,7 +323,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="arys">One or more input arrays.</param>
         /// <returns>An array, or list of arrays, each with a.ndim >= 1. Copies are made only if necessary.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.atleast_1d.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.atleast_1d.html</remarks>
         public static NDArray[] atleast_1d(params NDArray[] arys)
         {
             if (arys == null)

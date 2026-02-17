@@ -15,7 +15,7 @@ namespace NumSharp
         /// <param name="df">Number of degrees of freedom, should be > 0.</param>
         /// <param name="shape">Output Shape</param>
         /// <returns>Drawn samples from the parameterized chi-square distribution.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy-1.15.0/reference/generated/numpy.random.chisquare.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.random.chisquare.html</remarks>
         public NDArray chisquare(double df, Shape shape) => chisquare(df, shape.dimensions);
 
         /// <summary>
@@ -26,7 +26,7 @@ namespace NumSharp
         /// <param name="df">Number of degrees of freedom, should be > 0.</param>
         /// <param name="dims">Output Shape</param>
         /// <returns>Drawn samples from the parameterized chi-square distribution.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy-1.15.0/reference/generated/numpy.random.chisquare.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.random.chisquare.html</remarks>
         public NDArray chisquare(double df, params int[] dims)
         {
             if (df <= 0)

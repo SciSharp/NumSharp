@@ -34,7 +34,7 @@ namespace NumSharp.UnitTest.Creation
         }
 
         /// <summary>
-        ///     Taken from https://docs.scipy.org/doc/numpy/user/basics.broadcasting.html
+        ///     Taken from https://numpy.org/doc/stable/user/basics.broadcasting.html
         /// </summary>
         [Test]
         public void basics_ResolveReturnShape()
@@ -73,7 +73,7 @@ namespace NumSharp.UnitTest.Creation
         }
 
         /// <summary>
-        ///     Taken from https://docs.scipy.org/doc/numpy/user/basics.broadcasting.html
+        ///     Taken from https://numpy.org/doc/stable/user/basics.broadcasting.html
         /// </summary>
         [Test]
         public void basics_broadcasting()
@@ -140,7 +140,7 @@ namespace NumSharp.UnitTest.Creation
         }
 
         /// <summary>
-        ///     Taken from https://docs.scipy.org/doc/numpy/user/basics.broadcasting.html
+        ///     Taken from https://numpy.org/doc/stable/user/basics.broadcasting.html
         /// </summary>
         [Test]
         public void basics_broadcasting_narrays()

@@ -15,7 +15,7 @@ namespace NumSharp
         /// <param name="lhs"></param>
         /// <param name="rhs"></param>
         /// <returns>mesh-grid `ndarrays` all of the same dimensions</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.mgrid.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.mgrid.html</remarks>
         public static (NDArray, NDArray) mgrid(NDArray lhs, NDArray rhs)
         {
             if (!(lhs.ndim == 1 || rhs.ndim == 1))

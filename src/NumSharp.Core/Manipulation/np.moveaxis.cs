@@ -10,7 +10,7 @@
         /// <param name="source">Original positions of the axes to move. These must be unique (distinct).</param>
         /// <param name="destination">Destination positions for each of the original axes. These must also be unique (distinct).</param>
         /// <returns>Array with moved axes.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.moveaxis.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.moveaxis.html</remarks>
         public static NDArray moveaxis(in NDArray a, int source, int destination)
             => a.TensorEngine.MoveAxis(a, new[] {source}, new[] {destination});
 
@@ -22,7 +22,7 @@
         /// <param name="source">Original positions of the axes to move. These must be unique (distinct).</param>
         /// <param name="destination">Destination positions for each of the original axes. These must also be unique (distinct).</param>
         /// <returns>Array with moved axes.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.moveaxis.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.moveaxis.html</remarks>
         public static NDArray moveaxis(in NDArray a, int[] source, int destination)
             => a.TensorEngine.MoveAxis(a, source, new[] {destination});
 
@@ -34,7 +34,7 @@
         /// <param name="source">Original positions of the axes to move. These must be unique (distinct).</param>
         /// <param name="destination">Destination positions for each of the original axes. These must also be unique (distinct).</param>
         /// <returns>Array with moved axes.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.moveaxis.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.moveaxis.html</remarks>
         public static NDArray moveaxis(in NDArray a, int source, int[] destination)
             => a.TensorEngine.MoveAxis(a, new[] {source}, destination);
 
@@ -46,7 +46,7 @@
         /// <param name="source">Original positions of the axes to move. These must be unique (distinct).</param>
         /// <param name="destination">Destination positions for each of the original axes. These must also be unique (distinct).</param>
         /// <returns>Array with moved axes.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.moveaxis.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.moveaxis.html</remarks>
         public static NDArray moveaxis(in NDArray a, int[] source, int[] destination)
             => a.TensorEngine.MoveAxis(a, source, destination);
     }

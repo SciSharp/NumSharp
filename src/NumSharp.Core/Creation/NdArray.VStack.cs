@@ -10,7 +10,7 @@ namespace NumSharp
         /// </summary>
         /// <typeparam name="T">The type dtype to return.</typeparam>
         /// <param name="tup">The arrays must have the same shape along all but the first axis. 1-D arrays must have the same length.</param>
-        /// <returns>https://docs.scipy.org/doc/numpy/reference/generated/numpy.vstack.html</returns>
+        /// <returns>https://numpy.org/doc/stable/reference/generated/numpy.vstack.html</returns>
         public NDArray vstack(params NDArray[] tup)
         {
             if (tup == null)

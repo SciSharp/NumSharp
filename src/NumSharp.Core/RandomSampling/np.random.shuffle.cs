@@ -11,7 +11,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="x">The array or list to be shuffled.</param>
         /// <param name="passes">How many times to pass all items in a complexity of O(n*passes)</param>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.random.shuffle.html <br></br>Does not copy <paramref name="x"/></remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.random.shuffle.html <br></br>Does not copy <paramref name="x"/></remarks>
         [SuppressMessage("ReSharper", "TooWideLocalVariableScope")]
         public void shuffle(NDArray x, int passes = 2)
         {

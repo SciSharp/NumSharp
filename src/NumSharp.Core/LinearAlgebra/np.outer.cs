@@ -10,7 +10,7 @@
         /// <param name="a">First input vector. Input is flattened if not already 1-dimensional.</param>
         /// <param name="b">Second input vector. Input is flattened if not already 1-dimensional.</param>
         /// <returns>out[i, j] = a[i] * b[j]</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.outer.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.outer.html</remarks>
         public static NDArray outer(in NDArray a, in NDArray b)
         {
             //multiply(a.ravel()[:, newaxis], b.ravel()[newaxis, :], out)

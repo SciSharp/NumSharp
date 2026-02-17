@@ -10,7 +10,7 @@ namespace NumSharp
         /// <param name="a">Input data, in any form that can be converted to an array. This includes scalars, lists, lists of tuples, tuples, tuples of tuples, tuples of lists, and ndarrays.</param>
         /// <param name="dtype">By default, the data-type is inferred from the input data.</param>
         /// <returns>Array interpretation of a. If a is an ndarray or a subclass of ndarray, it is returned as-is and no copy is performed.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.asanyarray.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.asanyarray.html</remarks>
         public static NDArray asanyarray(in object a, Type dtype = null) //todo support order
         {
             NDArray ret;

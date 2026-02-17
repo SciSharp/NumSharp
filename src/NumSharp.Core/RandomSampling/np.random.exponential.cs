@@ -14,7 +14,7 @@ namespace NumSharp
         /// <param name="scale">The scale parameter, \beta = 1/\lambda.</param>
         /// <param name="shape">Output Shape</param>
         /// <returns>Drawn samples from the parameterized exponential distribution.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy-1.15.0/reference/generated/numpy.random.exponential.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.random.exponential.html</remarks>
         public NDArray exponential(double scale, Shape shape) => exponential(scale, shape.dimensions);
 
         /// <summary>
@@ -24,7 +24,7 @@ namespace NumSharp
         /// <param name="scale">The scale parameter, \beta = 1/\lambda.</param>
         /// <param name="dims">Output Shape</param>
         /// <returns>Drawn samples from the parameterized exponential distribution.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy-1.15.0/reference/generated/numpy.random.exponential.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.random.exponential.html</remarks>
         public NDArray exponential(double scale, params int[] dims)
         {
             var x = np.log(1 - np.random.uniform(0, 1, dims));

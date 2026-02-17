@@ -7,7 +7,7 @@ namespace NumSharp
         /// <summary>
         ///     Return a contiguous flattened array. A 1-D array, containing the elements of the input, is returned
         /// </summary>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.ravel.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ravel.html</remarks>
         /// <param name="a">Input array. The elements in a are read in the order specified by order, and packed as a 1-D array.</param>
         /// <remarks><br></br>If this array's <see cref="Shape"/> is a sliced or broadcasted, the a copy will be made.</remarks>
         public static NDArray ravel(NDArray a)

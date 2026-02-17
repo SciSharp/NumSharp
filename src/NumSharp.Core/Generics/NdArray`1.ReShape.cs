@@ -9,7 +9,7 @@ namespace NumSharp.Generic
         /// </summary>
         /// <param name="newShape">The new shape should be compatible with the original shape. If an integer, then the result will be a 1-D array of that length. One shape dimension can be -1. In this case, the value is inferred from the length of the array and remaining dimensions.</param>
         /// <returns>This will be a new view object if possible; otherwise, it will be a copy. Note there is no guarantee of the memory layout (C- or Fortran- contiguous) of the returned array.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.reshape.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.reshape.html</remarks>
         public new NDArray<TDType> reshape(Shape newShape)
         {
             return reshape(ref newShape);
@@ -20,7 +20,7 @@ namespace NumSharp.Generic
         /// </summary>
         /// <param name="newShape">The new shape should be compatible with the original shape. If an integer, then the result will be a 1-D array of that length. One shape dimension can be -1. In this case, the value is inferred from the length of the array and remaining dimensions.</param>
         /// <returns>This will be a new view object if possible; otherwise, it will be a copy. Note there is no guarantee of the memory layout (C- or Fortran- contiguous) of the returned array.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.reshape.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.reshape.html</remarks>
         public new NDArray<TDType> reshape(ref Shape newShape)
         {
             var ret = Storage.Alias();
@@ -36,7 +36,7 @@ namespace NumSharp.Generic
         /// and remaining dimensions.</param>
         /// <returns>This will be a new view object if possible; otherwise, it will be a copy. Note there is no guarantee of the 
         /// memory layout (C- or Fortran- contiguous) of the returned array.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.reshape.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.reshape.html</remarks>
         [SuppressMessage("ReSharper", "ParameterHidesMember")]
         public new NDArray<TDType> reshape(params int[] shape)
         {
@@ -50,7 +50,7 @@ namespace NumSharp.Generic
         /// </summary>
         /// <param name="newshape">The new shape should be compatible with the original shape. If an integer, then the result will be a 1-D array of that length. One shape dimension can be -1. In this case, the value is inferred from the length of the array and remaining dimensions.</param>
         /// <returns>This will be a new view object if possible; otherwise, it will be a copy. Note there is no guarantee of the memory layout (C- or Fortran- contiguous) of the returned array.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.reshape.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.reshape.html</remarks>
         public new NDArray<TDType> reshape_unsafe(Shape newshape)
         {
             return reshape_unsafe(ref newshape);
@@ -61,7 +61,7 @@ namespace NumSharp.Generic
         /// </summary>
         /// <param name="newshape">The new shape should be compatible with the original shape. If an integer, then the result will be a 1-D array of that length. One shape dimension can be -1. In this case, the value is inferred from the length of the array and remaining dimensions.</param>
         /// <returns>This will be a new view object if possible; otherwise, it will be a copy. Note there is no guarantee of the memory layout (C- or Fortran- contiguous) of the returned array.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.reshape.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.reshape.html</remarks>
         public new NDArray<TDType> reshape_unsafe(ref Shape newShape)
         {
             var ret = Storage.Alias();
@@ -77,7 +77,7 @@ namespace NumSharp.Generic
         /// and remaining dimensions.</param>
         /// <returns>This will be a new view object if possible; otherwise, it will be a copy. Note there is no guarantee of the 
         /// memory layout (C- or Fortran- contiguous) of the returned array.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.reshape.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.reshape.html</remarks>
         [SuppressMessage("ReSharper", "ParameterHidesMember")]
         public new NDArray<TDType> reshape_unsafe(params int[] shape)
         {

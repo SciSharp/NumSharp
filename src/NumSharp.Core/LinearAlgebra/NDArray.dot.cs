@@ -8,7 +8,7 @@
         /// <param name="b">Rhs, Second argument.</param>
         /// <returns>Returns the dot product of a and b. If a and b are both scalars or both 1-D arrays then a scalar is returned; otherwise an array is returned. If out is given, then it is returned.</returns>
         /// <remarks>
-        ///     https://docs.scipy.org/doc/numpy/reference/generated/numpy.dot.html<br></br>
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.dot.html<br></br>
         ///     Specifically,<br></br>
         ///         - If both a and b are 1-D arrays, it is inner product of vectors (without complex conjugation).<br></br>
         ///         - If both a and b are 2-D arrays, it is matrix multiplication, but using matmul or a @ b is preferred.<br></br>

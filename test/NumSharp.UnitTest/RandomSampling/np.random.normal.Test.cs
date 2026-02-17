@@ -13,7 +13,7 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void NormalDistributionTest()
         {
-            // https://docs.scipy.org/doc/numpy-1.15.0/reference/generated/numpy.random.normal.html
+            // https://numpy.org/doc/stable/reference/generated/numpy.random.normal.html
             double mu = 0; // mean
             double sigma = 0.1; // standard deviation
             var s = np.random.normal(mu, sigma, 10, 100);

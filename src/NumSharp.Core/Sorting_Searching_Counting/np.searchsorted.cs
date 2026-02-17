@@ -10,7 +10,7 @@
         /// <param name="a">Input array. Must be sorted in ascending order.</param>
         /// <param name="v">Values to insert into a.</param>
         /// <returns>Array of insertion points with the same shape as v.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.searchsorted.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.searchsorted.html</remarks>
         public static NDArray searchsorted(NDArray a, NDArray v)
         {
             // TODO currently no support for multidimensional a

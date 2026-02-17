@@ -10,7 +10,7 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.matmul.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.matmul.html</remarks>
         public override NDArray Matmul(NDArray lhs, NDArray rhs)
         {
             if (lhs.Shape.IsScalar || rhs.Shape.IsScalar)

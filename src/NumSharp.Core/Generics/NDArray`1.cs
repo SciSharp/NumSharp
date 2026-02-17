@@ -225,7 +225,7 @@ namespace NumSharp.Generic
         /// <summary>
         ///     A 1-D iterator over the array.
         /// </summary>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.ndarray.flat.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.flat.html</remarks>
         public new NDArray<TDType> flat
         {
             get
@@ -238,7 +238,7 @@ namespace NumSharp.Generic
         ///     The transposed array. <br></br>
         ///     Same as self.transpose().
         /// </summary>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.ndarray.T.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.T.html</remarks>
         public new NDArray<TDType> T
         {
             get

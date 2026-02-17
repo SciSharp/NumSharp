@@ -29,7 +29,7 @@ namespace NumSharp
         /// <param name="ndmin">Specifies the minimum number of dimensions that the resulting array should have. Ones will be pre-pended to the shape as needed to meet this requirement.</param>
         /// <param name="copy">Always copies if the array is larger than 1-d.</param>
         /// <param name="order">Not used.</param>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.array.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.array.html</remarks>
         [MethodImpl(Optimize)]
         [SuppressMessage("ReSharper", "InvalidXmlDocComment")]
         public static NDArray array(Array array, Type dtype = null, int ndmin = 1, bool copy = true, char order = 'C')
@@ -75,7 +75,7 @@ namespace NumSharp
         /// <typeparam name="T">The type of given array, must be compliant to numpy's supported dtypes.</typeparam>
         /// <param name="data">The array to create <see cref="NDArray"/> from.</param>
         /// <returns>An <see cref="NDArray"/> with the data and shape of the given array.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.array.html <br></br>Always performs a copy.</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.array.html <br></br>Always performs a copy.</remarks>
         public static NDArray array<T>(params T[] data) where T : unmanaged => new NDArray(ArraySlice.FromArray(data, true), Shape.Vector(data.Length));
 
         /// <summary>
@@ -84,7 +84,7 @@ namespace NumSharp
         /// <typeparam name="T">The type of given array, must be compliant to numpy's supported dtypes.</typeparam>
         /// <param name="data">The enumeration of data to create <see cref="NDArray"/> from.</param>
         /// <returns>An <see cref="NDArray"/> with the data and shape of the given array.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.array.html <br></br>Always performs a copy.</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.array.html <br></br>Always performs a copy.</remarks>
         public static NDArray array<T>(IEnumerable<T> data) where T : unmanaged
         {
             var slice = ArraySlice.FromArray(data.ToArray(), false);
@@ -98,7 +98,7 @@ namespace NumSharp
         /// <param name="data">The enumeration of data to create <see cref="NDArray"/> from.</param>
         /// <returns>An <see cref="NDArray"/> with the data and shape of the given array.</returns>
         /// <remarks>
-        ///     https://docs.scipy.org/doc/numpy/reference/generated/numpy.array.html <br></br>
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.array.html <br></br>
         ///     Always performs a copy.<br></br>
         ///     <paramref name="size"/> can be used to limit the amount of items to read form <paramref name="data"/>. Reading stops on either size or <paramref name="data"/> ends.
         /// </remarks>
@@ -156,7 +156,7 @@ namespace NumSharp
         /// <typeparam name="T">The type of given array, must be compliant to numpy's supported dtypes.</typeparam>
         /// <param name="data">The array to create <see cref="NDArray"/> from. Shape is taken from the first item of each array/nested array.</param>
         /// <returns>An <see cref="NDArray"/> with the data and shape of the given array.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.array.html <br></br>Always performs a copy.</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.array.html <br></br>Always performs a copy.</remarks>
         [SuppressMessage("ReSharper", "SuggestVarOrType_SimpleTypes")]
         [SuppressMessage("ReSharper", "SuggestVarOrType_Elsewhere")]
         [MethodImpl(Optimize)]
@@ -194,7 +194,7 @@ namespace NumSharp
         /// <typeparam name="T">The type of given array, must be compliant to numpy's supported dtypes.</typeparam>
         /// <param name="data">The array to create <see cref="NDArray"/> from. Shape is taken from the first item of each array/nested array.</param>
         /// <returns>An <see cref="NDArray"/> with the data and shape of the given array.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.array.html <br></br>Always performs a copy.</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.array.html <br></br>Always performs a copy.</remarks>
         [SuppressMessage("ReSharper", "SuggestVarOrType_SimpleTypes")]
         [SuppressMessage("ReSharper", "SuggestVarOrType_Elsewhere")]
         [MethodImpl(Optimize)]
@@ -239,7 +239,7 @@ namespace NumSharp
         /// <typeparam name="T">The type of given array, must be compliant to numpy's supported dtypes.</typeparam>
         /// <param name="data">The array to create <see cref="NDArray"/> from. Shape is taken from the first item of each array/nested array.</param>
         /// <returns>An <see cref="NDArray"/> with the data and shape of the given array.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.array.html <br></br>Always performs a copy.</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.array.html <br></br>Always performs a copy.</remarks>
         [SuppressMessage("ReSharper", "SuggestVarOrType_SimpleTypes")]
         [SuppressMessage("ReSharper", "SuggestVarOrType_Elsewhere")]
         [MethodImpl(Optimize)]
@@ -291,7 +291,7 @@ namespace NumSharp
         /// <typeparam name="T">The type of given array, must be compliant to numpy's supported dtypes.</typeparam>
         /// <param name="data">The array to create <see cref="NDArray"/> from. Shape is taken from the first item of each array/nested array.</param>
         /// <returns>An <see cref="NDArray"/> with the data and shape of the given array.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.array.html <br></br>Always performs a copy.</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.array.html <br></br>Always performs a copy.</remarks>
         [SuppressMessage("ReSharper", "SuggestVarOrType_SimpleTypes")]
         [SuppressMessage("ReSharper", "SuggestVarOrType_Elsewhere")]
         [MethodImpl(Optimize)]
@@ -359,7 +359,7 @@ namespace NumSharp
         ///     If false then the array will be pinned by calling <see cref="GCHandle.Alloc(object)"/>.
         /// </param>
         /// <returns>An <see cref="NDArray"/> with the data and shape of the given array.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.array.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.array.html</remarks>
         public static NDArray array<T>(T[#(repeat(",", i))] data, bool copy = true) where T : unmanaged
         {
             if (data == null)
@@ -380,7 +380,7 @@ namespace NumSharp
         ///     If false then the array will be pinned by calling <see cref="GCHandle.Alloc(object)"/>.
         /// </param>
         /// <returns>An <see cref="NDArray"/> with the data and shape of the given array.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.array.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.array.html</remarks>
         public static NDArray array<T>(T[] data, bool copy) where T : unmanaged
         {
             if (data == null)
@@ -399,7 +399,7 @@ namespace NumSharp
         ///     If false then the array will be pinned by calling <see cref="GCHandle.Alloc(object)"/>.
         /// </param>
         /// <returns>An <see cref="NDArray"/> with the data and shape of the given array.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.array.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.array.html</remarks>
         public static NDArray array<T>(T[,] data, bool copy = true) where T : unmanaged
         {
             if (data == null)
@@ -418,7 +418,7 @@ namespace NumSharp
         ///     If false then the array will be pinned by calling <see cref="GCHandle.Alloc(object)"/>.
         /// </param>
         /// <returns>An <see cref="NDArray"/> with the data and shape of the given array.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.array.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.array.html</remarks>
         public static NDArray array<T>(T[,,] data, bool copy = true) where T : unmanaged
         {
             if (data == null)
@@ -437,7 +437,7 @@ namespace NumSharp
         ///     If false then the array will be pinned by calling <see cref="GCHandle.Alloc(object)"/>.
         /// </param>
         /// <returns>An <see cref="NDArray"/> with the data and shape of the given array.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.array.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.array.html</remarks>
         public static NDArray array<T>(T[,,,] data, bool copy = true) where T : unmanaged
         {
             if (data == null)
@@ -456,7 +456,7 @@ namespace NumSharp
         ///     If false then the array will be pinned by calling <see cref="GCHandle.Alloc(object)"/>.
         /// </param>
         /// <returns>An <see cref="NDArray"/> with the data and shape of the given array.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.array.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.array.html</remarks>
         public static NDArray array<T>(T[,,,,] data, bool copy = true) where T : unmanaged
         {
             if (data == null)
@@ -475,7 +475,7 @@ namespace NumSharp
         ///     If false then the array will be pinned by calling <see cref="GCHandle.Alloc(object)"/>.
         /// </param>
         /// <returns>An <see cref="NDArray"/> with the data and shape of the given array.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.array.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.array.html</remarks>
         public static NDArray array<T>(T[,,,,,] data, bool copy = true) where T : unmanaged
         {
             if (data == null)
@@ -494,7 +494,7 @@ namespace NumSharp
         ///     If false then the array will be pinned by calling <see cref="GCHandle.Alloc(object)"/>.
         /// </param>
         /// <returns>An <see cref="NDArray"/> with the data and shape of the given array.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.array.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.array.html</remarks>
         public static NDArray array<T>(T[,,,,,,] data, bool copy = true) where T : unmanaged
         {
             if (data == null)
@@ -513,7 +513,7 @@ namespace NumSharp
         ///     If false then the array will be pinned by calling <see cref="GCHandle.Alloc(object)"/>.
         /// </param>
         /// <returns>An <see cref="NDArray"/> with the data and shape of the given array.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.array.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.array.html</remarks>
         public static NDArray array<T>(T[,,,,,,,] data, bool copy = true) where T : unmanaged
         {
             if (data == null)
@@ -532,7 +532,7 @@ namespace NumSharp
         ///     If false then the array will be pinned by calling <see cref="GCHandle.Alloc(object)"/>.
         /// </param>
         /// <returns>An <see cref="NDArray"/> with the data and shape of the given array.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.array.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.array.html</remarks>
         public static NDArray array<T>(T[,,,,,,,,] data, bool copy = true) where T : unmanaged
         {
             if (data == null)
@@ -551,7 +551,7 @@ namespace NumSharp
         ///     If false then the array will be pinned by calling <see cref="GCHandle.Alloc(object)"/>.
         /// </param>
         /// <returns>An <see cref="NDArray"/> with the data and shape of the given array.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.array.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.array.html</remarks>
         public static NDArray array<T>(T[,,,,,,,,,] data, bool copy = true) where T : unmanaged
         {
             if (data == null)
@@ -570,7 +570,7 @@ namespace NumSharp
         ///     If false then the array will be pinned by calling <see cref="GCHandle.Alloc(object)"/>.
         /// </param>
         /// <returns>An <see cref="NDArray"/> with the data and shape of the given array.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.array.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.array.html</remarks>
         public static NDArray array<T>(T[,,,,,,,,,,] data, bool copy = true) where T : unmanaged
         {
             if (data == null)
@@ -589,7 +589,7 @@ namespace NumSharp
         ///     If false then the array will be pinned by calling <see cref="GCHandle.Alloc(object)"/>.
         /// </param>
         /// <returns>An <see cref="NDArray"/> with the data and shape of the given array.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.array.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.array.html</remarks>
         public static NDArray array<T>(T[,,,,,,,,,,,] data, bool copy = true) where T : unmanaged
         {
             if (data == null)
@@ -608,7 +608,7 @@ namespace NumSharp
         ///     If false then the array will be pinned by calling <see cref="GCHandle.Alloc(object)"/>.
         /// </param>
         /// <returns>An <see cref="NDArray"/> with the data and shape of the given array.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.array.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.array.html</remarks>
         public static NDArray array<T>(T[,,,,,,,,,,,,] data, bool copy = true) where T : unmanaged
         {
             if (data == null)
@@ -627,7 +627,7 @@ namespace NumSharp
         ///     If false then the array will be pinned by calling <see cref="GCHandle.Alloc(object)"/>.
         /// </param>
         /// <returns>An <see cref="NDArray"/> with the data and shape of the given array.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.array.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.array.html</remarks>
         public static NDArray array<T>(T[,,,,,,,,,,,,,] data, bool copy = true) where T : unmanaged
         {
             if (data == null)
@@ -646,7 +646,7 @@ namespace NumSharp
         ///     If false then the array will be pinned by calling <see cref="GCHandle.Alloc(object)"/>.
         /// </param>
         /// <returns>An <see cref="NDArray"/> with the data and shape of the given array.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.array.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.array.html</remarks>
         public static NDArray array<T>(T[,,,,,,,,,,,,,,] data, bool copy = true) where T : unmanaged
         {
             if (data == null)
@@ -665,7 +665,7 @@ namespace NumSharp
         ///     If false then the array will be pinned by calling <see cref="GCHandle.Alloc(object)"/>.
         /// </param>
         /// <returns>An <see cref="NDArray"/> with the data and shape of the given array.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.array.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.array.html</remarks>
         public static NDArray array<T>(T[,,,,,,,,,,,,,,,] data, bool copy = true) where T : unmanaged
         {
             if (data == null)

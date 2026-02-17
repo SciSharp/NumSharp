@@ -18,7 +18,7 @@ namespace NumSharp
         /// <param name="sigma">Standard deviation of the underlying normal distribution. Should be greater than zero. Default is 1.</param>
         /// <param name="shape">Output Shape</param>
         /// <returns>Drawn samples from the parameterized bernoulli distribution.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy-1.16.0/reference/generated/numpy.random.lognormal.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.random.lognormal.html</remarks>
         public NDArray lognormal(double mean, double sigma, Shape shape) => lognormal(mean, sigma, shape.dimensions);
 
         /// <summary>
@@ -30,7 +30,7 @@ namespace NumSharp
         /// <param name="sigma">Standard deviation of the underlying normal distribution. Should be greater than zero. Default is 1.</param>
         /// <param name="dims">Output Shape</param>
         /// <returns>Drawn samples from the parameterized bernoulli distribution.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy-1.16.0/reference/generated/numpy.random.lognormal.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.random.lognormal.html</remarks>
         public NDArray lognormal(double mean, double sigma, params int[] dims)
         {
             double zm = mean * mean;

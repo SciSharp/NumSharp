@@ -12,7 +12,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="tup">The arrays must have the same shape along all but the third axis. 1-D or 2-D arrays must have the same shape.</param>
         /// <returns>The array formed by stacking the given arrays, will be at least 3-D.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.dstack.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.dstack.html</remarks>
         public static NDArray dstack(params NDArray[] tup)
         {
             if (tup == null)

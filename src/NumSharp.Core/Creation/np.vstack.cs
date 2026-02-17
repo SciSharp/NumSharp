@@ -10,7 +10,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="tup">The arrays must have the same shape along all but the first axis. 1-D arrays must have the same length.</param>
         /// <returns>The array formed by stacking the given arrays, will be at least 2-D.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.vstack.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.vstack.html</remarks>
         public static NDArray vstack(params NDArray[] tup)
         {
             if (tup == null)

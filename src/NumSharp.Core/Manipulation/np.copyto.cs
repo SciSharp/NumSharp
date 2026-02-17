@@ -11,7 +11,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="dst">The array into which values are copied.</param>
         /// <param name="src">The array from which values are copied.</param>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.copyto.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.copyto.html</remarks>
         public static void copyto(NDArray dst, NDArray src) //todo! add where argument
         {
             if (dst == null)

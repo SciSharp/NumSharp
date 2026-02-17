@@ -11,7 +11,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="tup">The arrays must have the same shape along all but the second axis, except 1-D arrays which can be any length.</param>
         /// <returns>The array formed by stacking the given arrays.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.hstack.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.hstack.html</remarks>
         public NDArray hstack(params NDArray[] tup)
         {
             if (tup == null)
