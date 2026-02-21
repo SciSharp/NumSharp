@@ -30,6 +30,19 @@ namespace NumSharp.Backends.Kernels
         public static bool Enabled { get; set; } = true;
 
         /// <summary>
+        /// Detected vector width at startup: 512, 256, 128, or 0 (no SIMD).
+        /// </summary>
+        public static readonly int VectorBits =
+            Vector512.IsHardwareAccelerated ? 512 :
+            Vector256.IsHardwareAccelerated ? 256 :
+            Vector128.IsHardwareAccelerated ? 128 : 0;
+
+        /// <summary>
+        /// Number of bytes per vector register.
+        /// </summary>
+        public static readonly int VectorBytes = VectorBits / 8;
+
+        /// <summary>
         /// Number of IL-generated kernels in cache.
         /// </summary>
         public static int CachedCount => _contiguousKernelCache.Count;
@@ -38,6 +51,28 @@ namespace NumSharp.Backends.Kernels
         /// Clear the IL kernel cache.
         /// </summary>
         public static void Clear() => _contiguousKernelCache.Clear();
+
+        /// <summary>
+        /// Get the Vector container type (Vector128, Vector256, or Vector512).
+        /// </summary>
+        private static Type GetVectorContainerType() => VectorBits switch
+        {
+            512 => typeof(Vector512),
+            256 => typeof(Vector256),
+            128 => typeof(Vector128),
+            _ => throw new NotSupportedException("No SIMD support")
+        };
+
+        /// <summary>
+        /// Get the Vector{Width}&lt;T&gt; generic type.
+        /// </summary>
+        private static Type GetVectorType(Type elementType) => VectorBits switch
+        {
+            512 => typeof(Vector512<>).MakeGenericType(elementType),
+            256 => typeof(Vector256<>).MakeGenericType(elementType),
+            128 => typeof(Vector128<>).MakeGenericType(elementType),
+            _ => throw new NotSupportedException("No SIMD support")
+        };
 
         #region Public API
 
@@ -332,58 +367,48 @@ namespace NumSharp.Backends.Kernels
 
         private static int GetVectorCount<T>() where T : unmanaged
         {
-            return Vector256<T>.Count;
+            return VectorBits switch
+            {
+                512 => Vector512<T>.Count,
+                256 => Vector256<T>.Count,
+                128 => Vector128<T>.Count,
+                _ => 1
+            };
         }
 
         private static void EmitVectorLoad<T>(ILGenerator il) where T : unmanaged
         {
-            // Call Vector256.Load<T>(T*)
-            var loadMethod = typeof(Vector256).GetMethod(
-                nameof(Vector256.Load),
-                BindingFlags.Public | BindingFlags.Static,
-                null,
-                new[] { typeof(T).MakePointerType() },
-                null
-            );
+            var containerType = GetVectorContainerType();
 
-            if (loadMethod == null)
-            {
-                // Try the generic version
-                loadMethod = typeof(Vector256)
-                    .GetMethods(BindingFlags.Public | BindingFlags.Static)
-                    .First(m => m.Name == "Load" && m.IsGenericMethod && m.GetParameters().Length == 1)
-                    .MakeGenericMethod(typeof(T));
-            }
+            var loadMethod = containerType
+                .GetMethods(BindingFlags.Public | BindingFlags.Static)
+                .First(m => m.Name == "Load" && m.IsGenericMethod &&
+                            m.GetParameters().Length == 1 &&
+                            m.GetParameters()[0].ParameterType.IsPointer)
+                .MakeGenericMethod(typeof(T));
 
-            il.EmitCall(OpCodes.Call, loadMethod!, null);
+            il.EmitCall(OpCodes.Call, loadMethod, null);
         }
 
         private static void EmitVectorStore<T>(ILGenerator il) where T : unmanaged
         {
-            // Stack has: [Vector256<T>, T*]
-            // Need to call Vector256.Store<T>(Vector256<T> source, T* destination)
-            // But Store takes (this Vector256<T>, T*) so we need the extension method
+            var containerType = GetVectorContainerType();
+            var vectorType = GetVectorType(typeof(T));
 
-            var storeMethod = typeof(Vector256).GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .Where(m => m.Name == "Store" && m.IsGenericMethod)
-                .Select(m => m.MakeGenericMethod(typeof(T)))
-                .FirstOrDefault(m =>
-                {
-                    var p = m.GetParameters();
-                    return p.Length == 2 &&
-                           p[0].ParameterType == typeof(Vector256<T>) &&
-                           p[1].ParameterType == typeof(T).MakePointerType();
-                });
-
-            if (storeMethod == null)
-                throw new InvalidOperationException($"Could not find Vector256.Store<{typeof(T).Name}> method");
+            var storeMethod = containerType
+                .GetMethods(BindingFlags.Public | BindingFlags.Static)
+                .First(m => m.Name == "Store" && m.IsGenericMethod &&
+                            m.GetParameters().Length == 2 &&
+                            m.GetParameters()[0].ParameterType.IsGenericType)
+                .MakeGenericMethod(typeof(T));
 
             il.EmitCall(OpCodes.Call, storeMethod, null);
         }
 
         private static void EmitVectorOperation<T>(ILGenerator il, BinaryOp op) where T : unmanaged
         {
-            // Stack has two Vector256<T> values, need to emit the operation
+            var vectorType = GetVectorType(typeof(T));
+
             string methodName = op switch
             {
                 BinaryOp.Add => "op_Addition",
@@ -393,18 +418,12 @@ namespace NumSharp.Backends.Kernels
                 _ => throw new NotSupportedException($"Operation {op} not supported for SIMD")
             };
 
-            // Look for the operator on Vector256<T>
-            var vectorType = typeof(Vector256<T>);
-            var opMethod = vectorType.GetMethod(
-                methodName,
+            var opMethod = vectorType.GetMethod(methodName,
                 BindingFlags.Public | BindingFlags.Static,
-                null,
-                new[] { vectorType, vectorType },
-                null
-            );
+                null, new[] { vectorType, vectorType }, null);
 
             if (opMethod == null)
-                throw new InvalidOperationException($"Could not find {methodName} for Vector256<{typeof(T).Name}>");
+                throw new InvalidOperationException($"Could not find {methodName} for {vectorType.Name}");
 
             il.EmitCall(OpCodes.Call, opMethod, null);
         }
@@ -1561,31 +1580,30 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
-        /// Check if type supports SIMD Vector256 operations.
+        /// Check if type supports SIMD operations (V128/V256/V512).
         /// </summary>
         internal static bool CanUseSimd(NPTypeCode type)
         {
+            if (VectorBits == 0) return false;  // No SIMD hardware
+
             return type switch
             {
                 NPTypeCode.Byte => true,
-                NPTypeCode.Int16 => true,
-                NPTypeCode.UInt16 => true,
-                NPTypeCode.Int32 => true,
-                NPTypeCode.UInt32 => true,
-                NPTypeCode.Int64 => true,
-                NPTypeCode.UInt64 => true,
-                NPTypeCode.Single => true,
-                NPTypeCode.Double => true,
-                _ => false // bool, char, decimal don't have Vector256 support
+                NPTypeCode.Int16 or NPTypeCode.UInt16 => true,
+                NPTypeCode.Int32 or NPTypeCode.UInt32 => true,
+                NPTypeCode.Int64 or NPTypeCode.UInt64 => true,
+                NPTypeCode.Single or NPTypeCode.Double => true,
+                _ => false  // Boolean, Char, Decimal
             };
         }
 
         /// <summary>
-        /// Get Vector256 element count for type.
+        /// Get vector element count for type (adapts to V128/V256/V512).
         /// </summary>
         internal static int GetVectorCount(NPTypeCode type)
         {
-            return 32 / GetTypeSize(type); // Vector256 is 32 bytes
+            if (VectorBits == 0) return 1;  // Scalar fallback
+            return VectorBytes / GetTypeSize(type);
         }
 
         /// <summary>
@@ -1881,96 +1899,82 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
-        /// Emit Vector256.Load for NPTypeCode.
+        /// Emit Vector.Load for NPTypeCode (adapts to V128/V256/V512).
         /// </summary>
         internal static void EmitVectorLoad(ILGenerator il, NPTypeCode type)
         {
+            var containerType = GetVectorContainerType();
             var clrType = GetClrType(type);
-            var loadMethod = typeof(Vector256)
+
+            var loadMethod = containerType
                 .GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .First(m => m.Name == "Load" && m.IsGenericMethod && m.GetParameters().Length == 1)
+                .First(m => m.Name == "Load" && m.IsGenericMethod &&
+                            m.GetParameters().Length == 1 &&
+                            m.GetParameters()[0].ParameterType.IsPointer)
                 .MakeGenericMethod(clrType);
 
             il.EmitCall(OpCodes.Call, loadMethod, null);
         }
 
         /// <summary>
-        /// Emit Vector256.Create for NPTypeCode (broadcasts scalar to all vector elements).
-        /// Stack must have scalar value on top; result is Vector256 on stack.
+        /// Emit Vector.Create for NPTypeCode (broadcasts scalar to all vector elements).
+        /// Stack must have scalar value on top; result is Vector on stack.
         /// </summary>
         internal static void EmitVectorCreate(ILGenerator il, NPTypeCode type)
         {
+            var containerType = GetVectorContainerType();
             var clrType = GetClrType(type);
-            // Vector256.Create<T>(T value) - generic method that takes single scalar
-            var createMethod = typeof(Vector256)
+
+            var createMethod = containerType
                 .GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .Where(m => m.Name == "Create" && m.IsGenericMethod)
-                .Select(m => m.MakeGenericMethod(clrType))
-                .First(m =>
-                {
-                    var p = m.GetParameters();
-                    return p.Length == 1 && p[0].ParameterType == clrType;
-                });
+                .First(m => m.Name == "Create" && m.IsGenericMethod &&
+                            m.GetParameters().Length == 1 &&
+                            !m.GetParameters()[0].ParameterType.IsPointer)
+                .MakeGenericMethod(clrType);
 
             il.EmitCall(OpCodes.Call, createMethod, null);
         }
 
         /// <summary>
-        /// Emit Vector256.Store for NPTypeCode.
+        /// Emit Vector.Store for NPTypeCode (adapts to V128/V256/V512).
         /// </summary>
         internal static void EmitVectorStore(ILGenerator il, NPTypeCode type)
         {
+            var containerType = GetVectorContainerType();
             var clrType = GetClrType(type);
-            var vectorType = typeof(Vector256<>).MakeGenericType(clrType);
-            var ptrType = clrType.MakePointerType();
 
-            var storeMethod = typeof(Vector256)
+            var storeMethod = containerType
                 .GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .Where(m => m.Name == "Store" && m.IsGenericMethod)
-                .Select(m => m.MakeGenericMethod(clrType))
-                .FirstOrDefault(m =>
-                {
-                    var p = m.GetParameters();
-                    return p.Length == 2 &&
-                           p[0].ParameterType == vectorType &&
-                           p[1].ParameterType == ptrType;
-                });
-
-            if (storeMethod == null)
-                throw new InvalidOperationException($"Could not find Vector256.Store for {type}");
+                .First(m => m.Name == "Store" && m.IsGenericMethod &&
+                            m.GetParameters().Length == 2 &&
+                            m.GetParameters()[0].ParameterType.IsGenericType)
+                .MakeGenericMethod(clrType);
 
             il.EmitCall(OpCodes.Call, storeMethod, null);
         }
 
         /// <summary>
-        /// Emit Vector256 operation for NPTypeCode.
+        /// Emit Vector operation for NPTypeCode (adapts to V128/V256/V512).
         /// </summary>
         internal static void EmitVectorOperation(ILGenerator il, BinaryOp op, NPTypeCode type)
         {
             var clrType = GetClrType(type);
-            var vectorType = typeof(Vector256<>).MakeGenericType(clrType);
+            var vectorType = GetVectorType(clrType);
 
-            var methodName = op switch
+            string methodName = op switch
             {
                 BinaryOp.Add => "op_Addition",
                 BinaryOp.Subtract => "op_Subtraction",
                 BinaryOp.Multiply => "op_Multiply",
                 BinaryOp.Divide => "op_Division",
-                _ => throw new NotSupportedException($"SIMD operation {op} not supported")
+                _ => throw new NotSupportedException($"Operation {op} not supported for SIMD")
             };
 
-            var opMethod = vectorType.GetMethod(
-                methodName,
+            var opMethod = vectorType.GetMethod(methodName,
                 BindingFlags.Public | BindingFlags.Static,
-                null,
-                new[] { vectorType, vectorType },
-                null
-            );
+                null, new[] { vectorType, vectorType }, null);
 
-            if (opMethod == null)
-                throw new InvalidOperationException($"Could not find {methodName} for Vector256<{type}>");
-
-            il.EmitCall(OpCodes.Call, opMethod, null);
+            il.EmitCall(OpCodes.Call, opMethod!, null);
         }
 
         #endregion
