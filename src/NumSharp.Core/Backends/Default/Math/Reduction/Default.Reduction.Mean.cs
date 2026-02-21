@@ -19,15 +19,28 @@ namespace NumSharp.Backends
             {
                 var r = NDArray.Scalar(typeCode.HasValue ? Converts.ChangeType(arr.GetAtIndex(0), typeCode.Value) : arr.GetAtIndex(0));
                 if (keepdims)
-                    r.Storage.ExpandDimension(0);
+                {
+                    // NumPy: keepdims preserves the number of dimensions, all set to 1
+                    var keepdimsShape = new int[arr.ndim];
+                    for (int i = 0; i < arr.ndim; i++)
+                        keepdimsShape[i] = 1;
+                    r.Storage.Reshape(new Shape(keepdimsShape));
+                }
                 return r;
             }
 
             if (axis_ == null)
             {
-                var r = NDArray.Scalar(mean_elementwise(arr, typeCode));
+                // Use IL-generated kernels for element-wise reduction
+                var r = NDArray.Scalar(mean_elementwise_il(arr, typeCode));
                 if (keepdims)
-                    r.Storage.ExpandDimension(0);
+                {
+                    // NumPy: keepdims preserves the number of dimensions, all set to 1
+                    var keepdimsShape = new int[arr.ndim];
+                    for (int i = 0; i < arr.ndim; i++)
+                        keepdimsShape[i] = 1;
+                    r.Storage.Reshape(new Shape(keepdimsShape));
+                }
                 else if (!r.Shape.IsScalar && r.Shape.size == 1 && r.ndim == 1)
                     r.Storage.Reshape(Shape.Scalar);
                 return r;

@@ -63,7 +63,6 @@ namespace NumSharp.UnitTest.LinearAlgebra
         }
 
         [Test]
-        [OpenBugs] // np.matmul crashes with ArgumentOutOfRangeException
         public void Case_3_1_2_2__3_2_2()
         {
             var a = np.full(2, (3, 1, 2, 2));
@@ -73,7 +72,6 @@ namespace NumSharp.UnitTest.LinearAlgebra
         }
 
         [Test]
-        [OpenBugs] // np.matmul crashes with ArgumentOutOfRangeException
         public void Case_3_1_2_2__3_2_2_Arange()
         {
             var a = np.arange(2 * 1 * 2 * 2).reshape((2, 1, 2, 2));

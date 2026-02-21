@@ -23,7 +23,12 @@ namespace NumSharp.UnitTest.Utilities
             return new NDArrayAssertions(arr);
         }
 
-        public static NDArrayAssertions Should(this UnmanagedStorage arr)
+        public static UnmanagedStorageAssertions Should(this UnmanagedStorage arr)
+        {
+            return new UnmanagedStorageAssertions(arr);
+        }
+
+        public static NDArrayAssertions ShouldAsNDArray(this UnmanagedStorage arr)
         {
             return new NDArrayAssertions(arr);
         }
@@ -105,6 +110,22 @@ namespace NumSharp.UnitTest.Utilities
                 {
                     Subject.dimensions[i].Should().Be((int)shape[i]);
                 }
+            }
+
+            return new AndConstraint<ShapeAssertions>(this);
+        }
+
+        public AndConstraint<ShapeAssertions> BeEquivalentTo(Shape expected)
+        {
+            _chain
+                .ForCondition(expected.dimensions.Length == Subject.dimensions.Length)
+                .FailWith($"Expected shape to have {expected.dimensions.Length} dimensions but got {Subject.dimensions.Length} dimensions ({Subject}).");
+
+            for (int i = 0; i < expected.dimensions.Length; i++)
+            {
+                _chain
+                    .ForCondition(Subject.dimensions[i] == expected.dimensions[i])
+                    .FailWith($"Expected shape[{i}] to be {expected.dimensions[i]} but got {Subject.dimensions[i]}. Expected: {expected}, Got: {Subject}");
             }
 
             return new AndConstraint<ShapeAssertions>(this);
@@ -387,6 +408,49 @@ namespace NumSharp.UnitTest.Utilities
             _chain
                 .ForCondition(!np.array_equal(Subject, expected))
                 .FailWith($"Did not expect the ndarrays to be equal.\n------- Subject -------\n{Subject.ToString(false)}");
+
+            return new AndConstraint<NDArrayAssertions>(this);
+        }
+
+        public AndConstraint<NDArrayAssertions> BeSameAs(UnmanagedStorage expected)
+        {
+            _chain
+                .ForCondition(ReferenceEquals(Subject.Storage, expected))
+                .FailWith($"Expected storage to be the same instance.\nSubject storage hash: {Subject.Storage.GetHashCode()}\nExpected storage hash: {expected.GetHashCode()}");
+
+            return new AndConstraint<NDArrayAssertions>(this);
+        }
+
+        public AndConstraint<NDArrayAssertions> BeEquivalentTo(NDArray expected)
+        {
+            // Handle empty arrays specially
+            var subjectIsEmpty = Subject.Shape.IsEmpty || Subject.size == 0;
+            var expectedIsEmpty = expected.Shape.IsEmpty || expected.size == 0;
+
+            if (subjectIsEmpty || expectedIsEmpty)
+            {
+                _chain
+                    .ForCondition(subjectIsEmpty == expectedIsEmpty)
+                    .FailWith($"Expected both arrays to be empty or both to be non-empty.\nSubject empty: {subjectIsEmpty}, Expected empty: {expectedIsEmpty}");
+                return new AndConstraint<NDArrayAssertions>(this);
+            }
+
+            _chain
+                .ForCondition(Subject.Shape.Equals(expected.Shape))
+                .FailWith($"Expected shapes to match.\nSubject shape: {Subject.Shape}\nExpected shape: {expected.Shape}");
+
+            _chain
+                .ForCondition(np.array_equal(Subject, expected))
+                .FailWith($"Expected arrays to be equal.\n------- Subject -------\n{Subject.ToString(false)}\n------- Expected -------\n{expected.ToString(false)}");
+
+            return new AndConstraint<NDArrayAssertions>(this);
+        }
+
+        public AndConstraint<NDArrayAssertions> NotBeSameAs(UnmanagedStorage expected)
+        {
+            _chain
+                .ForCondition(!ReferenceEquals(Subject.Storage, expected))
+                .FailWith($"Did not expect storage to be the same instance.\nStorage hash: {Subject.Storage.GetHashCode()}");
 
             return new AndConstraint<NDArrayAssertions>(this);
         }
@@ -1209,6 +1273,94 @@ namespace NumSharp.UnitTest.Utilities
 
 
             return new AndConstraint<NDArrayAssertions>(this);
+        }
+    }
+
+    [DebuggerStepThrough]
+    public class UnmanagedStorageAssertions : ReferenceTypeAssertions<UnmanagedStorage, UnmanagedStorageAssertions>
+    {
+        private readonly AssertionChain _chain;
+        private readonly Lazy<NDArrayAssertions> _ndArrayAssertions;
+
+        public UnmanagedStorageAssertions(UnmanagedStorage instance)
+            : this(instance, AssertionChain.GetOrCreate())
+        {
+        }
+
+        public UnmanagedStorageAssertions(UnmanagedStorage instance, AssertionChain chain)
+            : base(instance, chain)
+        {
+            _chain = chain;
+            _ndArrayAssertions = new Lazy<NDArrayAssertions>(() =>
+                instance != null ? new NDArrayAssertions(new NDArray(instance), chain) : null!);
+        }
+
+        protected override string Identifier => "storage";
+
+        public AndConstraint<UnmanagedStorageAssertions> BeSameAs(UnmanagedStorage expected)
+        {
+            _chain
+                .ForCondition(ReferenceEquals(Subject, expected))
+                .FailWith($"Expected storage to be the same instance.\nSubject: {Subject?.GetHashCode()}\nExpected: {expected?.GetHashCode()}");
+
+            return new AndConstraint<UnmanagedStorageAssertions>(this);
+        }
+
+        public AndConstraint<UnmanagedStorageAssertions> NotBeSameAs(UnmanagedStorage expected)
+        {
+            _chain
+                .ForCondition(!ReferenceEquals(Subject, expected))
+                .FailWith($"Did not expect storage to be the same instance.\nStorage: {Subject?.GetHashCode()}");
+
+            return new AndConstraint<UnmanagedStorageAssertions>(this);
+        }
+
+        public AndConstraint<UnmanagedStorageAssertions> BeOfValues(params object[] values)
+        {
+            if (Subject == null)
+                throw new InvalidOperationException("Cannot call BeOfValues on null storage");
+            _ndArrayAssertions.Value.BeOfValues(values);
+            return new AndConstraint<UnmanagedStorageAssertions>(this);
+        }
+
+        public AndConstraint<UnmanagedStorageAssertions> AllValuesBe(object val)
+        {
+            if (Subject == null)
+                throw new InvalidOperationException("Cannot call AllValuesBe on null storage");
+            _ndArrayAssertions.Value.AllValuesBe(val);
+            return new AndConstraint<UnmanagedStorageAssertions>(this);
+        }
+
+        public AndConstraint<UnmanagedStorageAssertions> BeOfValuesApproximately(double sensitivity, params object[] values)
+        {
+            if (Subject == null)
+                throw new InvalidOperationException("Cannot call BeOfValuesApproximately on null storage");
+            _ndArrayAssertions.Value.BeOfValuesApproximately(sensitivity, values);
+            return new AndConstraint<UnmanagedStorageAssertions>(this);
+        }
+
+        public AndConstraint<UnmanagedStorageAssertions> BeShaped(params int[] dimensions)
+        {
+            if (Subject == null)
+                throw new InvalidOperationException("Cannot call BeShaped on null storage");
+            _ndArrayAssertions.Value.BeShaped(dimensions);
+            return new AndConstraint<UnmanagedStorageAssertions>(this);
+        }
+
+        public AndConstraint<UnmanagedStorageAssertions> BeOfSize(int size, string because = null, params object[] becauseArgs)
+        {
+            if (Subject == null)
+                throw new InvalidOperationException("Cannot call BeOfSize on null storage");
+            _ndArrayAssertions.Value.BeOfSize(size, because, becauseArgs);
+            return new AndConstraint<UnmanagedStorageAssertions>(this);
+        }
+
+        public AndConstraint<UnmanagedStorageAssertions> BeOfType(NPTypeCode typeCode)
+        {
+            if (Subject == null)
+                throw new InvalidOperationException("Cannot call BeOfType on null storage");
+            _ndArrayAssertions.Value.BeOfType(typeCode);
+            return new AndConstraint<UnmanagedStorageAssertions>(this);
         }
     }
 }

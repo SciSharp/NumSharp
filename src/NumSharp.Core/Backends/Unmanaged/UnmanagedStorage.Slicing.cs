@@ -110,7 +110,19 @@ namespace NumSharp.Backends
 
             var slicedShape = _shape.Slice(slices);
 
-            // NumPy-aligned: All slices return views (aliases) that share memory with the original.
+            // NumPy-aligned optimization: For contiguous slices, slice the InternalArray directly
+            // and create a fresh shape with offset=0. This matches NumPy's data pointer adjustment
+            // for contiguous views and makes IsSliced=false for contiguous slices.
+            if (slicedShape.IsContiguous && slicedShape.offset > 0)
+            {
+                // Create a fresh contiguous shape (no offset)
+                var freshShape = new Shape(slicedShape.dimensions);
+                var view = new UnmanagedStorage(InternalArray.Slice(slicedShape.offset, slicedShape.size), freshShape);
+                view._baseStorage = _baseStorage ?? this;
+                return view;
+            }
+
+            // Non-contiguous slices: create an alias with the sliced shape.
             // The slicedShape contains the correct offset and strides computed by Shape.Slice().
             // Views with non-zero offset or non-standard strides use coordinate-based access.
             return Alias(slicedShape);

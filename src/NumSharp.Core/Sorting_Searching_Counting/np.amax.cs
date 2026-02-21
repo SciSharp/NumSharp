@@ -22,9 +22,8 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.amax.html</remarks>
         public static NDArray amax(NDArray a, int? axis = null, bool keepdims = false, Type dtype = null)
         {
-            if (!axis.HasValue)
-                return a.amax(dtype);
-            return a.amax(axis.Value, keepdims, dtype);
+            // Delegate to TensorEngine which handles keepdims for axis=null
+            return a.TensorEngine.ReduceAMax(a, axis, keepdims, dtype?.GetTypeCode());
         }
 
         /// <summary>
@@ -37,10 +36,8 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.amax.html</remarks>
         public static NDArray max(NDArray a, int? axis = null, bool keepdims = false, Type dtype = null)
         {
-            if (!axis.HasValue)
-                return a.amax(dtype);
-
-            return a.amax(axis.Value, keepdims, dtype);
+            // Delegate to TensorEngine which handles keepdims for axis=null
+            return a.TensorEngine.ReduceAMax(a, axis, keepdims, dtype?.GetTypeCode());
         }
     }
 }

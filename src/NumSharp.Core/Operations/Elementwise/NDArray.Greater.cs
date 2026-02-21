@@ -1,78 +1,81 @@
-﻿using NumSharp.Utilities;
+using NumSharp.Generic;
 
 namespace NumSharp
 {
     public partial class NDArray
     {
-        public static NumSharp.Generic.NDArray<bool> operator >(NDArray np, int obj)
+        /// <summary>
+        /// Element-wise greater-than comparison (>).
+        /// Supports all 12 dtypes and broadcasting.
+        /// </summary>
+        public static NDArray<bool> operator >(NDArray lhs, NDArray rhs)
         {
-            return (np > (System.Object)obj);
+            if (lhs is null || rhs is null)
+                return Scalar<bool>(false).MakeGeneric<bool>();
+
+            if (lhs.Shape.IsEmpty || lhs.size == 0)
+                return Scalar<bool>(false).MakeGeneric<bool>();
+
+            return lhs.TensorEngine.Greater(lhs, rhs);
         }
 
-        public static NumSharp.Generic.NDArray<bool> operator >(NDArray np, object obj)
+        /// <summary>
+        /// Element-wise greater-than comparison with scalar (>).
+        /// </summary>
+        public static NDArray<bool> operator >(NDArray lhs, object rhs)
         {
-            var boolTensor = new NDArray(typeof(bool),np.shape);
-            var bools = boolTensor.Storage.GetData();
+            if (lhs is null)
+                return Scalar<bool>(false).MakeGeneric<bool>();
 
-            var npValues = np.Storage.GetData();
+            return lhs > np.asanyarray(rhs);
+        }
 
-            switch (npValues.TypeCode)
-            {
-                case NPTypeCode.Int32:
-                {
-                    int value = Converts.ToInt32(obj);
-                    int idx = 0;
-                    foreach (var npValue in npValues)
-                    {
-                        if ((int)npValue > value)
-                            bools[idx] = true;
-                        idx++;
-                    }
-                    break;
-                    }
-                case NPTypeCode.Int64:
-                {
-                    long value = Converts.ToInt64(obj);
-                    int idx = 0;
-                    foreach (var npValue in npValues)
-                    {
-                        if ((long)npValue > value)
-                            bools[idx] = true;
-                        idx++;
-                    }
-                    break;
-                    }
-                case NPTypeCode.Float:
-                {
-                    float value = Converts.ToSingle(obj);
-                    int idx = 0;
-                    foreach (var npValue in npValues)
-                    {
-                        if ((float)npValue > value)
-                            bools[idx] = true;
-                        idx++;
-                    }
-                    break;
-                    }
-                case NPTypeCode.Double:
-                {
-                    double value = Converts.ToDouble(obj);
-                    int idx = 0;
-                    foreach (var npValue in npValues)
-                    {
-                        if ((double)npValue > value)
-                            bools[idx] = true;
-                        idx++;
-                    }
-                    break;
-                    }
-                default :
-                {
-                    throw new IncorrectTypeException();
-                } 
-            }
+        /// <summary>
+        /// Element-wise greater-than comparison with scalar on left (>).
+        /// </summary>
+        public static NDArray<bool> operator >(object lhs, NDArray rhs)
+        {
+            if (rhs is null)
+                return Scalar<bool>(false).MakeGeneric<bool>();
 
-            return boolTensor.MakeGeneric<bool>();
+            return np.asanyarray(lhs) > rhs;
+        }
+
+        /// <summary>
+        /// Element-wise greater-than-or-equal comparison (>=).
+        /// Supports all 12 dtypes and broadcasting.
+        /// </summary>
+        public static NDArray<bool> operator >=(NDArray lhs, NDArray rhs)
+        {
+            if (lhs is null || rhs is null)
+                return Scalar<bool>(false).MakeGeneric<bool>();
+
+            if (lhs.Shape.IsEmpty || lhs.size == 0)
+                return Scalar<bool>(false).MakeGeneric<bool>();
+
+            return lhs.TensorEngine.GreaterEqual(lhs, rhs);
+        }
+
+        /// <summary>
+        /// Element-wise greater-than-or-equal comparison with scalar (>=).
+        /// </summary>
+        public static NDArray<bool> operator >=(NDArray lhs, object rhs)
+        {
+            if (lhs is null)
+                return Scalar<bool>(false).MakeGeneric<bool>();
+
+            return lhs >= np.asanyarray(rhs);
+        }
+
+        /// <summary>
+        /// Element-wise greater-than-or-equal comparison with scalar on left (>=).
+        /// </summary>
+        public static NDArray<bool> operator >=(object lhs, NDArray rhs)
+        {
+            if (rhs is null)
+                return Scalar<bool>(false).MakeGeneric<bool>();
+
+            return np.asanyarray(lhs) >= rhs;
         }
     }
 }

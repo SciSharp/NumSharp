@@ -121,9 +121,14 @@ namespace NumSharp.Backends
             if (this_shape.IsBroadcasted)
             {
                 var (shape, offset) = this_shape.GetSubshape(indices);
-                // NumPy-aligned: use bufferSize instead of BroadcastInfo.OriginalShape.size
-                int sliceSize = shape.BufferSize > 0 ? shape.BufferSize : shape.size;
-                var view = UnmanagedStorage.CreateBroadcastedUnsafe(InternalArray.Slice(offset, sliceSize), shape);
+                // For non-broadcasted contiguous subshapes, use size (the actual data extent).
+                // Only use BufferSize when the subshape itself is broadcasted.
+                int sliceSize = shape.IsBroadcasted
+                    ? (shape.BufferSize > 0 ? shape.BufferSize : shape.size)
+                    : shape.size;
+                // Create shape with offset=0 since InternalArray.Slice already accounts for the offset
+                var adjustedShape = new Shape(shape.dimensions, shape.strides, 0, sliceSize);
+                var view = UnmanagedStorage.CreateBroadcastedUnsafe(InternalArray.Slice(offset, sliceSize), adjustedShape);
                 view._baseStorage = _baseStorage ?? this;
                 return view;
             }
@@ -183,9 +188,14 @@ namespace NumSharp.Backends
             if (this_shape.IsBroadcasted)
             {
                 var (shape, offset) = this_shape.GetSubshape(dims, ndims);
-                // NumPy-aligned: use bufferSize instead of BroadcastInfo.OriginalShape.size
-                int sliceSize = shape.BufferSize > 0 ? shape.BufferSize : shape.size;
-                var view = UnmanagedStorage.CreateBroadcastedUnsafe(InternalArray.Slice(offset, sliceSize), shape);
+                // For non-broadcasted contiguous subshapes, use size (the actual data extent).
+                // Only use BufferSize when the subshape itself is broadcasted.
+                int sliceSize = shape.IsBroadcasted
+                    ? (shape.BufferSize > 0 ? shape.BufferSize : shape.size)
+                    : shape.size;
+                // Create shape with offset=0 since InternalArray.Slice already accounts for the offset
+                var adjustedShape = new Shape(shape.dimensions, shape.strides, 0, sliceSize);
+                var view = UnmanagedStorage.CreateBroadcastedUnsafe(InternalArray.Slice(offset, sliceSize), adjustedShape);
                 view._baseStorage = _baseStorage ?? this;
                 return view;
             }

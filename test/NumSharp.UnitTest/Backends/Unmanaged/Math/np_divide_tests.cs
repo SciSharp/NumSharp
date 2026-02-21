@@ -12,20 +12,27 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void UInt8DivideTest1()
         {
+            // NumPy: uint8 / int returns float64 (true division)
             var nd1 = np.arange(3).astype(np.uint8);
 
             var nd2 = nd1 / (byte)2;
 
-            nd2.array_equal(new byte[] {0 / 2, 1 / 2, 2 / 2}).Should().BeTrue();
+            // True division returns float64
+            nd2.dtype.Should().Be(np.float64);
+            nd2.array_equal(new double[] {0.0 / 2, 1.0 / 2, 2.0 / 2}).Should().BeTrue();
         }
 
         [Test]
         public void UInt16DivideTest1()
         {
+            // NumPy: uint16 / int returns float64 (true division)
             var nd1 = np.arange(3).astype(np.uint16);
 
             var nd2 = nd1 / (byte)2;
-            nd2.array_equal(new ushort[] {0 / 2, 1 / 2, 2 / 2}).Should().BeTrue();
+
+            // True division returns float64
+            nd2.dtype.Should().Be(np.float64);
+            nd2.array_equal(new double[] {0.0 / 2, 1.0 / 2, 2.0 / 2}).Should().BeTrue();
         }
 
         [Test]
