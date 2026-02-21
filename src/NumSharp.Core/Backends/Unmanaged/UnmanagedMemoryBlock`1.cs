@@ -28,7 +28,7 @@ namespace NumSharp.Backends.Unmanaged
         public UnmanagedMemoryBlock(long count)
         {
             var bytes = BytesCount = count * InfoOf<T>.Size;
-            var ptr = Marshal.AllocHGlobal(new IntPtr(bytes));
+            var ptr = (IntPtr)NativeMemory.Alloc((nuint)bytes);
             _disposer = new Disposer(ptr);
             Address = (T*)ptr;
             Count = count;
@@ -992,7 +992,7 @@ namespace NumSharp.Backends.Unmanaged
                 switch (_type)
                 {
                     case AllocationType.AllocHGlobal:
-                        Marshal.FreeHGlobal(Address);
+                        NativeMemory.Free((void*)Address);
                         return;
                     case AllocationType.Wrap:
                         return;
