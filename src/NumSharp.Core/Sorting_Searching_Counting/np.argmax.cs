@@ -9,7 +9,7 @@
         /// <param name="a">Input array.</param>
         /// <param name="axis">By default, the index is into the flattened array, otherwise along the specified axis.</param>
         /// <returns>Array of indices into the array. It has the same shape as a.shape with the dimension along axis removed.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.argmax.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.argmax.html</remarks>
         public static NDArray argmax(NDArray a, int axis)
             => a.TensorEngine.ArgMax(a, axis: axis);
 
@@ -18,7 +18,7 @@
         /// </summary>
         /// <param name="a">Input array.</param>
         /// <returns>Array of indices into the array. It has the same shape as a.shape with the dimension along axis removed.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.argmax.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.argmax.html</remarks>
         public static int argmax(NDArray a)
             => a.TensorEngine.ArgMax(a);
 
@@ -28,7 +28,7 @@
         /// <param name="a">Input array.</param>
         /// <param name="axis">By default, the index is into the flattened array, otherwise along the specified axis.</param>
         /// <returns>Array of indices into the array. It has the same shape as a.shape with the dimension along axis removed.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.argmin.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.argmin.html</remarks>
         public static NDArray argmin(NDArray a, int axis)
             => a.TensorEngine.ArgMin(a, axis: axis);
 
@@ -37,7 +37,7 @@
         /// </summary>
         /// <param name="a">Input array.</param>
         /// <returns>Array of indices into the array. It has the same shape as a.shape with the dimension along axis removed.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.argmin.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.argmin.html</remarks>
         public static int argmin(NDArray a)
             => a.TensorEngine.ArgMin(a);
     }

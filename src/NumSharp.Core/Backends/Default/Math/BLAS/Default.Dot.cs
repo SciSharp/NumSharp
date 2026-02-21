@@ -11,7 +11,7 @@ namespace NumSharp.Backends
     public partial class DefaultEngine
     {
 
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.dot.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.dot.html</remarks>
         public override NDArray Dot(in NDArray left, in NDArray right)
         {
             //Dot product of two arrays.Specifically,

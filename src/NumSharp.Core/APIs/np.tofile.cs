@@ -10,7 +10,7 @@ namespace NumSharp
         ///     Data is always written in ‘C’ order, independent of the order of a. <br></br>The data produced by this method can be recovered using the function fromfile().
         /// </summary>
         /// <param name="fid">An open file object, or a string containing a filename.</param>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.ndarray.tofile.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.tofile.html</remarks>
         public void tofile(string fid)
         {
             //TODO! support for sliced data (if sliced, clone and then save)

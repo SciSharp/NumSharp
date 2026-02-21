@@ -11,7 +11,7 @@ namespace NumSharp
         /// <param name="x">Angle, in radians (2 \pi rad equals 360 degrees).</param>
         /// <param name="outType">The dtype the returned ndarray should be of, only non integer values are supported.</param>
         /// <returns>The sine of each element of x. This is a scalar if x is a scalar.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.sin.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.sin.html</remarks>
         public static NDArray sin(in NDArray x, NPTypeCode? outType = null) 
             => x.TensorEngine.Sin(x, outType);
 
@@ -21,7 +21,7 @@ namespace NumSharp
         /// <param name="x">Angle, in radians (2 \pi rad equals 360 degrees).</param>
         /// <param name="outType">The dtype the returned ndarray should be of, only non integer values are supported.</param>
         /// <returns>The sine of each element of x. This is a scalar if x is a scalar.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.sin.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.sin.html</remarks>
         public static NDArray sin(in NDArray x, Type outType) 
             => x.TensorEngine.Sin(x, outType);
 
@@ -32,7 +32,7 @@ namespace NumSharp
         /// <param name="x">Input array.</param>
         /// <param name="outType">The dtype the returned ndarray should be of, only non integer values are supported.</param>
         /// <returns>The sine of each element of x. This is a scalar if x is a scalar.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.sinh.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.sinh.html</remarks>
         public static NDArray sinh(in NDArray x, NPTypeCode? outType = null) 
             => x.TensorEngine.Sinh(x, outType);
 
@@ -43,7 +43,7 @@ namespace NumSharp
         /// <param name="x">Input array.</param>
         /// <param name="outType">The dtype the returned ndarray should be of, only non integer values are supported.</param>
         /// <returns>The sine of each element of x. This is a scalar if x is a scalar.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.sinh.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.sinh.html</remarks>
         public static NDArray sinh(in NDArray x, Type outType) 
             => x.TensorEngine.Sinh(x, outType);
 
@@ -54,7 +54,7 @@ namespace NumSharp
         /// <param name="x">Input array.</param>
         /// <param name="outType">The dtype the returned ndarray should be of, only non integer values are supported.</param>
         /// <returns>The inverse sine of each element in x, in radians and in the closed interval [-pi/2, pi/2]. This is a scalar if x is a scalar.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.arcsin.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.arcsin.html</remarks>
         public static NDArray arcsin(in NDArray x, NPTypeCode? outType = null)
             => x.TensorEngine.ASin(x, outType);
 
@@ -65,7 +65,7 @@ namespace NumSharp
         /// <param name="x">Input array.</param>
         /// <param name="outType">The dtype the returned ndarray should be of, only non integer values are supported.</param>
         /// <returns>The inverse sine of each element in x, in radians and in the closed interval [-pi/2, pi/2]. This is a scalar if x is a scalar.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.arcsin.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.arcsin.html</remarks>
         public static NDArray arcsin(in NDArray x, Type outType)
             => x.TensorEngine.ASin(x, outType);
     }

@@ -13,7 +13,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="shapes">Shape of the new array.</param>
         /// <param name="dtype">The desired data-type for the array, e.g., <see cref="uint8"/>. Default is <see cref="float64"/> / <see cref="double"/>.</param>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.ones.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ones.html</remarks>
         public static NDArray ones(params int[] shapes)
         {
             return ones(typeof(double), shapes);
@@ -24,7 +24,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="shapes">Shape of the new array.</param>
         /// <param name="dtype">The desired data-type for the array, e.g., <see cref="uint8"/>. Default is <see cref="float64"/> / <see cref="double"/>.</param>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.ones.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ones.html</remarks>
         public static NDArray ones(Type dtype = null, params int[] shapes)
         {
             return ones(new Shape(shapes), dtype: dtype);
@@ -35,7 +35,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="shapes">Shape of the new array.</param>
         /// <typeparam name="T">The desired data-type for the array, e.g., <see cref="uint8"/>. Default is <see cref="float64"/> / <see cref="double"/>.</typeparam>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.ones.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ones.html</remarks>
         public static NDArray ones<T>(params int[] shapes) where T : unmanaged
         {
             return ones(new Shape(shapes), typeof(T));
@@ -46,7 +46,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="shape">Shape of the new array.</param>
         /// <param name="dtype">The desired data-type for the array, e.g., <see cref="uint8"/>. Default is <see cref="float64"/> / <see cref="double"/>.</param>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.ones.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ones.html</remarks>
         public static NDArray ones(Shape shape, Type dtype)
         {
             return ones(shape, (dtype ?? typeof(double)).GetTypeCode());
@@ -58,7 +58,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="shape">Shape of the new array.</param>
         /// <param name="dtype">The desired data-type for the array, e.g., <see cref="uint8"/>. Default is <see cref="float64"/> / <see cref="double"/>.</param>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.ones.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ones.html</remarks>
         public static NDArray ones(Shape shape)
         {
             return ones(shape, NPTypeCode.Double);
@@ -69,7 +69,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="shape">Shape of the new array.</param>
         /// <param name="typeCode">The desired data-type for the array, e.g., <see cref="uint8"/>. Default is <see cref="float64"/> / <see cref="double"/>.</param>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.ones.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ones.html</remarks>
         public static NDArray ones(Shape shape, NPTypeCode typeCode)
         {
             object one = null;

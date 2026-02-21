@@ -12,7 +12,7 @@ namespace NumSharp
         /// <param name="arrays">Each array must have the same shape.</param>
         /// <param name="axis">The axis in the result array along which the input arrays are stacked.</param>
         /// <returns>The stacked array has one more dimension than the input arrays.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.stack.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.stack.html</remarks>
         public static NDArray stack(NDArray[] arrays, int axis = 0)
         {
             if (arrays == null)

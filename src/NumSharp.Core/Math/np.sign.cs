@@ -12,7 +12,7 @@ namespace NumSharp
         /// <param name="x">Angle, in radians (2 \pi rad equals 360 degrees).</param>
         /// <param name="outType">The dtype the returned ndarray should be of, only non integer values are supported.</param>
         /// <returns>The sign of x. This is a scalar if x is a scalar.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.sign.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.sign.html</remarks>
         public static NDArray sign(in NDArray x, NPTypeCode? outType = null)
             => x.TensorEngine.Sign(x, outType);
 
@@ -23,7 +23,7 @@ namespace NumSharp
         /// <param name="x">Angle, in radians (2 \pi rad equals 360 degrees).</param>
         /// <param name="outType">The dtype the returned ndarray should be of, only non integer values are supported.</param>
         /// <returns>The sign of x. This is a scalar if x is a scalar.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.sign.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.sign.html</remarks>
         public static NDArray sign(in NDArray x, Type outType) 
             => x.TensorEngine.Sign(x, outType);
     }

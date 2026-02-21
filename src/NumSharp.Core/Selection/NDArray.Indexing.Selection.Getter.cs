@@ -16,7 +16,7 @@ namespace NumSharp
         ///     Used to perform selection based on indices, equivalent to nd[NDArray[]].
         /// </summary>
         /// <param name="@out">Alternative output array in which to place the result. It must have the same shape as the expected output and be of dtype <see cref="Int32"/>.</param>
-        /// <remarks>https://docs.scipy.org/doc/numpy-1.17.0/user/basics.indexing.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/user/basics.indexing.html</remarks>
         /// <exception cref="IndexOutOfRangeException">When one of the indices exceeds limits.</exception>
         /// <exception cref="ArgumentException">indices must be of Int type (byte, u/short, u/int, u/long).</exception>
         public NDArray GetIndices(NDArray @out, NDArray[] indices)

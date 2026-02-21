@@ -10,7 +10,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="ndArrays">The arrays to test for broadcasting.</param>
         /// <returns>True if these can be broadcasted against each other.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.broadcast_arrays.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.broadcast_arrays.html</remarks>
         public static bool are_broadcastable(params NDArray[] ndArrays)
         {
             return DefaultEngine.AreBroadcastable(ndArrays);
@@ -21,7 +21,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="shapes">The shapes to test for broadcasting.</param>
         /// <returns>True if these can be broadcasted against each other.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.broadcast_arrays.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.broadcast_arrays.html</remarks>
         public static bool are_broadcastable(params Shape[] shapes)
         {
             return DefaultEngine.AreBroadcastable(shapes);
@@ -32,7 +32,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="shapes">The shapes to test for broadcasting.</param>
         /// <returns>True if these can be broadcasted against each other.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.broadcast_arrays.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.broadcast_arrays.html</remarks>
         public static bool are_broadcastable(params int[][] shapes)
         {
             return DefaultEngine.AreBroadcastable(shapes);
@@ -44,7 +44,7 @@ namespace NumSharp
         /// <param name="lhs">An array to test for broadcasting.</param>
         /// <param name="rhs">An array to test for broadcasting.</param>
         /// <returns>True if these can be broadcasted against each other.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.broadcast_arrays.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.broadcast_arrays.html</remarks>
         public static bool are_broadcastable(NDArray lhs, NDArray rhs)
         {
             return DefaultEngine.AreBroadcastable(lhs, rhs);

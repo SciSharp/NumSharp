@@ -14,7 +14,7 @@ namespace NumSharp
         /// <param name="fill_value">Fill value.</param>
         /// <param name="dtype">Overrides the data type of the result.</param>
         /// <returns>Array of fill_value with the same shape and type as a.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.full_like.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.full_like.html</remarks>
         public static NDArray full_like(NDArray a, object fill_value, Type dtype = null)
         {
             var typeCode = (dtype ?? fill_value?.GetType() ?? a.dtype).GetTypeCode();

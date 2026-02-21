@@ -3,7 +3,7 @@
     /// <summary>
     ///     A class that serves as numpy.random.RandomState in python.
     /// </summary>
-    /// <remarks>https://docs.scipy.org/doc/numpy-1.16.1/reference/routines.random.html</remarks>
+    /// <remarks>https://numpy.org/doc/stable/reference/random/index.html</remarks>
     public partial class NumPyRandom
     {
         protected internal Randomizer randomizer;

@@ -8,7 +8,7 @@ using NumSharp.Backends;
 
 namespace NumSharp
 {
-    /// <remarks>https://docs.scipy.org/doc/numpy-1.16.0/reference/generated/numpy.dtype.html#numpy.dtype</remarks>
+    /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.dtype.html#numpy.dtype</remarks>
     public class DType
     {
         protected internal static readonly FrozenDictionary<NPTypeCode, char> _kind_list_map = new Dictionary<NPTypeCode, char>()
@@ -170,7 +170,7 @@ namespace NumSharp
         /// <param name="dtype"></param>
         /// <returns>A <see cref="DType"/> based on <paramref name="dtype"/>, return can be null.</returns>
         /// <remarks>
-        ///     https://docs.scipy.org/doc/numpy-1.16.0/reference/arrays.dtypes.html <br></br>
+        ///     https://numpy.org/doc/stable/reference/arrays.dtypes.html <br></br>
         ///     This was created to ease the porting of C++ numpy to C#.
         /// </remarks>
         public static DType dtype(string dtype)
@@ -377,7 +377,7 @@ namespace NumSharp
     };
 
     /// <summary>
-    ///     https://docs.scipy.org/doc/numpy-1.16.1/reference/c-api.dtype.html#enumerated-types
+    ///     https://numpy.org/doc/stable/reference/c-api/dtype.html#enumerated-types
     /// </summary>
     internal enum NPY_TYPECHAR
     {

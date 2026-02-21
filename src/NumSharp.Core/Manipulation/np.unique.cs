@@ -11,7 +11,7 @@
         ///     * the number of times each unique value comes up in the input array<br></br>
         /// </summary>
         /// <returns>The sorted unique values.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.unique.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.unique.html</remarks>
         public static NDArray unique(in NDArray a)
             => a.unique();
     }

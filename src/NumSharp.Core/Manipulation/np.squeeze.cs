@@ -12,7 +12,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="a">Input data.</param>
         /// <returns>The input array, but with all or a subset of the dimensions of length 1 removed. This is always a itself or a view into a.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.squeeze.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.squeeze.html</remarks>
         public static NDArray squeeze(NDArray a)
         {
             return a.reshape(a.shape.Where(x => x != 1).ToArray());
@@ -24,7 +24,7 @@ namespace NumSharp
         /// <param name="a">Input data.</param>
         /// <param name="axis">Selects a subset of the single-dimensional entries in the shape. If an axis is selected with shape entry greater than one, an error is raised.</param>
         /// <returns>The input array, but with all or a subset of the dimensions of length 1 removed. This is always a itself or a view into a.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.squeeze.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.squeeze.html</remarks>
         /// <exception cref="IncorrectShapeException">If axis is not None, and an axis being squeezed is not of length 1</exception>
         public static NDArray squeeze(NDArray a, int axis)
         {
@@ -45,7 +45,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="shape">Input shape.</param>
         /// <returns>The input array, but with all or a subset of the dimensions of length 1 removed. This is always a itself or a view into a.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.squeeze.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.squeeze.html</remarks>
         public static Shape squeeze(Shape shape)
         {
             //TODO! what will happen if its a slice?
@@ -58,7 +58,7 @@ namespace NumSharp
         /// <param name="a">Input data.</param>
         /// <param name="axis">Selects a subset of the single-dimensional entries in the shape. If an axis is selected with shape entry greater than one, an error is raised.</param>
         /// <returns>The input array, but with all or a subset of the dimensions of length 1 removed. This is always a itself or a view into a.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.squeeze.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.squeeze.html</remarks>
         /// <exception cref="IncorrectShapeException">If axis is not None, and an axis being squeezed is not of length 1</exception>
         [MethodImpl(Inline)]
         internal static NDArray squeeze_fast(NDArray a, int axis)
@@ -72,7 +72,7 @@ namespace NumSharp
         /// <param name="a">Input data.</param>
         /// <param name="axis">Selects a subset of the single-dimensional entries in the shape. If an axis is selected with shape entry greater than one, an error is raised.</param>
         /// <returns>The input array, but with all or a subset of the dimensions of length 1 removed. This is always a itself or a view into a.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.squeeze.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.squeeze.html</remarks>
         /// <exception cref="IncorrectShapeException">If axis is not None, and an axis being squeezed is not of length 1</exception>
         [MethodImpl(Inline)]
         internal static Shape squeeze_fast(Shape a, int axis)

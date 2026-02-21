@@ -17,7 +17,7 @@ namespace NumSharp
         /// <param name="num">Number of samples to generate. Default is 50. Must be non-negative.</param>
         /// <param name="endpoint">If True, stop is the last sample. Otherwise, it is not included. Default is True.</param>
         /// <param name="dtype">The type of the output array. If dtype is not given, infer the data type from the other input arguments.</param>
-        /// <remarks>https://docs.scipy.org/doc/numpy-1.15.0/reference/generated/numpy.linspace.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linspace.html</remarks>
         public static NDArray linspace(double start, double stop, int num, bool endpoint, Type dtype)
         {
             return linspace(start, stop, num, endpoint, (dtype ?? typeof(double)).GetTypeCode());
@@ -33,7 +33,7 @@ namespace NumSharp
         /// <param name="num">Number of samples to generate. Default is 50. Must be non-negative.</param>
         /// <param name="endpoint">If True, stop is the last sample. Otherwise, it is not included. Default is True.</param>
         /// <param name="dtype">The type of the output array. If dtype is not given, infer the data type from the other input arguments.</param>
-        /// <remarks>https://docs.scipy.org/doc/numpy-1.15.0/reference/generated/numpy.linspace.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linspace.html</remarks>
         public static NDArray linspace(float start, float stop, int num, bool endpoint, Type dtype)
         {
             return linspace(start, stop, num, endpoint, (dtype ?? typeof(float)).GetTypeCode());
@@ -49,7 +49,7 @@ namespace NumSharp
         /// <param name="num">Number of samples to generate. Default is 50. Must be non-negative.</param>
         /// <param name="endpoint">If True, stop is the last sample. Otherwise, it is not included. Default is True.</param>
         /// <param name="typeCode">The type of the output array. If dtype is not given, infer the data type from the other input arguments.</param>
-        /// <remarks>https://docs.scipy.org/doc/numpy-1.15.0/reference/generated/numpy.linspace.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linspace.html</remarks>
         public static NDArray linspace(float start, float stop, int num, bool endpoint = true, NPTypeCode typeCode = NPTypeCode.Single)
         {
             return linspace((double)start, (double)stop, num, endpoint, typeCode);
@@ -65,7 +65,7 @@ namespace NumSharp
         /// <param name="num">Number of samples to generate. Default is 50. Must be non-negative.</param>
         /// <param name="endpoint">If True, stop is the last sample. Otherwise, it is not included. Default is True.</param>
         /// <param name="typeCode">The type of the output array. If dtype is not given, infer the data type from the other input arguments.</param>
-        /// <remarks>https://docs.scipy.org/doc/numpy-1.15.0/reference/generated/numpy.linspace.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linspace.html</remarks>
         public static NDArray linspace(double start, double stop, int num, bool endpoint = true, NPTypeCode typeCode = NPTypeCode.Double)
         {
             if (typeCode == NPTypeCode.Empty)

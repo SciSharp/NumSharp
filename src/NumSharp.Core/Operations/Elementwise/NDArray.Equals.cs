@@ -66,7 +66,7 @@ namespace NumSharp
         /// <param name="a">Input array.</param>
         /// <param name="rhs">Input array.</param>
         /// <returns>Returns True if the arrays are equal.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy-1.16.0/reference/generated/numpy.array_equal.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.array_equal.html</remarks>
         public bool array_equal(NDArray rhs)
         {
             unsafe

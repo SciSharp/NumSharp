@@ -9,7 +9,7 @@
         /// </summary>
         /// <param name="rhs"></param>
         /// <returns>mesh-grid `ndarrays` all of the same dimensions</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.mgrid.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.mgrid.html</remarks>
         public (NDArray, NDArray) mgrid(NDArray rhs)
         {
             return np.mgrid(this, rhs);

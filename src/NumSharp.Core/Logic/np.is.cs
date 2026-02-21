@@ -66,7 +66,7 @@ namespace NumSharp
         /// <summary>
         ///     Returns true incase of a number, bool or string. If null, returns false.
         /// </summary>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.isscalar.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.isscalar.html</remarks>
         public static bool isscalar(object obj)
         {
             switch (obj)

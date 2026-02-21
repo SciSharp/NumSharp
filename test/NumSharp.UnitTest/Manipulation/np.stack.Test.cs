@@ -4,7 +4,7 @@ using NumSharp.UnitTest.Utilities;
 namespace NumSharp.UnitTest.Manipulation
 {
     /// <summary>
-    /// Tests following https://docs.scipy.org/doc/numpy/reference/generated/numpy.dstack.html
+    /// Tests following https://numpy.org/doc/stable/reference/generated/numpy.dstack.html
     /// </summary>
     public class np_stack_tests
     {

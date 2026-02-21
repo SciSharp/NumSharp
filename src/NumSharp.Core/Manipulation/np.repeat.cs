@@ -14,7 +14,7 @@ namespace NumSharp
         /// <param name="repeats">The number of repetitions for each element. repeats is broadcasted to fit the shape of the given axis.</param>
         /// <param name="axis"></param>
         /// <returns></returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.repeat.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.repeat.html</remarks>
         public static NDArray repeat(NDArray a, int repeats) //TODO! , int axis = -1
         {
             int size = a.size * repeats;
@@ -157,7 +157,7 @@ namespace NumSharp
         /// <param name="repeats">The number of repetitions for each element. repeats is broadcasted to fit the shape of the given axis.</param>
         /// <param name="axis"></param>
         /// <returns></returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.repeat.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.repeat.html</remarks>
         public static NDArray repeat<T>(T a, int repeats) where T : unmanaged //TODO! , int axis = -1
         {
             var ret = new NDArray(InfoOf<T>.NPTypeCode, Shape.Vector(repeats));

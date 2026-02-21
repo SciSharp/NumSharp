@@ -3,7 +3,7 @@
 namespace NumSharp.UnitTest.Manipulation
 {
     /// <summary>
-    /// Tests following https://docs.scipy.org/doc/numpy-1.15.0/reference/generated/numpy.hstack.html
+    /// Tests following https://numpy.org/doc/stable/reference/generated/numpy.hstack.html
     /// </summary>
     public class np_hstack_tests
     {

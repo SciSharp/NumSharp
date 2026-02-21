@@ -16,7 +16,7 @@ namespace NumSharp
         ///     Used to perform set a selection based on indices, equivalent to nd[NDArray[]] = values.
         /// </summary>
         /// <param name="values">The values to set via .</param>
-        /// <remarks>https://docs.scipy.org/doc/numpy-1.17.0/user/basics.indexing.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/user/basics.indexing.html</remarks>
         /// <exception cref="IndexOutOfRangeException">When one of the indices exceeds limits.</exception>
         /// <exception cref="ArgumentException">indices must be of Int type (byte, u/short, u/int, u/long).</exception>
         /// <exception cref="NumSharpException">If this array is not writeable (e.g., broadcast array).</exception>

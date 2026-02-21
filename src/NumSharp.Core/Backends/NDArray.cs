@@ -35,7 +35,7 @@ namespace NumSharp
     ///     An associated data-type object describes the format of each element in the array (its byte-order,<br></br>
     ///     how many bytes it occupies in memory, whether it is an integer, a floating point number, or something else, etc.)
     /// </summary>
-    /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.ndarray.html</remarks>
+    /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html</remarks>
     [DebuggerTypeProxy(nameof(NDArrayDebuggerProxy))]
     [SuppressMessage("ReSharper", "ParameterHidesMember")]
     public partial class NDArray : IIndex, ICloneable, IEnumerable
@@ -342,7 +342,7 @@ namespace NumSharp
         /// <summary>
         ///     A 1-D iterator over the array.
         /// </summary>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.ndarray.flat.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.flat.html</remarks>
         public NDArray flat
         {
             get
@@ -357,7 +357,7 @@ namespace NumSharp
         ///     The transposed array. <br></br>
         ///     Same as self.transpose().
         /// </summary>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.ndarray.T.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.T.html</remarks>
         public NDArray T
         {
             get
@@ -422,7 +422,7 @@ namespace NumSharp
         /// <param name="dtype">The dtype to cast this array.</param>
         /// <param name="copy">By default, astype always returns a newly allocated array. If this is set to false, the input internal array is replaced instead of returning a new NDArray with the casted data.</param>
         /// <returns>An <see cref="NDArray"/> of given <paramref name="dtype"/>.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.ndarray.astype.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.astype.html</remarks>
         [SuppressMessage("ReSharper", "ParameterHidesMember")]
         public NDArray astype(Type dtype, bool copy = true) => TensorEngine.Cast(this, dtype, copy);
 
@@ -432,7 +432,7 @@ namespace NumSharp
         /// <param name="dtype">The dtype to cast this array.</param>
         /// <param name="copy">By default, astype always returns a newly allocated array. If this is set to false, the input internal array is replaced instead of returning a new NDArray with the casted data.</param>
         /// <returns>An <see cref="NDArray"/> of given <paramref name="dtype"/>.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.ndarray.astype.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.astype.html</remarks>
         public NDArray astype(NPTypeCode typeCode, bool copy = true) => TensorEngine.Cast(this, typeCode, copy);
 
         /// <summary>
@@ -505,7 +505,7 @@ namespace NumSharp
         ///     This argument can also be specified as an ndarray sub-class, which then specifies the type of the returned object (this is equivalent to setting the type parameter).
         /// </param>
         /// <returns></returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.ndarray.view.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.view.html</remarks>
         public NDArray view(Type dtype = null)
         {
             //TODO! this shouldnt be a cast in case dtype != null, it should be an unsafe reinterpret (see remarks).
@@ -525,7 +525,7 @@ namespace NumSharp
         ///     This argument can also be specified as an ndarray sub-class, which then specifies the type of the returned object (this is equivalent to setting the type parameter).
         /// </param>
         /// <returns></returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.ndarray.view.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.view.html</remarks>
         public NDArray<T> view<T>() where T : unmanaged 
             => view(typeof(T)).AsGeneric<T>();
 

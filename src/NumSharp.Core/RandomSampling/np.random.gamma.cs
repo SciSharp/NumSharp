@@ -19,7 +19,7 @@ namespace NumSharp
         /// <param name="scale">The scale of the gamma distribution. Should be greater than zero. Default is equal to 1.</param>
         /// <param name="shape">Output shape.</param>
         /// <returns>Drawn samples from the parameterized gamma distribution.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy-1.15.0/reference/generated/numpy.random.gamma.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/random/generated/numpy.random.gamma.html</remarks>
         public NDArray gamma(double shapeV, double scale, Shape shape) => gamma(shapeV, scale, shape.dimensions);
 
         /// <summary>
@@ -31,7 +31,7 @@ namespace NumSharp
         /// <param name="scale">The scale of the gamma distribution. Should be greater than zero. Default is equal to 1.</param>
         /// <param name="dims">Output shape.</param>
         /// <returns>Drawn samples from the parameterized gamma distribution.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy-1.15.0/reference/generated/numpy.random.gamma.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/random/generated/numpy.random.gamma.html</remarks>
         public NDArray gamma(double shape, double scale, params int[] dims)
         {
             if (shape < 1)

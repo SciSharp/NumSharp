@@ -6,7 +6,7 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        /// <remarks>Based on https://docs.scipy.org/doc/numpy-1.16.1/user/basics.broadcasting.html </remarks>
+        /// <remarks>Based on https://numpy.org/doc/stable/user/basics.broadcasting.html </remarks>
         public static Shape ResolveReturnShape(Shape leftShape, Shape rightShape)
         {
             if (leftShape == rightShape)
@@ -78,7 +78,7 @@ namespace NumSharp.Backends
             return mit; //implicit cast
         }
 
-        /// <remarks>Based on https://docs.scipy.org/doc/numpy-1.16.1/user/basics.broadcasting.html </remarks>
+        /// <remarks>Based on https://numpy.org/doc/stable/user/basics.broadcasting.html </remarks>
         public static Shape ResolveReturnShape(params Shape[] shapes)
         {
             if (shapes.Length == 0)
@@ -134,7 +134,7 @@ namespace NumSharp.Backends
             return mit.Clean();
         }
 
-        /// <remarks>Based on https://docs.scipy.org/doc/numpy-1.16.1/user/basics.broadcasting.html </remarks>
+        /// <remarks>Based on https://numpy.org/doc/stable/user/basics.broadcasting.html </remarks>
         public static Shape ResolveReturnShape(params NDArray[] shapes)
         {
             if (shapes.Length == 0)
@@ -191,7 +191,7 @@ namespace NumSharp.Backends
             return mit.Clean();
         }
 
-        /// <remarks>Based on https://docs.scipy.org/doc/numpy-1.16.1/user/basics.broadcasting.html </remarks>
+        /// <remarks>Based on https://numpy.org/doc/stable/user/basics.broadcasting.html </remarks>
         public static Shape[] Broadcast(params Shape[] shapes)
         {
             if (shapes.Length == 0)
@@ -268,7 +268,7 @@ namespace NumSharp.Backends
 
         //private static readonly int[][] _zeros = new int[][] {new int[0], new int[] {0}, new int[] {0, 0}, new int[] {0, 0, 0}, new int[] {0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, new int[] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},};
 
-        /// <remarks>Based on https://docs.scipy.org/doc/numpy-1.16.1/user/basics.broadcasting.html </remarks>
+        /// <remarks>Based on https://numpy.org/doc/stable/user/basics.broadcasting.html </remarks>
         public static (Shape LeftShape, Shape RightShape) Broadcast(Shape leftShape, Shape rightShape)
         {
             if (leftShape._hashCode != 0 && leftShape._hashCode == rightShape._hashCode)
@@ -373,7 +373,7 @@ namespace NumSharp.Backends
             return (leftResult, rightResult);
         }
 
-        /// <remarks>Based on https://docs.scipy.org/doc/numpy-1.16.1/user/basics.broadcasting.html </remarks>
+        /// <remarks>Based on https://numpy.org/doc/stable/user/basics.broadcasting.html </remarks>
         public static NDArray[] Broadcast(params NDArray[] arrays)
         {
             if (arrays.Length == 0)
@@ -390,7 +390,7 @@ namespace NumSharp.Backends
             return arrays;
         }
 
-        /// <remarks>Based on https://docs.scipy.org/doc/numpy-1.16.1/user/basics.broadcasting.html </remarks>
+        /// <remarks>Based on https://numpy.org/doc/stable/user/basics.broadcasting.html </remarks>
         public unsafe static bool AreBroadcastable(params Shape[] shapes)
         {
             if (shapes.Length <= 1)
@@ -442,7 +442,7 @@ namespace NumSharp.Backends
             return true;
         }
 
-        /// <remarks>Based on https://docs.scipy.org/doc/numpy-1.16.1/user/basics.broadcasting.html </remarks>
+        /// <remarks>Based on https://numpy.org/doc/stable/user/basics.broadcasting.html </remarks>
         public unsafe static bool AreBroadcastable(params int[][] shapes)
         {
             if (shapes.Length <= 1)
@@ -494,7 +494,7 @@ namespace NumSharp.Backends
             return true;
         }
 
-        /// <remarks>Based on https://docs.scipy.org/doc/numpy-1.16.1/user/basics.broadcasting.html </remarks>
+        /// <remarks>Based on https://numpy.org/doc/stable/user/basics.broadcasting.html </remarks>
         public static bool AreBroadcastable(params NDArray[] arrays)
         {
             if (arrays.Length <= 1)
