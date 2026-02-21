@@ -929,7 +929,7 @@ namespace NumSharp.Backends.Unmanaged
 
             private enum AllocationType
             {
-                AllocHGlobal,
+                Native,
                 GCHandle,
                 External,
                 Wrap
@@ -944,13 +944,13 @@ namespace NumSharp.Backends.Unmanaged
 
 
             /// <summary>
-            ///     Construct a AllocationType.AllocHGlobal
+            ///     Construct a AllocationType.Native (NativeMemory.Alloc)
             /// </summary>
             /// <param name="address"></param>
             public Disposer(IntPtr address)
             {
                 Address = address;
-                _type = AllocationType.AllocHGlobal;
+                _type = AllocationType.Native;
             }
 
             /// <summary>
@@ -991,7 +991,7 @@ namespace NumSharp.Backends.Unmanaged
 
                 switch (_type)
                 {
-                    case AllocationType.AllocHGlobal:
+                    case AllocationType.Native:
                         NativeMemory.Free((void*)Address);
                         return;
                     case AllocationType.Wrap:
