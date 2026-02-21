@@ -10,12 +10,12 @@
 
 ## Description
 
-If you declare an array of a specific size, is there a way to assign slices of arrays?
-
-For example, if x is an NDArray of size (5,2,3,4), is there a way to do something like the following?
-
-NDArray a = some NDArray of size (1,2,3,4)
-
+If you declare an array of a specific size, is there a way to assign slices of arrays?
+
+For example, if x is an NDArray of size (5,2,3,4), is there a way to do something like the following?
+
+NDArray a = some NDArray of size (1,2,3,4)
+
 x[0,:,:,:] = a
 
 ## Comments

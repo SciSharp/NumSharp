@@ -9,22 +9,22 @@
 
 ## Description
 
-            var arr = np.ones(1, 2, 1, 3).astype(NPTypeCode.Byte);
-            var bmp = arr.ToBitmap();
-
-            for (int c = 0; c < bmp.Width; c++)
-            {
-                for (int r = 0; r < bmp.Height; r++)
-                {
-                    var p = bmp.GetPixel(c, r);
-                    Console.WriteLine($"r:{r} c:{c} => ({p.R};{p.G};{p.B})");
-                }
-            }
-
-            // return
-            // r: 0 c: 0 => (1; 1; 1)
-            // r: 1 c: 0 => (0; 1; 1) !!!
-
-            // instead of
-            // r: 0 c: 0 => (1; 1; 1)
+            var arr = np.ones(1, 2, 1, 3).astype(NPTypeCode.Byte);
+            var bmp = arr.ToBitmap();
+
+            for (int c = 0; c < bmp.Width; c++)
+            {
+                for (int r = 0; r < bmp.Height; r++)
+                {
+                    var p = bmp.GetPixel(c, r);
+                    Console.WriteLine($"r:{r} c:{c} => ({p.R};{p.G};{p.B})");
+                }
+            }
+
+            // return
+            // r: 0 c: 0 => (1; 1; 1)
+            // r: 1 c: 0 => (0; 1; 1) !!!
+
+            // instead of
+            // r: 0 c: 0 => (1; 1; 1)
             // r: 1 c: 0 => (1; 1; 1)

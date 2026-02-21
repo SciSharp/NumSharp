@@ -11,15 +11,15 @@
 
 ## Description
 
-Add a buffer or padding around a numpy array: 
+Add a buffer or padding around a numpy array: 
 https://docs.scipy.org/doc/numpy/reference/generated/numpy.pad.html 
 
 ## Comments
 
 ### Comment 1 by @Oceania2018 (2019-03-03T15:13:32Z)
 
-```python
-a = [1, 2, 3, 4, 5]
-np.pad(a, (2,3), 'constant', constant_values=(4, 6))
-
+```python
+a = [1, 2, 3, 4, 5]
+np.pad(a, (2,3), 'constant', constant_values=(4, 6))
+
 ```

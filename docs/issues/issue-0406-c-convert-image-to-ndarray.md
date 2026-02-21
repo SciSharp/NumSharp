@@ -8,13 +8,13 @@
 
 ## Description
 
-Does anyone know how to convert "System.Drawing.Image" to "NDarray" in C#?
+Does anyone know how to convert "System.Drawing.Image" to "NDarray" in C#?
 Any suggestions would be greatly appreciated. 
 
 ## Comments
 
 ### Comment 1 by @chriss2401 (2020-05-22T09:06:35Z)
 
-Could this extension class help ? 
-
+Could this extension class help ? 
+
 https://github.com/SciSharp/NumSharp/blob/master/src/NumSharp.Bitmap/np_.extensions.cs

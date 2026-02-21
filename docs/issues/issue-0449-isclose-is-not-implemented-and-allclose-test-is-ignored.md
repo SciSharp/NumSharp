@@ -9,18 +9,18 @@
 
 ## Description
 
-These should probably be removed from the API if they are not properly implemented?
-
-```cs
-        [Ignore("TODO: fix this test")]
-        [TestMethod]
-        public void np_allclose_1D()
-```
-
-```cs
-        public override NDArray<bool> IsClose(NDArray a, NDArray b, double rtol = 1.0E-5, double atol = 1.0E-8, bool equal_nan = false)
-        {
-            // ... lots of commeted out code
-           return null;
-        }
+These should probably be removed from the API if they are not properly implemented?
+
+```cs
+        [Ignore("TODO: fix this test")]
+        [TestMethod]
+        public void np_allclose_1D()
+```
+
+```cs
+        public override NDArray<bool> IsClose(NDArray a, NDArray b, double rtol = 1.0E-5, double atol = 1.0E-8, bool equal_nan = false)
+        {
+            // ... lots of commeted out code
+           return null;
+        }
 ```

@@ -15,5 +15,5 @@ Is there an equivalent method to np.append?  If not, what is the best workaround
 
 ### Comment 1 by @Nucs (2019-12-07T17:49:22Z)
 
-Maybe np.concatenate, np.vstack or np.stack will help you. They might require reshaping to emulate np.append.
+Maybe np.concatenate, np.vstack or np.stack will help you. They might require reshaping to emulate np.append.
 

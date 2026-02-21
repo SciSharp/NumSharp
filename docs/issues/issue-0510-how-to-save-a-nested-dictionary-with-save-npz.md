@@ -8,18 +8,18 @@
 
 ## Description
 
-If i have a data struct like:
-```json
-{
-   "port1": {
-                 "time": ["xxxx", "yyyy"],
-                 "data": [0.0, 0.0]
-                },
-   "port2": {
-                 "time": ["xxxx", "yyyy"],
-                 "data": [0.0, 0.0]
-                },
-}
-```
-how to save it with `save_npz`?
+If i have a data struct like:
+```json
+{
+   "port1": {
+                 "time": ["xxxx", "yyyy"],
+                 "data": [0.0, 0.0]
+                },
+   "port2": {
+                 "time": ["xxxx", "yyyy"],
+                 "data": [0.0, 0.0]
+                },
+}
+```
+how to save it with `save_npz`?
 can you give same sample codes? Thanks!

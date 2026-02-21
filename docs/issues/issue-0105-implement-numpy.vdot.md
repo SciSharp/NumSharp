@@ -10,9 +10,9 @@
 
 ## Description
 
-Return the dot product of two vectors.
-https://docs.scipy.org/doc/numpy-1.15.1/reference/generated/numpy.vdot.html#numpy.vdot
-
+Return the dot product of two vectors.
+https://docs.scipy.org/doc/numpy-1.15.1/reference/generated/numpy.vdot.html#numpy.vdot
+
 `ndarray.vdot` should be put in `LinearAlgebra` folder.
 
 ## Comments

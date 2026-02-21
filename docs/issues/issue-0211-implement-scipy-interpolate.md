@@ -24,9 +24,9 @@ Will do `Interpolate a 1-D function.` and `2-D`
 
 ### Comment 3 by @xinqipony (2019-03-26T05:09:21Z)
 
-yes,  this is what I used: 
-interpolate.interp1d(x, y, kind='cubic', axis=0),
-
-in the meantime, I use MathNet now, but its implementation is not so good and not easy to use,
-
+yes,  this is what I used: 
+interpolate.interp1d(x, y, kind='cubic', axis=0),
+
+in the meantime, I use MathNet now, but its implementation is not so good and not easy to use,
+
 look forward to your new updates!

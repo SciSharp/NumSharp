@@ -10,6 +10,6 @@
 
 ## Description
 
-There should be an approachable way to perform fast `foreach` on a `NDArray`.
-Currently `NDArray` implements non-generic `IEnumerable` which returns a boxed value that can be either the `NDArray.dtype` or an `NDArray`.
+There should be an approachable way to perform fast `foreach` on a `NDArray`.
+Currently `NDArray` implements non-generic `IEnumerable` which returns a boxed value that can be either the `NDArray.dtype` or an `NDArray`.
 Boxing causes `O(n)` operations to be significantly slower on large datasets.
