@@ -94,7 +94,7 @@ namespace NumSharp
             if (!isBroadcasted && ComputeIsContiguousStatic(dims, strides))
                 flags |= (int)ArrayFlags.C_CONTIGUOUS;
 
-            // ALIGNED is always true for managed memory
+            // ALIGNED is always true because NumSharp uses unaligned SIMD loads (Vector.Load, not LoadAligned)
             flags |= (int)ArrayFlags.ALIGNED;
 
             // WRITEABLE is true unless this is a broadcast shape (NumPy behavior).
