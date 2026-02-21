@@ -17,7 +17,7 @@ namespace NumSharp
         /// <param name="p">Parameter of the distribution, >= 0 and &lt;=1.</param>
         /// <param name="shape">Output Shape</param>
         /// <returns>Drawn samples from the parameterized binomial distribution, where each sample is equal to the number of successes over the n trials.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.random.binomial.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/random/generated/numpy.random.binomial.html</remarks>
         public NDArray binomial(int n, double p, Shape shape) => binomial(n, p, shape.dimensions);
 
         /// <summary>
@@ -28,7 +28,7 @@ namespace NumSharp
         /// <param name="p">Parameter of the distribution, >= 0 and &lt;=1.</param>
         /// <param name="dims">Output Shape</param>
         /// <returns>Drawn samples from the parameterized binomial distribution, where each sample is equal to the number of successes over the n trials.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.random.binomial.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/random/generated/numpy.random.binomial.html</remarks>
         public NDArray binomial(int n, double p, params int[] dims)
         {
             var x = np.zeros(dims);

@@ -15,7 +15,7 @@ namespace NumSharp
         /// <param name="size">The shape of the array.</param>
         /// <param name="dtype">Desired dtype of the result. All dtypes are determined by their name, i.e., ‘int64’, ‘int’, etc, so byteorder is not available and a specific precision may have different C types depending on the platform. The default value is ‘np.int’.</param>
         /// <returns></returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.random.randint.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/random/generated/numpy.random.randint.html</remarks>
         public NDArray randint(long low, long high = -1, Shape size = default, Type dtype = null)
         {
             dtype = dtype ?? np.int32;

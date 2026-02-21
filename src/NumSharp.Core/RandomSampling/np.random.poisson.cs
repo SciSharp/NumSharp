@@ -16,7 +16,7 @@ namespace NumSharp
         /// <param name="lam">Expectation of interval, should be >= 0. A sequence of expectation intervals must be broadcastable over the requested size.</param>
         /// <param name="shape">Output Shape</param>
         /// <returns>Drawn samples from the parameterized binomial distribution, where each sample is equal to the number of successes over the n trials.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.random.poisson.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/random/generated/numpy.random.poisson.html</remarks>
         public NDArray poisson(double lam, Shape shape) => poisson(lam, shape.dimensions);
 
         /// <summary>
@@ -25,7 +25,7 @@ namespace NumSharp
         /// <param name="lam">Expectation of interval, should be >= 0. A sequence of expectation intervals must be broadcastable over the requested size.</param>
         /// <param name="dims">Output Shape</param>
         /// <returns>Drawn samples from the parameterized binomial distribution, where each sample is equal to the number of successes over the n trials.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.random.poisson.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/random/generated/numpy.random.poisson.html</remarks>
         public NDArray poisson(double lam, params int[] dims)
         {
             if (lam < 0)

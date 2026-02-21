@@ -377,7 +377,7 @@ namespace NumSharp
     };
 
     /// <summary>
-    ///     https://numpy.org/doc/stable/reference/c-api.dtype.html#enumerated-types
+    ///     https://numpy.org/doc/stable/reference/c-api/dtype.html#enumerated-types
     /// </summary>
     internal enum NPY_TYPECHAR
     {
