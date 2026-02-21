@@ -11,6 +11,6 @@
 ## Description
 
 Compute tensor dot product along specified axes for arrays >= 1-D.
-https://numpy.org/doc/stable-1.15.1/reference/generated/numpy.tensordot.html#numpy.tensordot
+https://docs.scipy.org/doc/numpy-1.15.1/reference/generated/numpy.tensordot.html#numpy.tensordot
 
 `ndarray.tensordot` should be put in `LinearAlgebra` folder.

@@ -11,4 +11,4 @@
 ## Description
 
 This is how we should wrap a pointer to a certain memory block.
-https://numpy.org/doc/stable/reference/generated/numpy.frombuffer.html
+https://docs.scipy.org/doc/numpy/reference/generated/numpy.frombuffer.html

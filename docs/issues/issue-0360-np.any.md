@@ -11,7 +11,7 @@
 ## Description
 
 Test whether any array element along a given axis evaluates to True.
-https://numpy.org/doc/stable/reference/generated/numpy.any.html
+https://docs.scipy.org/doc/numpy/reference/generated/numpy.any.html
 
 ## Comments
 
