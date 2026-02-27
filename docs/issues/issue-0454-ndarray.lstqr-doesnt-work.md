@@ -8,8 +8,8 @@
 
 ## Description
 
-can you check why `NDArray.lstqr()` doesn't work?
-
-I wanna finish this part, in python it like `a = np.linalg.lstsq(x,y)`
-
+can you check why `NDArray.lstqr()` doesn't work?
+
+I wanna finish this part, in python it like `a = np.linalg.lstsq(x,y)`
+
 how does it work in Numsharp?

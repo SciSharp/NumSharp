@@ -8,6 +8,6 @@
 
 ## Description
 
-According to the filename `NumSharp.Core/Casting/NdArrayToMultiDimArray.cs`, I think it should be `NDArray.ToMultiArray`
-
+According to the filename `NumSharp.Core/Casting/NdArrayToMultiDimArray.cs`, I think it should be `NDArray.ToMultiArray`
+
 https://github.com/SciSharp/NumSharp/blob/843309e7e873bfb0bec2d6e56b3dcba4b9e723e0/src/NumSharp.Core/Casting/NdArrayToMultiDimArray.cs#L31

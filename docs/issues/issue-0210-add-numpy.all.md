@@ -9,8 +9,8 @@
 
 ## Description
 
-Test whether all array elements along a given axis evaluate to True.
-`np.all([[True,False],[True,True]])`
+Test whether all array elements along a given axis evaluate to True.
+`np.all([[True,False],[True,True]])`
 https://docs.scipy.org/doc/numpy/reference/generated/numpy.all.html
 
 ## Comments

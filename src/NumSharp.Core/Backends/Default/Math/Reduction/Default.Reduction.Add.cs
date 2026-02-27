@@ -33,7 +33,13 @@ namespace NumSharp.Backends
                 }
 
                 if (keepdims)
-                    r.Storage.ExpandDimension(0);
+                {
+                    // NumPy: keepdims preserves the number of dimensions, all set to 1
+                    var keepdimsShape = new int[arr.ndim];
+                    for (int i = 0; i < arr.ndim; i++)
+                        keepdimsShape[i] = 1;
+                    r.Storage.Reshape(new Shape(keepdimsShape));
+                }
                 else if (!r.Shape.IsScalar && r.Shape.size == 1 && r.ndim == 1)
                     r.Storage.Reshape(Shape.Scalar);
 
@@ -43,15 +49,23 @@ namespace NumSharp.Backends
             //handle element-wise (no axis specified)
             if (axis_ == null)
             {
+                // Use IL-generated kernels for element-wise reduction
                 if (!(@out is null))
                 {
-                    @out.SetAtIndex(sum_elementwise(arr, typeCode), 0);
+                    @out.SetAtIndex(sum_elementwise_il(arr, typeCode), 0);
                     return @out;
                 }
 
-                var r = NDArray.Scalar(sum_elementwise(arr, typeCode));
+                var r = NDArray.Scalar(sum_elementwise_il(arr, typeCode));
                 if (keepdims)
-                    r.Storage.ExpandDimension(0);
+                {
+                    // NumPy: keepdims preserves the number of dimensions, all set to 1
+                    // e.g., sum of (3,2) with keepdims=True returns (1,1)
+                    var keepdimsShape = new int[arr.ndim];
+                    for (int i = 0; i < arr.ndim; i++)
+                        keepdimsShape[i] = 1;
+                    r.Storage.Reshape(new Shape(keepdimsShape));
+                }
                 else if (!r.Shape.IsScalar && r.Shape.size == 1 && r.ndim == 1)
                     r.Storage.Reshape(Shape.Scalar);
 

@@ -78,7 +78,7 @@ namespace NumSharp.Unmanaged.Memory
         }
 
 
-        public IntPtr Take()
+        public unsafe IntPtr Take()
         {
             lock (this)
             {
@@ -87,7 +87,7 @@ namespace NumSharp.Unmanaged.Memory
                     if (availables_blocks.Count != 0)
                         return availables_blocks.Pop();
 
-                    var ret = Marshal.AllocHGlobal(SingleSize);
+                    var ret = (IntPtr)NativeMemory.Alloc((nuint)SingleSize);
                     individualyAllocated.Add(ret);
                     _totalCount += 1;
                     return ret;
@@ -146,7 +146,7 @@ namespace NumSharp.Unmanaged.Memory
             _gcTimer = new System.Threading.Timer(state => CollectGarbage((GCContext)state), new GCContext(availables.Count, restarts), delay, -1);
         }
 
-        private void CollectGarbage(GCContext ctx)
+        private unsafe void CollectGarbage(GCContext ctx)
         {
             lock (this)
             {
@@ -166,7 +166,7 @@ namespace NumSharp.Unmanaged.Memory
                     var addr = availables.Pop();
                     Debug.Assert(individualyAllocated.Contains(addr), "individualyAllocated.Contains(addr)");
                     individualyAllocated.Remove(addr);
-                    Marshal.FreeHGlobal(addr);
+                    NativeMemory.Free((void*)addr);
                 }
 
                 availables.TrimExcess();
@@ -227,7 +227,7 @@ _restart:
             _originalTotalsThreshold = unchecked((int)Math.Min((_totalCount * 1.333f), int.MaxValue));
         }
 
-        private void ReleaseUnmanagedResources()
+        private unsafe void ReleaseUnmanagedResources()
         {
             lock (this)
             {
@@ -235,7 +235,7 @@ _restart:
                 availables.Clear();
                 availables_blocks.Clear();
 
-                individualyAllocated.ForEach(Marshal.FreeHGlobal);
+                individualyAllocated.ForEach(ptr => NativeMemory.Free((void*)ptr));
                 individualyAllocated.Clear();
             }
         }

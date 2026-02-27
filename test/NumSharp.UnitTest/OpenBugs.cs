@@ -2666,11 +2666,11 @@ namespace NumSharp.UnitTest
         // ================================================================
 
         /// <summary>
-        ///     BUG 65a: Shape.IsContiguous should be true for step-1 slices.
+        ///     FIXED: Contiguous slices now have IsSliced=False and IsContiguous=True.
         ///
         ///     np.arange(10)[2:7] has step=1 and occupies a contiguous block of memory.
-        ///     NumPy reports c_contiguous=True. NumSharp reports IsContiguous=false
-        ///     because IsSliced=true, causing ravel to unnecessarily copy data.
+        ///     NumPy reports c_contiguous=True. NumSharp now correctly optimizes this
+        ///     by slicing the InternalArray and creating a fresh shape with offset=0.
         /// </summary>
         [Test]
         public void Bug_IsContiguous_FalseForContiguousSlice1D()
@@ -2678,20 +2678,18 @@ namespace NumSharp.UnitTest
             var a = np.arange(10);
             var s = a["2:7"];
 
-            s.Shape.IsSliced.Should().BeTrue("slice creates a sliced shape");
-            s.Shape.IsContiguous.Should().BeTrue(
-                "NumPy: a[2:7].flags['C_CONTIGUOUS'] is True — step-1 slice " +
-                "is contiguous in memory. NumSharp returns false because " +
-                "Shape.IsContiguous = !IsSliced && !IsBroadcasted, which treats " +
-                "ALL slices as non-contiguous regardless of step size.");
+            // FIXED: Contiguous slices now use data pointer adjustment (like NumPy)
+            s.Shape.IsSliced.Should().BeFalse("contiguous slices get fresh shape with offset=0");
+            s.Shape.IsContiguous.Should().BeTrue("step-1 slice is contiguous in memory");
+            s.Shape.offset.Should().Be(0, "offset is absorbed into InternalArray slice");
         }
 
         /// <summary>
-        ///     BUG 65b: Shape.IsContiguous should be true for contiguous row slices.
+        ///     FIXED: Contiguous row slices now have IsSliced=False and IsContiguous=True.
         ///
         ///     np.arange(12).reshape(3,4)[1:3] selects 2 consecutive rows from a
         ///     row-major array — the data is contiguous in memory.
-        ///     NumPy reports c_contiguous=True. NumSharp reports IsContiguous=false.
+        ///     NumPy reports c_contiguous=True. NumSharp now correctly optimizes this.
         /// </summary>
         [Test]
         public void Bug_IsContiguous_FalseForContiguousRowSlice2D()
@@ -2699,12 +2697,10 @@ namespace NumSharp.UnitTest
             var a = np.arange(12).reshape(3, 4);
             var s = a["1:3"];
 
-            s.Shape.IsSliced.Should().BeTrue("row slice creates a sliced shape");
-            s.Shape.IsContiguous.Should().BeTrue(
-                "NumPy: a[1:3].flags['C_CONTIGUOUS'] is True — consecutive row " +
-                "slice of a C-contiguous 2D array is contiguous in memory. " +
-                "NumSharp returns false because IsContiguous treats all slices " +
-                "as non-contiguous. Root cause: Shape.cs line ~39.");
+            // FIXED: Contiguous row slices now use data pointer adjustment (like NumPy)
+            s.Shape.IsSliced.Should().BeFalse("contiguous row slices get fresh shape with offset=0");
+            s.Shape.IsContiguous.Should().BeTrue("consecutive rows are contiguous in memory");
+            s.Shape.offset.Should().Be(0, "offset is absorbed into InternalArray slice");
         }
 
         // ================================================================

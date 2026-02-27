@@ -9,10 +9,10 @@
 
 ## Description
 
-NDIterator is useful, we should add an overload that handles specific axis iterator:
-usage:
-```C#
-new NDIterator<T>(ndarray, axis: 1);
-```
-
+NDIterator is useful, we should add an overload that handles specific axis iterator:
+usage:
+```C#
+new NDIterator<T>(ndarray, axis: 1);
+```
+
 Also add an overload to extension `ndarray.AsIterator<T>(axis: 1);`

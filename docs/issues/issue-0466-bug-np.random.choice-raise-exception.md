@@ -8,11 +8,11 @@
 
 ## Description
 
-Hi, when using `np.random.choice`, I got an Exception with message "Specified method is not supported.", and the stack trace is:
-
->    at NumSharp.NPTypeCodeExtensions.GetAccumulatingType(NPTypeCode typeCode)
->    at NumSharp.Backends.DefaultEngine.cumsum_elementwise(NDArray& arr, Nullable`1 typeCode)
->    at NumSharp.Backends.DefaultEngine.ReduceCumAdd(NDArray& arr, Nullable`1 axis_, Nullable`1 typeCode)
+Hi, when using `np.random.choice`, I got an Exception with message "Specified method is not supported.", and the stack trace is:
+
+>    at NumSharp.NPTypeCodeExtensions.GetAccumulatingType(NPTypeCode typeCode)
+>    at NumSharp.Backends.DefaultEngine.cumsum_elementwise(NDArray& arr, Nullable`1 typeCode)
+>    at NumSharp.Backends.DefaultEngine.ReduceCumAdd(NDArray& arr, Nullable`1 axis_, Nullable`1 typeCode)
 >    at NumSharp.np.cumsum(NDArray arr, Nullable`1 axis, Nullable`1 typeCode)
 
 ## Comments
@@ -27,16 +27,16 @@ Besides, another argument `replace` is not used at all in both overrides.
 
 ### Comment 3 by @QingtaoLi1 (2021-11-30T08:28:09Z)
 
-I do a simple test on `np.cumsum` since it is in the stack trace:
->         public static void RandomChoice()
->         {
->             var array = np.arange(1, 50265);
->             var arrayDouble = 1.0 / array.astype(np.@double);
->             var cumsum = np.cumsum(arrayDouble, typeCode: arrayDouble.typecode);  // OK
->             var cumsum2 = np.cumsum(arrayDouble);                              // raise Exception mentioned above
->         }
-> 
-
+I do a simple test on `np.cumsum` since it is in the stack trace:
+>         public static void RandomChoice()
+>         {
+>             var array = np.arange(1, 50265);
+>             var arrayDouble = 1.0 / array.astype(np.@double);
+>             var cumsum = np.cumsum(arrayDouble, typeCode: arrayDouble.typecode);  // OK
+>             var cumsum2 = np.cumsum(arrayDouble);                              // raise Exception mentioned above
+>         }
+> 
+
 It looks like there's something wrong in the default typeCode. BTW, I'm using the latest NumSharp 0.30.0 version.
 
 ### Comment 4 by @UCtreespring (2021-12-14T16:25:46Z)

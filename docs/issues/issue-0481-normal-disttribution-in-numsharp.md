@@ -8,7 +8,7 @@
 
 ## Description
 
-Hi,
-
-I am looking for a solution to do normal distributions NORM.S.INV, NORM.S.DIST in C# .NET. 
+Hi,
+
+I am looking for a solution to do normal distributions NORM.S.INV, NORM.S.DIST in C# .NET. 
 Is it possible to achieve using NumSharp? If so How?

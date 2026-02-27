@@ -96,7 +96,6 @@ namespace NumSharp.UnitTest.Manipulation
         }
 
         [Test]
-        [OpenBugs] // IsBroadcasted is False after broadcast_arrays
         public void flat_broadcasted_Case1()
         {
             var a = np.arange(4 * 1 * 1 * 1).reshape(4, 1, 1, 1)["3, :"];
@@ -104,8 +103,10 @@ namespace NumSharp.UnitTest.Manipulation
 
             (a, b) = np.broadcast_arrays(a, b);
 
+            // Only 'a' is broadcasted (shape changed from (1,1,1) to (1,10,1) with stride=0)
+            // 'b' is NOT broadcasted - it was already (1,10,1), no strides changed to 0
             a.Should().BeBroadcasted().And.BeShaped(1, 10, 1);
-            b.Should().BeBroadcasted().And.BeShaped(1, 10, 1);
+            b.Should().BeShaped(1, 10, 1);  // b is NOT broadcasted per NumPy semantics
             a.flat.Should().BeShaped(10).And.AllValuesBe(3);
             b.flat.Should().BeShaped(10).And.BeOfValues(30, 31, 32, 33, 34, 35, 36, 37, 38, 39);
         }

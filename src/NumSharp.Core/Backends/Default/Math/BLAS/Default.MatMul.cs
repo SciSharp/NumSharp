@@ -30,11 +30,10 @@ namespace NumSharp.Backends
             NDArray r = rhs;
             (l, r) = np.broadcast_arrays(l, r);
             var retShape = l.Shape.Clean();
-            Console.WriteLine(retShape);
             Debug.Assert(l.shape[0] == r.shape[0]);
-            var len = l.size;
             var ret = new NDArray(np._FindCommonArrayType(l.typecode, r.typecode), retShape);
             var iterShape = new Shape(retShape.dimensions.Take(retShape.dimensions.Length - 2).ToArray());
+            var len = iterShape.size;
             var incr = new ValueCoordinatesIncrementor(ref iterShape);
             var index = incr.Index;
 

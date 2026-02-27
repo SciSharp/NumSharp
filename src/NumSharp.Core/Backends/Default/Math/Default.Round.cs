@@ -1,6 +1,5 @@
-﻿using System;
-using System.Threading.Tasks;
-using DecimalMath;
+using System;
+using NumSharp.Backends.Kernels;
 using NumSharp.Utilities;
 
 namespace NumSharp.Backends
@@ -11,61 +10,18 @@ namespace NumSharp.Backends
 
         public override NDArray Round(in NDArray nd, int decimals, Type dtype) => Round(nd, decimals, dtype?.GetTypeCode());
 
+        /// <summary>
+        /// Element-wise round using IL-generated kernels.
+        /// </summary>
         public override NDArray Round(in NDArray nd, NPTypeCode? typeCode = null)
         {
-            if (nd.size == 0)
-                return nd.Clone();
-
-            var @out = Cast(nd, ResolveUnaryReturnType(nd, typeCode), copy: true);
-            var len = @out.size;
-
-            unsafe
-            {
-                switch (@out.GetTypeCode)
-                {
-#if _REGEN
-                    %foreach except(supported_numericals, "Decimal"),except(supported_numericals_lowercase, "decimal")%
-	                case NPTypeCode.#1:
-	                {
-                        var out_addr = (#2*)@out.Address;
-                        for (int i = 0; i < len; i++) out_addr[i] = Converts.To#1(Math.Round(out_addr[i]));
-                        return @out;
-	                }
-	                %
-                    case NPTypeCode.Decimal:
-	                {
-                        var out_addr = (decimal*)@out.Address;
-                        for (int i = 0; i < len; i++) out_addr[i] = (DecimalEx.Round(out_addr[i]));
-                        return @out;
-	                }
-	                default:
-		                throw new NotSupportedException();
-#else
-	                case NPTypeCode.Double:
-	                {
-                        var out_addr = (double*)@out.Address;
-                        for (int i = 0; i < len; i++) out_addr[i] = Converts.ToDouble(Math.Round(out_addr[i]));
-                        return @out;
-	                }
-	                case NPTypeCode.Single:
-	                {
-                        var out_addr = (float*)@out.Address;
-                        for (int i = 0; i < len; i++) out_addr[i] = Converts.ToSingle(Math.Round(out_addr[i]));
-                        return @out;
-	                }
-                    case NPTypeCode.Decimal:
-	                {
-                        var out_addr = (decimal*)@out.Address;
-                        for (int i = 0; i < len; i++) out_addr[i] = (decimal.Round(out_addr[i]));
-                        return @out;
-	                }
-	                default:
-		                throw new NotSupportedException();
-#endif
-                }
-            }
+            return ExecuteUnaryOp(in nd, UnaryOp.Round, ResolveUnaryReturnType(nd, typeCode));
         }
 
+        /// <summary>
+        /// Element-wise round with specified decimal places.
+        /// Note: This overload uses traditional loop implementation for precision control.
+        /// </summary>
         public override NDArray Round(in NDArray nd, int decimals, NPTypeCode? typeCode = null)
         {
             if (nd.size == 0)
@@ -78,45 +34,27 @@ namespace NumSharp.Backends
             {
                 switch (@out.GetTypeCode)
                 {
-#if _REGEN
-                    %foreach except(supported_numericals, "Decimal"),except(supported_numericals_lowercase, "decimal")%
-	                case NPTypeCode.#1:
-	                {
-                        var out_addr = (#2*)@out.Address;
-                        for (int i = 0; i < len; i++) out_addr[i] = Converts.To#1(Math.Round(out_addr[i], decimals));
-                        return @out;
-	                }
-	                %
-                    case NPTypeCode.Decimal:
-	                {
-                        var out_addr = (decimal*)@out.Address;
-                        for (int i = 0; i < len; i++) out_addr[i] = (DecimalEx.Round(out_addr[i], decimals));
-                        return @out;
-	                }
-	                default:
-		                throw new NotSupportedException();
-#else
                     case NPTypeCode.Double:
-                        {
-                            var out_addr = (double*)@out.Address;
-                            for (int i = 0; i < len; i++) out_addr[i] = Converts.ToDouble(Math.Round(out_addr[i], decimals));
-                            return @out;
-                        }
+                    {
+                        var out_addr = (double*)@out.Address;
+                        for (int i = 0; i < len; i++) out_addr[i] = Math.Round(out_addr[i], decimals);
+                        return @out;
+                    }
                     case NPTypeCode.Single:
-                        {
-                            var out_addr = (float*)@out.Address;
-                            for (int i = 0; i < len; i++) out_addr[i] = Converts.ToSingle(Math.Round(out_addr[i], decimals));
-                            return @out;
-                        }
+                    {
+                        var out_addr = (float*)@out.Address;
+                        for (int i = 0; i < len; i++) out_addr[i] = (float)Math.Round(out_addr[i], decimals);
+                        return @out;
+                    }
                     case NPTypeCode.Decimal:
-                        {
-                            var out_addr = (decimal*)@out.Address;
-                            for (int i = 0; i < len; i++) out_addr[i] = (decimal.Round(out_addr[i], decimals));
-                            return @out;
-                        }
+                    {
+                        var out_addr = (decimal*)@out.Address;
+                        for (int i = 0; i < len; i++) out_addr[i] = decimal.Round(out_addr[i], decimals);
+                        return @out;
+                    }
                     default:
-                        throw new NotSupportedException();
-#endif
+                        // For integer types, rounding with decimals has no effect
+                        return @out;
                 }
             }
         }
