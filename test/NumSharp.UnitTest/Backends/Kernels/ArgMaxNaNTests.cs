@@ -252,7 +252,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
             var a = np.array(new[,] { { 1, 5, 3 }, { 4, 2, 6 } });
             var result = np.argmax(a, 0);
 
-            Assert.AreEqual(new[] { 1, 0, 1 }, result.ToArray<int>());
+            CollectionAssert.AreEqual(new[] { 1, 0, 1 }, result.ToArray<int>());
         }
 
         [Test]
@@ -262,7 +262,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
             var a = np.array(new[,] { { 1, 5, 3 }, { 4, 2, 6 } });
             var result = np.argmax(a, 1);
 
-            Assert.AreEqual(new[] { 1, 2 }, result.ToArray<int>());
+            CollectionAssert.AreEqual(new[] { 1, 2 }, result.ToArray<int>());
         }
 
         [Test]
@@ -272,7 +272,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
             var a = np.array(new[,] { { 1, 5, 3 }, { 4, 2, 6 } });
             var result = np.argmax(a, -1);
 
-            Assert.AreEqual(new[] { 1, 2 }, result.ToArray<int>());
+            CollectionAssert.AreEqual(new[] { 1, 2 }, result.ToArray<int>());
         }
 
         [Test]
@@ -282,7 +282,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
             var a = np.array(new[,] { { 1, 5, 3 }, { 4, 2, 6 } });
             var result = np.argmin(a, 0);
 
-            Assert.AreEqual(new[] { 0, 1, 0 }, result.ToArray<int>());
+            CollectionAssert.AreEqual(new[] { 0, 1, 0 }, result.ToArray<int>());
         }
 
         [Test]
@@ -292,7 +292,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
             var a = np.array(new[,] { { 1, 5, 3 }, { 4, 2, 6 } });
             var result = np.argmin(a, 1);
 
-            Assert.AreEqual(new[] { 0, 1 }, result.ToArray<int>());
+            CollectionAssert.AreEqual(new[] { 0, 1 }, result.ToArray<int>());
         }
 
         #endregion
@@ -311,10 +311,11 @@ namespace NumSharp.UnitTest.Backends.Kernels
         [Test]
         public void NDArray_ArgMin_Instance()
         {
+            // NumPy: argmin([1, 5, 3]) = 0 (index of minimum value 1)
             var a = np.array(new[] { 1, 5, 3 });
             int result = a.argmin();
 
-            Assert.AreEqual(2, result);
+            Assert.AreEqual(0, result);
         }
 
         [Test]
@@ -323,7 +324,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
             var a = np.array(new[,] { { 1, 5, 3 }, { 4, 2, 6 } });
             NDArray result = a.argmax(1);
 
-            Assert.AreEqual(new[] { 1, 2 }, result.ToArray<int>());
+            CollectionAssert.AreEqual(new[] { 1, 2 }, result.ToArray<int>());
         }
 
         [Test]
@@ -332,7 +333,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
             var a = np.array(new[,] { { 1, 5, 3 }, { 4, 2, 6 } });
             NDArray result = a.argmin(1);
 
-            Assert.AreEqual(new[] { 0, 1 }, result.ToArray<int>());
+            CollectionAssert.AreEqual(new[] { 0, 1 }, result.ToArray<int>());
         }
 
         #endregion

@@ -32,6 +32,9 @@ namespace NumSharp
                 switch (indicesObjects[0])
                 {
                     case NDArray nd:
+                        // Boolean mask indexing: delegate to the specialized NDArray<bool> indexer
+                        if (nd.typecode == NPTypeCode.Boolean)
+                            return this[nd.MakeGeneric<bool>()];
                         return FetchIndices(this, new NDArray[] {nd}, null, true);
                     case int i:
                         return new NDArray(Storage.GetData(i));
@@ -172,8 +175,9 @@ namespace NumSharp
                     case NDArray nd:
                         if (nd.typecode == NPTypeCode.Boolean)
                         {
-                            //TODO: mask only specific axis??? find a unit test to check it against.
-                            throw new Exception("if (nd.typecode == NPTypeCode.Boolean)");
+                            // Boolean mask indexing: convert to NDArray<bool> and use the specialized indexer
+                            // This handles cases like arr[np.array([true, false, true])]
+                            return @this[nd.MakeGeneric<bool>()];
                         }
 
                         indices.Add(nd);

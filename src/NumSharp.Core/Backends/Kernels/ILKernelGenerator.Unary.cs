@@ -54,7 +54,7 @@ using System.Reflection.Emit;
 //     - Array kernels for unary math: Negate, Abs, Sqrt, Sin, Cos, Exp, Log,
 //       Sign, Floor, Ceil, Round, Tan, Sinh, Cosh, Tanh, ASin, ACos, ATan,
 //       Exp2, Expm1, Log2, Log10, Log1p
-//     - SIMD support for Negate, Abs, Sqrt, Floor, Ceil on float/double
+//     - SIMD support for Negate, Abs, Sqrt, Floor, Ceil, Round on float/double
 //     - Scalar delegates (Func<TIn, TOut>) for single-value operations
 //     - Binary scalar delegates (Func<TLhs, TRhs, TResult>) for mixed-type scalars
 //   DEPENDENCIES: Uses core emit helpers from ILKernelGenerator.cs
@@ -202,7 +202,7 @@ namespace NumSharp.Backends.Kernels
 
             // Only certain operations have SIMD support
             return key.Op == UnaryOp.Negate || key.Op == UnaryOp.Abs || key.Op == UnaryOp.Sqrt ||
-                   key.Op == UnaryOp.Floor || key.Op == UnaryOp.Ceil;
+                   key.Op == UnaryOp.Floor || key.Op == UnaryOp.Ceil || key.Op == UnaryOp.Round;
         }
 
         /// <summary>
@@ -1109,6 +1109,7 @@ namespace NumSharp.Backends.Kernels
                 UnaryOp.Sqrt => "Sqrt",
                 UnaryOp.Floor => "Floor",
                 UnaryOp.Ceil => "Ceiling",  // Vector uses "Ceiling" not "Ceil"
+                UnaryOp.Round => "Round",
                 _ => throw new NotSupportedException($"SIMD operation {op} not supported")
             };
 
@@ -1120,9 +1121,10 @@ namespace NumSharp.Backends.Kernels
                 method = vectorType.GetMethod(methodName, BindingFlags.Public | BindingFlags.Static,
                     null, new[] { vectorType }, null);
             }
-            else if (op == UnaryOp.Floor || op == UnaryOp.Ceil)
+            else if (op == UnaryOp.Floor || op == UnaryOp.Ceil || op == UnaryOp.Round)
             {
-                // Floor/Ceiling are NOT generic - they're overloaded for specific types
+                // Floor/Ceiling/Round are NOT generic - they're overloaded for specific types
+                // Use the single-parameter overload (default MidpointRounding.ToEven for Round)
                 method = containerType.GetMethod(methodName, BindingFlags.Public | BindingFlags.Static,
                     null, new[] { vectorType }, null);
             }

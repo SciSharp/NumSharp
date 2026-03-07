@@ -59,7 +59,17 @@ namespace NumSharp.Backends
         {
             x = np.atleast_1d(x).MakeGeneric<T>();
             var size = x.size;
-            Debug.Assert(size > 0);
+            var ndim = x.ndim;
+
+            // Handle empty arrays: return tuple of empty arrays (one per dimension)
+            // NumPy: np.nonzero(np.array([])) -> (array([], dtype=int64),)
+            if (size == 0)
+            {
+                var emptyResult = new NDArray<int>[ndim];
+                for (int i = 0; i < ndim; i++)
+                    emptyResult[i] = new NDArray<int>(0);
+                return emptyResult;
+            }
 
             // SIMD fast path for contiguous arrays
             if (x.Shape.IsContiguous && ILKernelGenerator.Enabled && ILKernelGenerator.VectorBits > 0)
@@ -272,7 +282,6 @@ namespace NumSharp.Backends
 #endif
 
             var len = nonzeroCoords.Count;
-            var ndim = x.ndim;
             //create ndarray for each dimension
             var ret = new NDArray<int>[ndim];
             for (int i = 0; i < x.ndim; i++)
