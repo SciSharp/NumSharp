@@ -10,10 +10,13 @@ namespace NumSharp.Backends
         /// <summary>
         /// Element-wise sign function using IL-generated kernels.
         /// Returns -1, 0, or 1 based on input sign.
+        /// NumPy behavior: preserves input dtype.
         /// </summary>
         public override NDArray Sign(in NDArray nd, NPTypeCode? typeCode = null)
         {
-            return ExecuteUnaryOp(in nd, UnaryOp.Sign, ResolveUnaryReturnType(nd, typeCode));
+            // np.sign preserves input dtype (unlike trigonometric functions)
+            var outputType = typeCode ?? nd.GetTypeCode;
+            return ExecuteUnaryOp(in nd, UnaryOp.Sign, outputType);
         }
     }
 }

@@ -59,7 +59,7 @@ namespace NumSharp.Backends
                     
                 ret.SetAtIndex(np.sum(
                                 lhs[#(join(", ", take(letters, #1).Insert(#1, "Slice.All")))]
-                                * rhs[#(join(", ", skiptake(letters, #1, #101).Insert(#101-1, "Slice.All")))]).GetAtIndex(0),
+                                * rhs[#(join(", ", skiptake(letters, #1, #101).Insert(#101-1, "Slice.All")))], ret.typecode).GetAtIndex(0),
                                     retShape.GetOffset(#(join(", ", retIndices))));
              
             %foreach range(0, #1+#101)%
@@ -101,7 +101,7 @@ namespace NumSharp.Backends
                                         {
                                             ret.SetAtIndex(np.sum(
                                                     lhs[a, b, Slice.All]
-                                                    * rhs[c, Slice.All, d]).GetAtIndex(0),
+                                                    * rhs[c, Slice.All, d], ret.typecode).GetAtIndex(0),
                                                 retShape.GetOffset(a, b, c, d));
                                         }
                                     }
@@ -132,7 +132,7 @@ namespace NumSharp.Backends
                                             {
                                                 ret.SetAtIndex(np.sum(
                                                         lhs[a, b, Slice.All]
-                                                        * rhs[c, d, Slice.All, e]).GetAtIndex(0),
+                                                        * rhs[c, d, Slice.All, e], ret.typecode).GetAtIndex(0),
                                                     retShape.GetOffset(a, b, c, d, e));
                                             }
                                         }
@@ -167,7 +167,7 @@ namespace NumSharp.Backends
                                                 {
                                                     ret.SetAtIndex(np.sum(
                                                             lhs[a, b, Slice.All]
-                                                            * rhs[c, d, e, Slice.All, f]).GetAtIndex(0),
+                                                            * rhs[c, d, e, Slice.All, f], ret.typecode).GetAtIndex(0),
                                                         retShape.GetOffset(a, b, c, d, e, f));
                                                 }
                                             }
@@ -206,7 +206,7 @@ namespace NumSharp.Backends
                                                     {
                                                         ret.SetAtIndex(np.sum(
                                                                 lhs[a, b, Slice.All]
-                                                                * rhs[c, d, e, f, Slice.All, g]).GetAtIndex(0),
+                                                                * rhs[c, d, e, f, Slice.All, g], ret.typecode).GetAtIndex(0),
                                                             retShape.GetOffset(a, b, c, d, e, f, g));
                                                     }
                                                 }
@@ -249,7 +249,7 @@ namespace NumSharp.Backends
                                                         {
                                                             ret.SetAtIndex(np.sum(
                                                                     lhs[a, b, Slice.All]
-                                                                    * rhs[c, d, e, f, g, Slice.All, h]).GetAtIndex(0),
+                                                                    * rhs[c, d, e, f, g, Slice.All, h], ret.typecode).GetAtIndex(0),
                                                                 retShape.GetOffset(a, b, c, d, e, f, g, h));
                                                         }
                                                     }
@@ -296,7 +296,7 @@ namespace NumSharp.Backends
                                                             {
                                                                 ret.SetAtIndex(np.sum(
                                                                         lhs[a, b, Slice.All]
-                                                                        * rhs[c, d, e, f, g, h, Slice.All, i]).GetAtIndex(0),
+                                                                        * rhs[c, d, e, f, g, h, Slice.All, i], ret.typecode).GetAtIndex(0),
                                                                     retShape.GetOffset(a, b, c, d, e, f, g, h, i));
                                                             }
                                                         }
@@ -347,7 +347,7 @@ namespace NumSharp.Backends
                                                                 {
                                                                     ret.SetAtIndex(np.sum(
                                                                             lhs[a, b, Slice.All]
-                                                                            * rhs[c, d, e, f, g, h, i, Slice.All, j]).GetAtIndex(0),
+                                                                            * rhs[c, d, e, f, g, h, i, Slice.All, j], ret.typecode).GetAtIndex(0),
                                                                         retShape.GetOffset(a, b, c, d, e, f, g, h, i, j));
                                                                 }
                                                             }
@@ -402,7 +402,7 @@ namespace NumSharp.Backends
                                                                     {
                                                                         ret.SetAtIndex(np.sum(
                                                                                 lhs[a, b, Slice.All]
-                                                                                * rhs[c, d, e, f, g, h, i, j, Slice.All, k]).GetAtIndex(0),
+                                                                                * rhs[c, d, e, f, g, h, i, j, Slice.All, k], ret.typecode).GetAtIndex(0),
                                                                             retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k));
                                                                     }
                                                                 }
@@ -461,7 +461,7 @@ namespace NumSharp.Backends
                                                                         {
                                                                             ret.SetAtIndex(np.sum(
                                                                                     lhs[a, b, Slice.All]
-                                                                                    * rhs[c, d, e, f, g, h, i, j, k, Slice.All, l]).GetAtIndex(0),
+                                                                                    * rhs[c, d, e, f, g, h, i, j, k, Slice.All, l], ret.typecode).GetAtIndex(0),
                                                                                 retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l));
                                                                         }
                                                                     }
@@ -524,7 +524,7 @@ namespace NumSharp.Backends
                                                                             {
                                                                                 ret.SetAtIndex(np.sum(
                                                                                         lhs[a, b, Slice.All]
-                                                                                        * rhs[c, d, e, f, g, h, i, j, k, l, Slice.All, m]).GetAtIndex(0),
+                                                                                        * rhs[c, d, e, f, g, h, i, j, k, l, Slice.All, m], ret.typecode).GetAtIndex(0),
                                                                                     retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m));
                                                                             }
                                                                         }
@@ -591,7 +591,7 @@ namespace NumSharp.Backends
                                                                                 {
                                                                                     ret.SetAtIndex(np.sum(
                                                                                             lhs[a, b, Slice.All]
-                                                                                            * rhs[c, d, e, f, g, h, i, j, k, l, m, Slice.All, n]).GetAtIndex(0),
+                                                                                            * rhs[c, d, e, f, g, h, i, j, k, l, m, Slice.All, n], ret.typecode).GetAtIndex(0),
                                                                                         retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n));
                                                                                 }
                                                                             }
@@ -662,7 +662,7 @@ namespace NumSharp.Backends
                                                                                     {
                                                                                         ret.SetAtIndex(np.sum(
                                                                                                 lhs[a, b, Slice.All]
-                                                                                                * rhs[c, d, e, f, g, h, i, j, k, l, m, n, Slice.All, o]).GetAtIndex(0),
+                                                                                                * rhs[c, d, e, f, g, h, i, j, k, l, m, n, Slice.All, o], ret.typecode).GetAtIndex(0),
                                                                                             retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o));
                                                                                     }
                                                                                 }
@@ -737,7 +737,7 @@ namespace NumSharp.Backends
                                                                                         {
                                                                                             ret.SetAtIndex(np.sum(
                                                                                                     lhs[a, b, Slice.All]
-                                                                                                    * rhs[c, d, e, f, g, h, i, j, k, l, m, n, o, Slice.All, p]).GetAtIndex(0),
+                                                                                                    * rhs[c, d, e, f, g, h, i, j, k, l, m, n, o, Slice.All, p], ret.typecode).GetAtIndex(0),
                                                                                                 retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p));
                                                                                         }
                                                                                     }
@@ -816,7 +816,7 @@ namespace NumSharp.Backends
                                                                                             {
                                                                                                 ret.SetAtIndex(np.sum(
                                                                                                         lhs[a, b, Slice.All]
-                                                                                                        * rhs[c, d, e, f, g, h, i, j, k, l, m, n, o, p, Slice.All, q]).GetAtIndex(0),
+                                                                                                        * rhs[c, d, e, f, g, h, i, j, k, l, m, n, o, p, Slice.All, q], ret.typecode).GetAtIndex(0),
                                                                                                     retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q));
                                                                                             }
                                                                                         }
@@ -868,7 +868,7 @@ namespace NumSharp.Backends
                                             {
                                                 ret.SetAtIndex(np.sum(
                                                         lhs[a, b, c, Slice.All]
-                                                        * rhs[d, Slice.All, e]).GetAtIndex(0),
+                                                        * rhs[d, Slice.All, e], ret.typecode).GetAtIndex(0),
                                                     retShape.GetOffset(a, b, c, d, e));
                                             }
                                         }
@@ -903,7 +903,7 @@ namespace NumSharp.Backends
                                                 {
                                                     ret.SetAtIndex(np.sum(
                                                             lhs[a, b, c, Slice.All]
-                                                            * rhs[d, e, Slice.All, f]).GetAtIndex(0),
+                                                            * rhs[d, e, Slice.All, f], ret.typecode).GetAtIndex(0),
                                                         retShape.GetOffset(a, b, c, d, e, f));
                                                 }
                                             }
@@ -942,7 +942,7 @@ namespace NumSharp.Backends
                                                     {
                                                         ret.SetAtIndex(np.sum(
                                                                 lhs[a, b, c, Slice.All]
-                                                                * rhs[d, e, f, Slice.All, g]).GetAtIndex(0),
+                                                                * rhs[d, e, f, Slice.All, g], ret.typecode).GetAtIndex(0),
                                                             retShape.GetOffset(a, b, c, d, e, f, g));
                                                     }
                                                 }
@@ -985,7 +985,7 @@ namespace NumSharp.Backends
                                                         {
                                                             ret.SetAtIndex(np.sum(
                                                                     lhs[a, b, c, Slice.All]
-                                                                    * rhs[d, e, f, g, Slice.All, h]).GetAtIndex(0),
+                                                                    * rhs[d, e, f, g, Slice.All, h], ret.typecode).GetAtIndex(0),
                                                                 retShape.GetOffset(a, b, c, d, e, f, g, h));
                                                         }
                                                     }
@@ -1032,7 +1032,7 @@ namespace NumSharp.Backends
                                                             {
                                                                 ret.SetAtIndex(np.sum(
                                                                         lhs[a, b, c, Slice.All]
-                                                                        * rhs[d, e, f, g, h, Slice.All, i]).GetAtIndex(0),
+                                                                        * rhs[d, e, f, g, h, Slice.All, i], ret.typecode).GetAtIndex(0),
                                                                     retShape.GetOffset(a, b, c, d, e, f, g, h, i));
                                                             }
                                                         }
@@ -1083,7 +1083,7 @@ namespace NumSharp.Backends
                                                                 {
                                                                     ret.SetAtIndex(np.sum(
                                                                             lhs[a, b, c, Slice.All]
-                                                                            * rhs[d, e, f, g, h, i, Slice.All, j]).GetAtIndex(0),
+                                                                            * rhs[d, e, f, g, h, i, Slice.All, j], ret.typecode).GetAtIndex(0),
                                                                         retShape.GetOffset(a, b, c, d, e, f, g, h, i, j));
                                                                 }
                                                             }
@@ -1138,7 +1138,7 @@ namespace NumSharp.Backends
                                                                     {
                                                                         ret.SetAtIndex(np.sum(
                                                                                 lhs[a, b, c, Slice.All]
-                                                                                * rhs[d, e, f, g, h, i, j, Slice.All, k]).GetAtIndex(0),
+                                                                                * rhs[d, e, f, g, h, i, j, Slice.All, k], ret.typecode).GetAtIndex(0),
                                                                             retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k));
                                                                     }
                                                                 }
@@ -1197,7 +1197,7 @@ namespace NumSharp.Backends
                                                                         {
                                                                             ret.SetAtIndex(np.sum(
                                                                                     lhs[a, b, c, Slice.All]
-                                                                                    * rhs[d, e, f, g, h, i, j, k, Slice.All, l]).GetAtIndex(0),
+                                                                                    * rhs[d, e, f, g, h, i, j, k, Slice.All, l], ret.typecode).GetAtIndex(0),
                                                                                 retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l));
                                                                         }
                                                                     }
@@ -1260,7 +1260,7 @@ namespace NumSharp.Backends
                                                                             {
                                                                                 ret.SetAtIndex(np.sum(
                                                                                         lhs[a, b, c, Slice.All]
-                                                                                        * rhs[d, e, f, g, h, i, j, k, l, Slice.All, m]).GetAtIndex(0),
+                                                                                        * rhs[d, e, f, g, h, i, j, k, l, Slice.All, m], ret.typecode).GetAtIndex(0),
                                                                                     retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m));
                                                                             }
                                                                         }
@@ -1327,7 +1327,7 @@ namespace NumSharp.Backends
                                                                                 {
                                                                                     ret.SetAtIndex(np.sum(
                                                                                             lhs[a, b, c, Slice.All]
-                                                                                            * rhs[d, e, f, g, h, i, j, k, l, m, Slice.All, n]).GetAtIndex(0),
+                                                                                            * rhs[d, e, f, g, h, i, j, k, l, m, Slice.All, n], ret.typecode).GetAtIndex(0),
                                                                                         retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n));
                                                                                 }
                                                                             }
@@ -1398,7 +1398,7 @@ namespace NumSharp.Backends
                                                                                     {
                                                                                         ret.SetAtIndex(np.sum(
                                                                                                 lhs[a, b, c, Slice.All]
-                                                                                                * rhs[d, e, f, g, h, i, j, k, l, m, n, Slice.All, o]).GetAtIndex(0),
+                                                                                                * rhs[d, e, f, g, h, i, j, k, l, m, n, Slice.All, o], ret.typecode).GetAtIndex(0),
                                                                                             retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o));
                                                                                     }
                                                                                 }
@@ -1473,7 +1473,7 @@ namespace NumSharp.Backends
                                                                                         {
                                                                                             ret.SetAtIndex(np.sum(
                                                                                                     lhs[a, b, c, Slice.All]
-                                                                                                    * rhs[d, e, f, g, h, i, j, k, l, m, n, o, Slice.All, p]).GetAtIndex(0),
+                                                                                                    * rhs[d, e, f, g, h, i, j, k, l, m, n, o, Slice.All, p], ret.typecode).GetAtIndex(0),
                                                                                                 retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p));
                                                                                         }
                                                                                     }
@@ -1552,7 +1552,7 @@ namespace NumSharp.Backends
                                                                                             {
                                                                                                 ret.SetAtIndex(np.sum(
                                                                                                         lhs[a, b, c, Slice.All]
-                                                                                                        * rhs[d, e, f, g, h, i, j, k, l, m, n, o, p, Slice.All, q]).GetAtIndex(0),
+                                                                                                        * rhs[d, e, f, g, h, i, j, k, l, m, n, o, p, Slice.All, q], ret.typecode).GetAtIndex(0),
                                                                                                     retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q));
                                                                                             }
                                                                                         }
@@ -1635,7 +1635,7 @@ namespace NumSharp.Backends
                                                                                                 {
                                                                                                     ret.SetAtIndex(np.sum(
                                                                                                             lhs[a, b, c, Slice.All]
-                                                                                                            * rhs[d, e, f, g, h, i, j, k, l, m, n, o, p, q, Slice.All, r]).GetAtIndex(0),
+                                                                                                            * rhs[d, e, f, g, h, i, j, k, l, m, n, o, p, q, Slice.All, r], ret.typecode).GetAtIndex(0),
                                                                                                         retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r));
                                                                                                 }
                                                                                             }
@@ -1691,7 +1691,7 @@ namespace NumSharp.Backends
                                                 {
                                                     ret.SetAtIndex(np.sum(
                                                             lhs[a, b, c, d, Slice.All]
-                                                            * rhs[e, Slice.All, f]).GetAtIndex(0),
+                                                            * rhs[e, Slice.All, f], ret.typecode).GetAtIndex(0),
                                                         retShape.GetOffset(a, b, c, d, e, f));
                                                 }
                                             }
@@ -1730,7 +1730,7 @@ namespace NumSharp.Backends
                                                     {
                                                         ret.SetAtIndex(np.sum(
                                                                 lhs[a, b, c, d, Slice.All]
-                                                                * rhs[e, f, Slice.All, g]).GetAtIndex(0),
+                                                                * rhs[e, f, Slice.All, g], ret.typecode).GetAtIndex(0),
                                                             retShape.GetOffset(a, b, c, d, e, f, g));
                                                     }
                                                 }
@@ -1773,7 +1773,7 @@ namespace NumSharp.Backends
                                                         {
                                                             ret.SetAtIndex(np.sum(
                                                                     lhs[a, b, c, d, Slice.All]
-                                                                    * rhs[e, f, g, Slice.All, h]).GetAtIndex(0),
+                                                                    * rhs[e, f, g, Slice.All, h], ret.typecode).GetAtIndex(0),
                                                                 retShape.GetOffset(a, b, c, d, e, f, g, h));
                                                         }
                                                     }
@@ -1820,7 +1820,7 @@ namespace NumSharp.Backends
                                                             {
                                                                 ret.SetAtIndex(np.sum(
                                                                         lhs[a, b, c, d, Slice.All]
-                                                                        * rhs[e, f, g, h, Slice.All, i]).GetAtIndex(0),
+                                                                        * rhs[e, f, g, h, Slice.All, i], ret.typecode).GetAtIndex(0),
                                                                     retShape.GetOffset(a, b, c, d, e, f, g, h, i));
                                                             }
                                                         }
@@ -1871,7 +1871,7 @@ namespace NumSharp.Backends
                                                                 {
                                                                     ret.SetAtIndex(np.sum(
                                                                             lhs[a, b, c, d, Slice.All]
-                                                                            * rhs[e, f, g, h, i, Slice.All, j]).GetAtIndex(0),
+                                                                            * rhs[e, f, g, h, i, Slice.All, j], ret.typecode).GetAtIndex(0),
                                                                         retShape.GetOffset(a, b, c, d, e, f, g, h, i, j));
                                                                 }
                                                             }
@@ -1926,7 +1926,7 @@ namespace NumSharp.Backends
                                                                     {
                                                                         ret.SetAtIndex(np.sum(
                                                                                 lhs[a, b, c, d, Slice.All]
-                                                                                * rhs[e, f, g, h, i, j, Slice.All, k]).GetAtIndex(0),
+                                                                                * rhs[e, f, g, h, i, j, Slice.All, k], ret.typecode).GetAtIndex(0),
                                                                             retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k));
                                                                     }
                                                                 }
@@ -1985,7 +1985,7 @@ namespace NumSharp.Backends
                                                                         {
                                                                             ret.SetAtIndex(np.sum(
                                                                                     lhs[a, b, c, d, Slice.All]
-                                                                                    * rhs[e, f, g, h, i, j, k, Slice.All, l]).GetAtIndex(0),
+                                                                                    * rhs[e, f, g, h, i, j, k, Slice.All, l], ret.typecode).GetAtIndex(0),
                                                                                 retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l));
                                                                         }
                                                                     }
@@ -2048,7 +2048,7 @@ namespace NumSharp.Backends
                                                                             {
                                                                                 ret.SetAtIndex(np.sum(
                                                                                         lhs[a, b, c, d, Slice.All]
-                                                                                        * rhs[e, f, g, h, i, j, k, l, Slice.All, m]).GetAtIndex(0),
+                                                                                        * rhs[e, f, g, h, i, j, k, l, Slice.All, m], ret.typecode).GetAtIndex(0),
                                                                                     retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m));
                                                                             }
                                                                         }
@@ -2115,7 +2115,7 @@ namespace NumSharp.Backends
                                                                                 {
                                                                                     ret.SetAtIndex(np.sum(
                                                                                             lhs[a, b, c, d, Slice.All]
-                                                                                            * rhs[e, f, g, h, i, j, k, l, m, Slice.All, n]).GetAtIndex(0),
+                                                                                            * rhs[e, f, g, h, i, j, k, l, m, Slice.All, n], ret.typecode).GetAtIndex(0),
                                                                                         retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n));
                                                                                 }
                                                                             }
@@ -2186,7 +2186,7 @@ namespace NumSharp.Backends
                                                                                     {
                                                                                         ret.SetAtIndex(np.sum(
                                                                                                 lhs[a, b, c, d, Slice.All]
-                                                                                                * rhs[e, f, g, h, i, j, k, l, m, n, Slice.All, o]).GetAtIndex(0),
+                                                                                                * rhs[e, f, g, h, i, j, k, l, m, n, Slice.All, o], ret.typecode).GetAtIndex(0),
                                                                                             retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o));
                                                                                     }
                                                                                 }
@@ -2261,7 +2261,7 @@ namespace NumSharp.Backends
                                                                                         {
                                                                                             ret.SetAtIndex(np.sum(
                                                                                                     lhs[a, b, c, d, Slice.All]
-                                                                                                    * rhs[e, f, g, h, i, j, k, l, m, n, o, Slice.All, p]).GetAtIndex(0),
+                                                                                                    * rhs[e, f, g, h, i, j, k, l, m, n, o, Slice.All, p], ret.typecode).GetAtIndex(0),
                                                                                                 retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p));
                                                                                         }
                                                                                     }
@@ -2340,7 +2340,7 @@ namespace NumSharp.Backends
                                                                                             {
                                                                                                 ret.SetAtIndex(np.sum(
                                                                                                         lhs[a, b, c, d, Slice.All]
-                                                                                                        * rhs[e, f, g, h, i, j, k, l, m, n, o, p, Slice.All, q]).GetAtIndex(0),
+                                                                                                        * rhs[e, f, g, h, i, j, k, l, m, n, o, p, Slice.All, q], ret.typecode).GetAtIndex(0),
                                                                                                     retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q));
                                                                                             }
                                                                                         }
@@ -2423,7 +2423,7 @@ namespace NumSharp.Backends
                                                                                                 {
                                                                                                     ret.SetAtIndex(np.sum(
                                                                                                             lhs[a, b, c, d, Slice.All]
-                                                                                                            * rhs[e, f, g, h, i, j, k, l, m, n, o, p, q, Slice.All, r]).GetAtIndex(0),
+                                                                                                            * rhs[e, f, g, h, i, j, k, l, m, n, o, p, q, Slice.All, r], ret.typecode).GetAtIndex(0),
                                                                                                         retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r));
                                                                                                 }
                                                                                             }
@@ -2510,7 +2510,7 @@ namespace NumSharp.Backends
                                                                                                     {
                                                                                                         ret.SetAtIndex(np.sum(
                                                                                                                 lhs[a, b, c, d, Slice.All]
-                                                                                                                * rhs[e, f, g, h, i, j, k, l, m, n, o, p, q, r, Slice.All, s]).GetAtIndex(0),
+                                                                                                                * rhs[e, f, g, h, i, j, k, l, m, n, o, p, q, r, Slice.All, s], ret.typecode).GetAtIndex(0),
                                                                                                             retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s));
                                                                                                     }
                                                                                                 }
@@ -2570,7 +2570,7 @@ namespace NumSharp.Backends
                                                     {
                                                         ret.SetAtIndex(np.sum(
                                                                 lhs[a, b, c, d, e, Slice.All]
-                                                                * rhs[f, Slice.All, g]).GetAtIndex(0),
+                                                                * rhs[f, Slice.All, g], ret.typecode).GetAtIndex(0),
                                                             retShape.GetOffset(a, b, c, d, e, f, g));
                                                     }
                                                 }
@@ -2613,7 +2613,7 @@ namespace NumSharp.Backends
                                                         {
                                                             ret.SetAtIndex(np.sum(
                                                                     lhs[a, b, c, d, e, Slice.All]
-                                                                    * rhs[f, g, Slice.All, h]).GetAtIndex(0),
+                                                                    * rhs[f, g, Slice.All, h], ret.typecode).GetAtIndex(0),
                                                                 retShape.GetOffset(a, b, c, d, e, f, g, h));
                                                         }
                                                     }
@@ -2660,7 +2660,7 @@ namespace NumSharp.Backends
                                                             {
                                                                 ret.SetAtIndex(np.sum(
                                                                         lhs[a, b, c, d, e, Slice.All]
-                                                                        * rhs[f, g, h, Slice.All, i]).GetAtIndex(0),
+                                                                        * rhs[f, g, h, Slice.All, i], ret.typecode).GetAtIndex(0),
                                                                     retShape.GetOffset(a, b, c, d, e, f, g, h, i));
                                                             }
                                                         }
@@ -2711,7 +2711,7 @@ namespace NumSharp.Backends
                                                                 {
                                                                     ret.SetAtIndex(np.sum(
                                                                             lhs[a, b, c, d, e, Slice.All]
-                                                                            * rhs[f, g, h, i, Slice.All, j]).GetAtIndex(0),
+                                                                            * rhs[f, g, h, i, Slice.All, j], ret.typecode).GetAtIndex(0),
                                                                         retShape.GetOffset(a, b, c, d, e, f, g, h, i, j));
                                                                 }
                                                             }
@@ -2766,7 +2766,7 @@ namespace NumSharp.Backends
                                                                     {
                                                                         ret.SetAtIndex(np.sum(
                                                                                 lhs[a, b, c, d, e, Slice.All]
-                                                                                * rhs[f, g, h, i, j, Slice.All, k]).GetAtIndex(0),
+                                                                                * rhs[f, g, h, i, j, Slice.All, k], ret.typecode).GetAtIndex(0),
                                                                             retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k));
                                                                     }
                                                                 }
@@ -2825,7 +2825,7 @@ namespace NumSharp.Backends
                                                                         {
                                                                             ret.SetAtIndex(np.sum(
                                                                                     lhs[a, b, c, d, e, Slice.All]
-                                                                                    * rhs[f, g, h, i, j, k, Slice.All, l]).GetAtIndex(0),
+                                                                                    * rhs[f, g, h, i, j, k, Slice.All, l], ret.typecode).GetAtIndex(0),
                                                                                 retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l));
                                                                         }
                                                                     }
@@ -2888,7 +2888,7 @@ namespace NumSharp.Backends
                                                                             {
                                                                                 ret.SetAtIndex(np.sum(
                                                                                         lhs[a, b, c, d, e, Slice.All]
-                                                                                        * rhs[f, g, h, i, j, k, l, Slice.All, m]).GetAtIndex(0),
+                                                                                        * rhs[f, g, h, i, j, k, l, Slice.All, m], ret.typecode).GetAtIndex(0),
                                                                                     retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m));
                                                                             }
                                                                         }
@@ -2955,7 +2955,7 @@ namespace NumSharp.Backends
                                                                                 {
                                                                                     ret.SetAtIndex(np.sum(
                                                                                             lhs[a, b, c, d, e, Slice.All]
-                                                                                            * rhs[f, g, h, i, j, k, l, m, Slice.All, n]).GetAtIndex(0),
+                                                                                            * rhs[f, g, h, i, j, k, l, m, Slice.All, n], ret.typecode).GetAtIndex(0),
                                                                                         retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n));
                                                                                 }
                                                                             }
@@ -3026,7 +3026,7 @@ namespace NumSharp.Backends
                                                                                     {
                                                                                         ret.SetAtIndex(np.sum(
                                                                                                 lhs[a, b, c, d, e, Slice.All]
-                                                                                                * rhs[f, g, h, i, j, k, l, m, n, Slice.All, o]).GetAtIndex(0),
+                                                                                                * rhs[f, g, h, i, j, k, l, m, n, Slice.All, o], ret.typecode).GetAtIndex(0),
                                                                                             retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o));
                                                                                     }
                                                                                 }
@@ -3101,7 +3101,7 @@ namespace NumSharp.Backends
                                                                                         {
                                                                                             ret.SetAtIndex(np.sum(
                                                                                                     lhs[a, b, c, d, e, Slice.All]
-                                                                                                    * rhs[f, g, h, i, j, k, l, m, n, o, Slice.All, p]).GetAtIndex(0),
+                                                                                                    * rhs[f, g, h, i, j, k, l, m, n, o, Slice.All, p], ret.typecode).GetAtIndex(0),
                                                                                                 retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p));
                                                                                         }
                                                                                     }
@@ -3180,7 +3180,7 @@ namespace NumSharp.Backends
                                                                                             {
                                                                                                 ret.SetAtIndex(np.sum(
                                                                                                         lhs[a, b, c, d, e, Slice.All]
-                                                                                                        * rhs[f, g, h, i, j, k, l, m, n, o, p, Slice.All, q]).GetAtIndex(0),
+                                                                                                        * rhs[f, g, h, i, j, k, l, m, n, o, p, Slice.All, q], ret.typecode).GetAtIndex(0),
                                                                                                     retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q));
                                                                                             }
                                                                                         }
@@ -3263,7 +3263,7 @@ namespace NumSharp.Backends
                                                                                                 {
                                                                                                     ret.SetAtIndex(np.sum(
                                                                                                             lhs[a, b, c, d, e, Slice.All]
-                                                                                                            * rhs[f, g, h, i, j, k, l, m, n, o, p, q, Slice.All, r]).GetAtIndex(0),
+                                                                                                            * rhs[f, g, h, i, j, k, l, m, n, o, p, q, Slice.All, r], ret.typecode).GetAtIndex(0),
                                                                                                         retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r));
                                                                                                 }
                                                                                             }
@@ -3350,7 +3350,7 @@ namespace NumSharp.Backends
                                                                                                     {
                                                                                                         ret.SetAtIndex(np.sum(
                                                                                                                 lhs[a, b, c, d, e, Slice.All]
-                                                                                                                * rhs[f, g, h, i, j, k, l, m, n, o, p, q, r, Slice.All, s]).GetAtIndex(0),
+                                                                                                                * rhs[f, g, h, i, j, k, l, m, n, o, p, q, r, Slice.All, s], ret.typecode).GetAtIndex(0),
                                                                                                             retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s));
                                                                                                     }
                                                                                                 }
@@ -3441,7 +3441,7 @@ namespace NumSharp.Backends
                                                                                                         {
                                                                                                             ret.SetAtIndex(np.sum(
                                                                                                                     lhs[a, b, c, d, e, Slice.All]
-                                                                                                                    * rhs[f, g, h, i, j, k, l, m, n, o, p, q, r, s, Slice.All, t]).GetAtIndex(0),
+                                                                                                                    * rhs[f, g, h, i, j, k, l, m, n, o, p, q, r, s, Slice.All, t], ret.typecode).GetAtIndex(0),
                                                                                                                 retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t));
                                                                                                         }
                                                                                                     }
@@ -3505,7 +3505,7 @@ namespace NumSharp.Backends
                                                         {
                                                             ret.SetAtIndex(np.sum(
                                                                     lhs[a, b, c, d, e, f, Slice.All]
-                                                                    * rhs[g, Slice.All, h]).GetAtIndex(0),
+                                                                    * rhs[g, Slice.All, h], ret.typecode).GetAtIndex(0),
                                                                 retShape.GetOffset(a, b, c, d, e, f, g, h));
                                                         }
                                                     }
@@ -3552,7 +3552,7 @@ namespace NumSharp.Backends
                                                             {
                                                                 ret.SetAtIndex(np.sum(
                                                                         lhs[a, b, c, d, e, f, Slice.All]
-                                                                        * rhs[g, h, Slice.All, i]).GetAtIndex(0),
+                                                                        * rhs[g, h, Slice.All, i], ret.typecode).GetAtIndex(0),
                                                                     retShape.GetOffset(a, b, c, d, e, f, g, h, i));
                                                             }
                                                         }
@@ -3603,7 +3603,7 @@ namespace NumSharp.Backends
                                                                 {
                                                                     ret.SetAtIndex(np.sum(
                                                                             lhs[a, b, c, d, e, f, Slice.All]
-                                                                            * rhs[g, h, i, Slice.All, j]).GetAtIndex(0),
+                                                                            * rhs[g, h, i, Slice.All, j], ret.typecode).GetAtIndex(0),
                                                                         retShape.GetOffset(a, b, c, d, e, f, g, h, i, j));
                                                                 }
                                                             }
@@ -3658,7 +3658,7 @@ namespace NumSharp.Backends
                                                                     {
                                                                         ret.SetAtIndex(np.sum(
                                                                                 lhs[a, b, c, d, e, f, Slice.All]
-                                                                                * rhs[g, h, i, j, Slice.All, k]).GetAtIndex(0),
+                                                                                * rhs[g, h, i, j, Slice.All, k], ret.typecode).GetAtIndex(0),
                                                                             retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k));
                                                                     }
                                                                 }
@@ -3717,7 +3717,7 @@ namespace NumSharp.Backends
                                                                         {
                                                                             ret.SetAtIndex(np.sum(
                                                                                     lhs[a, b, c, d, e, f, Slice.All]
-                                                                                    * rhs[g, h, i, j, k, Slice.All, l]).GetAtIndex(0),
+                                                                                    * rhs[g, h, i, j, k, Slice.All, l], ret.typecode).GetAtIndex(0),
                                                                                 retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l));
                                                                         }
                                                                     }
@@ -3780,7 +3780,7 @@ namespace NumSharp.Backends
                                                                             {
                                                                                 ret.SetAtIndex(np.sum(
                                                                                         lhs[a, b, c, d, e, f, Slice.All]
-                                                                                        * rhs[g, h, i, j, k, l, Slice.All, m]).GetAtIndex(0),
+                                                                                        * rhs[g, h, i, j, k, l, Slice.All, m], ret.typecode).GetAtIndex(0),
                                                                                     retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m));
                                                                             }
                                                                         }
@@ -3847,7 +3847,7 @@ namespace NumSharp.Backends
                                                                                 {
                                                                                     ret.SetAtIndex(np.sum(
                                                                                             lhs[a, b, c, d, e, f, Slice.All]
-                                                                                            * rhs[g, h, i, j, k, l, m, Slice.All, n]).GetAtIndex(0),
+                                                                                            * rhs[g, h, i, j, k, l, m, Slice.All, n], ret.typecode).GetAtIndex(0),
                                                                                         retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n));
                                                                                 }
                                                                             }
@@ -3918,7 +3918,7 @@ namespace NumSharp.Backends
                                                                                     {
                                                                                         ret.SetAtIndex(np.sum(
                                                                                                 lhs[a, b, c, d, e, f, Slice.All]
-                                                                                                * rhs[g, h, i, j, k, l, m, n, Slice.All, o]).GetAtIndex(0),
+                                                                                                * rhs[g, h, i, j, k, l, m, n, Slice.All, o], ret.typecode).GetAtIndex(0),
                                                                                             retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o));
                                                                                     }
                                                                                 }
@@ -3993,7 +3993,7 @@ namespace NumSharp.Backends
                                                                                         {
                                                                                             ret.SetAtIndex(np.sum(
                                                                                                     lhs[a, b, c, d, e, f, Slice.All]
-                                                                                                    * rhs[g, h, i, j, k, l, m, n, o, Slice.All, p]).GetAtIndex(0),
+                                                                                                    * rhs[g, h, i, j, k, l, m, n, o, Slice.All, p], ret.typecode).GetAtIndex(0),
                                                                                                 retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p));
                                                                                         }
                                                                                     }
@@ -4072,7 +4072,7 @@ namespace NumSharp.Backends
                                                                                             {
                                                                                                 ret.SetAtIndex(np.sum(
                                                                                                         lhs[a, b, c, d, e, f, Slice.All]
-                                                                                                        * rhs[g, h, i, j, k, l, m, n, o, p, Slice.All, q]).GetAtIndex(0),
+                                                                                                        * rhs[g, h, i, j, k, l, m, n, o, p, Slice.All, q], ret.typecode).GetAtIndex(0),
                                                                                                     retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q));
                                                                                             }
                                                                                         }
@@ -4155,7 +4155,7 @@ namespace NumSharp.Backends
                                                                                                 {
                                                                                                     ret.SetAtIndex(np.sum(
                                                                                                             lhs[a, b, c, d, e, f, Slice.All]
-                                                                                                            * rhs[g, h, i, j, k, l, m, n, o, p, q, Slice.All, r]).GetAtIndex(0),
+                                                                                                            * rhs[g, h, i, j, k, l, m, n, o, p, q, Slice.All, r], ret.typecode).GetAtIndex(0),
                                                                                                         retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r));
                                                                                                 }
                                                                                             }
@@ -4242,7 +4242,7 @@ namespace NumSharp.Backends
                                                                                                     {
                                                                                                         ret.SetAtIndex(np.sum(
                                                                                                                 lhs[a, b, c, d, e, f, Slice.All]
-                                                                                                                * rhs[g, h, i, j, k, l, m, n, o, p, q, r, Slice.All, s]).GetAtIndex(0),
+                                                                                                                * rhs[g, h, i, j, k, l, m, n, o, p, q, r, Slice.All, s], ret.typecode).GetAtIndex(0),
                                                                                                             retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s));
                                                                                                     }
                                                                                                 }
@@ -4333,7 +4333,7 @@ namespace NumSharp.Backends
                                                                                                         {
                                                                                                             ret.SetAtIndex(np.sum(
                                                                                                                     lhs[a, b, c, d, e, f, Slice.All]
-                                                                                                                    * rhs[g, h, i, j, k, l, m, n, o, p, q, r, s, Slice.All, t]).GetAtIndex(0),
+                                                                                                                    * rhs[g, h, i, j, k, l, m, n, o, p, q, r, s, Slice.All, t], ret.typecode).GetAtIndex(0),
                                                                                                                 retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t));
                                                                                                         }
                                                                                                     }
@@ -4428,7 +4428,7 @@ namespace NumSharp.Backends
                                                                                                             {
                                                                                                                 ret.SetAtIndex(np.sum(
                                                                                                                         lhs[a, b, c, d, e, f, Slice.All]
-                                                                                                                        * rhs[g, h, i, j, k, l, m, n, o, p, q, r, s, t, Slice.All, u]).GetAtIndex(0),
+                                                                                                                        * rhs[g, h, i, j, k, l, m, n, o, p, q, r, s, t, Slice.All, u], ret.typecode).GetAtIndex(0),
                                                                                                                     retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u));
                                                                                                             }
                                                                                                         }
@@ -4496,7 +4496,7 @@ namespace NumSharp.Backends
                                                             {
                                                                 ret.SetAtIndex(np.sum(
                                                                         lhs[a, b, c, d, e, f, g, Slice.All]
-                                                                        * rhs[h, Slice.All, i]).GetAtIndex(0),
+                                                                        * rhs[h, Slice.All, i], ret.typecode).GetAtIndex(0),
                                                                     retShape.GetOffset(a, b, c, d, e, f, g, h, i));
                                                             }
                                                         }
@@ -4547,7 +4547,7 @@ namespace NumSharp.Backends
                                                                 {
                                                                     ret.SetAtIndex(np.sum(
                                                                             lhs[a, b, c, d, e, f, g, Slice.All]
-                                                                            * rhs[h, i, Slice.All, j]).GetAtIndex(0),
+                                                                            * rhs[h, i, Slice.All, j], ret.typecode).GetAtIndex(0),
                                                                         retShape.GetOffset(a, b, c, d, e, f, g, h, i, j));
                                                                 }
                                                             }
@@ -4602,7 +4602,7 @@ namespace NumSharp.Backends
                                                                     {
                                                                         ret.SetAtIndex(np.sum(
                                                                                 lhs[a, b, c, d, e, f, g, Slice.All]
-                                                                                * rhs[h, i, j, Slice.All, k]).GetAtIndex(0),
+                                                                                * rhs[h, i, j, Slice.All, k], ret.typecode).GetAtIndex(0),
                                                                             retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k));
                                                                     }
                                                                 }
@@ -4661,7 +4661,7 @@ namespace NumSharp.Backends
                                                                         {
                                                                             ret.SetAtIndex(np.sum(
                                                                                     lhs[a, b, c, d, e, f, g, Slice.All]
-                                                                                    * rhs[h, i, j, k, Slice.All, l]).GetAtIndex(0),
+                                                                                    * rhs[h, i, j, k, Slice.All, l], ret.typecode).GetAtIndex(0),
                                                                                 retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l));
                                                                         }
                                                                     }
@@ -4724,7 +4724,7 @@ namespace NumSharp.Backends
                                                                             {
                                                                                 ret.SetAtIndex(np.sum(
                                                                                         lhs[a, b, c, d, e, f, g, Slice.All]
-                                                                                        * rhs[h, i, j, k, l, Slice.All, m]).GetAtIndex(0),
+                                                                                        * rhs[h, i, j, k, l, Slice.All, m], ret.typecode).GetAtIndex(0),
                                                                                     retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m));
                                                                             }
                                                                         }
@@ -4791,7 +4791,7 @@ namespace NumSharp.Backends
                                                                                 {
                                                                                     ret.SetAtIndex(np.sum(
                                                                                             lhs[a, b, c, d, e, f, g, Slice.All]
-                                                                                            * rhs[h, i, j, k, l, m, Slice.All, n]).GetAtIndex(0),
+                                                                                            * rhs[h, i, j, k, l, m, Slice.All, n], ret.typecode).GetAtIndex(0),
                                                                                         retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n));
                                                                                 }
                                                                             }
@@ -4862,7 +4862,7 @@ namespace NumSharp.Backends
                                                                                     {
                                                                                         ret.SetAtIndex(np.sum(
                                                                                                 lhs[a, b, c, d, e, f, g, Slice.All]
-                                                                                                * rhs[h, i, j, k, l, m, n, Slice.All, o]).GetAtIndex(0),
+                                                                                                * rhs[h, i, j, k, l, m, n, Slice.All, o], ret.typecode).GetAtIndex(0),
                                                                                             retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o));
                                                                                     }
                                                                                 }
@@ -4937,7 +4937,7 @@ namespace NumSharp.Backends
                                                                                         {
                                                                                             ret.SetAtIndex(np.sum(
                                                                                                     lhs[a, b, c, d, e, f, g, Slice.All]
-                                                                                                    * rhs[h, i, j, k, l, m, n, o, Slice.All, p]).GetAtIndex(0),
+                                                                                                    * rhs[h, i, j, k, l, m, n, o, Slice.All, p], ret.typecode).GetAtIndex(0),
                                                                                                 retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p));
                                                                                         }
                                                                                     }
@@ -5016,7 +5016,7 @@ namespace NumSharp.Backends
                                                                                             {
                                                                                                 ret.SetAtIndex(np.sum(
                                                                                                         lhs[a, b, c, d, e, f, g, Slice.All]
-                                                                                                        * rhs[h, i, j, k, l, m, n, o, p, Slice.All, q]).GetAtIndex(0),
+                                                                                                        * rhs[h, i, j, k, l, m, n, o, p, Slice.All, q], ret.typecode).GetAtIndex(0),
                                                                                                     retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q));
                                                                                             }
                                                                                         }
@@ -5099,7 +5099,7 @@ namespace NumSharp.Backends
                                                                                                 {
                                                                                                     ret.SetAtIndex(np.sum(
                                                                                                             lhs[a, b, c, d, e, f, g, Slice.All]
-                                                                                                            * rhs[h, i, j, k, l, m, n, o, p, q, Slice.All, r]).GetAtIndex(0),
+                                                                                                            * rhs[h, i, j, k, l, m, n, o, p, q, Slice.All, r], ret.typecode).GetAtIndex(0),
                                                                                                         retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r));
                                                                                                 }
                                                                                             }
@@ -5186,7 +5186,7 @@ namespace NumSharp.Backends
                                                                                                     {
                                                                                                         ret.SetAtIndex(np.sum(
                                                                                                                 lhs[a, b, c, d, e, f, g, Slice.All]
-                                                                                                                * rhs[h, i, j, k, l, m, n, o, p, q, r, Slice.All, s]).GetAtIndex(0),
+                                                                                                                * rhs[h, i, j, k, l, m, n, o, p, q, r, Slice.All, s], ret.typecode).GetAtIndex(0),
                                                                                                             retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s));
                                                                                                     }
                                                                                                 }
@@ -5277,7 +5277,7 @@ namespace NumSharp.Backends
                                                                                                         {
                                                                                                             ret.SetAtIndex(np.sum(
                                                                                                                     lhs[a, b, c, d, e, f, g, Slice.All]
-                                                                                                                    * rhs[h, i, j, k, l, m, n, o, p, q, r, s, Slice.All, t]).GetAtIndex(0),
+                                                                                                                    * rhs[h, i, j, k, l, m, n, o, p, q, r, s, Slice.All, t], ret.typecode).GetAtIndex(0),
                                                                                                                 retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t));
                                                                                                         }
                                                                                                     }
@@ -5372,7 +5372,7 @@ namespace NumSharp.Backends
                                                                                                             {
                                                                                                                 ret.SetAtIndex(np.sum(
                                                                                                                         lhs[a, b, c, d, e, f, g, Slice.All]
-                                                                                                                        * rhs[h, i, j, k, l, m, n, o, p, q, r, s, t, Slice.All, u]).GetAtIndex(0),
+                                                                                                                        * rhs[h, i, j, k, l, m, n, o, p, q, r, s, t, Slice.All, u], ret.typecode).GetAtIndex(0),
                                                                                                                     retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u));
                                                                                                             }
                                                                                                         }
@@ -5471,7 +5471,7 @@ namespace NumSharp.Backends
                                                                                                                 {
                                                                                                                     ret.SetAtIndex(np.sum(
                                                                                                                             lhs[a, b, c, d, e, f, g, Slice.All]
-                                                                                                                            * rhs[h, i, j, k, l, m, n, o, p, q, r, s, t, u, Slice.All, v]).GetAtIndex(0),
+                                                                                                                            * rhs[h, i, j, k, l, m, n, o, p, q, r, s, t, u, Slice.All, v], ret.typecode).GetAtIndex(0),
                                                                                                                         retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v));
                                                                                                                 }
                                                                                                             }
@@ -5543,7 +5543,7 @@ namespace NumSharp.Backends
                                                                 {
                                                                     ret.SetAtIndex(np.sum(
                                                                             lhs[a, b, c, d, e, f, g, h, Slice.All]
-                                                                            * rhs[i, Slice.All, j]).GetAtIndex(0),
+                                                                            * rhs[i, Slice.All, j], ret.typecode).GetAtIndex(0),
                                                                         retShape.GetOffset(a, b, c, d, e, f, g, h, i, j));
                                                                 }
                                                             }
@@ -5598,7 +5598,7 @@ namespace NumSharp.Backends
                                                                     {
                                                                         ret.SetAtIndex(np.sum(
                                                                                 lhs[a, b, c, d, e, f, g, h, Slice.All]
-                                                                                * rhs[i, j, Slice.All, k]).GetAtIndex(0),
+                                                                                * rhs[i, j, Slice.All, k], ret.typecode).GetAtIndex(0),
                                                                             retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k));
                                                                     }
                                                                 }
@@ -5657,7 +5657,7 @@ namespace NumSharp.Backends
                                                                         {
                                                                             ret.SetAtIndex(np.sum(
                                                                                     lhs[a, b, c, d, e, f, g, h, Slice.All]
-                                                                                    * rhs[i, j, k, Slice.All, l]).GetAtIndex(0),
+                                                                                    * rhs[i, j, k, Slice.All, l], ret.typecode).GetAtIndex(0),
                                                                                 retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l));
                                                                         }
                                                                     }
@@ -5720,7 +5720,7 @@ namespace NumSharp.Backends
                                                                             {
                                                                                 ret.SetAtIndex(np.sum(
                                                                                         lhs[a, b, c, d, e, f, g, h, Slice.All]
-                                                                                        * rhs[i, j, k, l, Slice.All, m]).GetAtIndex(0),
+                                                                                        * rhs[i, j, k, l, Slice.All, m], ret.typecode).GetAtIndex(0),
                                                                                     retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m));
                                                                             }
                                                                         }
@@ -5787,7 +5787,7 @@ namespace NumSharp.Backends
                                                                                 {
                                                                                     ret.SetAtIndex(np.sum(
                                                                                             lhs[a, b, c, d, e, f, g, h, Slice.All]
-                                                                                            * rhs[i, j, k, l, m, Slice.All, n]).GetAtIndex(0),
+                                                                                            * rhs[i, j, k, l, m, Slice.All, n], ret.typecode).GetAtIndex(0),
                                                                                         retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n));
                                                                                 }
                                                                             }
@@ -5858,7 +5858,7 @@ namespace NumSharp.Backends
                                                                                     {
                                                                                         ret.SetAtIndex(np.sum(
                                                                                                 lhs[a, b, c, d, e, f, g, h, Slice.All]
-                                                                                                * rhs[i, j, k, l, m, n, Slice.All, o]).GetAtIndex(0),
+                                                                                                * rhs[i, j, k, l, m, n, Slice.All, o], ret.typecode).GetAtIndex(0),
                                                                                             retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o));
                                                                                     }
                                                                                 }
@@ -5933,7 +5933,7 @@ namespace NumSharp.Backends
                                                                                         {
                                                                                             ret.SetAtIndex(np.sum(
                                                                                                     lhs[a, b, c, d, e, f, g, h, Slice.All]
-                                                                                                    * rhs[i, j, k, l, m, n, o, Slice.All, p]).GetAtIndex(0),
+                                                                                                    * rhs[i, j, k, l, m, n, o, Slice.All, p], ret.typecode).GetAtIndex(0),
                                                                                                 retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p));
                                                                                         }
                                                                                     }
@@ -6012,7 +6012,7 @@ namespace NumSharp.Backends
                                                                                             {
                                                                                                 ret.SetAtIndex(np.sum(
                                                                                                         lhs[a, b, c, d, e, f, g, h, Slice.All]
-                                                                                                        * rhs[i, j, k, l, m, n, o, p, Slice.All, q]).GetAtIndex(0),
+                                                                                                        * rhs[i, j, k, l, m, n, o, p, Slice.All, q], ret.typecode).GetAtIndex(0),
                                                                                                     retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q));
                                                                                             }
                                                                                         }
@@ -6095,7 +6095,7 @@ namespace NumSharp.Backends
                                                                                                 {
                                                                                                     ret.SetAtIndex(np.sum(
                                                                                                             lhs[a, b, c, d, e, f, g, h, Slice.All]
-                                                                                                            * rhs[i, j, k, l, m, n, o, p, q, Slice.All, r]).GetAtIndex(0),
+                                                                                                            * rhs[i, j, k, l, m, n, o, p, q, Slice.All, r], ret.typecode).GetAtIndex(0),
                                                                                                         retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r));
                                                                                                 }
                                                                                             }
@@ -6182,7 +6182,7 @@ namespace NumSharp.Backends
                                                                                                     {
                                                                                                         ret.SetAtIndex(np.sum(
                                                                                                                 lhs[a, b, c, d, e, f, g, h, Slice.All]
-                                                                                                                * rhs[i, j, k, l, m, n, o, p, q, r, Slice.All, s]).GetAtIndex(0),
+                                                                                                                * rhs[i, j, k, l, m, n, o, p, q, r, Slice.All, s], ret.typecode).GetAtIndex(0),
                                                                                                             retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s));
                                                                                                     }
                                                                                                 }
@@ -6273,7 +6273,7 @@ namespace NumSharp.Backends
                                                                                                         {
                                                                                                             ret.SetAtIndex(np.sum(
                                                                                                                     lhs[a, b, c, d, e, f, g, h, Slice.All]
-                                                                                                                    * rhs[i, j, k, l, m, n, o, p, q, r, s, Slice.All, t]).GetAtIndex(0),
+                                                                                                                    * rhs[i, j, k, l, m, n, o, p, q, r, s, Slice.All, t], ret.typecode).GetAtIndex(0),
                                                                                                                 retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t));
                                                                                                         }
                                                                                                     }
@@ -6368,7 +6368,7 @@ namespace NumSharp.Backends
                                                                                                             {
                                                                                                                 ret.SetAtIndex(np.sum(
                                                                                                                         lhs[a, b, c, d, e, f, g, h, Slice.All]
-                                                                                                                        * rhs[i, j, k, l, m, n, o, p, q, r, s, t, Slice.All, u]).GetAtIndex(0),
+                                                                                                                        * rhs[i, j, k, l, m, n, o, p, q, r, s, t, Slice.All, u], ret.typecode).GetAtIndex(0),
                                                                                                                     retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u));
                                                                                                             }
                                                                                                         }
@@ -6467,7 +6467,7 @@ namespace NumSharp.Backends
                                                                                                                 {
                                                                                                                     ret.SetAtIndex(np.sum(
                                                                                                                             lhs[a, b, c, d, e, f, g, h, Slice.All]
-                                                                                                                            * rhs[i, j, k, l, m, n, o, p, q, r, s, t, u, Slice.All, v]).GetAtIndex(0),
+                                                                                                                            * rhs[i, j, k, l, m, n, o, p, q, r, s, t, u, Slice.All, v], ret.typecode).GetAtIndex(0),
                                                                                                                         retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v));
                                                                                                                 }
                                                                                                             }
@@ -6570,7 +6570,7 @@ namespace NumSharp.Backends
                                                                                                                     {
                                                                                                                         ret.SetAtIndex(np.sum(
                                                                                                                                 lhs[a, b, c, d, e, f, g, h, Slice.All]
-                                                                                                                                * rhs[i, j, k, l, m, n, o, p, q, r, s, t, u, v, Slice.All, w]).GetAtIndex(0),
+                                                                                                                                * rhs[i, j, k, l, m, n, o, p, q, r, s, t, u, v, Slice.All, w], ret.typecode).GetAtIndex(0),
                                                                                                                             retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w));
                                                                                                                     }
                                                                                                                 }
@@ -6646,7 +6646,7 @@ namespace NumSharp.Backends
                                                                     {
                                                                         ret.SetAtIndex(np.sum(
                                                                                 lhs[a, b, c, d, e, f, g, h, i, Slice.All]
-                                                                                * rhs[j, Slice.All, k]).GetAtIndex(0),
+                                                                                * rhs[j, Slice.All, k], ret.typecode).GetAtIndex(0),
                                                                             retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k));
                                                                     }
                                                                 }
@@ -6705,7 +6705,7 @@ namespace NumSharp.Backends
                                                                         {
                                                                             ret.SetAtIndex(np.sum(
                                                                                     lhs[a, b, c, d, e, f, g, h, i, Slice.All]
-                                                                                    * rhs[j, k, Slice.All, l]).GetAtIndex(0),
+                                                                                    * rhs[j, k, Slice.All, l], ret.typecode).GetAtIndex(0),
                                                                                 retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l));
                                                                         }
                                                                     }
@@ -6768,7 +6768,7 @@ namespace NumSharp.Backends
                                                                             {
                                                                                 ret.SetAtIndex(np.sum(
                                                                                         lhs[a, b, c, d, e, f, g, h, i, Slice.All]
-                                                                                        * rhs[j, k, l, Slice.All, m]).GetAtIndex(0),
+                                                                                        * rhs[j, k, l, Slice.All, m], ret.typecode).GetAtIndex(0),
                                                                                     retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m));
                                                                             }
                                                                         }
@@ -6835,7 +6835,7 @@ namespace NumSharp.Backends
                                                                                 {
                                                                                     ret.SetAtIndex(np.sum(
                                                                                             lhs[a, b, c, d, e, f, g, h, i, Slice.All]
-                                                                                            * rhs[j, k, l, m, Slice.All, n]).GetAtIndex(0),
+                                                                                            * rhs[j, k, l, m, Slice.All, n], ret.typecode).GetAtIndex(0),
                                                                                         retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n));
                                                                                 }
                                                                             }
@@ -6906,7 +6906,7 @@ namespace NumSharp.Backends
                                                                                     {
                                                                                         ret.SetAtIndex(np.sum(
                                                                                                 lhs[a, b, c, d, e, f, g, h, i, Slice.All]
-                                                                                                * rhs[j, k, l, m, n, Slice.All, o]).GetAtIndex(0),
+                                                                                                * rhs[j, k, l, m, n, Slice.All, o], ret.typecode).GetAtIndex(0),
                                                                                             retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o));
                                                                                     }
                                                                                 }
@@ -6981,7 +6981,7 @@ namespace NumSharp.Backends
                                                                                         {
                                                                                             ret.SetAtIndex(np.sum(
                                                                                                     lhs[a, b, c, d, e, f, g, h, i, Slice.All]
-                                                                                                    * rhs[j, k, l, m, n, o, Slice.All, p]).GetAtIndex(0),
+                                                                                                    * rhs[j, k, l, m, n, o, Slice.All, p], ret.typecode).GetAtIndex(0),
                                                                                                 retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p));
                                                                                         }
                                                                                     }
@@ -7060,7 +7060,7 @@ namespace NumSharp.Backends
                                                                                             {
                                                                                                 ret.SetAtIndex(np.sum(
                                                                                                         lhs[a, b, c, d, e, f, g, h, i, Slice.All]
-                                                                                                        * rhs[j, k, l, m, n, o, p, Slice.All, q]).GetAtIndex(0),
+                                                                                                        * rhs[j, k, l, m, n, o, p, Slice.All, q], ret.typecode).GetAtIndex(0),
                                                                                                     retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q));
                                                                                             }
                                                                                         }
@@ -7143,7 +7143,7 @@ namespace NumSharp.Backends
                                                                                                 {
                                                                                                     ret.SetAtIndex(np.sum(
                                                                                                             lhs[a, b, c, d, e, f, g, h, i, Slice.All]
-                                                                                                            * rhs[j, k, l, m, n, o, p, q, Slice.All, r]).GetAtIndex(0),
+                                                                                                            * rhs[j, k, l, m, n, o, p, q, Slice.All, r], ret.typecode).GetAtIndex(0),
                                                                                                         retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r));
                                                                                                 }
                                                                                             }
@@ -7230,7 +7230,7 @@ namespace NumSharp.Backends
                                                                                                     {
                                                                                                         ret.SetAtIndex(np.sum(
                                                                                                                 lhs[a, b, c, d, e, f, g, h, i, Slice.All]
-                                                                                                                * rhs[j, k, l, m, n, o, p, q, r, Slice.All, s]).GetAtIndex(0),
+                                                                                                                * rhs[j, k, l, m, n, o, p, q, r, Slice.All, s], ret.typecode).GetAtIndex(0),
                                                                                                             retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s));
                                                                                                     }
                                                                                                 }
@@ -7321,7 +7321,7 @@ namespace NumSharp.Backends
                                                                                                         {
                                                                                                             ret.SetAtIndex(np.sum(
                                                                                                                     lhs[a, b, c, d, e, f, g, h, i, Slice.All]
-                                                                                                                    * rhs[j, k, l, m, n, o, p, q, r, s, Slice.All, t]).GetAtIndex(0),
+                                                                                                                    * rhs[j, k, l, m, n, o, p, q, r, s, Slice.All, t], ret.typecode).GetAtIndex(0),
                                                                                                                 retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t));
                                                                                                         }
                                                                                                     }
@@ -7416,7 +7416,7 @@ namespace NumSharp.Backends
                                                                                                             {
                                                                                                                 ret.SetAtIndex(np.sum(
                                                                                                                         lhs[a, b, c, d, e, f, g, h, i, Slice.All]
-                                                                                                                        * rhs[j, k, l, m, n, o, p, q, r, s, t, Slice.All, u]).GetAtIndex(0),
+                                                                                                                        * rhs[j, k, l, m, n, o, p, q, r, s, t, Slice.All, u], ret.typecode).GetAtIndex(0),
                                                                                                                     retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u));
                                                                                                             }
                                                                                                         }
@@ -7515,7 +7515,7 @@ namespace NumSharp.Backends
                                                                                                                 {
                                                                                                                     ret.SetAtIndex(np.sum(
                                                                                                                             lhs[a, b, c, d, e, f, g, h, i, Slice.All]
-                                                                                                                            * rhs[j, k, l, m, n, o, p, q, r, s, t, u, Slice.All, v]).GetAtIndex(0),
+                                                                                                                            * rhs[j, k, l, m, n, o, p, q, r, s, t, u, Slice.All, v], ret.typecode).GetAtIndex(0),
                                                                                                                         retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v));
                                                                                                                 }
                                                                                                             }
@@ -7618,7 +7618,7 @@ namespace NumSharp.Backends
                                                                                                                     {
                                                                                                                         ret.SetAtIndex(np.sum(
                                                                                                                                 lhs[a, b, c, d, e, f, g, h, i, Slice.All]
-                                                                                                                                * rhs[j, k, l, m, n, o, p, q, r, s, t, u, v, Slice.All, w]).GetAtIndex(0),
+                                                                                                                                * rhs[j, k, l, m, n, o, p, q, r, s, t, u, v, Slice.All, w], ret.typecode).GetAtIndex(0),
                                                                                                                             retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w));
                                                                                                                     }
                                                                                                                 }
@@ -7725,7 +7725,7 @@ namespace NumSharp.Backends
                                                                                                                         {
                                                                                                                             ret.SetAtIndex(np.sum(
                                                                                                                                     lhs[a, b, c, d, e, f, g, h, i, Slice.All]
-                                                                                                                                    * rhs[j, k, l, m, n, o, p, q, r, s, t, u, v, w, Slice.All, x]).GetAtIndex(0),
+                                                                                                                                    * rhs[j, k, l, m, n, o, p, q, r, s, t, u, v, w, Slice.All, x], ret.typecode).GetAtIndex(0),
                                                                                                                                 retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w, x));
                                                                                                                         }
                                                                                                                     }
@@ -7805,7 +7805,7 @@ namespace NumSharp.Backends
                                                                         {
                                                                             ret.SetAtIndex(np.sum(
                                                                                     lhs[a, b, c, d, e, f, g, h, i, j, Slice.All]
-                                                                                    * rhs[k, Slice.All, l]).GetAtIndex(0),
+                                                                                    * rhs[k, Slice.All, l], ret.typecode).GetAtIndex(0),
                                                                                 retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l));
                                                                         }
                                                                     }
@@ -7868,7 +7868,7 @@ namespace NumSharp.Backends
                                                                             {
                                                                                 ret.SetAtIndex(np.sum(
                                                                                         lhs[a, b, c, d, e, f, g, h, i, j, Slice.All]
-                                                                                        * rhs[k, l, Slice.All, m]).GetAtIndex(0),
+                                                                                        * rhs[k, l, Slice.All, m], ret.typecode).GetAtIndex(0),
                                                                                     retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m));
                                                                             }
                                                                         }
@@ -7935,7 +7935,7 @@ namespace NumSharp.Backends
                                                                                 {
                                                                                     ret.SetAtIndex(np.sum(
                                                                                             lhs[a, b, c, d, e, f, g, h, i, j, Slice.All]
-                                                                                            * rhs[k, l, m, Slice.All, n]).GetAtIndex(0),
+                                                                                            * rhs[k, l, m, Slice.All, n], ret.typecode).GetAtIndex(0),
                                                                                         retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n));
                                                                                 }
                                                                             }
@@ -8006,7 +8006,7 @@ namespace NumSharp.Backends
                                                                                     {
                                                                                         ret.SetAtIndex(np.sum(
                                                                                                 lhs[a, b, c, d, e, f, g, h, i, j, Slice.All]
-                                                                                                * rhs[k, l, m, n, Slice.All, o]).GetAtIndex(0),
+                                                                                                * rhs[k, l, m, n, Slice.All, o], ret.typecode).GetAtIndex(0),
                                                                                             retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o));
                                                                                     }
                                                                                 }
@@ -8081,7 +8081,7 @@ namespace NumSharp.Backends
                                                                                         {
                                                                                             ret.SetAtIndex(np.sum(
                                                                                                     lhs[a, b, c, d, e, f, g, h, i, j, Slice.All]
-                                                                                                    * rhs[k, l, m, n, o, Slice.All, p]).GetAtIndex(0),
+                                                                                                    * rhs[k, l, m, n, o, Slice.All, p], ret.typecode).GetAtIndex(0),
                                                                                                 retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p));
                                                                                         }
                                                                                     }
@@ -8160,7 +8160,7 @@ namespace NumSharp.Backends
                                                                                             {
                                                                                                 ret.SetAtIndex(np.sum(
                                                                                                         lhs[a, b, c, d, e, f, g, h, i, j, Slice.All]
-                                                                                                        * rhs[k, l, m, n, o, p, Slice.All, q]).GetAtIndex(0),
+                                                                                                        * rhs[k, l, m, n, o, p, Slice.All, q], ret.typecode).GetAtIndex(0),
                                                                                                     retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q));
                                                                                             }
                                                                                         }
@@ -8243,7 +8243,7 @@ namespace NumSharp.Backends
                                                                                                 {
                                                                                                     ret.SetAtIndex(np.sum(
                                                                                                             lhs[a, b, c, d, e, f, g, h, i, j, Slice.All]
-                                                                                                            * rhs[k, l, m, n, o, p, q, Slice.All, r]).GetAtIndex(0),
+                                                                                                            * rhs[k, l, m, n, o, p, q, Slice.All, r], ret.typecode).GetAtIndex(0),
                                                                                                         retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r));
                                                                                                 }
                                                                                             }
@@ -8330,7 +8330,7 @@ namespace NumSharp.Backends
                                                                                                     {
                                                                                                         ret.SetAtIndex(np.sum(
                                                                                                                 lhs[a, b, c, d, e, f, g, h, i, j, Slice.All]
-                                                                                                                * rhs[k, l, m, n, o, p, q, r, Slice.All, s]).GetAtIndex(0),
+                                                                                                                * rhs[k, l, m, n, o, p, q, r, Slice.All, s], ret.typecode).GetAtIndex(0),
                                                                                                             retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s));
                                                                                                     }
                                                                                                 }
@@ -8421,7 +8421,7 @@ namespace NumSharp.Backends
                                                                                                         {
                                                                                                             ret.SetAtIndex(np.sum(
                                                                                                                     lhs[a, b, c, d, e, f, g, h, i, j, Slice.All]
-                                                                                                                    * rhs[k, l, m, n, o, p, q, r, s, Slice.All, t]).GetAtIndex(0),
+                                                                                                                    * rhs[k, l, m, n, o, p, q, r, s, Slice.All, t], ret.typecode).GetAtIndex(0),
                                                                                                                 retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t));
                                                                                                         }
                                                                                                     }
@@ -8516,7 +8516,7 @@ namespace NumSharp.Backends
                                                                                                             {
                                                                                                                 ret.SetAtIndex(np.sum(
                                                                                                                         lhs[a, b, c, d, e, f, g, h, i, j, Slice.All]
-                                                                                                                        * rhs[k, l, m, n, o, p, q, r, s, t, Slice.All, u]).GetAtIndex(0),
+                                                                                                                        * rhs[k, l, m, n, o, p, q, r, s, t, Slice.All, u], ret.typecode).GetAtIndex(0),
                                                                                                                     retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u));
                                                                                                             }
                                                                                                         }
@@ -8615,7 +8615,7 @@ namespace NumSharp.Backends
                                                                                                                 {
                                                                                                                     ret.SetAtIndex(np.sum(
                                                                                                                             lhs[a, b, c, d, e, f, g, h, i, j, Slice.All]
-                                                                                                                            * rhs[k, l, m, n, o, p, q, r, s, t, u, Slice.All, v]).GetAtIndex(0),
+                                                                                                                            * rhs[k, l, m, n, o, p, q, r, s, t, u, Slice.All, v], ret.typecode).GetAtIndex(0),
                                                                                                                         retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v));
                                                                                                                 }
                                                                                                             }
@@ -8718,7 +8718,7 @@ namespace NumSharp.Backends
                                                                                                                     {
                                                                                                                         ret.SetAtIndex(np.sum(
                                                                                                                                 lhs[a, b, c, d, e, f, g, h, i, j, Slice.All]
-                                                                                                                                * rhs[k, l, m, n, o, p, q, r, s, t, u, v, Slice.All, w]).GetAtIndex(0),
+                                                                                                                                * rhs[k, l, m, n, o, p, q, r, s, t, u, v, Slice.All, w], ret.typecode).GetAtIndex(0),
                                                                                                                             retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w));
                                                                                                                     }
                                                                                                                 }
@@ -8825,7 +8825,7 @@ namespace NumSharp.Backends
                                                                                                                         {
                                                                                                                             ret.SetAtIndex(np.sum(
                                                                                                                                     lhs[a, b, c, d, e, f, g, h, i, j, Slice.All]
-                                                                                                                                    * rhs[k, l, m, n, o, p, q, r, s, t, u, v, w, Slice.All, x]).GetAtIndex(0),
+                                                                                                                                    * rhs[k, l, m, n, o, p, q, r, s, t, u, v, w, Slice.All, x], ret.typecode).GetAtIndex(0),
                                                                                                                                 retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w, x));
                                                                                                                         }
                                                                                                                     }
@@ -8936,7 +8936,7 @@ namespace NumSharp.Backends
                                                                                                                             {
                                                                                                                                 ret.SetAtIndex(np.sum(
                                                                                                                                         lhs[a, b, c, d, e, f, g, h, i, j, Slice.All]
-                                                                                                                                        * rhs[k, l, m, n, o, p, q, r, s, t, u, v, w, x, Slice.All, y]).GetAtIndex(0),
+                                                                                                                                        * rhs[k, l, m, n, o, p, q, r, s, t, u, v, w, x, Slice.All, y], ret.typecode).GetAtIndex(0),
                                                                                                                                     retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w, x, y));
                                                                                                                             }
                                                                                                                         }
@@ -9020,7 +9020,7 @@ namespace NumSharp.Backends
                                                                             {
                                                                                 ret.SetAtIndex(np.sum(
                                                                                         lhs[a, b, c, d, e, f, g, h, i, j, k, Slice.All]
-                                                                                        * rhs[l, Slice.All, m]).GetAtIndex(0),
+                                                                                        * rhs[l, Slice.All, m], ret.typecode).GetAtIndex(0),
                                                                                     retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m));
                                                                             }
                                                                         }
@@ -9087,7 +9087,7 @@ namespace NumSharp.Backends
                                                                                 {
                                                                                     ret.SetAtIndex(np.sum(
                                                                                             lhs[a, b, c, d, e, f, g, h, i, j, k, Slice.All]
-                                                                                            * rhs[l, m, Slice.All, n]).GetAtIndex(0),
+                                                                                            * rhs[l, m, Slice.All, n], ret.typecode).GetAtIndex(0),
                                                                                         retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n));
                                                                                 }
                                                                             }
@@ -9158,7 +9158,7 @@ namespace NumSharp.Backends
                                                                                     {
                                                                                         ret.SetAtIndex(np.sum(
                                                                                                 lhs[a, b, c, d, e, f, g, h, i, j, k, Slice.All]
-                                                                                                * rhs[l, m, n, Slice.All, o]).GetAtIndex(0),
+                                                                                                * rhs[l, m, n, Slice.All, o], ret.typecode).GetAtIndex(0),
                                                                                             retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o));
                                                                                     }
                                                                                 }
@@ -9233,7 +9233,7 @@ namespace NumSharp.Backends
                                                                                         {
                                                                                             ret.SetAtIndex(np.sum(
                                                                                                     lhs[a, b, c, d, e, f, g, h, i, j, k, Slice.All]
-                                                                                                    * rhs[l, m, n, o, Slice.All, p]).GetAtIndex(0),
+                                                                                                    * rhs[l, m, n, o, Slice.All, p], ret.typecode).GetAtIndex(0),
                                                                                                 retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p));
                                                                                         }
                                                                                     }
@@ -9312,7 +9312,7 @@ namespace NumSharp.Backends
                                                                                             {
                                                                                                 ret.SetAtIndex(np.sum(
                                                                                                         lhs[a, b, c, d, e, f, g, h, i, j, k, Slice.All]
-                                                                                                        * rhs[l, m, n, o, p, Slice.All, q]).GetAtIndex(0),
+                                                                                                        * rhs[l, m, n, o, p, Slice.All, q], ret.typecode).GetAtIndex(0),
                                                                                                     retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q));
                                                                                             }
                                                                                         }
@@ -9395,7 +9395,7 @@ namespace NumSharp.Backends
                                                                                                 {
                                                                                                     ret.SetAtIndex(np.sum(
                                                                                                             lhs[a, b, c, d, e, f, g, h, i, j, k, Slice.All]
-                                                                                                            * rhs[l, m, n, o, p, q, Slice.All, r]).GetAtIndex(0),
+                                                                                                            * rhs[l, m, n, o, p, q, Slice.All, r], ret.typecode).GetAtIndex(0),
                                                                                                         retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r));
                                                                                                 }
                                                                                             }
@@ -9482,7 +9482,7 @@ namespace NumSharp.Backends
                                                                                                     {
                                                                                                         ret.SetAtIndex(np.sum(
                                                                                                                 lhs[a, b, c, d, e, f, g, h, i, j, k, Slice.All]
-                                                                                                                * rhs[l, m, n, o, p, q, r, Slice.All, s]).GetAtIndex(0),
+                                                                                                                * rhs[l, m, n, o, p, q, r, Slice.All, s], ret.typecode).GetAtIndex(0),
                                                                                                             retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s));
                                                                                                     }
                                                                                                 }
@@ -9573,7 +9573,7 @@ namespace NumSharp.Backends
                                                                                                         {
                                                                                                             ret.SetAtIndex(np.sum(
                                                                                                                     lhs[a, b, c, d, e, f, g, h, i, j, k, Slice.All]
-                                                                                                                    * rhs[l, m, n, o, p, q, r, s, Slice.All, t]).GetAtIndex(0),
+                                                                                                                    * rhs[l, m, n, o, p, q, r, s, Slice.All, t], ret.typecode).GetAtIndex(0),
                                                                                                                 retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t));
                                                                                                         }
                                                                                                     }
@@ -9668,7 +9668,7 @@ namespace NumSharp.Backends
                                                                                                             {
                                                                                                                 ret.SetAtIndex(np.sum(
                                                                                                                         lhs[a, b, c, d, e, f, g, h, i, j, k, Slice.All]
-                                                                                                                        * rhs[l, m, n, o, p, q, r, s, t, Slice.All, u]).GetAtIndex(0),
+                                                                                                                        * rhs[l, m, n, o, p, q, r, s, t, Slice.All, u], ret.typecode).GetAtIndex(0),
                                                                                                                     retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u));
                                                                                                             }
                                                                                                         }
@@ -9767,7 +9767,7 @@ namespace NumSharp.Backends
                                                                                                                 {
                                                                                                                     ret.SetAtIndex(np.sum(
                                                                                                                             lhs[a, b, c, d, e, f, g, h, i, j, k, Slice.All]
-                                                                                                                            * rhs[l, m, n, o, p, q, r, s, t, u, Slice.All, v]).GetAtIndex(0),
+                                                                                                                            * rhs[l, m, n, o, p, q, r, s, t, u, Slice.All, v], ret.typecode).GetAtIndex(0),
                                                                                                                         retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v));
                                                                                                                 }
                                                                                                             }
@@ -9870,7 +9870,7 @@ namespace NumSharp.Backends
                                                                                                                     {
                                                                                                                         ret.SetAtIndex(np.sum(
                                                                                                                                 lhs[a, b, c, d, e, f, g, h, i, j, k, Slice.All]
-                                                                                                                                * rhs[l, m, n, o, p, q, r, s, t, u, v, Slice.All, w]).GetAtIndex(0),
+                                                                                                                                * rhs[l, m, n, o, p, q, r, s, t, u, v, Slice.All, w], ret.typecode).GetAtIndex(0),
                                                                                                                             retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w));
                                                                                                                     }
                                                                                                                 }
@@ -9977,7 +9977,7 @@ namespace NumSharp.Backends
                                                                                                                         {
                                                                                                                             ret.SetAtIndex(np.sum(
                                                                                                                                     lhs[a, b, c, d, e, f, g, h, i, j, k, Slice.All]
-                                                                                                                                    * rhs[l, m, n, o, p, q, r, s, t, u, v, w, Slice.All, x]).GetAtIndex(0),
+                                                                                                                                    * rhs[l, m, n, o, p, q, r, s, t, u, v, w, Slice.All, x], ret.typecode).GetAtIndex(0),
                                                                                                                                 retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w, x));
                                                                                                                         }
                                                                                                                     }
@@ -10088,7 +10088,7 @@ namespace NumSharp.Backends
                                                                                                                             {
                                                                                                                                 ret.SetAtIndex(np.sum(
                                                                                                                                         lhs[a, b, c, d, e, f, g, h, i, j, k, Slice.All]
-                                                                                                                                        * rhs[l, m, n, o, p, q, r, s, t, u, v, w, x, Slice.All, y]).GetAtIndex(0),
+                                                                                                                                        * rhs[l, m, n, o, p, q, r, s, t, u, v, w, x, Slice.All, y], ret.typecode).GetAtIndex(0),
                                                                                                                                     retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w, x, y));
                                                                                                                             }
                                                                                                                         }
@@ -10203,7 +10203,7 @@ namespace NumSharp.Backends
                                                                                                                                 {
                                                                                                                                     ret.SetAtIndex(np.sum(
                                                                                                                                             lhs[a, b, c, d, e, f, g, h, i, j, k, Slice.All]
-                                                                                                                                            * rhs[l, m, n, o, p, q, r, s, t, u, v, w, x, y, Slice.All, z]).GetAtIndex(0),
+                                                                                                                                            * rhs[l, m, n, o, p, q, r, s, t, u, v, w, x, y, Slice.All, z], ret.typecode).GetAtIndex(0),
                                                                                                                                         retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w, x, y, z));
                                                                                                                                 }
                                                                                                                             }
@@ -10291,7 +10291,7 @@ namespace NumSharp.Backends
                                                                                 {
                                                                                     ret.SetAtIndex(np.sum(
                                                                                             lhs[a, b, c, d, e, f, g, h, i, j, k, l, Slice.All]
-                                                                                            * rhs[m, Slice.All, n]).GetAtIndex(0),
+                                                                                            * rhs[m, Slice.All, n], ret.typecode).GetAtIndex(0),
                                                                                         retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n));
                                                                                 }
                                                                             }
@@ -10362,7 +10362,7 @@ namespace NumSharp.Backends
                                                                                     {
                                                                                         ret.SetAtIndex(np.sum(
                                                                                                 lhs[a, b, c, d, e, f, g, h, i, j, k, l, Slice.All]
-                                                                                                * rhs[m, n, Slice.All, o]).GetAtIndex(0),
+                                                                                                * rhs[m, n, Slice.All, o], ret.typecode).GetAtIndex(0),
                                                                                             retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o));
                                                                                     }
                                                                                 }
@@ -10437,7 +10437,7 @@ namespace NumSharp.Backends
                                                                                         {
                                                                                             ret.SetAtIndex(np.sum(
                                                                                                     lhs[a, b, c, d, e, f, g, h, i, j, k, l, Slice.All]
-                                                                                                    * rhs[m, n, o, Slice.All, p]).GetAtIndex(0),
+                                                                                                    * rhs[m, n, o, Slice.All, p], ret.typecode).GetAtIndex(0),
                                                                                                 retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p));
                                                                                         }
                                                                                     }
@@ -10516,7 +10516,7 @@ namespace NumSharp.Backends
                                                                                             {
                                                                                                 ret.SetAtIndex(np.sum(
                                                                                                         lhs[a, b, c, d, e, f, g, h, i, j, k, l, Slice.All]
-                                                                                                        * rhs[m, n, o, p, Slice.All, q]).GetAtIndex(0),
+                                                                                                        * rhs[m, n, o, p, Slice.All, q], ret.typecode).GetAtIndex(0),
                                                                                                     retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q));
                                                                                             }
                                                                                         }
@@ -10599,7 +10599,7 @@ namespace NumSharp.Backends
                                                                                                 {
                                                                                                     ret.SetAtIndex(np.sum(
                                                                                                             lhs[a, b, c, d, e, f, g, h, i, j, k, l, Slice.All]
-                                                                                                            * rhs[m, n, o, p, q, Slice.All, r]).GetAtIndex(0),
+                                                                                                            * rhs[m, n, o, p, q, Slice.All, r], ret.typecode).GetAtIndex(0),
                                                                                                         retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r));
                                                                                                 }
                                                                                             }
@@ -10686,7 +10686,7 @@ namespace NumSharp.Backends
                                                                                                     {
                                                                                                         ret.SetAtIndex(np.sum(
                                                                                                                 lhs[a, b, c, d, e, f, g, h, i, j, k, l, Slice.All]
-                                                                                                                * rhs[m, n, o, p, q, r, Slice.All, s]).GetAtIndex(0),
+                                                                                                                * rhs[m, n, o, p, q, r, Slice.All, s], ret.typecode).GetAtIndex(0),
                                                                                                             retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s));
                                                                                                     }
                                                                                                 }
@@ -10777,7 +10777,7 @@ namespace NumSharp.Backends
                                                                                                         {
                                                                                                             ret.SetAtIndex(np.sum(
                                                                                                                     lhs[a, b, c, d, e, f, g, h, i, j, k, l, Slice.All]
-                                                                                                                    * rhs[m, n, o, p, q, r, s, Slice.All, t]).GetAtIndex(0),
+                                                                                                                    * rhs[m, n, o, p, q, r, s, Slice.All, t], ret.typecode).GetAtIndex(0),
                                                                                                                 retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t));
                                                                                                         }
                                                                                                     }
@@ -10872,7 +10872,7 @@ namespace NumSharp.Backends
                                                                                                             {
                                                                                                                 ret.SetAtIndex(np.sum(
                                                                                                                         lhs[a, b, c, d, e, f, g, h, i, j, k, l, Slice.All]
-                                                                                                                        * rhs[m, n, o, p, q, r, s, t, Slice.All, u]).GetAtIndex(0),
+                                                                                                                        * rhs[m, n, o, p, q, r, s, t, Slice.All, u], ret.typecode).GetAtIndex(0),
                                                                                                                     retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u));
                                                                                                             }
                                                                                                         }
@@ -10971,7 +10971,7 @@ namespace NumSharp.Backends
                                                                                                                 {
                                                                                                                     ret.SetAtIndex(np.sum(
                                                                                                                             lhs[a, b, c, d, e, f, g, h, i, j, k, l, Slice.All]
-                                                                                                                            * rhs[m, n, o, p, q, r, s, t, u, Slice.All, v]).GetAtIndex(0),
+                                                                                                                            * rhs[m, n, o, p, q, r, s, t, u, Slice.All, v], ret.typecode).GetAtIndex(0),
                                                                                                                         retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v));
                                                                                                                 }
                                                                                                             }
@@ -11074,7 +11074,7 @@ namespace NumSharp.Backends
                                                                                                                     {
                                                                                                                         ret.SetAtIndex(np.sum(
                                                                                                                                 lhs[a, b, c, d, e, f, g, h, i, j, k, l, Slice.All]
-                                                                                                                                * rhs[m, n, o, p, q, r, s, t, u, v, Slice.All, w]).GetAtIndex(0),
+                                                                                                                                * rhs[m, n, o, p, q, r, s, t, u, v, Slice.All, w], ret.typecode).GetAtIndex(0),
                                                                                                                             retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w));
                                                                                                                     }
                                                                                                                 }
@@ -11181,7 +11181,7 @@ namespace NumSharp.Backends
                                                                                                                         {
                                                                                                                             ret.SetAtIndex(np.sum(
                                                                                                                                     lhs[a, b, c, d, e, f, g, h, i, j, k, l, Slice.All]
-                                                                                                                                    * rhs[m, n, o, p, q, r, s, t, u, v, w, Slice.All, x]).GetAtIndex(0),
+                                                                                                                                    * rhs[m, n, o, p, q, r, s, t, u, v, w, Slice.All, x], ret.typecode).GetAtIndex(0),
                                                                                                                                 retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w, x));
                                                                                                                         }
                                                                                                                     }
@@ -11292,7 +11292,7 @@ namespace NumSharp.Backends
                                                                                                                             {
                                                                                                                                 ret.SetAtIndex(np.sum(
                                                                                                                                         lhs[a, b, c, d, e, f, g, h, i, j, k, l, Slice.All]
-                                                                                                                                        * rhs[m, n, o, p, q, r, s, t, u, v, w, x, Slice.All, y]).GetAtIndex(0),
+                                                                                                                                        * rhs[m, n, o, p, q, r, s, t, u, v, w, x, Slice.All, y], ret.typecode).GetAtIndex(0),
                                                                                                                                     retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w, x, y));
                                                                                                                             }
                                                                                                                         }
@@ -11407,7 +11407,7 @@ namespace NumSharp.Backends
                                                                                                                                 {
                                                                                                                                     ret.SetAtIndex(np.sum(
                                                                                                                                             lhs[a, b, c, d, e, f, g, h, i, j, k, l, Slice.All]
-                                                                                                                                            * rhs[m, n, o, p, q, r, s, t, u, v, w, x, y, Slice.All, z]).GetAtIndex(0),
+                                                                                                                                            * rhs[m, n, o, p, q, r, s, t, u, v, w, x, y, Slice.All, z], ret.typecode).GetAtIndex(0),
                                                                                                                                         retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w, x, y, z));
                                                                                                                                 }
                                                                                                                             }
@@ -11526,7 +11526,7 @@ namespace NumSharp.Backends
                                                                                                                                     {
                                                                                                                                         ret.SetAtIndex(np.sum(
                                                                                                                                                 lhs[a, b, c, d, e, f, g, h, i, j, k, l, Slice.All]
-                                                                                                                                                * rhs[m, n, o, p, q, r, s, t, u, v, w, x, y, z, Slice.All, aa]).GetAtIndex(0),
+                                                                                                                                                * rhs[m, n, o, p, q, r, s, t, u, v, w, x, y, z, Slice.All, aa], ret.typecode).GetAtIndex(0),
                                                                                                                                             retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w, x, y, z, aa));
                                                                                                                                     }
                                                                                                                                 }
@@ -11618,7 +11618,7 @@ namespace NumSharp.Backends
                                                                                     {
                                                                                         ret.SetAtIndex(np.sum(
                                                                                                 lhs[a, b, c, d, e, f, g, h, i, j, k, l, m, Slice.All]
-                                                                                                * rhs[n, Slice.All, o]).GetAtIndex(0),
+                                                                                                * rhs[n, Slice.All, o], ret.typecode).GetAtIndex(0),
                                                                                             retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o));
                                                                                     }
                                                                                 }
@@ -11693,7 +11693,7 @@ namespace NumSharp.Backends
                                                                                         {
                                                                                             ret.SetAtIndex(np.sum(
                                                                                                     lhs[a, b, c, d, e, f, g, h, i, j, k, l, m, Slice.All]
-                                                                                                    * rhs[n, o, Slice.All, p]).GetAtIndex(0),
+                                                                                                    * rhs[n, o, Slice.All, p], ret.typecode).GetAtIndex(0),
                                                                                                 retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p));
                                                                                         }
                                                                                     }
@@ -11772,7 +11772,7 @@ namespace NumSharp.Backends
                                                                                             {
                                                                                                 ret.SetAtIndex(np.sum(
                                                                                                         lhs[a, b, c, d, e, f, g, h, i, j, k, l, m, Slice.All]
-                                                                                                        * rhs[n, o, p, Slice.All, q]).GetAtIndex(0),
+                                                                                                        * rhs[n, o, p, Slice.All, q], ret.typecode).GetAtIndex(0),
                                                                                                     retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q));
                                                                                             }
                                                                                         }
@@ -11855,7 +11855,7 @@ namespace NumSharp.Backends
                                                                                                 {
                                                                                                     ret.SetAtIndex(np.sum(
                                                                                                             lhs[a, b, c, d, e, f, g, h, i, j, k, l, m, Slice.All]
-                                                                                                            * rhs[n, o, p, q, Slice.All, r]).GetAtIndex(0),
+                                                                                                            * rhs[n, o, p, q, Slice.All, r], ret.typecode).GetAtIndex(0),
                                                                                                         retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r));
                                                                                                 }
                                                                                             }
@@ -11942,7 +11942,7 @@ namespace NumSharp.Backends
                                                                                                     {
                                                                                                         ret.SetAtIndex(np.sum(
                                                                                                                 lhs[a, b, c, d, e, f, g, h, i, j, k, l, m, Slice.All]
-                                                                                                                * rhs[n, o, p, q, r, Slice.All, s]).GetAtIndex(0),
+                                                                                                                * rhs[n, o, p, q, r, Slice.All, s], ret.typecode).GetAtIndex(0),
                                                                                                             retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s));
                                                                                                     }
                                                                                                 }
@@ -12033,7 +12033,7 @@ namespace NumSharp.Backends
                                                                                                         {
                                                                                                             ret.SetAtIndex(np.sum(
                                                                                                                     lhs[a, b, c, d, e, f, g, h, i, j, k, l, m, Slice.All]
-                                                                                                                    * rhs[n, o, p, q, r, s, Slice.All, t]).GetAtIndex(0),
+                                                                                                                    * rhs[n, o, p, q, r, s, Slice.All, t], ret.typecode).GetAtIndex(0),
                                                                                                                 retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t));
                                                                                                         }
                                                                                                     }
@@ -12128,7 +12128,7 @@ namespace NumSharp.Backends
                                                                                                             {
                                                                                                                 ret.SetAtIndex(np.sum(
                                                                                                                         lhs[a, b, c, d, e, f, g, h, i, j, k, l, m, Slice.All]
-                                                                                                                        * rhs[n, o, p, q, r, s, t, Slice.All, u]).GetAtIndex(0),
+                                                                                                                        * rhs[n, o, p, q, r, s, t, Slice.All, u], ret.typecode).GetAtIndex(0),
                                                                                                                     retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u));
                                                                                                             }
                                                                                                         }
@@ -12227,7 +12227,7 @@ namespace NumSharp.Backends
                                                                                                                 {
                                                                                                                     ret.SetAtIndex(np.sum(
                                                                                                                             lhs[a, b, c, d, e, f, g, h, i, j, k, l, m, Slice.All]
-                                                                                                                            * rhs[n, o, p, q, r, s, t, u, Slice.All, v]).GetAtIndex(0),
+                                                                                                                            * rhs[n, o, p, q, r, s, t, u, Slice.All, v], ret.typecode).GetAtIndex(0),
                                                                                                                         retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v));
                                                                                                                 }
                                                                                                             }
@@ -12330,7 +12330,7 @@ namespace NumSharp.Backends
                                                                                                                     {
                                                                                                                         ret.SetAtIndex(np.sum(
                                                                                                                                 lhs[a, b, c, d, e, f, g, h, i, j, k, l, m, Slice.All]
-                                                                                                                                * rhs[n, o, p, q, r, s, t, u, v, Slice.All, w]).GetAtIndex(0),
+                                                                                                                                * rhs[n, o, p, q, r, s, t, u, v, Slice.All, w], ret.typecode).GetAtIndex(0),
                                                                                                                             retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w));
                                                                                                                     }
                                                                                                                 }
@@ -12437,7 +12437,7 @@ namespace NumSharp.Backends
                                                                                                                         {
                                                                                                                             ret.SetAtIndex(np.sum(
                                                                                                                                     lhs[a, b, c, d, e, f, g, h, i, j, k, l, m, Slice.All]
-                                                                                                                                    * rhs[n, o, p, q, r, s, t, u, v, w, Slice.All, x]).GetAtIndex(0),
+                                                                                                                                    * rhs[n, o, p, q, r, s, t, u, v, w, Slice.All, x], ret.typecode).GetAtIndex(0),
                                                                                                                                 retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w, x));
                                                                                                                         }
                                                                                                                     }
@@ -12548,7 +12548,7 @@ namespace NumSharp.Backends
                                                                                                                             {
                                                                                                                                 ret.SetAtIndex(np.sum(
                                                                                                                                         lhs[a, b, c, d, e, f, g, h, i, j, k, l, m, Slice.All]
-                                                                                                                                        * rhs[n, o, p, q, r, s, t, u, v, w, x, Slice.All, y]).GetAtIndex(0),
+                                                                                                                                        * rhs[n, o, p, q, r, s, t, u, v, w, x, Slice.All, y], ret.typecode).GetAtIndex(0),
                                                                                                                                     retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w, x, y));
                                                                                                                             }
                                                                                                                         }
@@ -12663,7 +12663,7 @@ namespace NumSharp.Backends
                                                                                                                                 {
                                                                                                                                     ret.SetAtIndex(np.sum(
                                                                                                                                             lhs[a, b, c, d, e, f, g, h, i, j, k, l, m, Slice.All]
-                                                                                                                                            * rhs[n, o, p, q, r, s, t, u, v, w, x, y, Slice.All, z]).GetAtIndex(0),
+                                                                                                                                            * rhs[n, o, p, q, r, s, t, u, v, w, x, y, Slice.All, z], ret.typecode).GetAtIndex(0),
                                                                                                                                         retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w, x, y, z));
                                                                                                                                 }
                                                                                                                             }
@@ -12782,7 +12782,7 @@ namespace NumSharp.Backends
                                                                                                                                     {
                                                                                                                                         ret.SetAtIndex(np.sum(
                                                                                                                                                 lhs[a, b, c, d, e, f, g, h, i, j, k, l, m, Slice.All]
-                                                                                                                                                * rhs[n, o, p, q, r, s, t, u, v, w, x, y, z, Slice.All, aa]).GetAtIndex(0),
+                                                                                                                                                * rhs[n, o, p, q, r, s, t, u, v, w, x, y, z, Slice.All, aa], ret.typecode).GetAtIndex(0),
                                                                                                                                             retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w, x, y, z, aa));
                                                                                                                                     }
                                                                                                                                 }
@@ -12905,7 +12905,7 @@ namespace NumSharp.Backends
                                                                                                                                         {
                                                                                                                                             ret.SetAtIndex(np.sum(
                                                                                                                                                     lhs[a, b, c, d, e, f, g, h, i, j, k, l, m, Slice.All]
-                                                                                                                                                    * rhs[n, o, p, q, r, s, t, u, v, w, x, y, z, aa, Slice.All, bb]).GetAtIndex(0),
+                                                                                                                                                    * rhs[n, o, p, q, r, s, t, u, v, w, x, y, z, aa, Slice.All, bb], ret.typecode).GetAtIndex(0),
                                                                                                                                                 retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w, x, y, z, aa, bb));
                                                                                                                                         }
                                                                                                                                     }
@@ -13001,7 +13001,7 @@ namespace NumSharp.Backends
                                                                                         {
                                                                                             ret.SetAtIndex(np.sum(
                                                                                                     lhs[a, b, c, d, e, f, g, h, i, j, k, l, m, n, Slice.All]
-                                                                                                    * rhs[o, Slice.All, p]).GetAtIndex(0),
+                                                                                                    * rhs[o, Slice.All, p], ret.typecode).GetAtIndex(0),
                                                                                                 retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p));
                                                                                         }
                                                                                     }
@@ -13080,7 +13080,7 @@ namespace NumSharp.Backends
                                                                                             {
                                                                                                 ret.SetAtIndex(np.sum(
                                                                                                         lhs[a, b, c, d, e, f, g, h, i, j, k, l, m, n, Slice.All]
-                                                                                                        * rhs[o, p, Slice.All, q]).GetAtIndex(0),
+                                                                                                        * rhs[o, p, Slice.All, q], ret.typecode).GetAtIndex(0),
                                                                                                     retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q));
                                                                                             }
                                                                                         }
@@ -13163,7 +13163,7 @@ namespace NumSharp.Backends
                                                                                                 {
                                                                                                     ret.SetAtIndex(np.sum(
                                                                                                             lhs[a, b, c, d, e, f, g, h, i, j, k, l, m, n, Slice.All]
-                                                                                                            * rhs[o, p, q, Slice.All, r]).GetAtIndex(0),
+                                                                                                            * rhs[o, p, q, Slice.All, r], ret.typecode).GetAtIndex(0),
                                                                                                         retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r));
                                                                                                 }
                                                                                             }
@@ -13250,7 +13250,7 @@ namespace NumSharp.Backends
                                                                                                     {
                                                                                                         ret.SetAtIndex(np.sum(
                                                                                                                 lhs[a, b, c, d, e, f, g, h, i, j, k, l, m, n, Slice.All]
-                                                                                                                * rhs[o, p, q, r, Slice.All, s]).GetAtIndex(0),
+                                                                                                                * rhs[o, p, q, r, Slice.All, s], ret.typecode).GetAtIndex(0),
                                                                                                             retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s));
                                                                                                     }
                                                                                                 }
@@ -13341,7 +13341,7 @@ namespace NumSharp.Backends
                                                                                                         {
                                                                                                             ret.SetAtIndex(np.sum(
                                                                                                                     lhs[a, b, c, d, e, f, g, h, i, j, k, l, m, n, Slice.All]
-                                                                                                                    * rhs[o, p, q, r, s, Slice.All, t]).GetAtIndex(0),
+                                                                                                                    * rhs[o, p, q, r, s, Slice.All, t], ret.typecode).GetAtIndex(0),
                                                                                                                 retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t));
                                                                                                         }
                                                                                                     }
@@ -13436,7 +13436,7 @@ namespace NumSharp.Backends
                                                                                                             {
                                                                                                                 ret.SetAtIndex(np.sum(
                                                                                                                         lhs[a, b, c, d, e, f, g, h, i, j, k, l, m, n, Slice.All]
-                                                                                                                        * rhs[o, p, q, r, s, t, Slice.All, u]).GetAtIndex(0),
+                                                                                                                        * rhs[o, p, q, r, s, t, Slice.All, u], ret.typecode).GetAtIndex(0),
                                                                                                                     retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u));
                                                                                                             }
                                                                                                         }
@@ -13535,7 +13535,7 @@ namespace NumSharp.Backends
                                                                                                                 {
                                                                                                                     ret.SetAtIndex(np.sum(
                                                                                                                             lhs[a, b, c, d, e, f, g, h, i, j, k, l, m, n, Slice.All]
-                                                                                                                            * rhs[o, p, q, r, s, t, u, Slice.All, v]).GetAtIndex(0),
+                                                                                                                            * rhs[o, p, q, r, s, t, u, Slice.All, v], ret.typecode).GetAtIndex(0),
                                                                                                                         retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v));
                                                                                                                 }
                                                                                                             }
@@ -13638,7 +13638,7 @@ namespace NumSharp.Backends
                                                                                                                     {
                                                                                                                         ret.SetAtIndex(np.sum(
                                                                                                                                 lhs[a, b, c, d, e, f, g, h, i, j, k, l, m, n, Slice.All]
-                                                                                                                                * rhs[o, p, q, r, s, t, u, v, Slice.All, w]).GetAtIndex(0),
+                                                                                                                                * rhs[o, p, q, r, s, t, u, v, Slice.All, w], ret.typecode).GetAtIndex(0),
                                                                                                                             retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w));
                                                                                                                     }
                                                                                                                 }
@@ -13745,7 +13745,7 @@ namespace NumSharp.Backends
                                                                                                                         {
                                                                                                                             ret.SetAtIndex(np.sum(
                                                                                                                                     lhs[a, b, c, d, e, f, g, h, i, j, k, l, m, n, Slice.All]
-                                                                                                                                    * rhs[o, p, q, r, s, t, u, v, w, Slice.All, x]).GetAtIndex(0),
+                                                                                                                                    * rhs[o, p, q, r, s, t, u, v, w, Slice.All, x], ret.typecode).GetAtIndex(0),
                                                                                                                                 retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w, x));
                                                                                                                         }
                                                                                                                     }
@@ -13856,7 +13856,7 @@ namespace NumSharp.Backends
                                                                                                                             {
                                                                                                                                 ret.SetAtIndex(np.sum(
                                                                                                                                         lhs[a, b, c, d, e, f, g, h, i, j, k, l, m, n, Slice.All]
-                                                                                                                                        * rhs[o, p, q, r, s, t, u, v, w, x, Slice.All, y]).GetAtIndex(0),
+                                                                                                                                        * rhs[o, p, q, r, s, t, u, v, w, x, Slice.All, y], ret.typecode).GetAtIndex(0),
                                                                                                                                     retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w, x, y));
                                                                                                                             }
                                                                                                                         }
@@ -13971,7 +13971,7 @@ namespace NumSharp.Backends
                                                                                                                                 {
                                                                                                                                     ret.SetAtIndex(np.sum(
                                                                                                                                             lhs[a, b, c, d, e, f, g, h, i, j, k, l, m, n, Slice.All]
-                                                                                                                                            * rhs[o, p, q, r, s, t, u, v, w, x, y, Slice.All, z]).GetAtIndex(0),
+                                                                                                                                            * rhs[o, p, q, r, s, t, u, v, w, x, y, Slice.All, z], ret.typecode).GetAtIndex(0),
                                                                                                                                         retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w, x, y, z));
                                                                                                                                 }
                                                                                                                             }
@@ -14090,7 +14090,7 @@ namespace NumSharp.Backends
                                                                                                                                     {
                                                                                                                                         ret.SetAtIndex(np.sum(
                                                                                                                                                 lhs[a, b, c, d, e, f, g, h, i, j, k, l, m, n, Slice.All]
-                                                                                                                                                * rhs[o, p, q, r, s, t, u, v, w, x, y, z, Slice.All, aa]).GetAtIndex(0),
+                                                                                                                                                * rhs[o, p, q, r, s, t, u, v, w, x, y, z, Slice.All, aa], ret.typecode).GetAtIndex(0),
                                                                                                                                             retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w, x, y, z, aa));
                                                                                                                                     }
                                                                                                                                 }
@@ -14213,7 +14213,7 @@ namespace NumSharp.Backends
                                                                                                                                         {
                                                                                                                                             ret.SetAtIndex(np.sum(
                                                                                                                                                     lhs[a, b, c, d, e, f, g, h, i, j, k, l, m, n, Slice.All]
-                                                                                                                                                    * rhs[o, p, q, r, s, t, u, v, w, x, y, z, aa, Slice.All, bb]).GetAtIndex(0),
+                                                                                                                                                    * rhs[o, p, q, r, s, t, u, v, w, x, y, z, aa, Slice.All, bb], ret.typecode).GetAtIndex(0),
                                                                                                                                                 retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w, x, y, z, aa, bb));
                                                                                                                                         }
                                                                                                                                     }
@@ -14340,7 +14340,7 @@ namespace NumSharp.Backends
                                                                                                                                             {
                                                                                                                                                 ret.SetAtIndex(np.sum(
                                                                                                                                                         lhs[a, b, c, d, e, f, g, h, i, j, k, l, m, n, Slice.All]
-                                                                                                                                                        * rhs[o, p, q, r, s, t, u, v, w, x, y, z, aa, bb, Slice.All, cc]).GetAtIndex(0),
+                                                                                                                                                        * rhs[o, p, q, r, s, t, u, v, w, x, y, z, aa, bb, Slice.All, cc], ret.typecode).GetAtIndex(0),
                                                                                                                                                     retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w, x, y, z, aa, bb, cc));
                                                                                                                                             }
                                                                                                                                         }
@@ -14440,7 +14440,7 @@ namespace NumSharp.Backends
                                                                                             {
                                                                                                 ret.SetAtIndex(np.sum(
                                                                                                         lhs[a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, Slice.All]
-                                                                                                        * rhs[p, Slice.All, q]).GetAtIndex(0),
+                                                                                                        * rhs[p, Slice.All, q], ret.typecode).GetAtIndex(0),
                                                                                                     retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q));
                                                                                             }
                                                                                         }
@@ -14523,7 +14523,7 @@ namespace NumSharp.Backends
                                                                                                 {
                                                                                                     ret.SetAtIndex(np.sum(
                                                                                                             lhs[a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, Slice.All]
-                                                                                                            * rhs[p, q, Slice.All, r]).GetAtIndex(0),
+                                                                                                            * rhs[p, q, Slice.All, r], ret.typecode).GetAtIndex(0),
                                                                                                         retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r));
                                                                                                 }
                                                                                             }
@@ -14610,7 +14610,7 @@ namespace NumSharp.Backends
                                                                                                     {
                                                                                                         ret.SetAtIndex(np.sum(
                                                                                                                 lhs[a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, Slice.All]
-                                                                                                                * rhs[p, q, r, Slice.All, s]).GetAtIndex(0),
+                                                                                                                * rhs[p, q, r, Slice.All, s], ret.typecode).GetAtIndex(0),
                                                                                                             retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s));
                                                                                                     }
                                                                                                 }
@@ -14701,7 +14701,7 @@ namespace NumSharp.Backends
                                                                                                         {
                                                                                                             ret.SetAtIndex(np.sum(
                                                                                                                     lhs[a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, Slice.All]
-                                                                                                                    * rhs[p, q, r, s, Slice.All, t]).GetAtIndex(0),
+                                                                                                                    * rhs[p, q, r, s, Slice.All, t], ret.typecode).GetAtIndex(0),
                                                                                                                 retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t));
                                                                                                         }
                                                                                                     }
@@ -14796,7 +14796,7 @@ namespace NumSharp.Backends
                                                                                                             {
                                                                                                                 ret.SetAtIndex(np.sum(
                                                                                                                         lhs[a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, Slice.All]
-                                                                                                                        * rhs[p, q, r, s, t, Slice.All, u]).GetAtIndex(0),
+                                                                                                                        * rhs[p, q, r, s, t, Slice.All, u], ret.typecode).GetAtIndex(0),
                                                                                                                     retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u));
                                                                                                             }
                                                                                                         }
@@ -14895,7 +14895,7 @@ namespace NumSharp.Backends
                                                                                                                 {
                                                                                                                     ret.SetAtIndex(np.sum(
                                                                                                                             lhs[a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, Slice.All]
-                                                                                                                            * rhs[p, q, r, s, t, u, Slice.All, v]).GetAtIndex(0),
+                                                                                                                            * rhs[p, q, r, s, t, u, Slice.All, v], ret.typecode).GetAtIndex(0),
                                                                                                                         retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v));
                                                                                                                 }
                                                                                                             }
@@ -14998,7 +14998,7 @@ namespace NumSharp.Backends
                                                                                                                     {
                                                                                                                         ret.SetAtIndex(np.sum(
                                                                                                                                 lhs[a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, Slice.All]
-                                                                                                                                * rhs[p, q, r, s, t, u, v, Slice.All, w]).GetAtIndex(0),
+                                                                                                                                * rhs[p, q, r, s, t, u, v, Slice.All, w], ret.typecode).GetAtIndex(0),
                                                                                                                             retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w));
                                                                                                                     }
                                                                                                                 }
@@ -15105,7 +15105,7 @@ namespace NumSharp.Backends
                                                                                                                         {
                                                                                                                             ret.SetAtIndex(np.sum(
                                                                                                                                     lhs[a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, Slice.All]
-                                                                                                                                    * rhs[p, q, r, s, t, u, v, w, Slice.All, x]).GetAtIndex(0),
+                                                                                                                                    * rhs[p, q, r, s, t, u, v, w, Slice.All, x], ret.typecode).GetAtIndex(0),
                                                                                                                                 retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w, x));
                                                                                                                         }
                                                                                                                     }
@@ -15216,7 +15216,7 @@ namespace NumSharp.Backends
                                                                                                                             {
                                                                                                                                 ret.SetAtIndex(np.sum(
                                                                                                                                         lhs[a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, Slice.All]
-                                                                                                                                        * rhs[p, q, r, s, t, u, v, w, x, Slice.All, y]).GetAtIndex(0),
+                                                                                                                                        * rhs[p, q, r, s, t, u, v, w, x, Slice.All, y], ret.typecode).GetAtIndex(0),
                                                                                                                                     retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w, x, y));
                                                                                                                             }
                                                                                                                         }
@@ -15331,7 +15331,7 @@ namespace NumSharp.Backends
                                                                                                                                 {
                                                                                                                                     ret.SetAtIndex(np.sum(
                                                                                                                                             lhs[a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, Slice.All]
-                                                                                                                                            * rhs[p, q, r, s, t, u, v, w, x, y, Slice.All, z]).GetAtIndex(0),
+                                                                                                                                            * rhs[p, q, r, s, t, u, v, w, x, y, Slice.All, z], ret.typecode).GetAtIndex(0),
                                                                                                                                         retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w, x, y, z));
                                                                                                                                 }
                                                                                                                             }
@@ -15450,7 +15450,7 @@ namespace NumSharp.Backends
                                                                                                                                     {
                                                                                                                                         ret.SetAtIndex(np.sum(
                                                                                                                                                 lhs[a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, Slice.All]
-                                                                                                                                                * rhs[p, q, r, s, t, u, v, w, x, y, z, Slice.All, aa]).GetAtIndex(0),
+                                                                                                                                                * rhs[p, q, r, s, t, u, v, w, x, y, z, Slice.All, aa], ret.typecode).GetAtIndex(0),
                                                                                                                                             retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w, x, y, z, aa));
                                                                                                                                     }
                                                                                                                                 }
@@ -15573,7 +15573,7 @@ namespace NumSharp.Backends
                                                                                                                                         {
                                                                                                                                             ret.SetAtIndex(np.sum(
                                                                                                                                                     lhs[a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, Slice.All]
-                                                                                                                                                    * rhs[p, q, r, s, t, u, v, w, x, y, z, aa, Slice.All, bb]).GetAtIndex(0),
+                                                                                                                                                    * rhs[p, q, r, s, t, u, v, w, x, y, z, aa, Slice.All, bb], ret.typecode).GetAtIndex(0),
                                                                                                                                                 retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w, x, y, z, aa, bb));
                                                                                                                                         }
                                                                                                                                     }
@@ -15700,7 +15700,7 @@ namespace NumSharp.Backends
                                                                                                                                             {
                                                                                                                                                 ret.SetAtIndex(np.sum(
                                                                                                                                                         lhs[a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, Slice.All]
-                                                                                                                                                        * rhs[p, q, r, s, t, u, v, w, x, y, z, aa, bb, Slice.All, cc]).GetAtIndex(0),
+                                                                                                                                                        * rhs[p, q, r, s, t, u, v, w, x, y, z, aa, bb, Slice.All, cc], ret.typecode).GetAtIndex(0),
                                                                                                                                                     retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w, x, y, z, aa, bb, cc));
                                                                                                                                             }
                                                                                                                                         }
@@ -15831,7 +15831,7 @@ namespace NumSharp.Backends
                                                                                                                                                 {
                                                                                                                                                     ret.SetAtIndex(np.sum(
                                                                                                                                                             lhs[a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, Slice.All]
-                                                                                                                                                            * rhs[p, q, r, s, t, u, v, w, x, y, z, aa, bb, cc, Slice.All, dd]).GetAtIndex(0),
+                                                                                                                                                            * rhs[p, q, r, s, t, u, v, w, x, y, z, aa, bb, cc, Slice.All, dd], ret.typecode).GetAtIndex(0),
                                                                                                                                                         retShape.GetOffset(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w, x, y, z, aa, bb, cc, dd));
                                                                                                                                                 }
                                                                                                                                             }

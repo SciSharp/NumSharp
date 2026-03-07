@@ -1,4 +1,6 @@
-﻿namespace NumSharp
+﻿using System;
+
+namespace NumSharp
 {
     public partial class NDArray
     {
@@ -21,7 +23,12 @@
             if (ndim > 1 || rhs.ndim > 1)
                 throw new IncorrectShapeException();
             var retType = np._FindCommonType(lhs, rhs);
-            return null;
+
+            // TODO: This function requires code regeneration - the #else block is empty
+            // The _REGEN template exists but generated code was not committed
+            throw new NotImplementedException(
+                "np.convolve is not implemented. The code generation template exists but " +
+                "the generated code was not committed. See NdArray.Convolve.cs #if _REGEN block.");
 #if _REGEN
             #region Output
             %mod = "%"
