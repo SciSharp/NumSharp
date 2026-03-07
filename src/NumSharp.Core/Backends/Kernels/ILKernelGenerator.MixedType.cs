@@ -2,6 +2,88 @@ using System;
 using System.Collections.Concurrent;
 using System.Reflection.Emit;
 
+// =============================================================================
+// ILKernelGenerator - IL-based SIMD kernel generation using DynamicMethod
+// =============================================================================
+//
+// ARCHITECTURE OVERVIEW
+// ---------------------
+// This partial class generates high-performance kernels at runtime using IL emission.
+// The JIT compiler can then optimize these kernels with full SIMD support (V128/V256/V512).
+// Kernels are cached by operation key to avoid repeated IL generation.
+//
+// FLOW: Caller (DefaultEngine, np.*, NDArray ops)
+//         -> Requests kernel via Get*Kernel() or *Helper() methods
+//         -> ILKernelGenerator checks cache, generates IL if needed
+//         -> Returns delegate that caller invokes with array pointers
+//
+// =============================================================================
+// PARTIAL CLASS FILES
+// =============================================================================
+//
+// ILKernelGenerator.cs
+//   OWNERSHIP: Core infrastructure - foundation for all other partial files
+//   RESPONSIBILITY:
+//     - Global state: Enabled flag, VectorBits/VectorBytes (detected at startup)
+//     - Type mapping: NPTypeCode <-> CLR Type <-> Vector type conversions
+//     - Shared IL emission primitives used by all other partials
+//   DEPENDENCIES: None (other partials depend on this)
+//
+// ILKernelGenerator.Binary.cs
+//   OWNERSHIP: Same-type binary operations on contiguous arrays (fast path)
+//   RESPONSIBILITY:
+//     - Optimized kernels when both operands have identical type and layout
+//     - SIMD loop + scalar tail for Add, Sub, Mul, Div
+//   DEPENDENCIES: Uses core emit helpers from ILKernelGenerator.cs
+//   FLOW: Called by DefaultEngine for same-type contiguous operations
+//
+// ILKernelGenerator.MixedType.cs (THIS FILE)
+//   OWNERSHIP: Mixed-type binary operations with type promotion (general case)
+//   RESPONSIBILITY:
+//     - Handles ALL binary ops regardless of operand types or memory layout
+//     - Selects optimal execution path based on stride analysis:
+//       * SimdFull: both operands contiguous, same type -> full SIMD
+//       * SimdScalarRight/Left: one operand is scalar -> broadcast SIMD
+//       * SimdChunk: inner dimension contiguous -> chunked SIMD
+//       * General: arbitrary strides -> coordinate-based iteration
+//     - Owns ClearAll() which clears ALL caches across ALL partial files
+//   DEPENDENCIES: Uses core emit helpers from ILKernelGenerator.cs
+//   FLOW: Called by DefaultEngine as the general binary operation handler
+//   KEY MEMBERS:
+//     - MixedTypeKernel delegate - full signature with strides/shape/ndim
+//     - _mixedTypeCache - caches by MixedTypeKernelKey (types, op, path)
+//     - GetMixedTypeKernel(), TryGetMixedTypeKernel() - main entry points
+//     - ClearAll() - clears ALL caches (this file owns global cleanup)
+//     - GenerateSimdFullKernel(), GenerateSimdScalarRight/LeftKernel()
+//     - GenerateSimdChunkKernel(), GenerateGeneralKernel()
+//     - EmitScalarFullLoop(), EmitSimdFullLoop(), EmitGeneralLoop(), etc.
+//
+// ILKernelGenerator.Unary.cs
+//   OWNERSHIP: Unary element-wise operations
+//   RESPONSIBILITY:
+//     - Math functions: Negate, Abs, Sqrt, Sin, Cos, Exp, Log, Sign, Floor, Ceil, etc.
+//     - Scalar delegate generation for single-value operations (Func<TIn,TOut>)
+//   DEPENDENCIES: Uses core emit helpers from ILKernelGenerator.cs
+//   FLOW: Called by DefaultEngine for unary ops; scalar delegates used in broadcasting
+//
+// ILKernelGenerator.Comparison.cs
+//   OWNERSHIP: Comparison operations returning boolean arrays
+//   RESPONSIBILITY:
+//     - Element-wise comparisons: ==, !=, <, >, <=, >=
+//     - SIMD comparison with efficient mask-to-bool extraction
+//   DEPENDENCIES: Uses core emit helpers from ILKernelGenerator.cs
+//   FLOW: Called by NDArray comparison operators
+//
+// ILKernelGenerator.Reduction.cs
+//   OWNERSHIP: Reduction operations and specialized SIMD helpers
+//   RESPONSIBILITY:
+//     - Reductions: Sum, Prod, Min, Max, Mean, ArgMax, ArgMin, All, Any
+//     - SIMD helpers called directly by np.all/any/nonzero/masking
+//   DEPENDENCIES: Uses core emit helpers from ILKernelGenerator.cs
+//   FLOW: Kernels called by DefaultEngine; helpers called directly by np.*
+//
+// =============================================================================
+
 namespace NumSharp.Backends.Kernels
 {
     /// <summary>

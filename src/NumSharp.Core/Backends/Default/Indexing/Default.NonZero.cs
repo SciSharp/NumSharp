@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using NumSharp.Generic;
 using NumSharp.Utilities;
 using System.Collections.Generic;
@@ -7,13 +7,14 @@ using System.Threading;
 using System.Linq;
 using System.Threading.Tasks;
 using NumSharp.Backends;
+using NumSharp.Backends.Kernels;
 
 namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
         /// <summary>
-        /// Test whether all array elements evaluate to True.
+        /// Return the indices of non-zero elements.
         /// </summary>
         /// <param name="nd"></param>
         /// <returns></returns>
@@ -57,9 +58,19 @@ namespace NumSharp.Backends
         private static unsafe NDArray<int>[] nonzeros<T>(NDArray<T> x) where T : unmanaged
         {
             x = np.atleast_1d(x).MakeGeneric<T>();
-            var nonzeroCoords = new List<int[]>(x.size / 3);
             var size = x.size;
             Debug.Assert(size > 0);
+
+            // SIMD fast path for contiguous arrays
+            if (x.Shape.IsContiguous && ILKernelGenerator.Enabled && ILKernelGenerator.VectorBits > 0)
+            {
+                var flatIndices = new List<int>(Math.Max(16, size / 4));
+                ILKernelGenerator.NonZeroSimdHelper((T*)x.Address, size, flatIndices);
+                return ILKernelGenerator.ConvertFlatIndicesToCoordinates(flatIndices, x.shape);
+            }
+
+            // Original path for non-contiguous arrays
+            var nonzeroCoords = new List<int[]>(size / 3);
 #if _REGEN
             #region Compute
             Func<int[], int> getOffset = x.Shape.GetOffset;
@@ -284,6 +295,6 @@ namespace NumSharp.Backends
 
             return ret;
         }
-        
+
     }
 }

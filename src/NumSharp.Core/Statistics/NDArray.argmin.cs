@@ -3,9 +3,9 @@
     public partial class NDArray
     {
         /// <summary>
-        ///     Returns the indices of the minimum values along an axis.
+        ///     Returns the index of the minimum value (flattened array).
         /// </summary>
-        /// <returns>The index of the minimum value in the array.</returns>
+        /// <returns>The index of the minimum value in the flattened array.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.argmin.html</remarks>
         public int argmin()
         {
@@ -15,9 +15,10 @@
         /// <summary>
         ///     Returns the indices of the minimum values along an axis.
         /// </summary>
+        /// <param name="axis">The axis along which to operate. By default, the index is into the flattened array.</param>
         /// <returns>Array of indices into the array. It has the same shape as a.shape with the dimension along axis removed.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.argmin.html</remarks>
-        public int argmin(int axis)
+        public NDArray argmin(int axis)
         {
             return np.argmin(this, axis);
         }

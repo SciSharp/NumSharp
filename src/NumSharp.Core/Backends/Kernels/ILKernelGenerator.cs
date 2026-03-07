@@ -4,6 +4,114 @@ using System.Reflection;
 using System.Reflection.Emit;
 using System.Runtime.Intrinsics;
 
+// =============================================================================
+// ILKernelGenerator - IL-based SIMD kernel generation using DynamicMethod
+// =============================================================================
+//
+// ARCHITECTURE OVERVIEW
+// ---------------------
+// This partial class generates high-performance kernels at runtime using IL emission.
+// The JIT compiler can then optimize these kernels with full SIMD support (V128/V256/V512).
+// Kernels are cached by operation key to avoid repeated IL generation.
+//
+// FLOW: Caller (DefaultEngine, np.*, NDArray ops)
+//         -> Requests kernel via Get*Kernel() or *Helper() methods
+//         -> ILKernelGenerator checks cache, generates IL if needed
+//         -> Returns delegate that caller invokes with array pointers
+//
+// =============================================================================
+// PARTIAL CLASS FILES
+// =============================================================================
+//
+// ILKernelGenerator.cs (THIS FILE)
+//   OWNERSHIP: Core infrastructure - foundation for all other partial files
+//   RESPONSIBILITY:
+//     - Global state: Enabled flag, VectorBits/VectorBytes (detected at startup)
+//     - Type mapping: NPTypeCode <-> CLR Type <-> Vector type conversions
+//     - Shared IL emission primitives used by all other partials
+//   DEPENDENCIES: None (other partials depend on this)
+//   KEY MEMBERS:
+//     - Enabled, VectorBits, VectorBytes - runtime SIMD capability
+//     - GetVectorContainerType(), GetVectorType() - V128/V256/V512 type selection
+//     - GetTypeSize(), GetClrType(), CanUseSimd(), IsUnsigned() - type utilities
+//     - EmitLoadIndirect(), EmitStoreIndirect() - memory access IL
+//     - EmitConvertTo(), EmitScalarOperation() - type conversion and scalar ops
+//     - EmitVectorLoad/Store/Create/Operation() - SIMD operations
+//
+// ILKernelGenerator.Binary.cs
+//   OWNERSHIP: Same-type binary operations on contiguous arrays (fast path)
+//   RESPONSIBILITY:
+//     - Optimized kernels when both operands have identical type and layout
+//     - SIMD loop + scalar tail for Add, Sub, Mul, Div
+//   DEPENDENCIES: Uses core emit helpers from ILKernelGenerator.cs
+//   FLOW: Called by DefaultEngine for same-type contiguous operations
+//   KEY MEMBERS:
+//     - ContiguousKernel<T> delegate, _contiguousKernelCache
+//     - GetContiguousKernel<T>(), GenerateUnifiedKernel<T>()
+//     - Generic helpers: IsSimdSupported<T>(), EmitLoadIndirect<T>(), etc.
+//
+// ILKernelGenerator.MixedType.cs
+//   OWNERSHIP: Mixed-type binary operations with type promotion
+//   RESPONSIBILITY:
+//     - Handles all binary ops where operand types may differ
+//     - Generates path-specific kernels based on stride patterns
+//     - Owns ClearAll() which clears ALL caches across all partials
+//   DEPENDENCIES: Uses core emit helpers from ILKernelGenerator.cs
+//   FLOW: Called by DefaultEngine for general binary operations
+//   KEY MEMBERS:
+//     - MixedTypeKernel delegate, _mixedTypeCache
+//     - GetMixedTypeKernel(), TryGetMixedTypeKernel(), ClearAll()
+//     - Path generators: GenerateSimdFullKernel(), GenerateGeneralKernel(), etc.
+//     - Loop emitters: EmitScalarFullLoop(), EmitSimdFullLoop(), EmitGeneralLoop()
+//
+// ILKernelGenerator.Unary.cs
+//   OWNERSHIP: Unary element-wise operations
+//   RESPONSIBILITY:
+//     - Math functions: Negate, Abs, Sqrt, Sin, Cos, Exp, Log, Sign, Floor, Ceil, etc.
+//     - Scalar delegate generation for single-value operations (Func<TIn,TOut>)
+//     - Binary scalar delegates for mixed-type scalar operations
+//   DEPENDENCIES: Uses core emit helpers from ILKernelGenerator.cs
+//   FLOW: Called by DefaultEngine for unary ops; scalar delegates used in broadcasting
+//   KEY MEMBERS:
+//     - UnaryKernel delegate, _unaryCache, _unaryScalarCache, _binaryScalarCache
+//     - GetUnaryKernel(), GetUnaryScalarDelegate(), GetBinaryScalarDelegate()
+//     - EmitUnaryScalarOperation(), EmitMathCall(), EmitSignCall()
+//
+// ILKernelGenerator.Comparison.cs
+//   OWNERSHIP: Comparison operations returning boolean arrays
+//   RESPONSIBILITY:
+//     - Element-wise comparisons: ==, !=, <, >, <=, >=
+//     - SIMD comparison with efficient mask-to-bool extraction
+//     - Scalar comparison delegates for single-value operations
+//   DEPENDENCIES: Uses core emit helpers from ILKernelGenerator.cs
+//   FLOW: Called by NDArray comparison operators (==, !=, <, >, etc.)
+//   KEY MEMBERS:
+//     - ComparisonKernel delegate, _comparisonCache, _comparisonScalarCache
+//     - GetComparisonKernel(), GetComparisonScalarDelegate()
+//     - EmitVectorComparison(), EmitMaskToBoolExtraction()
+//
+// ILKernelGenerator.Reduction.cs
+//   OWNERSHIP: Reduction operations and specialized SIMD helpers
+//   RESPONSIBILITY:
+//     - Reductions: Sum, Prod, Min, Max, Mean, ArgMax, ArgMin, All, Any
+//     - SIMD helpers called DIRECTLY by other NumSharp code (not just via kernels):
+//       * All/Any with early-exit optimization
+//       * ArgMax/ArgMin with SIMD two-pass (find value, then find index)
+//       * NonZero for finding non-zero indices
+//       * Boolean masking: CountTrue, CopyMaskedElements
+//   DEPENDENCIES: Uses core emit helpers from ILKernelGenerator.cs
+//   FLOW: Kernels called by DefaultEngine; helpers called directly by np.all/any/nonzero/masking
+//   KEY MEMBERS:
+//     - TypedElementReductionKernel<T> delegate, _elementReductionCache
+//     - GetTypedElementReductionKernel<T>(), ClearReduction()
+//     - AllSimdHelper<T>(), AnySimdHelper<T>() - early-exit boolean reductions
+//     - ArgMaxSimdHelper<T>(), ArgMinSimdHelper<T>() - index-tracking reductions
+//     - NonZeroSimdHelper<T>(), ConvertFlatIndicesToCoordinates()
+//     - CountTrueSimdHelper(), CopyMaskedElementsHelper<T>()
+//     - EmitTreeReduction(), EmitVectorHorizontalReduction()
+//
+// =============================================================================
+
 namespace NumSharp.Backends.Kernels
 {
     /// <summary>
