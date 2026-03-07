@@ -1,4 +1,5 @@
-﻿using System;
+using System;
+using NumSharp.Backends.Kernels;
 using NumSharp.Generic;
 
 namespace NumSharp {
@@ -85,9 +86,9 @@ namespace NumSharp {
                     outputShape[outputIndex++] = 1; // keep axis but length is one.
                 }
             }
-            
+
             NDArray<bool> resultArray = (NDArray<bool>)zeros<bool>(outputShape);
-            Span<bool> resultSpan = resultArray.GetData().AsSpan<bool>(); 
+            Span<bool> resultSpan = resultArray.GetData().AsSpan<bool>();
 
             int axisSize = inputShape[axis];
 
@@ -104,7 +105,7 @@ namespace NumSharp {
                 postAxisStride *= inputShape[i];
             }
 
-           
+
             // Operate different logic by TypeCode
             bool computationSuccess = false;
             switch (nd.typecode)
@@ -134,10 +135,10 @@ namespace NumSharp {
         }
 
         private static bool ComputeAllPerAxis<T>(NDArray<T> nd, int axis, int preAxisStride, int postAxisStride, int axisSize, Span<bool> resultSpan) where T : unmanaged
-        { 
+        {
             Span<T> inputSpan = nd.GetData().AsSpan<T>();
 
-            
+
             for (int o = 0; o < resultSpan.Length; o++)
             {
                 int blockIndex = o / postAxisStride;
@@ -151,7 +152,7 @@ namespace NumSharp {
                     if (inputSpan[inputIndex].Equals(default(T)))
                     {
                         currentResult = false;
-                        break; 
+                        break;
                     }
                 }
                 resultSpan[o] = currentResult;
@@ -166,6 +167,13 @@ namespace NumSharp {
             {
                 unsafe
                 {
+                    // Use SIMD helper from unified reduction infrastructure
+                    if (ILKernelGenerator.Enabled)
+                    {
+                        return ILKernelGenerator.AllSimdHelper<T>(nd.Address, nd.size);
+                    }
+
+                    // Scalar fallback
                     var addr = nd.Address;
                     var len = nd.size;
                     for (int i = 0; i < len; i++)

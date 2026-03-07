@@ -1,4 +1,5 @@
-﻿using System;
+using System;
+using NumSharp.Backends.Kernels;
 using NumSharp.Generic;
 
 namespace NumSharp
@@ -55,7 +56,7 @@ namespace NumSharp
         /// <param name="axis">Axis or axes along which a logical OR reduction is performed. The default (axis = None) is to perform a logical OR over all the dimensions of the input array. axis may be negative, in which case it counts from the last to the first axis.</param>
         /// <returns>A new boolean or ndarray is returned unless out is specified, in which case a reference to out is returned.</returns>
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.any.html</remarks>
-        public static NDArray<bool> any(NDArray nd, int axis, bool keepdims)
+        public static NDArray<bool> any(NDArray nd, int axis, bool keepdims = false)
         {
             if (axis < 0)
                 axis = nd.ndim + axis;
@@ -129,7 +130,7 @@ namespace NumSharp
 
             if (!computationSuccess)
             {
-                throw new InvalidOperationException("Failed to compute all() along the specified axis");
+                throw new InvalidOperationException("Failed to compute any() along the specified axis");
             }
 
             return resultArray;
@@ -146,20 +147,23 @@ namespace NumSharp
                 int inBlockIndex = o % postAxisStride;
                 int inputStartIndex = blockIndex * axisSize * postAxisStride + inBlockIndex;
 
-                bool currentResult = true;
+                // BUG FIX: Initialize to false for 'any' (we're looking for any non-zero)
+                bool currentResult = false;
                 for (int a = 0; a < axisSize; a++)
                 {
                     int inputIndex = inputStartIndex + a * postAxisStride;
-                    if (inputSpan[inputIndex].Equals(default(T)))
+                    // BUG FIX: Check for NOT equal to default (looking for any non-zero value)
+                    if (!inputSpan[inputIndex].Equals(default(T)))
                     {
                         currentResult = true;
-                        break;
+                        break; // Early exit: found a non-zero value
                     }
                 }
                 resultSpan[o] = currentResult;
             }
 
-            return false;
+            // BUG FIX: Return true to indicate computation success
+            return true;
         }
 
         private static bool _any_linear<T>(NDArray<T> nd) where T : unmanaged
@@ -168,6 +172,13 @@ namespace NumSharp
             {
                 unsafe
                 {
+                    // Use SIMD helper from unified reduction infrastructure
+                    if (ILKernelGenerator.Enabled)
+                    {
+                        return ILKernelGenerator.AnySimdHelper<T>(nd.Address, nd.size);
+                    }
+
+                    // Scalar fallback
                     var addr = nd.Address;
                     var len = nd.size;
                     for (int i = 0; i < len; i++)

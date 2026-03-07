@@ -1,9 +1,102 @@
 using System;
 using System.Collections.Concurrent;
 using System.Linq;
+using System.Numerics;
 using System.Reflection;
 using System.Reflection.Emit;
 using System.Runtime.Intrinsics;
+
+// =============================================================================
+// ILKernelGenerator - IL-based SIMD kernel generation using DynamicMethod
+// =============================================================================
+//
+// ARCHITECTURE OVERVIEW
+// ---------------------
+// This partial class generates high-performance kernels at runtime using IL emission.
+// The JIT compiler can then optimize these kernels with full SIMD support (V128/V256/V512).
+// Kernels are cached by operation key to avoid repeated IL generation.
+//
+// FLOW: Caller (DefaultEngine, np.*, NDArray ops)
+//         -> Requests kernel via Get*Kernel() or *Helper() methods
+//         -> ILKernelGenerator checks cache, generates IL if needed
+//         -> Returns delegate that caller invokes with array pointers
+//
+// =============================================================================
+// PARTIAL CLASS FILES
+// =============================================================================
+//
+// ILKernelGenerator.cs
+//   OWNERSHIP: Core infrastructure - foundation for all other partial files
+//   RESPONSIBILITY:
+//     - Global state: Enabled flag, VectorBits/VectorBytes (detected at startup)
+//     - Type mapping: NPTypeCode <-> CLR Type <-> Vector type conversions
+//     - Shared IL emission primitives used by all other partials
+//   DEPENDENCIES: None (other partials depend on this)
+//
+// ILKernelGenerator.Binary.cs
+//   OWNERSHIP: Same-type binary operations on contiguous arrays (fast path)
+//   RESPONSIBILITY:
+//     - Optimized kernels when both operands have identical type and layout
+//     - SIMD loop + scalar tail for Add, Sub, Mul, Div
+//   DEPENDENCIES: Uses core emit helpers from ILKernelGenerator.cs
+//   FLOW: Called by DefaultEngine for same-type contiguous operations
+//
+// ILKernelGenerator.MixedType.cs
+//   OWNERSHIP: Mixed-type binary operations with type promotion
+//   RESPONSIBILITY:
+//     - Handles all binary ops where operand types may differ
+//     - Generates path-specific kernels based on stride patterns
+//     - Owns ClearAll() which clears ALL caches across all partials
+//   DEPENDENCIES: Uses core emit helpers from ILKernelGenerator.cs
+//   FLOW: Called by DefaultEngine for general binary operations
+//
+// ILKernelGenerator.Unary.cs
+//   OWNERSHIP: Unary element-wise operations
+//   RESPONSIBILITY:
+//     - Math functions: Negate, Abs, Sqrt, Sin, Cos, Exp, Log, Sign, Floor, Ceil, etc.
+//     - Scalar delegate generation for single-value operations (Func<TIn,TOut>)
+//   DEPENDENCIES: Uses core emit helpers from ILKernelGenerator.cs
+//   FLOW: Called by DefaultEngine for unary ops; scalar delegates used in broadcasting
+//
+// ILKernelGenerator.Comparison.cs
+//   OWNERSHIP: Comparison operations returning boolean arrays
+//   RESPONSIBILITY:
+//     - Element-wise comparisons: ==, !=, <, >, <=, >=
+//     - SIMD comparison with efficient mask-to-bool extraction
+//   DEPENDENCIES: Uses core emit helpers from ILKernelGenerator.cs
+//   FLOW: Called by NDArray comparison operators
+//
+// ILKernelGenerator.Reduction.cs (THIS FILE)
+//   OWNERSHIP: Reduction operations and specialized SIMD helpers
+//   RESPONSIBILITY:
+//     - IL-generated reduction kernels: Sum, Prod, Min, Max, Mean, ArgMax, ArgMin, All, Any
+//     - HORIZONTAL SIMD: Tree reduction pattern (O(log N) vs O(N)):
+//       * Vector512 -> Vector256 -> Vector128 -> scalar using GetLower/GetUpper
+//     - SIMD HELPER METHODS (called directly, not via IL kernels):
+//       * AllSimdHelper<T>() - returns false on first zero (early-exit)
+//       * AnySimdHelper<T>() - returns true on first non-zero (early-exit)
+//       * ArgMaxSimdHelper<T>() - two-pass: find max value with SIMD, then find index
+//       * ArgMinSimdHelper<T>() - two-pass: find min value with SIMD, then find index
+//       * NonZeroSimdHelper<T>() - collects indices where elements != 0
+//       * ConvertFlatIndicesToCoordinates() - flat indices -> per-dimension arrays
+//       * CountTrueSimdHelper() - counts true values in bool array
+//       * CopyMaskedElementsHelper<T>() - copies elements where mask is true
+//   DEPENDENCIES: Uses core emit helpers from ILKernelGenerator.cs
+//   FLOW:
+//     - Reduction kernels: Called by DefaultEngine for np.sum, np.max, etc.
+//     - Helper methods: Called DIRECTLY by np.all, np.any, np.nonzero, boolean indexing
+//   KEY MEMBERS:
+//     - TypedElementReductionKernel<T> delegate - returns TResult from array
+//     - _elementReductionCache - caches by ElementReductionKernelKey
+//     - GetTypedElementReductionKernel<T>(), ClearReduction()
+//     - AllSimdHelper<T>(), AnySimdHelper<T>() - direct SIMD for boolean reductions
+//     - ArgMaxSimdHelper<T>(), ArgMinSimdHelper<T>() - SIMD with index tracking
+//     - NonZeroSimdHelper<T>(), ConvertFlatIndicesToCoordinates() - for np.nonzero
+//     - CountTrueSimdHelper(), CopyMaskedElementsHelper<T>() - boolean masking
+//     - EmitTreeReduction() - O(log N) horizontal reduction pattern
+//     - EmitLoadIdentity(), EmitLoadZero/One/MinValue/MaxValue() - reduction identities
+//
+// =============================================================================
 
 namespace NumSharp.Backends.Kernels
 {
@@ -127,9 +220,11 @@ namespace NumSharp.Backends.Kernels
             // Sum: Vector.Sum() or manual horizontal add
             // Max/Min: Reduce vector then scalar reduce remainder
             // Prod: Manual horizontal multiply
-            // ArgMax/ArgMin: Need to track indices, more complex
+            // All/Any: SIMD comparison with early-exit
+            // ArgMax/ArgMin: SIMD with index tracking
             return key.Op == ReductionOp.Sum || key.Op == ReductionOp.Max || key.Op == ReductionOp.Min ||
-                   key.Op == ReductionOp.Prod;
+                   key.Op == ReductionOp.Prod || key.Op == ReductionOp.All || key.Op == ReductionOp.Any ||
+                   key.Op == ReductionOp.ArgMax || key.Op == ReductionOp.ArgMin;
         }
 
         /// <summary>
@@ -138,6 +233,20 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         private static void EmitReductionSimdLoop(ILGenerator il, ElementReductionKernelKey key, int inputSize)
         {
+            // All/Any use special early-exit logic
+            if (key.Op == ReductionOp.All || key.Op == ReductionOp.Any)
+            {
+                EmitAllAnySimdLoop(il, key, inputSize);
+                return;
+            }
+
+            // ArgMax/ArgMin use special index-tracking logic
+            if (key.Op == ReductionOp.ArgMax || key.Op == ReductionOp.ArgMin)
+            {
+                EmitArgMaxMinSimdLoop(il, key, inputSize);
+                return;
+            }
+
             int vectorCount = GetVectorCount(key.InputType);
 
             var locI = il.DeclareLocal(typeof(int)); // loop counter
@@ -462,6 +571,761 @@ namespace NumSharp.Backends.Kernels
             }
         }
 
+        /// <summary>
+        /// Emit All/Any SIMD loop with early-exit.
+        /// All: returns false immediately when any zero is found
+        /// Any: returns true immediately when any non-zero is found
+        /// </summary>
+        private static void EmitAllAnySimdLoop(ILGenerator il, ElementReductionKernelKey key, int inputSize)
+        {
+            // For All/Any, we use a helper method approach because:
+            // 1. Early-exit logic is complex to emit in IL
+            // 2. The helper method can be JIT-optimized effectively
+            // 3. This matches the pattern used elsewhere in the codebase
+
+            var helperMethod = typeof(ILKernelGenerator).GetMethod(
+                key.Op == ReductionOp.All ? nameof(AllSimdHelper) : nameof(AnySimdHelper),
+                BindingFlags.NonPublic | BindingFlags.Static);
+
+            var genericHelper = helperMethod!.MakeGenericMethod(GetClrType(key.InputType));
+
+            // Call helper: AllSimdHelper<T>(input, totalSize) or AnySimdHelper<T>(input, totalSize)
+            il.Emit(OpCodes.Ldarg_0); // input
+            il.Emit(OpCodes.Ldarg_S, (byte)4); // totalSize
+            il.EmitCall(OpCodes.Call, genericHelper, null);
+
+            // Result (bool) is already on stack, but we need to convert to TResult (also bool for All/Any)
+            // Stack has: bool result - convert to byte (0 or 1) for bool return
+        }
+
+        /// <summary>
+        /// SIMD helper for All reduction with early-exit.
+        /// Returns true if ALL elements are non-zero.
+        /// </summary>
+        internal static unsafe bool AllSimdHelper<T>(void* input, int totalSize) where T : unmanaged
+        {
+            if (totalSize == 0)
+                return true; // NumPy: all([]) == True (vacuous truth)
+
+            T* src = (T*)input;
+
+            if (Vector256.IsHardwareAccelerated && Vector256<T>.IsSupported && totalSize >= Vector256<T>.Count)
+            {
+                int vectorCount = Vector256<T>.Count;
+                int vectorEnd = totalSize - vectorCount;
+                var zero = Vector256<T>.Zero;
+                int i = 0;
+
+                // SIMD loop with early exit
+                for (; i <= vectorEnd; i += vectorCount)
+                {
+                    var vec = Vector256.Load(src + i);
+                    var mask = Vector256.Equals(vec, zero);
+
+                    // If ANY element equals zero, return false
+                    if (Vector256.ExtractMostSignificantBits(mask) != 0)
+                        return false;
+                }
+
+                // Scalar tail
+                for (; i < totalSize; i++)
+                {
+                    if (System.Collections.Generic.EqualityComparer<T>.Default.Equals(src[i], default))
+                        return false;
+                }
+
+                return true;
+            }
+            else if (Vector128.IsHardwareAccelerated && Vector128<T>.IsSupported && totalSize >= Vector128<T>.Count)
+            {
+                int vectorCount = Vector128<T>.Count;
+                int vectorEnd = totalSize - vectorCount;
+                var zero = Vector128<T>.Zero;
+                int i = 0;
+
+                for (; i <= vectorEnd; i += vectorCount)
+                {
+                    var vec = Vector128.Load(src + i);
+                    var mask = Vector128.Equals(vec, zero);
+
+                    if (Vector128.ExtractMostSignificantBits(mask) != 0)
+                        return false;
+                }
+
+                for (; i < totalSize; i++)
+                {
+                    if (System.Collections.Generic.EqualityComparer<T>.Default.Equals(src[i], default))
+                        return false;
+                }
+
+                return true;
+            }
+            else
+            {
+                // Scalar fallback
+                for (int i = 0; i < totalSize; i++)
+                {
+                    if (System.Collections.Generic.EqualityComparer<T>.Default.Equals(src[i], default))
+                        return false;
+                }
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// SIMD helper for Any reduction with early-exit.
+        /// Returns true if ANY element is non-zero.
+        /// </summary>
+        internal static unsafe bool AnySimdHelper<T>(void* input, int totalSize) where T : unmanaged
+        {
+            if (totalSize == 0)
+                return false; // NumPy: any([]) == False
+
+            T* src = (T*)input;
+
+            if (Vector256.IsHardwareAccelerated && Vector256<T>.IsSupported && totalSize >= Vector256<T>.Count)
+            {
+                int vectorCount = Vector256<T>.Count;
+                int vectorEnd = totalSize - vectorCount;
+                var zero = Vector256<T>.Zero;
+                uint allZeroMask = (1u << vectorCount) - 1;
+                int i = 0;
+
+                // SIMD loop with early exit
+                for (; i <= vectorEnd; i += vectorCount)
+                {
+                    var vec = Vector256.Load(src + i);
+                    var mask = Vector256.Equals(vec, zero);
+                    uint bits = Vector256.ExtractMostSignificantBits(mask);
+
+                    // If NOT all elements are zero, we found a non-zero
+                    if (bits != allZeroMask)
+                        return true;
+                }
+
+                // Scalar tail
+                for (; i < totalSize; i++)
+                {
+                    if (!System.Collections.Generic.EqualityComparer<T>.Default.Equals(src[i], default))
+                        return true;
+                }
+
+                return false;
+            }
+            else if (Vector128.IsHardwareAccelerated && Vector128<T>.IsSupported && totalSize >= Vector128<T>.Count)
+            {
+                int vectorCount = Vector128<T>.Count;
+                int vectorEnd = totalSize - vectorCount;
+                var zero = Vector128<T>.Zero;
+                uint allZeroMask = (1u << vectorCount) - 1;
+                int i = 0;
+
+                for (; i <= vectorEnd; i += vectorCount)
+                {
+                    var vec = Vector128.Load(src + i);
+                    var mask = Vector128.Equals(vec, zero);
+                    uint bits = Vector128.ExtractMostSignificantBits(mask);
+
+                    if (bits != allZeroMask)
+                        return true;
+                }
+
+                for (; i < totalSize; i++)
+                {
+                    if (!System.Collections.Generic.EqualityComparer<T>.Default.Equals(src[i], default))
+                        return true;
+                }
+
+                return false;
+            }
+            else
+            {
+                // Scalar fallback
+                for (int i = 0; i < totalSize; i++)
+                {
+                    if (!System.Collections.Generic.EqualityComparer<T>.Default.Equals(src[i], default))
+                        return true;
+                }
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Emit ArgMax/ArgMin SIMD loop.
+        /// Uses helper methods for clean implementation with SIMD index tracking.
+        /// </summary>
+        private static void EmitArgMaxMinSimdLoop(ILGenerator il, ElementReductionKernelKey key, int inputSize)
+        {
+            var helperMethod = typeof(ILKernelGenerator).GetMethod(
+                key.Op == ReductionOp.ArgMax ? nameof(ArgMaxSimdHelper) : nameof(ArgMinSimdHelper),
+                BindingFlags.NonPublic | BindingFlags.Static);
+
+            var genericHelper = helperMethod!.MakeGenericMethod(GetClrType(key.InputType));
+
+            // Call helper: ArgMaxSimdHelper<T>(input, totalSize) or ArgMinSimdHelper<T>(input, totalSize)
+            il.Emit(OpCodes.Ldarg_0); // input
+            il.Emit(OpCodes.Ldarg_S, (byte)4); // totalSize
+            il.EmitCall(OpCodes.Call, genericHelper, null);
+
+            // Result (int) is already on stack
+        }
+
+        /// <summary>
+        /// SIMD helper for ArgMax reduction.
+        /// Returns the index of the maximum element.
+        /// Uses SIMD to find candidates then scalar to resolve exact index.
+        /// </summary>
+        internal static unsafe int ArgMaxSimdHelper<T>(void* input, int totalSize) where T : unmanaged, IComparable<T>
+        {
+            if (totalSize == 0)
+                return -1;
+
+            if (totalSize == 1)
+                return 0;
+
+            T* src = (T*)input;
+            T bestValue = src[0];
+            int bestIndex = 0;
+
+            if (Vector256.IsHardwareAccelerated && Vector256<T>.IsSupported && totalSize >= Vector256<T>.Count * 2)
+            {
+                int vectorCount = Vector256<T>.Count;
+                int vectorEnd = totalSize - vectorCount;
+
+                // First pass: find the maximum value using SIMD
+                var maxVec = Vector256.Load(src);
+                int i = vectorCount;
+
+                for (; i <= vectorEnd; i += vectorCount)
+                {
+                    var vec = Vector256.Load(src + i);
+                    maxVec = Vector256.Max(maxVec, vec);
+                }
+
+                // Horizontal reduce the max vector to find the scalar max
+                T maxValue = maxVec.GetElement(0);
+                for (int j = 1; j < vectorCount; j++)
+                {
+                    T elem = maxVec.GetElement(j);
+                    if (elem.CompareTo(maxValue) > 0)
+                        maxValue = elem;
+                }
+
+                // Process scalar tail for max value
+                for (; i < totalSize; i++)
+                {
+                    if (src[i].CompareTo(maxValue) > 0)
+                        maxValue = src[i];
+                }
+
+                // Second pass: find the first index with the max value
+                // Use SIMD to quickly scan for the max value
+                var targetVec = Vector256.Create(maxValue);
+                for (i = 0; i <= vectorEnd; i += vectorCount)
+                {
+                    var vec = Vector256.Load(src + i);
+                    var mask = Vector256.Equals(vec, targetVec);
+                    uint bits = Vector256.ExtractMostSignificantBits(mask);
+                    if (bits != 0)
+                    {
+                        // Found it! Return index of first match
+                        return i + System.Numerics.BitOperations.TrailingZeroCount(bits);
+                    }
+                }
+
+                // Check scalar tail
+                for (; i < totalSize; i++)
+                {
+                    if (src[i].CompareTo(maxValue) == 0)
+                        return i;
+                }
+
+                return 0; // Should never reach here
+            }
+            else if (Vector128.IsHardwareAccelerated && Vector128<T>.IsSupported && totalSize >= Vector128<T>.Count * 2)
+            {
+                int vectorCount = Vector128<T>.Count;
+                int vectorEnd = totalSize - vectorCount;
+
+                var maxVec = Vector128.Load(src);
+                int i = vectorCount;
+
+                for (; i <= vectorEnd; i += vectorCount)
+                {
+                    var vec = Vector128.Load(src + i);
+                    maxVec = Vector128.Max(maxVec, vec);
+                }
+
+                T maxValue = maxVec.GetElement(0);
+                for (int j = 1; j < vectorCount; j++)
+                {
+                    T elem = maxVec.GetElement(j);
+                    if (elem.CompareTo(maxValue) > 0)
+                        maxValue = elem;
+                }
+
+                for (; i < totalSize; i++)
+                {
+                    if (src[i].CompareTo(maxValue) > 0)
+                        maxValue = src[i];
+                }
+
+                var targetVec = Vector128.Create(maxValue);
+                for (i = 0; i <= vectorEnd; i += vectorCount)
+                {
+                    var vec = Vector128.Load(src + i);
+                    var mask = Vector128.Equals(vec, targetVec);
+                    uint bits = Vector128.ExtractMostSignificantBits(mask);
+                    if (bits != 0)
+                    {
+                        return i + System.Numerics.BitOperations.TrailingZeroCount(bits);
+                    }
+                }
+
+                for (; i < totalSize; i++)
+                {
+                    if (src[i].CompareTo(maxValue) == 0)
+                        return i;
+                }
+
+                return 0;
+            }
+            else
+            {
+                // Scalar fallback
+                for (int i = 1; i < totalSize; i++)
+                {
+                    if (src[i].CompareTo(bestValue) > 0)
+                    {
+                        bestValue = src[i];
+                        bestIndex = i;
+                    }
+                }
+                return bestIndex;
+            }
+        }
+
+        /// <summary>
+        /// SIMD helper for ArgMin reduction.
+        /// Returns the index of the minimum element.
+        /// Uses SIMD to find candidates then scalar to resolve exact index.
+        /// </summary>
+        internal static unsafe int ArgMinSimdHelper<T>(void* input, int totalSize) where T : unmanaged, IComparable<T>
+        {
+            if (totalSize == 0)
+                return -1;
+
+            if (totalSize == 1)
+                return 0;
+
+            T* src = (T*)input;
+            T bestValue = src[0];
+            int bestIndex = 0;
+
+            if (Vector256.IsHardwareAccelerated && Vector256<T>.IsSupported && totalSize >= Vector256<T>.Count * 2)
+            {
+                int vectorCount = Vector256<T>.Count;
+                int vectorEnd = totalSize - vectorCount;
+
+                // First pass: find the minimum value using SIMD
+                var minVec = Vector256.Load(src);
+                int i = vectorCount;
+
+                for (; i <= vectorEnd; i += vectorCount)
+                {
+                    var vec = Vector256.Load(src + i);
+                    minVec = Vector256.Min(minVec, vec);
+                }
+
+                // Horizontal reduce the min vector to find the scalar min
+                T minValue = minVec.GetElement(0);
+                for (int j = 1; j < vectorCount; j++)
+                {
+                    T elem = minVec.GetElement(j);
+                    if (elem.CompareTo(minValue) < 0)
+                        minValue = elem;
+                }
+
+                // Process scalar tail for min value
+                for (; i < totalSize; i++)
+                {
+                    if (src[i].CompareTo(minValue) < 0)
+                        minValue = src[i];
+                }
+
+                // Second pass: find the first index with the min value
+                var targetVec = Vector256.Create(minValue);
+                for (i = 0; i <= vectorEnd; i += vectorCount)
+                {
+                    var vec = Vector256.Load(src + i);
+                    var mask = Vector256.Equals(vec, targetVec);
+                    uint bits = Vector256.ExtractMostSignificantBits(mask);
+                    if (bits != 0)
+                    {
+                        return i + System.Numerics.BitOperations.TrailingZeroCount(bits);
+                    }
+                }
+
+                for (; i < totalSize; i++)
+                {
+                    if (src[i].CompareTo(minValue) == 0)
+                        return i;
+                }
+
+                return 0;
+            }
+            else if (Vector128.IsHardwareAccelerated && Vector128<T>.IsSupported && totalSize >= Vector128<T>.Count * 2)
+            {
+                int vectorCount = Vector128<T>.Count;
+                int vectorEnd = totalSize - vectorCount;
+
+                var minVec = Vector128.Load(src);
+                int i = vectorCount;
+
+                for (; i <= vectorEnd; i += vectorCount)
+                {
+                    var vec = Vector128.Load(src + i);
+                    minVec = Vector128.Min(minVec, vec);
+                }
+
+                T minValue = minVec.GetElement(0);
+                for (int j = 1; j < vectorCount; j++)
+                {
+                    T elem = minVec.GetElement(j);
+                    if (elem.CompareTo(minValue) < 0)
+                        minValue = elem;
+                }
+
+                for (; i < totalSize; i++)
+                {
+                    if (src[i].CompareTo(minValue) < 0)
+                        minValue = src[i];
+                }
+
+                var targetVec = Vector128.Create(minValue);
+                for (i = 0; i <= vectorEnd; i += vectorCount)
+                {
+                    var vec = Vector128.Load(src + i);
+                    var mask = Vector128.Equals(vec, targetVec);
+                    uint bits = Vector128.ExtractMostSignificantBits(mask);
+                    if (bits != 0)
+                    {
+                        return i + System.Numerics.BitOperations.TrailingZeroCount(bits);
+                    }
+                }
+
+                for (; i < totalSize; i++)
+                {
+                    if (src[i].CompareTo(minValue) == 0)
+                        return i;
+                }
+
+                return 0;
+            }
+            else
+            {
+                // Scalar fallback
+                for (int i = 1; i < totalSize; i++)
+                {
+                    if (src[i].CompareTo(bestValue) < 0)
+                    {
+                        bestValue = src[i];
+                        bestIndex = i;
+                    }
+                }
+                return bestIndex;
+            }
+        }
+
+        #region NonZero SIMD Helpers
+
+        /// <summary>
+        /// SIMD helper for NonZero operation.
+        /// Finds all indices where elements are non-zero.
+        /// </summary>
+        /// <param name="src">Source array pointer</param>
+        /// <param name="size">Number of elements</param>
+        /// <param name="indices">Output list to populate with non-zero indices</param>
+        internal static unsafe void NonZeroSimdHelper<T>(T* src, int size, System.Collections.Generic.List<int> indices)
+            where T : unmanaged
+        {
+            if (size == 0)
+                return;
+
+            if (Vector256.IsHardwareAccelerated && Vector256<T>.IsSupported && size >= Vector256<T>.Count)
+            {
+                int vectorCount = Vector256<T>.Count;
+                int vectorEnd = size - vectorCount;
+                var zero = Vector256<T>.Zero;
+                int i = 0;
+
+                for (; i <= vectorEnd; i += vectorCount)
+                {
+                    var vec = Vector256.Load(src + i);
+                    var mask = Vector256.Equals(vec, zero);
+                    uint bits = Vector256.ExtractMostSignificantBits(mask);
+
+                    // Invert: we want non-zero elements
+                    uint nonZeroBits = ~bits & ((1u << vectorCount) - 1);
+
+                    // Extract indices where bits are set
+                    while (nonZeroBits != 0)
+                    {
+                        int bitPos = System.Numerics.BitOperations.TrailingZeroCount(nonZeroBits);
+                        indices.Add(i + bitPos);
+                        nonZeroBits &= nonZeroBits - 1; // Clear lowest bit
+                    }
+                }
+
+                // Scalar tail
+                for (; i < size; i++)
+                {
+                    if (!System.Collections.Generic.EqualityComparer<T>.Default.Equals(src[i], default))
+                        indices.Add(i);
+                }
+            }
+            else if (Vector128.IsHardwareAccelerated && Vector128<T>.IsSupported && size >= Vector128<T>.Count)
+            {
+                int vectorCount = Vector128<T>.Count;
+                int vectorEnd = size - vectorCount;
+                var zero = Vector128<T>.Zero;
+                int i = 0;
+
+                for (; i <= vectorEnd; i += vectorCount)
+                {
+                    var vec = Vector128.Load(src + i);
+                    var mask = Vector128.Equals(vec, zero);
+                    uint bits = Vector128.ExtractMostSignificantBits(mask);
+
+                    uint nonZeroBits = ~bits & ((1u << vectorCount) - 1);
+
+                    while (nonZeroBits != 0)
+                    {
+                        int bitPos = System.Numerics.BitOperations.TrailingZeroCount(nonZeroBits);
+                        indices.Add(i + bitPos);
+                        nonZeroBits &= nonZeroBits - 1;
+                    }
+                }
+
+                for (; i < size; i++)
+                {
+                    if (!System.Collections.Generic.EqualityComparer<T>.Default.Equals(src[i], default))
+                        indices.Add(i);
+                }
+            }
+            else
+            {
+                // Scalar fallback
+                for (int i = 0; i < size; i++)
+                {
+                    if (!System.Collections.Generic.EqualityComparer<T>.Default.Equals(src[i], default))
+                        indices.Add(i);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Convert flat indices to per-dimension coordinate arrays.
+        /// </summary>
+        /// <param name="flatIndices">List of flat (linear) indices</param>
+        /// <param name="shape">Shape of the array</param>
+        /// <returns>Array of NDArray&lt;int&gt;, one per dimension</returns>
+        internal static unsafe NumSharp.Generic.NDArray<int>[] ConvertFlatIndicesToCoordinates(
+            System.Collections.Generic.List<int> flatIndices, int[] shape)
+        {
+            int ndim = shape.Length;
+            int len = flatIndices.Count;
+
+            // Create result arrays
+            var result = new NumSharp.Generic.NDArray<int>[ndim];
+            for (int d = 0; d < ndim; d++)
+                result[d] = new NumSharp.Generic.NDArray<int>(len);
+
+            // Get addresses for direct writing
+            var addresses = new int*[ndim];
+            for (int d = 0; d < ndim; d++)
+                addresses[d] = (int*)result[d].Address;
+
+            // Pre-compute strides for index conversion
+            var strides = new int[ndim];
+            strides[ndim - 1] = 1;
+            for (int d = ndim - 2; d >= 0; d--)
+                strides[d] = strides[d + 1] * shape[d + 1];
+
+            // Convert each flat index to coordinates
+            for (int i = 0; i < len; i++)
+            {
+                int flatIdx = flatIndices[i];
+                for (int d = 0; d < ndim; d++)
+                {
+                    addresses[d][i] = flatIdx / strides[d];
+                    flatIdx %= strides[d];
+                }
+            }
+
+            return result;
+        }
+
+        #endregion
+
+        #region Boolean Masking SIMD Helpers
+
+        /// <summary>
+        /// SIMD helper to count true values in a boolean array.
+        /// </summary>
+        internal static unsafe int CountTrueSimdHelper(bool* mask, int size)
+        {
+            if (size == 0)
+                return 0;
+
+            int count = 0;
+
+            if (Vector256.IsHardwareAccelerated && Vector256<byte>.IsSupported && size >= Vector256<byte>.Count)
+            {
+                int vectorCount = Vector256<byte>.Count;
+                int vectorEnd = size - vectorCount;
+                var zero = Vector256<byte>.Zero;
+                int i = 0;
+
+                for (; i <= vectorEnd; i += vectorCount)
+                {
+                    var vec = Vector256.Load((byte*)(mask + i));
+                    var cmp = Vector256.Equals(vec, zero);
+                    uint bits = Vector256.ExtractMostSignificantBits(cmp);
+
+                    // Count non-zero (true) values: invert mask, popcount
+                    uint nonZeroBits = ~bits;
+                    count += System.Numerics.BitOperations.PopCount(nonZeroBits);
+                }
+
+                // Scalar tail
+                for (; i < size; i++)
+                {
+                    if (mask[i])
+                        count++;
+                }
+            }
+            else if (Vector128.IsHardwareAccelerated && Vector128<byte>.IsSupported && size >= Vector128<byte>.Count)
+            {
+                int vectorCount = Vector128<byte>.Count;
+                int vectorEnd = size - vectorCount;
+                var zero = Vector128<byte>.Zero;
+                int i = 0;
+
+                for (; i <= vectorEnd; i += vectorCount)
+                {
+                    var vec = Vector128.Load((byte*)(mask + i));
+                    var cmp = Vector128.Equals(vec, zero);
+                    uint bits = Vector128.ExtractMostSignificantBits(cmp);
+
+                    uint nonZeroBits = ~bits & 0xFFFFu;
+                    count += System.Numerics.BitOperations.PopCount(nonZeroBits);
+                }
+
+                for (; i < size; i++)
+                {
+                    if (mask[i])
+                        count++;
+                }
+            }
+            else
+            {
+                // Scalar fallback
+                for (int i = 0; i < size; i++)
+                {
+                    if (mask[i])
+                        count++;
+                }
+            }
+
+            return count;
+        }
+
+        /// <summary>
+        /// SIMD helper to copy elements where mask is true.
+        /// Copies from src to dst where mask[i] is true.
+        /// </summary>
+        /// <returns>Number of elements copied</returns>
+        internal static unsafe int CopyMaskedElementsHelper<T>(T* src, bool* mask, T* dst, int size)
+            where T : unmanaged
+        {
+            int dstIdx = 0;
+
+            // For masking, we can't easily vectorize the gather/scatter
+            // But we can vectorize the mask scanning to find true indices faster
+            if (Vector256.IsHardwareAccelerated && Vector256<byte>.IsSupported && size >= Vector256<byte>.Count)
+            {
+                int vectorCount = Vector256<byte>.Count;
+                int vectorEnd = size - vectorCount;
+                var zero = Vector256<byte>.Zero;
+                int i = 0;
+
+                for (; i <= vectorEnd; i += vectorCount)
+                {
+                    var maskVec = Vector256.Load((byte*)(mask + i));
+                    var cmp = Vector256.Equals(maskVec, zero);
+                    uint bits = Vector256.ExtractMostSignificantBits(cmp);
+                    uint nonZeroBits = ~bits;
+
+                    // Copy elements where mask is true
+                    while (nonZeroBits != 0)
+                    {
+                        int bitPos = System.Numerics.BitOperations.TrailingZeroCount(nonZeroBits);
+                        dst[dstIdx++] = src[i + bitPos];
+                        nonZeroBits &= nonZeroBits - 1;
+                    }
+                }
+
+                // Scalar tail
+                for (; i < size; i++)
+                {
+                    if (mask[i])
+                        dst[dstIdx++] = src[i];
+                }
+            }
+            else if (Vector128.IsHardwareAccelerated && Vector128<byte>.IsSupported && size >= Vector128<byte>.Count)
+            {
+                int vectorCount = Vector128<byte>.Count;
+                int vectorEnd = size - vectorCount;
+                var zero = Vector128<byte>.Zero;
+                int i = 0;
+
+                for (; i <= vectorEnd; i += vectorCount)
+                {
+                    var maskVec = Vector128.Load((byte*)(mask + i));
+                    var cmp = Vector128.Equals(maskVec, zero);
+                    uint bits = Vector128.ExtractMostSignificantBits(cmp);
+                    uint nonZeroBits = ~bits & 0xFFFFu;
+
+                    while (nonZeroBits != 0)
+                    {
+                        int bitPos = System.Numerics.BitOperations.TrailingZeroCount(nonZeroBits);
+                        dst[dstIdx++] = src[i + bitPos];
+                        nonZeroBits &= nonZeroBits - 1;
+                    }
+                }
+
+                for (; i < size; i++)
+                {
+                    if (mask[i])
+                        dst[dstIdx++] = src[i];
+                }
+            }
+            else
+            {
+                // Scalar fallback
+                for (int i = 0; i < size; i++)
+                {
+                    if (mask[i])
+                        dst[dstIdx++] = src[i];
+                }
+            }
+
+            return dstIdx;
+        }
+
+        #endregion
+
         #region Reduction IL Helpers
 
         /// <summary>
@@ -501,6 +1365,16 @@ namespace NumSharp.Backends.Kernels
                         EmitLoadMinValue(il, type);
                     else
                         EmitLoadMaxValue(il, type);
+                    break;
+
+                case ReductionOp.All:
+                    // Identity for AND is true (vacuous truth)
+                    il.Emit(OpCodes.Ldc_I4_1);
+                    break;
+
+                case ReductionOp.Any:
+                    // Identity for OR is false
+                    il.Emit(OpCodes.Ldc_I4_0);
                     break;
 
                 default:

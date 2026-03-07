@@ -12,8 +12,10 @@ namespace NumSharp.Backends
             //the size of the array is [1, 2, n, m] all shapes after 2nd multiplied gives size
             //the size of what we need to reduce is the size of the shape of the given axis (shape[axis])
             var shape = arr.Shape;
-            if (shape.IsEmpty)
-                return arr;
+
+            // NumPy: argmax of empty array raises ValueError
+            if (shape.IsEmpty || shape.size == 0)
+                throw new ArgumentException("attempt to get argmax of an empty sequence");
 
             if (shape.IsScalar || (shape.size == 1 && shape.NDim == 1))
                 return NDArray.Scalar(0);
@@ -86,7 +88,35 @@ namespace NumSharp.Backends
             #region Compute
             switch (arr.GetTypeCode)
 		    {
-			    case NPTypeCode.Byte: 
+			    case NPTypeCode.Boolean:
+                {
+                    // Boolean: True=1, False=0, so argmax finds first True
+                    int at;
+                    do
+                    {
+                        var iter = arr[slices].AsIterator<bool>();
+                        var moveNext = iter.MoveNext;
+                        var hasNext = iter.HasNext;
+                        int idx = 1, maxAt = 0;
+                        bool max = moveNext();
+                        while (hasNext())
+                        {
+                            var val = moveNext();
+                            // For argmax: True > False, so if val is True and max is False
+                            if (val && !max)
+                            {
+                                max = val;
+                                maxAt = idx;
+                            }
+
+                            idx++;
+                        }
+
+                        ret.SetInt32(maxAt, iterIndex);
+                    } while (iterAxis.Next() != null && iterRet.Next() != null);
+                    break;
+                }
+			    case NPTypeCode.Byte:
                 {
                     int at;
                     do
@@ -294,7 +324,7 @@ namespace NumSharp.Backends
                     } while (iterAxis.Next() != null && iterRet.Next() != null);
                     break;
                 }
-			    case NPTypeCode.Double: 
+			    case NPTypeCode.Double:
                 {
                     int at;
                     do
@@ -307,7 +337,8 @@ namespace NumSharp.Backends
                         while (hasNext())
                         {
                             var val = moveNext();
-                            if (val > max)
+                            // NumPy: first NaN always wins
+                            if (val > max || (double.IsNaN(val) && !double.IsNaN(max)))
                             {
                                 max = val;
                                 maxAt = idx;
@@ -320,7 +351,7 @@ namespace NumSharp.Backends
                     } while (iterAxis.Next() != null && iterRet.Next() != null);
                     break;
                 }
-			    case NPTypeCode.Single: 
+			    case NPTypeCode.Single:
                 {
                     int at;
                     do
@@ -333,7 +364,8 @@ namespace NumSharp.Backends
                         while (hasNext())
                         {
                             var val = moveNext();
-                            if (val > max)
+                            // NumPy: first NaN always wins
+                            if (val > max || (float.IsNaN(val) && !float.IsNaN(max)))
                             {
                                 max = val;
                                 maxAt = idx;
@@ -427,7 +459,30 @@ namespace NumSharp.Backends
             #region Compute
             switch (arr.GetTypeCode)
 		    {
-			    case NPTypeCode.Byte: 
+			    case NPTypeCode.Boolean:
+                {
+                    // Boolean: True=1, False=0, so argmax finds first True
+                    var iter = arr.AsIterator<bool>();
+                    var moveNext = iter.MoveNext;
+                    var hasNext = iter.HasNext;
+                    int idx = 1, maxAt = 0;
+                    bool max = moveNext();
+                    while (hasNext())
+                    {
+                        var val = moveNext();
+                        // For argmax: True > False
+                        if (val && !max)
+                        {
+                            max = val;
+                            maxAt = idx;
+                        }
+
+                        idx++;
+                    }
+
+                    return maxAt;
+                }
+			    case NPTypeCode.Byte:
                 {
                     var iter = arr.AsIterator<byte>();
                     var moveNext = iter.MoveNext;
@@ -595,7 +650,7 @@ namespace NumSharp.Backends
 
                     return maxAt;
                 }
-			    case NPTypeCode.Double: 
+			    case NPTypeCode.Double:
                 {
                     var iter = arr.AsIterator<double>();
                     var moveNext = iter.MoveNext;
@@ -605,7 +660,8 @@ namespace NumSharp.Backends
                     while (hasNext())
                     {
                         var val = moveNext();
-                        if (val > max)
+                        // NumPy: first NaN always wins
+                        if (val > max || (double.IsNaN(val) && !double.IsNaN(max)))
                         {
                             max = val;
                             maxAt = idx;
@@ -616,7 +672,7 @@ namespace NumSharp.Backends
 
                     return maxAt;
                 }
-			    case NPTypeCode.Single: 
+			    case NPTypeCode.Single:
                 {
                     var iter = arr.AsIterator<float>();
                     var moveNext = iter.MoveNext;
@@ -626,7 +682,8 @@ namespace NumSharp.Backends
                     while (hasNext())
                     {
                         var val = moveNext();
-                        if (val > max)
+                        // NumPy: first NaN always wins
+                        if (val > max || (float.IsNaN(val) && !float.IsNaN(max)))
                         {
                             max = val;
                             maxAt = idx;

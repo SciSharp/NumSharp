@@ -22,7 +22,11 @@ namespace NumSharp.Backends.Kernels
         /// <summary>Mean = Sum / count</summary>
         Mean,
         /// <summary>Cumulative sum (running total)</summary>
-        CumSum
+        CumSum,
+        /// <summary>All elements non-zero (logical AND reduction, returns bool)</summary>
+        All,
+        /// <summary>Any element non-zero (logical OR reduction, returns bool)</summary>
+        Any
     }
 
     /// <summary>
@@ -60,6 +64,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Result type depends on operation:
         /// - ArgMax/ArgMin: always Int32
+        /// - All/Any: always Boolean
         /// - Mean: always Double (or accumulator type if specified)
         /// - Others: same as accumulator type
         /// </summary>
@@ -67,6 +72,8 @@ namespace NumSharp.Backends.Kernels
         {
             ReductionOp.ArgMax => NPTypeCode.Int32,
             ReductionOp.ArgMin => NPTypeCode.Int32,
+            ReductionOp.All => NPTypeCode.Boolean,
+            ReductionOp.Any => NPTypeCode.Boolean,
             _ => AccumulatorType
         };
 
@@ -246,6 +253,8 @@ namespace NumSharp.Backends.Kernels
                 ReductionOp.ArgMin => 0,
                 ReductionOp.Mean => type.GetDefaultValue(),
                 ReductionOp.CumSum => type.GetDefaultValue(),
+                ReductionOp.All => true,   // Identity for AND: true (vacuous truth)
+                ReductionOp.Any => false,  // Identity for OR: false
                 _ => throw new NotSupportedException($"Operation {op} has no identity element")
             };
         }
@@ -259,6 +268,14 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
+        /// Check if this reduction returns a boolean.
+        /// </summary>
+        public static bool ReturnsBool(this ReductionOp op)
+        {
+            return op == ReductionOp.All || op == ReductionOp.Any;
+        }
+
+        /// <summary>
         /// Check if this reduction is order-dependent (cannot be parallelized trivially).
         /// </summary>
         public static bool IsOrderDependent(this ReductionOp op)
@@ -267,13 +284,26 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
+        /// Check if this reduction supports early-exit optimization.
+        /// </summary>
+        public static bool SupportsEarlyExit(this ReductionOp op)
+        {
+            // All: exit when first zero found
+            // Any: exit when first non-zero found
+            return op == ReductionOp.All || op == ReductionOp.Any;
+        }
+
+        /// <summary>
         /// Check if this reduction has SIMD horizontal reduction support.
         /// </summary>
         public static bool HasSimdSupport(this ReductionOp op)
         {
-            // Vector256 has Sum (horizontal add) but not Max/Min horizontal
-            // For Max/Min we need to reduce the vector at the end
-            return op == ReductionOp.Sum || op == ReductionOp.Max || op == ReductionOp.Min;
+            // Vector has Sum (horizontal add), Max/Min/Prod use manual horizontal reduction
+            // All/Any use SIMD comparison with early-exit
+            // ArgMax/ArgMin use SIMD two-pass: find extreme, then find index
+            return op == ReductionOp.Sum || op == ReductionOp.Max || op == ReductionOp.Min ||
+                   op == ReductionOp.Prod || op == ReductionOp.All || op == ReductionOp.Any ||
+                   op == ReductionOp.ArgMax || op == ReductionOp.ArgMin;
         }
     }
 
