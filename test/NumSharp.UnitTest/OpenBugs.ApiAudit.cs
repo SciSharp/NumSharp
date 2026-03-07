@@ -360,13 +360,14 @@ namespace NumSharp.UnitTest
         [Test]
         public void Bug_DoubleCast_Int32NDArray_ReturnsGarbage()
         {
-            // np.sum returns a scalar NDArray (ndim=0) with int32 dtype
+            // np.sum returns a scalar NDArray (ndim=0)
+            // After BUG-21 fix: int32 input now accumulates to int64 (NumPy 2.x behavior)
             var sum = np.sum(np.arange(10));
-            sum.dtype.Should().Be(typeof(int), "arange produces int32, sum preserves it");
+            sum.dtype.Should().Be(typeof(long), "NumPy 2.x: int32 sum accumulates to int64");
             sum.ndim.Should().Be(0, "np.sum without axis returns a scalar (ndim=0)");
 
-            // Same-dtype cast works fine
-            ((int)(NDArray)sum).Should().Be(45, "(int) cast on int32 scalar works");
+            // Same-dtype cast works fine (now int64 after BUG-21 fix)
+            ((long)(NDArray)sum).Should().Be(45, "(long) cast on int64 scalar works");
 
             // Cross-dtype cast produces garbage
             double val = 0;
