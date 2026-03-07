@@ -29,6 +29,9 @@ if (args.Length == 0)
     Console.WriteLine("11. Slicing Operations");
     Console.WriteLine("12. Multi-dimensional Arrays");
     Console.WriteLine();
+    Console.WriteLine("=== Performance Analysis ===");
+    Console.WriteLine("13. SIMD vs Scalar Comparison (binary ops, reductions)");
+    Console.WriteLine();
     Console.WriteLine("=== Meta Options ===");
     Console.WriteLine("A. All Benchmarks");
     Console.WriteLine("Q. Quick smoke test (dry run)");
@@ -50,6 +53,7 @@ if (args.Length == 0)
         "10" => ["--filter", "*Manipulation*,*Reshape*,*Stack*,*Dims*"],
         "11" => ["--filter", "*Slice*"],
         "12" => ["--filter", "*MultiDim*"],
+        "13" => ["--filter", "*SimdVsScalar*,*SimdReductionType*"],
         "A" => [],
         "Q" => ["--job", "Dry"],
         _ => []
