@@ -3,6 +3,7 @@ using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
 using System.Runtime.Intrinsics;
+using NumSharp.Utilities;
 
 // =============================================================================
 // ILKernelGenerator - IL-based SIMD kernel generation using DynamicMethod
@@ -10,7 +11,7 @@ using System.Runtime.Intrinsics;
 //
 // ARCHITECTURE OVERVIEW
 // ---------------------
-// This partial class generates high-performance kernels at runtime using IL emission.
+// This class generates high-performance kernels at runtime using IL emission.
 // The JIT compiler can then optimize these kernels with full SIMD support (V128/V256/V512).
 // Kernels are cached by operation key to avoid repeated IL generation.
 //
@@ -19,6 +20,10 @@ using System.Runtime.Intrinsics;
 //         -> ILKernelGenerator checks cache, generates IL if needed
 //         -> Returns delegate that caller invokes with array pointers
 //
+// DESIGN: Singleton pattern with IKernelProvider interface implementation.
+// Use ILKernelGenerator.Instance for instance methods, or static facades for
+// backward compatibility with existing code.
+//
 // =============================================================================
 // PARTIAL CLASS FILES
 // =============================================================================
@@ -26,11 +31,13 @@ using System.Runtime.Intrinsics;
 // ILKernelGenerator.cs (THIS FILE)
 //   OWNERSHIP: Core infrastructure - foundation for all other partial files
 //   RESPONSIBILITY:
+//     - Singleton instance and IKernelProvider interface implementation
 //     - Global state: Enabled flag, VectorBits/VectorBytes (detected at startup)
 //     - Type mapping: NPTypeCode <-> CLR Type <-> Vector type conversions
 //     - Shared IL emission primitives used by all other partials
 //   DEPENDENCIES: None (other partials depend on this)
 //   KEY MEMBERS:
+//     - Instance - singleton for IKernelProvider access
 //     - Enabled, VectorBits, VectorBytes - runtime SIMD capability
 //     - GetVectorContainerType(), GetVectorType() - V128/V256/V512 type selection
 //     - GetTypeSize(), GetClrType(), CanUseSimd(), IsUnsigned() - type utilities
@@ -119,15 +126,40 @@ namespace NumSharp.Backends.Kernels
     /// These kernels provide ~10-15% speedup over the C# reference implementations
     /// by allowing the JIT to inline Vector256 operations more aggressively.
     ///
-    /// Currently implements the SimdFull execution path (both operands contiguous).
-    /// Falls back to C# implementations for other paths.
+    /// Implements <see cref="IKernelProvider"/> for unified kernel access.
+    /// Use <see cref="Instance"/> for interface-based access, or static methods
+    /// for backward compatibility.
     /// </summary>
-    public static partial class ILKernelGenerator
+    public sealed partial class ILKernelGenerator : IKernelProvider
     {
+        #region Singleton and IKernelProvider Implementation
+
+        /// <summary>
+        /// Singleton instance for IKernelProvider interface access.
+        /// </summary>
+        public static readonly ILKernelGenerator Instance = new();
+
+        /// <summary>
+        /// Private constructor to enforce singleton pattern.
+        /// </summary>
+        private ILKernelGenerator() { }
+
+        /// <summary>
+        /// Provider name for diagnostics.
+        /// </summary>
+        public string Name => "IL";
+
         /// <summary>
         /// Whether IL generation is enabled. Can be disabled for debugging.
         /// </summary>
         public static bool Enabled { get; set; } = true;
+
+        // IKernelProvider.Enabled - instance property delegates to static
+        bool IKernelProvider.Enabled
+        {
+            get => Enabled;
+            set => Enabled = value;
+        }
 
         /// <summary>
         /// Detected vector width at startup: 512, 256, 128, or 0 (no SIMD).
@@ -137,10 +169,15 @@ namespace NumSharp.Backends.Kernels
             Vector256.IsHardwareAccelerated ? 256 :
             Vector128.IsHardwareAccelerated ? 128 : 0;
 
+        // IKernelProvider.VectorBits - instance property delegates to static
+        int IKernelProvider.VectorBits => VectorBits;
+
         /// <summary>
         /// Number of bytes per vector register.
         /// </summary>
         public static readonly int VectorBytes = VectorBits / 8;
+
+        #endregion
 
         /// <summary>
         /// Get the Vector container type (Vector128, Vector256, or Vector512).
@@ -593,8 +630,31 @@ namespace NumSharp.Backends.Kernels
         {
             var clrType = GetClrType(type);
             var vectorType = GetVectorType(clrType);
+            var containerType = GetVectorContainerType();
 
-            string methodName = op switch
+            // Bitwise operations use static methods on Vector256/Vector128 container
+            if (op == BinaryOp.BitwiseAnd || op == BinaryOp.BitwiseOr || op == BinaryOp.BitwiseXor)
+            {
+                string methodName = op switch
+                {
+                    BinaryOp.BitwiseAnd => "BitwiseAnd",
+                    BinaryOp.BitwiseOr => "BitwiseOr",
+                    BinaryOp.BitwiseXor => "Xor",
+                    _ => throw new NotSupportedException()
+                };
+
+                var opMethod = containerType
+                    .GetMethods(BindingFlags.Public | BindingFlags.Static)
+                    .First(m => m.Name == methodName && m.IsGenericMethod &&
+                                m.GetParameters().Length == 2)
+                    .MakeGenericMethod(clrType);
+
+                il.EmitCall(OpCodes.Call, opMethod, null);
+                return;
+            }
+
+            // Arithmetic operations use operator overloads on Vector256<T>/Vector128<T>
+            string operatorName = op switch
             {
                 BinaryOp.Add => "op_Addition",
                 BinaryOp.Subtract => "op_Subtraction",
@@ -603,11 +663,122 @@ namespace NumSharp.Backends.Kernels
                 _ => throw new NotSupportedException($"Operation {op} not supported for SIMD")
             };
 
-            var opMethod = vectorType.GetMethod(methodName,
+            var operatorMethod = vectorType.GetMethod(operatorName,
                 BindingFlags.Public | BindingFlags.Static,
                 null, new[] { vectorType, vectorType }, null);
 
-            il.EmitCall(OpCodes.Call, opMethod!, null);
+            il.EmitCall(OpCodes.Call, operatorMethod!, null);
+        }
+
+        #endregion
+
+        #region IKernelProvider Interface Implementation
+
+        /// <summary>
+        /// Check if type supports SIMD operations (IKernelProvider interface).
+        /// </summary>
+        bool IKernelProvider.CanUseSimd(NPTypeCode type) => CanUseSimd(type);
+
+        /// <summary>
+        /// Get contiguous same-type binary kernel (IKernelProvider interface).
+        /// Delegates to static GetContiguousKernel method in Binary partial.
+        /// </summary>
+        ContiguousKernel<T>? IKernelProvider.GetContiguousKernel<T>(BinaryOp op)
+            => GetContiguousKernel<T>(op);
+
+        /// <summary>
+        /// Get mixed-type binary kernel (IKernelProvider interface).
+        /// Delegates to static TryGetMixedTypeKernel method in MixedType partial.
+        /// </summary>
+        MixedTypeKernel? IKernelProvider.GetMixedTypeKernel(MixedTypeKernelKey key)
+            => TryGetMixedTypeKernel(key);
+
+        /// <summary>
+        /// Get unary kernel (IKernelProvider interface).
+        /// Delegates to static TryGetUnaryKernel method in Unary partial.
+        /// </summary>
+        UnaryKernel? IKernelProvider.GetUnaryKernel(UnaryKernelKey key)
+            => TryGetUnaryKernel(key);
+
+        /// <summary>
+        /// Get unary scalar function (IKernelProvider interface).
+        /// </summary>
+        UnaryScalar<TIn, TOut>? IKernelProvider.GetUnaryScalar<TIn, TOut>(UnaryOp op)
+        {
+            var key = new UnaryScalarKernelKey(
+                InfoOf<TIn>.NPTypeCode,
+                InfoOf<TOut>.NPTypeCode,
+                op
+            );
+            try
+            {
+                var del = GetUnaryScalarDelegate(key);
+                return del as UnaryScalar<TIn, TOut>;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Get element reduction kernel (IKernelProvider interface).
+        /// </summary>
+        TypedElementReductionKernel<TResult>? IKernelProvider.GetElementReductionKernel<TResult>(ElementReductionKernelKey key)
+            => TryGetTypedElementReductionKernel<TResult>(key);
+
+        /// <summary>
+        /// Get comparison kernel (IKernelProvider interface).
+        /// </summary>
+        ComparisonKernel? IKernelProvider.GetComparisonKernel(ComparisonKernelKey key)
+            => TryGetComparisonKernel(key);
+
+        /// <summary>
+        /// Get comparison scalar function (IKernelProvider interface).
+        /// </summary>
+        ComparisonScalar<TLhs, TRhs>? IKernelProvider.GetComparisonScalar<TLhs, TRhs>(ComparisonOp op)
+        {
+            var key = new ComparisonScalarKernelKey(
+                InfoOf<TLhs>.NPTypeCode,
+                InfoOf<TRhs>.NPTypeCode,
+                op
+            );
+            try
+            {
+                var del = GetComparisonScalarDelegate(key);
+                return del as ComparisonScalar<TLhs, TRhs>;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Clear all cached kernels (IKernelProvider interface).
+        /// </summary>
+        void IKernelProvider.Clear() => ClearAll();
+
+        /// <summary>
+        /// Total number of cached kernels across all caches.
+        /// </summary>
+        int IKernelProvider.CacheCount => GetTotalCacheCount();
+
+        /// <summary>
+        /// Get total count of all cached kernels.
+        /// </summary>
+        private static int GetTotalCacheCount()
+        {
+            // Sum counts from all partial class caches
+            int count = 0;
+            count += CachedCount;           // Binary: _contiguousKernelCache
+            count += MixedTypeCachedCount;  // MixedType: _mixedTypeCache
+            count += UnaryCachedCount;      // Unary: _unaryCache
+            count += UnaryScalarCachedCount; // Unary: _unaryScalarCache
+            count += ComparisonCachedCount; // Comparison: _comparisonCache
+            count += ComparisonScalarCachedCount; // Comparison: _comparisonScalarCache
+            count += ElementReductionCachedCount;  // Reduction: _elementReductionCache
+            return count;
         }
 
         #endregion

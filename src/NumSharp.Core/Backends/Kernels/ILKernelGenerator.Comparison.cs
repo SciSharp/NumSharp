@@ -92,7 +92,7 @@ using System.Runtime.Intrinsics;
 
 namespace NumSharp.Backends.Kernels
 {
-    public static partial class ILKernelGenerator
+    public sealed partial class ILKernelGenerator
     {
         #region Comparison Kernel Generation
 
@@ -148,6 +148,11 @@ namespace NumSharp.Backends.Kernels
         {
             if (VectorBits == 0) return false;
             if (!CanUseSimd(key.ComparisonType)) return false;
+
+            // SIMD comparison only works when both operands have the same type.
+            // Mixed-type comparisons require scalar conversion before comparison,
+            // which cannot be done efficiently with SIMD vector loads.
+            if (key.LhsType != key.RhsType) return false;
 
             // Only for contiguous (SimdFull) path initially
             return key.Path == ExecutionPath.SimdFull;

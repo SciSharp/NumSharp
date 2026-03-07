@@ -100,7 +100,7 @@ using System.Runtime.Intrinsics;
 
 namespace NumSharp.Backends.Kernels
 {
-    public static partial class ILKernelGenerator
+    public sealed partial class ILKernelGenerator
     {
         #region Reduction Kernel Generation
 
@@ -215,6 +215,14 @@ namespace NumSharp.Backends.Kernels
             // SIMD for numeric types (not bool, char, decimal)
             if (!CanUseSimd(key.InputType))
                 return false;
+
+            // For Sum/Prod, SIMD vectors work on same type - can't widen int32 to int64 in SIMD
+            // When accumulator type differs from input type, use scalar path to prevent overflow
+            if ((key.Op == ReductionOp.Sum || key.Op == ReductionOp.Prod) &&
+                key.InputType != key.AccumulatorType)
+            {
+                return false;
+            }
 
             // Only certain operations have SIMD support
             // Sum: Vector.Sum() or manual horizontal add

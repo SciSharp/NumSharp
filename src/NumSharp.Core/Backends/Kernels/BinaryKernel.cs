@@ -3,68 +3,6 @@ using System;
 namespace NumSharp.Backends.Kernels
 {
     /// <summary>
-    /// Binary operation types supported by the SIMD kernel infrastructure.
-    /// </summary>
-    public enum BinaryOp
-    {
-        Add,
-        Subtract,
-        Multiply,
-        Divide,
-        Mod,
-        BitwiseAnd,
-        BitwiseOr,
-        BitwiseXor
-    }
-
-    /// <summary>
-    /// Comparison operation types supported by the IL kernel infrastructure.
-    /// All comparison operations return bool (NPTypeCode.Boolean).
-    /// </summary>
-    public enum ComparisonOp
-    {
-        Equal,
-        NotEqual,
-        Less,
-        LessEqual,
-        Greater,
-        GreaterEqual
-    }
-
-    /// <summary>
-    /// Unary operation types supported by the SIMD kernel infrastructure.
-    /// </summary>
-    public enum UnaryOp
-    {
-        // Core operations (Phase 1)
-        Negate,
-        Abs,
-        Sqrt,
-        Exp,
-        Log,
-        Sin,
-        Cos,
-
-        // Extended operations (Phase 2 - future)
-        Tan,
-        Exp2,
-        Expm1,
-        Log2,
-        Log10,
-        Log1p,
-        Sinh,
-        Cosh,
-        Tanh,
-        ASin,
-        ACos,
-        ATan,
-        Sign,
-        Ceil,
-        Floor,
-        Round
-    }
-
-    /// <summary>
     /// Cache key for mixed-type binary operation kernels.
     /// Identifies a unique kernel by LHS type, RHS type, result type, operation, and execution path.
     /// </summary>
@@ -96,23 +34,6 @@ namespace NumSharp.Backends.Kernels
         public bool NeedsRhsConversion => RhsType != ResultType;
 
         public override string ToString() => $"{Op}_{LhsType}_{RhsType}_{ResultType}_{Path}";
-    }
-
-    /// <summary>
-    /// Execution paths for binary operations, selected based on stride analysis.
-    /// </summary>
-    public enum ExecutionPath
-    {
-        /// <summary>Both operands are fully C-contiguous with identical shapes.</summary>
-        SimdFull,
-        /// <summary>Right operand is a scalar (all strides = 0).</summary>
-        SimdScalarRight,
-        /// <summary>Left operand is a scalar (all strides = 0).</summary>
-        SimdScalarLeft,
-        /// <summary>Inner dimension is contiguous/broadcast for both operands.</summary>
-        SimdChunk,
-        /// <summary>Arbitrary strides, requires coordinate-based iteration.</summary>
-        General
     }
 
     /// <summary>

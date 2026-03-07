@@ -3,33 +3,6 @@ using System;
 namespace NumSharp.Backends.Kernels
 {
     /// <summary>
-    /// Reduction operation types supported by the IL kernel infrastructure.
-    /// </summary>
-    public enum ReductionOp
-    {
-        /// <summary>Sum of elements (add reduction)</summary>
-        Sum,
-        /// <summary>Product of elements (multiply reduction)</summary>
-        Prod,
-        /// <summary>Maximum element</summary>
-        Max,
-        /// <summary>Minimum element</summary>
-        Min,
-        /// <summary>Index of maximum element (returns int)</summary>
-        ArgMax,
-        /// <summary>Index of minimum element (returns int)</summary>
-        ArgMin,
-        /// <summary>Mean = Sum / count</summary>
-        Mean,
-        /// <summary>Cumulative sum (running total)</summary>
-        CumSum,
-        /// <summary>All elements non-zero (logical AND reduction, returns bool)</summary>
-        All,
-        /// <summary>Any element non-zero (logical OR reduction, returns bool)</summary>
-        Any
-    }
-
-    /// <summary>
     /// Execution path for reduction operations.
     /// </summary>
     public enum ReductionPath
