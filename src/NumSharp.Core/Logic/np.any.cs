@@ -58,19 +58,19 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.any.html</remarks>
         public static NDArray<bool> any(NDArray nd, int axis, bool keepdims = false)
         {
-            if (axis < 0)
-                axis = nd.ndim + axis;
-            if (axis < 0 || axis >= nd.ndim)
+            if (nd == null)
             {
-                throw new ArgumentOutOfRangeException(nameof(axis));
+                throw new ArgumentNullException(nameof(nd), "Can't operate with null array");
             }
             if (nd.ndim == 0)
             {
                 throw new ArgumentException("Can't operate with zero array");
             }
-            if (nd == null)
+            if (axis < 0)
+                axis = nd.ndim + axis;
+            if (axis < 0 || axis >= nd.ndim)
             {
-                throw new ArgumentException("Can't operate with null array");
+                throw new ArgumentOutOfRangeException(nameof(axis));
             }
 
             int[] inputShape = nd.shape;
@@ -88,7 +88,7 @@ namespace NumSharp
                 }
             }
 
-            NDArray<bool> resultArray = (NDArray<bool>)zeros<bool>(outputShape);
+            NDArray<bool> resultArray = zeros<bool>(outputShape).MakeGeneric<bool>();
             Span<bool> resultSpan = resultArray.GetData().AsSpan<bool>();
 
             int axisSize = inputShape[axis];

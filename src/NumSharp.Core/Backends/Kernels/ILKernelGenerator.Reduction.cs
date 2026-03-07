@@ -229,7 +229,7 @@ namespace NumSharp.Backends.Kernels
 
         /// <summary>
         /// Emit a SIMD reduction loop for contiguous arrays.
-        /// Uses Vector256 for horizontal reductions.
+        /// Uses vector accumulator for O(N + log(vectorWidth)) instead of O(N * log(vectorWidth)).
         /// </summary>
         private static void EmitReductionSimdLoop(ILGenerator il, ElementReductionKernelKey key, int inputSize)
         {
@@ -248,19 +248,22 @@ namespace NumSharp.Backends.Kernels
             }
 
             int vectorCount = GetVectorCount(key.InputType);
+            var clrType = GetClrType(key.InputType);
+            var vectorType = GetVectorType(clrType);
 
             var locI = il.DeclareLocal(typeof(int)); // loop counter
             var locVectorEnd = il.DeclareLocal(typeof(int)); // totalSize - vectorCount
-            var locAccum = il.DeclareLocal(GetClrType(key.AccumulatorType)); // scalar accumulator
+            var locVecAccum = il.DeclareLocal(vectorType); // VECTOR accumulator (optimized)
+            var locScalarAccum = il.DeclareLocal(GetClrType(key.AccumulatorType)); // scalar for tail
 
             var lblSimdLoop = il.DefineLabel();
             var lblSimdLoopEnd = il.DefineLabel();
             var lblTailLoop = il.DefineLabel();
             var lblTailLoopEnd = il.DefineLabel();
 
-            // Initialize accumulator with identity value
-            EmitLoadIdentity(il, key.Op, key.AccumulatorType);
-            il.Emit(OpCodes.Stloc, locAccum);
+            // Initialize VECTOR accumulator with identity value broadcast
+            EmitVectorIdentity(il, key.Op, key.InputType);
+            il.Emit(OpCodes.Stloc, locVecAccum);
 
             // vectorEnd = totalSize - vectorCount
             il.Emit(OpCodes.Ldarg_S, (byte)4); // totalSize
@@ -272,13 +275,16 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Ldc_I4_0);
             il.Emit(OpCodes.Stloc, locI);
 
-            // === SIMD LOOP ===
+            // === SIMD LOOP (vector * vector accumulation) ===
             il.MarkLabel(lblSimdLoop);
 
             // if (i > vectorEnd) goto SimdLoopEnd
             il.Emit(OpCodes.Ldloc, locI);
             il.Emit(OpCodes.Ldloc, locVectorEnd);
             il.Emit(OpCodes.Bgt, lblSimdLoopEnd);
+
+            // Load vector accumulator
+            il.Emit(OpCodes.Ldloc, locVecAccum);
 
             // Load vector from input[i]
             il.Emit(OpCodes.Ldarg_0); // input
@@ -289,13 +295,9 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Add);
             EmitVectorLoad(il, key.InputType);
 
-            // Perform horizontal reduction on vector and combine with accumulator
-            EmitVectorHorizontalReduction(il, key.Op, key.InputType);
-
-            // Combine with accumulator
-            il.Emit(OpCodes.Ldloc, locAccum);
-            EmitReductionCombine(il, key.Op, key.AccumulatorType);
-            il.Emit(OpCodes.Stloc, locAccum);
+            // vecAccum = vecAccum OP inputVec (vector-vector operation)
+            EmitVectorBinaryReductionOp(il, key.Op, key.InputType);
+            il.Emit(OpCodes.Stloc, locVecAccum);
 
             // i += vectorCount
             il.Emit(OpCodes.Ldloc, locI);
@@ -306,7 +308,13 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Br, lblSimdLoop);
             il.MarkLabel(lblSimdLoopEnd);
 
-            // === TAIL LOOP ===
+            // === HORIZONTAL REDUCTION (once at end) ===
+            // Reduce vector accumulator to scalar
+            il.Emit(OpCodes.Ldloc, locVecAccum);
+            EmitVectorHorizontalReduction(il, key.Op, key.InputType);
+            il.Emit(OpCodes.Stloc, locScalarAccum);
+
+            // === TAIL LOOP (scalar) ===
             il.MarkLabel(lblTailLoop);
 
             // if (i >= totalSize) goto end
@@ -324,10 +332,10 @@ namespace NumSharp.Backends.Kernels
             EmitLoadIndirect(il, key.InputType);
             EmitConvertTo(il, key.InputType, key.AccumulatorType);
 
-            // Combine with accumulator
-            il.Emit(OpCodes.Ldloc, locAccum);
+            // Combine with scalar accumulator
+            il.Emit(OpCodes.Ldloc, locScalarAccum);
             EmitReductionCombine(il, key.Op, key.AccumulatorType);
-            il.Emit(OpCodes.Stloc, locAccum);
+            il.Emit(OpCodes.Stloc, locScalarAccum);
 
             // i++
             il.Emit(OpCodes.Ldloc, locI);
@@ -338,8 +346,50 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Br, lblTailLoop);
             il.MarkLabel(lblTailLoopEnd);
 
-            // Return accumulator
-            il.Emit(OpCodes.Ldloc, locAccum);
+            // Return scalar accumulator
+            il.Emit(OpCodes.Ldloc, locScalarAccum);
+        }
+
+        /// <summary>
+        /// Emit vector identity value (broadcast identity to all lanes).
+        /// </summary>
+        private static void EmitVectorIdentity(ILGenerator il, ReductionOp op, NPTypeCode type)
+        {
+            // Load scalar identity
+            EmitLoadIdentity(il, op, type);
+            // Broadcast to vector
+            EmitVectorCreate(il, type);
+        }
+
+        /// <summary>
+        /// Emit vector-vector binary reduction operation.
+        /// Stack has [vec1, vec2], result is combined vector.
+        /// </summary>
+        private static void EmitVectorBinaryReductionOp(ILGenerator il, ReductionOp op, NPTypeCode type)
+        {
+            var containerType = GetVectorContainerType();
+            var clrType = GetClrType(type);
+            var vectorType = GetVectorType(clrType);
+
+            string methodName = op switch
+            {
+                ReductionOp.Sum => "Add",
+                ReductionOp.Prod => "Multiply",
+                ReductionOp.Max => "Max",
+                ReductionOp.Min => "Min",
+                ReductionOp.Mean => "Add", // Mean uses Sum internally
+                _ => throw new NotSupportedException($"Vector binary op for {op} not supported")
+            };
+
+            var method = containerType.GetMethods(BindingFlags.Public | BindingFlags.Static)
+                .Where(m => m.Name == methodName && m.IsGenericMethod && m.GetParameters().Length == 2)
+                .Select(m => m.MakeGenericMethod(clrType))
+                .FirstOrDefault(m => m.GetParameters()[0].ParameterType == vectorType);
+
+            if (method == null)
+                throw new InvalidOperationException($"Could not find {containerType.Name}.{methodName}<{clrType.Name}>");
+
+            il.EmitCall(OpCodes.Call, method, null);
         }
 
         /// <summary>
