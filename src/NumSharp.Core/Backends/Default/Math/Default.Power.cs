@@ -16,7 +16,30 @@ namespace NumSharp.Backends
             if (lhs.size == 0)
                 return lhs.Clone();
 
-            var @out = Cast(lhs, typeCode ?? lhs.typecode, copy: true);
+            // NumPy type promotion for power:
+            // - If exponent is floating-point and base is integer → result is float64
+            // - Otherwise, preserve input type
+            NPTypeCode outputType;
+            if (typeCode.HasValue)
+            {
+                outputType = typeCode.Value;
+            }
+            else if (rhs is float || rhs is double || rhs is decimal)
+            {
+                // Floating-point exponent with integer base → promote to float64
+                // GetGroup(): 0=Byte/Char, 1=signed int, 2=unsigned int, 3=float, 4=decimal
+                var inputGroup = lhs.typecode.GetGroup();
+                if (inputGroup == 0 || inputGroup == 1 || inputGroup == 2)
+                    outputType = NPTypeCode.Double;
+                else
+                    outputType = lhs.typecode;
+            }
+            else
+            {
+                outputType = lhs.typecode;
+            }
+
+            var @out = Cast(lhs, outputType, copy: true);
             var len = @out.size;
 
             unsafe

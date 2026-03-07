@@ -9,11 +9,15 @@ namespace NumSharp.Backends
 
         /// <summary>
         /// Element-wise absolute value using IL-generated kernels.
+        /// NumPy behavior: preserves input dtype (unlike sin/cos which promote to float).
         /// </summary>
         public override NDArray Abs(in NDArray nd, NPTypeCode? typeCode = null)
         {
+            // np.abs preserves input dtype (unlike trigonometric functions)
+            // Only use explicit typeCode if provided, otherwise keep input type
+            var outputType = typeCode ?? nd.GetTypeCode;
+
             // Unsigned types are already non-negative - just return a copy with type cast
-            var outputType = ResolveUnaryReturnType(nd, typeCode);
             if (nd.typecode.IsUnsigned())
             {
                 return Cast(nd, outputType, copy: true);

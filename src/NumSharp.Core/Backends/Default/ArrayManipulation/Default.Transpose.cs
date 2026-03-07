@@ -37,11 +37,11 @@ namespace NumSharp.Backends
         /// <param name="argname">A prefix to put before the error message, typically the name of the argument.</param>
         /// <param name="allow_duplicate">If False, the default, disallow an axis from being specified twice.</param>
         /// <returns>The normalized axis index, such that `0 <= normalized_axis < ndim`</returns>
-        public static int[] normalize_axis_tuple(int[] axis, object argname = null, bool allow_duplicate = false)
+        public static int[] normalize_axis_tuple(int[] axis, int ndim, object argname = null, bool allow_duplicate = false)
         {
             for (int i = 0; i < axis.Length; i++)
             {
-                axis[i] = check_and_adjust_axis(axis.Length, axis[i]);
+                axis[i] = check_and_adjust_axis(ndim, axis[i]);
             }
 
             return allow_duplicate ? (int[])axis.Clone() : axis.Distinct().ToArray();
@@ -59,15 +59,15 @@ namespace NumSharp.Backends
         /// <param name="argname">A prefix to put before the error message, typically the name of the argument.</param>
         /// <param name="allow_duplicate">If False, the default, disallow an axis from being specified twice.</param>
         /// <returns>The normalized axis index, such that `0 <= normalized_axis < ndim`</returns>
-        public static int[] normalize_axis_tuple(int axis, object argname = null, bool allow_duplicate = false)
+        public static int[] normalize_axis_tuple(int axis, int ndim, object argname = null, bool allow_duplicate = false)
         {
-            return normalize_axis_tuple(new int[] {axis}, argname, allow_duplicate);
+            return normalize_axis_tuple(new int[] {axis}, ndim, argname, allow_duplicate);
         }
 
         public override NDArray MoveAxis(in NDArray nd, int[] source, int[] destinition)
         {
-            source = normalize_axis_tuple(source);
-            destinition = normalize_axis_tuple(destinition);
+            source = normalize_axis_tuple(source, nd.ndim);
+            destinition = normalize_axis_tuple(destinition, nd.ndim);
             if (source.Length != destinition.Length)
                 throw new Exception("`source` and `destination` arguments must have the same number of elements'");
 
