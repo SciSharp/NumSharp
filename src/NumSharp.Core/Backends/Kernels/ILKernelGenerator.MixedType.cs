@@ -89,7 +89,7 @@ namespace NumSharp.Backends.Kernels
     /// <summary>
     /// Mixed-type binary operations and IL loop emission.
     /// </summary>
-    public static partial class ILKernelGenerator
+    public sealed partial class ILKernelGenerator
     {
         #region Mixed-Type Kernel Generation
 
@@ -217,10 +217,12 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         private static bool CanUseSimdForOp(BinaryOp op)
         {
-            // Only Add, Subtract, Multiply, Divide have Vector256 operators
+            // Add, Subtract, Multiply, Divide have Vector256 operators
+            // BitwiseAnd, BitwiseOr, BitwiseXor use Vector256.BitwiseAnd/Or/Xor
             // Mod requires scalar implementation
             return op == BinaryOp.Add || op == BinaryOp.Subtract ||
-                   op == BinaryOp.Multiply || op == BinaryOp.Divide;
+                   op == BinaryOp.Multiply || op == BinaryOp.Divide ||
+                   op == BinaryOp.BitwiseAnd || op == BinaryOp.BitwiseOr || op == BinaryOp.BitwiseXor;
         }
 
         /// <summary>

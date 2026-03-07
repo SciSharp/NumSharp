@@ -91,7 +91,7 @@ using System.Reflection.Emit;
 
 namespace NumSharp.Backends.Kernels
 {
-    public static partial class ILKernelGenerator
+    public sealed partial class ILKernelGenerator
     {
         #region Unary Kernel Generation
 

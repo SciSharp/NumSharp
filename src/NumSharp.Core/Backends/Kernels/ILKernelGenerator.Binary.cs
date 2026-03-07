@@ -89,7 +89,7 @@ namespace NumSharp.Backends.Kernels
     /// <summary>
     /// Binary operations (same-type) - contiguous kernels and generic helpers.
     /// </summary>
-    public static partial class ILKernelGenerator
+    public sealed partial class ILKernelGenerator
     {
         /// <summary>
         /// Cache of IL-generated contiguous kernels.
@@ -159,11 +159,8 @@ namespace NumSharp.Backends.Kernels
 
         #region Contiguous Kernel Generation
 
-        /// <summary>
-        /// Delegate for contiguous (SimdFull) operations.
-        /// Simplified signature - no strides needed since both arrays are contiguous.
-        /// </summary>
-        public unsafe delegate void ContiguousKernel<T>(T* lhs, T* rhs, T* result, int count) where T : unmanaged;
+        // NOTE: ContiguousKernel<T> delegate is now defined in KernelSignatures.cs
+        // to support IKernelProvider interface.
 
         /// <summary>
         /// Try to generate an IL-based contiguous kernel for the given operation and type.
@@ -174,9 +171,15 @@ namespace NumSharp.Backends.Kernels
             if (!IsSimdSupported<T>())
                 return null;
 
-            // Only support basic arithmetic operations
+            // Only support basic arithmetic and bitwise operations
             if (op != BinaryOp.Add && op != BinaryOp.Subtract &&
-                op != BinaryOp.Multiply && op != BinaryOp.Divide)
+                op != BinaryOp.Multiply && op != BinaryOp.Divide &&
+                op != BinaryOp.BitwiseAnd && op != BinaryOp.BitwiseOr && op != BinaryOp.BitwiseXor)
+                return null;
+
+            // Bitwise operations only supported on integer types
+            if ((op == BinaryOp.BitwiseAnd || op == BinaryOp.BitwiseOr || op == BinaryOp.BitwiseXor) &&
+                !IsIntegerType<T>())
                 return null;
 
             try
@@ -398,6 +401,18 @@ namespace NumSharp.Backends.Kernels
                    typeof(T) == typeof(ushort);
         }
 
+        private static bool IsIntegerType<T>() where T : unmanaged
+        {
+            return typeof(T) == typeof(int) ||
+                   typeof(T) == typeof(long) ||
+                   typeof(T) == typeof(byte) ||
+                   typeof(T) == typeof(short) ||
+                   typeof(T) == typeof(uint) ||
+                   typeof(T) == typeof(ulong) ||
+                   typeof(T) == typeof(ushort) ||
+                   typeof(T) == typeof(sbyte);
+        }
+
         private static int GetVectorCount<T>() where T : unmanaged
         {
             return VectorBits switch
@@ -441,8 +456,31 @@ namespace NumSharp.Backends.Kernels
         private static void EmitVectorOperation<T>(ILGenerator il, BinaryOp op) where T : unmanaged
         {
             var vectorType = GetVectorType(typeof(T));
+            var containerType = GetVectorContainerType();
 
-            string methodName = op switch
+            // Bitwise operations use static methods on Vector256/Vector128 container
+            if (op == BinaryOp.BitwiseAnd || op == BinaryOp.BitwiseOr || op == BinaryOp.BitwiseXor)
+            {
+                string methodName = op switch
+                {
+                    BinaryOp.BitwiseAnd => "BitwiseAnd",
+                    BinaryOp.BitwiseOr => "BitwiseOr",
+                    BinaryOp.BitwiseXor => "Xor",
+                    _ => throw new NotSupportedException()
+                };
+
+                var opMethod = containerType
+                    .GetMethods(BindingFlags.Public | BindingFlags.Static)
+                    .First(m => m.Name == methodName && m.IsGenericMethod &&
+                                m.GetParameters().Length == 2)
+                    .MakeGenericMethod(typeof(T));
+
+                il.EmitCall(OpCodes.Call, opMethod, null);
+                return;
+            }
+
+            // Arithmetic operations use operator overloads on Vector256<T>/Vector128<T>
+            string operatorName = op switch
             {
                 BinaryOp.Add => "op_Addition",
                 BinaryOp.Subtract => "op_Subtraction",
@@ -451,14 +489,14 @@ namespace NumSharp.Backends.Kernels
                 _ => throw new NotSupportedException($"Operation {op} not supported for SIMD")
             };
 
-            var opMethod = vectorType.GetMethod(methodName,
+            var operatorMethod = vectorType.GetMethod(operatorName,
                 BindingFlags.Public | BindingFlags.Static,
                 null, new[] { vectorType, vectorType }, null);
 
-            if (opMethod == null)
-                throw new InvalidOperationException($"Could not find {methodName} for {vectorType.Name}");
+            if (operatorMethod == null)
+                throw new InvalidOperationException($"Could not find {operatorName} for {vectorType.Name}");
 
-            il.EmitCall(OpCodes.Call, opMethod, null);
+            il.EmitCall(OpCodes.Call, operatorMethod, null);
         }
 
         private static void EmitScalarOperation<T>(ILGenerator il, BinaryOp op) where T : unmanaged
@@ -471,6 +509,9 @@ namespace NumSharp.Backends.Kernels
                 BinaryOp.Subtract => OpCodes.Sub,
                 BinaryOp.Multiply => OpCodes.Mul,
                 BinaryOp.Divide => GetDivOpcode<T>(),
+                BinaryOp.BitwiseAnd => OpCodes.And,
+                BinaryOp.BitwiseOr => OpCodes.Or,
+                BinaryOp.BitwiseXor => OpCodes.Xor,
                 _ => throw new NotSupportedException($"Operation {op} not supported")
             };
 
