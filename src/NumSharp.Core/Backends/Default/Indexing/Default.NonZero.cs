@@ -72,7 +72,8 @@ namespace NumSharp.Backends
             }
 
             // SIMD fast path for contiguous arrays
-            if (x.Shape.IsContiguous && ILKernelGenerator.Enabled && ILKernelGenerator.VectorBits > 0)
+            var kp = DefaultKernelProvider;
+            if (x.Shape.IsContiguous && kp.Enabled && kp.VectorBits > 0)
             {
                 var flatIndices = new List<int>(Math.Max(16, size / 4));
                 ILKernelGenerator.NonZeroSimdHelper((T*)x.Address, size, flatIndices);
