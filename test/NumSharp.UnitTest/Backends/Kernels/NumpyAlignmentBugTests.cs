@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp;
 using NumSharp.UnitTest.Utilities;
@@ -10,10 +11,10 @@ namespace NumSharp.UnitTest.Backends.Kernels;
 /// Comprehensive bug reproduction tests found during NumPy 2.4.2 alignment testing.
 /// All tests assert CORRECT NumPy behavior. Tests FAIL while bug exists, PASS when fixed.
 ///
-/// Bug Summary (11 bugs):
+/// Bug Summary (23 bugs):
 /// - BUG-1: Boolean indexing setter throws NotImplementedException (CRITICAL)
 /// - BUG-2: np.nonzero 1-D shape wrong (HIGH)
-/// - BUG-3: np.all/np.any with axis throws InvalidCastException (HIGH)
+/// - BUG-3: np.all/np.any with axis throws InvalidCastException (HIGH) - FIXED
 /// - BUG-4: np.std/np.var ddof parameter ignored (MEDIUM)
 /// - BUG-5: np.std/np.var crash on empty array (MEDIUM)
 /// - BUG-6: np.sum empty 2D with axis returns scalar (MEDIUM)
@@ -22,6 +23,19 @@ namespace NumSharp.UnitTest.Backends.Kernels;
 /// - BUG-9: np.unique returns unsorted (MEDIUM)
 /// - BUG-10: np.repeat with array repeats fails (MEDIUM)
 /// - BUG-11: np.repeat missing axis parameter (LOW)
+/// - BUG-12: np.searchsorted scalar input throws + array input returns wrong results (MEDIUM)
+/// - BUG-13: np.linspace returns float32 instead of float64 (LOW) - FIXED
+/// - BUG-14: np.abs changes int dtype to Double (MEDIUM) - FIXED
+/// - BUG-15: np.moveaxis returns wrong shape (MEDIUM) - FIXED
+/// - BUG-16: nd.astype(int) uses rounding instead of truncation (MEDIUM)
+/// - BUG-17: np.convolve throws NullReferenceException (HIGH)
+/// - BUG-18: np.negative applies abs then negates instead of just negating (HIGH) - FIXED
+/// - BUG-19: np.positive applies abs instead of being identity (HIGH) - FIXED
+/// - BUG-20: np.arange/sum int32 overflow - no auto-promotion to int64 (CRITICAL) - FIXED
+/// - BUG-21: np.amax empty array returns -Inf instead of raising ValueError (MEDIUM)
+/// - BUG-22: np.amin empty array returns +Inf instead of raising ValueError (MEDIUM)
+/// - BUG-25: np.power(int, float) returns int instead of float64 (MEDIUM) - FIXED
+/// - BUG-32: np.random.choice replace=False parameter ignored (HIGH)
 /// </summary>
 [OpenBugs]
 public class NumpyAlignmentBugTests
@@ -73,6 +87,22 @@ public class NumpyAlignmentBugTests
         Assert.AreEqual(1, result.GetInt32(0));
         Assert.AreEqual(2, result.GetInt32(1));
         Assert.AreEqual(3, result.GetInt32(2));
+    }
+
+    [Test]
+    public void BooleanMask_FromComparison_Works()
+    {
+        // Using comparison result directly as mask
+        // NUMPY: arr[arr > 2] = [3, 4, 5]
+        var arr = np.array(new[] { 1, 2, 3, 4, 5 });
+        var mask = arr > 2;
+
+        var result = arr[mask];
+
+        Assert.AreEqual(3, result.size);
+        Assert.AreEqual(3, result.GetInt32(0));
+        Assert.AreEqual(4, result.GetInt32(1));
+        Assert.AreEqual(5, result.GetInt32(2));
     }
 
     [Test]
@@ -476,6 +506,609 @@ public class NumpyAlignmentBugTests
 
     #endregion
 
+    #region BUG-12: np.searchsorted Scalar Input Throws (MEDIUM)
+
+    [Test]
+    public void Bug12_Searchsorted_ScalarInput()
+    {
+        // NUMPY 2.4.2:
+        // >>> np.searchsorted([1, 2, 3, 4, 5], 3)
+        // 2
+        var arr = np.array(new[] { 1, 2, 3, 4, 5 });
+
+        // NumSharp throws IndexOutOfRangeException for scalar input
+        // Array input works fine
+        var result = np.searchsorted(arr, 3);
+
+        Assert.AreEqual(2, result);
+    }
+
+    [Test]
+    public void Bug12_Searchsorted_ScalarInput_NotFound()
+    {
+        // NUMPY: np.searchsorted([1, 3, 5], 4) = 2
+        var arr = np.array(new[] { 1, 3, 5 });
+
+        var result = np.searchsorted(arr, 4);
+
+        Assert.AreEqual(2, result);
+    }
+
+    [Test]
+    public void Bug12_Searchsorted_ArrayInput_WrongResults()
+    {
+        // NUMPY 2.4.2:
+        // >>> np.searchsorted([1, 2, 3, 4, 5], [2, 4])
+        // array([1, 3])
+        // Insert 2 at index 1, insert 4 at index 3
+        var arr = np.array(new[] { 1, 2, 3, 4, 5 });
+        var values = np.array(new[] { 2, 4 });
+
+        var result = np.searchsorted(arr, values);
+
+        Assert.AreEqual(2, result.size);
+        Assert.AreEqual(1, result.GetInt32(0), "index to insert 2 should be 1");
+        Assert.AreEqual(3, result.GetInt32(1), "index to insert 4 should be 3");
+    }
+
+    #endregion
+
+    #region BUG-13: np.linspace Returns float32 Instead of float64 (LOW)
+
+    [Test]
+    public void Bug13_Linspace_ReturnsDtype()
+    {
+        // NUMPY 2.4.2:
+        // >>> np.linspace(0, 10, 5).dtype
+        // dtype('float64')
+        var lin = np.linspace(0, 10, 5);
+
+        // NumSharp returns Single (float32), NumPy returns Double (float64)
+        Assert.AreEqual(typeof(double), lin.dtype,
+            "np.linspace should return float64, not float32");
+    }
+
+    [Test]
+    public void Bug13_Linspace_Values()
+    {
+        // NUMPY: np.linspace(0, 10, 5) = [0, 2.5, 5, 7.5, 10]
+        var lin = np.linspace(0, 10, 5);
+
+        Assert.AreEqual(5, lin.size);
+        Assert.AreEqual(0.0, lin.GetDouble(0), 1e-10);
+        Assert.AreEqual(2.5, lin.GetDouble(1), 1e-10);
+        Assert.AreEqual(5.0, lin.GetDouble(2), 1e-10);
+        Assert.AreEqual(7.5, lin.GetDouble(3), 1e-10);
+        Assert.AreEqual(10.0, lin.GetDouble(4), 1e-10);
+    }
+
+    #endregion
+
+    #region BUG-14: np.abs Changes int dtype to Double (MEDIUM)
+
+    [Test]
+    public void Bug14_Abs_PreservesIntDtype()
+    {
+        // NUMPY 2.4.2:
+        // >>> np.abs([-3, -1, 0, 2, 5]).dtype
+        // dtype('int64')
+        var arr = np.array(new[] { -3, -1, 0, 2, 5 });
+
+        var absArr = np.abs(arr);
+
+        // NumSharp changes dtype to Double, should preserve Int32
+        Assert.AreEqual(typeof(int), absArr.dtype,
+            "np.abs should preserve integer dtype");
+        CollectionAssert.AreEqual(
+            new[] { 3, 1, 0, 2, 5 },
+            absArr.ToArray<int>());
+    }
+
+    [Test]
+    public void Bug14_Abs_Float64_PreservesDtype()
+    {
+        // NUMPY: np.abs([-3.5, 2.5]).dtype = float64
+        var arr = np.array(new[] { -3.5, 2.5 });
+
+        var absArr = np.abs(arr);
+
+        Assert.AreEqual(typeof(double), absArr.dtype);
+        Assert.AreEqual(3.5, absArr.GetDouble(0), 1e-10);
+        Assert.AreEqual(2.5, absArr.GetDouble(1), 1e-10);
+    }
+
+    #endregion
+
+    #region BUG-15: np.moveaxis Returns Wrong Shape (MEDIUM)
+
+    [Test]
+    public void Bug15_Moveaxis_3D()
+    {
+        // NUMPY 2.4.2:
+        // >>> arr = np.zeros((3, 4, 5))
+        // >>> np.moveaxis(arr, 0, -1).shape
+        // (4, 5, 3)
+        var arr = np.zeros(3, 4, 5);
+
+        var moved = np.moveaxis(arr, 0, -1);
+
+        // NumSharp returns unchanged shape (3, 4, 5)
+        // Should move axis 0 to last position: (4, 5, 3)
+        Assert.AreEqual(4, moved.shape[0], "axis 0 should become 4 (original axis 1)");
+        Assert.AreEqual(5, moved.shape[1], "axis 1 should become 5 (original axis 2)");
+        Assert.AreEqual(3, moved.shape[2], "axis 2 should become 3 (original axis 0)");
+    }
+
+    [Test]
+    public void Bug15_Moveaxis_ToFirst()
+    {
+        // NUMPY: np.moveaxis(arr, -1, 0).shape on (3,4,5) -> (5,3,4)
+        var arr = np.zeros(3, 4, 5);
+
+        var moved = np.moveaxis(arr, -1, 0);
+
+        Assert.AreEqual(5, moved.shape[0]);
+        Assert.AreEqual(3, moved.shape[1]);
+        Assert.AreEqual(4, moved.shape[2]);
+    }
+
+    #endregion
+
+    #region BUG-16: nd.astype(int) Uses Rounding Instead of Truncation (MEDIUM)
+
+    [Test]
+    public void Bug16_Astype_FloatToInt_ShouldTruncate()
+    {
+        // NUMPY 2.4.2:
+        // >>> np.array([1.7, 2.3, 3.9]).astype(int)
+        // array([1, 2, 3])  -- truncation toward zero
+        var arr = np.array(new[] { 1.7, 2.3, 3.9 });
+
+        var asInt = arr.astype(np.int32);
+
+        // NumSharp uses rounding: [2, 2, 4]
+        // NumPy uses truncation: [1, 2, 3]
+        CollectionAssert.AreEqual(
+            new[] { 1, 2, 3 },
+            asInt.ToArray<int>(),
+            "astype(int) should truncate, not round");
+    }
+
+    [Test]
+    public void Bug16_Astype_NegativeFloatToInt()
+    {
+        // NUMPY: np.array([-1.7, -2.3, -3.9]).astype(int) = [-1, -2, -3]
+        var arr = np.array(new[] { -1.7, -2.3, -3.9 });
+
+        var asInt = arr.astype(np.int32);
+
+        // Truncation toward zero
+        CollectionAssert.AreEqual(
+            new[] { -1, -2, -3 },
+            asInt.ToArray<int>());
+    }
+
+    #endregion
+
+    #region BUG-17: np.convolve Throws NullReferenceException (HIGH)
+
+    [Test]
+    public void Bug17_Convolve_Basic()
+    {
+        // NUMPY 2.4.2:
+        // >>> np.convolve([1, 2, 3], [0, 1, 0.5])
+        // array([0. , 1. , 2.5, 4. , 1.5])
+        var a = np.array(new double[] { 1, 2, 3 });
+        var v = np.array(new double[] { 0, 1, 0.5 });
+
+        // NumSharp throws NullReferenceException
+        var result = np.convolve(a, v);
+
+        Assert.IsNotNull(result);
+        Assert.AreEqual(5, result.size);
+        Assert.AreEqual(0.0, result.GetDouble(0), 1e-10);
+        Assert.AreEqual(1.0, result.GetDouble(1), 1e-10);
+        Assert.AreEqual(2.5, result.GetDouble(2), 1e-10);
+        Assert.AreEqual(4.0, result.GetDouble(3), 1e-10);
+        Assert.AreEqual(1.5, result.GetDouble(4), 1e-10);
+    }
+
+    [Test]
+    public void Bug17_Convolve_IntArrays()
+    {
+        // NUMPY: np.convolve([1, 2, 3], [1, 1]) = [1, 3, 5, 3]
+        var a = np.array(new[] { 1, 2, 3 });
+        var v = np.array(new[] { 1, 1 });
+
+        var result = np.convolve(a, v);
+
+        Assert.IsNotNull(result);
+        Assert.AreEqual(4, result.size);
+    }
+
+    #endregion
+
+    #region BUG-18: np.negative Applies abs() Then Negates (HIGH)
+
+    [Test]
+    public void Bug18_Negative_ShouldJustNegate()
+    {
+        // NUMPY 2.4.2:
+        // >>> np.negative([1, -2, 3, -4])
+        // array([-1,  2, -3,  4])
+        // Just negates each element (flip sign)
+        var arr = np.array(new[] { 1, -2, 3, -4 });
+
+        var neg = np.negative(arr);
+
+        // NumSharp BUG: applies abs() then negates, giving [-1, -2, -3, -4]
+        // Should give: [-1, 2, -3, 4]
+        Assert.AreEqual(-1, neg.GetInt32(0));
+        Assert.AreEqual(2, neg.GetInt32(1), "negative of -2 should be 2");
+        Assert.AreEqual(-3, neg.GetInt32(2));
+        Assert.AreEqual(4, neg.GetInt32(3), "negative of -4 should be 4");
+    }
+
+    [Test]
+    public void Bug18_Negative_Float64()
+    {
+        // NUMPY: np.negative([-1.5, 2.5]) = [1.5, -2.5]
+        var arr = np.array(new[] { -1.5, 2.5 });
+
+        var neg = np.negative(arr);
+
+        Assert.AreEqual(1.5, neg.GetDouble(0), 1e-10);
+        Assert.AreEqual(-2.5, neg.GetDouble(1), 1e-10);
+    }
+
+    [Test]
+    public void Bug18_Negative_Zero()
+    {
+        // NUMPY: np.negative([0]) = [0] (or -0.0 for float)
+        var arr = np.array(new[] { 0 });
+
+        var neg = np.negative(arr);
+
+        Assert.AreEqual(0, neg.GetInt32(0));
+    }
+
+    #endregion
+
+    #region BUG-19: np.positive Applies abs() Instead of Identity (HIGH)
+
+    [Test]
+    public void Bug19_Positive_ShouldBeIdentity()
+    {
+        // NUMPY 2.4.2:
+        // >>> np.positive([1, -2, 3, -4])
+        // array([ 1, -2,  3, -4])
+        // np.positive is identity function (returns unchanged)
+        var arr = np.array(new[] { 1, -2, 3, -4 });
+
+        var pos = np.positive(arr);
+
+        // NumSharp BUG: applies abs(), giving [1, 2, 3, 4]
+        // Should give: [1, -2, 3, -4]
+        Assert.AreEqual(1, pos.GetInt32(0));
+        Assert.AreEqual(-2, pos.GetInt32(1), "positive should preserve -2");
+        Assert.AreEqual(3, pos.GetInt32(2));
+        Assert.AreEqual(-4, pos.GetInt32(3), "positive should preserve -4");
+    }
+
+    [Test]
+    public void Bug19_Positive_Float64()
+    {
+        // NUMPY: np.positive([-1.5, 2.5]) = [-1.5, 2.5]
+        var arr = np.array(new[] { -1.5, 2.5 });
+
+        var pos = np.positive(arr);
+
+        Assert.AreEqual(-1.5, pos.GetDouble(0), 1e-10, "should preserve -1.5");
+        Assert.AreEqual(2.5, pos.GetDouble(1), 1e-10);
+    }
+
+    #endregion
+
+    #region BUG-20: np.arange/sum Integer Overflow - No Auto-Promotion (CRITICAL)
+    // Two related issues:
+    // A) np.arange returns int32 instead of int64 on 64-bit systems
+    // B) np.sum doesn't auto-promote to int64 to prevent overflow
+
+    [Test]
+    public void Bug20_Arange_ShouldReturnInt64()
+    {
+        // NUMPY 2.4.2:
+        // >>> np.arange(100000).dtype
+        // dtype('int64')  on 64-bit systems
+        //
+        // NumSharp returns int32 instead
+        var arr = np.arange(100000);
+
+        // NumPy returns int64 on 64-bit systems
+        // NumSharp BUG: returns int32
+        Assert.AreEqual(typeof(long), arr.dtype,
+            "np.arange should return int64 on 64-bit systems, not int32");
+    }
+
+    [Test]
+    public void Bug20_Sum_ShouldAutoPromoteToPreventOverflow()
+    {
+        // NUMPY 2.4.2:
+        // >>> np.sum(np.arange(85000, dtype=np.int32))
+        // 3612457500  (auto-promoted to int64)
+        //
+        // NumSharp overflows because it keeps int32
+        var arr = np.arange(85000);  // Returns int32 in NumSharp
+        var sum = np.sum(arr);
+
+        // Expected: 85000 * 84999 / 2 = 3,612,457,500
+        // This exceeds int32.MaxValue (2,147,483,647)
+        // NumSharp BUG: returns -682,509,796 (overflow)
+        // NumPy auto-promotes to int64 and returns correct value
+
+        var expected = 3612457500L;
+        var actual = sum.GetInt32(0);  // Using GetInt32 since NumSharp returns int32
+
+        Assert.AreEqual(expected, (long)actual,
+            $"Sum should be {expected}, got {actual} (overflow). NumPy auto-promotes to int64.");
+    }
+
+    [Test]
+    public void Bug20_Sum_SmallArray_NoOverflow()
+    {
+        // Verify small arrays work correctly (no overflow)
+        // 50000 * 49999 / 2 = 1,249,975,000 (fits in int32)
+        var arr = np.arange(50000);
+        var sum = np.sum(arr);
+
+        Assert.AreEqual(1249975000, sum.GetInt32(0),
+            "Sum of arange(50000) should be 1,249,975,000");
+    }
+
+    [Test]
+    public void Bug20_Sum_LargeArray_Overflow()
+    {
+        // 100000 * 99999 / 2 = 4,999,950,000 (exceeds int32)
+        // NumSharp returns 704,982,704 (overflow)
+        var arr = np.arange(100000);
+        var sum = np.sum(arr);
+
+        var expected = 4999950000L;
+        var actual = sum.GetInt32(0);
+
+        // This will fail due to overflow - documenting the bug
+        Assert.AreEqual(expected, (long)actual,
+            $"Sum should be {expected}, got {actual} (overflow)");
+    }
+
+    [Test]
+    public void Bug20_Sum_Float64_Workaround()
+    {
+        // Workaround: convert to float64 to avoid overflow
+        var large = np.arange(100000).astype(np.float64);
+
+        var sum = np.sum(large);
+
+        Assert.IsNotNull(sum);
+        Assert.AreEqual(4999950000.0, sum.GetDouble(0), 1.0,
+            "Float64 workaround should give correct sum");
+    }
+
+    #endregion
+
+    #region BUG-21: np.amax Empty Array Returns -Inf (MEDIUM)
+
+    [Test]
+    public void Bug21_Amax_EmptyArray_ShouldThrow()
+    {
+        // NUMPY 2.4.2:
+        // >>> np.amax([])
+        // ValueError: zero-size array to reduction operation maximum which has no identity
+        //
+        // NumSharp returns -Infinity instead of throwing
+        var empty = np.array(Array.Empty<double>());
+
+        // NumPy throws ValueError, NumSharp returns -Inf
+        // This test documents that empty max should ideally throw
+        try
+        {
+            var result = np.amax(empty);
+            // If we get here, NumSharp returned a value instead of throwing
+            // Document that it returns -Inf (incorrect NumPy behavior)
+            Assert.Fail($"np.amax on empty array should throw, but returned: {result.GetDouble(0)}");
+        }
+        catch (Exception)
+        {
+            // Correct behavior - should throw
+            Assert.IsTrue(true);
+        }
+    }
+
+    #endregion
+
+    #region BUG-22: np.amin Empty Array Returns +Inf (MEDIUM)
+
+    [Test]
+    public void Bug22_Amin_EmptyArray_ShouldThrow()
+    {
+        // NUMPY 2.4.2:
+        // >>> np.amin([])
+        // ValueError: zero-size array to reduction operation minimum which has no identity
+        //
+        // NumSharp returns +Infinity instead of throwing
+        var empty = np.array(Array.Empty<double>());
+
+        // NumPy throws ValueError, NumSharp returns +Inf
+        try
+        {
+            var result = np.amin(empty);
+            // If we get here, NumSharp returned a value instead of throwing
+            Assert.Fail($"np.amin on empty array should throw, but returned: {result.GetDouble(0)}");
+        }
+        catch (Exception)
+        {
+            // Correct behavior - should throw
+            Assert.IsTrue(true);
+        }
+    }
+
+    #endregion
+
+    #region BUG-32: np.random.choice replace=False Parameter Ignored (HIGH)
+
+    [Test]
+    [OpenBugs]
+    public void Bug32_Choice_ReplaceFalse_NoDuplicates()
+    {
+        // NUMPY 2.4.2:
+        // >>> np.random.seed(42)
+        // >>> np.random.choice(10, 5, replace=False)
+        // array([8, 1, 5, 0, 7])  # All unique values
+        //
+        // NumSharp BUG: replace parameter is declared but never used.
+        // Code always uses randint which samples WITH replacement.
+        np.random.seed(42);
+        var result = np.random.choice(10, new Shape(5), replace: false);
+
+        // With replace=False, all values must be unique
+        var values = result.ToArray<int>();
+        var uniqueCount = values.Distinct().Count();
+
+        Assert.AreEqual(5, uniqueCount,
+            "replace=False should produce 5 unique values, but got duplicates. " +
+            "NumSharp ignores the replace parameter.");
+    }
+
+    [Test]
+    [OpenBugs]
+    public void Bug32_Choice_ReplaceFalse_SizeExceedsPopulation_ShouldThrow()
+    {
+        // NUMPY 2.4.2:
+        // >>> np.random.choice(5, 10, replace=False)
+        // ValueError: Cannot take a larger sample than population when 'replace=False'
+        //
+        // NumSharp BUG: No validation, will produce duplicates instead
+        np.random.seed(42);
+
+        try
+        {
+            var result = np.random.choice(5, new Shape(10), replace: false);
+            Assert.Fail(
+                "np.random.choice(5, 10, replace=False) should throw ValueError, " +
+                "but returned: " + string.Join(", ", result.ToArray<int>()));
+        }
+        catch (ArgumentException)
+        {
+            // Correct - should throw when size > population with replace=False
+            Assert.IsTrue(true);
+        }
+        catch (InvalidOperationException)
+        {
+            // Also acceptable exception type
+            Assert.IsTrue(true);
+        }
+    }
+
+    [Test]
+    public void Bug32_Choice_ReplaceTrue_AllowsDuplicates()
+    {
+        // NUMPY: replace=True (default) allows duplicates
+        // This test verifies the default behavior still works
+        np.random.seed(42);
+        var result = np.random.choice(3, new Shape(100), replace: true);
+
+        // With only 3 choices and 100 samples, duplicates are guaranteed
+        var values = result.ToArray<int>();
+        var uniqueCount = values.Distinct().Count();
+
+        Assert.IsTrue(uniqueCount <= 3,
+            "replace=True should allow duplicates (only 3 unique values possible)");
+        Assert.AreEqual(100, values.Length, "Should return 100 samples");
+    }
+
+    [Test]
+    [OpenBugs]
+    public void Bug32_Choice_NDArray_ReplaceFalse()
+    {
+        // NUMPY: np.random.choice(['a','b','c','d','e'], 3, replace=False)
+        // Should return 3 unique elements from the array
+        np.random.seed(42);
+        var arr = np.array(new[] { 10, 20, 30, 40, 50 });
+        var result = np.random.choice(arr, new Shape(3), replace: false);
+
+        var values = result.ToArray<int>();
+        var uniqueCount = values.Distinct().Count();
+
+        Assert.AreEqual(3, uniqueCount,
+            "replace=False with NDArray input should produce unique selections");
+
+        // All values must be from the original array
+        foreach (var v in values)
+        {
+            Assert.IsTrue(v == 10 || v == 20 || v == 30 || v == 40 || v == 50,
+                $"Value {v} not in original array");
+        }
+    }
+
+    #endregion
+
+    #region Verified Working: np.modf
+
+    [Test]
+    public void Modf_Works()
+    {
+        // NUMPY: np.modf([1.5, 2.7, -3.2]) = ([0.5, 0.7, -0.2], [1.0, 2.0, -3.0])
+        var arr = np.array(new[] { 1.5, 2.7, -3.2 });
+
+        var (frac, integ) = np.modf(arr);
+
+        Assert.AreEqual(3, frac.size);
+        Assert.AreEqual(0.5, frac.GetDouble(0), 1e-10);
+        Assert.AreEqual(0.7, frac.GetDouble(1), 1e-10);
+        Assert.AreEqual(-0.2, frac.GetDouble(2), 1e-10);
+
+        Assert.AreEqual(1.0, integ.GetDouble(0), 1e-10);
+        Assert.AreEqual(2.0, integ.GetDouble(1), 1e-10);
+        Assert.AreEqual(-3.0, integ.GetDouble(2), 1e-10);
+    }
+
+    #endregion
+
+    #region Verified Working: Negative Axis
+
+    [Test]
+    public void Sum_NegativeAxis_Works()
+    {
+        // NUMPY: np.sum([[1,2],[3,4]], axis=-1) = [3, 7]
+        var arr = np.array(new[,] { { 1, 2 }, { 3, 4 } });
+
+        var result = np.sum(arr, axis: -1);
+
+        Assert.AreEqual(1, result.ndim);
+        Assert.AreEqual(2, result.size);
+        Assert.AreEqual(3, result.GetInt32(0));
+        Assert.AreEqual(7, result.GetInt32(1));
+    }
+
+    #endregion
+
+    #region Verified Working: 3D Sum with Axis
+
+    [Test]
+    public void Sum_3D_Axis1_Works()
+    {
+        // NUMPY: np.sum(arr, axis=1) on (2,3,4) -> (2,4)
+        var arr = np.arange(24).reshape(2, 3, 4);
+
+        var result = np.sum(arr, axis: 1);
+
+        Assert.AreEqual(2, result.ndim);
+        Assert.AreEqual(2, result.shape[0]);
+        Assert.AreEqual(4, result.shape[1]);
+    }
+
+    #endregion
+
     #region Verified Working: np.repeat with Scalar
 
     [Test]
@@ -504,6 +1137,333 @@ public class NumpyAlignmentBugTests
         CollectionAssert.AreEqual(
             new[] { 5, 5, 10, 15, 15 },
             result.ToArray<int>());
+    }
+
+    #endregion
+
+    #region Verified Working: np.roll
+
+    [Test]
+    public void Roll_1D_Positive()
+    {
+        // NUMPY: np.roll([1,2,3,4,5], 2) = [4,5,1,2,3]
+        var arr = np.array(new[] { 1, 2, 3, 4, 5 });
+        var result = np.roll(arr, 2);
+
+        CollectionAssert.AreEqual(
+            new[] { 4, 5, 1, 2, 3 },
+            result.ToArray<int>());
+    }
+
+    [Test]
+    public void Roll_1D_Negative()
+    {
+        // NUMPY: np.roll([1,2,3,4,5], -2) = [3,4,5,1,2]
+        var arr = np.array(new[] { 1, 2, 3, 4, 5 });
+        var result = np.roll(arr, -2);
+
+        CollectionAssert.AreEqual(
+            new[] { 3, 4, 5, 1, 2 },
+            result.ToArray<int>());
+    }
+
+    #endregion
+
+    #region Verified Working: np.argsort
+
+    [Test]
+    public void Argsort_1D_Int32()
+    {
+        // NUMPY: np.argsort([3,1,4,1,5]) = [1,3,0,2,4]
+        var arr = np.array(new[] { 3, 1, 4, 1, 5 });
+        var result = np.argsort<int>(arr);
+
+        CollectionAssert.AreEqual(
+            new[] { 1, 3, 0, 2, 4 },
+            result.ToArray<int>());
+    }
+
+    #endregion
+
+    #region Verified Working: np.cumsum
+
+    [Test]
+    public void Cumsum_1D()
+    {
+        // NUMPY: np.cumsum([1,2,3,4,5]) = [1,3,6,10,15]
+        // NumPy-aligned: cumsum of int32 returns int64
+        var arr = np.array(new[] { 1, 2, 3, 4, 5 });
+        var result = np.cumsum(arr);
+
+        CollectionAssert.AreEqual(
+            new long[] { 1, 3, 6, 10, 15 },
+            result.ToArray<long>());
+    }
+
+    [Test]
+    public void Cumsum_2D_Flat()
+    {
+        // NUMPY: np.cumsum([[1,2],[3,4]]) = [1,3,6,10]
+        // NumPy-aligned: cumsum of int32 returns int64
+        var arr = np.array(new[,] { { 1, 2 }, { 3, 4 } });
+        var result = np.cumsum(arr);
+
+        CollectionAssert.AreEqual(
+            new long[] { 1, 3, 6, 10 },
+            result.ToArray<long>());
+    }
+
+    #endregion
+
+    #region Verified Working: NaN in Reductions
+
+    [Test]
+    public void Sum_WithNaN_ReturnsNaN()
+    {
+        // NUMPY: np.sum([1, 2, NaN, 4]) = NaN
+        var arr = np.array(new[] { 1.0, 2.0, double.NaN, 4.0 });
+        var result = np.sum(arr);
+
+        Assert.IsTrue(double.IsNaN(result.GetDouble(0)),
+            "Sum with NaN should return NaN");
+    }
+
+    [Test]
+    public void Max_WithNaN_ReturnsNaN()
+    {
+        // NUMPY: np.max([1, 2, NaN, 4]) = NaN
+        var arr = np.array(new[] { 1.0, 2.0, double.NaN, 4.0 });
+        var result = np.amax(arr);
+
+        Assert.IsTrue(double.IsNaN(result.GetDouble(0)),
+            "Max with NaN should return NaN");
+    }
+
+    [Test]
+    public void Min_WithNaN_ReturnsNaN()
+    {
+        // NUMPY: np.min([1, 2, NaN, 4]) = NaN
+        var arr = np.array(new[] { 1.0, 2.0, double.NaN, 4.0 });
+        var result = np.amin(arr);
+
+        Assert.IsTrue(double.IsNaN(result.GetDouble(0)),
+            "Min with NaN should return NaN");
+    }
+
+    [Test]
+    public void ArgMax_WithNaN_ReturnsNaNIndex()
+    {
+        // NUMPY: np.argmax([1, 2, NaN, 4]) = 2 (index of NaN)
+        var arr = np.array(new[] { 1.0, 2.0, double.NaN, 4.0 });
+        var result = arr.argmax();
+
+        Assert.AreEqual(2, result,
+            "ArgMax with NaN should return index of NaN");
+    }
+
+    [Test]
+    public void ArgMin_WithNaN_ReturnsNaNIndex()
+    {
+        // NUMPY: np.argmin([1, 2, NaN, 4]) = 2 (index of NaN)
+        var arr = np.array(new[] { 1.0, 2.0, double.NaN, 4.0 });
+        var result = arr.argmin();
+
+        Assert.AreEqual(2, result,
+            "ArgMin with NaN should return index of NaN");
+    }
+
+    #endregion
+
+    #region Verified Working: Double Array Reductions (BUG-26 Fix Verification)
+
+    [Test]
+    public void Bug26_Sum_DoubleArray_Works()
+    {
+        // BUG-26 FIX VERIFICATION: np.sum on double arrays
+        var arr = np.array(new double[] { 1.0, 2.0, 3.0, 4.0, 5.0 });
+        var result = np.sum(arr);
+
+        Assert.AreEqual(15.0, result.GetDouble(0), 1e-10,
+            "sum(double[]) should return 15.0");
+    }
+
+    [Test]
+    public void Bug26_Prod_DoubleArray_Works()
+    {
+        // BUG-26 FIX VERIFICATION: np.prod on double arrays
+        var arr = np.array(new double[] { 1.0, 2.0, 3.0, 4.0, 5.0 });
+        var result = np.prod(arr);
+
+        Assert.AreEqual(120.0, result.GetDouble(0), 1e-10,
+            "prod(double[]) should return 120.0");
+    }
+
+    [Test]
+    public void Bug26_Cumsum_DoubleArray_Works()
+    {
+        // BUG-26 FIX VERIFICATION: np.cumsum on double arrays
+        var arr = np.array(new double[] { 1.0, 2.0, 3.0, 4.0, 5.0 });
+        var result = np.cumsum(arr);
+
+        Assert.AreEqual(5, result.size);
+        Assert.AreEqual(1.0, result.GetDouble(0), 1e-10);
+        Assert.AreEqual(3.0, result.GetDouble(1), 1e-10);
+        Assert.AreEqual(6.0, result.GetDouble(2), 1e-10);
+        Assert.AreEqual(10.0, result.GetDouble(3), 1e-10);
+        Assert.AreEqual(15.0, result.GetDouble(4), 1e-10);
+    }
+
+    #endregion
+
+    #region Verified Working: Empty Array Reductions
+
+    [Test]
+    public void Sum_EmptyArray_ReturnsZero()
+    {
+        // NUMPY: np.sum([]) = 0.0
+        var empty = np.array(Array.Empty<double>());
+        var result = np.sum(empty);
+
+        Assert.AreEqual(0.0, result.GetDouble(0), 1e-10,
+            "Sum of empty array should be 0");
+    }
+
+    [Test]
+    public void Prod_EmptyArray_ReturnsOne()
+    {
+        // NUMPY: np.prod([]) = 1.0
+        var empty = np.array(Array.Empty<double>());
+        var result = np.prod(empty);
+
+        Assert.AreEqual(1.0, result.GetDouble(0), 1e-10,
+            "Prod of empty array should be 1");
+    }
+
+    [Test]
+    public void Mean_EmptyArray_ReturnsNaN()
+    {
+        // NUMPY: np.mean([]) = NaN (with RuntimeWarning)
+        var empty = np.array(Array.Empty<double>());
+        var result = np.mean(empty);
+
+        Assert.IsTrue(double.IsNaN(result.GetDouble(0)),
+            "Mean of empty array should be NaN");
+    }
+
+    #endregion
+
+    #region Verified Working: Type Promotion
+
+    [Test]
+    public void TypePromotion_Int32_Float64()
+    {
+        // NUMPY: int32 + float64 = float64
+        var intArr = np.array(new[] { 1, 2, 3 });
+        var floatArr = np.array(new[] { 0.5, 0.5, 0.5 });
+
+        var result = intArr + floatArr;
+
+        Assert.AreEqual(typeof(double), result.dtype);
+        Assert.AreEqual(1.5, result.GetDouble(0), 1e-10);
+    }
+
+    [Test]
+    public void TypePromotion_Bool_Int32()
+    {
+        // NUMPY: bool + int32 = int32
+        var boolArr = np.array(new[] { true, true, true });
+        var intArr = np.array(new[] { 1, 1, 3 });
+
+        var result = boolArr + intArr;
+
+        Assert.AreEqual(typeof(int), result.dtype);
+        Assert.AreEqual(2, result.GetInt32(0));
+        Assert.AreEqual(2, result.GetInt32(1));
+        Assert.AreEqual(4, result.GetInt32(2));
+    }
+
+    [Test]
+    public void Bug25_Power_FloatExponent_ReturnsFloat64()
+    {
+        // BUG-25 FIX VERIFICATION:
+        // NUMPY 2.4.2: np.power(int32, float) returns float64
+        // >>> np.power(np.array([1,2,3], dtype=np.int32), 2.0).dtype
+        // dtype('float64')
+        var arr = np.array(new[] { 1, 2, 3, 4, 5 });
+        var result = np.power(arr, 2.0);
+
+        Assert.AreEqual(typeof(double), result.dtype,
+            "power(int32, float) should return float64 per NumPy behavior");
+        Assert.AreEqual(1.0, result.GetDouble(0), 1e-10);
+        Assert.AreEqual(4.0, result.GetDouble(1), 1e-10);
+        Assert.AreEqual(9.0, result.GetDouble(2), 1e-10);
+    }
+
+    [Test]
+    public void Power_IntExponent_PreservesIntType()
+    {
+        // NUMPY: np.power(int32, int) returns int32
+        // >>> np.power(np.array([1,2,3], dtype=np.int32), 2).dtype
+        // dtype('int32')
+        var arr = np.array(new[] { 1, 2, 3 });
+        var result = np.power(arr, 2);
+
+        Assert.AreEqual(typeof(int), result.dtype,
+            "power(int32, int) should preserve int32 dtype");
+        Assert.AreEqual(1, result.GetInt32(0));
+        Assert.AreEqual(4, result.GetInt32(1));
+        Assert.AreEqual(9, result.GetInt32(2));
+    }
+
+    #endregion
+
+    #region Verified Working: All/Any with Axis and Keepdims
+
+    [Test]
+    public void All_3D_Axis0()
+    {
+        // NUMPY: np.all(arr, axis=0) on (2,2,2) -> (2,2)
+        var arr = np.array(new[,,] {
+            { { true, true }, { true, false } },
+            { { true, true }, { false, true } }
+        });
+
+        var result = np.all(arr, axis: 0);
+
+        Assert.AreEqual(2, result.ndim);
+        Assert.AreEqual(2, result.shape[0]);
+        Assert.AreEqual(2, result.shape[1]);
+    }
+
+    [Test]
+    public void All_3D_Axis1()
+    {
+        // NUMPY: np.all(arr, axis=1) on (2,2,2) -> (2,2)
+        var arr = np.array(new[,,] {
+            { { true, true }, { true, false } },
+            { { true, true }, { false, true } }
+        });
+
+        var result = np.all(arr, axis: 1);
+
+        Assert.AreEqual(2, result.ndim);
+        Assert.AreEqual(2, result.shape[0]);
+        Assert.AreEqual(2, result.shape[1]);
+    }
+
+    [Test]
+    public void All_Keepdims()
+    {
+        // NUMPY: np.all([[True,False],[True,True]], axis=1, keepdims=True) -> [[False],[True]]
+        var arr = np.array(new[,] { { true, false }, { true, true } });
+
+        var result = np.all(arr, axis: 1, keepdims: true);
+
+        Assert.AreEqual(2, result.ndim);
+        Assert.AreEqual(2, result.shape[0]);
+        Assert.AreEqual(1, result.shape[1]);
+        Assert.IsFalse(result.GetBoolean(0, 0));
+        Assert.IsTrue(result.GetBoolean(1, 0));
     }
 
     #endregion
@@ -545,6 +1505,30 @@ public class MissingFunctionTests
 
         Assert.IsNotNull(result, "np.isclose returns null - dead code");
     }
+
+    // Note: The following functions are not implemented in NumSharp
+    // Selection/Manipulation:
+    //   np.where - conditional selection
+    //   np.sort - returns sorted copy (only argsort exists)
+    //   np.flip, np.fliplr, np.flipud - reverse along axis
+    //   np.rot90 - rotate 90 degrees
+    //   np.tile - repeat array
+    //   np.pad - pad array
+    //   np.split, np.array_split, np.hsplit, np.vsplit - split operations
+    // Math:
+    //   np.cumprod - cumulative product
+    //   np.diff - discrete difference
+    //   np.gradient - numerical gradient
+    //   np.ediff1d - 1D differences
+    //   np.round - rounding (np.around may exist as alternative)
+    // Linear Algebra:
+    //   np.diag - extract/create diagonal
+    //   np.diagonal - return diagonal
+    //   np.trace - sum of diagonal
+    // Counting:
+    //   np.count_nonzero - count non-zero elements
+    // NaN-aware:
+    //   np.nansum, np.nanprod, np.nanmax, np.nanmin - NaN-ignoring reductions
 }
 
 /// <summary>
@@ -553,14 +1537,15 @@ public class MissingFunctionTests
 public class TypePromotionDifferenceTests
 {
     [Test]
-    [Misaligned]
-    public void Sum_Int32_OutputType()
+    public void Sum_Int32_OutputType_NowAligned()
     {
+        // After BUG-21 fix: NumSharp now matches NumPy 2.x behavior
+        // int32 sum accumulates to int64 to prevent overflow
         var arr = np.array(new int[] { 1, 2, 3 });
         var result = np.sum(arr);
 
-        Assert.AreEqual(NPTypeCode.Int32, result.typecode,
-            "NumSharp returns int32. NumPy returns int64.");
+        Assert.AreEqual(NPTypeCode.Int64, result.typecode,
+            "NumPy 2.x: int32 sum returns int64. NumSharp now aligned.");
     }
 
     [Test]

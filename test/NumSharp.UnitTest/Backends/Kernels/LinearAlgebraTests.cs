@@ -298,40 +298,43 @@ public class LinearAlgebraTests
     public void Cumsum_NoAxis_Flattens()
     {
         // NumPy: np.cumsum([[1,2,3],[4,5,6]]) = [1,3,6,10,15,21]
+        // NumPy-aligned: cumsum of int32 returns int64
         var arr = np.array(new[,] { { 1, 2, 3 }, { 4, 5, 6 } });
 
         var result = np.cumsum(arr);
 
         Assert.AreEqual(1, result.ndim);
-        result.Should().BeOfValues(1, 3, 6, 10, 15, 21);
+        result.Should().BeOfValues(1L, 3L, 6L, 10L, 15L, 21L);
     }
 
     [Test]
     public void Cumsum_Axis0()
     {
         // NumPy: np.cumsum([[1,2,3],[4,5,6]], axis=0) = [[1,2,3],[5,7,9]]
+        // NumPy-aligned: cumsum of int32 returns int64
         var arr = np.array(new[,] { { 1, 2, 3 }, { 4, 5, 6 } });
 
         var result = np.cumsum(arr, axis: 0);
 
         Assert.AreEqual(2, result.ndim);
-        Assert.AreEqual(1, result.GetInt32(0, 0));
-        Assert.AreEqual(5, result.GetInt32(1, 0));
-        Assert.AreEqual(9, result.GetInt32(1, 2));
+        Assert.AreEqual(1L, result.GetInt64(0, 0));
+        Assert.AreEqual(5L, result.GetInt64(1, 0));
+        Assert.AreEqual(9L, result.GetInt64(1, 2));
     }
 
     [Test]
     public void Cumsum_Axis1()
     {
         // NumPy: np.cumsum([[1,2,3],[4,5,6]], axis=1) = [[1,3,6],[4,9,15]]
+        // NumPy-aligned: cumsum of int32 returns int64
         var arr = np.array(new[,] { { 1, 2, 3 }, { 4, 5, 6 } });
 
         var result = np.cumsum(arr, axis: 1);
 
         Assert.AreEqual(2, result.ndim);
-        Assert.AreEqual(1, result.GetInt32(0, 0));
-        Assert.AreEqual(6, result.GetInt32(0, 2));
-        Assert.AreEqual(15, result.GetInt32(1, 2));
+        Assert.AreEqual(1L, result.GetInt64(0, 0));
+        Assert.AreEqual(6L, result.GetInt64(0, 2));
+        Assert.AreEqual(15L, result.GetInt64(1, 2));
     }
 
     #endregion

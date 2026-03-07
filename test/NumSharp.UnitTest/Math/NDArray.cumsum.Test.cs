@@ -33,7 +33,8 @@ namespace NumSharp.UnitTest.Maths
         public void Cumsum2d()
         {
             NDArray arr = new int[,] {{1, 2, 3}, {4, 5, 6}};
-            NDArray expected = new int[] {1, 3, 6, 10, 15, 21};
+            // NumPy-aligned: cumsum of int32 returns int64
+            NDArray expected = new long[] {1, 3, 6, 10, 15, 21};
 
             np.cumsum(arr).Should().Be(expected);
         }
@@ -51,16 +52,18 @@ namespace NumSharp.UnitTest.Maths
         public void Cumsum2dAxisRows()
         {
             NDArray arr = new int[,] {{1, 2, 3}, {4, 5, 6}};
-            NDArray expected = new int[,] {{1, 2, 3}, {5, 7, 9}};
+            // NumPy-aligned: cumsum of int32 returns int64
+            NDArray expected = new long[,] {{1, 2, 3}, {5, 7, 9}};
 
             np.cumsum(arr, axis: 0).Should().Be(expected);
-        }        
-        
+        }
+
         [Test]
         public void Cumsum2dAxisCols()
         {
             NDArray arr = new int[,] {{1, 2, 3}, {4, 5, 6}};
-            NDArray expected = new int[,] {{1, 3, 6}, {4, 9, 15}};
+            // NumPy-aligned: cumsum of int32 returns int64
+            NDArray expected = new long[,] {{1, 3, 6}, {4, 9, 15}};
 
             np.cumsum(arr, axis: 1).Should().Be(expected);
         }
