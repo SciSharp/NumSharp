@@ -17,5 +17,11 @@ namespace NumSharp.Backends
         ///     Abstracts kernel generation to enable future backends (CUDA, Vulkan).
         /// </summary>
         protected readonly IKernelProvider KernelProvider = ILKernelGenerator.Instance;
+
+        /// <summary>
+        ///     Default kernel provider for static access (np.all, np.any, masking, etc.).
+        ///     Use this for code paths that don't have access to a DefaultEngine instance.
+        /// </summary>
+        public static IKernelProvider DefaultKernelProvider { get; } = ILKernelGenerator.Instance;
     }
 }

@@ -24,7 +24,8 @@ namespace NumSharp
             get
             {
                 // SIMD fast path: contiguous arrays of same size
-                if (ILKernelGenerator.Enabled && ILKernelGenerator.VectorBits > 0 &&
+                var kp = DefaultEngine.DefaultKernelProvider;
+                if (kp.Enabled && kp.VectorBits > 0 &&
                     mask.Shape.IsContiguous && this.Shape.IsContiguous &&
                     mask.size == this.size)
                 {

@@ -1,4 +1,5 @@
 using System;
+using NumSharp.Backends;
 using NumSharp.Backends.Kernels;
 using NumSharp.Generic;
 
@@ -173,7 +174,7 @@ namespace NumSharp
                 unsafe
                 {
                     // Use SIMD helper from unified reduction infrastructure
-                    if (ILKernelGenerator.Enabled)
+                    if (DefaultEngine.DefaultKernelProvider.Enabled)
                     {
                         return ILKernelGenerator.AnySimdHelper<T>(nd.Address, nd.size);
                     }
