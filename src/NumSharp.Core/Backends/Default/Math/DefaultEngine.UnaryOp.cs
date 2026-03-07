@@ -87,7 +87,7 @@ namespace NumSharp.Backends
         {
             var inputType = nd.GetTypeCode;
             var key = new UnaryScalarKernelKey(inputType, outputType, op);
-            var func = ILKernelGenerator.GetUnaryScalarDelegate(key);
+            var func = KernelProvider.GetUnaryScalarDelegate(key);
 
             // Dispatch based on input type to avoid boxing
             return inputType switch

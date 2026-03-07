@@ -77,8 +77,8 @@ namespace NumSharp.Backends
         {
             var lhsType = lhs.GetTypeCode;
             var rhsType = rhs.GetTypeCode;
-            var key = new ILKernelGenerator.ComparisonScalarKernelKey(lhsType, rhsType, op);
-            var func = ILKernelGenerator.GetComparisonScalarDelegate(key);
+            var key = new ComparisonScalarKernelKey(lhsType, rhsType, op);
+            var func = KernelProvider.GetComparisonScalarDelegate(key);
 
             // Dispatch based on lhs type first
             return lhsType switch

@@ -44,4 +44,32 @@ namespace NumSharp.Backends.Kernels
 
         public override string ToString() => $"Scalar_{Op}_{LhsType}_{RhsType}_{ResultType}";
     }
+
+    /// <summary>
+    /// Cache key for comparison scalar operation kernels.
+    /// Identifies a unique kernel by LHS type, RHS type, and comparison operation.
+    /// Result type is always bool.
+    /// </summary>
+    /// <remarks>
+    /// Used to cache IL-generated Func delegates that eliminate dynamic dispatch overhead.
+    /// The delegate signature is Func&lt;TLhs, TRhs, bool&gt;.
+    /// </remarks>
+    public readonly record struct ComparisonScalarKernelKey(
+        NPTypeCode LhsType,
+        NPTypeCode RhsType,
+        ComparisonOp Op
+    )
+    {
+        /// <summary>
+        /// Returns true if both operand types are the same.
+        /// </summary>
+        public bool IsSameType => LhsType == RhsType;
+
+        /// <summary>
+        /// Get the common type to use for comparison (both operands promoted to this type).
+        /// </summary>
+        public NPTypeCode ComparisonType => np._FindCommonScalarType(LhsType, RhsType);
+
+        public override string ToString() => $"ScalarCmp_{Op}_{LhsType}_{RhsType}";
+    }
 }
