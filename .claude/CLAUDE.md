@@ -9,9 +9,12 @@ A full clone of the NumPy repository is available at `src/numpy/`, checked out t
 ## Core Principles
 
 1. **Match NumPy Exactly**: Run actual Python/NumPy code first, observe behavior, replicate in C#
-2. **Edge Cases Matter**: NaN handling, empty arrays, type promotion, broadcasting, negative axis
-3. **Breaking Changes OK**: Library was dormant; API stability is not a constraint
-4. **Test From NumPy Output**: Tests should be based on running actual NumPy code
+2. **Match NumPy Implementation Patterns**: Don't just match behavior - match NumPy's implementation structure. If NumPy has a clean approach and NumSharp has spaghetti code, refactor to match NumPy's design
+3. **Edge Cases Matter**: NaN handling, empty arrays, type promotion, broadcasting, negative axis
+4. **Breaking Changes OK**: Library was dormant; API stability is not a constraint
+5. **Test From NumPy Output**: Tests should be based on running actual NumPy code
+
+**When fixing bugs:** Don't just patch symptoms. Check `src/numpy/` (v2.4.2) for how NumPy implements the same functionality, then refactor NumSharp to match NumPy's structure.
 
 ## Supported Types (12)
 
@@ -50,6 +53,46 @@ np                Static API class (like `import numpy as np`)
 | View semantics | Slicing returns views (shared memory), not copies |
 | Shape readonly struct | Immutable after construction (NumPy-aligned). Contains `ArrayFlags` for cached O(1) property access |
 | Broadcast write protection | Broadcast views are read-only (`IsWriteable = false`), matching NumPy behavior |
+| ILKernelGenerator | Runtime IL emission replacing ~500K lines of Regen templates; SIMD V128/V256/V512 |
+
+## ILKernelGenerator (0.41.x)
+
+Runtime IL generation via `System.Reflection.Emit.DynamicMethod` for high-performance kernels.
+
+**Partial Class Structure:**
+| File | Responsibility |
+|------|----------------|
+| `ILKernelGenerator.cs` | Core: type mapping, SIMD detection (VectorBits), shared IL primitives |
+| `.Binary.cs` | Same-type binary ops (Add, Sub, Mul, Div, BitwiseAnd/Or/Xor) |
+| `.MixedType.cs` | Mixed-type binary ops with promotion; owns `ClearAll()` |
+| `.Unary.cs` | Math functions (Negate, Abs, Sqrt, Sin, Cos, Exp, Log, Sign, etc.) |
+| `.Comparison.cs` | Comparisons (==, !=, <, >, <=, >=) returning bool arrays |
+| `.Reduction.cs` | Reductions (Sum, Prod, Min, Max, ArgMax, ArgMin, All, Any) |
+
+**Execution Paths:**
+1. **SimdFull** - Both operands contiguous, SIMD-capable dtype → Vector loop + scalar tail
+2. **ScalarFull** - Both contiguous, non-SIMD dtype (Decimal) → Scalar loop
+3. **General** - Strided/broadcast → Coordinate-based iteration
+
+**NEP50 Dtype Alignment (NumPy 2.x):**
+| Operation | Returns |
+|-----------|---------|
+| `sum(int32)` | `int64` |
+| `prod(int32)` | `int64` |
+| `cumsum(int32)` | `int64` |
+| `abs(int32)` | `int32` (preserves) |
+| `sign(int32)` | `int32` (preserves) |
+| `power(int32, float)` | `float64` |
+
+**Missing from ILKernel (needs implementation):**
+- Binary: Power, FloorDivide, LeftShift, RightShift
+- Unary: Reciprocal, Square, Cbrt, Deg2Rad, Rad2Deg, BitwiseNot
+- Reduction: Std, Var, NanSum, NanProd, CumProd
+- Axis reductions (use old iterator path, no SIMD)
+
+**DefaultEngine ops needing IL migration:**
+- Quick wins: `Clip`, `Modf` (SIMD-friendly)
+- High impact: `MatMul`, `Dot`, axis reductions
 
 ## Shape Architecture (NumPy-Aligned)
 
@@ -103,6 +146,90 @@ nd["::-1"]        // Reversed
 nd[":, 0"]        // All rows, first column
 nd["..., -1"]     // Ellipsis fills dimensions
 ```
+
+---
+
+## Known Issues & Bugs
+
+### Critical Bugs (Fundamentally Wrong Output)
+
+| Bug | Function | Issue | Workaround |
+|-----|----------|-------|------------|
+| BUG-19 | `np.negative` | Applies abs() then negates (always returns negative) | Use `arr * -1` instead |
+| BUG-20 | `np.positive` | Applies abs() instead of identity | Use `arr.copy()` instead |
+| BUG-21 | `np.arange`/`np.sum` | int32 default dtype, no overflow protection | Specify `dtype: np.int64` |
+| BUG-18 | `np.convolve` | NullReferenceException | Not usable |
+
+### Medium Severity Bugs
+
+| Bug | Function | Issue |
+|-----|----------|-------|
+| BUG-12 | `np.searchsorted` | Scalar input throws IndexOutOfRangeException |
+| BUG-15 | `np.abs` | Changes int dtype to Double |
+| BUG-16 | `np.moveaxis` | Returns unchanged shape |
+| BUG-17 | `nd.astype()` | Uses rounding instead of truncation for float->int |
+
+### Low Severity (Behavioral Differences)
+
+| Bug | Function | Issue |
+|-----|----------|-------|
+| BUG-13 | `np.linspace` | Returns float32 instead of float64 |
+| BUG-14 | `np.unique` | Doesn't sort results (NumPy sorts) |
+| BUG-4 | `np.std`/`np.var` | ddof parameter ignored |
+| BUG-7 | sbyte (int8) | Type not supported |
+
+### Dead Code (Returns null/default)
+
+These functions exist but are non-functional:
+
+| Function | Issue |
+|----------|-------|
+| `np.isnan`, `np.isfinite`, `np.isclose` | DefaultEngine returns null |
+| `np.allclose` | Depends on np.isclose |
+| `np.linalg.inv`, `qr`, `svd`, `lstsq` | LAPACK bindings removed |
+| `nd.delete()`, `nd.multi_dot()` | Return null |
+| `operator &`, `operator \|` | Fixed in 0.41.x via ILKernel |
+
+---
+
+## Missing Functions (22)
+
+These NumPy functions are **not implemented**:
+
+| Category | Functions |
+|----------|-----------|
+| Sorting | `np.sort` |
+| Selection | `np.where` |
+| Manipulation | `np.flip`, `np.fliplr`, `np.flipud`, `np.rot90`, `np.tile`, `np.pad` |
+| Splitting | `np.split`, `np.array_split`, `np.hsplit`, `np.vsplit`, `np.dsplit` |
+| Diagonal | `np.diag`, `np.diagonal`, `np.trace` |
+| Cumulative | `np.cumprod`, `np.diff`, `np.gradient`, `np.ediff1d` |
+| Counting | `np.count_nonzero` |
+| Rounding | `np.round` (use `np.around` instead) |
+
+---
+
+## Verified Working Functions (75+)
+
+Tested against NumPy 2.4.2 (2703 tests, 97.5% pass rate):
+
+**Array Creation:** `zeros`, `ones`, `empty`, `full`, `arange`, `linspace`, `eye`, `identity`, `meshgrid`, `copy`, `zeros_like`, `ones_like`, `empty_like`, `full_like`, `array`, `asarray`
+
+**Shape Manipulation:** `reshape`, `transpose`, `ravel`, `flatten`, `squeeze`, `expand_dims`, `swapaxes`, `rollaxis`, `atleast_1d/2d/3d`, `stack`, `vstack`, `hstack`, `dstack`, `concatenate`
+
+**Math Operations:** `add`, `subtract`, `multiply`, `divide`, `mod`, `power`, `sqrt`, `abs`, `sign`, `floor`, `ceil`, `sin`, `cos`, `tan`, `exp`, `log`, `log2`, `log10`, `log1p`, `expm1`, `exp2`, `around`
+
+**Reductions:** `sum`, `prod`, `mean`, `std`, `var`, `max`, `min`, `argmax`, `argmin`, `all`, `any`, `cumsum`
+
+**Comparisons:** `==`, `!=`, `<`, `>`, `<=`, `>=`, `array_equal`
+
+**Linear Algebra:** `dot`, `matmul`, `outer`
+
+**Random:** `seed`, `rand`, `randn`, `randint`, `uniform`, `choice`, `shuffle`, `permutation`
+
+**File I/O:** `save`/`load` (.npy), `tofile`/`fromfile`
+
+**Other:** `clip`, `roll`, `repeat`, `argsort`, `copyto`, `broadcast_to`, `modf`, `nonzero`, `unique`
 
 ---
 
@@ -214,10 +341,10 @@ nd["..., -1"]     // Ellipsis fills dimensions
 | `np.copyto` | `np.copyto.cs` |
 
 ### Logic Functions (`Logic/`)
-| Function | File |
-|----------|------|
-| `np.all` | `np.all.cs` | All dtypes; with-axis works |
-| `np.any` | `np.any.cs` | All dtypes; with-axis **BUGGY** (always throws) |
+| Function | File | Notes |
+|----------|------|-------|
+| `np.all` | `np.all.cs` | All dtypes; SIMD optimized with early-exit |
+| `np.any` | `np.any.cs` | All dtypes; SIMD optimized with early-exit |
 | ~~`np.allclose`~~ | `np.allclose.cs` | **DEAD CODE**: depends on `np.isclose` which returns null |
 | `np.array_equal` | `np.array_equal.cs` | |
 | `np.isscalar` | `np.is.cs` | |
@@ -227,15 +354,15 @@ nd["..., -1"]     // Ellipsis fills dimensions
 | `np.find_common_type` | `np.find_common_type.cs` | |
 
 ### Comparison Operators (`Operations/Elementwise/`)
-| Operator | File |
-|----------|------|
-| `==` (element-wise) | `NDArray.Equals.cs` |
-| `!=` | `NDArray.NotEquals.cs` |
-| `>`, `>=` | `NDArray.Greater.cs` |
-| `<`, `<=` | `NDArray.Lower.cs` |
-| ~~`&` (AND)~~ | `NDArray.AND.cs` | **DEAD CODE**: returns null |
-| ~~`\|` (OR)~~ | `NDArray.OR.cs` | **DEAD CODE**: returns null |
-| `!` (NOT) | `NDArray.NOT.cs` |
+| Operator | File | Notes |
+|----------|------|-------|
+| `==` (element-wise) | `NDArray.Equals.cs` | SIMD optimized |
+| `!=` | `NDArray.NotEquals.cs` | SIMD optimized |
+| `>`, `>=` | `NDArray.Greater.cs` | SIMD optimized |
+| `<`, `<=` | `NDArray.Lower.cs` | SIMD optimized |
+| `&` (AND) | `NDArray.AND.cs` | Fixed in 0.41.x via ILKernel |
+| `\|` (OR) | `NDArray.OR.cs` | Fixed in 0.41.x via ILKernel |
+| `!` (NOT) | `NDArray.NOT.cs` | |
 
 ### Arithmetic Operators (`Operations/Elementwise/`)
 | Operator | File |
