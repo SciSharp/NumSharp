@@ -755,6 +755,33 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
+        /// Get unary scalar delegate with runtime type dispatch (IKernelProvider interface).
+        /// </summary>
+        Delegate? IKernelProvider.GetUnaryScalarDelegate(UnaryScalarKernelKey key)
+        {
+            try { return GetUnaryScalarDelegate(key); }
+            catch { return null; }
+        }
+
+        /// <summary>
+        /// Get binary scalar delegate with runtime type dispatch (IKernelProvider interface).
+        /// </summary>
+        Delegate? IKernelProvider.GetBinaryScalarDelegate(BinaryScalarKernelKey key)
+        {
+            try { return GetBinaryScalarDelegate(key); }
+            catch { return null; }
+        }
+
+        /// <summary>
+        /// Get comparison scalar delegate with runtime type dispatch (IKernelProvider interface).
+        /// </summary>
+        Delegate? IKernelProvider.GetComparisonScalarDelegate(ComparisonScalarKernelKey key)
+        {
+            try { return GetComparisonScalarDelegate(key); }
+            catch { return null; }
+        }
+
+        /// <summary>
         /// Clear all cached kernels (IKernelProvider interface).
         /// </summary>
         void IKernelProvider.Clear() => ClearAll();

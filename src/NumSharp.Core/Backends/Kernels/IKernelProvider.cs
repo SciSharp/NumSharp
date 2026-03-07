@@ -1,3 +1,5 @@
+using System;
+
 namespace NumSharp.Backends.Kernels
 {
     /// <summary>
@@ -72,6 +74,18 @@ namespace NumSharp.Backends.Kernels
         /// <returns>The scalar function delegate, or null if not supported.</returns>
         UnaryScalar<TIn, TOut>? GetUnaryScalar<TIn, TOut>(UnaryOp op);
 
+        /// <summary>
+        /// Get unary scalar delegate with runtime type dispatch.
+        /// Returns Func&lt;TIn, TOut&gt; as Delegate for type-erased scenarios.
+        /// </summary>
+        Delegate? GetUnaryScalarDelegate(UnaryScalarKernelKey key);
+
+        /// <summary>
+        /// Get binary scalar delegate with runtime type dispatch.
+        /// Returns Func&lt;TLhs, TRhs, TResult&gt; as Delegate for type-erased scenarios.
+        /// </summary>
+        Delegate? GetBinaryScalarDelegate(BinaryScalarKernelKey key);
+
         // ===================
         // Reduction Operations
         // ===================
@@ -107,6 +121,12 @@ namespace NumSharp.Backends.Kernels
         /// <param name="op">The comparison operation to perform.</param>
         /// <returns>The scalar function delegate, or null if not supported.</returns>
         ComparisonScalar<TLhs, TRhs>? GetComparisonScalar<TLhs, TRhs>(ComparisonOp op);
+
+        /// <summary>
+        /// Get comparison scalar delegate with runtime type dispatch.
+        /// Returns Func&lt;TLhs, TRhs, bool&gt; as Delegate for type-erased scenarios.
+        /// </summary>
+        Delegate? GetComparisonScalarDelegate(ComparisonScalarKernelKey key);
 
         // ===================
         // Cache Management

@@ -973,18 +973,7 @@ namespace NumSharp.Backends.Kernels
 
         #region Comparison Scalar Kernel Generation
 
-        /// <summary>
-        /// Cache key for comparison scalar operation kernels.
-        /// </summary>
-        public readonly record struct ComparisonScalarKernelKey(
-            NPTypeCode LhsType,
-            NPTypeCode RhsType,
-            ComparisonOp Op
-        )
-        {
-            public NPTypeCode ComparisonType => np._FindCommonScalarType(LhsType, RhsType);
-            public override string ToString() => $"ScalarCmp_{Op}_{LhsType}_{RhsType}";
-        }
+        // ComparisonScalarKernelKey is now defined in ScalarKernel.cs
 
         /// <summary>
         /// Cache for comparison scalar kernels.

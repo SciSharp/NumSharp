@@ -85,7 +85,7 @@ namespace NumSharp.Backends
             var lhsType = lhs.GetTypeCode;
             var rhsType = rhs.GetTypeCode;
             var key = new BinaryScalarKernelKey(lhsType, rhsType, resultType, op);
-            var func = ILKernelGenerator.GetBinaryScalarDelegate(key);
+            var func = KernelProvider.GetBinaryScalarDelegate(key);
 
             // Dispatch based on lhs type first
             return lhsType switch
