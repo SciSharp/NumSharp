@@ -51,8 +51,8 @@ namespace NumSharp.Backends
             // Get kernel key
             var key = new ComparisonKernelKey(lhsType, rhsType, op, path);
 
-            // Get or generate kernel
-            var kernel = ILKernelGenerator.TryGetComparisonKernel(key);
+            // Get or generate kernel via provider interface
+            var kernel = KernelProvider.GetComparisonKernel(key);
 
             if (kernel != null)
             {

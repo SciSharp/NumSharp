@@ -60,8 +60,8 @@ namespace NumSharp.Backends
             // Get kernel key
             var key = new MixedTypeKernelKey(lhsType, rhsType, resultType, op, path);
 
-            // Get or generate kernel
-            var kernel = ILKernelGenerator.TryGetMixedTypeKernel(key);
+            // Get or generate kernel via provider interface
+            var kernel = KernelProvider.GetMixedTypeKernel(key);
 
             if (kernel != null)
             {

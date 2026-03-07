@@ -61,8 +61,8 @@ namespace NumSharp.Backends
             // Get kernel key
             var key = new UnaryKernelKey(inputType, outputType, op, isContiguous);
 
-            // Get or generate kernel
-            var kernel = ILKernelGenerator.TryGetUnaryKernel(key);
+            // Get or generate kernel via provider interface
+            var kernel = KernelProvider.GetUnaryKernel(key);
 
             if (kernel != null)
             {
