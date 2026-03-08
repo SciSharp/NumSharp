@@ -35,9 +35,10 @@ namespace NumSharp.Backends
             {
                 outputType = typeCode.Value;
             }
-            else if (op == UnaryOp.Negate || op == UnaryOp.Abs)
+            else if (op == UnaryOp.Negate || op == UnaryOp.Abs || op == UnaryOp.LogicalNot)
             {
-                // Arithmetic operations preserve type
+                // Arithmetic/logical operations preserve type
+                // LogicalNot on boolean returns boolean
                 outputType = inputType;
             }
             else
