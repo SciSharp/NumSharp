@@ -67,6 +67,38 @@ namespace NumSharp
         public static NDArray power(NDArray x1, NDArray x2) => x1.TensorEngine.Power(x1, x2, (NPTypeCode?)null);
 
         /// <summary>
+        ///     First array elements raised to powers from second array, element-wise.
+        ///     Supports broadcasting between x1 and x2.
+        /// </summary>
+        /// <param name="x1">The bases.</param>
+        /// <param name="x2">The exponents (array).</param>
+        /// <param name="dtype">The dtype of the returned NDArray.</param>
+        /// <returns>The bases in x1 raised to the exponents in x2.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.power.html</remarks>
+        public static NDArray power(in NDArray x1, in NDArray x2, Type dtype) => x1.TensorEngine.Power(x1, x2, dtype);
+
+        /// <summary>
+        ///     First array elements raised to powers from second array, element-wise.
+        ///     Supports broadcasting between x1 and x2.
+        /// </summary>
+        /// <param name="x1">The bases.</param>
+        /// <param name="x2">The exponents (array).</param>
+        /// <param name="typeCode">The dtype of the returned NDArray.</param>
+        /// <returns>The bases in x1 raised to the exponents in x2.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.power.html</remarks>
+        public static NDArray power(in NDArray x1, in NDArray x2, NPTypeCode typeCode) => x1.TensorEngine.Power(x1, x2, typeCode);
+
+        /// <summary>
+        ///     First array elements raised to powers from second array, element-wise.
+        ///     Supports broadcasting between x1 and x2.
+        /// </summary>
+        /// <param name="x1">The bases.</param>
+        /// <param name="x2">The exponents (array).</param>
+        /// <returns>The bases in x1 raised to the exponents in x2.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.power.html</remarks>
+        public static NDArray power(in NDArray x1, in NDArray x2) => x1.TensorEngine.Power(x1, x2, (NPTypeCode?)null);
+
+        /// <summary>
         ///     Return the element-wise square of the input.
         /// </summary>
         /// <param name="x">Input data.</param>
