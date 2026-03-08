@@ -47,8 +47,9 @@ namespace NumSharp
             if (lhs is null || rhs is null)
                 return Scalar<bool>(false).MakeGeneric<bool>();
 
+            // NumPy: empty array comparison returns empty array, not scalar
             if (lhs.Shape.IsEmpty || lhs.size == 0)
-                return Scalar<bool>(false).MakeGeneric<bool>();
+                return np.empty(lhs.Shape, NPTypeCode.Boolean).MakeGeneric<bool>();
 
             return lhs.TensorEngine.Compare(lhs, rhs);
         }
@@ -64,8 +65,9 @@ namespace NumSharp
             if (lhs is null)
                 return Scalar<bool>(false).MakeGeneric<bool>();
 
+            // NumPy: empty array comparison returns empty array, not scalar
             if (lhs.Shape.IsEmpty || lhs.size == 0)
-                return Scalar<bool>(false).MakeGeneric<bool>();
+                return np.empty(lhs.Shape, NPTypeCode.Boolean).MakeGeneric<bool>();
 
             return lhs == np.asanyarray(rhs);
         }

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using NumSharp.Backends;
@@ -7,6 +8,46 @@ using NumSharp.Utilities;
 
 namespace NumSharp
 {
+    /// <summary>
+    /// Comparer for double that matches NumPy's sorting behavior:
+    /// NaN is treated as greater than all other values (placed at end).
+    /// </summary>
+    internal sealed class NaNAwareDoubleComparer : IComparer<double>
+    {
+        public static readonly NaNAwareDoubleComparer Instance = new NaNAwareDoubleComparer();
+
+        public int Compare(double x, double y)
+        {
+            // If both are NaN, they are equal
+            if (double.IsNaN(x) && double.IsNaN(y)) return 0;
+            // NaN is greater than any non-NaN value
+            if (double.IsNaN(x)) return 1;
+            if (double.IsNaN(y)) return -1;
+            // For non-NaN values, use default comparison (handles -Inf, +Inf correctly)
+            return x.CompareTo(y);
+        }
+    }
+
+    /// <summary>
+    /// Comparer for float that matches NumPy's sorting behavior:
+    /// NaN is treated as greater than all other values (placed at end).
+    /// </summary>
+    internal sealed class NaNAwareSingleComparer : IComparer<float>
+    {
+        public static readonly NaNAwareSingleComparer Instance = new NaNAwareSingleComparer();
+
+        public int Compare(float x, float y)
+        {
+            // If both are NaN, they are equal
+            if (float.IsNaN(x) && float.IsNaN(y)) return 0;
+            // NaN is greater than any non-NaN value
+            if (float.IsNaN(x)) return 1;
+            if (float.IsNaN(y)) return -1;
+            // For non-NaN values, use default comparison (handles -Inf, +Inf correctly)
+            return x.CompareTo(y);
+        }
+    }
+
     public partial class NDArray
     {
         /// <summary>
@@ -70,8 +111,8 @@ namespace NumSharp
 
                     var dst = new NDArray(InfoOf<T>.NPTypeCode, Shape.Vector(hashset.Count));
                     Hashset<T>.CopyTo(hashset, (ArraySlice<T>)dst.Array);
-                    // NumPy returns sorted unique values
-                    new Span<T>((T*)dst.Address, hashset.Count).Sort();
+                    // NumPy returns sorted unique values with NaN at end
+                    SortUniqueSpan<T>((T*)dst.Address, hashset.Count);
                     return dst;
                 }
                 else
@@ -85,10 +126,34 @@ namespace NumSharp
 
                     var dst = new NDArray(InfoOf<T>.NPTypeCode, Shape.Vector(hashset.Count));
                     Hashset<T>.CopyTo(hashset, (ArraySlice<T>)dst.Array);
-                    // NumPy returns sorted unique values
-                    new Span<T>((T*)dst.Address, hashset.Count).Sort();
+                    // NumPy returns sorted unique values with NaN at end
+                    SortUniqueSpan<T>((T*)dst.Address, hashset.Count);
                     return dst;
                 }
+            }
+        }
+
+        /// <summary>
+        /// Sorts the unique values span. For float/double, uses NaN-aware comparison
+        /// that places NaN at the end (matching NumPy behavior).
+        /// </summary>
+        private static unsafe void SortUniqueSpan<T>(T* ptr, int count) where T : unmanaged, IComparable<T>
+        {
+            var span = new Span<T>(ptr, count);
+
+            if (typeof(T) == typeof(double))
+            {
+                var doubleSpan = System.Runtime.InteropServices.MemoryMarshal.Cast<T, double>(span);
+                doubleSpan.Sort(NaNAwareDoubleComparer.Instance.Compare);
+            }
+            else if (typeof(T) == typeof(float))
+            {
+                var floatSpan = System.Runtime.InteropServices.MemoryMarshal.Cast<T, float>(span);
+                floatSpan.Sort(NaNAwareSingleComparer.Instance.Compare);
+            }
+            else
+            {
+                span.Sort();
             }
         }
     }

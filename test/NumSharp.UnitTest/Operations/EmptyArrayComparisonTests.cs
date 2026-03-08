@@ -1,0 +1,145 @@
+using System;
+using System.Linq;
+using System.Threading.Tasks;
+using NumSharp;
+using TUnit.Assertions;
+using TUnit.Assertions.Extensions;
+using TUnit.Core;
+
+namespace NumSharp.UnitTest.Operations;
+
+/// <summary>
+/// Tests for empty array comparison operations.
+/// NumPy behavior: comparing empty arrays with scalars should return empty arrays, not scalars.
+///
+/// NumPy reference:
+/// >>> (np.array([], dtype=int) == 0).shape
+/// (0,)
+/// >>> (np.array([], dtype=int) != 0).shape
+/// (0,)
+/// >>> (np.array([], dtype=int) > 0).shape
+/// (0,)
+/// </summary>
+public class EmptyArrayComparisonTests
+{
+    [Test]
+    public async Task EmptyArray_Equals_Scalar_ReturnsEmptyArray()
+    {
+        // NumPy: (np.array([], dtype=int) == 0).shape returns (0,)
+        var emptyInt = np.array(Array.Empty<int>());
+        var result = emptyInt == 0;
+
+        await Assert.That(result.shape.SequenceEqual(new[] { 0 })).IsTrue();
+        await Assert.That(result.size).IsEqualTo(0);
+        await Assert.That(result.dtype).IsEqualTo(typeof(bool));
+    }
+
+    [Test]
+    public async Task EmptyArray_NotEquals_Scalar_ReturnsEmptyArray()
+    {
+        // NumPy: (np.array([], dtype=int) != 0).shape returns (0,)
+        var emptyInt = np.array(Array.Empty<int>());
+        var result = emptyInt != 0;
+
+        await Assert.That(result.shape.SequenceEqual(new[] { 0 })).IsTrue();
+        await Assert.That(result.size).IsEqualTo(0);
+        await Assert.That(result.dtype).IsEqualTo(typeof(bool));
+    }
+
+    [Test]
+    public async Task EmptyArray_GreaterThan_Scalar_ReturnsEmptyArray()
+    {
+        // NumPy: (np.array([], dtype=int) > 0).shape returns (0,)
+        var emptyInt = np.array(Array.Empty<int>());
+        var result = emptyInt > 0;
+
+        await Assert.That(result.shape.SequenceEqual(new[] { 0 })).IsTrue();
+        await Assert.That(result.size).IsEqualTo(0);
+        await Assert.That(result.dtype).IsEqualTo(typeof(bool));
+    }
+
+    [Test]
+    public async Task EmptyArray_GreaterThanOrEqual_Scalar_ReturnsEmptyArray()
+    {
+        // NumPy: (np.array([], dtype=int) >= 0).shape returns (0,)
+        var emptyInt = np.array(Array.Empty<int>());
+        var result = emptyInt >= 0;
+
+        await Assert.That(result.shape.SequenceEqual(new[] { 0 })).IsTrue();
+        await Assert.That(result.size).IsEqualTo(0);
+        await Assert.That(result.dtype).IsEqualTo(typeof(bool));
+    }
+
+    [Test]
+    public async Task EmptyArray_LessThan_Scalar_ReturnsEmptyArray()
+    {
+        // NumPy: (np.array([], dtype=int) < 0).shape returns (0,)
+        var emptyInt = np.array(Array.Empty<int>());
+        var result = emptyInt < 0;
+
+        await Assert.That(result.shape.SequenceEqual(new[] { 0 })).IsTrue();
+        await Assert.That(result.size).IsEqualTo(0);
+        await Assert.That(result.dtype).IsEqualTo(typeof(bool));
+    }
+
+    [Test]
+    public async Task EmptyArray_LessThanOrEqual_Scalar_ReturnsEmptyArray()
+    {
+        // NumPy: (np.array([], dtype=int) <= 0).shape returns (0,)
+        var emptyInt = np.array(Array.Empty<int>());
+        var result = emptyInt <= 0;
+
+        await Assert.That(result.shape.SequenceEqual(new[] { 0 })).IsTrue();
+        await Assert.That(result.size).IsEqualTo(0);
+        await Assert.That(result.dtype).IsEqualTo(typeof(bool));
+    }
+
+    [Test]
+    public async Task Empty2DArray_Equals_Scalar_PreservesShape()
+    {
+        // NumPy: (np.zeros((0,3), dtype=int) == 0).shape returns (0, 3)
+        var empty2D = np.zeros(new Shape(0, 3), NPTypeCode.Int32);
+        var result = empty2D == 0;
+
+        await Assert.That(result.shape.SequenceEqual(new[] { 0, 3 })).IsTrue();
+        await Assert.That(result.size).IsEqualTo(0);
+        await Assert.That(result.dtype).IsEqualTo(typeof(bool));
+    }
+
+    [Test]
+    public async Task Empty2DArray_Reverse_Equals_Scalar_PreservesShape()
+    {
+        // NumPy: (np.zeros((3,0), dtype=int) == 0).shape returns (3, 0)
+        var empty2D = np.zeros(new Shape(3, 0), NPTypeCode.Int32);
+        var result = empty2D == 0;
+
+        await Assert.That(result.shape.SequenceEqual(new[] { 3, 0 })).IsTrue();
+        await Assert.That(result.size).IsEqualTo(0);
+        await Assert.That(result.dtype).IsEqualTo(typeof(bool));
+    }
+
+    [Test]
+    public async Task EmptyFloatArray_Equals_Scalar_ReturnsEmptyArray()
+    {
+        // NumPy: (np.array([], dtype=float) == 0.0).shape returns (0,)
+        var emptyFloat = np.array(Array.Empty<double>());
+        var result = emptyFloat == 0.0;
+
+        await Assert.That(result.shape.SequenceEqual(new[] { 0 })).IsTrue();
+        await Assert.That(result.size).IsEqualTo(0);
+        await Assert.That(result.dtype).IsEqualTo(typeof(bool));
+    }
+
+    [Test]
+    public async Task EmptyArray_ArrayEquals_Preserves_Shape()
+    {
+        // Compare two empty arrays
+        var empty1 = np.array(Array.Empty<int>());
+        var empty2 = np.array(Array.Empty<int>());
+        var result = empty1 == empty2;
+
+        await Assert.That(result.shape.SequenceEqual(new[] { 0 })).IsTrue();
+        await Assert.That(result.size).IsEqualTo(0);
+        await Assert.That(result.dtype).IsEqualTo(typeof(bool));
+    }
+}

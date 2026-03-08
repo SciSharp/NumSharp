@@ -274,7 +274,6 @@ public class np_unique_EdgeCases_Test
         #region NaN and Infinity (Float Types)
 
         [Test]
-        [OpenBugs]  // BUG: .NET Span.Sort places NaN at start, NumPy places NaN at end
         public void Unique_NaN_Double()
         {
             // >>> np.unique(np.array([1.0, np.nan, 2.0, np.nan, 1.0, np.inf, -np.inf]))
@@ -295,7 +294,6 @@ public class np_unique_EdgeCases_Test
         }
 
         [Test]
-        [OpenBugs]  // BUG: .NET Span.Sort places NaN at start, NumPy places NaN at end
         public void Unique_NaN_Single()
         {
             // >>> np.unique(np.array([1.0, np.nan, 2.0, np.nan], dtype=np.float32))
