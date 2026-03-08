@@ -638,31 +638,33 @@ public class BinaryOpTests
     [Test]
     public void ATan2_Int32()
     {
-        // Verifies the bug fix: Previously used byte* for x operand regardless of type
-        // NumPy: np.arctan2([1000, 0, -1000], [0, 1000, 0]) truncated to int
+        // NumPy: np.arctan2([1000, 0, -1000], [0, 1000, 0]) returns float64
+        // Integer inputs are promoted to float64 for arctan2 (same as NumPy)
         var y = np.array(new int[] { 1000, 0, -1000 });
         var x = np.array(new int[] { 0, 1000, 0 });
         var result = np.arctan2(y, x);
 
-        // atan2(1000, 0) = π/2 → 1 when truncated to int
-        // atan2(0, 1000) = 0 → 0
-        // atan2(-1000, 0) = -π/2 → -1 when truncated to int
-        Assert.AreEqual(1, result.GetInt32(0));
-        Assert.AreEqual(0, result.GetInt32(1));
-        Assert.AreEqual(-1, result.GetInt32(2));
+        // arctan2 always returns float64, even for integer inputs
+        Assert.AreEqual(typeof(double), result.dtype);
+        Assert.IsTrue(Math.Abs(result.GetDouble(0) - Math.PI / 2) < 1e-10);  // atan2(1000, 0) = π/2
+        Assert.AreEqual(0.0, result.GetDouble(1));                           // atan2(0, 1000) = 0
+        Assert.IsTrue(Math.Abs(result.GetDouble(2) + Math.PI / 2) < 1e-10);  // atan2(-1000, 0) = -π/2
     }
 
     [Test]
     public void ATan2_Int64()
     {
-        // Verifies bug fix for Int64 - previously used byte* causing wrong results
+        // NumPy: np.arctan2(int64, int64) returns float64
+        // Integer inputs are promoted to float64 for arctan2 (same as NumPy)
         var y = np.array(new long[] { 1000000L, 0L, -1000000L });
         var x = np.array(new long[] { 0L, 1000000L, 0L });
         var result = np.arctan2(y, x);
 
-        Assert.AreEqual(1L, result.GetInt64(0));  // atan2(1M, 0) ≈ π/2 → 1
-        Assert.AreEqual(0L, result.GetInt64(1));  // atan2(0, 1M) = 0 → 0
-        Assert.AreEqual(-1L, result.GetInt64(2)); // atan2(-1M, 0) ≈ -π/2 → -1
+        // arctan2 always returns float64, even for integer inputs
+        Assert.AreEqual(typeof(double), result.dtype);
+        Assert.IsTrue(Math.Abs(result.GetDouble(0) - Math.PI / 2) < 1e-10);  // atan2(1M, 0) = π/2
+        Assert.AreEqual(0.0, result.GetDouble(1));                           // atan2(0, 1M) = 0
+        Assert.IsTrue(Math.Abs(result.GetDouble(2) + Math.PI / 2) < 1e-10);  // atan2(-1M, 0) = -π/2
     }
 
     [Test]

@@ -69,101 +69,109 @@ namespace NumSharp.Backends
         private unsafe NDArray ExecuteShiftOp(in NDArray lhs, in NDArray rhs, bool isLeftShift)
         {
             var (broadcastedLhs, broadcastedRhs) = np.broadcast_arrays(lhs, rhs);
-            var resultShape = broadcastedLhs.Shape;
-            var result = new NDArray(lhs.typecode, resultShape, fillZeros: false);
+            // Create result with clean (contiguous) strides, not broadcast strides
+            var resultDimensions = broadcastedLhs.shape;
+            var result = new NDArray(lhs.typecode, new Shape(resultDimensions), fillZeros: false);
             var len = result.size;
+
+            // Materialize non-contiguous arrays to allow raw pointer access.
+            // This handles broadcast arrays where stride=0 would cause incorrect reads.
+            var contiguousLhs = broadcastedLhs.Shape.IsContiguous ? broadcastedLhs : broadcastedLhs.copy();
+
+            // Cast RHS to Int32 for shift amounts (C# shift operators require int for shift amount).
+            // Also materialize if non-contiguous to allow raw pointer access.
+            var rhsInt32 = broadcastedRhs.GetTypeCode == NPTypeCode.Int32
+                ? broadcastedRhs
+                : broadcastedRhs.astype(NPTypeCode.Int32);
+            var contiguousRhs = rhsInt32.Shape.IsContiguous ? rhsInt32 : rhsInt32.copy();
+
+
+            var shiftPtr = (int*)contiguousRhs.Address;
 
             switch (lhs.GetTypeCode)
             {
                 case NPTypeCode.Byte:
                 {
-                    var lhsPtr = (byte*)broadcastedLhs.Address;
-                    var rhsPtr = (byte*)broadcastedRhs.Address;
+                    var lhsPtr = (byte*)contiguousLhs.Address;
                     var resPtr = (byte*)result.Address;
                     if (isLeftShift)
                         for (int i = 0; i < len; i++)
-                            resPtr[i] = (byte)(lhsPtr[i] << rhsPtr[i]);
+                            resPtr[i] = (byte)(lhsPtr[i] << shiftPtr[i]);
                     else
                         for (int i = 0; i < len; i++)
-                            resPtr[i] = (byte)(lhsPtr[i] >> rhsPtr[i]);
+                            resPtr[i] = (byte)(lhsPtr[i] >> shiftPtr[i]);
                     break;
                 }
                 case NPTypeCode.Int16:
                 {
-                    var lhsPtr = (short*)broadcastedLhs.Address;
-                    var rhsPtr = (short*)broadcastedRhs.Address;
+                    var lhsPtr = (short*)contiguousLhs.Address;
                     var resPtr = (short*)result.Address;
                     if (isLeftShift)
                         for (int i = 0; i < len; i++)
-                            resPtr[i] = (short)(lhsPtr[i] << rhsPtr[i]);
+                            resPtr[i] = (short)(lhsPtr[i] << shiftPtr[i]);
                     else
                         for (int i = 0; i < len; i++)
-                            resPtr[i] = (short)(lhsPtr[i] >> rhsPtr[i]);
+                            resPtr[i] = (short)(lhsPtr[i] >> shiftPtr[i]);
                     break;
                 }
                 case NPTypeCode.UInt16:
                 {
-                    var lhsPtr = (ushort*)broadcastedLhs.Address;
-                    var rhsPtr = (ushort*)broadcastedRhs.Address;
+                    var lhsPtr = (ushort*)contiguousLhs.Address;
                     var resPtr = (ushort*)result.Address;
                     if (isLeftShift)
                         for (int i = 0; i < len; i++)
-                            resPtr[i] = (ushort)(lhsPtr[i] << rhsPtr[i]);
+                            resPtr[i] = (ushort)(lhsPtr[i] << shiftPtr[i]);
                     else
                         for (int i = 0; i < len; i++)
-                            resPtr[i] = (ushort)(lhsPtr[i] >> rhsPtr[i]);
+                            resPtr[i] = (ushort)(lhsPtr[i] >> shiftPtr[i]);
                     break;
                 }
                 case NPTypeCode.Int32:
                 {
-                    var lhsPtr = (int*)broadcastedLhs.Address;
-                    var rhsPtr = (int*)broadcastedRhs.Address;
+                    var lhsPtr = (int*)contiguousLhs.Address;
                     var resPtr = (int*)result.Address;
                     if (isLeftShift)
                         for (int i = 0; i < len; i++)
-                            resPtr[i] = lhsPtr[i] << rhsPtr[i];
+                            resPtr[i] = lhsPtr[i] << shiftPtr[i];
                     else
                         for (int i = 0; i < len; i++)
-                            resPtr[i] = lhsPtr[i] >> rhsPtr[i];
+                            resPtr[i] = lhsPtr[i] >> shiftPtr[i];
                     break;
                 }
                 case NPTypeCode.UInt32:
                 {
-                    var lhsPtr = (uint*)broadcastedLhs.Address;
-                    var rhsPtr = (uint*)broadcastedRhs.Address;
+                    var lhsPtr = (uint*)contiguousLhs.Address;
                     var resPtr = (uint*)result.Address;
                     if (isLeftShift)
                         for (int i = 0; i < len; i++)
-                            resPtr[i] = lhsPtr[i] << (int)rhsPtr[i];
+                            resPtr[i] = lhsPtr[i] << shiftPtr[i];
                     else
                         for (int i = 0; i < len; i++)
-                            resPtr[i] = lhsPtr[i] >> (int)rhsPtr[i];
+                            resPtr[i] = lhsPtr[i] >> shiftPtr[i];
                     break;
                 }
                 case NPTypeCode.Int64:
                 {
-                    var lhsPtr = (long*)broadcastedLhs.Address;
-                    var rhsPtr = (long*)broadcastedRhs.Address;
+                    var lhsPtr = (long*)contiguousLhs.Address;
                     var resPtr = (long*)result.Address;
                     if (isLeftShift)
                         for (int i = 0; i < len; i++)
-                            resPtr[i] = lhsPtr[i] << (int)rhsPtr[i];
+                            resPtr[i] = lhsPtr[i] << shiftPtr[i];
                     else
                         for (int i = 0; i < len; i++)
-                            resPtr[i] = lhsPtr[i] >> (int)rhsPtr[i];
+                            resPtr[i] = lhsPtr[i] >> shiftPtr[i];
                     break;
                 }
                 case NPTypeCode.UInt64:
                 {
-                    var lhsPtr = (ulong*)broadcastedLhs.Address;
-                    var rhsPtr = (ulong*)broadcastedRhs.Address;
+                    var lhsPtr = (ulong*)contiguousLhs.Address;
                     var resPtr = (ulong*)result.Address;
                     if (isLeftShift)
                         for (int i = 0; i < len; i++)
-                            resPtr[i] = lhsPtr[i] << (int)rhsPtr[i];
+                            resPtr[i] = lhsPtr[i] << shiftPtr[i];
                     else
                         for (int i = 0; i < len; i++)
-                            resPtr[i] = lhsPtr[i] >> (int)rhsPtr[i];
+                            resPtr[i] = lhsPtr[i] >> shiftPtr[i];
                     break;
                 }
                 default:
