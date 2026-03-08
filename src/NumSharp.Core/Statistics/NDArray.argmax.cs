@@ -7,7 +7,7 @@
         /// </summary>
         /// <returns>The index of the maximal value in the flattened array.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.argmax.html</remarks>
-        public int argmax()
+        public long argmax()
         {
             return np.argmax(this);
         }

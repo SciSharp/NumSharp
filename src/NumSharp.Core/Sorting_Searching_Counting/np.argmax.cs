@@ -19,7 +19,7 @@
         /// <param name="a">Input array.</param>
         /// <returns>Index of the maximum value in the flattened array.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.argmax.html</remarks>
-        public static int argmax(NDArray a)
+        public static long argmax(NDArray a)
             => a.TensorEngine.ArgMax(a);
 
         /// <summary>
@@ -39,7 +39,7 @@
         /// <param name="a">Input array.</param>
         /// <returns>Index of the minimum value in the flattened array.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.argmin.html</remarks>
-        public static int argmin(NDArray a)
+        public static long argmin(NDArray a)
             => a.TensorEngine.ArgMin(a);
     }
 }

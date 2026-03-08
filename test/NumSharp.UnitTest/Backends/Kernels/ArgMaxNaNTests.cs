@@ -18,7 +18,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
         {
             // NumPy: argmax([1.0, nan, 3.0]) = 1 (NaN wins)
             var a = np.array(new[] { 1.0, double.NaN, 3.0 });
-            int result = np.argmax(a);
+            long result = np.argmax(a);
 
             Assert.AreEqual(1, result);
         }
@@ -28,7 +28,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
         {
             // NumPy: argmax([nan, 1.0, 3.0]) = 0 (first NaN wins)
             var a = np.array(new[] { double.NaN, 1.0, 3.0 });
-            int result = np.argmax(a);
+            long result = np.argmax(a);
 
             Assert.AreEqual(0, result);
         }
@@ -38,7 +38,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
         {
             // NumPy: argmax([1.0, 3.0, nan]) = 2 (NaN wins)
             var a = np.array(new[] { 1.0, 3.0, double.NaN });
-            int result = np.argmax(a);
+            long result = np.argmax(a);
 
             Assert.AreEqual(2, result);
         }
@@ -48,7 +48,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
         {
             // NumPy: argmax([nan, nan, 1.0]) = 0 (first NaN wins)
             var a = np.array(new[] { double.NaN, double.NaN, 1.0 });
-            int result = np.argmax(a);
+            long result = np.argmax(a);
 
             Assert.AreEqual(0, result);
         }
@@ -58,7 +58,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
         {
             // NumPy: argmin([1.0, nan, 3.0]) = 1 (NaN wins - same as argmax!)
             var a = np.array(new[] { 1.0, double.NaN, 3.0 });
-            int result = np.argmin(a);
+            long result = np.argmin(a);
 
             Assert.AreEqual(1, result);
         }
@@ -68,7 +68,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
         {
             // NumPy: argmin([nan, 1.0, 3.0]) = 0
             var a = np.array(new[] { double.NaN, 1.0, 3.0 });
-            int result = np.argmin(a);
+            long result = np.argmin(a);
 
             Assert.AreEqual(0, result);
         }
@@ -78,7 +78,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
         {
             // NumPy: argmax([inf, nan, 2.0]) = 1 (NaN wins over Inf)
             var a = np.array(new[] { double.PositiveInfinity, double.NaN, 2.0 });
-            int result = np.argmax(a);
+            long result = np.argmax(a);
 
             Assert.AreEqual(1, result);
         }
@@ -88,7 +88,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
         {
             // NumPy: argmin([-inf, nan, 2.0]) = 1 (NaN wins over -Inf)
             var a = np.array(new[] { double.NegativeInfinity, double.NaN, 2.0 });
-            int result = np.argmin(a);
+            long result = np.argmin(a);
 
             Assert.AreEqual(1, result);
         }
@@ -98,7 +98,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
         {
             // NumPy: argmax(float32 with nan) = 1
             var a = np.array(new[] { 1.0f, float.NaN, 3.0f });
-            int result = np.argmax(a);
+            long result = np.argmax(a);
 
             Assert.AreEqual(1, result);
         }
@@ -134,7 +134,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
         {
             // NumPy: argmax([False, True, False, True]) = 1 (first True)
             var a = np.array(new[] { false, true, false, true });
-            int result = np.argmax(a);
+            long result = np.argmax(a);
 
             Assert.AreEqual(1, result);
         }
@@ -144,7 +144,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
         {
             // NumPy: argmin([False, True, False, True]) = 0 (first False)
             var a = np.array(new[] { false, true, false, true });
-            int result = np.argmin(a);
+            long result = np.argmin(a);
 
             Assert.AreEqual(0, result);
         }
@@ -154,7 +154,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
         {
             // NumPy: argmax([False, False, False]) = 0 (first occurrence)
             var a = np.array(new[] { false, false, false });
-            int result = np.argmax(a);
+            long result = np.argmax(a);
 
             Assert.AreEqual(0, result);
         }
@@ -164,7 +164,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
         {
             // NumPy: argmin([True, True, True]) = 0 (first occurrence)
             var a = np.array(new[] { true, true, true });
-            int result = np.argmin(a);
+            long result = np.argmin(a);
 
             Assert.AreEqual(0, result);
         }
@@ -178,7 +178,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
         {
             // NumPy: argmax([42]) = 0
             var a = np.array(new[] { 42 });
-            int result = np.argmax(a);
+            long result = np.argmax(a);
 
             Assert.AreEqual(0, result);
         }
@@ -188,7 +188,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
         {
             // NumPy: argmax(scalar) = 0
             var a = NDArray.Scalar(42);
-            int result = np.argmax(a);
+            long result = np.argmax(a);
 
             Assert.AreEqual(0, result);
         }
@@ -202,7 +202,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
         {
             // NumPy: argmax([5, 1, 5, 3, 5]) = 0 (first max)
             var a = np.array(new[] { 5, 1, 5, 3, 5 });
-            int result = np.argmax(a);
+            long result = np.argmax(a);
 
             Assert.AreEqual(0, result);
         }
@@ -212,7 +212,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
         {
             // NumPy: argmin([5, 1, 5, 1, 5]) = 1 (first min)
             var a = np.array(new[] { 5, 1, 5, 1, 5 });
-            int result = np.argmin(a);
+            long result = np.argmin(a);
 
             Assert.AreEqual(1, result);
         }
@@ -226,7 +226,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
         {
             // NumPy: argmax([1, inf, 3]) = 1
             var a = np.array(new[] { 1.0, double.PositiveInfinity, 3.0 });
-            int result = np.argmax(a);
+            long result = np.argmax(a);
 
             Assert.AreEqual(1, result);
         }
@@ -236,7 +236,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
         {
             // NumPy: argmin([1, -inf, 3]) = 1
             var a = np.array(new[] { 1.0, double.NegativeInfinity, 3.0 });
-            int result = np.argmin(a);
+            long result = np.argmin(a);
 
             Assert.AreEqual(1, result);
         }
@@ -252,7 +252,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
             var a = np.array(new[,] { { 1, 5, 3 }, { 4, 2, 6 } });
             var result = np.argmax(a, 0);
 
-            CollectionAssert.AreEqual(new[] { 1, 0, 1 }, result.ToArray<int>());
+            CollectionAssert.AreEqual(new long[] { 1, 0, 1 }, result.ToArray<long>());
         }
 
         [Test]
@@ -262,7 +262,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
             var a = np.array(new[,] { { 1, 5, 3 }, { 4, 2, 6 } });
             var result = np.argmax(a, 1);
 
-            CollectionAssert.AreEqual(new[] { 1, 2 }, result.ToArray<int>());
+            CollectionAssert.AreEqual(new long[] { 1, 2 }, result.ToArray<long>());
         }
 
         [Test]
@@ -272,7 +272,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
             var a = np.array(new[,] { { 1, 5, 3 }, { 4, 2, 6 } });
             var result = np.argmax(a, -1);
 
-            CollectionAssert.AreEqual(new[] { 1, 2 }, result.ToArray<int>());
+            CollectionAssert.AreEqual(new long[] { 1, 2 }, result.ToArray<long>());
         }
 
         [Test]
@@ -282,7 +282,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
             var a = np.array(new[,] { { 1, 5, 3 }, { 4, 2, 6 } });
             var result = np.argmin(a, 0);
 
-            CollectionAssert.AreEqual(new[] { 0, 1, 0 }, result.ToArray<int>());
+            CollectionAssert.AreEqual(new long[] { 0, 1, 0 }, result.ToArray<long>());
         }
 
         [Test]
@@ -292,7 +292,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
             var a = np.array(new[,] { { 1, 5, 3 }, { 4, 2, 6 } });
             var result = np.argmin(a, 1);
 
-            CollectionAssert.AreEqual(new[] { 0, 1 }, result.ToArray<int>());
+            CollectionAssert.AreEqual(new long[] { 0, 1 }, result.ToArray<long>());
         }
 
         #endregion
@@ -303,7 +303,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
         public void NDArray_ArgMax_Instance()
         {
             var a = np.array(new[] { 1, 5, 3 });
-            int result = a.argmax();
+            long result = a.argmax();
 
             Assert.AreEqual(1, result);
         }
@@ -313,7 +313,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
         {
             // NumPy: argmin([1, 5, 3]) = 0 (index of minimum value 1)
             var a = np.array(new[] { 1, 5, 3 });
-            int result = a.argmin();
+            long result = a.argmin();
 
             Assert.AreEqual(0, result);
         }
@@ -324,7 +324,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
             var a = np.array(new[,] { { 1, 5, 3 }, { 4, 2, 6 } });
             NDArray result = a.argmax(1);
 
-            CollectionAssert.AreEqual(new[] { 1, 2 }, result.ToArray<int>());
+            CollectionAssert.AreEqual(new long[] { 1, 2 }, result.ToArray<long>());
         }
 
         [Test]
@@ -333,7 +333,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
             var a = np.array(new[,] { { 1, 5, 3 }, { 4, 2, 6 } });
             NDArray result = a.argmin(1);
 
-            CollectionAssert.AreEqual(new[] { 0, 1 }, result.ToArray<int>());
+            CollectionAssert.AreEqual(new long[] { 0, 1 }, result.ToArray<long>());
         }
 
         #endregion

@@ -459,9 +459,9 @@ namespace NumSharp.UnitTest
         public void Bug_Argmin_IgnoresNaN()
         {
             var a = np.array(new double[] { 3.0, 1.0, double.NaN, 2.0 });
-            int result = np.argmin(a);
+            long result = np.argmin(a);
 
-            result.Should().Be(2,
+            result.Should().Be(2L,
                 "NumPy: argmin([3, 1, NaN, 2]) = 2 because NaN propagates in " +
                 "comparisons (NaN < x is always True in NumPy's argmin). " +
                 "NumSharp returns 1 (index of actual min 1.0), ignoring NaN. " +
