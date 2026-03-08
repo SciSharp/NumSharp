@@ -129,6 +129,135 @@ namespace NumSharp.Backends.Kernels
         Delegate? GetComparisonScalarDelegate(ComparisonScalarKernelKey key);
 
         // ===================
+        // SIMD Helper Operations
+        // ===================
+
+        /// <summary>
+        /// Test whether all array elements evaluate to true (non-zero).
+        /// Uses SIMD with early-exit for contiguous arrays.
+        /// </summary>
+        /// <typeparam name="T">Element type (must be unmanaged).</typeparam>
+        /// <param name="data">Pointer to contiguous array data.</param>
+        /// <param name="size">Number of elements.</param>
+        /// <returns>True if all elements are non-zero.</returns>
+        unsafe bool All<T>(T* data, int size) where T : unmanaged;
+
+        /// <summary>
+        /// Test whether any array element evaluates to true (non-zero).
+        /// Uses SIMD with early-exit for contiguous arrays.
+        /// </summary>
+        /// <typeparam name="T">Element type (must be unmanaged).</typeparam>
+        /// <param name="data">Pointer to contiguous array data.</param>
+        /// <param name="size">Number of elements.</param>
+        /// <returns>True if any element is non-zero.</returns>
+        unsafe bool Any<T>(T* data, int size) where T : unmanaged;
+
+        /// <summary>
+        /// Find indices of all non-zero elements.
+        /// Uses SIMD for efficient scanning of contiguous arrays.
+        /// </summary>
+        /// <typeparam name="T">Element type (must be unmanaged).</typeparam>
+        /// <param name="data">Pointer to contiguous array data.</param>
+        /// <param name="size">Number of elements.</param>
+        /// <param name="indices">Output list to populate with non-zero indices.</param>
+        unsafe void FindNonZero<T>(T* data, int size, System.Collections.Generic.List<int> indices) where T : unmanaged;
+
+        /// <summary>
+        /// Convert flat (linear) indices to per-dimension coordinate arrays.
+        /// </summary>
+        /// <param name="flatIndices">List of flat indices.</param>
+        /// <param name="shape">Shape of the array.</param>
+        /// <returns>Array of NDArray&lt;int&gt;, one per dimension.</returns>
+        NumSharp.Generic.NDArray<int>[] ConvertFlatToCoordinates(System.Collections.Generic.List<int> flatIndices, int[] shape);
+
+        /// <summary>
+        /// Count the number of true values in a boolean array.
+        /// Uses SIMD for efficient counting.
+        /// </summary>
+        /// <param name="data">Pointer to boolean array.</param>
+        /// <param name="size">Number of elements.</param>
+        /// <returns>Count of true values.</returns>
+        unsafe int CountTrue(bool* data, int size);
+
+        /// <summary>
+        /// Copy elements from source to destination where mask is true.
+        /// Uses SIMD for efficient mask scanning.
+        /// </summary>
+        /// <typeparam name="T">Element type (must be unmanaged).</typeparam>
+        /// <param name="src">Source array pointer.</param>
+        /// <param name="mask">Boolean mask array pointer.</param>
+        /// <param name="dest">Destination array pointer (must have capacity for all true elements).</param>
+        /// <param name="size">Number of elements in source and mask.</param>
+        /// <returns>Number of elements copied.</returns>
+        unsafe int CopyMasked<T>(T* src, bool* mask, T* dest, int size) where T : unmanaged;
+
+        /// <summary>
+        /// Compute variance of a contiguous array.
+        /// Uses SIMD-optimized two-pass algorithm for float/double.
+        /// </summary>
+        /// <typeparam name="T">Element type (must be unmanaged).</typeparam>
+        /// <param name="data">Pointer to contiguous array data.</param>
+        /// <param name="size">Number of elements.</param>
+        /// <param name="ddof">Delta degrees of freedom (0 for population, 1 for sample).</param>
+        /// <returns>Variance as double.</returns>
+        unsafe double Variance<T>(T* data, int size, int ddof = 0) where T : unmanaged;
+
+        /// <summary>
+        /// Compute standard deviation of a contiguous array.
+        /// Uses SIMD-optimized two-pass algorithm for float/double.
+        /// </summary>
+        /// <typeparam name="T">Element type (must be unmanaged).</typeparam>
+        /// <param name="data">Pointer to contiguous array data.</param>
+        /// <param name="size">Number of elements.</param>
+        /// <param name="ddof">Delta degrees of freedom (0 for population, 1 for sample).</param>
+        /// <returns>Standard deviation as double.</returns>
+        unsafe double StandardDeviation<T>(T* data, int size, int ddof = 0) where T : unmanaged;
+
+        /// <summary>
+        /// NaN-aware sum: sums all non-NaN values (NaN treated as 0).
+        /// </summary>
+        unsafe float NanSumFloat(float* data, int size);
+
+        /// <summary>
+        /// NaN-aware sum: sums all non-NaN values (NaN treated as 0).
+        /// </summary>
+        unsafe double NanSumDouble(double* data, int size);
+
+        /// <summary>
+        /// NaN-aware product: multiplies all non-NaN values (NaN treated as 1).
+        /// </summary>
+        unsafe float NanProdFloat(float* data, int size);
+
+        /// <summary>
+        /// NaN-aware product: multiplies all non-NaN values (NaN treated as 1).
+        /// </summary>
+        unsafe double NanProdDouble(double* data, int size);
+
+        /// <summary>
+        /// NaN-aware minimum: finds minimum ignoring NaN values.
+        /// Returns NaN if all values are NaN.
+        /// </summary>
+        unsafe float NanMinFloat(float* data, int size);
+
+        /// <summary>
+        /// NaN-aware minimum: finds minimum ignoring NaN values.
+        /// Returns NaN if all values are NaN.
+        /// </summary>
+        unsafe double NanMinDouble(double* data, int size);
+
+        /// <summary>
+        /// NaN-aware maximum: finds maximum ignoring NaN values.
+        /// Returns NaN if all values are NaN.
+        /// </summary>
+        unsafe float NanMaxFloat(float* data, int size);
+
+        /// <summary>
+        /// NaN-aware maximum: finds maximum ignoring NaN values.
+        /// Returns NaN if all values are NaN.
+        /// </summary>
+        unsafe double NanMaxDouble(double* data, int size);
+
+        // ===================
         // Cache Management
         // ===================
 

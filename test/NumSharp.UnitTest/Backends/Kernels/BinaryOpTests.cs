@@ -605,4 +605,79 @@ public class BinaryOpTests
     }
 
     #endregion
+
+    #region ATan2 Tests (Bug Fix Verification)
+
+    [Test]
+    public void ATan2_Float64()
+    {
+        // NumPy: np.arctan2([1, 1, -1, -1], [1, -1, 1, -1]) = [π/4, 3π/4, -π/4, -3π/4]
+        var y = np.array(new double[] { 1.0, 1.0, -1.0, -1.0 });
+        var x = np.array(new double[] { 1.0, -1.0, 1.0, -1.0 });
+        var result = np.arctan2(y, x);
+
+        Assert.IsTrue(Math.Abs(result.GetDouble(0) - Math.PI / 4) < 1e-10);
+        Assert.IsTrue(Math.Abs(result.GetDouble(1) - 3 * Math.PI / 4) < 1e-10);
+        Assert.IsTrue(Math.Abs(result.GetDouble(2) - (-Math.PI / 4)) < 1e-10);
+        Assert.IsTrue(Math.Abs(result.GetDouble(3) - (-3 * Math.PI / 4)) < 1e-10);
+    }
+
+    [Test]
+    public void ATan2_Float32()
+    {
+        // NumPy: np.arctan2([1, 0, -1], [0, 1, 0]) = [π/2, 0, -π/2]
+        var y = np.array(new float[] { 1.0f, 0.0f, -1.0f });
+        var x = np.array(new float[] { 0.0f, 1.0f, 0.0f });
+        var result = np.arctan2(y, x);
+
+        Assert.IsTrue(Math.Abs(result.GetSingle(0) - (float)(Math.PI / 2)) < 1e-6f);
+        Assert.IsTrue(Math.Abs(result.GetSingle(1) - 0.0f) < 1e-6f);
+        Assert.IsTrue(Math.Abs(result.GetSingle(2) - (float)(-Math.PI / 2)) < 1e-6f);
+    }
+
+    [Test]
+    public void ATan2_Int32()
+    {
+        // Verifies the bug fix: Previously used byte* for x operand regardless of type
+        // NumPy: np.arctan2([1000, 0, -1000], [0, 1000, 0]) truncated to int
+        var y = np.array(new int[] { 1000, 0, -1000 });
+        var x = np.array(new int[] { 0, 1000, 0 });
+        var result = np.arctan2(y, x);
+
+        // atan2(1000, 0) = π/2 → 1 when truncated to int
+        // atan2(0, 1000) = 0 → 0
+        // atan2(-1000, 0) = -π/2 → -1 when truncated to int
+        Assert.AreEqual(1, result.GetInt32(0));
+        Assert.AreEqual(0, result.GetInt32(1));
+        Assert.AreEqual(-1, result.GetInt32(2));
+    }
+
+    [Test]
+    public void ATan2_Int64()
+    {
+        // Verifies bug fix for Int64 - previously used byte* causing wrong results
+        var y = np.array(new long[] { 1000000L, 0L, -1000000L });
+        var x = np.array(new long[] { 0L, 1000000L, 0L });
+        var result = np.arctan2(y, x);
+
+        Assert.AreEqual(1L, result.GetInt64(0));  // atan2(1M, 0) ≈ π/2 → 1
+        Assert.AreEqual(0L, result.GetInt64(1));  // atan2(0, 1M) = 0 → 0
+        Assert.AreEqual(-1L, result.GetInt64(2)); // atan2(-1M, 0) ≈ -π/2 → -1
+    }
+
+    [Test]
+    public void ATan2_SpecialValues()
+    {
+        // NumPy: arctan2(0, 0) = 0, arctan2(inf, 1) = π/2, arctan2(1, inf) = 0
+        var y = np.array(new double[] { 0.0, double.PositiveInfinity, 1.0, double.NaN });
+        var x = np.array(new double[] { 0.0, 1.0, double.PositiveInfinity, 1.0 });
+        var result = np.arctan2(y, x);
+
+        Assert.AreEqual(0.0, result.GetDouble(0));
+        Assert.IsTrue(Math.Abs(result.GetDouble(1) - Math.PI / 2) < 1e-10);
+        Assert.AreEqual(0.0, result.GetDouble(2));
+        Assert.IsTrue(double.IsNaN(result.GetDouble(3)));
+    }
+
+    #endregion
 }

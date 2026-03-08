@@ -1,5 +1,6 @@
 ﻿using System;
 using DecimalMath;
+using NumSharp.Backends.Kernels;
 using NumSharp.Utilities;
 
 namespace NumSharp.Backends
@@ -6248,6 +6249,54 @@ namespace NumSharp.Backends
                 return NDArray.Scalar(0);
 
             var retType = typeCode ?? (arr.GetTypeCode).GetComputingType();
+
+            // SIMD fast-path for contiguous arrays
+            if (ILKernelGenerator.Enabled && arr.Shape.IsContiguous)
+            {
+                int _ddof = ddof ?? 0;
+                double std;
+
+                unsafe
+                {
+                    switch (arr.GetTypeCode)
+                    {
+                        case NPTypeCode.Single:
+                            std = ILKernelGenerator.StdSimdHelper((float*)arr.Address, arr.size, _ddof);
+                            break;
+                        case NPTypeCode.Double:
+                            std = ILKernelGenerator.StdSimdHelper((double*)arr.Address, arr.size, _ddof);
+                            break;
+                        case NPTypeCode.Byte:
+                            std = ILKernelGenerator.StdSimdHelper((byte*)arr.Address, arr.size, _ddof);
+                            break;
+                        case NPTypeCode.Int16:
+                            std = ILKernelGenerator.StdSimdHelper((short*)arr.Address, arr.size, _ddof);
+                            break;
+                        case NPTypeCode.UInt16:
+                            std = ILKernelGenerator.StdSimdHelper((ushort*)arr.Address, arr.size, _ddof);
+                            break;
+                        case NPTypeCode.Int32:
+                            std = ILKernelGenerator.StdSimdHelper((int*)arr.Address, arr.size, _ddof);
+                            break;
+                        case NPTypeCode.UInt32:
+                            std = ILKernelGenerator.StdSimdHelper((uint*)arr.Address, arr.size, _ddof);
+                            break;
+                        case NPTypeCode.Int64:
+                            std = ILKernelGenerator.StdSimdHelper((long*)arr.Address, arr.size, _ddof);
+                            break;
+                        case NPTypeCode.UInt64:
+                            std = ILKernelGenerator.StdSimdHelper((ulong*)arr.Address, arr.size, _ddof);
+                            break;
+                        default:
+                            goto fallback;
+                    }
+                }
+
+                // Convert to requested return type
+                return Converts.ChangeType(std, retType);
+
+                fallback:;
+            }
 #if _REGEN
             #region Compute
             switch (arr.GetTypeCode)

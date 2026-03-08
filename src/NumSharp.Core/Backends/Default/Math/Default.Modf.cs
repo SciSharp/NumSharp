@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Threading.Tasks;
 using DecimalMath;
+using NumSharp.Backends.Kernels;
 using NumSharp.Utilities;
 
 namespace NumSharp.Backends
@@ -15,28 +16,32 @@ namespace NumSharp.Backends
             var @out1 = Cast(nd, typeCode ?? nd.typecode, copy: true);
             var len = @out.size;
 
+            // Use SIMD-optimized path for contiguous float/double arrays
+            if (@out.Shape.IsContiguous && ILKernelGenerator.Enabled)
+            {
+                unsafe
+                {
+                    switch (@out.GetTypeCode)
+                    {
+                        case NPTypeCode.Double:
+                        {
+                            ILKernelGenerator.ModfHelper((double*)@out.Address, (double*)@out1.Address, len);
+                            return (@out, @out1);
+                        }
+                        case NPTypeCode.Single:
+                        {
+                            ILKernelGenerator.ModfHelper((float*)@out.Address, (float*)@out1.Address, len);
+                            return (@out, @out1);
+                        }
+                    }
+                }
+            }
+
+            // Fallback path (non-contiguous or decimal)
             unsafe
             {
                 switch (@out.GetTypeCode)
                 {
-#if _REGEN
-                    %foreach except(supported_numericals, "Decimal"),except(supported_numericals_lowercase, "decimal")%
-	                case NPTypeCode.#1:
-	                {
-                        var out_addr = (#2*)@out.Address;
-                        for (int i = 0; i < len; i++) out_addr[i] = Converts.To#1(Math.Frac(out_addr[i]));
-                        return @out;
-	                }
-	                %
-                    case NPTypeCode.Decimal:
-	                {
-                        var out_addr = (decimal*)@out.Address;
-                        for (int i = 0; i < len; i++) out_addr[i] = (DecimalEx.Frac(out_addr[i]));
-                        return @out;
-	                }
-	                default:
-		                throw new NotSupportedException();
-#else
                     case NPTypeCode.Double:
                     {
                         var out_addr = (double*)@out.Address;
@@ -78,7 +83,6 @@ namespace NumSharp.Backends
                     }
                     default:
                         throw new NotSupportedException();
-#endif
                 }
             }
         }

@@ -168,10 +168,11 @@ namespace NumSharp {
             {
                 unsafe
                 {
-                    // Use SIMD helper from unified reduction infrastructure
-                    if (DefaultEngine.DefaultKernelProvider.Enabled)
+                    // Use SIMD helper from kernel provider interface
+                    var kp = DefaultEngine.DefaultKernelProvider;
+                    if (kp.Enabled)
                     {
-                        return ILKernelGenerator.AllSimdHelper<T>(nd.Address, nd.size);
+                        return kp.All(nd.Address, nd.size);
                     }
 
                     // Scalar fallback

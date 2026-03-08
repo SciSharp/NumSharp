@@ -1,4 +1,5 @@
 ﻿using System;
+using NumSharp.Backends.Kernels;
 using NumSharp.Utilities;
 
 namespace NumSharp.Backends
@@ -5266,6 +5267,54 @@ namespace NumSharp.Backends
                 return NDArray.Scalar(0);
 
             var retType = typeCode ?? (arr.GetTypeCode).GetComputingType();
+
+            // SIMD fast-path for contiguous arrays
+            if (ILKernelGenerator.Enabled && arr.Shape.IsContiguous)
+            {
+                int _ddof = ddof ?? 0;
+                double variance;
+
+                unsafe
+                {
+                    switch (arr.GetTypeCode)
+                    {
+                        case NPTypeCode.Single:
+                            variance = ILKernelGenerator.VarSimdHelper((float*)arr.Address, arr.size, _ddof);
+                            break;
+                        case NPTypeCode.Double:
+                            variance = ILKernelGenerator.VarSimdHelper((double*)arr.Address, arr.size, _ddof);
+                            break;
+                        case NPTypeCode.Byte:
+                            variance = ILKernelGenerator.VarSimdHelper((byte*)arr.Address, arr.size, _ddof);
+                            break;
+                        case NPTypeCode.Int16:
+                            variance = ILKernelGenerator.VarSimdHelper((short*)arr.Address, arr.size, _ddof);
+                            break;
+                        case NPTypeCode.UInt16:
+                            variance = ILKernelGenerator.VarSimdHelper((ushort*)arr.Address, arr.size, _ddof);
+                            break;
+                        case NPTypeCode.Int32:
+                            variance = ILKernelGenerator.VarSimdHelper((int*)arr.Address, arr.size, _ddof);
+                            break;
+                        case NPTypeCode.UInt32:
+                            variance = ILKernelGenerator.VarSimdHelper((uint*)arr.Address, arr.size, _ddof);
+                            break;
+                        case NPTypeCode.Int64:
+                            variance = ILKernelGenerator.VarSimdHelper((long*)arr.Address, arr.size, _ddof);
+                            break;
+                        case NPTypeCode.UInt64:
+                            variance = ILKernelGenerator.VarSimdHelper((ulong*)arr.Address, arr.size, _ddof);
+                            break;
+                        default:
+                            goto fallback;
+                    }
+                }
+
+                // Convert to requested return type
+                return Converts.ChangeType(variance, retType);
+
+                fallback:;
+            }
 #if _REGEN
             #region Compute
             switch (arr.GetTypeCode)
