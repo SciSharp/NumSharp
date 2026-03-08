@@ -190,11 +190,7 @@ nd["..., -1"]     // Ellipsis fills dimensions
 
 ### Medium Severity Bugs
 
-| Bug | Function | Issue |
-|-----|----------|-------|
-| BUG-12 | `np.searchsorted` | Scalar input throws IndexOutOfRangeException |
-| BUG-16 | `np.moveaxis` | Returns unchanged shape |
-| BUG-17 | `nd.astype()` | Uses rounding instead of truncation for float->int |
+*All medium severity bugs have been fixed.*
 
 ### Low Severity (Behavioral Differences)
 
@@ -210,6 +206,9 @@ These bugs were fixed in recent commits:
 
 | Bug | Function | Fix Commit |
 |-----|----------|------------|
+| BUG-12 | `np.searchsorted` | `40a5c831` — scalar input now works, returns int |
+| BUG-16 | `np.moveaxis` | Already fixed — was listed in error |
+| BUG-17 | `nd.astype()` | `40a5c831` — uses truncation (not rounding) for float->int |
 | BUG-19 | `np.negative` | `0857d109` — was applying abs() then negating |
 | BUG-20 | `np.positive` | `0857d109` — was applying abs() instead of identity |
 | BUG-18 | `np.convolve` | `0857d109` — NullReferenceException fixed |
