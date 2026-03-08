@@ -9,11 +9,19 @@ namespace NumSharp.Backends
 
         /// <summary>
         /// Element-wise bitwise NOT using IL-generated kernels.
-        /// Computes ~x (ones complement).
+        /// For integers: computes ~x (ones complement).
+        /// For booleans: computes logical NOT (NumPy behavior).
         /// </summary>
         public override NDArray Invert(in NDArray nd, NPTypeCode? typeCode = null)
         {
-            // For invert, we keep the same type (it's a bitwise operation)
+            // NumPy treats boolean invert as logical NOT, not bitwise NOT
+            // ~True = False, ~False = True (not ~1 = 0xFE)
+            if (nd.typecode == NPTypeCode.Boolean)
+            {
+                return ExecuteUnaryOp(in nd, UnaryOp.LogicalNot, NPTypeCode.Boolean);
+            }
+
+            // For integer types: use bitwise NOT (~x)
             return ExecuteUnaryOp(in nd, UnaryOp.BitwiseNot, typeCode ?? nd.typecode);
         }
     }

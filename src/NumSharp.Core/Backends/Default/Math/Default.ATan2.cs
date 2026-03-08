@@ -14,8 +14,21 @@ namespace NumSharp.Backends
             if (y.size == 0)
                 return y.Clone();
 
-            var out_y = Cast(y, ResolveUnaryReturnType(y, typeCode), copy: true);
-            var out_x = Cast(x, ResolveUnaryReturnType(x, typeCode), copy: true);
+            // Broadcast arrays to compatible shapes (handles broadcasting like np.arctan2)
+            var (broadcastedY, broadcastedX) = np.broadcast_arrays(y, x);
+
+            // Determine result type
+            var resultType = ResolveUnaryReturnType(broadcastedY, typeCode);
+
+            // Cast and materialize to contiguous arrays for safe raw pointer access
+            // This handles: sliced views, transposed arrays, broadcast arrays (stride=0)
+            var castY = Cast(broadcastedY, resultType, copy: false);
+            var castX = Cast(broadcastedX, resultType, copy: false);
+
+            // Ensure contiguous memory layout for raw pointer iteration
+            var out_y = castY.Shape.IsContiguous ? castY.Clone() : castY.copy();
+            var out_x = castX.Shape.IsContiguous ? castX : castX.copy();
+
             var len = out_y.size;
 
             unsafe

@@ -204,6 +204,10 @@ namespace NumSharp.Backends.Kernels
                        key.InputType != NPTypeCode.Decimal;
             }
 
+            // LogicalNot is boolean-only, no SIMD (uses scalar comparison)
+            if (key.Op == UnaryOp.LogicalNot)
+                return false;
+
             // Float/double operations with SIMD support
             if (key.InputType != NPTypeCode.Single && key.InputType != NPTypeCode.Double)
                 return false;
@@ -673,6 +677,13 @@ namespace NumSharp.Backends.Kernels
                 case UnaryOp.BitwiseNot:
                     // ~x (bitwise complement)
                     il.Emit(OpCodes.Not);
+                    break;
+
+                case UnaryOp.LogicalNot:
+                    // Logical NOT: x == 0 (for boolean: !x)
+                    // Compare to zero and return 1 if equal, 0 otherwise
+                    il.Emit(OpCodes.Ldc_I4_0);
+                    il.Emit(OpCodes.Ceq);
                     break;
 
                 case UnaryOp.Cbrt:
@@ -1242,6 +1253,19 @@ namespace NumSharp.Backends.Kernels
                 case UnaryOp.BitwiseNot:
                     // Bitwise not doesn't make sense for decimal - throw
                     throw new NotSupportedException("BitwiseNot is not supported for decimal type");
+
+                case UnaryOp.LogicalNot:
+                    // Logical NOT for decimal: x == 0
+                    // Compare to decimal.Zero and return bool
+                    il.Emit(OpCodes.Ldsfld, typeof(decimal).GetField("Zero")!);
+                    il.EmitCall(OpCodes.Call,
+                        typeof(decimal).GetMethod("op_Equality", new[] { typeof(decimal), typeof(decimal) })!,
+                        null);
+                    // Result is bool (int32 0 or 1), convert to decimal
+                    il.EmitCall(OpCodes.Call,
+                        typeof(decimal).GetMethod("op_Implicit", new[] { typeof(int) })!,
+                        null);
+                    break;
 
                 case UnaryOp.Cbrt:
                     // Cube root for decimal - convert to double, call Math.Cbrt, convert back

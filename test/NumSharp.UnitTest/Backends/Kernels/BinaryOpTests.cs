@@ -681,5 +681,71 @@ public class BinaryOpTests
         Assert.IsTrue(double.IsNaN(result.GetDouble(3)));
     }
 
+    [Test]
+    public void ATan2_SlicedArray()
+    {
+        // Test with sliced (non-contiguous) input: arr[::2]
+        // NumPy: np.arctan2(y[::2], x[::2]) should work correctly
+        var y_full = np.array(new double[] { 1.0, 999.0, 1.0, 999.0, -1.0, 999.0 });
+        var x_full = np.array(new double[] { 1.0, 999.0, -1.0, 999.0, 1.0, 999.0 });
+
+        // Slice to get every other element (non-contiguous view)
+        var y = y_full["::2"];
+        var x = x_full["::2"];
+
+        // Verify inputs are non-contiguous
+        Assert.IsFalse(y.Shape.IsContiguous, "y should be non-contiguous slice");
+        Assert.IsFalse(x.Shape.IsContiguous, "x should be non-contiguous slice");
+
+        var result = np.arctan2(y, x);
+
+        // Expected: arctan2([1, 1, -1], [1, -1, 1]) = [π/4, 3π/4, -π/4]
+        Assert.IsTrue(Math.Abs(result.GetDouble(0) - Math.PI / 4) < 1e-10);
+        Assert.IsTrue(Math.Abs(result.GetDouble(1) - 3 * Math.PI / 4) < 1e-10);
+        Assert.IsTrue(Math.Abs(result.GetDouble(2) - (-Math.PI / 4)) < 1e-10);
+    }
+
+    [Test]
+    public void ATan2_BroadcastScalar()
+    {
+        // Test broadcasting: arctan2(array, scalar)
+        // NumPy: np.arctan2([1, 0, -1], 1) = [π/4, 0, -π/4]
+        var y = np.array(new double[] { 1.0, 0.0, -1.0 });
+        var x = np.array(1.0);  // Scalar (will be broadcast)
+
+        var result = np.arctan2(y, x);
+
+        Assert.AreEqual(3, result.size);
+        Assert.IsTrue(Math.Abs(result.GetDouble(0) - Math.PI / 4) < 1e-10);
+        Assert.AreEqual(0.0, result.GetDouble(1));
+        Assert.IsTrue(Math.Abs(result.GetDouble(2) - (-Math.PI / 4)) < 1e-10);
+    }
+
+    [Test]
+    public void ATan2_Broadcast2D()
+    {
+        // Test 2D broadcasting: arctan2(column, row)
+        // NumPy: np.arctan2([[1], [0], [-1]], [1, -1]) broadcasts to (3, 2)
+        var y = np.array(new double[,] { { 1.0 }, { 0.0 }, { -1.0 } });  // Shape (3, 1)
+        var x = np.array(new double[] { 1.0, -1.0 });                    // Shape (2,)
+
+        var result = np.arctan2(y, x);
+
+        // Result shape should be (3, 2)
+        Assert.AreEqual(new[] { 3, 2 }, result.shape);
+
+        // Row 0: arctan2(1, 1) = π/4, arctan2(1, -1) = 3π/4
+        Assert.IsTrue(Math.Abs(result.GetDouble(0, 0) - Math.PI / 4) < 1e-10);
+        Assert.IsTrue(Math.Abs(result.GetDouble(0, 1) - 3 * Math.PI / 4) < 1e-10);
+
+        // Row 1: arctan2(0, 1) = 0, arctan2(0, -1) = π
+        Assert.AreEqual(0.0, result.GetDouble(1, 0));
+        Assert.IsTrue(Math.Abs(result.GetDouble(1, 1) - Math.PI) < 1e-10);
+
+        // Row 2: arctan2(-1, 1) = -π/4, arctan2(-1, -1) = -3π/4
+        Assert.IsTrue(Math.Abs(result.GetDouble(2, 0) - (-Math.PI / 4)) < 1e-10);
+        Assert.IsTrue(Math.Abs(result.GetDouble(2, 1) - (-3 * Math.PI / 4)) < 1e-10);
+    }
+
     #endregion
 }

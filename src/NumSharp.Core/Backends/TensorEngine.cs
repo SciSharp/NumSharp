@@ -41,6 +41,8 @@ namespace NumSharp
         public abstract NDArray Mean(in NDArray nd, int axis, Type dtype, bool keepdims = false);
         public abstract NDArray Power(in NDArray lhs, in ValueType rhs, Type type);
         public abstract NDArray Power(in NDArray lhs, in ValueType rhs, NPTypeCode? typeCode = null);
+        public abstract NDArray Power(in NDArray lhs, in NDArray rhs, Type type);
+        public abstract NDArray Power(in NDArray lhs, in NDArray rhs, NPTypeCode? typeCode = null);
         public abstract NDArray FloorDivide(in NDArray lhs, in NDArray rhs, Type dtype);
         public abstract NDArray FloorDivide(in NDArray lhs, in NDArray rhs, NPTypeCode? typeCode = null);
         public abstract NDArray FloorDivide(in NDArray lhs, in ValueType rhs, Type dtype);
@@ -175,8 +177,8 @@ namespace NumSharp
 
         public abstract NDArray ReduceAMax(NDArray arr, int? axis_, bool keepdims = false, NPTypeCode? typeCode = null);
         public abstract NDArray ReduceAMin(NDArray arr, int? axis_, bool keepdims = false, NPTypeCode? typeCode = null);
-        public abstract NDArray ReduceArgMax(NDArray arr, int? axis_);
-        public abstract NDArray ReduceArgMin(NDArray arr, int? axis_);
+        public abstract NDArray ReduceArgMax(NDArray arr, int? axis_, bool keepdims = false);
+        public abstract NDArray ReduceArgMin(NDArray arr, int? axis_, bool keepdims = false);
         public abstract NDArray ReduceProduct(NDArray arr, int? axis_, bool keepdims = false, NPTypeCode? typeCode = null);
         public abstract NDArray ReduceStd(NDArray arr, int? axis_, bool keepdims = false, int? ddof = null, NPTypeCode? typeCode = null);
         public abstract NDArray ReduceVar(NDArray arr, int? axis_, bool keepdims = false, int? ddof = null, NPTypeCode? typeCode = null);
@@ -184,10 +186,10 @@ namespace NumSharp
         #endregion
 
         public abstract NDArray ArgMax(in NDArray a);
-        public abstract NDArray ArgMax(in NDArray a, int axis);
+        public abstract NDArray ArgMax(in NDArray a, int axis, bool keepdims = false);
 
         public abstract NDArray ArgMin(in NDArray a);
-        public abstract NDArray ArgMin(in NDArray a, int axis);
+        public abstract NDArray ArgMin(in NDArray a, int axis, bool keepdims = false);
 
         public abstract NDArray AMax(in NDArray nd, int? axis = null, NPTypeCode? typeCode = null, bool keepdims = false);
         public abstract NDArray AMax(in NDArray nd, int axis, Type dtype, bool keepdims = false);

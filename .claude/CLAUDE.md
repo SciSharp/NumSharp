@@ -16,6 +16,33 @@ A full clone of the NumPy repository is available at `src/numpy/`, checked out t
 
 **When fixing bugs:** Don't just patch symptoms. Check `src/numpy/` (v2.4.2) for how NumPy implements the same functionality, then refactor NumSharp to match NumPy's structure.
 
+## Definition of Done (DOD) - Operations
+
+Every np.* function and DefaultEngine operation MUST satisfy these criteria:
+
+### Memory Layout Support
+- **Contiguous arrays**: Works correctly with C-contiguous memory (SIMD fast path)
+- **Non-contiguous arrays**: Works correctly with sliced/strided/transposed views
+- **Broadcast arrays**: Works correctly with stride=0 dimensions (read-only)
+- **Sliced views**: Correctly handles Shape.offset for base address calculation
+
+### Dtype Support
+All 12 NumSharp types must be handled (or explicitly documented as unsupported):
+Boolean, Byte, Int16, UInt16, Int32, UInt32, Int64, UInt64, Char, Single, Double, Decimal
+
+### NumPy API Parity
+- Function signature matches NumPy (parameter names, order, defaults)
+- Type promotion matches NumPy 2.x (NEP50)
+- Edge cases match NumPy (empty arrays, scalars, NaN handling, broadcasting)
+- Return dtype matches NumPy exactly
+
+### Testing
+- Unit tests based on actual NumPy output
+- Edge case tests (empty, scalar, broadcast, strided)
+- Dtype coverage tests
+
+**Full audit tracking:** See `docs/KERNEL_API_AUDIT.md`
+
 ## Supported Types (12)
 
 | NPTypeCode | C# Type | NPTypeCode | C# Type |
@@ -84,11 +111,14 @@ Runtime IL generation via `System.Reflection.Emit.DynamicMethod` for high-perfor
 | `sign(int32)` | `int32` (preserves) |
 | `power(int32, float)` | `float64` |
 
-**Missing from ILKernel (needs implementation):**
-- Binary: Power, FloorDivide, LeftShift, RightShift
-- Unary: Reciprocal, Square, Cbrt, Deg2Rad, Rad2Deg, BitwiseNot
-- Reduction: Std, Var, NanSum, NanProd, CumProd
-- Axis reductions (use old iterator path, no SIMD)
+**ILKernel Status (0.41.x):**
+| Category | Implemented | Pending |
+|----------|-------------|---------|
+| Binary | Add, Sub, Mul, Div, Power, FloorDivide, BitwiseAnd/Or/Xor | LeftShift, RightShift (use Default.Shift.cs) |
+| Unary | Negate, Abs, Sign, Sqrt, Cbrt, Square, Reciprocal, Floor, Ceil, Truncate, Trig, Exp, Log, BitwiseNot | Deg2Rad, Rad2Deg (use DefaultEngine) |
+| Reduction | Sum, Prod, Min, Max, Mean, ArgMax, ArgMin, All, Any | Std, Var, NanSum, NanProd, CumProd |
+| Comparison | Equal, NotEqual, Less, Greater, LessEqual, GreaterEqual | — |
+| Axis reductions | Uses old iterator path (no SIMD) | — |
 
 **DefaultEngine ops needing IL migration:**
 - Quick wins: `Clip`, `Modf` (SIMD-friendly)

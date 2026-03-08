@@ -1,13 +1,30 @@
 ﻿using System;
 using DecimalMath;
 using NumSharp.Utilities;
+using NumSharp.Backends.Kernels;
 using System.Threading.Tasks;
 
 namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        // TODO! create an overload because np.power also allows to pass an array of exponents for every entry in the array
+        /// <summary>
+        /// Element-wise power with array exponents: x1 ** x2
+        /// </summary>
+        public override NDArray Power(in NDArray lhs, in NDArray rhs, Type dtype)
+            => Power(lhs, rhs, dtype?.GetTypeCode());
+
+        /// <summary>
+        /// Element-wise power with array exponents: x1 ** x2
+        /// Uses ExecuteBinaryOp with BinaryOp.Power for broadcasting support.
+        /// </summary>
+        public override NDArray Power(in NDArray lhs, in NDArray rhs, NPTypeCode? typeCode = null)
+        {
+            var result = ExecuteBinaryOp(in lhs, in rhs, BinaryOp.Power);
+            if (typeCode.HasValue && result.typecode != typeCode.Value)
+                return Cast(result, typeCode.Value, copy: false);
+            return result;
+        }
 
         public override NDArray Power(in NDArray lhs, in ValueType rhs, Type dtype) => Power(lhs, rhs, dtype?.GetTypeCode());
 

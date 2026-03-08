@@ -61,7 +61,9 @@ namespace NumSharp.Backends.Kernels
         Cbrt,
         Deg2Rad,
         Rad2Deg,
-        BitwiseNot
+        BitwiseNot,
+        /// <summary>Logical NOT for boolean arrays (! operator, not ~ bitwise)</summary>
+        LogicalNot
     }
 
     /// <summary>

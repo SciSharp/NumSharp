@@ -10,12 +10,12 @@ namespace NumSharp
         /// </summary>
         /// <param name="x1">The arrays holding the elements to be compared. If x1.shape != x2.shape, they must be broadcastable to a common shape (which becomes the shape of the output).</param>
         /// <param name="x2">The arrays holding the elements to be compared. If x1.shape != x2.shape, they must be broadcastable to a common shape (which becomes the shape of the output).</param>
-        /// <param name="outType"></param>
+        /// <param name="dtype"></param>
         /// <returns>The maximum of x1 and x2, element-wise. This is a scalar if both x1 and x2 are scalars.</returns>
-        public static NDArray minimum(in NDArray x1, in NDArray x2, NPTypeCode? outType = null)
+        public static NDArray minimum(in NDArray x1, in NDArray x2, NPTypeCode? dtype = null)
         {
             var (_x1, _x2) = np.broadcast_arrays(x1, x2);
-            return np.clip(_x1, a_min: null, a_max: _x2, outType: outType);
+            return np.clip(_x1, a_min: null, a_max: _x2, dtype: dtype);
         }
 
         /// <summary>
@@ -24,12 +24,12 @@ namespace NumSharp
         /// </summary>
         /// <param name="x1">The arrays holding the elements to be compared. If x1.shape != x2.shape, they must be broadcastable to a common shape (which becomes the shape of the output).</param>
         /// <param name="x2">The arrays holding the elements to be compared. If x1.shape != x2.shape, they must be broadcastable to a common shape (which becomes the shape of the output).</param>
-        /// <param name="outType"></param>
+        /// <param name="dtype"></param>
         /// <returns>The maximum of x1 and x2, element-wise. This is a scalar if both x1 and x2 are scalars.</returns>
-        public static NDArray minimum(in NDArray x1, in NDArray x2, Type outType)
+        public static NDArray minimum(in NDArray x1, in NDArray x2, Type dtype)
         {
             var (_x1, _x2) = np.broadcast_arrays(x1, x2);
-            return np.clip(_x1, a_min: null, a_max: _x2, outType: outType);
+            return np.clip(_x1, a_min: null, a_max: _x2, dtype: dtype);
         }
 
         /// <summary>
@@ -52,12 +52,12 @@ namespace NumSharp
         /// </summary>
         /// <param name="x1">The arrays holding the elements to be compared. If x1.shape != x2.shape, they must be broadcastable to a common shape (which becomes the shape of the output).</param>
         /// <param name="x2">The arrays holding the elements to be compared. If x1.shape != x2.shape, they must be broadcastable to a common shape (which becomes the shape of the output).</param>
-        /// <param name="outType"></param>
+        /// <param name="dtype"></param>
         /// <returns>The maximum of x1 and x2, element-wise. This is a scalar if both x1 and x2 are scalars.</returns>
-        public static NDArray fmin(in NDArray x1, in NDArray x2, NPTypeCode? outType = null)
+        public static NDArray fmin(in NDArray x1, in NDArray x2, NPTypeCode? dtype = null)
         {
             var (_x1, _x2) = np.broadcast_arrays(x1, x2);
-            return np.clip(_x1, a_min: null, a_max: _x2, outType: outType);
+            return np.clip(_x1, a_min: null, a_max: _x2, dtype: dtype);
         }
 
         /// <summary>
@@ -66,12 +66,12 @@ namespace NumSharp
         /// </summary>
         /// <param name="x1">The arrays holding the elements to be compared. If x1.shape != x2.shape, they must be broadcastable to a common shape (which becomes the shape of the output).</param>
         /// <param name="x2">The arrays holding the elements to be compared. If x1.shape != x2.shape, they must be broadcastable to a common shape (which becomes the shape of the output).</param>
-        /// <param name="outType"></param>
+        /// <param name="dtype"></param>
         /// <returns>The maximum of x1 and x2, element-wise. This is a scalar if both x1 and x2 are scalars.</returns>
-        public static NDArray fmin(in NDArray x1, in NDArray x2, Type outType)
+        public static NDArray fmin(in NDArray x1, in NDArray x2, Type dtype)
         {
             var (_x1, _x2) = np.broadcast_arrays(x1, x2);
-            return np.clip(_x1, a_min: null, a_max: _x2, outType: outType);
+            return np.clip(_x1, a_min: null, a_max: _x2, dtype: dtype);
         }
 
         /// <summary>
