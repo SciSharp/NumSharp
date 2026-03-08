@@ -2937,6 +2937,627 @@ namespace NumSharp.Backends.Kernels
 
         #endregion
 
+        #region Axis Reduction SIMD Helpers
+
+        /// <summary>
+        /// Cache for axis reduction kernels (delegates that call SIMD helpers).
+        /// </summary>
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<AxisReductionKernelKey, AxisReductionKernel> _axisReductionCache = new();
+
+        /// <summary>
+        /// Number of axis reduction kernels in cache.
+        /// </summary>
+        public static int AxisReductionCachedCount => _axisReductionCache.Count;
+
+        /// <summary>
+        /// Clear axis reduction cache.
+        /// </summary>
+        public static void ClearAxisReduction()
+        {
+            _axisReductionCache.Clear();
+        }
+
+        /// <summary>
+        /// Try to get an axis reduction kernel.
+        /// Returns null if the operation is not supported for SIMD axis reduction.
+        /// </summary>
+        public static AxisReductionKernel? TryGetAxisReductionKernel(AxisReductionKernelKey key)
+        {
+            if (!Enabled)
+                return null;
+
+            // Only support Sum, Prod, Min, Max for now
+            if (key.Op != ReductionOp.Sum && key.Op != ReductionOp.Prod &&
+                key.Op != ReductionOp.Min && key.Op != ReductionOp.Max)
+            {
+                return null;
+            }
+
+            // Only support SIMD-capable types
+            if (!CanUseSimd(key.InputType))
+                return null;
+
+            return _axisReductionCache.GetOrAdd(key, CreateAxisReductionKernel);
+        }
+
+        /// <summary>
+        /// Create an axis reduction kernel that dispatches to the appropriate SIMD helper.
+        /// </summary>
+        private static AxisReductionKernel CreateAxisReductionKernel(AxisReductionKernelKey key)
+        {
+            // Return a delegate that calls the generic SIMD helper
+            return key.InputType switch
+            {
+                NPTypeCode.Byte => CreateAxisReductionKernelTyped<byte>(key),
+                NPTypeCode.Int16 => CreateAxisReductionKernelTyped<short>(key),
+                NPTypeCode.UInt16 => CreateAxisReductionKernelTyped<ushort>(key),
+                NPTypeCode.Int32 => CreateAxisReductionKernelTyped<int>(key),
+                NPTypeCode.UInt32 => CreateAxisReductionKernelTyped<uint>(key),
+                NPTypeCode.Int64 => CreateAxisReductionKernelTyped<long>(key),
+                NPTypeCode.UInt64 => CreateAxisReductionKernelTyped<ulong>(key),
+                NPTypeCode.Single => CreateAxisReductionKernelTyped<float>(key),
+                NPTypeCode.Double => CreateAxisReductionKernelTyped<double>(key),
+                _ => throw new NotSupportedException($"Axis reduction not supported for {key.InputType}")
+            };
+        }
+
+        /// <summary>
+        /// Create a typed axis reduction kernel.
+        /// </summary>
+        private static unsafe AxisReductionKernel CreateAxisReductionKernelTyped<T>(AxisReductionKernelKey key)
+            where T : unmanaged
+        {
+            return (void* input, void* output, int* inputStrides, int* inputShape,
+                    int* outputStrides, int axis, int axisSize, int ndim, int outputSize) =>
+            {
+                AxisReductionSimdHelper<T>(
+                    (T*)input, (T*)output,
+                    inputStrides, inputShape, outputStrides,
+                    axis, axisSize, ndim, outputSize,
+                    key.Op);
+            };
+        }
+
+        /// <summary>
+        /// SIMD helper for axis reduction operations.
+        /// Reduces along a specific axis, writing results to output array.
+        /// </summary>
+        /// <typeparam name="T">Element type</typeparam>
+        /// <param name="input">Input data pointer</param>
+        /// <param name="output">Output data pointer</param>
+        /// <param name="inputStrides">Input strides (element units)</param>
+        /// <param name="inputShape">Input shape</param>
+        /// <param name="outputStrides">Output strides (element units)</param>
+        /// <param name="axis">Axis to reduce along</param>
+        /// <param name="axisSize">Size of the axis being reduced</param>
+        /// <param name="ndim">Number of input dimensions</param>
+        /// <param name="outputSize">Total number of output elements</param>
+        /// <param name="op">Reduction operation</param>
+        internal static unsafe void AxisReductionSimdHelper<T>(
+            T* input, T* output,
+            int* inputStrides, int* inputShape, int* outputStrides,
+            int axis, int axisSize, int ndim, int outputSize,
+            ReductionOp op)
+            where T : unmanaged
+        {
+            int axisStride = inputStrides[axis];
+
+            // Check if the reduction axis is contiguous (stride == 1)
+            bool axisContiguous = axisStride == 1;
+
+            // Compute output shape strides for coordinate calculation
+            // Output has ndim-1 dimensions (axis removed)
+            int outputNdim = ndim - 1;
+            Span<int> outputDimStrides = stackalloc int[outputNdim > 0 ? outputNdim : 1];
+            if (outputNdim > 0)
+            {
+                outputDimStrides[outputNdim - 1] = 1;
+                for (int d = outputNdim - 2; d >= 0; d--)
+                {
+                    // Map output dimension d to input dimension (d if d < axis, d+1 if d >= axis)
+                    int inputDim = d >= axis ? d + 1 : d;
+                    int nextInputDim = (d + 1) >= axis ? d + 2 : d + 1;
+                    outputDimStrides[d] = outputDimStrides[d + 1] * inputShape[nextInputDim];
+                }
+            }
+
+            // Iterate over all output elements
+            for (int outIdx = 0; outIdx < outputSize; outIdx++)
+            {
+                // Convert linear output index to coordinates and compute input base offset
+                int remaining = outIdx;
+                int inputBaseOffset = 0;
+                int outputOffset = 0;
+
+                for (int d = 0; d < outputNdim; d++)
+                {
+                    // Map output dimension d to input dimension
+                    int inputDim = d >= axis ? d + 1 : d;
+
+                    int coord = remaining / outputDimStrides[d];
+                    remaining = remaining % outputDimStrides[d];
+
+                    inputBaseOffset += coord * inputStrides[inputDim];
+                    outputOffset += coord * outputStrides[d];
+                }
+
+                // Now reduce along the axis
+                T* axisStart = input + inputBaseOffset;
+
+                T result;
+                if (axisContiguous)
+                {
+                    // Fast path: axis is contiguous, use SIMD
+                    result = ReduceContiguousAxis(axisStart, axisSize, op);
+                }
+                else
+                {
+                    // Strided path: axis is not contiguous
+                    result = ReduceStridedAxis(axisStart, axisSize, axisStride, op);
+                }
+
+                output[outputOffset] = result;
+            }
+        }
+
+        /// <summary>
+        /// Reduce a contiguous axis using SIMD.
+        /// </summary>
+        private static unsafe T ReduceContiguousAxis<T>(T* data, int size, ReductionOp op)
+            where T : unmanaged
+        {
+            if (size == 0)
+            {
+                return GetIdentityValue<T>(op);
+            }
+
+            if (size == 1)
+            {
+                return data[0];
+            }
+
+            // Use SIMD for Sum, Prod, Min, Max
+            if (Vector256.IsHardwareAccelerated && Vector256<T>.IsSupported && size >= Vector256<T>.Count)
+            {
+                return ReduceContiguousAxisSimd256(data, size, op);
+            }
+            else if (Vector128.IsHardwareAccelerated && Vector128<T>.IsSupported && size >= Vector128<T>.Count)
+            {
+                return ReduceContiguousAxisSimd128(data, size, op);
+            }
+            else
+            {
+                return ReduceContiguousAxisScalar(data, size, op);
+            }
+        }
+
+        /// <summary>
+        /// Reduce contiguous axis using Vector256 SIMD.
+        /// </summary>
+        private static unsafe T ReduceContiguousAxisSimd256<T>(T* data, int size, ReductionOp op)
+            where T : unmanaged
+        {
+            int vectorCount = Vector256<T>.Count;
+            int vectorEnd = size - vectorCount;
+
+            // Initialize accumulator vector
+            var accumVec = CreateIdentityVector256<T>(op);
+
+            int i = 0;
+            for (; i <= vectorEnd; i += vectorCount)
+            {
+                var vec = Vector256.Load(data + i);
+                accumVec = CombineVectors256(accumVec, vec, op);
+            }
+
+            // Horizontal reduce the vector
+            T result = HorizontalReduce256(accumVec, op);
+
+            // Process scalar tail
+            for (; i < size; i++)
+            {
+                result = CombineScalars(result, data[i], op);
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Reduce contiguous axis using Vector128 SIMD.
+        /// </summary>
+        private static unsafe T ReduceContiguousAxisSimd128<T>(T* data, int size, ReductionOp op)
+            where T : unmanaged
+        {
+            int vectorCount = Vector128<T>.Count;
+            int vectorEnd = size - vectorCount;
+
+            // Initialize accumulator vector
+            var accumVec = CreateIdentityVector128<T>(op);
+
+            int i = 0;
+            for (; i <= vectorEnd; i += vectorCount)
+            {
+                var vec = Vector128.Load(data + i);
+                accumVec = CombineVectors128(accumVec, vec, op);
+            }
+
+            // Horizontal reduce the vector
+            T result = HorizontalReduce128(accumVec, op);
+
+            // Process scalar tail
+            for (; i < size; i++)
+            {
+                result = CombineScalars(result, data[i], op);
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Reduce contiguous axis using scalar loop.
+        /// </summary>
+        private static unsafe T ReduceContiguousAxisScalar<T>(T* data, int size, ReductionOp op)
+            where T : unmanaged
+        {
+            T result = GetIdentityValue<T>(op);
+
+            for (int i = 0; i < size; i++)
+            {
+                result = CombineScalars(result, data[i], op);
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Reduce a strided axis (non-contiguous).
+        /// </summary>
+        private static unsafe T ReduceStridedAxis<T>(T* data, int size, int stride, ReductionOp op)
+            where T : unmanaged
+        {
+            T result = GetIdentityValue<T>(op);
+
+            for (int i = 0; i < size; i++)
+            {
+                result = CombineScalars(result, data[i * stride], op);
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Get the identity value for a reduction operation.
+        /// </summary>
+        private static T GetIdentityValue<T>(ReductionOp op) where T : unmanaged
+        {
+            if (typeof(T) == typeof(float))
+            {
+                float val = op switch
+                {
+                    ReductionOp.Sum => 0f,
+                    ReductionOp.Prod => 1f,
+                    ReductionOp.Min => float.PositiveInfinity,
+                    ReductionOp.Max => float.NegativeInfinity,
+                    _ => throw new NotSupportedException()
+                };
+                return (T)(object)val;
+            }
+            if (typeof(T) == typeof(double))
+            {
+                double val = op switch
+                {
+                    ReductionOp.Sum => 0.0,
+                    ReductionOp.Prod => 1.0,
+                    ReductionOp.Min => double.PositiveInfinity,
+                    ReductionOp.Max => double.NegativeInfinity,
+                    _ => throw new NotSupportedException()
+                };
+                return (T)(object)val;
+            }
+            if (typeof(T) == typeof(int))
+            {
+                int val = op switch
+                {
+                    ReductionOp.Sum => 0,
+                    ReductionOp.Prod => 1,
+                    ReductionOp.Min => int.MaxValue,
+                    ReductionOp.Max => int.MinValue,
+                    _ => throw new NotSupportedException()
+                };
+                return (T)(object)val;
+            }
+            if (typeof(T) == typeof(long))
+            {
+                long val = op switch
+                {
+                    ReductionOp.Sum => 0L,
+                    ReductionOp.Prod => 1L,
+                    ReductionOp.Min => long.MaxValue,
+                    ReductionOp.Max => long.MinValue,
+                    _ => throw new NotSupportedException()
+                };
+                return (T)(object)val;
+            }
+            if (typeof(T) == typeof(byte))
+            {
+                byte val = op switch
+                {
+                    ReductionOp.Sum => 0,
+                    ReductionOp.Prod => 1,
+                    ReductionOp.Min => byte.MaxValue,
+                    ReductionOp.Max => byte.MinValue,
+                    _ => throw new NotSupportedException()
+                };
+                return (T)(object)val;
+            }
+            if (typeof(T) == typeof(short))
+            {
+                short val = op switch
+                {
+                    ReductionOp.Sum => 0,
+                    ReductionOp.Prod => 1,
+                    ReductionOp.Min => short.MaxValue,
+                    ReductionOp.Max => short.MinValue,
+                    _ => throw new NotSupportedException()
+                };
+                return (T)(object)val;
+            }
+            if (typeof(T) == typeof(ushort))
+            {
+                ushort val = op switch
+                {
+                    ReductionOp.Sum => 0,
+                    ReductionOp.Prod => 1,
+                    ReductionOp.Min => ushort.MaxValue,
+                    ReductionOp.Max => ushort.MinValue,
+                    _ => throw new NotSupportedException()
+                };
+                return (T)(object)val;
+            }
+            if (typeof(T) == typeof(uint))
+            {
+                uint val = op switch
+                {
+                    ReductionOp.Sum => 0u,
+                    ReductionOp.Prod => 1u,
+                    ReductionOp.Min => uint.MaxValue,
+                    ReductionOp.Max => uint.MinValue,
+                    _ => throw new NotSupportedException()
+                };
+                return (T)(object)val;
+            }
+            if (typeof(T) == typeof(ulong))
+            {
+                ulong val = op switch
+                {
+                    ReductionOp.Sum => 0UL,
+                    ReductionOp.Prod => 1UL,
+                    ReductionOp.Min => ulong.MaxValue,
+                    ReductionOp.Max => ulong.MinValue,
+                    _ => throw new NotSupportedException()
+                };
+                return (T)(object)val;
+            }
+
+            throw new NotSupportedException($"Type {typeof(T)} not supported for axis reduction");
+        }
+
+        /// <summary>
+        /// Create identity Vector256 for reduction operation.
+        /// </summary>
+        private static Vector256<T> CreateIdentityVector256<T>(ReductionOp op) where T : unmanaged
+        {
+            T identity = GetIdentityValue<T>(op);
+            return Vector256.Create(identity);
+        }
+
+        /// <summary>
+        /// Create identity Vector128 for reduction operation.
+        /// </summary>
+        private static Vector128<T> CreateIdentityVector128<T>(ReductionOp op) where T : unmanaged
+        {
+            T identity = GetIdentityValue<T>(op);
+            return Vector128.Create(identity);
+        }
+
+        /// <summary>
+        /// Combine two Vector256 values using reduction operation.
+        /// </summary>
+        private static Vector256<T> CombineVectors256<T>(Vector256<T> a, Vector256<T> b, ReductionOp op)
+            where T : unmanaged
+        {
+            return op switch
+            {
+                ReductionOp.Sum => Vector256.Add(a, b),
+                ReductionOp.Prod => Vector256.Multiply(a, b),
+                ReductionOp.Min => Vector256.Min(a, b),
+                ReductionOp.Max => Vector256.Max(a, b),
+                _ => throw new NotSupportedException()
+            };
+        }
+
+        /// <summary>
+        /// Combine two Vector128 values using reduction operation.
+        /// </summary>
+        private static Vector128<T> CombineVectors128<T>(Vector128<T> a, Vector128<T> b, ReductionOp op)
+            where T : unmanaged
+        {
+            return op switch
+            {
+                ReductionOp.Sum => Vector128.Add(a, b),
+                ReductionOp.Prod => Vector128.Multiply(a, b),
+                ReductionOp.Min => Vector128.Min(a, b),
+                ReductionOp.Max => Vector128.Max(a, b),
+                _ => throw new NotSupportedException()
+            };
+        }
+
+        /// <summary>
+        /// Horizontal reduce Vector256 to scalar.
+        /// </summary>
+        private static T HorizontalReduce256<T>(Vector256<T> vec, ReductionOp op) where T : unmanaged
+        {
+            // First reduce to Vector128
+            var lower = vec.GetLower();
+            var upper = vec.GetUpper();
+            var combined = CombineVectors128(lower, upper, op);
+
+            return HorizontalReduce128(combined, op);
+        }
+
+        /// <summary>
+        /// Horizontal reduce Vector128 to scalar.
+        /// </summary>
+        private static T HorizontalReduce128<T>(Vector128<T> vec, ReductionOp op) where T : unmanaged
+        {
+            int count = Vector128<T>.Count;
+            T result = vec.GetElement(0);
+
+            for (int i = 1; i < count; i++)
+            {
+                result = CombineScalars(result, vec.GetElement(i), op);
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Combine two scalar values using reduction operation.
+        /// </summary>
+        private static T CombineScalars<T>(T a, T b, ReductionOp op) where T : unmanaged
+        {
+            if (typeof(T) == typeof(float))
+            {
+                float fa = (float)(object)a;
+                float fb = (float)(object)b;
+                float result = op switch
+                {
+                    ReductionOp.Sum => fa + fb,
+                    ReductionOp.Prod => fa * fb,
+                    ReductionOp.Min => Math.Min(fa, fb),
+                    ReductionOp.Max => Math.Max(fa, fb),
+                    _ => throw new NotSupportedException()
+                };
+                return (T)(object)result;
+            }
+            if (typeof(T) == typeof(double))
+            {
+                double da = (double)(object)a;
+                double db = (double)(object)b;
+                double result = op switch
+                {
+                    ReductionOp.Sum => da + db,
+                    ReductionOp.Prod => da * db,
+                    ReductionOp.Min => Math.Min(da, db),
+                    ReductionOp.Max => Math.Max(da, db),
+                    _ => throw new NotSupportedException()
+                };
+                return (T)(object)result;
+            }
+            if (typeof(T) == typeof(int))
+            {
+                int ia = (int)(object)a;
+                int ib = (int)(object)b;
+                int result = op switch
+                {
+                    ReductionOp.Sum => ia + ib,
+                    ReductionOp.Prod => ia * ib,
+                    ReductionOp.Min => Math.Min(ia, ib),
+                    ReductionOp.Max => Math.Max(ia, ib),
+                    _ => throw new NotSupportedException()
+                };
+                return (T)(object)result;
+            }
+            if (typeof(T) == typeof(long))
+            {
+                long la = (long)(object)a;
+                long lb = (long)(object)b;
+                long result = op switch
+                {
+                    ReductionOp.Sum => la + lb,
+                    ReductionOp.Prod => la * lb,
+                    ReductionOp.Min => Math.Min(la, lb),
+                    ReductionOp.Max => Math.Max(la, lb),
+                    _ => throw new NotSupportedException()
+                };
+                return (T)(object)result;
+            }
+            if (typeof(T) == typeof(byte))
+            {
+                int ba = (byte)(object)a;
+                int bb = (byte)(object)b;
+                byte result = op switch
+                {
+                    ReductionOp.Sum => (byte)(ba + bb),
+                    ReductionOp.Prod => (byte)(ba * bb),
+                    ReductionOp.Min => (byte)Math.Min(ba, bb),
+                    ReductionOp.Max => (byte)Math.Max(ba, bb),
+                    _ => throw new NotSupportedException()
+                };
+                return (T)(object)result;
+            }
+            if (typeof(T) == typeof(short))
+            {
+                int sa = (short)(object)a;
+                int sb = (short)(object)b;
+                short result = op switch
+                {
+                    ReductionOp.Sum => (short)(sa + sb),
+                    ReductionOp.Prod => (short)(sa * sb),
+                    ReductionOp.Min => (short)Math.Min(sa, sb),
+                    ReductionOp.Max => (short)Math.Max(sa, sb),
+                    _ => throw new NotSupportedException()
+                };
+                return (T)(object)result;
+            }
+            if (typeof(T) == typeof(ushort))
+            {
+                int usa = (ushort)(object)a;
+                int usb = (ushort)(object)b;
+                ushort result = op switch
+                {
+                    ReductionOp.Sum => (ushort)(usa + usb),
+                    ReductionOp.Prod => (ushort)(usa * usb),
+                    ReductionOp.Min => (ushort)Math.Min(usa, usb),
+                    ReductionOp.Max => (ushort)Math.Max(usa, usb),
+                    _ => throw new NotSupportedException()
+                };
+                return (T)(object)result;
+            }
+            if (typeof(T) == typeof(uint))
+            {
+                uint ua = (uint)(object)a;
+                uint ub = (uint)(object)b;
+                uint result = op switch
+                {
+                    ReductionOp.Sum => ua + ub,
+                    ReductionOp.Prod => ua * ub,
+                    ReductionOp.Min => Math.Min(ua, ub),
+                    ReductionOp.Max => Math.Max(ua, ub),
+                    _ => throw new NotSupportedException()
+                };
+                return (T)(object)result;
+            }
+            if (typeof(T) == typeof(ulong))
+            {
+                ulong ula = (ulong)(object)a;
+                ulong ulb = (ulong)(object)b;
+                ulong result = op switch
+                {
+                    ReductionOp.Sum => ula + ulb,
+                    ReductionOp.Prod => ula * ulb,
+                    ReductionOp.Min => Math.Min(ula, ulb),
+                    ReductionOp.Max => Math.Max(ula, ulb),
+                    _ => throw new NotSupportedException()
+                };
+                return (T)(object)result;
+            }
+
+            throw new NotSupportedException($"Type {typeof(T)} not supported");
+        }
+
+        #endregion
+
         #region IKernelProvider SIMD Helper Interface Implementation
 
         /// <inheritdoc />

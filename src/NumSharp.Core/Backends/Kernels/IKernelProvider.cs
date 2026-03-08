@@ -100,6 +100,15 @@ namespace NumSharp.Backends.Kernels
         TypedElementReductionKernel<TResult>? GetElementReductionKernel<TResult>(ElementReductionKernelKey key)
             where TResult : unmanaged;
 
+        /// <summary>
+        /// Get axis reduction kernel.
+        /// Reduces along a specific axis, producing an array with one fewer dimension.
+        /// Uses SIMD when the reduction axis is contiguous.
+        /// </summary>
+        /// <param name="key">The kernel key specifying input/output types, operation, and axis contiguity.</param>
+        /// <returns>The kernel delegate, or null if not supported.</returns>
+        AxisReductionKernel? GetAxisReductionKernel(AxisReductionKernelKey key);
+
         // ===================
         // Comparison Operations
         // ===================

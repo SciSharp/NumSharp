@@ -27,6 +27,19 @@ namespace NumSharp
 
             if (shape.IsScalar || (shape.size == 1 && shape.NDim == 1))
             {
+                // Scalar case: check for NaN and return identity (1) if so
+                var val = arr.GetAtIndex(0);
+                switch (arr.GetTypeCode)
+                {
+                    case NPTypeCode.Single:
+                        if (float.IsNaN((float)val))
+                            return NDArray.Scalar(1f);
+                        break;
+                    case NPTypeCode.Double:
+                        if (double.IsNaN((double)val))
+                            return NDArray.Scalar(1.0);
+                        break;
+                }
                 return a.Clone();
             }
 

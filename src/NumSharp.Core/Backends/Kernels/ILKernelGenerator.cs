@@ -930,6 +930,12 @@ namespace NumSharp.Backends.Kernels
             => TryGetTypedElementReductionKernel<TResult>(key);
 
         /// <summary>
+        /// Get axis reduction kernel (IKernelProvider interface).
+        /// </summary>
+        AxisReductionKernel? IKernelProvider.GetAxisReductionKernel(AxisReductionKernelKey key)
+            => TryGetAxisReductionKernel(key);
+
+        /// <summary>
         /// Get comparison kernel (IKernelProvider interface).
         /// </summary>
         ComparisonKernel? IKernelProvider.GetComparisonKernel(ComparisonKernelKey key)
@@ -1007,6 +1013,7 @@ namespace NumSharp.Backends.Kernels
             count += ComparisonCachedCount; // Comparison: _comparisonCache
             count += ComparisonScalarCachedCount; // Comparison: _comparisonScalarCache
             count += ElementReductionCachedCount;  // Reduction: _elementReductionCache
+            count += AxisReductionCachedCount;     // Reduction: _axisReductionCache
             return count;
         }
 
