@@ -15,6 +15,10 @@ namespace NumSharp.Backends
             if (shape.IsEmpty)
                 return arr;
 
+            // NumPy raises ValueError for empty arrays: "zero-size array to reduction operation minimum which has no identity"
+            if (arr.size == 0)
+                throw new ArgumentException("zero-size array to reduction operation minimum which has no identity", nameof(arr));
+
             if (shape.IsScalar || shape.size == 1 && shape.dimensions.Length == 1)
             {
                 var r = typeCode.HasValue ? Cast(arr, typeCode.Value, true) : arr.Clone();

@@ -7,7 +7,7 @@
         /// </summary>
         /// <returns>The index of the minimum value in the flattened array.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.argmin.html</remarks>
-        public int argmin()
+        public long argmin()
         {
             return np.argmin(this);
         }

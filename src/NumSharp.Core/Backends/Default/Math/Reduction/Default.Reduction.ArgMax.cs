@@ -58,9 +58,9 @@ namespace NumSharp.Backends
                 if (keepdims)
                 {
                     // Keep the axis but reduce to size 1 (it's already 1)
-                    return np.zeros(shape.dimensions, NPTypeCode.Int32);
+                    return np.zeros(shape.dimensions, NPTypeCode.Int64);
                 }
-                return np.squeeze_fast(np.zeros(shape.dimensions, NPTypeCode.Int32), axis);
+                return np.squeeze_fast(np.zeros(shape.dimensions, NPTypeCode.Int64), axis);
             }
 
             //handle keepdims - prepare output shape
@@ -82,7 +82,7 @@ namespace NumSharp.Backends
             }
 
             //prepare ret
-            var ret = new NDArray(NPTypeCode.Int32, axisedShape, false);
+            var ret = new NDArray(NPTypeCode.Int64, axisedShape, false);
             var iterAxis = new NDCoordinatesAxisIncrementor(ref shape, axis);
             var iterRet = new ValueCoordinatesIncrementor(ref axisedShape);
             var iterIndex = iterRet.Index;
@@ -115,7 +115,7 @@ namespace NumSharp.Backends
                             idx++;
                         }
 
-                        ret.SetInt32(maxAt, iterIndex);
+                        ret.SetInt64(maxAt, iterIndex);
                     } while (iterAxis.Next() != null && iterRet.Next() != null);
                     break;
                 }
@@ -153,7 +153,7 @@ namespace NumSharp.Backends
                             idx++;
                         }
 
-                        ret.SetInt32(maxAt, iterIndex);
+                        ret.SetInt64(maxAt, iterIndex);
                     } while (iterAxis.Next() != null && iterRet.Next() != null);
                     break;
                 }
@@ -179,7 +179,7 @@ namespace NumSharp.Backends
                             idx++;
                         }
 
-                        ret.SetInt32(maxAt, iterIndex);
+                        ret.SetInt64(maxAt, iterIndex);
                     } while (iterAxis.Next() != null && iterRet.Next() != null);
                     break;
                 }
@@ -205,7 +205,7 @@ namespace NumSharp.Backends
                             idx++;
                         }
 
-                        ret.SetInt32(maxAt, iterIndex);
+                        ret.SetInt64(maxAt, iterIndex);
                     } while (iterAxis.Next() != null && iterRet.Next() != null);
                     break;
                 }
@@ -231,7 +231,7 @@ namespace NumSharp.Backends
                             idx++;
                         }
 
-                        ret.SetInt32(maxAt, iterIndex);
+                        ret.SetInt64(maxAt, iterIndex);
                     } while (iterAxis.Next() != null && iterRet.Next() != null);
                     break;
                 }
@@ -257,7 +257,7 @@ namespace NumSharp.Backends
                             idx++;
                         }
 
-                        ret.SetInt32(maxAt, iterIndex);
+                        ret.SetInt64(maxAt, iterIndex);
                     } while (iterAxis.Next() != null && iterRet.Next() != null);
                     break;
                 }
@@ -283,7 +283,7 @@ namespace NumSharp.Backends
                             idx++;
                         }
 
-                        ret.SetInt32(maxAt, iterIndex);
+                        ret.SetInt64(maxAt, iterIndex);
                     } while (iterAxis.Next() != null && iterRet.Next() != null);
                     break;
                 }
@@ -309,7 +309,7 @@ namespace NumSharp.Backends
                             idx++;
                         }
 
-                        ret.SetInt32(maxAt, iterIndex);
+                        ret.SetInt64(maxAt, iterIndex);
                     } while (iterAxis.Next() != null && iterRet.Next() != null);
                     break;
                 }
@@ -335,7 +335,7 @@ namespace NumSharp.Backends
                             idx++;
                         }
 
-                        ret.SetInt32(maxAt, iterIndex);
+                        ret.SetInt64(maxAt, iterIndex);
                     } while (iterAxis.Next() != null && iterRet.Next() != null);
                     break;
                 }
@@ -361,7 +361,7 @@ namespace NumSharp.Backends
                             idx++;
                         }
 
-                        ret.SetInt32(maxAt, iterIndex);
+                        ret.SetInt64(maxAt, iterIndex);
                     } while (iterAxis.Next() != null && iterRet.Next() != null);
                     break;
                 }
@@ -388,7 +388,7 @@ namespace NumSharp.Backends
                             idx++;
                         }
 
-                        ret.SetInt32(maxAt, iterIndex);
+                        ret.SetInt64(maxAt, iterIndex);
                     } while (iterAxis.Next() != null && iterRet.Next() != null);
                     break;
                 }
@@ -415,7 +415,7 @@ namespace NumSharp.Backends
                             idx++;
                         }
 
-                        ret.SetInt32(maxAt, iterIndex);
+                        ret.SetInt64(maxAt, iterIndex);
                     } while (iterAxis.Next() != null && iterRet.Next() != null);
                     break;
                 }
@@ -441,7 +441,7 @@ namespace NumSharp.Backends
                             idx++;
                         }
 
-                        ret.SetInt32(maxAt, iterIndex);
+                        ret.SetInt64(maxAt, iterIndex);
                     } while (iterAxis.Next() != null && iterRet.Next() != null);
                     break;
                 }

@@ -1549,24 +1549,24 @@ public class TypePromotionDifferenceTests
     }
 
     [Test]
-    [Misaligned]
-    public void Max_EmptyArray_UsesIdentity()
+    public void Max_EmptyArray_ThrowsException()
     {
+        // NumPy: np.max([]) raises ValueError
+        // NumSharp: Now throws ArgumentException (FIXED in Task #84)
         var empty = np.array(Array.Empty<double>());
-        var result = np.amax(empty);
 
-        Assert.IsTrue(double.IsNegativeInfinity(result.GetDouble(0)),
-            "NumSharp returns -Inf. NumPy raises ValueError.");
+        Assert.ThrowsException<ArgumentException>(() => np.amax(empty),
+            "NumSharp now raises ArgumentException matching NumPy's ValueError.");
     }
 
     [Test]
-    [Misaligned]
-    public void Min_EmptyArray_UsesIdentity()
+    public void Min_EmptyArray_ThrowsException()
     {
+        // NumPy: np.min([]) raises ValueError
+        // NumSharp: Now throws ArgumentException (FIXED in Task #84)
         var empty = np.array(Array.Empty<double>());
-        var result = np.amin(empty);
 
-        Assert.IsTrue(double.IsPositiveInfinity(result.GetDouble(0)),
-            "NumSharp returns +Inf. NumPy raises ValueError.");
+        Assert.ThrowsException<ArgumentException>(() => np.amin(empty),
+            "NumSharp now raises ArgumentException matching NumPy's ValueError.");
     }
 }
