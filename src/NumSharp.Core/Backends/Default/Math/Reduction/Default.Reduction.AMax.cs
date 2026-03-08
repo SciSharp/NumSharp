@@ -15,9 +15,50 @@ namespace NumSharp.Backends
             if (shape.IsEmpty)
                 return arr;
 
-            // NumPy raises ValueError for empty arrays: "zero-size array to reduction operation maximum which has no identity"
+            // Handle empty arrays (size == 0) with axis reduction
+            // NumPy: np.max(np.zeros((0,3)), axis=0) raises ValueError (reducing along zero-size axis)
+            // NumPy: np.max(np.zeros((0,3)), axis=1) returns array([]) with shape (0,) (reducing along non-zero axis)
             if (arr.size == 0)
-                throw new ArgumentException("zero-size array to reduction operation maximum which has no identity", nameof(arr));
+            {
+                if (axis_ == null)
+                {
+                    // No axis specified - raise error
+                    throw new ArgumentException("zero-size array to reduction operation maximum which has no identity", nameof(arr));
+                }
+
+                // Axis specified - check if reducing along zero-size axis
+                var emptyAxis = axis_.Value;
+                while (emptyAxis < 0)
+                    emptyAxis = arr.ndim + emptyAxis;
+                if (emptyAxis >= arr.ndim)
+                    throw new ArgumentOutOfRangeException(nameof(axis_));
+
+                if (shape[emptyAxis] == 0)
+                {
+                    // Reducing along a zero-size axis - raise error
+                    throw new ArgumentException("zero-size array to reduction operation maximum which has no identity", nameof(arr));
+                }
+
+                // Reducing along non-zero axis - return empty array with reduced shape
+                var resultShape = Shape.GetAxis(shape, emptyAxis);
+                var emptyOutputType = typeCode ?? arr.GetTypeCode;
+                var result = np.empty(new Shape(resultShape), emptyOutputType);
+
+                if (keepdims)
+                {
+                    var keepdimsShape = new int[arr.ndim];
+                    for (int d = 0, sd = 0; d < arr.ndim; d++)
+                    {
+                        if (d == emptyAxis)
+                            keepdimsShape[d] = 1;
+                        else
+                            keepdimsShape[d] = resultShape[sd++];
+                    }
+                    result.Storage.Reshape(new Shape(keepdimsShape));
+                }
+
+                return result;
+            }
 
             if (shape.IsScalar || shape.size == 1 && shape.dimensions.Length == 1)
             {
@@ -64,11 +105,12 @@ namespace NumSharp.Backends
             if (shape[axis] == 1)
             {
                 //if the given div axis is 1 and can be squeezed out.
+                //Return a copy to avoid sharing memory with the original (NumPy behavior)
                 if (keepdims)
                 {
-                    return new NDArray(arr.Storage.Alias());
+                    return arr.copy();
                 }
-                return np.squeeze_fast(arr, axis);
+                return np.squeeze_fast(arr, axis).copy();
             }
 
             // Try SIMD-optimized axis reduction first

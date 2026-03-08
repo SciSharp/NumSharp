@@ -12,6 +12,65 @@ namespace NumSharp.Backends
             if (shape.IsEmpty)
                 return arr;
 
+            // Handle empty arrays (size == 0) with axis reduction
+            // NumPy: np.var(np.zeros((0,3)), axis=0) returns array([nan, nan, nan]) (reducing along zero-size axis)
+            // NumPy: np.var(np.zeros((0,3)), axis=1) returns array([]) with shape (0,) (reducing along non-zero axis)
+            if (arr.size == 0)
+            {
+                if (axis_ == null)
+                {
+                    // No axis specified - return NaN scalar
+                    var r = NDArray.Scalar(double.NaN);
+                    if (keepdims)
+                    {
+                        var keepdimsShape = new int[arr.ndim];
+                        for (int i = 0; i < arr.ndim; i++)
+                            keepdimsShape[i] = 1;
+                        r.Storage.Reshape(new Shape(keepdimsShape));
+                    }
+                    return r;
+                }
+
+                // Axis specified - check if reducing along zero-size axis
+                var emptyAxis = axis_.Value;
+                while (emptyAxis < 0)
+                    emptyAxis = arr.ndim + emptyAxis;
+                if (emptyAxis >= arr.ndim)
+                    throw new ArgumentOutOfRangeException(nameof(axis_));
+
+                var resultShape = Shape.GetAxis(shape, emptyAxis);
+                var emptyOutputType = typeCode ?? NPTypeCode.Double;
+
+                NDArray result;
+                if (shape[emptyAxis] == 0)
+                {
+                    // Reducing along a zero-size axis - return NaN filled array
+                    result = np.empty(new Shape(resultShape), emptyOutputType);
+                    for (int i = 0; i < result.size; i++)
+                        result.SetAtIndex(double.NaN, i);
+                }
+                else
+                {
+                    // Reducing along non-zero axis - return empty array with reduced shape
+                    result = np.empty(new Shape(resultShape), emptyOutputType);
+                }
+
+                if (keepdims)
+                {
+                    var keepdimsShape = new int[arr.ndim];
+                    for (int d = 0, sd = 0; d < arr.ndim; d++)
+                    {
+                        if (d == emptyAxis)
+                            keepdimsShape[d] = 1;
+                        else
+                            keepdimsShape[d] = resultShape[sd++];
+                    }
+                    result.Storage.Reshape(new Shape(keepdimsShape));
+                }
+
+                return result;
+            }
+
             if (shape.IsScalar || (shape.size == 1 && shape.NDim == 1))
             {
                 var r = NDArray.Scalar(0);
@@ -52,12 +111,16 @@ namespace NumSharp.Backends
 
             if (shape[axis] == 1)
             {
-                //if the given div axis is 1 and can be squeezed out.
+                //if the given div axis is 1 - variance of a single element is 0
+                //Return zeros with the appropriate shape (NumPy behavior)
                 if (keepdims)
                 {
-                    return new NDArray(arr.Storage.Alias());
+                    var keepdimsShapeDims = new int[arr.ndim];
+                    for (int i = 0; i < arr.ndim; i++)
+                        keepdimsShapeDims[i] = (i == axis) ? 1 : shape[i];
+                    return np.zeros(keepdimsShapeDims, typeCode ?? arr.GetTypeCode.GetComputingType());
                 }
-                return np.squeeze_fast(arr, axis);
+                return np.zeros(Shape.GetAxis(shape, axis), typeCode ?? arr.GetTypeCode.GetComputingType());
             }
 
             //handle keepdims

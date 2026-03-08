@@ -35,8 +35,9 @@ namespace NumSharp.Backends
 
             if (shape[axis] == 1)
             {
-                //if the given div axis is 1 and can be squeezed out.
-                return np.squeeze_fast(arr, axis);
+                //if the given div axis is 1 - cumsum is just the value itself
+                //Return a copy to avoid sharing memory with the original (NumPy behavior)
+                return arr.copy();
             }
 
             //prepare ret — use Clean() to strip broadcast metadata so that ret[slices]

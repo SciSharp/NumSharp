@@ -13,9 +13,52 @@ namespace NumSharp.Backends
             //the size of what we need to reduce is the size of the shape of the given axis (shape[axis])
             var shape = arr.Shape;
 
-            // NumPy: argmin of empty array raises ValueError
-            if (shape.IsEmpty || shape.size == 0)
+            if (shape.IsEmpty)
                 throw new ArgumentException("attempt to get argmin of an empty sequence");
+
+            // Handle empty arrays (size == 0) with axis reduction
+            // NumPy: np.argmin(np.zeros((0,3)), axis=0) raises ValueError (reducing along zero-size axis)
+            // NumPy: np.argmin(np.zeros((0,3)), axis=1) returns array([], dtype=int64) with shape (0,)
+            if (shape.size == 0)
+            {
+                if (axis_ == null)
+                {
+                    // No axis specified - raise error
+                    throw new ArgumentException("attempt to get argmin of an empty sequence");
+                }
+
+                // Axis specified - check if reducing along zero-size axis
+                var emptyAxis = axis_.Value;
+                while (emptyAxis < 0)
+                    emptyAxis = arr.ndim + emptyAxis;
+                if (emptyAxis >= arr.ndim)
+                    throw new ArgumentOutOfRangeException(nameof(axis_));
+
+                if (shape[emptyAxis] == 0)
+                {
+                    // Reducing along a zero-size axis - raise error
+                    throw new ArgumentException("attempt to get argmin of an empty sequence");
+                }
+
+                // Reducing along non-zero axis - return empty Int64 array with reduced shape
+                var resultShape = Shape.GetAxis(shape, emptyAxis);
+                var result = np.empty(new Shape(resultShape), NPTypeCode.Int64);
+
+                if (keepdims)
+                {
+                    var keepdimsShape = new int[arr.ndim];
+                    for (int d = 0, sd = 0; d < arr.ndim; d++)
+                    {
+                        if (d == emptyAxis)
+                            keepdimsShape[d] = 1;
+                        else
+                            keepdimsShape[d] = resultShape[sd++];
+                    }
+                    result.Storage.Reshape(new Shape(keepdimsShape));
+                }
+
+                return result;
+            }
 
             if (shape.IsScalar || (shape.size == 1 && shape.NDim == 1))
             {

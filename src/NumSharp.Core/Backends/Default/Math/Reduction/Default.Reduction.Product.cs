@@ -12,8 +12,53 @@ namespace NumSharp.Backends
             //the size of the array is [1, 2, n, m] all shapes after 2nd multiplied gives size
             //the size of what we need to reduce is the size of the shape of the given axis (shape[axis])
             var shape = arr.Shape;
-            if (shape.IsEmpty || shape.size==0)
+            if (shape.IsEmpty)
                 return NDArray.Scalar(1, (typeCode ?? arr.typecode));
+
+            // Handle empty arrays (size == 0) with axis reduction
+            // NumPy: np.prod(np.zeros((0,3)), axis=0) returns array([1., 1., 1.]) with shape (3,)
+            if (shape.size == 0)
+            {
+                if (axis_ == null)
+                {
+                    // No axis specified - return scalar 1
+                    var r = NDArray.Scalar(1, (typeCode ?? arr.typecode));
+                    if (keepdims)
+                    {
+                        var keepdimsShape = new int[arr.ndim];
+                        for (int i = 0; i < arr.ndim; i++)
+                            keepdimsShape[i] = 1;
+                        r.Storage.Reshape(new Shape(keepdimsShape));
+                    }
+                    return r;
+                }
+
+                // Axis specified - return ones with reduced shape
+                var emptyAxis = axis_.Value;
+                while (emptyAxis < 0)
+                    emptyAxis = arr.ndim + emptyAxis;
+                if (emptyAxis >= arr.ndim)
+                    throw new ArgumentOutOfRangeException(nameof(axis_));
+
+                var resultShape = Shape.GetAxis(shape, emptyAxis);
+                var emptyOutputType = typeCode ?? arr.GetTypeCode.GetAccumulatingType();
+                var result = np.ones(new Shape(resultShape), emptyOutputType);
+
+                if (keepdims)
+                {
+                    var keepdimsShape = new int[arr.ndim];
+                    for (int d = 0, sd = 0; d < arr.ndim; d++)
+                    {
+                        if (d == emptyAxis)
+                            keepdimsShape[d] = 1;
+                        else
+                            keepdimsShape[d] = resultShape[sd++];
+                    }
+                    result.Storage.Reshape(new Shape(keepdimsShape));
+                }
+
+                return result;
+            }
 
             if (shape.IsScalar || (shape.size == 1 && shape.NDim == 1))
             {
@@ -57,11 +102,12 @@ namespace NumSharp.Backends
             if (shape[axis] == 1)
             {
                 //if the given div axis is 1 and can be squeezed out.
+                //Return a copy to avoid sharing memory with the original (NumPy behavior)
                 if (keepdims)
                 {
-                    return new NDArray(arr.Storage.Alias());
+                    return arr.copy();
                 }
-                return np.squeeze_fast(arr, axis);
+                return np.squeeze_fast(arr, axis).copy();
             }
 
             // Try SIMD-optimized axis reduction first
