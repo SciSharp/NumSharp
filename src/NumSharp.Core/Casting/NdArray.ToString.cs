@@ -43,6 +43,13 @@ namespace NumSharp
                 return;
             }
 
+            // Handle empty arrays (size == 0)
+            if (this.size == 0)
+            {
+                s.Append("[]");
+                return;
+            }
+
             if (shape.Length == 1)
             {
                 s.Append("[");

@@ -112,9 +112,9 @@ namespace NumSharp
                 stop = tmp;
             }
 
-            if (start > stop)
-                throw new Exception("parameters invalid, start is greater than stop.");
-
+            // NumPy returns empty array when start >= stop (with positive step)
+            if (start >= stop)
+                return new NDArray(typeof(float), Shape.Vector(0), false);
 
             int length = (int)Math.Ceiling((stop - start + 0.0d) / step);
             var nd = new NDArray(typeof(float), Shape.Vector(length), false); //do not fill, we are about to
@@ -192,9 +192,9 @@ namespace NumSharp
                 stop = tmp;
             }
 
-            if (start > stop)
-                throw new Exception("parameters invalid, start is greater than stop.");
-
+            // NumPy returns empty array when start >= stop (with positive step)
+            if (start >= stop)
+                return new NDArray(typeof(double), Shape.Vector(0), false);
 
             int length = (int)Math.Ceiling((stop - start + 0.0d) / step);
             var nd = new NDArray(typeof(double), Shape.Vector(length), false); //do not fill, we are about to
@@ -301,11 +301,13 @@ namespace NumSharp
                 stop = tmp;
             }
 
-            if (start > stop)
-                throw new Exception("parameters invalid, start is greater than stop.");
-
+            // NumPy returns empty array when start >= stop (with positive step)
+            if (start >= stop)
+                return new NDArray(typeof(int), Shape.Vector(0), false);
 
             int length = (int)Math.Ceiling((stop - start + 0.0d) / step);
+            // TODO: NumPy 2.x returns int64 for integer arange (BUG-21/Task #109)
+            // Keeping int32 for now to avoid breaking existing tests
             var nd = new NDArray(typeof(int), Shape.Vector(length), false); //do not fill, we are about to
 
             if (negativeStep)
@@ -314,7 +316,7 @@ namespace NumSharp
                 unsafe
                 {
                     var addr = (int*)nd.Array.Address;
-                    for (int add = length - 1, i = 0; add >= 0; add--, i++) 
+                    for (int add = length - 1, i = 0; add >= 0; add--, i++)
                         addr[i] = 1 + start + add * step;
                 }
             }
