@@ -167,14 +167,19 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         private static ContiguousKernel<T>? TryGenerateContiguousKernel<T>(BinaryOp op) where T : unmanaged
         {
-            // Only support types with Vector256 support
-            if (!IsSimdSupported<T>())
+            // Only support types with Vector256 support for SIMD ops,
+            // but Power/FloorDivide can work with scalar loop on any type
+            bool isSimdOp = op == BinaryOp.Add || op == BinaryOp.Subtract ||
+                           op == BinaryOp.Multiply || op == BinaryOp.Divide ||
+                           op == BinaryOp.BitwiseAnd || op == BinaryOp.BitwiseOr || op == BinaryOp.BitwiseXor;
+
+            bool isScalarOnlyOp = op == BinaryOp.Power || op == BinaryOp.FloorDivide;
+
+            if (isSimdOp && !IsSimdSupported<T>())
                 return null;
 
-            // Only support basic arithmetic and bitwise operations
-            if (op != BinaryOp.Add && op != BinaryOp.Subtract &&
-                op != BinaryOp.Multiply && op != BinaryOp.Divide &&
-                op != BinaryOp.BitwiseAnd && op != BinaryOp.BitwiseOr && op != BinaryOp.BitwiseXor)
+            // Only support basic arithmetic, bitwise operations, and scalar-only ops
+            if (!isSimdOp && !isScalarOnlyOp)
                 return null;
 
             // Bitwise operations only supported on integer types
@@ -195,6 +200,7 @@ namespace NumSharp.Backends.Kernels
 
         /// <summary>
         /// Generate IL for a contiguous SIMD kernel.
+        /// For scalar-only ops (Power, FloorDivide), generates a pure scalar loop.
         /// </summary>
         private static unsafe ContiguousKernel<T> GenerateContiguousKernelIL<T>(BinaryOp op) where T : unmanaged
         {
@@ -208,85 +214,140 @@ namespace NumSharp.Backends.Kernels
 
             var il = dm.GetILGenerator();
 
+            // Check if this is a scalar-only operation (no SIMD support)
+            bool isScalarOnly = op == BinaryOp.Power || op == BinaryOp.FloorDivide;
+
             // Declare locals
             var locI = il.DeclareLocal(typeof(int));           // loop counter
-            var locVectorEnd = il.DeclareLocal(typeof(int));   // totalSize - vectorCount
 
-            // Define labels
-            var lblSimdLoop = il.DefineLabel();
-            var lblSimdLoopEnd = il.DefineLabel();
-            var lblTailLoop = il.DefineLabel();
-            var lblTailLoopEnd = il.DefineLabel();
-
-            int vectorCount = GetVectorCount<T>();
             int elementSize = Unsafe.SizeOf<T>();
-
-            // vectorEnd = count - vectorCount
-            il.Emit(OpCodes.Ldarg_3);                      // count
-            il.Emit(OpCodes.Ldc_I4, vectorCount);
-            il.Emit(OpCodes.Sub);
-            il.Emit(OpCodes.Stloc, locVectorEnd);
 
             // i = 0
             il.Emit(OpCodes.Ldc_I4_0);
             il.Emit(OpCodes.Stloc, locI);
 
-            // ========== SIMD LOOP ==========
-            il.MarkLabel(lblSimdLoop);
+            if (!isScalarOnly)
+            {
+                // SIMD-capable operations: generate SIMD loop + tail loop
+                var locVectorEnd = il.DeclareLocal(typeof(int));   // totalSize - vectorCount
 
-            // if (i > vectorEnd) goto SimdLoopEnd
-            il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Ldloc, locVectorEnd);
-            il.Emit(OpCodes.Bgt, lblSimdLoopEnd);
+                // Define labels
+                var lblSimdLoop = il.DefineLabel();
+                var lblSimdLoopEnd = il.DefineLabel();
+                var lblTailLoop = il.DefineLabel();
+                var lblTailLoopEnd = il.DefineLabel();
 
-            // Load lhs vector: Vector256.Load(lhs + i)
-            il.Emit(OpCodes.Ldarg_0);                      // lhs
-            il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Conv_I);
-            il.Emit(OpCodes.Ldc_I4, elementSize);
-            il.Emit(OpCodes.Mul);
-            il.Emit(OpCodes.Add);
-            EmitVectorLoad<T>(il);
+                int vectorCount = GetVectorCount<T>();
 
-            // Load rhs vector: Vector256.Load(rhs + i)
-            il.Emit(OpCodes.Ldarg_1);                      // rhs
-            il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Conv_I);
-            il.Emit(OpCodes.Ldc_I4, elementSize);
-            il.Emit(OpCodes.Mul);
-            il.Emit(OpCodes.Add);
-            EmitVectorLoad<T>(il);
+                // vectorEnd = count - vectorCount
+                il.Emit(OpCodes.Ldarg_3);                      // count
+                il.Emit(OpCodes.Ldc_I4, vectorCount);
+                il.Emit(OpCodes.Sub);
+                il.Emit(OpCodes.Stloc, locVectorEnd);
 
-            // Perform vector operation
-            EmitVectorOperation<T>(il, op);
+                // ========== SIMD LOOP ==========
+                il.MarkLabel(lblSimdLoop);
 
-            // Store result: Vector256.Store(result, result + i)
-            il.Emit(OpCodes.Ldarg_2);                      // result
-            il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Conv_I);
-            il.Emit(OpCodes.Ldc_I4, elementSize);
-            il.Emit(OpCodes.Mul);
-            il.Emit(OpCodes.Add);
-            EmitVectorStore<T>(il);
+                // if (i > vectorEnd) goto SimdLoopEnd
+                il.Emit(OpCodes.Ldloc, locI);
+                il.Emit(OpCodes.Ldloc, locVectorEnd);
+                il.Emit(OpCodes.Bgt, lblSimdLoopEnd);
 
-            // i += vectorCount
-            il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Ldc_I4, vectorCount);
-            il.Emit(OpCodes.Add);
-            il.Emit(OpCodes.Stloc, locI);
+                // Load lhs vector: Vector256.Load(lhs + i)
+                il.Emit(OpCodes.Ldarg_0);                      // lhs
+                il.Emit(OpCodes.Ldloc, locI);
+                il.Emit(OpCodes.Conv_I);
+                il.Emit(OpCodes.Ldc_I4, elementSize);
+                il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Add);
+                EmitVectorLoad<T>(il);
 
-            il.Emit(OpCodes.Br, lblSimdLoop);
-            il.MarkLabel(lblSimdLoopEnd);
+                // Load rhs vector: Vector256.Load(rhs + i)
+                il.Emit(OpCodes.Ldarg_1);                      // rhs
+                il.Emit(OpCodes.Ldloc, locI);
+                il.Emit(OpCodes.Conv_I);
+                il.Emit(OpCodes.Ldc_I4, elementSize);
+                il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Add);
+                EmitVectorLoad<T>(il);
 
-            // ========== TAIL LOOP ==========
-            il.MarkLabel(lblTailLoop);
+                // Perform vector operation
+                EmitVectorOperation<T>(il, op);
 
-            // if (i >= count) goto TailLoopEnd
-            il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Ldarg_3);                      // count
-            il.Emit(OpCodes.Bge, lblTailLoopEnd);
+                // Store result: Vector256.Store(result, result + i)
+                il.Emit(OpCodes.Ldarg_2);                      // result
+                il.Emit(OpCodes.Ldloc, locI);
+                il.Emit(OpCodes.Conv_I);
+                il.Emit(OpCodes.Ldc_I4, elementSize);
+                il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Add);
+                EmitVectorStore<T>(il);
 
-            // result[i] = lhs[i] op rhs[i]
+                // i += vectorCount
+                il.Emit(OpCodes.Ldloc, locI);
+                il.Emit(OpCodes.Ldc_I4, vectorCount);
+                il.Emit(OpCodes.Add);
+                il.Emit(OpCodes.Stloc, locI);
+
+                il.Emit(OpCodes.Br, lblSimdLoop);
+                il.MarkLabel(lblSimdLoopEnd);
+
+                // ========== TAIL LOOP ==========
+                il.MarkLabel(lblTailLoop);
+
+                // if (i >= count) goto TailLoopEnd
+                il.Emit(OpCodes.Ldloc, locI);
+                il.Emit(OpCodes.Ldarg_3);                      // count
+                il.Emit(OpCodes.Bge, lblTailLoopEnd);
+
+                // result[i] = lhs[i] op rhs[i]
+                EmitScalarLoopBody<T>(il, op, locI, elementSize);
+
+                // i++
+                il.Emit(OpCodes.Ldloc, locI);
+                il.Emit(OpCodes.Ldc_I4_1);
+                il.Emit(OpCodes.Add);
+                il.Emit(OpCodes.Stloc, locI);
+
+                il.Emit(OpCodes.Br, lblTailLoop);
+                il.MarkLabel(lblTailLoopEnd);
+            }
+            else
+            {
+                // Scalar-only operations: generate pure scalar loop (no SIMD)
+                var lblLoop = il.DefineLabel();
+                var lblLoopEnd = il.DefineLabel();
+
+                il.MarkLabel(lblLoop);
+
+                // if (i >= count) goto LoopEnd
+                il.Emit(OpCodes.Ldloc, locI);
+                il.Emit(OpCodes.Ldarg_3);                      // count
+                il.Emit(OpCodes.Bge, lblLoopEnd);
+
+                // result[i] = lhs[i] op rhs[i]
+                EmitScalarLoopBody<T>(il, op, locI, elementSize);
+
+                // i++
+                il.Emit(OpCodes.Ldloc, locI);
+                il.Emit(OpCodes.Ldc_I4_1);
+                il.Emit(OpCodes.Add);
+                il.Emit(OpCodes.Stloc, locI);
+
+                il.Emit(OpCodes.Br, lblLoop);
+                il.MarkLabel(lblLoopEnd);
+            }
+
+            il.Emit(OpCodes.Ret);
+
+            return dm.CreateDelegate<ContiguousKernel<T>>();
+        }
+
+        /// <summary>
+        /// Emit the body of a scalar loop iteration: result[i] = lhs[i] op rhs[i]
+        /// </summary>
+        private static void EmitScalarLoopBody<T>(ILGenerator il, BinaryOp op, LocalBuilder locI, int elementSize) where T : unmanaged
+        {
             // Address: result + i * elementSize
             il.Emit(OpCodes.Ldarg_2);                      // result
             il.Emit(OpCodes.Ldloc, locI);
@@ -318,19 +379,6 @@ namespace NumSharp.Backends.Kernels
 
             // Store to result[i]
             EmitStoreIndirect<T>(il);
-
-            // i++
-            il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Ldc_I4_1);
-            il.Emit(OpCodes.Add);
-            il.Emit(OpCodes.Stloc, locI);
-
-            il.Emit(OpCodes.Br, lblTailLoop);
-            il.MarkLabel(lblTailLoopEnd);
-
-            il.Emit(OpCodes.Ret);
-
-            return dm.CreateDelegate<ContiguousKernel<T>>();
         }
 
         #endregion
@@ -501,6 +549,20 @@ namespace NumSharp.Backends.Kernels
 
         private static void EmitScalarOperation<T>(ILGenerator il, BinaryOp op) where T : unmanaged
         {
+            // Handle Power operation - requires Math.Pow call
+            if (op == BinaryOp.Power)
+            {
+                EmitPowerOperation<T>(il);
+                return;
+            }
+
+            // Handle FloorDivide operation
+            if (op == BinaryOp.FloorDivide)
+            {
+                EmitFloorDivideOperation<T>(il);
+                return;
+            }
+
             // For scalar operations, use IL opcodes
             // Stack has two T values
             var opcode = op switch
@@ -516,6 +578,146 @@ namespace NumSharp.Backends.Kernels
             };
 
             il.Emit(opcode);
+        }
+
+        /// <summary>
+        /// Emit Power operation using Math.Pow for generic type T.
+        /// Stack: [base, exponent] -> [result]
+        /// </summary>
+        private static void EmitPowerOperation<T>(ILGenerator il) where T : unmanaged
+        {
+            // Math.Pow(double, double) -> double
+            // We need to convert both operands to double, call Math.Pow, then convert back
+
+            // Store exponent temporarily
+            var locExp = il.DeclareLocal(typeof(T));
+            il.Emit(OpCodes.Stloc, locExp);
+
+            // Convert base to double
+            EmitConvertToDouble<T>(il);
+
+            // Load and convert exponent to double
+            il.Emit(OpCodes.Ldloc, locExp);
+            EmitConvertToDouble<T>(il);
+
+            // Call Math.Pow(double, double)
+            var powMethod = typeof(Math).GetMethod(nameof(Math.Pow), new[] { typeof(double), typeof(double) });
+            il.EmitCall(OpCodes.Call, powMethod!, null);
+
+            // Convert result back to T
+            EmitConvertFromDouble<T>(il);
+        }
+
+        /// <summary>
+        /// Emit FloorDivide operation for generic type T.
+        /// NumPy floor_divide always floors toward negative infinity.
+        /// For floats: divide then Math.Floor.
+        /// For unsigned integers: regular division (same as floor for positive).
+        /// For signed integers: correct floor division toward negative infinity.
+        /// Stack: [dividend, divisor] -> [result]
+        /// </summary>
+        private static void EmitFloorDivideOperation<T>(ILGenerator il) where T : unmanaged
+        {
+            // For floating-point types, divide then floor
+            if (typeof(T) == typeof(float))
+            {
+                il.Emit(OpCodes.Div);
+                il.Emit(OpCodes.Conv_R8);
+                var floorMethod = typeof(Math).GetMethod(nameof(Math.Floor), new[] { typeof(double) });
+                il.EmitCall(OpCodes.Call, floorMethod!, null);
+                il.Emit(OpCodes.Conv_R4);
+            }
+            else if (typeof(T) == typeof(double))
+            {
+                il.Emit(OpCodes.Div);
+                var floorMethod = typeof(Math).GetMethod(nameof(Math.Floor), new[] { typeof(double) });
+                il.EmitCall(OpCodes.Call, floorMethod!, null);
+            }
+            else if (typeof(T) == typeof(byte) || typeof(T) == typeof(ushort) ||
+                     typeof(T) == typeof(uint) || typeof(T) == typeof(ulong))
+            {
+                // Unsigned integers: floor = regular division
+                il.Emit(OpCodes.Div_Un);
+            }
+            else
+            {
+                // Signed integers: need true floor division (toward negative infinity)
+                // NumPy: floor_divide(-7, 3) = -3, not -2
+                // C# division truncates toward zero, so we need adjustment
+                // Approach: convert to double, divide, floor, convert back
+                // Stack on entry: [dividend, divisor]
+
+                // Store divisor first (it's on top)
+                var locDivisor = il.DeclareLocal(typeof(T));
+                il.Emit(OpCodes.Stloc, locDivisor);
+
+                // Convert dividend to double
+                EmitConvertToDouble<T>(il);
+                var locDividendDouble = il.DeclareLocal(typeof(double));
+                il.Emit(OpCodes.Stloc, locDividendDouble);
+
+                // Convert divisor to double
+                il.Emit(OpCodes.Ldloc, locDivisor);
+                EmitConvertToDouble<T>(il);
+
+                // Load dividend and divisor as doubles
+                var locDivisorDouble = il.DeclareLocal(typeof(double));
+                il.Emit(OpCodes.Stloc, locDivisorDouble);
+                il.Emit(OpCodes.Ldloc, locDividendDouble);
+                il.Emit(OpCodes.Ldloc, locDivisorDouble);
+
+                // Divide and floor
+                il.Emit(OpCodes.Div);
+                var floorMethod = typeof(Math).GetMethod(nameof(Math.Floor), new[] { typeof(double) });
+                il.EmitCall(OpCodes.Call, floorMethod!, null);
+
+                // Convert back to T
+                EmitConvertFromDouble<T>(il);
+            }
+        }
+
+        /// <summary>
+        /// Emit conversion from T to double.
+        /// </summary>
+        private static void EmitConvertToDouble<T>(ILGenerator il) where T : unmanaged
+        {
+            if (typeof(T) == typeof(double))
+                return; // Already double
+
+            // For unsigned types, use Conv_R_Un first
+            if (typeof(T) == typeof(byte) || typeof(T) == typeof(ushort) ||
+                typeof(T) == typeof(uint) || typeof(T) == typeof(ulong))
+            {
+                il.Emit(OpCodes.Conv_R_Un);
+            }
+
+            il.Emit(OpCodes.Conv_R8);
+        }
+
+        /// <summary>
+        /// Emit conversion from double to T.
+        /// </summary>
+        private static void EmitConvertFromDouble<T>(ILGenerator il) where T : unmanaged
+        {
+            if (typeof(T) == typeof(double))
+                return; // Already double
+
+            if (typeof(T) == typeof(float))
+                il.Emit(OpCodes.Conv_R4);
+            else if (typeof(T) == typeof(byte))
+                il.Emit(OpCodes.Conv_U1);
+            else if (typeof(T) == typeof(short))
+                il.Emit(OpCodes.Conv_I2);
+            else if (typeof(T) == typeof(ushort))
+                il.Emit(OpCodes.Conv_U2);
+            else if (typeof(T) == typeof(int))
+                il.Emit(OpCodes.Conv_I4);
+            else if (typeof(T) == typeof(uint))
+                il.Emit(OpCodes.Conv_U4);
+            else if (typeof(T) == typeof(long))
+                il.Emit(OpCodes.Conv_I8);
+            else if (typeof(T) == typeof(ulong))
+                il.Emit(OpCodes.Conv_U8);
         }
 
         private static OpCode GetDivOpcode<T>() where T : unmanaged

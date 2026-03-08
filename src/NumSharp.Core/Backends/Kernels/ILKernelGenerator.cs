@@ -515,6 +515,20 @@ namespace NumSharp.Backends.Kernels
                 return;
             }
 
+            // Special handling for Power - requires Math.Pow call
+            if (op == BinaryOp.Power)
+            {
+                EmitPowerOperation(il, resultType);
+                return;
+            }
+
+            // Special handling for FloorDivide - division followed by floor for floats
+            if (op == BinaryOp.FloorDivide)
+            {
+                EmitFloorDivideOperation(il, resultType);
+                return;
+            }
+
             // Special handling for boolean
             if (resultType == NPTypeCode.Boolean)
             {
@@ -539,6 +553,163 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
+        /// Emit Power operation using Math.Pow.
+        /// Stack: [base, exponent] -> [result]
+        /// </summary>
+        private static void EmitPowerOperation(ILGenerator il, NPTypeCode resultType)
+        {
+            // Math.Pow(double, double) -> double
+            // We need to convert both operands to double, call Math.Pow, then convert back
+
+            // Stack has: base (resultType), exponent (resultType)
+            // We need to convert both to double for Math.Pow
+
+            // Store exponent temporarily
+            var locExp = il.DeclareLocal(GetClrType(resultType));
+            il.Emit(OpCodes.Stloc, locExp);
+
+            // Convert base to double
+            if (resultType != NPTypeCode.Double)
+            {
+                if (IsUnsigned(resultType))
+                    il.Emit(OpCodes.Conv_R_Un);
+                il.Emit(OpCodes.Conv_R8);
+            }
+
+            // Load and convert exponent to double
+            il.Emit(OpCodes.Ldloc, locExp);
+            if (resultType != NPTypeCode.Double)
+            {
+                if (IsUnsigned(resultType))
+                    il.Emit(OpCodes.Conv_R_Un);
+                il.Emit(OpCodes.Conv_R8);
+            }
+
+            // Call Math.Pow(double, double)
+            var powMethod = typeof(Math).GetMethod(nameof(Math.Pow), new[] { typeof(double), typeof(double) });
+            il.EmitCall(OpCodes.Call, powMethod!, null);
+
+            // Convert result back to target type
+            if (resultType != NPTypeCode.Double)
+            {
+                EmitConvertFromDouble(il, resultType);
+            }
+        }
+
+        /// <summary>
+        /// Emit FloorDivide operation.
+        /// NumPy floor_divide always floors toward negative infinity.
+        /// For floats: divide then Math.Floor.
+        /// For unsigned integers: regular division (same as floor for positive).
+        /// For signed integers: correct floor division toward negative infinity.
+        /// Stack: [dividend, divisor] -> [result]
+        /// </summary>
+        private static void EmitFloorDivideOperation(ILGenerator il, NPTypeCode resultType)
+        {
+            // For floating-point types, divide then floor
+            if (resultType == NPTypeCode.Single || resultType == NPTypeCode.Double)
+            {
+                il.Emit(OpCodes.Div);
+
+                if (resultType == NPTypeCode.Single)
+                {
+                    il.Emit(OpCodes.Conv_R8);
+                    var floorMethod = typeof(Math).GetMethod(nameof(Math.Floor), new[] { typeof(double) });
+                    il.EmitCall(OpCodes.Call, floorMethod!, null);
+                    il.Emit(OpCodes.Conv_R4);
+                }
+                else
+                {
+                    var floorMethod = typeof(Math).GetMethod(nameof(Math.Floor), new[] { typeof(double) });
+                    il.EmitCall(OpCodes.Call, floorMethod!, null);
+                }
+            }
+            else if (IsUnsigned(resultType))
+            {
+                // Unsigned integers: floor = regular division
+                il.Emit(OpCodes.Div_Un);
+            }
+            else
+            {
+                // Signed integers: need true floor division (toward negative infinity)
+                // NumPy: floor_divide(-7, 3) = -3, not -2
+                // Approach: convert to double, divide, floor, convert back
+                // Stack on entry: [dividend, divisor]
+
+                // Store divisor first (it's on top)
+                var locDivisor = il.DeclareLocal(typeof(long));
+                il.Emit(OpCodes.Conv_I8);  // Convert to long for storage
+                il.Emit(OpCodes.Stloc, locDivisor);
+
+                // Convert dividend to double
+                il.Emit(OpCodes.Conv_R8);
+                var locDividendDouble = il.DeclareLocal(typeof(double));
+                il.Emit(OpCodes.Stloc, locDividendDouble);
+
+                // Convert divisor to double
+                il.Emit(OpCodes.Ldloc, locDivisor);
+                il.Emit(OpCodes.Conv_R8);
+
+                // Load dividend and divisor as doubles
+                var locDivisorDouble = il.DeclareLocal(typeof(double));
+                il.Emit(OpCodes.Stloc, locDivisorDouble);
+                il.Emit(OpCodes.Ldloc, locDividendDouble);
+                il.Emit(OpCodes.Ldloc, locDivisorDouble);
+
+                // Divide and floor
+                il.Emit(OpCodes.Div);
+                var floorMethod = typeof(Math).GetMethod(nameof(Math.Floor), new[] { typeof(double) });
+                il.EmitCall(OpCodes.Call, floorMethod!, null);
+
+                // Convert back to result type
+                EmitConvertFromDouble(il, resultType);
+            }
+        }
+
+        /// <summary>
+        /// Emit conversion from double to target type.
+        /// </summary>
+        private static void EmitConvertFromDouble(ILGenerator il, NPTypeCode targetType)
+        {
+            switch (targetType)
+            {
+                case NPTypeCode.Byte:
+                    il.Emit(OpCodes.Conv_U1);
+                    break;
+                case NPTypeCode.Int16:
+                    il.Emit(OpCodes.Conv_I2);
+                    break;
+                case NPTypeCode.UInt16:
+                case NPTypeCode.Char:
+                    il.Emit(OpCodes.Conv_U2);
+                    break;
+                case NPTypeCode.Int32:
+                    il.Emit(OpCodes.Conv_I4);
+                    break;
+                case NPTypeCode.UInt32:
+                    il.Emit(OpCodes.Conv_U4);
+                    break;
+                case NPTypeCode.Int64:
+                    il.Emit(OpCodes.Conv_I8);
+                    break;
+                case NPTypeCode.UInt64:
+                    il.Emit(OpCodes.Conv_U8);
+                    break;
+                case NPTypeCode.Single:
+                    il.Emit(OpCodes.Conv_R4);
+                    break;
+                case NPTypeCode.Boolean:
+                    // double -> bool: != 0
+                    il.Emit(OpCodes.Ldc_R8, 0.0);
+                    il.Emit(OpCodes.Ceq);
+                    il.Emit(OpCodes.Ldc_I4_0);
+                    il.Emit(OpCodes.Ceq);
+                    break;
+                // NPTypeCode.Double needs no conversion
+            }
+        }
+
+        /// <summary>
         /// Emit decimal-specific operation using operator methods.
         /// </summary>
         private static void EmitDecimalOperation(ILGenerator il, BinaryOp op)
@@ -546,6 +717,37 @@ namespace NumSharp.Backends.Kernels
             // Bitwise operations not supported for decimal
             if (op == BinaryOp.BitwiseAnd || op == BinaryOp.BitwiseOr || op == BinaryOp.BitwiseXor)
                 throw new NotSupportedException($"Bitwise operation {op} not supported for decimal type");
+
+            // Power for decimal uses DecimalEx.Pow
+            if (op == BinaryOp.Power)
+            {
+                var powMethod = typeof(DecimalMath.DecimalEx).GetMethod(
+                    nameof(DecimalMath.DecimalEx.Pow),
+                    BindingFlags.Public | BindingFlags.Static,
+                    null,
+                    new[] { typeof(decimal), typeof(decimal) },
+                    null
+                );
+                il.EmitCall(OpCodes.Call, powMethod!, null);
+                return;
+            }
+
+            // FloorDivide for decimal: divide then truncate
+            if (op == BinaryOp.FloorDivide)
+            {
+                // Stack: [dividend, divisor]
+                // Call decimal.Divide, then decimal.Truncate
+                var divideMethod = typeof(decimal).GetMethod("op_Division",
+                    BindingFlags.Public | BindingFlags.Static,
+                    null, new[] { typeof(decimal), typeof(decimal) }, null);
+                il.EmitCall(OpCodes.Call, divideMethod!, null);
+
+                var truncateMethod = typeof(decimal).GetMethod(nameof(decimal.Truncate),
+                    BindingFlags.Public | BindingFlags.Static,
+                    null, new[] { typeof(decimal) }, null);
+                il.EmitCall(OpCodes.Call, truncateMethod!, null);
+                return;
+            }
 
             var methodName = op switch
             {

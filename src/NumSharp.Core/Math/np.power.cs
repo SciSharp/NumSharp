@@ -40,6 +40,6 @@ namespace NumSharp
         /// <param name="x">Input data.</param>
         /// <returns>Element-wise x*x, of the same shape and dtype as x. Returns scalar if x is a scalar.</returns>
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.square.html</remarks>
-        public static NDArray square(in NDArray x) => x.TensorEngine.Power(x, 2);
+        public static NDArray square(in NDArray x) => x.TensorEngine.Square(x, (NPTypeCode?)null);
     }
 }

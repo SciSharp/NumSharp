@@ -41,6 +41,10 @@ namespace NumSharp
         public abstract NDArray Mean(in NDArray nd, int axis, Type dtype, bool keepdims = false);
         public abstract NDArray Power(in NDArray lhs, in ValueType rhs, Type type);
         public abstract NDArray Power(in NDArray lhs, in ValueType rhs, NPTypeCode? typeCode = null);
+        public abstract NDArray FloorDivide(in NDArray lhs, in NDArray rhs, Type dtype);
+        public abstract NDArray FloorDivide(in NDArray lhs, in NDArray rhs, NPTypeCode? typeCode = null);
+        public abstract NDArray FloorDivide(in NDArray lhs, in ValueType rhs, Type dtype);
+        public abstract NDArray FloorDivide(in NDArray lhs, in ValueType rhs, NPTypeCode? typeCode = null);
         public abstract NDArray Sum(in NDArray nd, int? axis = null, NPTypeCode? typeCode = null, bool keepdims = false);
         public abstract NDArray Sum(in NDArray nd, int axis, Type dtype, bool keepdims = false);
         public abstract NDArray Negate(in NDArray nd);
@@ -82,6 +86,20 @@ namespace NumSharp
         public abstract NDArray Round(in NDArray nd, int decimals, Type dtype);
         public abstract NDArray Round(in NDArray nd, NPTypeCode? typeCode = null);
         public abstract NDArray Round(in NDArray nd, int decimals, NPTypeCode? typeCode = null);
+        public abstract NDArray Truncate(in NDArray nd, Type dtype);
+        public abstract NDArray Truncate(in NDArray nd, NPTypeCode? typeCode = null);
+        public abstract NDArray Reciprocal(in NDArray nd, Type dtype);
+        public abstract NDArray Reciprocal(in NDArray nd, NPTypeCode? typeCode = null);
+        public abstract NDArray Square(in NDArray nd, Type dtype);
+        public abstract NDArray Square(in NDArray nd, NPTypeCode? typeCode = null);
+        public abstract NDArray Deg2Rad(in NDArray nd, Type dtype);
+        public abstract NDArray Deg2Rad(in NDArray nd, NPTypeCode? typeCode = null);
+        public abstract NDArray Rad2Deg(in NDArray nd, Type dtype);
+        public abstract NDArray Rad2Deg(in NDArray nd, NPTypeCode? typeCode = null);
+        public abstract NDArray Invert(in NDArray nd, Type dtype);
+        public abstract NDArray Invert(in NDArray nd, NPTypeCode? typeCode = null);
+        public abstract NDArray Cbrt(in NDArray nd, Type dtype);
+        public abstract NDArray Cbrt(in NDArray nd, NPTypeCode? typeCode = null);
         public abstract (NDArray Fractional, NDArray Intergral) ModF(in NDArray nd, Type dtype);
         public abstract (NDArray Fractional, NDArray Intergral) ModF(in NDArray nd, NPTypeCode? typeCode = null);
        
@@ -122,6 +140,13 @@ namespace NumSharp
         public abstract NDArray BitwiseAnd(in NDArray lhs, in NDArray rhs);
         public abstract NDArray BitwiseOr(in NDArray lhs, in NDArray rhs);
         public abstract NDArray BitwiseXor(in NDArray lhs, in NDArray rhs);
+
+        // Bit shift operations (integer types only)
+        public abstract NDArray LeftShift(in NDArray lhs, in NDArray rhs);
+        public abstract NDArray LeftShift(in NDArray lhs, in ValueType rhs);
+        public abstract NDArray RightShift(in NDArray lhs, in NDArray rhs);
+        public abstract NDArray RightShift(in NDArray lhs, in ValueType rhs);
+
         public abstract bool All(NDArray nd);
         public abstract NDArray<bool> All(NDArray nd, int axis);
         public abstract bool AllClose(NDArray a, NDArray b, double rtol = 1.0E-5, double atol = 1.0E-8, bool equal_nan = false);
