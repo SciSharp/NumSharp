@@ -48,7 +48,7 @@ namespace NumSharp
 
         /// <summary>
         ///     Find the unique elements of an array.<br></br>
-        ///     
+        ///
         ///     Returns the sorted unique elements of an array.There are three optional outputs in addition to the unique elements:<br></br>
         ///     * the indices of the input array that give the unique values<br></br>
         ///     * the indices of the unique array that reconstruct the input array<br></br>
@@ -56,7 +56,7 @@ namespace NumSharp
         /// </summary>
         /// <returns></returns>
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.unique.html</remarks>
-        protected NDArray unique<T>() where T : unmanaged
+        protected NDArray unique<T>() where T : unmanaged, IComparable<T>
         {
             unsafe
             {
@@ -65,11 +65,13 @@ namespace NumSharp
                 {
                     var src = (T*)this.Address;
                     int len = this.size;
-                    for (int i = 0; i < len; i++) //we do not use Parellel.For to retain order like numpy does.
+                    for (int i = 0; i < len; i++)
                         hashset.Add(src[i]);
 
                     var dst = new NDArray(InfoOf<T>.NPTypeCode, Shape.Vector(hashset.Count));
                     Hashset<T>.CopyTo(hashset, (ArraySlice<T>)dst.Array);
+                    // NumPy returns sorted unique values
+                    new Span<T>((T*)dst.Address, hashset.Count).Sort();
                     return dst;
                 }
                 else
@@ -78,11 +80,13 @@ namespace NumSharp
                     var flat = this.flat;
                     var src = (T*)flat.Address;
                     Func<int, int> getOffset = flat.Shape.GetOffset_1D;
-                    for (int i = 0; i < len; i++) //we do not use Parellel.For to retain order like numpy does.
+                    for (int i = 0; i < len; i++)
                         hashset.Add(src[getOffset(i)]);
 
                     var dst = new NDArray(InfoOf<T>.NPTypeCode, Shape.Vector(hashset.Count));
                     Hashset<T>.CopyTo(hashset, (ArraySlice<T>)dst.Array);
+                    // NumPy returns sorted unique values
+                    new Span<T>((T*)dst.Address, hashset.Count).Sort();
                     return dst;
                 }
             }

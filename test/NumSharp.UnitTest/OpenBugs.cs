@@ -860,12 +860,13 @@ namespace NumSharp.UnitTest
         // ================================================================
 
         /// <summary>
-        ///     BUG 10: np.unique returns unsorted results.
+        ///     BUG 10: np.unique returns unsorted results. [FIXED]
         ///
         ///     NumPy: unique([3,1,2,1,3]) = [1,2,3] (always sorted).
-        ///     NumSharp: Returns [3,1,2] (encounter/insertion order).
+        ///     Fix: Added Span.Sort() after collecting unique values.
         /// </summary>
         [Test]
+        [Category("Fixed")]
         public void Bug_Unique_NotSorted()
         {
             var a = np.array(new int[] { 3, 1, 2, 1, 3 });
