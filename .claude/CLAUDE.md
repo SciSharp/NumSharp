@@ -194,10 +194,7 @@ nd["..., -1"]     // Ellipsis fills dimensions
 
 ### Low Severity (Behavioral Differences)
 
-| Bug | Function | Issue |
-|-----|----------|-------|
-| BUG-14 | `np.unique` | Doesn't sort results (NumPy sorts) |
-| BUG-4 | `np.std`/`np.var` | ddof parameter ignored |
+*All low severity bugs have been fixed.*
 | BUG-7 | sbyte (int8) | Type not supported |
 
 ### Fixed Bugs (0.41.x)

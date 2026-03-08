@@ -32,5 +32,31 @@ namespace NumSharp.UnitTest.Manipulation
             arr.unique().Should().BeShaped(10).And.BeOfValues(0, 1, 2, 3, 4, 5, 6, 7, 8, 9);
             Console.WriteLine((string)arr.unique());
         }
+
+        [Test]
+        public void Unique_ReturnsSorted_UnsortedInput()
+        {
+            // NumPy always returns sorted unique values
+            // >>> np.unique(np.array([5, 2, 9, 2, 5, 1, 8]))
+            // array([1, 2, 5, 8, 9])
+            var arr = np.array(new int[] { 5, 2, 9, 2, 5, 1, 8 });
+            arr.unique().Should().BeShaped(5).And.BeOfValues(1, 2, 5, 8, 9);
+        }
+
+        [Test]
+        public void Unique_ReturnsSorted_FloatInput()
+        {
+            // Test with floats
+            var arr = np.array(new double[] { 3.14, 1.41, 2.71, 1.41, 3.14 });
+            arr.unique().Should().BeShaped(3).And.BeOfValues(1.41, 2.71, 3.14);
+        }
+
+        [Test]
+        public void Unique_ReturnsSorted_NegativeValues()
+        {
+            // Test with negative values
+            var arr = np.array(new int[] { -5, 3, -1, 0, 3, -5, 7 });
+            arr.unique().Should().BeShaped(5).And.BeOfValues(-5, -1, 0, 3, 7);
+        }
     }
 }
