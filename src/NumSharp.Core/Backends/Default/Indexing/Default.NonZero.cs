@@ -67,8 +67,8 @@ namespace NumSharp.Backends
             if (shape.IsContiguous && ILKernelGenerator.Enabled && ILKernelGenerator.VectorBits > 0)
             {
                 var flatIndices = new List<int>(Math.Max(16, size / 4));
-                ILKernelGenerator.NonZeroSimdHelper((T*)x.Address, size, flatIndices);
-                return ILKernelGenerator.ConvertFlatIndicesToCoordinates(flatIndices, x.shape);
+                kp.FindNonZero((T*)x.Address, size, flatIndices);
+                return kp.ConvertFlatToCoordinates(flatIndices, x.shape);
             }
 
             // Strided path for non-contiguous arrays (transposed, sliced, etc.)
