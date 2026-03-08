@@ -74,6 +74,17 @@ namespace NumSharp
                 throw new ArgumentException("Invalid typeCode", nameof(typeCode));
 
             NDArray ret = new NDArray(typeCode, new Shape(num), false);
+
+            // Handle num <= 1 edge cases to avoid division by zero
+            if (num == 0)
+                return ret;
+
+            if (num == 1)
+            {
+                ret.SetAtIndex(Converts.ChangeType(start, typeCode), 0);
+                return ret;
+            }
+
             double step = (stop - start) / (endpoint ? num - 1.0 : num);
 
             switch (ret.GetTypeCode)

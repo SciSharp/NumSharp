@@ -41,7 +41,13 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.full.html</remarks>
         public static NDArray full(ValueType fill_value, Shape shape, Type dtype)
         {
-            return full(fill_value, shape, (fill_value.GetType()).GetTypeCode());
+            // When dtype is explicitly provided, use it
+            if (dtype != null)
+                return full(fill_value, shape, dtype.GetTypeCode());
+            // When dtype is null, infer from fill_value
+            // TODO: NumPy 2.x promotes int32 to int64 for scalar integer values (NEP50)
+            // Keeping original type for now to avoid breaking existing tests
+            return full(fill_value, shape, fill_value.GetType().GetTypeCode());
         }
 
         /// <summary>
@@ -53,6 +59,8 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.full.html</remarks>
         public static NDArray full(ValueType fill_value, Shape shape)
         {
+            // TODO: NumPy 2.x promotes int32 to int64 for scalar integer values (NEP50)
+            // Keeping original type for now to avoid breaking existing tests
             return new NDArray(new UnmanagedStorage(ArraySlice.Allocate(fill_value.GetType(), shape.size, fill_value), shape));
         }
 

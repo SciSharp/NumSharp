@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp.Backends
 {
@@ -109,6 +110,17 @@ namespace NumSharp.Backends
             }
 
             var slicedShape = _shape.Slice(slices);
+
+            // Handle empty slices (e.g., a[100:200] on a 10-element array)
+            // NumPy returns an empty array with shape (0,) or similar
+            if (slicedShape.size == 0)
+            {
+                // Create empty storage with correct dtype and shape
+                var emptySlice = ArraySlice.Allocate(_typecode, 0, false);
+                var emptyStorage = new UnmanagedStorage();
+                emptyStorage._Allocate(slicedShape, emptySlice);
+                return emptyStorage;
+            }
 
             // NumPy-aligned optimization: For contiguous slices, slice the InternalArray directly
             // and create a fresh shape with offset=0. This matches NumPy's data pointer adjustment

@@ -23,6 +23,12 @@ namespace NumSharp
         {
             get
             {
+                // NumPy requires mask size to match array size
+                if (mask.size != this.size)
+                    throw new IndexOutOfRangeException(
+                        $"boolean index did not match indexed array along axis 0; " +
+                        $"size of axis is {this.size} but size of boolean index is {mask.size}");
+
                 // SIMD fast path: contiguous arrays of same size
                 var kp = DefaultEngine.DefaultKernelProvider;
                 if (kp.Enabled && kp.VectorBits > 0 &&
