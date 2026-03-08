@@ -19,7 +19,7 @@ namespace NumSharp.Backends
 
             if (shape.IsScalar || (shape.size == 1 && shape.NDim == 1))
             {
-                var r = NDArray.Scalar(0);
+                var r = NDArray.Scalar(0L);  // Int64 for NumPy 2.x alignment
                 if (keepdims)
                 {
                     var keepdimsShape = new int[arr.ndim];

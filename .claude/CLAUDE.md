@@ -116,13 +116,14 @@ Runtime IL generation via `System.Reflection.Emit.DynamicMethod` for high-perfor
 |----------|-------------|---------|
 | Binary | Add, Sub, Mul, Div, Power, FloorDivide, BitwiseAnd/Or/Xor | LeftShift, RightShift (use Default.Shift.cs) |
 | Unary | Negate, Abs, Sign, Sqrt, Cbrt, Square, Reciprocal, Floor, Ceil, Truncate, Trig, Exp, Log, BitwiseNot | Deg2Rad, Rad2Deg (use DefaultEngine) |
-| Reduction | Sum, Prod, Min, Max, Mean, ArgMax, ArgMin, All, Any | Std, Var, NanSum, NanProd, CumProd |
+| Reduction | Sum, Prod, Min, Max, Mean, ArgMax, ArgMin, All, Any, CumSum | Std, Var (use Regen templates) |
+| NaN Reduction | — | NanSum, NanProd, NanMin, NanMax (Task #88) |
 | Comparison | Equal, NotEqual, Less, Greater, LessEqual, GreaterEqual | — |
-| Axis reductions | Uses old iterator path (no SIMD) | — |
+| Clip/Modf | Clip, Modf (SIMD helpers) | — |
+| Axis reductions | Uses iterator path (no SIMD) | SIMD axis kernels (Task #89) |
 
 **DefaultEngine ops needing IL migration:**
-- Quick wins: `Clip`, `Modf` (SIMD-friendly)
-- High impact: `MatMul`, `Dot`, axis reductions
+- High impact: `MatMul`, `Dot` (complex - consider BLAS integration)
 
 ## Shape Architecture (NumPy-Aligned)
 
