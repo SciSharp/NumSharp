@@ -64,6 +64,27 @@ namespace NumSharp.Backends
                 return np.squeeze_fast(arr, axis);
             }
 
+            // Try SIMD-optimized axis reduction first
+            var outputType = typeCode ?? arr.GetTypeCode.GetAccumulatingType();
+            var simdResult = prod_axis_simd(arr, axis, outputType);
+            if (simdResult != null)
+            {
+                if (keepdims)
+                {
+                    // Insert dimension of size 1 at the reduced axis position
+                    var keepdimsShape = new int[arr.ndim];
+                    for (int d = 0, sd = 0; d < arr.ndim; d++)
+                    {
+                        if (d == axis)
+                            keepdimsShape[d] = 1;
+                        else
+                            keepdimsShape[d] = simdResult.shape[sd++];
+                    }
+                    simdResult.Storage.Reshape(new Shape(keepdimsShape));
+                }
+                return simdResult;
+            }
+
             //handle keepdims
             Shape axisedShape = Shape.GetAxis(shape, axis);
             var retType = typeCode ?? (arr.GetTypeCode.GetAccumulatingType());

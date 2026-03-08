@@ -319,5 +319,132 @@ namespace NumSharp.Backends
         }
 
         #endregion
+
+        #region Axis Reduction Methods
+
+        /// <summary>
+        /// Try to execute an axis reduction using SIMD kernel.
+        /// Returns null if SIMD kernel is not available, allowing fallback to iterator-based approach.
+        /// </summary>
+        /// <param name="arr">Input array</param>
+        /// <param name="axis">Axis to reduce along (already normalized to positive)</param>
+        /// <param name="op">Reduction operation</param>
+        /// <param name="outputTypeCode">Output type code</param>
+        /// <returns>Result array, or null if SIMD kernel not available</returns>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        protected unsafe NDArray TryExecuteAxisReductionSimd(
+            in NDArray arr,
+            int axis,
+            ReductionOp op,
+            NPTypeCode outputTypeCode)
+        {
+            var inputType = arr.GetTypeCode;
+            var inputShape = arr.Shape;
+
+            // SIMD kernels only support same input/output type for Sum/Prod/Max/Min
+            // (type promotion handled by caller creating output array)
+            if (inputType != outputTypeCode)
+                return null;
+
+            // Check if the reduction axis is contiguous (stride == 1 for last axis)
+            // For row-major (C order), the last axis (axis == ndim-1) has stride 1
+            bool innerAxisContiguous = (axis == arr.ndim - 1) && inputShape.IsContiguous;
+
+            // Create kernel key
+            var key = new AxisReductionKernelKey(
+                inputType,
+                outputTypeCode,
+                op,
+                innerAxisContiguous
+            );
+
+            // Try to get SIMD kernel
+            var kernel = KernelProvider.GetAxisReductionKernel(key);
+            if (kernel == null)
+                return null;
+
+            // Compute output shape (remove the axis dimension)
+            var outputDims = new int[arr.ndim - 1];
+            for (int d = 0, od = 0; d < arr.ndim; d++)
+            {
+                if (d != axis)
+                    outputDims[od++] = inputShape.dimensions[d];
+            }
+
+            // Create output array
+            var outputShape = outputDims.Length > 0 ? new Shape(outputDims) : Shape.Scalar;
+            var output = new NDArray(outputTypeCode, outputShape, false);
+
+            // Execute the kernel
+            int axisSize = inputShape.dimensions[axis];
+            int outputSize = output.size > 0 ? output.size : 1;
+
+            // Get element size
+            int elemSize = arr.dtypesize;
+
+            // Calculate base address accounting for shape offset (for sliced views)
+            byte* inputAddr = (byte*)arr.Address + inputShape.offset * elemSize;
+
+            fixed (int* inputStrides = inputShape.strides)
+            fixed (int* inputDims = inputShape.dimensions)
+            fixed (int* outputStrides = output.Shape.strides)
+            {
+                kernel(
+                    (void*)inputAddr,
+                    (void*)output.Address,
+                    inputStrides,
+                    inputDims,
+                    outputStrides,
+                    axis,
+                    axisSize,
+                    arr.ndim,
+                    outputSize
+                );
+            }
+
+            return output;
+        }
+
+        /// <summary>
+        /// Execute axis reduction for Sum with SIMD optimization.
+        /// Falls back to iterator-based approach if SIMD not available.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        protected NDArray sum_axis_simd(in NDArray arr, int axis, NPTypeCode outputTypeCode)
+        {
+            return TryExecuteAxisReductionSimd(arr, axis, ReductionOp.Sum, outputTypeCode);
+        }
+
+        /// <summary>
+        /// Execute axis reduction for Prod with SIMD optimization.
+        /// Falls back to iterator-based approach if SIMD not available.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        protected NDArray prod_axis_simd(in NDArray arr, int axis, NPTypeCode outputTypeCode)
+        {
+            return TryExecuteAxisReductionSimd(arr, axis, ReductionOp.Prod, outputTypeCode);
+        }
+
+        /// <summary>
+        /// Execute axis reduction for Max with SIMD optimization.
+        /// Falls back to iterator-based approach if SIMD not available.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        protected NDArray max_axis_simd(in NDArray arr, int axis, NPTypeCode outputTypeCode)
+        {
+            return TryExecuteAxisReductionSimd(arr, axis, ReductionOp.Max, outputTypeCode);
+        }
+
+        /// <summary>
+        /// Execute axis reduction for Min with SIMD optimization.
+        /// Falls back to iterator-based approach if SIMD not available.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        protected NDArray min_axis_simd(in NDArray arr, int axis, NPTypeCode outputTypeCode)
+        {
+            return TryExecuteAxisReductionSimd(arr, axis, ReductionOp.Min, outputTypeCode);
+        }
+
+        #endregion
     }
 }
