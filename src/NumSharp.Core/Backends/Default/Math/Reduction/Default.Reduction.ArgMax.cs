@@ -5,7 +5,7 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public override NDArray ReduceArgMax(NDArray arr, int? axis_)
+        public override NDArray ReduceArgMax(NDArray arr, int? axis_, bool keepdims = false)
         {
             //in order to iterate an axis:
             //consider arange shaped (1,2,3,4) when we want to summarize axis 1 (2nd dimension which its value is 2)
@@ -18,11 +18,32 @@ namespace NumSharp.Backends
                 throw new ArgumentException("attempt to get argmax of an empty sequence");
 
             if (shape.IsScalar || (shape.size == 1 && shape.NDim == 1))
-                return NDArray.Scalar(0);
+            {
+                var r = NDArray.Scalar(0);
+                if (keepdims)
+                {
+                    var keepdimsShape = new int[arr.ndim];
+                    for (int i = 0; i < arr.ndim; i++)
+                        keepdimsShape[i] = 1;
+                    r.Storage.Reshape(new Shape(keepdimsShape));
+                }
+                return r;
+            }
 
             if (axis_ == null)
+            {
                 // Use IL-generated kernels for element-wise reduction
-                return NDArray.Scalar(argmax_elementwise_il(arr));
+                var r = NDArray.Scalar(argmax_elementwise_il(arr));
+                if (keepdims)
+                {
+                    // NumPy: keepdims preserves the number of dimensions, all set to 1
+                    var keepdimsShape = new int[arr.ndim];
+                    for (int i = 0; i < arr.ndim; i++)
+                        keepdimsShape[i] = 1;
+                    r.Storage.Reshape(new Shape(keepdimsShape));
+                }
+                return r;
+            }
 
             var axis = axis_.Value;
             while (axis < 0)
@@ -33,12 +54,32 @@ namespace NumSharp.Backends
 
             if (shape[axis] == 1)
             {
-                //if the given div axis is 1 and can be squeezed out.
-                return np.squeeze_fast(arr, axis);
+                //if the given div axis is 1, result is all zeros
+                if (keepdims)
+                {
+                    // Keep the axis but reduce to size 1 (it's already 1)
+                    return np.zeros(shape.dimensions, NPTypeCode.Int32);
+                }
+                return np.squeeze_fast(np.zeros(shape.dimensions, NPTypeCode.Int32), axis);
             }
 
-            //handle keepdims
+            //handle keepdims - prepare output shape
             Shape axisedShape = Shape.GetAxis(shape, axis);
+            Shape outputShape = axisedShape;
+            if (keepdims)
+            {
+                // Insert a 1 at the axis position
+                var keepdimsShapeDims = new int[arr.ndim];
+                int srcIdx = 0;
+                for (int i = 0; i < arr.ndim; i++)
+                {
+                    if (i == axis)
+                        keepdimsShapeDims[i] = 1;
+                    else
+                        keepdimsShapeDims[i] = axisedShape.dimensions[srcIdx++];
+                }
+                outputShape = new Shape(keepdimsShapeDims);
+            }
 
             //prepare ret
             var ret = new NDArray(NPTypeCode.Int32, axisedShape, false);
@@ -409,6 +450,12 @@ namespace NumSharp.Backends
 		    }
             #endregion
 #endif
+
+            // Apply keepdims reshape if needed
+            if (keepdims)
+            {
+                ret.Storage.Reshape(outputShape);
+            }
 
             return ret;
         }

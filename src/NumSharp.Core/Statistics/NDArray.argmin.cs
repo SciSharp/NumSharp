@@ -16,11 +16,12 @@
         ///     Returns the indices of the minimum values along an axis.
         /// </summary>
         /// <param name="axis">The axis along which to operate. By default, the index is into the flattened array.</param>
-        /// <returns>Array of indices into the array. It has the same shape as a.shape with the dimension along axis removed.</returns>
+        /// <param name="keepdims">If this is set to True, the axes which are reduced are left in the result as dimensions with size one.</param>
+        /// <returns>Array of indices into the array. It has the same shape as a.shape with the dimension along axis removed (unless keepdims is True).</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.argmin.html</remarks>
-        public NDArray argmin(int axis)
+        public NDArray argmin(int axis, bool keepdims = false)
         {
-            return np.argmin(this, axis);
+            return np.argmin(this, axis, keepdims);
         }
     }
 }

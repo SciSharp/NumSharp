@@ -13,14 +13,10 @@ public class KernelMisalignmentTests
 {
     /// <summary>
     /// NumPy: np.square(np.int32(3)) -> int32(9) (preserves dtype)
-    /// NumSharp: np.square(3) -> double(9) (promotes to double)
-    ///
-    /// This is a type promotion misalignment - NumSharp promotes integer inputs
-    /// to floating point for unary math operations.
+    /// NumSharp: np.square(3) -> int32(9) (preserves dtype) - FIXED
     /// </summary>
     [Test]
-    [Misaligned]
-    public void Square_IntegerInput_TypePromotion()
+    public void Square_IntegerInput_PreservesDtype()
     {
         // NumPy behavior: preserves int32 dtype
         // >>> np.square(np.int32(3))
@@ -28,25 +24,19 @@ public class KernelMisalignmentTests
         // >>> np.square(np.int32(3)).dtype
         // dtype('int32')
 
-        // NumSharp behavior: promotes to double
         var result = np.square(3);
 
-        // NumSharp returns double, NumPy returns int32
-        Assert.AreEqual(typeof(double), result.dtype);
-        Assert.AreEqual(9.0, (double)result);
-
-        // Expected NumPy behavior (not implemented):
-        // Assert.AreEqual(typeof(int), result.dtype);
-        // Assert.AreEqual(9, (int)result);
+        // NumSharp now preserves int dtype (matching NumPy)
+        Assert.AreEqual(typeof(int), result.dtype);
+        Assert.AreEqual(9, (int)result);
     }
 
     /// <summary>
-    /// NumPy: np.square([1, 2, 3]) -> array([1, 4, 9], dtype=int64)
-    /// NumSharp: np.square([1, 2, 3]) -> array([1, 4, 9], dtype=float64)
+    /// NumPy: np.square([1, 2, 3]) -> array([1, 4, 9], dtype=int32)
+    /// NumSharp: np.square([1, 2, 3]) -> array([1, 4, 9], dtype=int32) - FIXED
     /// </summary>
     [Test]
-    [Misaligned]
-    public void Square_IntegerArray_TypePromotion()
+    public void Square_IntegerArray_PreservesDtype()
     {
         // NumPy behavior:
         // >>> np.square(np.array([1, 2, 3], dtype=np.int32)).dtype
@@ -55,25 +45,21 @@ public class KernelMisalignmentTests
         var arr = np.array(new[] { 1, 2, 3 });
         var result = np.square(arr);
 
-        // NumSharp promotes to double
-        Assert.AreEqual(typeof(double), result.dtype);
+        // NumSharp now preserves int dtype (matching NumPy)
+        Assert.AreEqual(typeof(int), result.dtype);
 
-        var values = result.ToArray<double>();
-        Assert.AreEqual(1.0, values[0]);
-        Assert.AreEqual(4.0, values[1]);
-        Assert.AreEqual(9.0, values[2]);
+        var values = result.ToArray<int>();
+        Assert.AreEqual(1, values[0]);
+        Assert.AreEqual(4, values[1]);
+        Assert.AreEqual(9, values[2]);
     }
 
     /// <summary>
     /// NumPy: np.invert(True) -> False (logical NOT for boolean)
-    /// NumSharp: np.invert(true) -> True (bitwise NOT: ~1 = 0xFE, nonzero = true)
-    ///
-    /// NumPy treats boolean invert as logical NOT.
-    /// NumSharp uses bitwise NOT which gives wrong result for booleans.
+    /// NumSharp: np.invert(true) -> False (logical NOT) - FIXED
     /// </summary>
     [Test]
-    [Misaligned]
-    public void Invert_Boolean_LogicalVsBitwise()
+    public void Invert_Boolean_LogicalNot()
     {
         // NumPy behavior:
         // >>> np.invert(True)
@@ -81,29 +67,20 @@ public class KernelMisalignmentTests
         // >>> np.invert(False)
         // np.True_
 
-        // NumSharp behavior: uses bitwise NOT
-        // ~1 (true) = 0xFE = 254 = true (non-zero)
+        // NumSharp now uses logical NOT for booleans (matching NumPy)
         var trueResult = np.invert(true);
+        Assert.IsFalse((bool)trueResult);
 
-        // NumSharp's current (incorrect) behavior:
-        // invert(true) should be False but returns True
-        Assert.IsTrue((bool)trueResult); // NumPy expects False
-
-        // invert(false) is also wrong in NumSharp
         var falseResult = np.invert(false);
-        Assert.IsTrue((bool)falseResult); // NumPy expects True (this matches but for wrong reason: ~0 = 0xFF = nonzero)
+        Assert.IsTrue((bool)falseResult);
     }
 
     /// <summary>
     /// NumPy: np.invert(np.array([True, False])) -> array([False, True])
-    /// NumSharp: np.invert([true, false]) -> [True, True] (both become true due to bitwise NOT)
-    ///
-    /// NumPy treats boolean invert as logical NOT.
-    /// NumSharp uses bitwise NOT: ~1 = 0xFE (nonzero = true), ~0 = 0xFF (nonzero = true)
+    /// NumSharp: np.invert([true, false]) -> [False, True] - FIXED
     /// </summary>
     [Test]
-    [Misaligned]
-    public void Invert_BooleanArray_LogicalVsBitwise()
+    public void Invert_BooleanArray_LogicalNot()
     {
         // NumPy behavior:
         // >>> np.invert(np.array([True, False]))
@@ -113,16 +90,10 @@ public class KernelMisalignmentTests
         var result = np.invert(arr);
         var values = result.ToArray<bool>();
 
-        // NumSharp uses bitwise NOT, not logical NOT
-        // ~1 = 0xFE = 254 = true (nonzero)
-        // ~0 = 0xFF = 255 = true (nonzero)
+        // NumSharp now uses logical NOT for booleans (matching NumPy)
         Assert.AreEqual(2, values.Length);
-        Assert.IsTrue(values[0]);  // NumPy expects False
-        Assert.IsTrue(values[1]);  // NumPy expects True (this one matches, but for wrong reason)
-
-        // Expected NumPy behavior (not implemented):
-        // Assert.IsFalse(values[0]);
-        // Assert.IsTrue(values[1]);
+        Assert.IsFalse(values[0]);  // True -> False
+        Assert.IsTrue(values[1]);   // False -> True
     }
 
     /// <summary>
