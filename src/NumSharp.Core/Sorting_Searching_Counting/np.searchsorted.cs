@@ -3,6 +3,30 @@
     public static partial class np
     {
         /// <summary>
+        /// Find index where a scalar should be inserted to maintain order.
+        /// </summary>
+        /// <param name="a">Input array. Must be sorted in ascending order.</param>
+        /// <param name="v">Value to insert into a.</param>
+        /// <returns>Scalar index for insertion point.</returns>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.searchsorted.html</remarks>
+        public static int searchsorted(NDArray a, int v)
+        {
+            return binarySearchRightmost(a, v);
+        }
+
+        /// <summary>
+        /// Find index where a scalar should be inserted to maintain order.
+        /// </summary>
+        /// <param name="a">Input array. Must be sorted in ascending order.</param>
+        /// <param name="v">Value to insert into a.</param>
+        /// <returns>Scalar index for insertion point.</returns>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.searchsorted.html</remarks>
+        public static int searchsorted(NDArray a, double v)
+        {
+            return binarySearchRightmost(a, v);
+        }
+
+        /// <summary>
         /// Find indices where elements should be inserted to maintain order.
         ///
         /// Find the indices into a sorted array a such that, if the corresponding elements in v were inserted before the indices, the order of a would be preserved.
@@ -10,39 +34,50 @@
         /// <param name="a">Input array. Must be sorted in ascending order.</param>
         /// <param name="v">Values to insert into a.</param>
         /// <returns>Array of insertion points with the same shape as v.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.searchsorted.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.searchsorted.html</remarks>
         public static NDArray searchsorted(NDArray a, NDArray v)
         {
             // TODO currently no support for multidimensional a
-            NDArray output = new int[v.shape[0]];
+
+            // Handle scalar input - return scalar output
+            if (v.Shape.IsScalar || v.size == 0)
+            {
+                if (v.size == 0)
+                    return new NDArray(typeof(int), Shape.Vector(0), false);
+
+                double target = v.GetDouble();
+                int idx = binarySearchRightmost(a, target);
+                return NDArray.Scalar(idx);
+            }
+
+            // Handle 1D array input
+            NDArray output = new int[v.size];
             for (int i = 0; i < v.size; i++)
             {
-                double target = (double) v[i];
+                double target = v.GetDouble(i);  // Use GetDouble for proper value extraction
                 int idx = binarySearchRightmost(a, target);
-                output[i] = (NDArray) idx;
+                output.SetInt32(idx, i);
             }
 
             return output;
         }
 
         /// <summary>
-        /// Find the (right-most) position of a target value within a sorted array.
+        /// Find the left-most position where target should be inserted to maintain order.
+        /// This is equivalent to NumPy's searchsorted with side='left' (default).
         /// </summary>
-        /// <param name="arr">Sorted array.</param>
-        /// <param name="target">Target value to find position of.</param>
-        /// <returns>Would-be index of target value within the array.</returns>
+        /// <param name="arr">Sorted array (1D).</param>
+        /// <param name="target">Target value to find position for.</param>
+        /// <returns>Index where target should be inserted.</returns>
         /// <remarks>https://en.wikipedia.org/wiki/Binary_search_algorithm</remarks>
         private static int binarySearchRightmost(NDArray arr, double target)
         {
-            // TODO should probably not work on NDArray? Does it make sense to do binary search on multidimensional arrays?
             int L = 0;
             int R = arr.size;
-            int m;
-            double val;
             while (L < R)
             {
-                m = (L + R) / 2;
-                val = (double) arr[m];
+                int m = (L + R) / 2;
+                double val = arr.GetDouble(m);  // Use GetDouble for proper value extraction
                 if (val < target)
                 {
                     L = m + 1;
