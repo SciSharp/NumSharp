@@ -45,13 +45,14 @@ namespace NumSharp.Backends.Kernels
 
         /// <summary>
         /// Get accumulating type for reductions (NEP50 alignment).
-        /// int32/int16/byte → int64, uint32/uint16 → uint64, floats preserve type.
+        /// int32/int16/byte/bool → int64, uint32/uint16 → uint64, floats preserve type.
+        /// NumPy: Boolean arrays are treated as integers for accumulation (True=1, False=0).
         /// </summary>
         public static NPTypeCode GetAccumulatingType(NPTypeCode type) => type switch
         {
-            NPTypeCode.Int32 or NPTypeCode.Int16 or NPTypeCode.Byte => NPTypeCode.Int64,
+            NPTypeCode.Int32 or NPTypeCode.Int16 or NPTypeCode.Byte or NPTypeCode.Boolean => NPTypeCode.Int64,
             NPTypeCode.UInt32 or NPTypeCode.UInt16 => NPTypeCode.UInt64,
-            _ => type  // Float/Double/Decimal/Int64/UInt64/Boolean preserve type
+            _ => type  // Float/Double/Decimal/Int64/UInt64 preserve type
         };
 
         /// <summary>Check if type is unsigned integer.</summary>

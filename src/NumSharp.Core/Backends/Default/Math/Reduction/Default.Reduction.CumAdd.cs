@@ -7,6 +7,14 @@ namespace NumSharp.Backends
     {
         public override unsafe NDArray ReduceCumAdd(in NDArray arr, int? axis_, NPTypeCode? typeCode = null)
         {
+            // NumPy: cumsum on boolean arrays treats True as 1 and False as 0, returning int64
+            // Convert boolean input to int64 to match NumPy behavior
+            if (arr.GetTypeCode == NPTypeCode.Boolean)
+            {
+                var int64Arr = arr.astype(NPTypeCode.Int64, copy: true);
+                return ReduceCumAdd(int64Arr, axis_, typeCode ?? NPTypeCode.Int64);
+            }
+
             //in order to iterate an axis:
             //consider arange shaped (1,2,3,4) when we want to summarize axis 1 (2nd dimension which its value is 2)
             //the size of the array is [1, 2, n, m] all shapes after 2nd multiplied gives size

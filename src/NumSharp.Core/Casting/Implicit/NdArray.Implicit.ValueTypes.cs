@@ -17,6 +17,7 @@
  */
 
 using System.Numerics;
+using NumSharp.Utilities;
 
 namespace NumSharp
 {
@@ -56,7 +57,8 @@ namespace NumSharp
             if (nd.ndim != 0)
                 throw new IncorrectShapeException();
 
-            return nd.GetAtIndex<bool>(0);
+            // Use Converts.ChangeType to handle cross-dtype conversion (NumPy behavior)
+            return Converts.ChangeType<bool>(nd.Storage.GetAtIndex(0));
         }
 
         //short operators
@@ -67,7 +69,8 @@ namespace NumSharp
             if (nd.ndim != 0)
                 throw new IncorrectShapeException();
 
-            return nd.GetAtIndex<short>(0);
+            // Use Converts.ChangeType to handle cross-dtype conversion (NumPy behavior)
+            return Converts.ChangeType<short>(nd.Storage.GetAtIndex(0));
         }
 
         //ushort operators
@@ -78,7 +81,8 @@ namespace NumSharp
             if (nd.ndim != 0)
                 throw new IncorrectShapeException();
 
-            return nd.GetAtIndex<ushort>(0);
+            // Use Converts.ChangeType to handle cross-dtype conversion (NumPy behavior)
+            return Converts.ChangeType<ushort>(nd.Storage.GetAtIndex(0));
         }
 
         //int operators
@@ -89,7 +93,8 @@ namespace NumSharp
             if (nd.ndim != 0)
                 throw new IncorrectShapeException();
 
-            return nd.GetAtIndex<int>(0);
+            // Use Converts.ChangeType to handle cross-dtype conversion (NumPy behavior)
+            return Converts.ChangeType<int>(nd.Storage.GetAtIndex(0));
         }
 
         //uint operators
@@ -100,7 +105,8 @@ namespace NumSharp
             if (nd.ndim != 0)
                 throw new IncorrectShapeException();
 
-            return nd.GetAtIndex<uint>(0);
+            // Use Converts.ChangeType to handle cross-dtype conversion (NumPy behavior)
+            return Converts.ChangeType<uint>(nd.Storage.GetAtIndex(0));
         }
 
         //long operators
@@ -111,7 +117,8 @@ namespace NumSharp
             if (nd.ndim != 0)
                 throw new IncorrectShapeException();
 
-            return nd.GetAtIndex<long>(0);
+            // Use Converts.ChangeType to handle cross-dtype conversion (NumPy behavior)
+            return Converts.ChangeType<long>(nd.Storage.GetAtIndex(0));
         }
 
         //ulong operators
@@ -122,7 +129,8 @@ namespace NumSharp
             if (nd.ndim != 0)
                 throw new IncorrectShapeException();
 
-            return nd.GetAtIndex<ulong>(0);
+            // Use Converts.ChangeType to handle cross-dtype conversion (NumPy behavior)
+            return Converts.ChangeType<ulong>(nd.Storage.GetAtIndex(0));
         }
 
         //char operators
@@ -133,7 +141,8 @@ namespace NumSharp
             if (nd.ndim != 0)
                 throw new IncorrectShapeException();
 
-            return nd.GetAtIndex<char>(0);
+            // Use Converts.ChangeType to handle cross-dtype conversion (NumPy behavior)
+            return Converts.ChangeType<char>(nd.Storage.GetAtIndex(0));
         }
 
         //double operators
@@ -144,7 +153,8 @@ namespace NumSharp
             if (nd.ndim != 0)
                 throw new IncorrectShapeException();
 
-            return nd.GetAtIndex<double>(0);
+            // Use Converts.ChangeType to handle cross-dtype conversion (NumPy behavior)
+            return Converts.ChangeType<double>(nd.Storage.GetAtIndex(0));
         }
 
         //float operators
@@ -155,7 +165,8 @@ namespace NumSharp
             if (nd.ndim != 0)
                 throw new IncorrectShapeException();
 
-            return nd.GetAtIndex<float>(0);
+            // Use Converts.ChangeType to handle cross-dtype conversion (NumPy behavior)
+            return Converts.ChangeType<float>(nd.Storage.GetAtIndex(0));
         }
 
         //decimal operators
@@ -166,7 +177,8 @@ namespace NumSharp
             if (nd.ndim != 0)
                 throw new IncorrectShapeException();
 
-            return nd.GetAtIndex<decimal>(0);
+            // Use Converts.ChangeType to handle cross-dtype conversion (NumPy behavior)
+            return Converts.ChangeType<decimal>(nd.Storage.GetAtIndex(0));
         }
 #endif
 

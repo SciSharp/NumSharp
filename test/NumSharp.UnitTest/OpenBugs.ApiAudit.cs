@@ -21,9 +21,9 @@ namespace NumSharp.UnitTest
     ///     Categories:
     ///       Bug 64:  np.sign returns Double for integer input (should preserve dtype)
     ///       Bug 65:  REMOVED — duplicate of Bug 10 (np.unique unsorted)
-    ///       Bug 66:  operator != (NDArray-NDArray) throws InvalidCastException
-    ///       Bug 67:  operator > (NDArray-NDArray) throws IncorrectShapeException
-    ///       Bug 68:  operator &lt; (NDArray-NDArray) throws IncorrectShapeException
+    ///       Bug 66:  FIXED — operator != (NDArray-NDArray) now works via ILKernelGenerator
+    ///       Bug 67:  FIXED — operator > (NDArray-NDArray) now works via ILKernelGenerator
+    ///       Bug 68:  FIXED — operator < (NDArray-NDArray) now works via ILKernelGenerator
     ///       Bug 69:  Boolean mask getter returns cast mask instead of selected elements
     ///       Bug 70:  Boolean mask setter silently no-ops (different path from Bug 46)
     ///       Bug 71:  REMOVED — false positive (NumPy 2.x also rejects int() on 1-d arrays)
@@ -100,127 +100,14 @@ namespace NumSharp.UnitTest
         // BUG 65 (np.unique unsorted) — REMOVED: Duplicate of Bug 10 in OpenBugs.cs
         // which already covers np.unique returning first-appearance order instead of sorted.
 
-        // ================================================================
-        //
-        //  BUG 66: operator != (NDArray-NDArray) throws InvalidCastException
-        //
-        //  SEVERITY: High — basic element-wise comparison is broken.
-        //
-        //  The != operator between two NDArrays throws InvalidCastException.
-        //  This is the NDArray-vs-NDArray overload (not scalar comparison).
-        //
-        //  PYTHON VERIFICATION (NumPy 2.4.2):
-        //    >>> np.array([1,2,3]) != np.array([1,0,3])
-        //    array([False,  True, False])
-        //
-        // ================================================================
+        // BUG 66 (operator != NDArray-NDArray) — FIXED in ILKernelGenerator.Comparison.cs
+        // Tests: ComparisonOpTests.NotEqual_Int32_SameType, np_comparison_Test.not_equal_ArrayArray
 
-        /// <summary>
-        ///     BUG 66: operator != between two NDArrays throws InvalidCastException.
-        ///
-        ///     NumPy:    [1,2,3] != [1,0,3] = [False, True, False]
-        ///     NumSharp: InvalidCastException
-        /// </summary>
-        [Test]
-        public void Bug_NotEquals_NDArray_ThrowsInvalidCast()
-        {
-            var a = np.array(new int[] { 1, 2, 3 });
-            var b = np.array(new int[] { 1, 0, 3 });
+        // BUG 67 (operator > NDArray-NDArray) — FIXED in ILKernelGenerator.Comparison.cs
+        // Tests: ComparisonOpTests.Greater_Int32_SameType, np_comparison_Test.greater_ArrayArray
 
-            NDArray result = null;
-            new Action(() => result = a != b)
-                .Should().NotThrow(
-                    "NumPy: [1,2,3] != [1,0,3] = [False, True, False]. " +
-                    "NumSharp: operator != between two NDArrays throws InvalidCastException " +
-                    "in NDArray.NotEquals.cs.");
-
-            result.Should().NotBeNull();
-            result.GetBoolean(0).Should().BeFalse("1 != 1 is False");
-            result.GetBoolean(1).Should().BeTrue("2 != 0 is True");
-            result.GetBoolean(2).Should().BeFalse("3 != 3 is False");
-        }
-
-        // ================================================================
-        //
-        //  BUG 67: operator > (NDArray-NDArray) throws IncorrectShapeException
-        //
-        //  SEVERITY: High — basic element-wise comparison is broken.
-        //
-        //  The > operator between two same-shaped NDArrays throws
-        //  IncorrectShapeException. This is the NDArray-vs-NDArray overload.
-        //  Bug 59 in DeprecationAudit covers >= and <= with SCALAR operands;
-        //  this bug covers > with NDArray operands (different overload).
-        //
-        //  PYTHON VERIFICATION (NumPy 2.4.2):
-        //    >>> np.array([1,5,3]) > np.array([2,4,3])
-        //    array([False,  True, False])
-        //
-        // ================================================================
-
-        /// <summary>
-        ///     BUG 67: operator &gt; between two NDArrays throws IncorrectShapeException.
-        ///
-        ///     NumPy:    [1,5,3] &gt; [2,4,3] = [False, True, False]
-        ///     NumSharp: IncorrectShapeException
-        /// </summary>
-        [Test]
-        public void Bug_GreaterThan_NDArray_ThrowsIncorrectShape()
-        {
-            var a = np.array(new int[] { 1, 5, 3 });
-            var b = np.array(new int[] { 2, 4, 3 });
-
-            NDArray result = null;
-            new Action(() => result = a > b)
-                .Should().NotThrow(
-                    "NumPy: [1,5,3] > [2,4,3] = [False, True, False]. " +
-                    "NumSharp: operator > between two same-shaped NDArrays throws " +
-                    "IncorrectShapeException. Bug 59 covers >=/<= with scalar operands; " +
-                    "this bug covers the NDArray-vs-NDArray overload.");
-
-            result.Should().NotBeNull();
-            result.GetBoolean(0).Should().BeFalse("1 > 2 is False");
-            result.GetBoolean(1).Should().BeTrue("5 > 4 is True");
-            result.GetBoolean(2).Should().BeFalse("3 > 3 is False");
-        }
-
-        // ================================================================
-        //
-        //  BUG 68: operator < (NDArray-NDArray) throws IncorrectShapeException
-        //
-        //  SEVERITY: High — basic element-wise comparison is broken.
-        //
-        //  Same root cause as Bug 67 but for the < operator.
-        //
-        //  PYTHON VERIFICATION (NumPy 2.4.2):
-        //    >>> np.array([1,5,3]) < np.array([2,4,3])
-        //    array([ True, False, False])
-        //
-        // ================================================================
-
-        /// <summary>
-        ///     BUG 68: operator &lt; between two NDArrays throws IncorrectShapeException.
-        ///
-        ///     NumPy:    [1,5,3] &lt; [2,4,3] = [True, False, False]
-        ///     NumSharp: IncorrectShapeException
-        /// </summary>
-        [Test]
-        public void Bug_LessThan_NDArray_ThrowsIncorrectShape()
-        {
-            var a = np.array(new int[] { 1, 5, 3 });
-            var b = np.array(new int[] { 2, 4, 3 });
-
-            NDArray result = null;
-            new Action(() => result = a < b)
-                .Should().NotThrow(
-                    "NumPy: [1,5,3] < [2,4,3] = [True, False, False]. " +
-                    "NumSharp: operator < between two same-shaped NDArrays throws " +
-                    "IncorrectShapeException. Same root cause as Bug 67 (operator >).");
-
-            result.Should().NotBeNull();
-            result.GetBoolean(0).Should().BeTrue("1 < 2 is True");
-            result.GetBoolean(1).Should().BeFalse("5 < 4 is False");
-            result.GetBoolean(2).Should().BeFalse("3 < 3 is False");
-        }
+        // BUG 68 (operator < NDArray-NDArray) — FIXED in ILKernelGenerator.Comparison.cs
+        // Tests: ComparisonOpTests.Less_Int32_SameType, np_comparison_Test.less_ArrayArray
 
         // ================================================================
         //
@@ -496,6 +383,8 @@ namespace NumSharp.UnitTest
         ///
         ///     NumPy:    prod([T, T, F, T]) = 0
         ///     NumSharp: NotSupportedException
+        ///
+        ///     FIXED: Boolean arrays are now converted to Int64 for accumulation.
         /// </summary>
         [Test]
         public void Bug_Prod_BoolArray_Crashes()
@@ -506,9 +395,12 @@ namespace NumSharp.UnitTest
             new Action(() => result = np.prod(a))
                 .Should().NotThrow(
                     "NumPy: prod([True, True, False, True]) = 0 (False acts as 0). " +
-                    "NumSharp throws NotSupportedException because boolean is not " +
-                    "handled in the prod reduction type switch. Same pattern as " +
-                    "Bug 57 (sum/mean on bool).");
+                    "NumSharp treats boolean as int64 for accumulation (True=1, False=0).");
+
+            // Verify correct value: True * True * False * True = 1 * 1 * 0 * 1 = 0
+            result.Should().NotBeNull();
+            result.GetInt64().Should().Be(0, "prod([T,T,F,T]) = 0 because False acts as 0");
+            result.typecode.Should().Be(NPTypeCode.Int64, "NumPy: prod(bool) returns int64");
         }
 
         // ================================================================
@@ -537,6 +429,8 @@ namespace NumSharp.UnitTest
         ///
         ///     NumPy:    cumsum([T, F, T, T, F]) = [1, 1, 2, 3, 3]
         ///     NumSharp: NotSupportedException
+        ///
+        ///     FIXED: Boolean arrays are now converted to Int64 for cumsum.
         /// </summary>
         [Test]
         public void Bug_Cumsum_BoolArray_Crashes()
@@ -547,9 +441,16 @@ namespace NumSharp.UnitTest
             new Action(() => result = np.cumsum(a))
                 .Should().NotThrow(
                     "NumPy: cumsum([True, False, True, True, False]) = [1, 1, 2, 3, 3]. " +
-                    "NumSharp throws NotSupportedException because boolean is not " +
-                    "handled in the cumsum type switch. Same pattern as Bug 57 " +
-                    "(sum/mean on bool) and Bug 75 (prod on bool).");
+                    "NumSharp converts boolean to int64 (True=1, False=0) before cumsum.");
+
+            // Verify correct values: cumsum([1,0,1,1,0]) = [1,1,2,3,3]
+            result.Should().NotBeNull();
+            result.typecode.Should().Be(NPTypeCode.Int64, "NumPy: cumsum(bool) returns int64");
+            result.GetInt64(0).Should().Be(1, "cumsum[0] = 1");
+            result.GetInt64(1).Should().Be(1, "cumsum[1] = 1 (0 added)");
+            result.GetInt64(2).Should().Be(2, "cumsum[2] = 2");
+            result.GetInt64(3).Should().Be(3, "cumsum[3] = 3");
+            result.GetInt64(4).Should().Be(3, "cumsum[4] = 3 (0 added)");
         }
 
         // ================================================================
@@ -577,6 +478,8 @@ namespace NumSharp.UnitTest
         ///
         ///     NumPy:    sign([NaN, inf, -inf, 0]) = [NaN, 1, -1, 0]
         ///     NumSharp: ArithmeticException from Math.Sign(NaN)
+        ///
+        ///     FIXED: IL kernel now checks for NaN and returns NaN directly.
         /// </summary>
         [Test]
         public void Bug_Sign_NaN_ThrowsArithmeticException()
@@ -586,10 +489,8 @@ namespace NumSharp.UnitTest
             NDArray result = null;
             new Action(() => result = np.sign(a))
                 .Should().NotThrow(
-                    "NumPy: sign([NaN,1,inf,-inf,0]) = [NaN,1,-1,0]. " +
-                    "NumSharp throws ArithmeticException because Math.Sign(double.NaN) " +
-                    "throws. The implementation should handle NaN by returning NaN, " +
-                    "inf by returning 1.0, and -inf by returning -1.0.");
+                    "NumPy: sign([NaN,1,inf,-inf,0]) = [NaN,1,1,-1,0]. " +
+                    "NumSharp IL kernel handles NaN by returning NaN directly.");
 
             result.Should().NotBeNull();
             double.IsNaN(result.GetDouble(0)).Should().BeTrue("sign(NaN) = NaN");
