@@ -1,4 +1,6 @@
-﻿namespace NumSharp
+﻿using System;
+
+namespace NumSharp
 {
     public static partial class np
     {
@@ -45,7 +47,8 @@
                 if (v.size == 0)
                     return new NDArray(typeof(int), Shape.Vector(0), false);
 
-                double target = v.GetDouble();
+                // Use Convert.ToDouble for type-agnostic value extraction
+                double target = Convert.ToDouble(v.Storage.GetValue());
                 int idx = binarySearchRightmost(a, target);
                 return NDArray.Scalar(idx);
             }
@@ -54,7 +57,8 @@
             NDArray output = new int[v.size];
             for (int i = 0; i < v.size; i++)
             {
-                double target = v.GetDouble(i);  // Use GetDouble for proper value extraction
+                // Use Convert.ToDouble for type-agnostic value extraction
+                double target = Convert.ToDouble(v.Storage.GetValue(i));
                 int idx = binarySearchRightmost(a, target);
                 output.SetInt32(idx, i);
             }
@@ -77,7 +81,8 @@
             while (L < R)
             {
                 int m = (L + R) / 2;
-                double val = arr.GetDouble(m);  // Use GetDouble for proper value extraction
+                // Use Convert.ToDouble for type-agnostic value extraction
+                double val = Convert.ToDouble(arr.Storage.GetValue(m));
                 if (val < target)
                 {
                     L = m + 1;
