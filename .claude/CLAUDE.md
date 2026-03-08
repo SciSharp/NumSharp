@@ -186,17 +186,13 @@ nd["..., -1"]     // Ellipsis fills dimensions
 
 | Bug | Function | Issue | Workaround |
 |-----|----------|-------|------------|
-| BUG-19 | `np.negative` | Applies abs() then negates (always returns negative) | Use `arr * -1` instead |
-| BUG-20 | `np.positive` | Applies abs() instead of identity | Use `arr.copy()` instead |
 | BUG-21 | `np.arange`/`np.sum` | int32 default dtype, no overflow protection | Specify `dtype: np.int64` |
-| BUG-18 | `np.convolve` | NullReferenceException | Not usable |
 
 ### Medium Severity Bugs
 
 | Bug | Function | Issue |
 |-----|----------|-------|
 | BUG-12 | `np.searchsorted` | Scalar input throws IndexOutOfRangeException |
-| BUG-15 | `np.abs` | Changes int dtype to Double |
 | BUG-16 | `np.moveaxis` | Returns unchanged shape |
 | BUG-17 | `nd.astype()` | Uses rounding instead of truncation for float->int |
 
@@ -204,10 +200,21 @@ nd["..., -1"]     // Ellipsis fills dimensions
 
 | Bug | Function | Issue |
 |-----|----------|-------|
-| BUG-13 | `np.linspace` | Returns float32 instead of float64 |
 | BUG-14 | `np.unique` | Doesn't sort results (NumPy sorts) |
 | BUG-4 | `np.std`/`np.var` | ddof parameter ignored |
 | BUG-7 | sbyte (int8) | Type not supported |
+
+### Fixed Bugs (0.41.x)
+
+These bugs were fixed in recent commits:
+
+| Bug | Function | Fix Commit |
+|-----|----------|------------|
+| BUG-19 | `np.negative` | `0857d109` — was applying abs() then negating |
+| BUG-20 | `np.positive` | `0857d109` — was applying abs() instead of identity |
+| BUG-18 | `np.convolve` | `0857d109` — NullReferenceException fixed |
+| BUG-15 | `np.abs` | `0857d109` — int dtype preserved (no longer converts to Double) |
+| BUG-13 | `np.linspace` | `0857d109` — returns float64 (was float32) |
 
 ### Dead Code (Returns null/default)
 
