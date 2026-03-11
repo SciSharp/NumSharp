@@ -48,17 +48,23 @@ namespace NumSharp.Backends
                 return arr.copy();
             }
 
-            //prepare ret — use Clean() to strip broadcast metadata so that ret[slices]
-            //doesn't trigger GetViewInternal's IsBroadcasted clone path (which would
-            //cause writes to go to a detached clone instead of the actual output array).
-            var retShape = shape.IsBroadcasted ? shape.Clean() : shape;
-            var ret = new NDArray(typeCode ?? (arr.GetTypeCode.GetAccumulatingType()), retShape, false);
+            // Materialize broadcast arrays before cumsum iteration.
+            // Broadcast arrays have zero-stride dimensions that confuse the axis iteration.
+            // By materializing upfront, we get contiguous memory with proper strides.
+            NDArray inputArr = arr;
+            if (shape.IsBroadcasted)
+            {
+                inputArr = arr.copy();  // Materialize broadcast to contiguous
+                shape = inputArr.Shape;
+            }
+
+            var ret = new NDArray(typeCode ?? (inputArr.GetTypeCode.GetAccumulatingType()), shape, false);
             var iterAxis = new NDCoordinatesAxisIncrementor(ref shape, axis);
             var slices = iterAxis.Slices;
 
 #if _REGEN
             #region Compute
-            switch (arr.GetTypeCode)
+            switch (inputArr.GetTypeCode)
 		    {
 			    %foreach supported_numericals,supported_numericals_lowercase%
 			    case NPTypeCode.#1: 
@@ -70,7 +76,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<#2>();
+                                var iter = inputArr[slices].AsIterator<#2>();
                                 var iterAxedRet = ret[slices].AsIterator<#102>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -98,7 +104,7 @@ namespace NumSharp.Backends
 #else
 
             #region Compute
-            switch (arr.GetTypeCode)
+            switch (inputArr.GetTypeCode)
 		    {
 			    case NPTypeCode.Byte: 
                 {
@@ -108,7 +114,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<byte>();
+                                var iter = inputArr[slices].AsIterator<byte>();
                                 var iterAxedRet = ret[slices].AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -126,7 +132,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<byte>();
+                                var iter = inputArr[slices].AsIterator<byte>();
                                 var iterAxedRet = ret[slices].AsIterator<short>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -144,7 +150,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<byte>();
+                                var iter = inputArr[slices].AsIterator<byte>();
                                 var iterAxedRet = ret[slices].AsIterator<ushort>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -162,7 +168,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<byte>();
+                                var iter = inputArr[slices].AsIterator<byte>();
                                 var iterAxedRet = ret[slices].AsIterator<int>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -180,7 +186,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<byte>();
+                                var iter = inputArr[slices].AsIterator<byte>();
                                 var iterAxedRet = ret[slices].AsIterator<uint>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -198,7 +204,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<byte>();
+                                var iter = inputArr[slices].AsIterator<byte>();
                                 var iterAxedRet = ret[slices].AsIterator<long>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -216,7 +222,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<byte>();
+                                var iter = inputArr[slices].AsIterator<byte>();
                                 var iterAxedRet = ret[slices].AsIterator<ulong>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -234,7 +240,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<byte>();
+                                var iter = inputArr[slices].AsIterator<byte>();
                                 var iterAxedRet = ret[slices].AsIterator<char>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -252,7 +258,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<byte>();
+                                var iter = inputArr[slices].AsIterator<byte>();
                                 var iterAxedRet = ret[slices].AsIterator<double>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -270,7 +276,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<byte>();
+                                var iter = inputArr[slices].AsIterator<byte>();
                                 var iterAxedRet = ret[slices].AsIterator<float>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -288,7 +294,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<byte>();
+                                var iter = inputArr[slices].AsIterator<byte>();
                                 var iterAxedRet = ret[slices].AsIterator<decimal>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -315,7 +321,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<short>();
+                                var iter = inputArr[slices].AsIterator<short>();
                                 var iterAxedRet = ret[slices].AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -333,7 +339,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<short>();
+                                var iter = inputArr[slices].AsIterator<short>();
                                 var iterAxedRet = ret[slices].AsIterator<short>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -351,7 +357,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<short>();
+                                var iter = inputArr[slices].AsIterator<short>();
                                 var iterAxedRet = ret[slices].AsIterator<ushort>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -369,7 +375,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<short>();
+                                var iter = inputArr[slices].AsIterator<short>();
                                 var iterAxedRet = ret[slices].AsIterator<int>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -387,7 +393,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<short>();
+                                var iter = inputArr[slices].AsIterator<short>();
                                 var iterAxedRet = ret[slices].AsIterator<uint>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -405,7 +411,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<short>();
+                                var iter = inputArr[slices].AsIterator<short>();
                                 var iterAxedRet = ret[slices].AsIterator<long>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -423,7 +429,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<short>();
+                                var iter = inputArr[slices].AsIterator<short>();
                                 var iterAxedRet = ret[slices].AsIterator<ulong>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -441,7 +447,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<short>();
+                                var iter = inputArr[slices].AsIterator<short>();
                                 var iterAxedRet = ret[slices].AsIterator<char>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -459,7 +465,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<short>();
+                                var iter = inputArr[slices].AsIterator<short>();
                                 var iterAxedRet = ret[slices].AsIterator<double>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -477,7 +483,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<short>();
+                                var iter = inputArr[slices].AsIterator<short>();
                                 var iterAxedRet = ret[slices].AsIterator<float>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -495,7 +501,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<short>();
+                                var iter = inputArr[slices].AsIterator<short>();
                                 var iterAxedRet = ret[slices].AsIterator<decimal>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -522,7 +528,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ushort>();
+                                var iter = inputArr[slices].AsIterator<ushort>();
                                 var iterAxedRet = ret[slices].AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -540,7 +546,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ushort>();
+                                var iter = inputArr[slices].AsIterator<ushort>();
                                 var iterAxedRet = ret[slices].AsIterator<short>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -558,7 +564,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ushort>();
+                                var iter = inputArr[slices].AsIterator<ushort>();
                                 var iterAxedRet = ret[slices].AsIterator<ushort>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -576,7 +582,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ushort>();
+                                var iter = inputArr[slices].AsIterator<ushort>();
                                 var iterAxedRet = ret[slices].AsIterator<int>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -594,7 +600,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ushort>();
+                                var iter = inputArr[slices].AsIterator<ushort>();
                                 var iterAxedRet = ret[slices].AsIterator<uint>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -612,7 +618,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ushort>();
+                                var iter = inputArr[slices].AsIterator<ushort>();
                                 var iterAxedRet = ret[slices].AsIterator<long>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -630,7 +636,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ushort>();
+                                var iter = inputArr[slices].AsIterator<ushort>();
                                 var iterAxedRet = ret[slices].AsIterator<ulong>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -648,7 +654,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ushort>();
+                                var iter = inputArr[slices].AsIterator<ushort>();
                                 var iterAxedRet = ret[slices].AsIterator<char>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -666,7 +672,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ushort>();
+                                var iter = inputArr[slices].AsIterator<ushort>();
                                 var iterAxedRet = ret[slices].AsIterator<double>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -684,7 +690,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ushort>();
+                                var iter = inputArr[slices].AsIterator<ushort>();
                                 var iterAxedRet = ret[slices].AsIterator<float>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -702,7 +708,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ushort>();
+                                var iter = inputArr[slices].AsIterator<ushort>();
                                 var iterAxedRet = ret[slices].AsIterator<decimal>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -729,7 +735,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<int>();
+                                var iter = inputArr[slices].AsIterator<int>();
                                 var iterAxedRet = ret[slices].AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -747,7 +753,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<int>();
+                                var iter = inputArr[slices].AsIterator<int>();
                                 var iterAxedRet = ret[slices].AsIterator<short>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -765,7 +771,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<int>();
+                                var iter = inputArr[slices].AsIterator<int>();
                                 var iterAxedRet = ret[slices].AsIterator<ushort>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -783,7 +789,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<int>();
+                                var iter = inputArr[slices].AsIterator<int>();
                                 var iterAxedRet = ret[slices].AsIterator<int>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -801,7 +807,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<int>();
+                                var iter = inputArr[slices].AsIterator<int>();
                                 var iterAxedRet = ret[slices].AsIterator<uint>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -819,7 +825,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<int>();
+                                var iter = inputArr[slices].AsIterator<int>();
                                 var iterAxedRet = ret[slices].AsIterator<long>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -837,7 +843,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<int>();
+                                var iter = inputArr[slices].AsIterator<int>();
                                 var iterAxedRet = ret[slices].AsIterator<ulong>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -855,7 +861,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<int>();
+                                var iter = inputArr[slices].AsIterator<int>();
                                 var iterAxedRet = ret[slices].AsIterator<char>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -873,7 +879,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<int>();
+                                var iter = inputArr[slices].AsIterator<int>();
                                 var iterAxedRet = ret[slices].AsIterator<double>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -891,7 +897,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<int>();
+                                var iter = inputArr[slices].AsIterator<int>();
                                 var iterAxedRet = ret[slices].AsIterator<float>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -909,7 +915,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<int>();
+                                var iter = inputArr[slices].AsIterator<int>();
                                 var iterAxedRet = ret[slices].AsIterator<decimal>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -936,7 +942,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<uint>();
+                                var iter = inputArr[slices].AsIterator<uint>();
                                 var iterAxedRet = ret[slices].AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -954,7 +960,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<uint>();
+                                var iter = inputArr[slices].AsIterator<uint>();
                                 var iterAxedRet = ret[slices].AsIterator<short>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -972,7 +978,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<uint>();
+                                var iter = inputArr[slices].AsIterator<uint>();
                                 var iterAxedRet = ret[slices].AsIterator<ushort>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -990,7 +996,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<uint>();
+                                var iter = inputArr[slices].AsIterator<uint>();
                                 var iterAxedRet = ret[slices].AsIterator<int>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -1008,7 +1014,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<uint>();
+                                var iter = inputArr[slices].AsIterator<uint>();
                                 var iterAxedRet = ret[slices].AsIterator<uint>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -1026,7 +1032,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<uint>();
+                                var iter = inputArr[slices].AsIterator<uint>();
                                 var iterAxedRet = ret[slices].AsIterator<long>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -1044,7 +1050,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<uint>();
+                                var iter = inputArr[slices].AsIterator<uint>();
                                 var iterAxedRet = ret[slices].AsIterator<ulong>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -1062,7 +1068,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<uint>();
+                                var iter = inputArr[slices].AsIterator<uint>();
                                 var iterAxedRet = ret[slices].AsIterator<char>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -1080,7 +1086,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<uint>();
+                                var iter = inputArr[slices].AsIterator<uint>();
                                 var iterAxedRet = ret[slices].AsIterator<double>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -1098,7 +1104,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<uint>();
+                                var iter = inputArr[slices].AsIterator<uint>();
                                 var iterAxedRet = ret[slices].AsIterator<float>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -1116,7 +1122,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<uint>();
+                                var iter = inputArr[slices].AsIterator<uint>();
                                 var iterAxedRet = ret[slices].AsIterator<decimal>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -1143,7 +1149,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<long>();
+                                var iter = inputArr[slices].AsIterator<long>();
                                 var iterAxedRet = ret[slices].AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -1161,7 +1167,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<long>();
+                                var iter = inputArr[slices].AsIterator<long>();
                                 var iterAxedRet = ret[slices].AsIterator<short>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -1179,7 +1185,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<long>();
+                                var iter = inputArr[slices].AsIterator<long>();
                                 var iterAxedRet = ret[slices].AsIterator<ushort>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -1197,7 +1203,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<long>();
+                                var iter = inputArr[slices].AsIterator<long>();
                                 var iterAxedRet = ret[slices].AsIterator<int>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -1215,7 +1221,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<long>();
+                                var iter = inputArr[slices].AsIterator<long>();
                                 var iterAxedRet = ret[slices].AsIterator<uint>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -1233,7 +1239,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<long>();
+                                var iter = inputArr[slices].AsIterator<long>();
                                 var iterAxedRet = ret[slices].AsIterator<long>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -1251,7 +1257,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<long>();
+                                var iter = inputArr[slices].AsIterator<long>();
                                 var iterAxedRet = ret[slices].AsIterator<ulong>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -1269,7 +1275,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<long>();
+                                var iter = inputArr[slices].AsIterator<long>();
                                 var iterAxedRet = ret[slices].AsIterator<char>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -1287,7 +1293,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<long>();
+                                var iter = inputArr[slices].AsIterator<long>();
                                 var iterAxedRet = ret[slices].AsIterator<double>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -1305,7 +1311,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<long>();
+                                var iter = inputArr[slices].AsIterator<long>();
                                 var iterAxedRet = ret[slices].AsIterator<float>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -1323,7 +1329,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<long>();
+                                var iter = inputArr[slices].AsIterator<long>();
                                 var iterAxedRet = ret[slices].AsIterator<decimal>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -1350,7 +1356,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ulong>();
+                                var iter = inputArr[slices].AsIterator<ulong>();
                                 var iterAxedRet = ret[slices].AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -1368,7 +1374,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ulong>();
+                                var iter = inputArr[slices].AsIterator<ulong>();
                                 var iterAxedRet = ret[slices].AsIterator<short>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -1386,7 +1392,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ulong>();
+                                var iter = inputArr[slices].AsIterator<ulong>();
                                 var iterAxedRet = ret[slices].AsIterator<ushort>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -1404,7 +1410,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ulong>();
+                                var iter = inputArr[slices].AsIterator<ulong>();
                                 var iterAxedRet = ret[slices].AsIterator<int>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -1422,7 +1428,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ulong>();
+                                var iter = inputArr[slices].AsIterator<ulong>();
                                 var iterAxedRet = ret[slices].AsIterator<uint>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -1440,7 +1446,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ulong>();
+                                var iter = inputArr[slices].AsIterator<ulong>();
                                 var iterAxedRet = ret[slices].AsIterator<long>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -1458,7 +1464,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ulong>();
+                                var iter = inputArr[slices].AsIterator<ulong>();
                                 var iterAxedRet = ret[slices].AsIterator<ulong>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -1476,7 +1482,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ulong>();
+                                var iter = inputArr[slices].AsIterator<ulong>();
                                 var iterAxedRet = ret[slices].AsIterator<char>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -1494,7 +1500,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ulong>();
+                                var iter = inputArr[slices].AsIterator<ulong>();
                                 var iterAxedRet = ret[slices].AsIterator<double>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -1512,7 +1518,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ulong>();
+                                var iter = inputArr[slices].AsIterator<ulong>();
                                 var iterAxedRet = ret[slices].AsIterator<float>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -1530,7 +1536,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ulong>();
+                                var iter = inputArr[slices].AsIterator<ulong>();
                                 var iterAxedRet = ret[slices].AsIterator<decimal>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -1557,7 +1563,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<char>();
+                                var iter = inputArr[slices].AsIterator<char>();
                                 var iterAxedRet = ret[slices].AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -1575,7 +1581,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<char>();
+                                var iter = inputArr[slices].AsIterator<char>();
                                 var iterAxedRet = ret[slices].AsIterator<short>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -1593,7 +1599,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<char>();
+                                var iter = inputArr[slices].AsIterator<char>();
                                 var iterAxedRet = ret[slices].AsIterator<ushort>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -1611,7 +1617,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<char>();
+                                var iter = inputArr[slices].AsIterator<char>();
                                 var iterAxedRet = ret[slices].AsIterator<int>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -1629,7 +1635,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<char>();
+                                var iter = inputArr[slices].AsIterator<char>();
                                 var iterAxedRet = ret[slices].AsIterator<uint>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -1647,7 +1653,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<char>();
+                                var iter = inputArr[slices].AsIterator<char>();
                                 var iterAxedRet = ret[slices].AsIterator<long>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -1665,7 +1671,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<char>();
+                                var iter = inputArr[slices].AsIterator<char>();
                                 var iterAxedRet = ret[slices].AsIterator<ulong>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -1683,7 +1689,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<char>();
+                                var iter = inputArr[slices].AsIterator<char>();
                                 var iterAxedRet = ret[slices].AsIterator<char>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -1701,7 +1707,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<char>();
+                                var iter = inputArr[slices].AsIterator<char>();
                                 var iterAxedRet = ret[slices].AsIterator<double>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -1719,7 +1725,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<char>();
+                                var iter = inputArr[slices].AsIterator<char>();
                                 var iterAxedRet = ret[slices].AsIterator<float>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -1737,7 +1743,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<char>();
+                                var iter = inputArr[slices].AsIterator<char>();
                                 var iterAxedRet = ret[slices].AsIterator<decimal>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -1764,7 +1770,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<double>();
+                                var iter = inputArr[slices].AsIterator<double>();
                                 var iterAxedRet = ret[slices].AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -1782,7 +1788,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<double>();
+                                var iter = inputArr[slices].AsIterator<double>();
                                 var iterAxedRet = ret[slices].AsIterator<short>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -1800,7 +1806,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<double>();
+                                var iter = inputArr[slices].AsIterator<double>();
                                 var iterAxedRet = ret[slices].AsIterator<ushort>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -1818,7 +1824,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<double>();
+                                var iter = inputArr[slices].AsIterator<double>();
                                 var iterAxedRet = ret[slices].AsIterator<int>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -1836,7 +1842,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<double>();
+                                var iter = inputArr[slices].AsIterator<double>();
                                 var iterAxedRet = ret[slices].AsIterator<uint>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -1854,7 +1860,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<double>();
+                                var iter = inputArr[slices].AsIterator<double>();
                                 var iterAxedRet = ret[slices].AsIterator<long>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -1872,7 +1878,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<double>();
+                                var iter = inputArr[slices].AsIterator<double>();
                                 var iterAxedRet = ret[slices].AsIterator<ulong>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -1890,7 +1896,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<double>();
+                                var iter = inputArr[slices].AsIterator<double>();
                                 var iterAxedRet = ret[slices].AsIterator<char>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -1908,7 +1914,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<double>();
+                                var iter = inputArr[slices].AsIterator<double>();
                                 var iterAxedRet = ret[slices].AsIterator<double>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -1926,7 +1932,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<double>();
+                                var iter = inputArr[slices].AsIterator<double>();
                                 var iterAxedRet = ret[slices].AsIterator<float>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -1944,7 +1950,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<double>();
+                                var iter = inputArr[slices].AsIterator<double>();
                                 var iterAxedRet = ret[slices].AsIterator<decimal>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -1971,7 +1977,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<float>();
+                                var iter = inputArr[slices].AsIterator<float>();
                                 var iterAxedRet = ret[slices].AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -1989,7 +1995,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<float>();
+                                var iter = inputArr[slices].AsIterator<float>();
                                 var iterAxedRet = ret[slices].AsIterator<short>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -2007,7 +2013,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<float>();
+                                var iter = inputArr[slices].AsIterator<float>();
                                 var iterAxedRet = ret[slices].AsIterator<ushort>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -2025,7 +2031,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<float>();
+                                var iter = inputArr[slices].AsIterator<float>();
                                 var iterAxedRet = ret[slices].AsIterator<int>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -2043,7 +2049,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<float>();
+                                var iter = inputArr[slices].AsIterator<float>();
                                 var iterAxedRet = ret[slices].AsIterator<uint>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -2061,7 +2067,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<float>();
+                                var iter = inputArr[slices].AsIterator<float>();
                                 var iterAxedRet = ret[slices].AsIterator<long>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -2079,7 +2085,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<float>();
+                                var iter = inputArr[slices].AsIterator<float>();
                                 var iterAxedRet = ret[slices].AsIterator<ulong>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -2097,7 +2103,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<float>();
+                                var iter = inputArr[slices].AsIterator<float>();
                                 var iterAxedRet = ret[slices].AsIterator<char>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -2115,7 +2121,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<float>();
+                                var iter = inputArr[slices].AsIterator<float>();
                                 var iterAxedRet = ret[slices].AsIterator<double>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -2133,7 +2139,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<float>();
+                                var iter = inputArr[slices].AsIterator<float>();
                                 var iterAxedRet = ret[slices].AsIterator<float>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -2151,7 +2157,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<float>();
+                                var iter = inputArr[slices].AsIterator<float>();
                                 var iterAxedRet = ret[slices].AsIterator<decimal>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -2178,7 +2184,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<decimal>();
+                                var iter = inputArr[slices].AsIterator<decimal>();
                                 var iterAxedRet = ret[slices].AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -2196,7 +2202,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<decimal>();
+                                var iter = inputArr[slices].AsIterator<decimal>();
                                 var iterAxedRet = ret[slices].AsIterator<short>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -2214,7 +2220,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<decimal>();
+                                var iter = inputArr[slices].AsIterator<decimal>();
                                 var iterAxedRet = ret[slices].AsIterator<ushort>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -2232,7 +2238,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<decimal>();
+                                var iter = inputArr[slices].AsIterator<decimal>();
                                 var iterAxedRet = ret[slices].AsIterator<int>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -2250,7 +2256,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<decimal>();
+                                var iter = inputArr[slices].AsIterator<decimal>();
                                 var iterAxedRet = ret[slices].AsIterator<uint>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -2268,7 +2274,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<decimal>();
+                                var iter = inputArr[slices].AsIterator<decimal>();
                                 var iterAxedRet = ret[slices].AsIterator<long>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -2286,7 +2292,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<decimal>();
+                                var iter = inputArr[slices].AsIterator<decimal>();
                                 var iterAxedRet = ret[slices].AsIterator<ulong>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -2304,7 +2310,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<decimal>();
+                                var iter = inputArr[slices].AsIterator<decimal>();
                                 var iterAxedRet = ret[slices].AsIterator<char>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -2322,7 +2328,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<decimal>();
+                                var iter = inputArr[slices].AsIterator<decimal>();
                                 var iterAxedRet = ret[slices].AsIterator<double>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -2340,7 +2346,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<decimal>();
+                                var iter = inputArr[slices].AsIterator<decimal>();
                                 var iterAxedRet = ret[slices].AsIterator<float>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -2358,7 +2364,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<decimal>();
+                                var iter = inputArr[slices].AsIterator<decimal>();
                                 var iterAxedRet = ret[slices].AsIterator<decimal>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
@@ -2442,11 +2448,11 @@ namespace NumSharp.Backends
             #region Compute
             switch (arr.GetTypeCode)
 		    {
-			    case NPTypeCode.Byte: 
+			    case NPTypeCode.Byte:
                 {
                     switch (retType)
 		            {
-			            case NPTypeCode.Byte: 
+			            case NPTypeCode.Byte:
                         {
                             var iter = arr.AsIterator<byte>();
                             var addr = (byte*)ret.Address;

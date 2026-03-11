@@ -12,7 +12,7 @@ namespace NumSharp
         ///
         /// Perform an indirect sort along the given axis using the algorithm specified by the kind keyword.It returns an array of indices of the same shape as a that index data along the given axis in sorted order.
         /// </summary>
-        public NDArray argsort<T>(int axis = -1)
+        public NDArray argsort<T>(int axis = -1) where T : unmanaged
         {
             if (ndim < axis + 1) {
                 throw new IndexOutOfRangeException($"Axis = {axis} is out bounds for dimension = {ndim}");
@@ -29,16 +29,17 @@ namespace NumSharp
             if (requiredSize.Length == 0)
             {
                 var data = Array;
+                // NumPy argsort always returns int64 (long) indices
                 var sorted = Enumerable.Range(0, size)
-                    .Select(_ => new {Data = data[_], Index = _})
+                    .Select(_ => new {Data = data[_], Index = (long)_})
                     .OrderBy(_ => _.Data)
                     .Select(_ => _.Index)
                     .ToArray();
                 return np.array(sorted);
             }
 
-            // Sorted arguments array
-            var resultArray = new NDArray(typeof(T), shape);
+            // Sorted arguments array - NumPy argsort always returns int64 (long) indices
+            var resultArray = new NDArray(typeof(long), shape);
 
             var accessingIndices = AccessorCreator(requiredSize, Enumerable.Empty<int>(), 0);
 
@@ -99,9 +100,12 @@ namespace NumSharp
         /// <typeparam name="T">Type of parameters</typeparam>
         /// <param name="accessIndex">Indexes to access the data</param>
         /// <returns>Sorted Data</returns>
-        private IEnumerable<int> Sort<T>(IEnumerable<IEnumerable<int>> accessIndex)
+        private IEnumerable<int> Sort<T>(IEnumerable<IEnumerable<int>> accessIndex) where T : unmanaged
         {
-            var sort = accessIndex.Select((x, index) => new {Data = this[x.ToArray()], Index = index});
+            // Extract the scalar value from the NDArray for proper comparison.
+            // this[indices] returns an NDArray even for scalar results, and NDArray
+            // doesn't implement IComparable, so we must extract the underlying value.
+            var sort = accessIndex.Select((x, index) => new {Data = this[x.ToArray()].GetAtIndex<T>(0), Index = index});
             return sort.OrderBy(a => a.Data).Select(a => a.Index);
         }
 

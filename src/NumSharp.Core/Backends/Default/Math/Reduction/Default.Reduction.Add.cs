@@ -140,13 +140,63 @@ namespace NumSharp.Backends
             {
                 if (!(@out is null))
                     return null;
-                //if the given div axis is 1 and can be squeezed out.
-                //Return a copy to avoid sharing memory with the original (NumPy behavior)
+
+                // When axis dimension is 1, sum is identity - just reshape/copy the data.
+                // We need to be careful to properly handle the type conversion and shape.
+                var outputType = typeCode ?? arr.GetTypeCode.GetAccumulatingType();
+
+                // Create the result shape by removing the axis dimension
+                int[] resultDims;
                 if (keepdims)
                 {
-                    return arr.copy();
+                    // keepdims: preserve all dimensions, just set axis dim to 1
+                    resultDims = (int[])shape.dimensions.Clone();
+                    resultDims[axis] = 1;
                 }
-                return np.squeeze_fast(arr, axis).copy();
+                else
+                {
+                    // Remove the axis dimension entirely
+                    resultDims = new int[arr.ndim - 1];
+                    for (int d = 0, rd = 0; d < arr.ndim; d++)
+                    {
+                        if (d != axis)
+                            resultDims[rd++] = shape.dimensions[d];
+                    }
+                }
+
+                // Handle scalar result (empty resultDims)
+                if (resultDims.Length == 0)
+                {
+                    var scalarVal = arr.GetAtIndex(0);
+                    if (outputType != arr.GetTypeCode)
+                        scalarVal = (ValueType)Converts.ChangeType(scalarVal, outputType);
+                    return NDArray.Scalar(scalarVal);
+                }
+
+                // Create result array with correct shape and type
+                var resultShape = new Shape(resultDims);
+                var result = new NDArray(outputType, resultShape, false);
+
+                // Copy data with type conversion if needed
+                if (outputType == arr.GetTypeCode)
+                {
+                    // Same type - just copy
+                    for (int i = 0; i < result.size; i++)
+                    {
+                        result.SetAtIndex(arr.GetAtIndex(i), i);
+                    }
+                }
+                else
+                {
+                    // Type conversion needed
+                    for (int i = 0; i < result.size; i++)
+                    {
+                        var val = arr.GetAtIndex(i);
+                        result.SetAtIndex(Converts.ChangeType(val, outputType), i);
+                    }
+                }
+
+                return result;
             }
 
             // Try SIMD-optimized axis reduction first (when @out is null)

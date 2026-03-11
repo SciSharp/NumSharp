@@ -529,6 +529,14 @@ namespace NumSharp.Backends.Kernels
                 return;
             }
 
+            // Special handling for Mod - NumPy uses floored division semantics (Python %)
+            // Result sign matches divisor sign, not dividend sign (unlike C# %)
+            if (op == BinaryOp.Mod)
+            {
+                EmitModOperation(il, resultType);
+                return;
+            }
+
             // Special handling for boolean
             if (resultType == NPTypeCode.Boolean)
             {
@@ -542,7 +550,6 @@ namespace NumSharp.Backends.Kernels
                 BinaryOp.Subtract => OpCodes.Sub,
                 BinaryOp.Multiply => OpCodes.Mul,
                 BinaryOp.Divide => IsUnsigned(resultType) ? OpCodes.Div_Un : OpCodes.Div,
-                BinaryOp.Mod => IsUnsigned(resultType) ? OpCodes.Rem_Un : OpCodes.Rem,
                 BinaryOp.BitwiseAnd => OpCodes.And,
                 BinaryOp.BitwiseOr => OpCodes.Or,
                 BinaryOp.BitwiseXor => OpCodes.Xor,
@@ -667,6 +674,114 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
+        /// Emit Mod operation using NumPy/Python floored division semantics.
+        /// NumPy: result = a - floor(a / b) * b  (result sign matches divisor sign)
+        /// C#:    result = a - trunc(a / b) * b  (result sign matches dividend sign)
+        /// Stack: [dividend, divisor] -> [result]
+        /// </summary>
+        private static void EmitModOperation(ILGenerator il, NPTypeCode resultType)
+        {
+            // For unsigned types, C# remainder is equivalent to floored modulo
+            if (IsUnsigned(resultType))
+            {
+                il.Emit(OpCodes.Rem_Un);
+                return;
+            }
+
+            // For floating-point types: result = a - floor(a / b) * b
+            if (resultType == NPTypeCode.Single || resultType == NPTypeCode.Double)
+            {
+                // Stack: [a, b]
+                // We need to compute: a - floor(a / b) * b
+
+                var locDivisor = il.DeclareLocal(resultType == NPTypeCode.Single ? typeof(float) : typeof(double));
+                var locDividend = il.DeclareLocal(resultType == NPTypeCode.Single ? typeof(float) : typeof(double));
+
+                // Store divisor (b)
+                il.Emit(OpCodes.Stloc, locDivisor);
+                // Store dividend (a)
+                il.Emit(OpCodes.Stloc, locDividend);
+
+                // Load a for final subtraction
+                il.Emit(OpCodes.Ldloc, locDividend);
+
+                // Compute floor(a / b) * b
+                il.Emit(OpCodes.Ldloc, locDividend);
+                il.Emit(OpCodes.Ldloc, locDivisor);
+                il.Emit(OpCodes.Div);
+
+                // Call Math.Floor
+                if (resultType == NPTypeCode.Single)
+                {
+                    il.Emit(OpCodes.Conv_R8);  // Math.Floor takes double
+                    var floorMethod = typeof(Math).GetMethod(nameof(Math.Floor), new[] { typeof(double) });
+                    il.EmitCall(OpCodes.Call, floorMethod!, null);
+                    il.Emit(OpCodes.Conv_R4);  // Convert back to float
+                }
+                else
+                {
+                    var floorMethod = typeof(Math).GetMethod(nameof(Math.Floor), new[] { typeof(double) });
+                    il.EmitCall(OpCodes.Call, floorMethod!, null);
+                }
+
+                // Multiply by b
+                il.Emit(OpCodes.Ldloc, locDivisor);
+                il.Emit(OpCodes.Mul);
+
+                // Subtract: a - floor(a/b)*b
+                il.Emit(OpCodes.Sub);
+                return;
+            }
+
+            // For signed integer types, compute: a - floor(a / b) * b
+            // Using double arithmetic for correctness
+
+            // Stack: [a, b]
+            var locDivisorInt = il.DeclareLocal(typeof(long));
+            var locDividendInt = il.DeclareLocal(typeof(long));
+
+            // Widen to long for consistency
+            il.Emit(OpCodes.Conv_I8);  // Convert b to long
+            il.Emit(OpCodes.Stloc, locDivisorInt);
+            il.Emit(OpCodes.Conv_I8);  // Convert a to long
+            il.Emit(OpCodes.Stloc, locDividendInt);
+
+            // Load a for final subtraction
+            il.Emit(OpCodes.Ldloc, locDividendInt);
+
+            // Compute floor(a / b) * b using double arithmetic
+            il.Emit(OpCodes.Ldloc, locDividendInt);
+            il.Emit(OpCodes.Conv_R8);  // Convert a to double
+            il.Emit(OpCodes.Ldloc, locDivisorInt);
+            il.Emit(OpCodes.Conv_R8);  // Convert b to double
+            il.Emit(OpCodes.Div);
+
+            // Floor
+            var floorMethodInt = typeof(Math).GetMethod(nameof(Math.Floor), new[] { typeof(double) });
+            il.EmitCall(OpCodes.Call, floorMethodInt!, null);
+
+            // Convert back to long and multiply by b
+            il.Emit(OpCodes.Conv_I8);
+            il.Emit(OpCodes.Ldloc, locDivisorInt);
+            il.Emit(OpCodes.Mul);
+
+            // Subtract: a - floor(a/b)*b (result is long)
+            il.Emit(OpCodes.Sub);
+
+            // Convert to result type
+            switch (resultType)
+            {
+                case NPTypeCode.Int16:
+                    il.Emit(OpCodes.Conv_I2);
+                    break;
+                case NPTypeCode.Int32:
+                    il.Emit(OpCodes.Conv_I4);
+                    break;
+                // Int64 needs no conversion
+            }
+        }
+
+        /// <summary>
         /// Emit conversion from double to target type.
         /// </summary>
         private static void EmitConvertFromDouble(ILGenerator il, NPTypeCode targetType)
@@ -732,20 +847,69 @@ namespace NumSharp.Backends.Kernels
                 return;
             }
 
-            // FloorDivide for decimal: divide then truncate
+            // FloorDivide for decimal: divide then floor toward negative infinity
             if (op == BinaryOp.FloorDivide)
             {
                 // Stack: [dividend, divisor]
-                // Call decimal.Divide, then decimal.Truncate
+                // For NumPy semantics: floor(a/b), not truncate
+                var locDivisor = il.DeclareLocal(typeof(decimal));
+                var locDividend = il.DeclareLocal(typeof(decimal));
+                il.Emit(OpCodes.Stloc, locDivisor);
+                il.Emit(OpCodes.Stloc, locDividend);
+
+                // Compute a / b
+                il.Emit(OpCodes.Ldloc, locDividend);
+                il.Emit(OpCodes.Ldloc, locDivisor);
                 var divideMethod = typeof(decimal).GetMethod("op_Division",
                     BindingFlags.Public | BindingFlags.Static,
                     null, new[] { typeof(decimal), typeof(decimal) }, null);
                 il.EmitCall(OpCodes.Call, divideMethod!, null);
 
-                var truncateMethod = typeof(decimal).GetMethod(nameof(decimal.Truncate),
+                // Call decimal.Floor for floored division toward negative infinity
+                var floorMethod = typeof(decimal).GetMethod(nameof(decimal.Floor),
                     BindingFlags.Public | BindingFlags.Static,
                     null, new[] { typeof(decimal) }, null);
-                il.EmitCall(OpCodes.Call, truncateMethod!, null);
+                il.EmitCall(OpCodes.Call, floorMethod!, null);
+                return;
+            }
+
+            // Mod for decimal: NumPy floored modulo semantics
+            // result = a - floor(a / b) * b
+            if (op == BinaryOp.Mod)
+            {
+                // Stack: [dividend, divisor]
+                var locDivisor = il.DeclareLocal(typeof(decimal));
+                var locDividend = il.DeclareLocal(typeof(decimal));
+                il.Emit(OpCodes.Stloc, locDivisor);
+                il.Emit(OpCodes.Stloc, locDividend);
+
+                // Load a for final subtraction
+                il.Emit(OpCodes.Ldloc, locDividend);
+
+                // Compute floor(a / b)
+                il.Emit(OpCodes.Ldloc, locDividend);
+                il.Emit(OpCodes.Ldloc, locDivisor);
+                var divideMethod = typeof(decimal).GetMethod("op_Division",
+                    BindingFlags.Public | BindingFlags.Static,
+                    null, new[] { typeof(decimal), typeof(decimal) }, null);
+                il.EmitCall(OpCodes.Call, divideMethod!, null);
+                var floorMethod = typeof(decimal).GetMethod(nameof(decimal.Floor),
+                    BindingFlags.Public | BindingFlags.Static,
+                    null, new[] { typeof(decimal) }, null);
+                il.EmitCall(OpCodes.Call, floorMethod!, null);
+
+                // Multiply by b
+                il.Emit(OpCodes.Ldloc, locDivisor);
+                var multiplyMethod = typeof(decimal).GetMethod("op_Multiply",
+                    BindingFlags.Public | BindingFlags.Static,
+                    null, new[] { typeof(decimal), typeof(decimal) }, null);
+                il.EmitCall(OpCodes.Call, multiplyMethod!, null);
+
+                // Subtract: a - floor(a/b)*b
+                var subtractMethod = typeof(decimal).GetMethod("op_Subtraction",
+                    BindingFlags.Public | BindingFlags.Static,
+                    null, new[] { typeof(decimal), typeof(decimal) }, null);
+                il.EmitCall(OpCodes.Call, subtractMethod!, null);
                 return;
             }
 
@@ -755,7 +919,6 @@ namespace NumSharp.Backends.Kernels
                 BinaryOp.Subtract => "op_Subtraction",
                 BinaryOp.Multiply => "op_Multiply",
                 BinaryOp.Divide => "op_Division",
-                BinaryOp.Mod => "op_Modulus",
                 _ => throw new NotSupportedException($"Operation {op} not supported for decimal")
             };
 
