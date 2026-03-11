@@ -1474,30 +1474,11 @@ public class NumpyAlignmentBugTests
 
 /// <summary>
 /// Tests documenting missing or dead-code NumPy functions.
+/// Note: IsNaN and IsFinite have been fixed and moved to np.isnan.Test.cs and np.isfinite.Test.cs
 /// </summary>
 [OpenBugs]
 public class MissingFunctionTests
 {
-    [Test]
-    public void IsNaN_DeadCode()
-    {
-        var arr = np.array(new[] { 1.0, double.NaN, 3.0 });
-
-        var result = np.isnan(arr);
-
-        Assert.IsNotNull(result, "np.isnan returns null - dead code");
-    }
-
-    [Test]
-    public void IsFinite_DeadCode()
-    {
-        var arr = np.array(new[] { 1.0, double.NaN, double.PositiveInfinity });
-
-        var result = np.isfinite(arr);
-
-        Assert.IsNotNull(result, "np.isfinite returns null - dead code");
-    }
-
     [Test]
     public void IsClose_DeadCode()
     {

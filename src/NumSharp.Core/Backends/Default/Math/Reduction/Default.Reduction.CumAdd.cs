@@ -48,17 +48,18 @@ namespace NumSharp.Backends
                 return arr.copy();
             }
 
-            // Materialize broadcast arrays before cumsum iteration.
-            // Broadcast arrays have zero-stride dimensions that confuse the axis iteration.
-            // By materializing upfront, we get contiguous memory with proper strides.
+            // For broadcast arrays, we iterate over the input (which has stride=0 for broadcast dims)
+            // but write to a contiguous output array. Key insight:
+            // - Input: may have stride=0 (broadcast) - read same value multiple times
+            // - Output: must be contiguous - write unique values to distinct memory locations
             NDArray inputArr = arr;
-            if (shape.IsBroadcasted)
-            {
-                inputArr = arr.copy();  // Materialize broadcast to contiguous
-                shape = inputArr.Shape;
-            }
 
-            var ret = new NDArray(typeCode ?? (inputArr.GetTypeCode.GetAccumulatingType()), shape, false);
+            // Create output with CONTIGUOUS strides even if input is broadcast.
+            // Use dimensions only, not the input shape's strides.
+            var outputShape = new Shape(shape.dimensions);  // Fresh contiguous shape
+            var ret = new NDArray(typeCode ?? (inputArr.GetTypeCode.GetAccumulatingType()), outputShape, false);
+
+            // Use the INPUT shape for the axis incrementor (it iterates over input dimensions)
             var iterAxis = new NDCoordinatesAxisIncrementor(ref shape, axis);
             var slices = iterAxis.Slices;
 

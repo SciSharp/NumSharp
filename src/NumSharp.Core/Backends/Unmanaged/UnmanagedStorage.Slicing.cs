@@ -98,16 +98,14 @@ namespace NumSharp.Backends
             if (slices.All(s => Equals(Slice.All, s)))
                 return Alias();
 
-            //handle broadcasted shape: materialize broadcast data into contiguous memory,
-            //then slice the contiguous result. We must use a Clean() shape (not the broadcast
-            //shape) so that strides match the contiguous data layout. Using _shape.Slice(slices)
-            //would attach broadcast strides [1,0] to contiguous data [3,1], causing wrong offsets.
-            if (_shape.IsBroadcasted)
-            {
-                var clonedData = CloneData();
-                var cleanShape = _shape.Clean();
-                return new UnmanagedStorage(clonedData, cleanShape).GetViewInternal(slices);
-            }
+            // Broadcast arrays: DO NOT materialize! Shape.Slice correctly handles stride=0.
+            // The old code materialized broadcast data, losing stride=0 information.
+            // NumPy preserves stride=0 when slicing broadcast views.
+            // Example: broadcast_to([1,2,3], (4,3)) with strides (0,1)
+            //   [:, 0] should give shape (4,) with stride (0,) - NOT materialized stride (3,)
+            //
+            // NOTE: Cumsum and other axis reductions need this to work correctly with
+            // broadcast arrays without requiring memory-expensive .copy() workarounds.
 
             var slicedShape = _shape.Slice(slices);
 

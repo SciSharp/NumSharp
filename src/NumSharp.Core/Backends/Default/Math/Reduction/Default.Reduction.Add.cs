@@ -135,15 +135,11 @@ namespace NumSharp.Backends
             if (axis >= arr.ndim)
                 throw new ArgumentOutOfRangeException(nameof(axis));
 
-            // Handle broadcast arrays: materialize to contiguous memory before reduction.
-            // Broadcast arrays have stride=0 dimensions which causes the iterator-based
-            // reduction to read wrong values. Materializing ensures correct iteration.
+            // Broadcast arrays now work correctly without materialization.
+            // Shape.Slice preserves stride=0, and NDIterator correctly handles it.
+            // The slice view reads from the same memory location for broadcast dimensions
+            // which is exactly what we want for reductions.
             NDArray workingArr = arr;
-            if (shape.IsBroadcasted)
-            {
-                workingArr = arr.copy();  // Materialize broadcast data
-                shape = workingArr.Shape;
-            }
 
             //incase the axis is of size 1
             if (shape[axis] == 1)
