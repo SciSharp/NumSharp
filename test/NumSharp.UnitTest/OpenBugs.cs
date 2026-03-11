@@ -1185,13 +1185,14 @@ namespace NumSharp.UnitTest
 
             result.shape.Should().BeEquivalentTo(new[] { 3 });
 
-            result.GetInt32(0).Should().Be(600,
+            // np.sum promotes int32 to int64 for accumulation (NEP50)
+            result.GetInt64(0).Should().Be(600L,
                 "NumPy: sum(broadcast_to([[100],[200],[300]],(3,3)), axis=0) = [600,600,600]. " +
                 "NumSharp returns [300,300,300] — only summing 2 of 3 rows (100+200=300). " +
                 "The axis=0 reduction iteration uses wrong strides for column-broadcast arrays, " +
                 "causing it to read fewer rows than exist in the broadcast shape.");
-            result.GetInt32(1).Should().Be(600);
-            result.GetInt32(2).Should().Be(600);
+            result.GetInt64(1).Should().Be(600L);
+            result.GetInt64(2).Should().Be(600L);
         }
 
         /// <summary>
@@ -1281,12 +1282,13 @@ namespace NumSharp.UnitTest
 
             result.shape.Should().BeEquivalentTo(new[] { 3 });
 
-            result.GetInt32(0).Should().Be(15,
+            // np.sum promotes int32 to int64 for accumulation (NEP50)
+            result.GetInt64(0).Should().Be(15L,
                 "NumPy: sum(broadcast_to([[1],[2],[3],[4],[5]],(5,3)), axis=0) = [15,15,15]. " +
                 "NumSharp returns [7,7,7]. The wrong value (7 instead of 15) confirms the " +
                 "axis=0 reduction iteration reads wrong memory offsets for column-broadcast.");
-            result.GetInt32(1).Should().Be(15);
-            result.GetInt32(2).Should().Be(15);
+            result.GetInt64(1).Should().Be(15L);
+            result.GetInt64(2).Should().Be(15L);
         }
 
         // ================================================================

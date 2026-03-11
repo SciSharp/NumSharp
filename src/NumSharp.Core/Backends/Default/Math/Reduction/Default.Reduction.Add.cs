@@ -135,6 +135,16 @@ namespace NumSharp.Backends
             if (axis >= arr.ndim)
                 throw new ArgumentOutOfRangeException(nameof(axis));
 
+            // Handle broadcast arrays: materialize to contiguous memory before reduction.
+            // Broadcast arrays have stride=0 dimensions which causes the iterator-based
+            // reduction to read wrong values. Materializing ensures correct iteration.
+            NDArray workingArr = arr;
+            if (shape.IsBroadcasted)
+            {
+                workingArr = arr.copy();  // Materialize broadcast data
+                shape = workingArr.Shape;
+            }
+
             //incase the axis is of size 1
             if (shape[axis] == 1)
             {
@@ -143,7 +153,7 @@ namespace NumSharp.Backends
 
                 // When axis dimension is 1, sum is identity - just reshape/copy the data.
                 // We need to be careful to properly handle the type conversion and shape.
-                var outputType = typeCode ?? arr.GetTypeCode.GetAccumulatingType();
+                var outputType = typeCode ?? workingArr.GetTypeCode.GetAccumulatingType();
 
                 // Create the result shape by removing the axis dimension
                 int[] resultDims;
@@ -156,8 +166,8 @@ namespace NumSharp.Backends
                 else
                 {
                     // Remove the axis dimension entirely
-                    resultDims = new int[arr.ndim - 1];
-                    for (int d = 0, rd = 0; d < arr.ndim; d++)
+                    resultDims = new int[workingArr.ndim - 1];
+                    for (int d = 0, rd = 0; d < workingArr.ndim; d++)
                     {
                         if (d != axis)
                             resultDims[rd++] = shape.dimensions[d];
@@ -167,8 +177,8 @@ namespace NumSharp.Backends
                 // Handle scalar result (empty resultDims)
                 if (resultDims.Length == 0)
                 {
-                    var scalarVal = arr.GetAtIndex(0);
-                    if (outputType != arr.GetTypeCode)
+                    var scalarVal = workingArr.GetAtIndex(0);
+                    if (outputType != workingArr.GetTypeCode)
                         scalarVal = (ValueType)Converts.ChangeType(scalarVal, outputType);
                     return NDArray.Scalar(scalarVal);
                 }
@@ -178,12 +188,12 @@ namespace NumSharp.Backends
                 var result = new NDArray(outputType, resultShape, false);
 
                 // Copy data with type conversion if needed
-                if (outputType == arr.GetTypeCode)
+                if (outputType == workingArr.GetTypeCode)
                 {
                     // Same type - just copy
                     for (int i = 0; i < result.size; i++)
                     {
-                        result.SetAtIndex(arr.GetAtIndex(i), i);
+                        result.SetAtIndex(workingArr.GetAtIndex(i), i);
                     }
                 }
                 else
@@ -191,7 +201,7 @@ namespace NumSharp.Backends
                     // Type conversion needed
                     for (int i = 0; i < result.size; i++)
                     {
-                        var val = arr.GetAtIndex(i);
+                        var val = workingArr.GetAtIndex(i);
                         result.SetAtIndex(Converts.ChangeType(val, outputType), i);
                     }
                 }
@@ -202,15 +212,15 @@ namespace NumSharp.Backends
             // Try SIMD-optimized axis reduction first (when @out is null)
             if (@out is null)
             {
-                var outputType = typeCode ?? arr.GetTypeCode.GetAccumulatingType();
-                var simdResult = sum_axis_simd(arr, axis, outputType);
+                var outputType = typeCode ?? workingArr.GetTypeCode.GetAccumulatingType();
+                var simdResult = sum_axis_simd(workingArr, axis, outputType);
                 if (simdResult != null)
                 {
                     if (keepdims)
                     {
                         // Insert dimension of size 1 at the reduced axis position
-                        var keepdimsShape = new int[arr.ndim];
-                        for (int d = 0, sd = 0; d < arr.ndim; d++)
+                        var keepdimsShape = new int[workingArr.ndim];
+                        for (int d = 0, sd = 0; d < workingArr.ndim; d++)
                         {
                             if (d == axis)
                                 keepdimsShape[d] = 1;
@@ -234,7 +244,7 @@ namespace NumSharp.Backends
                     throw new IncorrectShapeException($"Unable to perform {nameof(ReduceAdd)} when @out is specific but is not shaped {axedShape}.");
                 ret = @out;
             } else
-                ret = new NDArray(typeCode ?? (arr.GetTypeCode.GetAccumulatingType()), axedShape, false);
+                ret = new NDArray(typeCode ?? (workingArr.GetTypeCode.GetAccumulatingType()), axedShape, false);
 
             //prepare iterators
             var iterAxis = new NDCoordinatesAxisIncrementor(ref shape, axis);
@@ -244,7 +254,7 @@ namespace NumSharp.Backends
 
 #if _REGEN
             #region Compute
-            switch (arr.GetTypeCode)
+            switch (workingArr.GetTypeCode)
 		    {
 			    %foreach supported_numericals,supported_numericals_lowercase%
 			    case NPTypeCode.#1: 
@@ -256,7 +266,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<#2>();
+                                var iter = workingArr[slices].AsIterator<#2>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 |#102 sum = default;
@@ -282,7 +292,7 @@ namespace NumSharp.Backends
 
             #region Compute
 
-            switch (arr.GetTypeCode)
+            switch (workingArr.GetTypeCode)
             {
                 case NPTypeCode.Byte:
                 {
@@ -292,7 +302,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<byte>();
+                                var iter = workingArr[slices].AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 byte sum = default;
@@ -309,7 +319,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<byte>();
+                                var iter = workingArr[slices].AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 short sum = default;
@@ -326,7 +336,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<byte>();
+                                var iter = workingArr[slices].AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 ushort sum = default;
@@ -343,7 +353,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<byte>();
+                                var iter = workingArr[slices].AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 int sum = default;
@@ -360,7 +370,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<byte>();
+                                var iter = workingArr[slices].AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 uint sum = default;
@@ -377,7 +387,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<byte>();
+                                var iter = workingArr[slices].AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 long sum = default;
@@ -394,7 +404,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<byte>();
+                                var iter = workingArr[slices].AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 ulong sum = default;
@@ -411,7 +421,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<byte>();
+                                var iter = workingArr[slices].AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 char sum = default;
@@ -428,7 +438,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<byte>();
+                                var iter = workingArr[slices].AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 double sum = default;
@@ -445,7 +455,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<byte>();
+                                var iter = workingArr[slices].AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 float sum = default;
@@ -462,7 +472,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<byte>();
+                                var iter = workingArr[slices].AsIterator<byte>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 decimal sum = default;
@@ -490,7 +500,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<short>();
+                                var iter = workingArr[slices].AsIterator<short>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 byte sum = default;
@@ -507,7 +517,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<short>();
+                                var iter = workingArr[slices].AsIterator<short>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 short sum = default;
@@ -524,7 +534,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<short>();
+                                var iter = workingArr[slices].AsIterator<short>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 ushort sum = default;
@@ -541,7 +551,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<short>();
+                                var iter = workingArr[slices].AsIterator<short>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 int sum = default;
@@ -558,7 +568,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<short>();
+                                var iter = workingArr[slices].AsIterator<short>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 uint sum = default;
@@ -575,7 +585,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<short>();
+                                var iter = workingArr[slices].AsIterator<short>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 long sum = default;
@@ -592,7 +602,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<short>();
+                                var iter = workingArr[slices].AsIterator<short>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 ulong sum = default;
@@ -609,7 +619,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<short>();
+                                var iter = workingArr[slices].AsIterator<short>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 char sum = default;
@@ -626,7 +636,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<short>();
+                                var iter = workingArr[slices].AsIterator<short>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 double sum = default;
@@ -643,7 +653,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<short>();
+                                var iter = workingArr[slices].AsIterator<short>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 float sum = default;
@@ -660,7 +670,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<short>();
+                                var iter = workingArr[slices].AsIterator<short>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 decimal sum = default;
@@ -688,7 +698,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ushort>();
+                                var iter = workingArr[slices].AsIterator<ushort>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 byte sum = default;
@@ -705,7 +715,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ushort>();
+                                var iter = workingArr[slices].AsIterator<ushort>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 short sum = default;
@@ -722,7 +732,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ushort>();
+                                var iter = workingArr[slices].AsIterator<ushort>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 ushort sum = default;
@@ -739,7 +749,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ushort>();
+                                var iter = workingArr[slices].AsIterator<ushort>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 int sum = default;
@@ -756,7 +766,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ushort>();
+                                var iter = workingArr[slices].AsIterator<ushort>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 uint sum = default;
@@ -773,7 +783,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ushort>();
+                                var iter = workingArr[slices].AsIterator<ushort>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 long sum = default;
@@ -790,7 +800,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ushort>();
+                                var iter = workingArr[slices].AsIterator<ushort>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 ulong sum = default;
@@ -807,7 +817,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ushort>();
+                                var iter = workingArr[slices].AsIterator<ushort>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 char sum = default;
@@ -824,7 +834,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ushort>();
+                                var iter = workingArr[slices].AsIterator<ushort>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 double sum = default;
@@ -841,7 +851,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ushort>();
+                                var iter = workingArr[slices].AsIterator<ushort>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 float sum = default;
@@ -858,7 +868,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ushort>();
+                                var iter = workingArr[slices].AsIterator<ushort>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 decimal sum = default;
@@ -886,7 +896,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<int>();
+                                var iter = workingArr[slices].AsIterator<int>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 byte sum = default;
@@ -903,7 +913,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<int>();
+                                var iter = workingArr[slices].AsIterator<int>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 short sum = default;
@@ -920,7 +930,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<int>();
+                                var iter = workingArr[slices].AsIterator<int>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 ushort sum = default;
@@ -937,7 +947,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<int>();
+                                var iter = workingArr[slices].AsIterator<int>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 int sum = default;
@@ -954,7 +964,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<int>();
+                                var iter = workingArr[slices].AsIterator<int>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 uint sum = default;
@@ -971,7 +981,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<int>();
+                                var iter = workingArr[slices].AsIterator<int>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 long sum = default;
@@ -988,7 +998,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<int>();
+                                var iter = workingArr[slices].AsIterator<int>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 ulong sum = default;
@@ -1005,7 +1015,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<int>();
+                                var iter = workingArr[slices].AsIterator<int>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 char sum = default;
@@ -1022,7 +1032,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<int>();
+                                var iter = workingArr[slices].AsIterator<int>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 double sum = default;
@@ -1039,7 +1049,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<int>();
+                                var iter = workingArr[slices].AsIterator<int>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 float sum = default;
@@ -1056,7 +1066,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<int>();
+                                var iter = workingArr[slices].AsIterator<int>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 decimal sum = default;
@@ -1084,7 +1094,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<uint>();
+                                var iter = workingArr[slices].AsIterator<uint>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 byte sum = default;
@@ -1101,7 +1111,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<uint>();
+                                var iter = workingArr[slices].AsIterator<uint>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 short sum = default;
@@ -1118,7 +1128,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<uint>();
+                                var iter = workingArr[slices].AsIterator<uint>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 ushort sum = default;
@@ -1135,7 +1145,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<uint>();
+                                var iter = workingArr[slices].AsIterator<uint>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 int sum = default;
@@ -1152,7 +1162,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<uint>();
+                                var iter = workingArr[slices].AsIterator<uint>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 uint sum = default;
@@ -1169,7 +1179,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<uint>();
+                                var iter = workingArr[slices].AsIterator<uint>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 long sum = default;
@@ -1186,7 +1196,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<uint>();
+                                var iter = workingArr[slices].AsIterator<uint>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 ulong sum = default;
@@ -1203,7 +1213,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<uint>();
+                                var iter = workingArr[slices].AsIterator<uint>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 char sum = default;
@@ -1220,7 +1230,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<uint>();
+                                var iter = workingArr[slices].AsIterator<uint>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 double sum = default;
@@ -1237,7 +1247,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<uint>();
+                                var iter = workingArr[slices].AsIterator<uint>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 float sum = default;
@@ -1254,7 +1264,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<uint>();
+                                var iter = workingArr[slices].AsIterator<uint>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 decimal sum = default;
@@ -1282,7 +1292,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<long>();
+                                var iter = workingArr[slices].AsIterator<long>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 byte sum = default;
@@ -1299,7 +1309,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<long>();
+                                var iter = workingArr[slices].AsIterator<long>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 short sum = default;
@@ -1316,7 +1326,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<long>();
+                                var iter = workingArr[slices].AsIterator<long>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 ushort sum = default;
@@ -1333,7 +1343,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<long>();
+                                var iter = workingArr[slices].AsIterator<long>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 int sum = default;
@@ -1350,7 +1360,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<long>();
+                                var iter = workingArr[slices].AsIterator<long>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 uint sum = default;
@@ -1367,7 +1377,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<long>();
+                                var iter = workingArr[slices].AsIterator<long>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 long sum = default;
@@ -1384,7 +1394,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<long>();
+                                var iter = workingArr[slices].AsIterator<long>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 ulong sum = default;
@@ -1401,7 +1411,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<long>();
+                                var iter = workingArr[slices].AsIterator<long>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 char sum = default;
@@ -1418,7 +1428,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<long>();
+                                var iter = workingArr[slices].AsIterator<long>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 double sum = default;
@@ -1435,7 +1445,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<long>();
+                                var iter = workingArr[slices].AsIterator<long>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 float sum = default;
@@ -1452,7 +1462,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<long>();
+                                var iter = workingArr[slices].AsIterator<long>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 decimal sum = default;
@@ -1480,7 +1490,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ulong>();
+                                var iter = workingArr[slices].AsIterator<ulong>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 byte sum = default;
@@ -1497,7 +1507,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ulong>();
+                                var iter = workingArr[slices].AsIterator<ulong>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 short sum = default;
@@ -1514,7 +1524,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ulong>();
+                                var iter = workingArr[slices].AsIterator<ulong>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 ushort sum = default;
@@ -1531,7 +1541,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ulong>();
+                                var iter = workingArr[slices].AsIterator<ulong>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 int sum = default;
@@ -1548,7 +1558,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ulong>();
+                                var iter = workingArr[slices].AsIterator<ulong>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 uint sum = default;
@@ -1565,7 +1575,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ulong>();
+                                var iter = workingArr[slices].AsIterator<ulong>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 long sum = default;
@@ -1582,7 +1592,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ulong>();
+                                var iter = workingArr[slices].AsIterator<ulong>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 ulong sum = default;
@@ -1599,7 +1609,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ulong>();
+                                var iter = workingArr[slices].AsIterator<ulong>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 char sum = default;
@@ -1616,7 +1626,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ulong>();
+                                var iter = workingArr[slices].AsIterator<ulong>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 double sum = default;
@@ -1633,7 +1643,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ulong>();
+                                var iter = workingArr[slices].AsIterator<ulong>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 float sum = default;
@@ -1650,7 +1660,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<ulong>();
+                                var iter = workingArr[slices].AsIterator<ulong>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 decimal sum = default;
@@ -1678,7 +1688,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<char>();
+                                var iter = workingArr[slices].AsIterator<char>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 byte sum = default;
@@ -1695,7 +1705,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<char>();
+                                var iter = workingArr[slices].AsIterator<char>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 short sum = default;
@@ -1712,7 +1722,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<char>();
+                                var iter = workingArr[slices].AsIterator<char>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 ushort sum = default;
@@ -1729,7 +1739,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<char>();
+                                var iter = workingArr[slices].AsIterator<char>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 int sum = default;
@@ -1746,7 +1756,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<char>();
+                                var iter = workingArr[slices].AsIterator<char>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 uint sum = default;
@@ -1763,7 +1773,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<char>();
+                                var iter = workingArr[slices].AsIterator<char>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 long sum = default;
@@ -1780,7 +1790,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<char>();
+                                var iter = workingArr[slices].AsIterator<char>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 ulong sum = default;
@@ -1797,7 +1807,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<char>();
+                                var iter = workingArr[slices].AsIterator<char>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 char sum = default;
@@ -1814,7 +1824,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<char>();
+                                var iter = workingArr[slices].AsIterator<char>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 double sum = default;
@@ -1831,7 +1841,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<char>();
+                                var iter = workingArr[slices].AsIterator<char>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 float sum = default;
@@ -1848,7 +1858,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<char>();
+                                var iter = workingArr[slices].AsIterator<char>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 decimal sum = default;
@@ -1876,7 +1886,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<double>();
+                                var iter = workingArr[slices].AsIterator<double>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 byte sum = default;
@@ -1893,7 +1903,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<double>();
+                                var iter = workingArr[slices].AsIterator<double>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 short sum = default;
@@ -1910,7 +1920,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<double>();
+                                var iter = workingArr[slices].AsIterator<double>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 ushort sum = default;
@@ -1927,7 +1937,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<double>();
+                                var iter = workingArr[slices].AsIterator<double>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 int sum = default;
@@ -1944,7 +1954,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<double>();
+                                var iter = workingArr[slices].AsIterator<double>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 uint sum = default;
@@ -1961,7 +1971,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<double>();
+                                var iter = workingArr[slices].AsIterator<double>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 long sum = default;
@@ -1978,7 +1988,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<double>();
+                                var iter = workingArr[slices].AsIterator<double>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 ulong sum = default;
@@ -1995,7 +2005,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<double>();
+                                var iter = workingArr[slices].AsIterator<double>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 char sum = default;
@@ -2012,7 +2022,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<double>();
+                                var iter = workingArr[slices].AsIterator<double>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 double sum = default;
@@ -2029,7 +2039,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<double>();
+                                var iter = workingArr[slices].AsIterator<double>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 float sum = default;
@@ -2046,7 +2056,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<double>();
+                                var iter = workingArr[slices].AsIterator<double>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 decimal sum = default;
@@ -2074,7 +2084,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<float>();
+                                var iter = workingArr[slices].AsIterator<float>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 byte sum = default;
@@ -2091,7 +2101,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<float>();
+                                var iter = workingArr[slices].AsIterator<float>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 short sum = default;
@@ -2108,7 +2118,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<float>();
+                                var iter = workingArr[slices].AsIterator<float>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 ushort sum = default;
@@ -2125,7 +2135,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<float>();
+                                var iter = workingArr[slices].AsIterator<float>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 int sum = default;
@@ -2142,7 +2152,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<float>();
+                                var iter = workingArr[slices].AsIterator<float>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 uint sum = default;
@@ -2159,7 +2169,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<float>();
+                                var iter = workingArr[slices].AsIterator<float>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 long sum = default;
@@ -2176,7 +2186,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<float>();
+                                var iter = workingArr[slices].AsIterator<float>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 ulong sum = default;
@@ -2193,7 +2203,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<float>();
+                                var iter = workingArr[slices].AsIterator<float>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 char sum = default;
@@ -2210,7 +2220,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<float>();
+                                var iter = workingArr[slices].AsIterator<float>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 double sum = default;
@@ -2227,7 +2237,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<float>();
+                                var iter = workingArr[slices].AsIterator<float>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 float sum = default;
@@ -2244,7 +2254,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<float>();
+                                var iter = workingArr[slices].AsIterator<float>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 decimal sum = default;
@@ -2272,7 +2282,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<decimal>();
+                                var iter = workingArr[slices].AsIterator<decimal>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 byte sum = default;
@@ -2289,7 +2299,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<decimal>();
+                                var iter = workingArr[slices].AsIterator<decimal>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 short sum = default;
@@ -2306,7 +2316,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<decimal>();
+                                var iter = workingArr[slices].AsIterator<decimal>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 ushort sum = default;
@@ -2323,7 +2333,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<decimal>();
+                                var iter = workingArr[slices].AsIterator<decimal>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 int sum = default;
@@ -2340,7 +2350,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<decimal>();
+                                var iter = workingArr[slices].AsIterator<decimal>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 uint sum = default;
@@ -2357,7 +2367,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<decimal>();
+                                var iter = workingArr[slices].AsIterator<decimal>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 long sum = default;
@@ -2374,7 +2384,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<decimal>();
+                                var iter = workingArr[slices].AsIterator<decimal>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 ulong sum = default;
@@ -2391,7 +2401,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<decimal>();
+                                var iter = workingArr[slices].AsIterator<decimal>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 char sum = default;
@@ -2408,7 +2418,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<decimal>();
+                                var iter = workingArr[slices].AsIterator<decimal>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 double sum = default;
@@ -2425,7 +2435,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<decimal>();
+                                var iter = workingArr[slices].AsIterator<decimal>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 float sum = default;
@@ -2442,7 +2452,7 @@ namespace NumSharp.Backends
                         {
                             do
                             {
-                                var iter = arr[slices].AsIterator<decimal>();
+                                var iter = workingArr[slices].AsIterator<decimal>();
                                 var moveNext = iter.MoveNext;
                                 var hasNext = iter.HasNext;
                                 decimal sum = default;
