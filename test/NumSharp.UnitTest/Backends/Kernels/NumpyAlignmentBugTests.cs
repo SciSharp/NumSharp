@@ -839,20 +839,19 @@ public class NumpyAlignmentBugTests
         // >>> np.sum(np.arange(85000, dtype=np.int32))
         // 3612457500  (auto-promoted to int64)
         //
-        // NumSharp overflows because it keeps int32
+        // FIXED: NumSharp now auto-promotes int32 to int64 (NEP50)
         var arr = np.arange(85000);  // Returns int32 in NumSharp
         var sum = np.sum(arr);
 
         // Expected: 85000 * 84999 / 2 = 3,612,457,500
         // This exceeds int32.MaxValue (2,147,483,647)
-        // NumSharp BUG: returns -682,509,796 (overflow)
-        // NumPy auto-promotes to int64 and returns correct value
+        // FIXED: NumSharp now auto-promotes to int64 and returns correct value
 
         var expected = 3612457500L;
-        var actual = sum.GetInt32(0);  // Using GetInt32 since NumSharp returns int32
+        var actual = sum.GetInt64(0);  // Using GetInt64 since sum now returns int64
 
-        Assert.AreEqual(expected, (long)actual,
-            $"Sum should be {expected}, got {actual} (overflow). NumPy auto-promotes to int64.");
+        Assert.AreEqual(expected, actual,
+            $"Sum should be {expected}, got {actual}. NumPy auto-promotes to int64.");
     }
 
     [Test]
@@ -863,7 +862,8 @@ public class NumpyAlignmentBugTests
         var arr = np.arange(50000);
         var sum = np.sum(arr);
 
-        Assert.AreEqual(1249975000, sum.GetInt32(0),
+        // np.sum promotes int32 to int64 for accumulation (NEP50)
+        Assert.AreEqual(1249975000L, sum.GetInt64(0),
             "Sum of arange(50000) should be 1,249,975,000");
     }
 
@@ -871,16 +871,15 @@ public class NumpyAlignmentBugTests
     public void Bug20_Sum_LargeArray_Overflow()
     {
         // 100000 * 99999 / 2 = 4,999,950,000 (exceeds int32)
-        // NumSharp returns 704,982,704 (overflow)
+        // FIXED: NumSharp now auto-promotes to int64
         var arr = np.arange(100000);
         var sum = np.sum(arr);
 
         var expected = 4999950000L;
-        var actual = sum.GetInt32(0);
+        var actual = sum.GetInt64(0);  // Using GetInt64 since sum now returns int64
 
-        // This will fail due to overflow - documenting the bug
-        Assert.AreEqual(expected, (long)actual,
-            $"Sum should be {expected}, got {actual} (overflow)");
+        Assert.AreEqual(expected, actual,
+            $"Sum should be {expected}, got {actual}.");
     }
 
     [Test]
@@ -1088,8 +1087,9 @@ public class NumpyAlignmentBugTests
 
         Assert.AreEqual(1, result.ndim);
         Assert.AreEqual(2, result.size);
-        Assert.AreEqual(3, result.GetInt32(0));
-        Assert.AreEqual(7, result.GetInt32(1));
+        // np.sum promotes int32 to int64 for accumulation (NEP50)
+        Assert.AreEqual(3L, result.GetInt64(0));
+        Assert.AreEqual(7L, result.GetInt64(1));
     }
 
     #endregion
