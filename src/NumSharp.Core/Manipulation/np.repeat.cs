@@ -151,6 +151,210 @@ namespace NumSharp
         }
 
         /// <summary>
+        ///     Repeat elements of an array with per-element repeat counts.
+        /// </summary>
+        /// <param name="a">Input array.</param>
+        /// <param name="repeats">Array of repeat counts for each element. Must have the same size as the flattened input array.</param>
+        /// <returns>A new array with each element repeated according to the corresponding count in repeats.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.repeat.html</remarks>
+        public static NDArray repeat(NDArray a, NDArray repeats)
+        {
+            a = a.ravel();
+            var repeatsFlat = repeats.ravel();
+
+            if (a.size != repeatsFlat.size)
+                throw new ArgumentException($"repeats array size ({repeatsFlat.size}) must match input array size ({a.size})");
+
+            // Calculate total output size by summing all repeat counts
+            int totalSize = 0;
+            for (int i = 0; i < repeatsFlat.size; i++)
+            {
+                int count = repeatsFlat.GetInt32(i);
+                if (count < 0)
+                    throw new ArgumentException("repeats may not contain negative values");
+                totalSize += count;
+            }
+
+            // Handle empty result
+            if (totalSize == 0)
+                return new NDArray(a.GetTypeCode, Shape.Vector(0));
+
+            switch (a.GetTypeCode)
+            {
+                case NPTypeCode.Boolean:
+                {
+                    var ret = new NDArray(NPTypeCode.Boolean, Shape.Vector(totalSize));
+                    var data = a.MakeGeneric<bool>();
+                    int outIdx = 0;
+                    for (int i = 0; i < a.size; i++)
+                    {
+                        int count = repeatsFlat.GetInt32(i);
+                        var val = data.GetAtIndex(i);
+                        for (int j = 0; j < count; j++)
+                            ret.itemset(new int[1] { outIdx++ }, val);
+                    }
+                    return ret;
+                }
+                case NPTypeCode.Byte:
+                {
+                    var ret = new NDArray(NPTypeCode.Byte, Shape.Vector(totalSize));
+                    var data = a.MakeGeneric<byte>();
+                    int outIdx = 0;
+                    for (int i = 0; i < a.size; i++)
+                    {
+                        int count = repeatsFlat.GetInt32(i);
+                        var val = data.GetAtIndex(i);
+                        for (int j = 0; j < count; j++)
+                            ret.itemset(new int[1] { outIdx++ }, val);
+                    }
+                    return ret;
+                }
+                case NPTypeCode.Int16:
+                {
+                    var ret = new NDArray(NPTypeCode.Int16, Shape.Vector(totalSize));
+                    var data = a.MakeGeneric<short>();
+                    int outIdx = 0;
+                    for (int i = 0; i < a.size; i++)
+                    {
+                        int count = repeatsFlat.GetInt32(i);
+                        var val = data.GetAtIndex(i);
+                        for (int j = 0; j < count; j++)
+                            ret.itemset(new int[1] { outIdx++ }, val);
+                    }
+                    return ret;
+                }
+                case NPTypeCode.UInt16:
+                {
+                    var ret = new NDArray(NPTypeCode.UInt16, Shape.Vector(totalSize));
+                    var data = a.MakeGeneric<ushort>();
+                    int outIdx = 0;
+                    for (int i = 0; i < a.size; i++)
+                    {
+                        int count = repeatsFlat.GetInt32(i);
+                        var val = data.GetAtIndex(i);
+                        for (int j = 0; j < count; j++)
+                            ret.itemset(new int[1] { outIdx++ }, val);
+                    }
+                    return ret;
+                }
+                case NPTypeCode.Int32:
+                {
+                    var ret = new NDArray(NPTypeCode.Int32, Shape.Vector(totalSize));
+                    var data = a.MakeGeneric<int>();
+                    int outIdx = 0;
+                    for (int i = 0; i < a.size; i++)
+                    {
+                        int count = repeatsFlat.GetInt32(i);
+                        var val = data.GetAtIndex(i);
+                        for (int j = 0; j < count; j++)
+                            ret.itemset(new int[1] { outIdx++ }, val);
+                    }
+                    return ret;
+                }
+                case NPTypeCode.UInt32:
+                {
+                    var ret = new NDArray(NPTypeCode.UInt32, Shape.Vector(totalSize));
+                    var data = a.MakeGeneric<uint>();
+                    int outIdx = 0;
+                    for (int i = 0; i < a.size; i++)
+                    {
+                        int count = repeatsFlat.GetInt32(i);
+                        var val = data.GetAtIndex(i);
+                        for (int j = 0; j < count; j++)
+                            ret.itemset(new int[1] { outIdx++ }, val);
+                    }
+                    return ret;
+                }
+                case NPTypeCode.Int64:
+                {
+                    var ret = new NDArray(NPTypeCode.Int64, Shape.Vector(totalSize));
+                    var data = a.MakeGeneric<long>();
+                    int outIdx = 0;
+                    for (int i = 0; i < a.size; i++)
+                    {
+                        int count = repeatsFlat.GetInt32(i);
+                        var val = data.GetAtIndex(i);
+                        for (int j = 0; j < count; j++)
+                            ret.itemset(new int[1] { outIdx++ }, val);
+                    }
+                    return ret;
+                }
+                case NPTypeCode.UInt64:
+                {
+                    var ret = new NDArray(NPTypeCode.UInt64, Shape.Vector(totalSize));
+                    var data = a.MakeGeneric<ulong>();
+                    int outIdx = 0;
+                    for (int i = 0; i < a.size; i++)
+                    {
+                        int count = repeatsFlat.GetInt32(i);
+                        var val = data.GetAtIndex(i);
+                        for (int j = 0; j < count; j++)
+                            ret.itemset(new int[1] { outIdx++ }, val);
+                    }
+                    return ret;
+                }
+                case NPTypeCode.Char:
+                {
+                    var ret = new NDArray(NPTypeCode.Char, Shape.Vector(totalSize));
+                    var data = a.MakeGeneric<char>();
+                    int outIdx = 0;
+                    for (int i = 0; i < a.size; i++)
+                    {
+                        int count = repeatsFlat.GetInt32(i);
+                        var val = data.GetAtIndex(i);
+                        for (int j = 0; j < count; j++)
+                            ret.itemset(new int[1] { outIdx++ }, val);
+                    }
+                    return ret;
+                }
+                case NPTypeCode.Double:
+                {
+                    var ret = new NDArray(NPTypeCode.Double, Shape.Vector(totalSize));
+                    var data = a.MakeGeneric<double>();
+                    int outIdx = 0;
+                    for (int i = 0; i < a.size; i++)
+                    {
+                        int count = repeatsFlat.GetInt32(i);
+                        var val = data.GetAtIndex(i);
+                        for (int j = 0; j < count; j++)
+                            ret.itemset(new int[1] { outIdx++ }, val);
+                    }
+                    return ret;
+                }
+                case NPTypeCode.Single:
+                {
+                    var ret = new NDArray(NPTypeCode.Single, Shape.Vector(totalSize));
+                    var data = a.MakeGeneric<float>();
+                    int outIdx = 0;
+                    for (int i = 0; i < a.size; i++)
+                    {
+                        int count = repeatsFlat.GetInt32(i);
+                        var val = data.GetAtIndex(i);
+                        for (int j = 0; j < count; j++)
+                            ret.itemset(new int[1] { outIdx++ }, val);
+                    }
+                    return ret;
+                }
+                case NPTypeCode.Decimal:
+                {
+                    var ret = new NDArray(NPTypeCode.Decimal, Shape.Vector(totalSize));
+                    var data = a.MakeGeneric<decimal>();
+                    int outIdx = 0;
+                    for (int i = 0; i < a.size; i++)
+                    {
+                        int count = repeatsFlat.GetInt32(i);
+                        var val = data.GetAtIndex(i);
+                        for (int j = 0; j < count; j++)
+                            ret.itemset(new int[1] { outIdx++ }, val);
+                    }
+                    return ret;
+                }
+                default:
+                    throw new NotSupportedException();
+            }
+        }
+
+        /// <summary>
         ///     Repeat a scalar.
         /// </summary>
         /// <param name="a">Input scalar.</param>

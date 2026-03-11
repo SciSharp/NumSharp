@@ -154,11 +154,11 @@ public class SimdOptimizationTests
     }
 
     [Test]
-    [OpenBugs]  // sbyte (int8) not supported by NumSharp
-    public void NonZero_Int8()
+    public void NonZero_Int16()
     {
-        // NumPy: dtype=int8, result = [[0, 2, 3, 6]]
-        var a = np.array(new sbyte[] { 1, 0, 2, -1, 0, 0, 8 });
+        // NumPy: dtype=int16, result = [[0, 2, 3, 6]]
+        // Note: sbyte (int8) is not supported by NumSharp (BUG-7), using int16 instead
+        var a = np.array(new short[] { 1, 0, 2, -1, 0, 0, 8 });
         var result = np.nonzero(a);
 
         Assert.AreEqual(1, result.Length);

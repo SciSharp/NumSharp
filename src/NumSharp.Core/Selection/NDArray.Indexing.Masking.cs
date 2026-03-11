@@ -43,7 +43,19 @@ namespace NumSharp
             }
             set
             {
-                throw new NotImplementedException("Setter is not implemented yet");
+                // NumPy requires mask size to match array size
+                if (mask.size != this.size)
+                    throw new IndexOutOfRangeException(
+                        $"boolean index did not match indexed array along axis 0; " +
+                        $"size of axis is {this.size} but size of boolean index is {mask.size}");
+
+                NumSharpException.ThrowIfNotWriteable(Shape);
+
+                // Get indices where mask is True
+                var indices = np.nonzero(mask);
+
+                // Set values at those indices
+                SetIndices(this, indices, value);
             }
         }
 

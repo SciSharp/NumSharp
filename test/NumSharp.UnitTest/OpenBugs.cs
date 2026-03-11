@@ -450,112 +450,9 @@ namespace NumSharp.UnitTest
         }
 
         // ================================================================
-        //
-        //  BUG 5 / BUG 9: np.minimum broadcast produces wrong values
-        //
-        //  SEVERITY: High — silently returns wrong computation results.
-        //
-        //  np.minimum with broadcasting produces transposed/swapped values.
-        //  The bug affects ALL numeric types: int, float, double, long, byte.
-        //
-        //  NumPy: minimum([1,5,3], [[2],[4]]) = [[1,2,2],[1,4,3]]
-        //  NumSharp: Returns [[1,4,2],[1,2,3]] for ALL types.
-        //
-        //  The pattern: row 0 should use b[0]=2 for comparisons, but gets
-        //  b[1]=4. Row 1 should use b[1]=4, but gets b[0]=2. The b values
-        //  are transposed between rows.
-        //
-        //  CRITICAL OBSERVATION: np.maximum with the EXACT same inputs
-        //  returns CORRECT values: [[2,5,3],[4,5,4]]. This proves the
-        //  broadcasting infrastructure (shape resolution, stride setup) is
-        //  correct — the bug is specifically in minimum's iteration logic.
-        //
-        //  Most likely: minimum creates its MultiIterator or paired iteration
-        //  with the two input arrays in swapped order compared to maximum.
-        //  Since minimum(a,b) ≠ minimum(b,a) when both are < and > the
-        //  comparison value, swapping the iteration order of the two broadcast
-        //  dimensions produces the transposed result.
-        //
-        //  FIX APPROACH: Check the argument order in np.minimum's call to
-        //  the broadcast iteration. Compare with np.maximum which works.
-        //
-        //  PYTHON VERIFICATION:
-        //    >>> np.minimum(np.array([1,5,3]), np.array([[2],[4]]))
-        //    array([[1, 2, 2], [1, 4, 3]])
-        //    >>> np.minimum(np.array([1.,5.,3.]), np.array([[2.],[4.]]))
-        //    array([[1., 2., 2.], [1., 4., 3.]])
-        //    >>> np.minimum(np.array([1,5,3], dtype=np.float32),
-        //    ...            np.array([[2],[4]], dtype=np.float32))
-        //    array([[1., 2., 2.], [1., 4., 3.]], dtype=float32)
-        //
+        // BUG 5 / BUG 9: np.minimum broadcast - FIXED
+        // Tests moved to Math/np.minimum.Test.cs
         // ================================================================
-
-        /// <summary>
-        ///     BUG 5: np.minimum with int32 broadcast returns wrong values.
-        ///     Row 0 gets b[1]=4 instead of b[0]=2, and vice versa.
-        ///
-        ///     NumPy:   [[1, 2, 2], [1, 4, 3]]
-        ///     NumSharp: [[1, 4, 2], [1, 2, 3]]  (b values transposed)
-        /// </summary>
-        [Test]
-        public void Bug_Minimum_IntBroadcast_WrongValues()
-        {
-            var a = np.array(new int[] { 1, 5, 3 });
-            var b = np.array(new int[,] { { 2 }, { 4 } });
-            var r = np.minimum(a, b);
-
-            r.shape.Should().BeEquivalentTo(new[] { 2, 3 });
-
-            var expected = np.array(new int[,] { { 1, 2, 2 }, { 1, 4, 3 } });
-            np.array_equal(r, expected).Should().BeTrue(
-                "NumPy: minimum([1,5,3], [[2],[4]]) = [[1,2,2],[1,4,3]]. " +
-                "NumSharp returns [[1,4,2],[1,2,3]] — the b column vector values " +
-                "are transposed between rows, suggesting the broadcast iteration " +
-                "in minimum reads the two inputs in swapped order. np.maximum " +
-                "with identical inputs returns correct values.");
-        }
-
-        /// <summary>
-        ///     BUG 9a: np.minimum with double broadcast — same transposition bug.
-        ///     Confirms the bug is type-independent (not an int-specific code path).
-        ///
-        ///     NumPy:   [[1., 2., 2.], [1., 4., 3.]]
-        ///     NumSharp: [[1., 4., 2.], [1., 2., 3.]]
-        /// </summary>
-        [Test]
-        public void Bug_Minimum_DoubleBroadcast_WrongValues()
-        {
-            var a = np.array(new double[] { 1, 5, 3 });
-            var b = np.array(new double[,] { { 2 }, { 4 } });
-            var r = np.minimum(a, b);
-
-            r.shape.Should().BeEquivalentTo(new[] { 2, 3 });
-
-            var expected = np.array(new double[,] { { 1, 2, 2 }, { 1, 4, 3 } });
-            np.array_equal(r, expected).Should().BeTrue(
-                "NumPy: minimum([1.,5.,3.], [[2.],[4.]]) = [[1,2,2],[1,4,3]]. " +
-                "NumSharp returns [[1,4,2],[1,2,3]] for double — same transposition " +
-                "as int, confirming the bug is in the iteration logic, not type-specific.");
-        }
-
-        /// <summary>
-        ///     BUG 9b: np.minimum with float32 broadcast — same transposition bug.
-        ///
-        ///     NumPy:   [[1f, 2f, 2f], [1f, 4f, 3f]]
-        ///     NumSharp: [[1f, 4f, 2f], [1f, 2f, 3f]]
-        /// </summary>
-        [Test]
-        public void Bug_Minimum_FloatBroadcast_WrongValues()
-        {
-            var a = np.array(new float[] { 1f, 5f, 3f });
-            var b = np.array(new float[,] { { 2f }, { 4f } });
-            var r = np.minimum(a, b);
-
-            var expected = np.array(new float[,] { { 1f, 2f, 2f }, { 1f, 4f, 3f } });
-            np.array_equal(r, expected).Should().BeTrue(
-                "NumPy: minimum([1,5,3], [[2],[4]]) = [[1,2,2],[1,4,3]] for float32. " +
-                "NumSharp returns [[1,4,2],[1,2,3]] — identical transposition to int/double.");
-        }
 
         // ================================================================
         //
@@ -953,150 +850,9 @@ namespace NumSharp.UnitTest
         }
 
         // ================================================================
-        //
-        //  BUG 12: concatenate/hstack/vstack on broadcasted arrays
-        //          produces wrong values
-        //
-        //  SEVERITY: High — silently returns wrong array contents.
-        //
-        //  np.concatenate (and hstack/vstack which delegate to it) produces
-        //  wrong values when any input array is broadcasted. The shape of
-        //  the result is correct, but the element values are wrong.
-        //
-        //  The bug is in the COPY step: when concatenate copies elements
-        //  from a broadcasted source array into the destination, it uses
-        //  a linear offset calculation that doesn't account for zero-stride
-        //  broadcast dimensions. The result is that rows get duplicated
-        //  (column-broadcast), shifted (sliced+broadcast), or contain
-        //  garbage values (reading past allocation).
-        //
-        //  WORKAROUND: Call np.copy() on broadcasted arrays before passing
-        //  them to concatenate/hstack/vstack. This materializes the broadcast
-        //  into contiguous memory, which concatenate can then handle correctly.
-        //
-        //  Verified: hstack(copy(a), copy(b)) returns correct results.
-        //
-        //  Three variants tested:
-        //    a) hstack with column-broadcast inputs → second row copies first
-        //    b) vstack with sliced+broadcast input → rows shifted
-        //    c) concatenate axis=0 with sliced+broadcast → garbage/zeros
-        //
-        //  PYTHON VERIFICATION:
-        //    >>> a = np.broadcast_to(np.array([[1],[2]]), (2,2))
-        //    >>> b = np.broadcast_to(np.array([[3],[4]]), (2,3))
-        //    >>> np.hstack([a, b])
-        //    array([[1, 1, 3, 3, 3], [2, 2, 4, 4, 4]])
-        //    >>> x = np.arange(6).reshape(3,2)
-        //    >>> np.vstack([np.broadcast_to(x[:,0:1],(3,3)), [[10,20,30]]])
-        //    array([[ 0,  0,  0], [ 2,  2,  2], [ 4,  4,  4], [10, 20, 30]])
-        //    >>> x = np.arange(12).reshape(3,4)
-        //    >>> np.concatenate([np.broadcast_to(x[:,1:2],(3,3)), np.ones((1,3),dtype=int)])
-        //    array([[1, 1, 1], [5, 5, 5], [9, 9, 9], [1, 1, 1]])
-        //
+        // BUG 12: FIXED - concatenate/hstack/vstack on broadcasted arrays
+        //         Tests moved to: Creation/np.concatenate.Test.cs
         // ================================================================
-
-        /// <summary>
-        ///     BUG 12a: hstack on column-broadcast arrays duplicates row 0
-        ///     into row 1.
-        ///
-        ///     Setup: Two column-vector arrays broadcast to (2,2) and (2,3).
-        ///     hstack should produce (2,5) with distinct rows.
-        ///
-        ///     NumPy:   [[1,1,3,3,3], [2,2,4,4,4]]
-        ///     NumSharp: [[1,1,3,3,3], [1,1,3,3,3]]  (row 1 = copy of row 0)
-        ///
-        ///     The copy routine reads both rows from offset 0 of the broadcast
-        ///     source, ignoring that the column dimension has stride=0 while
-        ///     the row dimension has the original source stride.
-        /// </summary>
-        [Test]
-        public void Bug_Hstack_Broadcast_WrongValues()
-        {
-            var a = np.broadcast_to(np.array(new int[,] { { 1 }, { 2 } }), new Shape(2, 2));
-            var b = np.broadcast_to(np.array(new int[,] { { 3 }, { 4 } }), new Shape(2, 3));
-            var r = np.hstack(a, b);
-
-            r.shape.Should().BeEquivalentTo(new[] { 2, 5 });
-
-            var expected = np.array(new int[,] { { 1, 1, 3, 3, 3 }, { 2, 2, 4, 4, 4 } });
-            np.array_equal(r, expected).Should().BeTrue(
-                "NumPy: hstack(broadcast[[1],[2]]→(2,2), broadcast[[3],[4]]→(2,3)) = " +
-                "[[1,1,3,3,3],[2,2,4,4,4]]. NumSharp returns [[1,1,3,3,3],[1,1,3,3,3]] — " +
-                "row 1 is a copy of row 0 because the concatenate copy routine iterates " +
-                "the broadcast source with a linear offset that doesn't account for the " +
-                "zero-stride column dimension. Workaround: np.copy() inputs first.");
-        }
-
-        /// <summary>
-        ///     BUG 12b: vstack with sliced+broadcast input shifts row values.
-        ///
-        ///     Setup: arange(6).reshape(3,2)[:,0:1] → (3,1): [[0],[2],[4]],
-        ///     then broadcast_to (3,3), then vstack with [[10,20,30]].
-        ///
-        ///     NumPy:   [[0,0,0], [2,2,2], [4,4,4], [10,20,30]]
-        ///     NumSharp: [[0,0,0], [0,0,0], [2,2,2], [10,20,30]]  (shifted)
-        ///
-        ///     Row 1 should be [2,2,2] but shows [0,0,0] (row 0's value).
-        ///     Row 2 should be [4,4,4] but shows [2,2,2] (row 1's value).
-        ///     The iteration is off by one row because the sliced source's
-        ///     row stride is not correctly applied during the copy.
-        /// </summary>
-        [Test]
-        public void Bug_Vstack_SlicedBroadcast_WrongValues()
-        {
-            var x = np.arange(6).reshape(3, 2);
-            var col = x[":, 0:1"]; // (3,1): [[0],[2],[4]]
-            var bcol = np.broadcast_to(col, new Shape(3, 3));
-            var other = np.array(new int[,] { { 10, 20, 30 } });
-
-            var r = np.vstack(bcol, other);
-            r.shape.Should().BeEquivalentTo(new[] { 4, 3 });
-
-            r.GetInt32(0, 0).Should().Be(0, "Row 0 should be [0,0,0]");
-            r.GetInt32(1, 0).Should().Be(2,
-                "NumPy: Row 1 should be [2,2,2]. NumSharp returns [0,0,0] — " +
-                "the concatenate copy routine is off by one row because the sliced " +
-                "source's row stride (2 elements, skipping column 1) is not correctly " +
-                "applied during linear iteration of the broadcast array.");
-            r.GetInt32(2, 0).Should().Be(4, "Row 2 should be [4,4,4]");
-            r.GetInt32(3, 0).Should().Be(10, "Row 3 should be [10,20,30]");
-        }
-
-        /// <summary>
-        ///     BUG 12c: concatenate axis=0 with sliced+broadcast reads garbage.
-        ///
-        ///     Setup: arange(12).reshape(3,4)[:,1:2] → (3,1): [[1],[5],[9]],
-        ///     then broadcast_to (3,3), then concatenate with ones(1,3).
-        ///
-        ///     NumPy:   [[1,1,1], [5,5,5], [9,9,9], [1,1,1]]
-        ///     NumSharp: [[1,1,1], [5,5,5], [garbage], [1,1,1]]
-        ///
-        ///     Row 2 should be [9,9,9] but contains garbage values (e.g.
-        ///     32765, 0, or other values depending on memory state). The
-        ///     sliced column has row stride=4 (stepping over 4-wide rows).
-        ///     The concatenate copy routine doesn't apply this stride,
-        ///     reading from wrong memory offsets for the last row.
-        /// </summary>
-        [Test]
-        public void Bug_Concatenate_SlicedBroadcast_WrongValues()
-        {
-            var x = np.arange(12).reshape(3, 4);
-            var col = x[":, 1:2"]; // (3,1): [[1],[5],[9]]
-            var bcol = np.broadcast_to(col, new Shape(3, 3));
-            var other = np.ones(new Shape(1, 3), np.int32);
-
-            var r = np.concatenate(new NDArray[] { bcol, other }, axis: 0);
-            r.shape.Should().BeEquivalentTo(new[] { 4, 3 });
-
-            r.GetInt32(0, 0).Should().Be(1, "Row 0 should be [1,1,1]");
-            r.GetInt32(1, 0).Should().Be(5, "Row 1 should be [5,5,5]");
-            r.GetInt32(2, 0).Should().Be(9,
-                "NumPy: Row 2 should be [9,9,9]. NumSharp reads garbage values because " +
-                "the concatenate copy routine doesn't apply the sliced column's row stride " +
-                "(4 elements per row in the source) when iterating the broadcast array. " +
-                "The linear offset overshoots and reads from beyond the valid data.");
-            r.GetInt32(3, 0).Should().Be(1, "Row 3 should be [1,1,1]");
-        }
 
         // ================================================================
         //
@@ -1154,25 +910,27 @@ namespace NumSharp.UnitTest
             var result = np.cumsum(a, 0);
 
             result.shape.Should().BeEquivalentTo(new[] { 3, 3 });
+            // cumsum promotes Int32 to Int64 per NumPy 2.x (GetAccumulatingType)
+            result.dtype.Should().Be(typeof(long), "cumsum promotes int32 to int64");
 
             // Row 0 should be the original values
-            result.GetInt32(0, 0).Should().Be(1, "cumsum axis=0 row 0 col 0");
-            result.GetInt32(0, 1).Should().Be(2, "cumsum axis=0 row 0 col 1");
-            result.GetInt32(0, 2).Should().Be(3, "cumsum axis=0 row 0 col 2");
+            result.GetInt64(0, 0).Should().Be(1, "cumsum axis=0 row 0 col 0");
+            result.GetInt64(0, 1).Should().Be(2, "cumsum axis=0 row 0 col 1");
+            result.GetInt64(0, 2).Should().Be(3, "cumsum axis=0 row 0 col 2");
 
             // Row 1 should be cumulative sum of 2 identical rows
-            result.GetInt32(1, 0).Should().Be(2,
+            result.GetInt64(1, 0).Should().Be(2,
                 "NumPy: cumsum(broadcast_to([1,2,3],(3,3)), axis=0)[1,0] = 2 (1+1). " +
                 "NumSharp returns garbage values (e.g. 32765) because cumsum's axis " +
                 "iteration reads from uninitialized memory instead of correctly " +
                 "traversing the broadcast zero-stride dimension.");
-            result.GetInt32(1, 1).Should().Be(4, "cumsum axis=0 row 1 col 1 = 2+2");
-            result.GetInt32(1, 2).Should().Be(6, "cumsum axis=0 row 1 col 2 = 3+3");
+            result.GetInt64(1, 1).Should().Be(4, "cumsum axis=0 row 1 col 1 = 2+2");
+            result.GetInt64(1, 2).Should().Be(6, "cumsum axis=0 row 1 col 2 = 3+3");
 
             // Row 2 = sum of 3 identical rows
-            result.GetInt32(2, 0).Should().Be(3, "cumsum axis=0 row 2 col 0 = 1+1+1");
-            result.GetInt32(2, 1).Should().Be(6, "cumsum axis=0 row 2 col 1 = 2+2+2");
-            result.GetInt32(2, 2).Should().Be(9, "cumsum axis=0 row 2 col 2 = 3+3+3");
+            result.GetInt64(2, 0).Should().Be(3, "cumsum axis=0 row 2 col 0 = 1+1+1");
+            result.GetInt64(2, 1).Should().Be(6, "cumsum axis=0 row 2 col 1 = 2+2+2");
+            result.GetInt64(2, 2).Should().Be(9, "cumsum axis=0 row 2 col 2 = 3+3+3");
         }
 
         /// <summary>
@@ -1192,21 +950,23 @@ namespace NumSharp.UnitTest
             var result = np.cumsum(a, 0);
 
             result.shape.Should().BeEquivalentTo(new[] { 3, 3 });
+            // cumsum promotes Int32 to Int64 per NumPy 2.x (GetAccumulatingType)
+            result.dtype.Should().Be(typeof(long), "cumsum promotes int32 to int64");
 
-            result.GetInt32(0, 0).Should().Be(1, "cumsum axis=0 row 0 = [1,1,1]");
-            result.GetInt32(0, 1).Should().Be(1);
-            result.GetInt32(0, 2).Should().Be(1);
+            result.GetInt64(0, 0).Should().Be(1, "cumsum axis=0 row 0 = [1,1,1]");
+            result.GetInt64(0, 1).Should().Be(1);
+            result.GetInt64(0, 2).Should().Be(1);
 
-            result.GetInt32(1, 0).Should().Be(3,
+            result.GetInt64(1, 0).Should().Be(3,
                 "NumPy: cumsum(broadcast_to([[1],[2],[3]],(3,3)), axis=0)[1,0] = 3 (1+2). " +
                 "NumSharp returns garbage values because the axis=0 iteration reads " +
                 "memory at wrong offsets for column-broadcast arrays.");
-            result.GetInt32(1, 1).Should().Be(3);
-            result.GetInt32(1, 2).Should().Be(3);
+            result.GetInt64(1, 1).Should().Be(3);
+            result.GetInt64(1, 2).Should().Be(3);
 
-            result.GetInt32(2, 0).Should().Be(6, "cumsum axis=0 row 2 = [6,6,6]");
-            result.GetInt32(2, 1).Should().Be(6);
-            result.GetInt32(2, 2).Should().Be(6);
+            result.GetInt64(2, 0).Should().Be(6, "cumsum axis=0 row 2 = [6,6,6]");
+            result.GetInt64(2, 1).Should().Be(6);
+            result.GetInt64(2, 2).Should().Be(6);
         }
 
         /// <summary>
@@ -1232,24 +992,26 @@ namespace NumSharp.UnitTest
             var result = np.cumsum(a, 1);
 
             result.shape.Should().BeEquivalentTo(new[] { 3, 3 });
+            // cumsum promotes Int32 to Int64 per NumPy 2.x (GetAccumulatingType)
+            result.dtype.Should().Be(typeof(long), "cumsum promotes int32 to int64");
 
             // Row 0: cumsum of [1,1,1] = [1, 2, 3]
-            result.GetInt32(0, 0).Should().Be(1, "cumsum([1,1,1])[0] = 1");
-            result.GetInt32(0, 1).Should().Be(2,
+            result.GetInt64(0, 0).Should().Be(1, "cumsum([1,1,1])[0] = 1");
+            result.GetInt64(0, 1).Should().Be(2,
                 "NumPy: cumsum(axis=1) on column-broadcast row [1,1,1] gives [1,2,3]. " +
                 "NumSharp returns [3,3,3] — it appears to accumulate along the wrong " +
                 "axis because the zero-stride column dimension confuses the iteration.");
-            result.GetInt32(0, 2).Should().Be(3, "cumsum([1,1,1])[2] = 3");
+            result.GetInt64(0, 2).Should().Be(3, "cumsum([1,1,1])[2] = 3");
 
             // Row 1: cumsum of [2,2,2] = [2, 4, 6]
-            result.GetInt32(1, 0).Should().Be(2);
-            result.GetInt32(1, 1).Should().Be(4);
-            result.GetInt32(1, 2).Should().Be(6);
+            result.GetInt64(1, 0).Should().Be(2);
+            result.GetInt64(1, 1).Should().Be(4);
+            result.GetInt64(1, 2).Should().Be(6);
 
             // Row 2: cumsum of [3,3,3] = [3, 6, 9]
-            result.GetInt32(2, 0).Should().Be(3);
-            result.GetInt32(2, 1).Should().Be(6);
-            result.GetInt32(2, 2).Should().Be(9);
+            result.GetInt64(2, 0).Should().Be(3);
+            result.GetInt64(2, 1).Should().Be(6);
+            result.GetInt64(2, 2).Should().Be(9);
         }
 
         // ================================================================
@@ -1573,16 +1335,17 @@ namespace NumSharp.UnitTest
 
             result.Should().NotBeNull();
             result.shape.Should().BeEquivalentTo(new[] { 2, 3 });
+            result.dtype.Should().Be(typeof(long), "NumPy argsort always returns int64 indices");
 
             // Row 0: argsort of [3,1,2] = [1,2,0]
-            result.GetInt32(0, 0).Should().Be(1, "index of min(3,1,2)=1 is at position 1");
-            result.GetInt32(0, 1).Should().Be(2, "index of 2 is at position 2");
-            result.GetInt32(0, 2).Should().Be(0, "index of max(3,1,2)=3 is at position 0");
+            result.GetInt64(0, 0).Should().Be(1, "index of min(3,1,2)=1 is at position 1");
+            result.GetInt64(0, 1).Should().Be(2, "index of 2 is at position 2");
+            result.GetInt64(0, 2).Should().Be(0, "index of max(3,1,2)=3 is at position 0");
 
             // Row 1: argsort of [6,4,5] = [1,2,0]
-            result.GetInt32(1, 0).Should().Be(1, "index of min(6,4,5)=4 is at position 1");
-            result.GetInt32(1, 1).Should().Be(2, "index of 5 is at position 2");
-            result.GetInt32(1, 2).Should().Be(0, "index of max(6,4,5)=6 is at position 0");
+            result.GetInt64(1, 0).Should().Be(1, "index of min(6,4,5)=4 is at position 1");
+            result.GetInt64(1, 1).Should().Be(2, "index of 5 is at position 2");
+            result.GetInt64(1, 2).Should().Be(0, "index of max(6,4,5)=6 is at position 0");
         }
 
         /// <summary>
@@ -1605,9 +1368,10 @@ namespace NumSharp.UnitTest
                     "regardless of dtype.");
 
             result.Should().NotBeNull();
-            result.GetInt32(0, 0).Should().Be(1);
-            result.GetInt32(0, 1).Should().Be(2);
-            result.GetInt32(0, 2).Should().Be(0);
+            result.dtype.Should().Be(typeof(long), "NumPy argsort always returns int64 indices");
+            result.GetInt64(0, 0).Should().Be(1);
+            result.GetInt64(0, 1).Should().Be(2);
+            result.GetInt64(0, 2).Should().Be(0);
         }
 
         // ================================================================
@@ -2007,24 +1771,26 @@ namespace NumSharp.UnitTest
             var result = np.cumsum(a, 0);
 
             result.shape.Should().BeEquivalentTo(new[] { 3, 3 });
+            // cumsum promotes Int32 to Int64 per NumPy 2.x (GetAccumulatingType)
+            result.dtype.Should().Be(typeof(long), "cumsum promotes int32 to int64");
 
             // Row 0: first row stays as-is
-            result.GetInt32(0, 0).Should().Be(1,
+            result.GetInt64(0, 0).Should().Be(1,
                 "cumsum(axis=0) row 0 should be [1, 2, 3]. Got garbage because cumsum " +
                 "creates its output using the broadcast shape (IsBroadcasted=true), so " +
                 "ret[slices] triggers CloneData and writes to a detached clone.");
-            result.GetInt32(0, 1).Should().Be(2);
-            result.GetInt32(0, 2).Should().Be(3);
+            result.GetInt64(0, 1).Should().Be(2);
+            result.GetInt64(0, 2).Should().Be(3);
 
             // Row 1: cumulative sum along axis 0
-            result.GetInt32(1, 0).Should().Be(2);
-            result.GetInt32(1, 1).Should().Be(4);
-            result.GetInt32(1, 2).Should().Be(6);
+            result.GetInt64(1, 0).Should().Be(2);
+            result.GetInt64(1, 1).Should().Be(4);
+            result.GetInt64(1, 2).Should().Be(6);
 
             // Row 2
-            result.GetInt32(2, 0).Should().Be(3);
-            result.GetInt32(2, 1).Should().Be(6);
-            result.GetInt32(2, 2).Should().Be(9);
+            result.GetInt64(2, 0).Should().Be(3);
+            result.GetInt64(2, 1).Should().Be(6);
+            result.GetInt64(2, 2).Should().Be(9);
         }
 
         /// <summary>
@@ -2041,21 +1807,23 @@ namespace NumSharp.UnitTest
             var result = np.cumsum(a, 1);
 
             result.shape.Should().BeEquivalentTo(new[] { 3, 3 });
+            // cumsum promotes Int32 to Int64 per NumPy 2.x (GetAccumulatingType)
+            result.dtype.Should().Be(typeof(long), "cumsum promotes int32 to int64");
 
             // Each row: cumsum of [N, N, N] = [N, 2N, 3N]
-            result.GetInt32(0, 0).Should().Be(1,
+            result.GetInt64(0, 0).Should().Be(1,
                 "cumsum(axis=1) row 0 of col-broadcast should be [1, 2, 3]. " +
                 "Same root cause as Bug 18a: output uses broadcast shape.");
-            result.GetInt32(0, 1).Should().Be(2);
-            result.GetInt32(0, 2).Should().Be(3);
+            result.GetInt64(0, 1).Should().Be(2);
+            result.GetInt64(0, 2).Should().Be(3);
 
-            result.GetInt32(1, 0).Should().Be(2);
-            result.GetInt32(1, 1).Should().Be(4);
-            result.GetInt32(1, 2).Should().Be(6);
+            result.GetInt64(1, 0).Should().Be(2);
+            result.GetInt64(1, 1).Should().Be(4);
+            result.GetInt64(1, 2).Should().Be(6);
 
-            result.GetInt32(2, 0).Should().Be(3);
-            result.GetInt32(2, 1).Should().Be(6);
-            result.GetInt32(2, 2).Should().Be(9);
+            result.GetInt64(2, 0).Should().Be(3);
+            result.GetInt64(2, 1).Should().Be(6);
+            result.GetInt64(2, 2).Should().Be(9);
         }
 
         // ================================================================

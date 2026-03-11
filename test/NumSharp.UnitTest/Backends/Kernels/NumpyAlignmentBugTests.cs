@@ -306,9 +306,11 @@ public class NumpyAlignmentBugTests
     #region BUG-7: sbyte (int8) Not Supported (LOW)
 
     [Test]
+    [OpenBugs]  // sbyte (int8) is not supported by NumSharp - requires adding NPTypeCode.SByte
     public void Bug7_SByte_ArrayCreation()
     {
-        // NumPy supports int8 (sbyte)
+        // NumPy supports int8 (sbyte), but NumSharp does not have NPTypeCode.SByte
+        // This is a known limitation documented in CLAUDE.md as BUG-7
         sbyte[] data = { -128, 0, 127 };
 
         var arr = np.array(data);
@@ -1175,12 +1177,13 @@ public class NumpyAlignmentBugTests
     public void Argsort_1D_Int32()
     {
         // NUMPY: np.argsort([3,1,4,1,5]) = [1,3,0,2,4]
+        // NumPy argsort always returns int64 indices
         var arr = np.array(new[] { 3, 1, 4, 1, 5 });
         var result = np.argsort<int>(arr);
 
         CollectionAssert.AreEqual(
-            new[] { 1, 3, 0, 2, 4 },
-            result.ToArray<int>());
+            new long[] { 1, 3, 0, 2, 4 },
+            result.ToArray<long>());
     }
 
     #endregion

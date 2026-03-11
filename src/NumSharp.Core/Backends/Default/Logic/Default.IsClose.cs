@@ -1,4 +1,5 @@
-﻿using NumSharp.Generic;
+﻿using System;
+using NumSharp.Generic;
 
 namespace NumSharp.Backends
 {
@@ -43,77 +44,42 @@ namespace NumSharp.Backends
         ///</returns>
         public override NDArray<bool> IsClose(NDArray a, NDArray b, double rtol = 1.0E-5, double atol = 1.0E-8, bool equal_nan = false)
         {
-            //    if (a.size > b.size)
-            //        throw new ArgumentException("Array a must not be larger in size than array b");
-            //    var result = new NDArray<bool>(a.shape);
-            //    bool[] rdata = result.Array;
-            //    if (a.dtype == np.uint8 || a.dtype == np.int16 || a.dtype == np.int32 || a.dtype == np.int64 && b.dtype == typeof(double) || b.dtype == typeof(float))
-            //    {
-            //        //  convert both to double and compare
-            //        double[] a_arr = a.Data<double>();
-            //        double[] b_arr = a.Data<double>();
-            //        for (int i = 0; i < a_arr.Length; i++)
-            //            rdata[i] = is_within_tol(a_arr[i], b_arr[i], rtol, atol, equal_nan);
-            //    }
-            //    var adata = a.Array;
-            //    switch (adata)
-            //    {
-            //        case double[] a_arr:
-            //            {
-            //                var b_arr = b.Data<double>();
-            //                for (int i = 0; i < a_arr.Length; i++)
-            //                    rdata[i] = is_within_tol(a_arr[i], b_arr[i], rtol, atol, equal_nan);
-            //                break;
-            //            }
-            //        case float[] a_arr:
-            //            {
-            //                var b_arr = b.Data<float>();
-            //                for (int i = 0; i < a_arr.Length; i++)
-            //                    rdata[i] = is_within_tol(a_arr[i], b_arr[i], rtol, atol, equal_nan);
-            //                break;
-            //            }
-            //        case Complex[] arr:
-            //            {
-            //                throw new NotImplementedException("Comparing Complex arrays is not implemented yet.");
-            //            }
-            //        default:
-            //            {
-            //                throw new IncorrectTypeException();
-            //            }
-            //    }
-            //    return result;
-            return null;
+            // Broadcast arrays to common shape
+            var (ba, bb) = np.broadcast_arrays(a, b);
+
+            var result = new NDArray<bool>(ba.Shape, true);
+            int size = ba.size;
+
+            unsafe
+            {
+                var dst = (bool*)result.Address;
+
+                // Convert both to double for comparison (NumPy behavior)
+                for (int i = 0; i < size; i++)
+                {
+                    double aVal = ba.GetAtIndex<double>(i);
+                    double bVal = bb.GetAtIndex<double>(i);
+                    dst[i] = IsCloseValue(aVal, bVal, rtol, atol, equal_nan);
+                }
+            }
+
+            return result.MakeGeneric<bool>();
         }
 
-        private static bool is_within_tol(object a_obj, object b_obj, double rtol = 1.0E-5, double atol = 1.0E-8,
-            bool equal_nan = false)
+        private static bool IsCloseValue(double a, double b, double rtol, double atol, bool equal_nan)
         {
-            return false;
-        }
+            // Handle NaN
+            if (double.IsNaN(a) && double.IsNaN(b))
+                return equal_nan;
+            if (double.IsNaN(a) || double.IsNaN(b))
+                return false;
 
-        //{
-        //    switch (a_obj)
-        //    {
-        //        case double a:
-        //            {
-        //                var b = (double)b_obj;
-        //                if (double.IsInfinity(a) && double.IsInfinity(b))
-        //                    return true;
-        //                if (equal_nan && double.IsNaN(a) && double.IsNaN(b))
-        //                    return true;
-        //                return Math.Abs(a - b) <= atol + rtol * Math.Abs(b);
-        //            }
-        //        case float a:
-        //            {
-        //                var b = (float)b_obj;
-        //                if (float.IsInfinity(a) && float.IsInfinity(b))
-        //                    return true;
-        //                if (equal_nan && float.IsNaN(a) && float.IsNaN(b))
-        //                    return true;
-        //                return Math.Abs(a - b) <= atol + rtol * Math.Abs(b);
-        //            }
-        //    }
-        //    throw new NotImplementedException($"Comparing type {a_obj.GetType()} not implemented");
-        //}
+            // Handle infinities - must be same sign
+            if (double.IsInfinity(a) || double.IsInfinity(b))
+                return a == b;
+
+            // NumPy formula: |a - b| <= (atol + rtol * |b|)
+            return Math.Abs(a - b) <= (atol + rtol * Math.Abs(b));
+        }
     }
 }

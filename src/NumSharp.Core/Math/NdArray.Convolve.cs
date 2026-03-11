@@ -8,161 +8,210 @@ namespace NumSharp
         /// Returns the discrete, linear convolution of two one-dimensional sequences.
         ///
         /// The convolution operator is often seen in signal processing, where it models the effect of a linear time-invariant system on a signal[1]. In probability theory, the sum of two independent random variables is distributed according to the convolution of their individual distributions.
-        /// 
+        ///
         /// If v is longer than a, the arrays are swapped before computation.
         /// </summary>
-        /// <param name="rhs"></param>
-        /// <param name="mode"></param>
-        /// <returns></returns>
-        public NDArray convolve(NDArray rhs, string mode = "full")
+        /// <param name="v">The second one-dimensional input array.</param>
+        /// <param name="mode">'full', 'same', or 'valid'. Default is 'full'.</param>
+        /// <returns>Discrete, linear convolution of a and v.</returns>
+        /// <remarks>
+        /// NumPy Reference: https://numpy.org/doc/stable/reference/generated/numpy.convolve.html
+        ///
+        /// The convolution product is only given for points where the signals overlap completely.
+        /// Values outside the signal boundary have no effect.
+        /// </remarks>
+        public NDArray convolve(NDArray v, string mode = "full")
         {
-            var lhs = this;
-            int nf = lhs.shape[0];
-            int ng = rhs.shape[0];
+            NDArray a = this;
 
-            if (ndim > 1 || rhs.ndim > 1)
-                throw new IncorrectShapeException();
-            var retType = np._FindCommonType(lhs, rhs);
+            // Validate inputs are 1D
+            if (a.ndim != 1)
+                throw new IncorrectShapeException("First argument must be a 1-dimensional array.");
+            if (v.ndim != 1)
+                throw new IncorrectShapeException("Second argument must be a 1-dimensional array.");
 
-            // TODO: This function requires code regeneration - the #else block is empty
-            // The _REGEN template exists but generated code was not committed
-            throw new NotImplementedException(
-                "np.convolve is not implemented. The code generation template exists but " +
-                "the generated code was not committed. See NdArray.Convolve.cs #if _REGEN block.");
-#if _REGEN
-            #region Output
-            %mod = "%"
-            switch (lhs.GetTypeCode)
+            // Validate non-empty
+            if (a.size == 0)
+                throw new ArgumentException("a cannot be empty", nameof(a));
+            if (v.size == 0)
+                throw new ArgumentException("v cannot be empty", nameof(v));
+
+            // NumPy swaps if v is longer than a
+            if (v.size > a.size)
             {
-	            %foreach supported_numericals,supported_numericals_lowercase%
-	            case NPTypeCode.#1:
-	            {
-                    ArraySlice<#2> lhsarr = lhs.Storage.GetData<#2>();
-		            switch (rhs.GetTypeCode)
-                    {
-	                    %foreach supported_numericals,supported_numericals_lowercase%
-	                    case NPTypeCode.#101: 
-                        {
-                            ArraySlice<#102> rhsarr = rhs.Storage.GetData<#102>();
-	                        %foreach supported_numericals,supported_numericals_lowercase%
-		                    switch (retType)
-                            {
-                                case NPTypeCode.#201:
-                                {
-            #region Compute
-                                    switch (mode.ToLowerInvariant())
-                                    {
-                    
-                                        case "full":
-                                        {
-                                            int n = nf + ng - 1;
-
-                                            var ret = new NDArray<#201>(Shape.Vector(n), true);
-                                            var outArray = (ArraySlice<#202>)ret.Array;
-
-                                            for (int idx = 0; idx < n; ++idx)
-                                            {
-                                                int jmn = (idx >= ng - 1) ? (idx - (ng - 1)) : 0;
-                                                int jmx = (idx < nf - 1) ? idx : nf - 1;
-
-                                                for (int jdx = jmn; jdx <= jmx; ++jdx)
-                                                {
-                                                    outArray[idx] += Converts.To#201(lhsarr[jdx] * rhsarr[idx - jdx]);
-                                                }
-                                            }
-
-                                            return ret;
-                                        }
-
-                                        case "valid":
-                                        {
-                                            var min_v = (nf < ng) ? lhsarr : rhsarr;
-                                            var max_v = (nf < ng) ? rhsarr : lhsarr;
-
-                                            int n = Math.Max(nf, ng) - Math.Min(nf, ng) + 1;
-
-                                            var ret = new NDArray(retType, Shape.Vector(n), true);
-                                            var outArray = (ArraySlice<#202>)ret.Array;
-
-                                            for (int idx = 0; idx < n; ++idx)
-                                            {
-                                                int kdx = idx;
-
-                                                for (int jdx = (min_v.Count - 1); jdx >= 0; --jdx)
-                                                {
-                                                    outArray[idx] += Converts.To#202(min_v[jdx] * max_v[kdx]);
-                                                    ++kdx;
-                                                }
-                                            }
-
-                                            return ret;
-                                        }
-
-                                        case "same":
-                                        {
-                                            // followed the discussion on 
-                                            // https://stackoverflow.com/questions/38194270/matlab-convolution-same-to-numpy-convolve
-                                            // implemented numpy convolve because we follow numpy
-                                            var npad = rhs.shape[0] - 1;
-
-                                            if (npad #(mod) 2 == 1)
-                                            {
-                                                unsafe
-                                                {
-                                                    npad = (int)Math.Floor(((double)npad) / 2.0);
-
-                                                    var arr = ArraySlice<#202>.Allocate(npad + lhsarr.Count);
-                                                    lhsarr.CopyTo(arr.AsSpan, npad);
-                                                    var retnd = new NDArray(new UnmanagedStorage(arr, Shape.Vector(lhsarr.Count)));
-
-                                                    return retnd.convolve(rhs, "valid");
-                                                }
-                                            }
-                                            else
-                                            {
-                                                {
-                                                    unsafe
-                                                    {
-                                                        npad = npad / 2;
-
-                                                        var puffer = new NDArray(retType, Shape.Vector(npad + lhsarr.Count), true);
-                                                        lhsarr.CopyTo(puffer.Storage.AsSpan<#202>(), npad);
-                                                        var np1New = puffer;
-
-                                                        puffer = new NDArray(retType, Shape.Vector(npad + np1New.size), true);
-                                                        var cpylen = np1New.size * sizeof(#202);
-                                                        Buffer.MemoryCopy(np1New.Address, ((#202*)puffer.Address) + npad, cpylen, cpylen);
-
-                                                        return puffer.convolve(rhs, "valid");
-                                                    }
-                                                }
-                                            }
-                                        }
-                                        default:
-                                            throw new ArgumentOutOfRangeException(nameof(mode));
-                                    }
-            #endregion
-                                }
-                            }
-
-                            %
-                            break;
-                        }
-                        %
-                    }
-                    break;
-	            }
-
-	            %
-	            default:
-		            throw new NotSupportedException();
+                var temp = a;
+                a = v;
+                v = temp;
             }
 
-            #endregion
-#else
+            int na = a.size;
+            int nv = v.size;
 
-#endif
+            // Determine output type using NumPy's type promotion rules
+            var retType = np._FindCommonType(a, v);
 
+            // Convert inputs to the result type for accurate computation
+            // This ensures proper type promotion (e.g., int + int = int, int + float = float)
+            NDArray aTyped = a.GetTypeCode == retType ? a : a.astype(retType);
+            NDArray vTyped = v.GetTypeCode == retType ? v : v.astype(retType);
+
+            // Compute convolution based on mode
+            // Convolution formula: (a * v)[n] = sum_m(a[m] * v[n-m])
+            // This is equivalent to correlation with v reversed: correlate(a, v[::-1])
+
+            switch (mode.ToLowerInvariant())
+            {
+                case "full":
+                    return ConvolveFull(aTyped, vTyped, retType);
+
+                case "same":
+                    return ConvolveSame(aTyped, vTyped, retType);
+
+                case "valid":
+                    return ConvolveValid(aTyped, vTyped, retType);
+
+                default:
+                    throw new ArgumentException($"mode must be 'full', 'same', or 'valid', got '{mode}'", nameof(mode));
+            }
+        }
+
+        /// <summary>
+        /// Full convolution: output length = na + nv - 1
+        /// </summary>
+        private static NDArray ConvolveFull(NDArray a, NDArray v, NPTypeCode retType)
+        {
+            int na = a.size;
+            int nv = v.size;
+            int outLen = na + nv - 1;
+
+            var result = new NDArray(retType, Shape.Vector(outLen), true);
+
+            // Convolution: result[k] = sum over j of a[j] * v[k-j]
+            // where j ranges over valid indices
+            switch (retType)
+            {
+                case NPTypeCode.Double:
+                    ConvolveFullTyped<double>(a, v, result, na, nv, outLen);
+                    break;
+                case NPTypeCode.Single:
+                    ConvolveFullTyped<float>(a, v, result, na, nv, outLen);
+                    break;
+                case NPTypeCode.Int32:
+                    ConvolveFullTyped<int>(a, v, result, na, nv, outLen);
+                    break;
+                case NPTypeCode.Int64:
+                    ConvolveFullTyped<long>(a, v, result, na, nv, outLen);
+                    break;
+                case NPTypeCode.Int16:
+                    ConvolveFullTyped<short>(a, v, result, na, nv, outLen);
+                    break;
+                case NPTypeCode.Byte:
+                    ConvolveFullTyped<byte>(a, v, result, na, nv, outLen);
+                    break;
+                case NPTypeCode.UInt16:
+                    ConvolveFullTyped<ushort>(a, v, result, na, nv, outLen);
+                    break;
+                case NPTypeCode.UInt32:
+                    ConvolveFullTyped<uint>(a, v, result, na, nv, outLen);
+                    break;
+                case NPTypeCode.UInt64:
+                    ConvolveFullTyped<ulong>(a, v, result, na, nv, outLen);
+                    break;
+                case NPTypeCode.Decimal:
+                    ConvolveFullTyped<decimal>(a, v, result, na, nv, outLen);
+                    break;
+                default:
+                    throw new NotSupportedException($"Type {retType} is not supported for convolution.");
+            }
+
+            return result;
+        }
+
+        private static unsafe void ConvolveFullTyped<T>(NDArray a, NDArray v, NDArray result, int na, int nv, int outLen)
+            where T : unmanaged
+        {
+            T* aPtr = (T*)a.Address;
+            T* vPtr = (T*)v.Address;
+            T* rPtr = (T*)result.Address;
+
+            for (int k = 0; k < outLen; k++)
+            {
+                // j ranges from max(0, k-nv+1) to min(na-1, k)
+                int jMin = Math.Max(0, k - nv + 1);
+                int jMax = Math.Min(na - 1, k);
+
+                double sum = 0;
+                for (int j = jMin; j <= jMax; j++)
+                {
+                    // v index is k - j, which is in range [0, nv-1] when j is in [jMin, jMax]
+                    double aVal = Convert.ToDouble(aPtr[j]);
+                    double vVal = Convert.ToDouble(vPtr[k - j]);
+                    sum += aVal * vVal;
+                }
+
+                // Convert back to target type
+                if (typeof(T) == typeof(double))
+                    rPtr[k] = (T)(object)sum;
+                else if (typeof(T) == typeof(float))
+                    rPtr[k] = (T)(object)(float)sum;
+                else if (typeof(T) == typeof(int))
+                    rPtr[k] = (T)(object)(int)sum;
+                else if (typeof(T) == typeof(long))
+                    rPtr[k] = (T)(object)(long)sum;
+                else if (typeof(T) == typeof(short))
+                    rPtr[k] = (T)(object)(short)sum;
+                else if (typeof(T) == typeof(byte))
+                    rPtr[k] = (T)(object)(byte)sum;
+                else if (typeof(T) == typeof(ushort))
+                    rPtr[k] = (T)(object)(ushort)sum;
+                else if (typeof(T) == typeof(uint))
+                    rPtr[k] = (T)(object)(uint)sum;
+                else if (typeof(T) == typeof(ulong))
+                    rPtr[k] = (T)(object)(ulong)sum;
+                else if (typeof(T) == typeof(decimal))
+                    rPtr[k] = (T)(object)(decimal)sum;
+            }
+        }
+
+        /// <summary>
+        /// Same mode: output length = max(na, nv)
+        /// Returns the central part of the full convolution
+        /// </summary>
+        private static NDArray ConvolveSame(NDArray a, NDArray v, NPTypeCode retType)
+        {
+            // Compute full convolution first
+            var full = ConvolveFull(a, v, retType);
+
+            int na = a.size;
+            int nv = v.size;
+            int outLen = Math.Max(na, nv);
+
+            // For 'same' mode, we return the center portion of length max(na, nv)
+            // Start index: (nv - 1) / 2  (integer division, floor)
+            int startIdx = (nv - 1) / 2;
+
+            // Slice from startIdx to startIdx + outLen
+            return full[$"{startIdx}:{startIdx + outLen}"].copy();
+        }
+
+        /// <summary>
+        /// Valid mode: output length = max(na, nv) - min(na, nv) + 1
+        /// Only positions where signals fully overlap
+        /// </summary>
+        private static NDArray ConvolveValid(NDArray a, NDArray v, NPTypeCode retType)
+        {
+            // Compute full convolution first
+            var full = ConvolveFull(a, v, retType);
+
+            int na = a.size;
+            int nv = v.size;
+            int outLen = Math.Max(na, nv) - Math.Min(na, nv) + 1;
+
+            // For 'valid' mode, we skip (min(na, nv) - 1) elements from start
+            int startIdx = Math.Min(na, nv) - 1;
+
+            // Slice from startIdx to startIdx + outLen
+            return full[$"{startIdx}:{startIdx + outLen}"].copy();
         }
     }
 }
