@@ -22,7 +22,12 @@ namespace NumSharp.Backends
         internal unsafe NDArray ExecuteUnaryOp(in NDArray nd, UnaryOp op, NPTypeCode? typeCode = null)
         {
             if (nd.size == 0)
-                return nd.Clone();
+            {
+                // For empty arrays, return empty array with correct output dtype
+                // typeCode specifies the output type (e.g., Boolean for predicate ops)
+                var emptyOutputType = typeCode ?? nd.GetTypeCode;
+                return new NDArray(emptyOutputType, nd.Shape.Clean(), false);
+            }
 
             var inputType = nd.GetTypeCode;
 

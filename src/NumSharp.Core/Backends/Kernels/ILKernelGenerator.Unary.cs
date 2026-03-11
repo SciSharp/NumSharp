@@ -188,6 +188,15 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
+        /// Check if this is a predicate operation (returns bool based on input type).
+        /// These operations should NOT convert input to output type before the operation.
+        /// </summary>
+        private static bool IsPredicateOp(UnaryOp op)
+        {
+            return op == UnaryOp.IsFinite || op == UnaryOp.IsNan || op == UnaryOp.IsInf;
+        }
+
+        /// <summary>
         /// Check if SIMD can be used for this unary operation.
         /// </summary>
         private static bool CanUseUnarySimd(UnaryKernelKey key)
@@ -306,9 +315,18 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Mul);
             il.Emit(OpCodes.Add);
             EmitLoadIndirect(il, key.InputType);
-            EmitConvertTo(il, key.InputType, key.OutputType);
 
-            EmitUnaryScalarOperation(il, key.Op, key.OutputType);
+            // For predicate operations (IsFinite, IsNan, IsInf), operate on INPUT type
+            if (IsPredicateOp(key.Op))
+            {
+                EmitUnaryScalarOperation(il, key.Op, key.InputType);
+            }
+            else
+            {
+                EmitConvertTo(il, key.InputType, key.OutputType);
+                EmitUnaryScalarOperation(il, key.Op, key.OutputType);
+            }
+
             EmitStoreIndirect(il, key.OutputType);
 
             // i++
@@ -356,7 +374,7 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Mul);
             il.Emit(OpCodes.Add);
 
-            // Load input[i] and convert to output type
+            // Load input[i]
             il.Emit(OpCodes.Ldarg_0); // input
             il.Emit(OpCodes.Ldloc, locI);
             il.Emit(OpCodes.Conv_I);
@@ -364,10 +382,20 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Mul);
             il.Emit(OpCodes.Add);
             EmitLoadIndirect(il, key.InputType);
-            EmitConvertTo(il, key.InputType, key.OutputType);
 
-            // Perform operation
-            EmitUnaryScalarOperation(il, key.Op, key.OutputType);
+            // For predicate operations (IsFinite, IsNan, IsInf), operate on INPUT type
+            // and the operation itself produces bool. For other ops, convert first.
+            if (IsPredicateOp(key.Op))
+            {
+                // Perform operation on input type - produces bool
+                EmitUnaryScalarOperation(il, key.Op, key.InputType);
+            }
+            else
+            {
+                // Convert to output type, then perform operation
+                EmitConvertTo(il, key.InputType, key.OutputType);
+                EmitUnaryScalarOperation(il, key.Op, key.OutputType);
+            }
 
             // Store result
             EmitStoreIndirect(il, key.OutputType);
@@ -503,10 +531,17 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Mul);
             il.Emit(OpCodes.Add);
             EmitLoadIndirect(il, key.InputType);
-            EmitConvertTo(il, key.InputType, key.OutputType);
 
-            // Operation
-            EmitUnaryScalarOperation(il, key.Op, key.OutputType);
+            // For predicate operations (IsFinite, IsNan, IsInf), operate on INPUT type
+            if (IsPredicateOp(key.Op))
+            {
+                EmitUnaryScalarOperation(il, key.Op, key.InputType);
+            }
+            else
+            {
+                EmitConvertTo(il, key.InputType, key.OutputType);
+                EmitUnaryScalarOperation(il, key.Op, key.OutputType);
+            }
 
             // Store
             EmitStoreIndirect(il, key.OutputType);
@@ -689,6 +724,27 @@ namespace NumSharp.Backends.Kernels
                 case UnaryOp.Cbrt:
                     // Cube root - Math.Cbrt (no SIMD intrinsic)
                     EmitMathCall(il, "Cbrt", type);
+                    break;
+
+                case UnaryOp.IsFinite:
+                    // Test for finiteness (not infinity and not NaN)
+                    // For integer types: always true
+                    // For float/double: use IsFinite static method
+                    EmitIsFiniteCall(il, type);
+                    break;
+
+                case UnaryOp.IsNan:
+                    // Test for NaN
+                    // For integer types: always false
+                    // For float/double: use IsNaN static method
+                    EmitIsNanCall(il, type);
+                    break;
+
+                case UnaryOp.IsInf:
+                    // Test for infinity (positive or negative)
+                    // For integer types: always false
+                    // For float/double: use IsInfinity static method
+                    EmitIsInfCall(il, type);
                     break;
 
                 default:
@@ -1051,6 +1107,90 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
+        /// Emit IsFinite check.
+        /// For float/double: calls float.IsFinite/double.IsFinite
+        /// For integer types: always true (integers cannot be infinite or NaN)
+        /// </summary>
+        private static void EmitIsFiniteCall(ILGenerator il, NPTypeCode type)
+        {
+            if (type == NPTypeCode.Single)
+            {
+                // float.IsFinite(x)
+                var method = typeof(float).GetMethod("IsFinite", new[] { typeof(float) });
+                il.EmitCall(OpCodes.Call, method!, null);
+            }
+            else if (type == NPTypeCode.Double)
+            {
+                // double.IsFinite(x)
+                var method = typeof(double).GetMethod("IsFinite", new[] { typeof(double) });
+                il.EmitCall(OpCodes.Call, method!, null);
+            }
+            else
+            {
+                // For all integer types: always true
+                // Pop the value from stack and push true (1)
+                il.Emit(OpCodes.Pop);
+                il.Emit(OpCodes.Ldc_I4_1);
+            }
+        }
+
+        /// <summary>
+        /// Emit IsNaN check.
+        /// For float/double: calls float.IsNaN/double.IsNaN
+        /// For integer types: always false (integers cannot be NaN)
+        /// </summary>
+        private static void EmitIsNanCall(ILGenerator il, NPTypeCode type)
+        {
+            if (type == NPTypeCode.Single)
+            {
+                // float.IsNaN(x)
+                var method = typeof(float).GetMethod("IsNaN", new[] { typeof(float) });
+                il.EmitCall(OpCodes.Call, method!, null);
+            }
+            else if (type == NPTypeCode.Double)
+            {
+                // double.IsNaN(x)
+                var method = typeof(double).GetMethod("IsNaN", new[] { typeof(double) });
+                il.EmitCall(OpCodes.Call, method!, null);
+            }
+            else
+            {
+                // For all integer types: always false
+                // Pop the value from stack and push false (0)
+                il.Emit(OpCodes.Pop);
+                il.Emit(OpCodes.Ldc_I4_0);
+            }
+        }
+
+        /// <summary>
+        /// Emit IsInfinity check.
+        /// For float/double: calls float.IsInfinity/double.IsInfinity
+        /// For integer types: always false (integers cannot be infinite)
+        /// </summary>
+        private static void EmitIsInfCall(ILGenerator il, NPTypeCode type)
+        {
+            if (type == NPTypeCode.Single)
+            {
+                // float.IsInfinity(x)
+                var method = typeof(float).GetMethod("IsInfinity", new[] { typeof(float) });
+                il.EmitCall(OpCodes.Call, method!, null);
+            }
+            else if (type == NPTypeCode.Double)
+            {
+                // double.IsInfinity(x)
+                var method = typeof(double).GetMethod("IsInfinity", new[] { typeof(double) });
+                il.EmitCall(OpCodes.Call, method!, null);
+            }
+            else
+            {
+                // For all integer types: always false
+                // Pop the value from stack and push false (0)
+                il.Emit(OpCodes.Pop);
+                il.Emit(OpCodes.Ldc_I4_0);
+            }
+        }
+
+        /// <summary>
         /// Emit unary operation for decimal type.
         /// </summary>
         private static void EmitUnaryDecimalOperation(ILGenerator il, UnaryOp op)
@@ -1278,6 +1418,19 @@ namespace NumSharp.Backends.Kernels
                     il.EmitCall(OpCodes.Call,
                         typeof(decimal).GetMethod("op_Explicit", new[] { typeof(double) })!,
                         null);
+                    break;
+
+                case UnaryOp.IsFinite:
+                    // Decimal is always finite - pop value, push true
+                    il.Emit(OpCodes.Pop);
+                    il.Emit(OpCodes.Ldc_I4_1);
+                    break;
+
+                case UnaryOp.IsNan:
+                case UnaryOp.IsInf:
+                    // Decimal cannot be NaN or Inf - pop value, push false
+                    il.Emit(OpCodes.Pop);
+                    il.Emit(OpCodes.Ldc_I4_0);
                     break;
 
                 default:
@@ -1629,11 +1782,20 @@ namespace NumSharp.Backends.Kernels
             // Load input argument
             il.Emit(OpCodes.Ldarg_0);
 
-            // Convert to output type if different
-            EmitConvertTo(il, key.InputType, key.OutputType);
-
-            // Perform the unary operation (result is on stack)
-            EmitUnaryScalarOperation(il, key.Op, key.OutputType);
+            // For predicate operations (IsFinite, IsNan, IsInf), operate on INPUT type
+            // and the operation itself produces bool. For other ops, convert first.
+            if (IsPredicateOp(key.Op))
+            {
+                // Perform operation on input type - produces bool
+                EmitUnaryScalarOperation(il, key.Op, key.InputType);
+            }
+            else
+            {
+                // Convert to output type if different
+                EmitConvertTo(il, key.InputType, key.OutputType);
+                // Perform the unary operation (result is on stack)
+                EmitUnaryScalarOperation(il, key.Op, key.OutputType);
+            }
 
             // Return
             il.Emit(OpCodes.Ret);

@@ -63,7 +63,15 @@ namespace NumSharp.Backends.Kernels
         Rad2Deg,
         BitwiseNot,
         /// <summary>Logical NOT for boolean arrays (! operator, not ~ bitwise)</summary>
-        LogicalNot
+        LogicalNot,
+
+        // Floating-point classification (returns bool)
+        /// <summary>Test element-wise for finiteness (not infinity and not NaN)</summary>
+        IsFinite,
+        /// <summary>Test element-wise for NaN</summary>
+        IsNan,
+        /// <summary>Test element-wise for positive or negative infinity</summary>
+        IsInf
     }
 
     /// <summary>
