@@ -81,14 +81,12 @@ namespace NumSharp.Backends
             {
                 case NPTypeCode.Single:
                 {
-                    var kernel = ILKernelGenerator.GetMatMulKernel<float>();
-                    if (kernel == null) return false;
-
                     float* a = (float*)left.Address;
                     float* b = (float*)right.Address;
                     float* c = (float*)result.Address;
 
-                    kernel(a, b, c, M, N, K);
+                    // Use cache-blocked implementation for better performance
+                    SimdMatMul.MatMulFloat(a, b, c, M, N, K);
                     return true;
                 }
 
