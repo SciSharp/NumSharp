@@ -58,7 +58,26 @@ namespace NumSharp.Backends
             // Create output with CONTIGUOUS strides even if input is broadcast.
             // Use dimensions only, not the input shape's strides.
             var outputShape = new Shape(shape.dimensions);  // Fresh contiguous shape
-            var ret = new NDArray(typeCode ?? (inputArr.GetTypeCode.GetAccumulatingType()), outputShape, false);
+            var retTypeCode = typeCode ?? (inputArr.GetTypeCode.GetAccumulatingType());
+            var ret = new NDArray(retTypeCode, outputShape, false);
+
+            // Fast path: use IL-generated axis kernel when available
+            // This avoids the overhead of iterator-based slicing and provides direct pointer access
+            if (ILKernelGenerator.Enabled && !shape.IsBroadcasted)
+            {
+                bool innerAxisContiguous = (axis == arr.ndim - 1) && (arr.strides[axis] == 1);
+                var key = new CumulativeAxisKernelKey(inputArr.GetTypeCode, retTypeCode, ReductionOp.CumSum, innerAxisContiguous);
+                var kernel = ILKernelGenerator.TryGetCumulativeAxisKernel(key);
+                if (kernel != null)
+                {
+                    fixed (int* inputStrides = arr.strides)
+                    fixed (int* shapePtr = arr.shape)
+                    {
+                        kernel((void*)arr.Address, (void*)ret.Address, inputStrides, shapePtr, axis, arr.ndim, arr.size);
+                    }
+                    return ret;
+                }
+            }
 
             // Use the INPUT shape for the axis incrementor (it iterates over input dimensions)
             var iterAxis = new NDCoordinatesAxisIncrementor(ref shape, axis);

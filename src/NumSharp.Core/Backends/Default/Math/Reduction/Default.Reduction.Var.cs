@@ -73,8 +73,11 @@ namespace NumSharp.Backends
 
             if (shape.IsScalar || (shape.size == 1 && shape.NDim == 1))
             {
-                // NumPy: variance of single element is 0.0 (always returns float64 for variance)
-                var r = NDArray.Scalar(0.0);
+                // NumPy: variance of single element with ddof=0 is 0.0
+                // With ddof >= size, the divisor is <= 0, which produces NaN
+                int _ddof = ddof ?? 0;
+                double value = (arr.size - _ddof) <= 0 ? double.NaN : 0.0;
+                var r = NDArray.Scalar(value);
                 if (keepdims)
                 {
                     // NumPy: keepdims preserves the number of dimensions, all set to 1
@@ -5336,7 +5339,11 @@ namespace NumSharp.Backends
         protected object var_elementwise(NDArray arr, NPTypeCode? typeCode, int? ddof)
         {
             if (arr.Shape.IsScalar || (arr.Shape.size == 1 && arr.Shape.NDim == 1))
-                return NDArray.Scalar(0);
+            {
+                // With ddof >= size, divisor is <= 0, which produces NaN
+                int _ddof = ddof ?? 0;
+                return (arr.size - _ddof) <= 0 ? double.NaN : 0.0;
+            }
 
             var retType = typeCode ?? (arr.GetTypeCode).GetComputingType();
 

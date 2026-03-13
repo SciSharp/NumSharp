@@ -118,6 +118,8 @@ namespace NumSharp.Backends.Kernels
             _comparisonScalarCache.Clear();
             _elementReductionCache.Clear();
             _scanCache.Clear();
+            _axisScanCache.Clear();
+            _shiftKernelCache.Clear();
         }
 
         /// <summary>
