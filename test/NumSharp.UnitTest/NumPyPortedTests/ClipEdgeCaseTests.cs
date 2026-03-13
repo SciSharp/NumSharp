@@ -1,8 +1,9 @@
 using System;
-using System.Threading.Tasks;
 using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.Backends;
+using NumSharp.UnitTest.Utilities;
+using TUnit.Core;
 
 namespace NumSharp.UnitTest.NumPyPortedTests
 {
@@ -15,7 +16,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         #region Basic Clip Tests
 
         [Test]
-        public async Task Clip_BasicIntArray()
+        public void Clip_BasicIntArray()
         {
             // NumPy: clip([-1,5,2,3,10,-4,-9], 2, 7) = [2, 5, 2, 3, 7, 2, 2]
             var arr = np.array(new int[] { -1, 5, 2, 3, 10, -4, -9 });
@@ -24,7 +25,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         }
 
         [Test]
-        public async Task Clip_2DArray()
+        public void Clip_2DArray()
         {
             // NumPy: clip(arange(12).reshape(3,4), 3, 8)
             var a = np.arange(12).reshape(3, 4);
@@ -38,7 +39,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         #region Clip with None Tests
 
         [Test]
-        public async Task Clip_NoneMin_OnlyMaxApplied()
+        public void Clip_NoneMin_OnlyMaxApplied()
         {
             // NumPy: clip(arange(10), None, 5) = [0,1,2,3,4,5,5,5,5,5]
             var a = np.arange(10);
@@ -47,7 +48,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         }
 
         [Test]
-        public async Task Clip_NoneMax_OnlyMinApplied()
+        public void Clip_NoneMax_OnlyMinApplied()
         {
             // NumPy: clip(arange(10), 3, None) = [3,3,3,3,4,5,6,7,8,9]
             var a = np.arange(10);
@@ -56,7 +57,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         }
 
         [Test]
-        public async Task Clip_BothNone_ReturnsOriginal()
+        public void Clip_BothNone_ReturnsOriginal()
         {
             // NumPy: clip(arange(10), None, None) = arange(10)
             var a = np.arange(10);
@@ -69,12 +70,12 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         #region Min > Max Edge Case (from test_clip_value_min_max_flip)
 
         [Test]
-        public async Task Clip_MinGreaterThanMax_UsesMaxValue()
+        public void Clip_MinGreaterThanMax_UsesMaxValue()
         {
             // NumPy: clip(arange(10), 5, 3) = all 3s
             // Per NumPy: result = minimum(maximum(a, amin), amax)
-            var a = np.arange(10, dtype: np.int64);
-            var result = np.clip(a, 5, 3);
+            var a = np.arange(10).astype(np.int64);
+            var result = np.clip(a, 5L, 3L);
             result.Should().BeOfValues(3L, 3L, 3L, 3L, 3L, 3L, 3L, 3L, 3L, 3L);
         }
 
@@ -83,30 +84,30 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         #region NaN Handling (from test_clip_nan)
 
         [Test]
-        public async Task Clip_NaNMin_ReturnsAllNaN()
+        public void Clip_NaNMin_ReturnsAllNaN()
         {
             // NumPy: clip(arange(7.), min=np.nan) = [nan, nan, ...]
-            var d = np.arange(7, dtype: np.float64);
+            var d = np.arange(7.0);  // float64 from double overload
             var result = np.clip(d, double.NaN, null);
             var data = result.GetData<double>();
 
             foreach (var val in data)
             {
-                await Assert.That(double.IsNaN(val)).IsTrue();
+                Assert.IsTrue(double.IsNaN(val));
             }
         }
 
         [Test]
-        public async Task Clip_NaNMax_ReturnsAllNaN()
+        public void Clip_NaNMax_ReturnsAllNaN()
         {
             // NumPy: clip(arange(7.), max=np.nan) = [nan, nan, ...]
-            var d = np.arange(7, dtype: np.float64);
+            var d = np.arange(7.0);  // float64 from double overload
             var result = np.clip(d, null, double.NaN);
             var data = result.GetData<double>();
 
             foreach (var val in data)
             {
-                await Assert.That(double.IsNaN(val)).IsTrue();
+                Assert.IsTrue(double.IsNaN(val));
             }
         }
 
@@ -115,35 +116,35 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         #region Dtype Preservation Tests
 
         [Test]
-        public async Task Clip_Int32_PreservesDtype()
+        public void Clip_Int32_PreservesDtype()
         {
-            var arr = np.arange(10, dtype: np.int32);
+            var arr = np.arange(10);  // int32 by default
             var result = np.clip(arr, 2, 7);
-            await Assert.That(result.dtype).IsEqualTo(np.int32);
+            Assert.AreEqual(np.int32, result.dtype);
         }
 
         [Test]
-        public async Task Clip_Int64_PreservesDtype()
+        public void Clip_Int64_PreservesDtype()
         {
-            var arr = np.arange(10, dtype: np.int64);
+            var arr = np.arange(10).astype(np.int64);
             var result = np.clip(arr, 2L, 7L);
-            await Assert.That(result.dtype).IsEqualTo(np.int64);
+            Assert.AreEqual(np.int64, result.dtype);
         }
 
         [Test]
-        public async Task Clip_Float32_PreservesDtype()
+        public void Clip_Float32_PreservesDtype()
         {
-            var arr = np.arange(10, dtype: np.float32);
+            var arr = np.arange(10f);  // float32 from float overload
             var result = np.clip(arr, 2f, 7f);
-            await Assert.That(result.dtype).IsEqualTo(np.float32);
+            Assert.AreEqual(np.float32, result.dtype);
         }
 
         [Test]
-        public async Task Clip_Float64_PreservesDtype()
+        public void Clip_Float64_PreservesDtype()
         {
-            var arr = np.arange(10, dtype: np.float64);
+            var arr = np.arange(10.0);  // float64 from double overload
             var result = np.clip(arr, 2.0, 7.0);
-            await Assert.That(result.dtype).IsEqualTo(np.float64);
+            Assert.AreEqual(np.float64, result.dtype);
         }
 
         #endregion
@@ -151,7 +152,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         #region Strided Array Tests (from test_clip_non_contig)
 
         [Test]
-        public async Task Clip_StridedArray()
+        public void Clip_StridedArray()
         {
             // NumPy: clip(a[::2], 3, 15) where a = arange(20)
             var a = np.arange(20);
@@ -166,7 +167,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         #region Transposed Array Tests (from test_clip_with_out_transposed)
 
         [Test]
-        public async Task Clip_TransposedArray()
+        public void Clip_TransposedArray()
         {
             // NumPy: clip(arange(16).reshape(4,4).T, 4, 10)
             var a = np.arange(16).reshape(4, 4);
@@ -181,7 +182,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         #region Broadcasting Tests
 
         [Test]
-        public async Task Clip_BroadcastMin()
+        public void Clip_BroadcastMin()
         {
             var a = np.arange(12).reshape(3, 4);
             var min = np.repeat(3, 12).reshape(3, 4);
@@ -192,7 +193,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         }
 
         [Test]
-        public async Task Clip_BroadcastMax()
+        public void Clip_BroadcastMax()
         {
             var a = np.arange(12).reshape(3, 4);
             var max = np.repeat(8, 12).reshape(3, 4);
@@ -207,7 +208,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         #region Special Float Values
 
         [Test]
-        public async Task Clip_WithInfinity()
+        public void Clip_WithInfinity()
         {
             var a = np.array(new double[] { -100.0, -1.0, 0.0, 1.0, 100.0 });
 
@@ -219,7 +220,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         }
 
         [Test]
-        public async Task Clip_InfiniteValuesInArray()
+        public void Clip_InfiniteValuesInArray()
         {
             var a = np.array(new double[] { double.NegativeInfinity, -1.0, 0.0, 1.0, double.PositiveInfinity });
             var result = np.clip(a, -10.0, 10.0);
@@ -232,12 +233,12 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         #region Empty Array
 
         [Test]
-        public async Task Clip_EmptyArray_ReturnsEmptyArray()
+        public void Clip_EmptyArray_ReturnsEmptyArray()
         {
             var a = np.array(new double[0]);
             var result = np.clip(a, 0.0, 1.0);
 
-            await Assert.That(result.size).IsEqualTo(0);
+            Assert.AreEqual(0, result.size);
         }
 
         #endregion
@@ -245,7 +246,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         #region Single Element
 
         [Test]
-        public async Task Clip_SingleElement_BelowMin()
+        public void Clip_SingleElement_BelowMin()
         {
             var a = np.array(new double[] { -5.0 });
             var result = np.clip(a, 0.0, 10.0);
@@ -253,7 +254,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         }
 
         [Test]
-        public async Task Clip_SingleElement_AboveMax()
+        public void Clip_SingleElement_AboveMax()
         {
             var a = np.array(new double[] { 15.0 });
             var result = np.clip(a, 0.0, 10.0);
@@ -261,7 +262,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         }
 
         [Test]
-        public async Task Clip_SingleElement_InRange()
+        public void Clip_SingleElement_InRange()
         {
             var a = np.array(new double[] { 5.0 });
             var result = np.clip(a, 0.0, 10.0);
@@ -273,7 +274,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         #region Scalar Min/Max
 
         [Test]
-        public async Task Clip_ScalarMinMax()
+        public void Clip_ScalarMinMax()
         {
             var a = np.arange(10);
             var result = np.clip(a, (NDArray)3, (NDArray)7);
@@ -285,7 +286,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         #region All Same Value
 
         [Test]
-        public async Task Clip_AllSameValue_BelowMin()
+        public void Clip_AllSameValue_BelowMin()
         {
             var a = np.full(10, -5);
             var result = np.clip(a, 0, 10);
@@ -293,7 +294,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         }
 
         [Test]
-        public async Task Clip_AllSameValue_AboveMax()
+        public void Clip_AllSameValue_AboveMax()
         {
             var a = np.full(10, 15);
             var result = np.clip(a, 0, 10);
@@ -301,7 +302,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         }
 
         [Test]
-        public async Task Clip_AllSameValue_InRange()
+        public void Clip_AllSameValue_InRange()
         {
             var a = np.full(10, 5);
             var result = np.clip(a, 0, 10);

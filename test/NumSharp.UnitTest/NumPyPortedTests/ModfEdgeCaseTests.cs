@@ -1,8 +1,9 @@
 using System;
-using System.Threading.Tasks;
 using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.Backends;
+using NumSharp.UnitTest.Utilities;
+using TUnit.Core;
 
 namespace NumSharp.UnitTest.NumPyPortedTests
 {
@@ -15,7 +16,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         #region Basic Tests
 
         [Test]
-        public async Task Modf_PositiveValues()
+        public void Modf_PositiveValues()
         {
             // NumPy: modf([1.5, 2.7]) = ([0.5, 0.7], [1., 2.])
             var x = np.array(new double[] { 1.5, 2.7 });
@@ -24,14 +25,14 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             var fracData = frac.GetData<double>();
             var intgData = intg.GetData<double>();
 
-            await Assert.That(Math.Abs(fracData[0] - 0.5)).IsLessThan(1e-10);
-            await Assert.That(Math.Abs(fracData[1] - 0.7)).IsLessThan(1e-10);
-            await Assert.That(intgData[0]).IsEqualTo(1.0);
-            await Assert.That(intgData[1]).IsEqualTo(2.0);
+            Assert.IsTrue(Math.Abs(fracData[0] - 0.5) <1e-10);
+            Assert.IsTrue(Math.Abs(fracData[1] - 0.7) <1e-10);
+            Assert.AreEqual(1.0, intgData[0]);
+            Assert.AreEqual(2.0, intgData[1]);
         }
 
         [Test]
-        public async Task Modf_NegativeValues()
+        public void Modf_NegativeValues()
         {
             // NumPy: modf(-3.2) = (-0.2, -3.)
             var x = np.array(new double[] { -3.2 });
@@ -40,12 +41,12 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             var fracData = frac.GetData<double>();
             var intgData = intg.GetData<double>();
 
-            await Assert.That(Math.Abs(fracData[0] - (-0.2))).IsLessThan(1e-10);
-            await Assert.That(intgData[0]).IsEqualTo(-3.0);
+            Assert.IsTrue(Math.Abs(fracData[0] - (-0.2)) < 1e-10);
+            Assert.AreEqual(-3.0, intgData[0]);
         }
 
         [Test]
-        public async Task Modf_MixedValues()
+        public void Modf_MixedValues()
         {
             // NumPy: modf([1.5, 2.7, -3.2, 0.0])
             var x = np.array(new double[] { 1.5, 2.7, -3.2, 0.0 });
@@ -54,15 +55,15 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             var fracData = frac.GetData<double>();
             var intgData = intg.GetData<double>();
 
-            await Assert.That(Math.Abs(fracData[0] - 0.5)).IsLessThan(1e-10);
-            await Assert.That(Math.Abs(fracData[1] - 0.7)).IsLessThan(1e-10);
-            await Assert.That(Math.Abs(fracData[2] - (-0.2))).IsLessThan(1e-10);
-            await Assert.That(fracData[3]).IsEqualTo(0.0);
+            Assert.IsTrue(Math.Abs(fracData[0] - 0.5) < 1e-10);
+            Assert.IsTrue(Math.Abs(fracData[1] - 0.7) < 1e-10);
+            Assert.IsTrue(Math.Abs(fracData[2] - (-0.2)) < 1e-10);
+            Assert.AreEqual(0.0, fracData[3]);
 
-            await Assert.That(intgData[0]).IsEqualTo(1.0);
-            await Assert.That(intgData[1]).IsEqualTo(2.0);
-            await Assert.That(intgData[2]).IsEqualTo(-3.0);
-            await Assert.That(intgData[3]).IsEqualTo(0.0);
+            Assert.AreEqual(1.0, intgData[0]);
+            Assert.AreEqual(2.0, intgData[1]);
+            Assert.AreEqual(-3.0, intgData[2]);
+            Assert.AreEqual(0.0, intgData[3]);
         }
 
         #endregion
@@ -70,17 +71,17 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         #region Zero Tests
 
         [Test]
-        public async Task Modf_PositiveZero()
+        public void Modf_PositiveZero()
         {
             var x = np.array(new double[] { 0.0 });
             var (frac, intg) = np.modf(x);
 
-            await Assert.That(frac.GetData<double>()[0]).IsEqualTo(0.0);
-            await Assert.That(intg.GetData<double>()[0]).IsEqualTo(0.0);
+            Assert.AreEqual(0.0, frac.GetData<double>()[0]);
+            Assert.AreEqual(0.0, intg.GetData<double>()[0]);
         }
 
         [Test]
-        public async Task Modf_NegativeZero()
+        public void Modf_NegativeZero()
         {
             // NumPy: modf(-0.0) = (-0.0, -0.0)
             var x = np.array(new double[] { -0.0 });
@@ -90,8 +91,8 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             var fracVal = frac.GetData<double>()[0];
             var intgVal = intg.GetData<double>()[0];
 
-            await Assert.That(fracVal).IsEqualTo(0.0);  // Value is zero
-            await Assert.That(intgVal).IsEqualTo(0.0);  // Value is zero
+            Assert.AreEqual(0.0, fracVal);  // Value is zero
+            Assert.AreEqual(0.0, intgVal);  // Value is zero
         }
 
         #endregion
@@ -99,41 +100,41 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         #region Special Values (Inf, NaN)
 
         [Test]
-        public async Task Modf_PositiveInfinity()
+        public void Modf_PositiveInfinity()
         {
             // NumPy: modf(inf) = (0.0, inf)
             var x = np.array(new double[] { double.PositiveInfinity });
             var (frac, intg) = np.modf(x);
 
-            await Assert.That(frac.GetData<double>()[0]).IsEqualTo(0.0);
-            await Assert.That(double.IsPositiveInfinity(intg.GetData<double>()[0])).IsTrue();
+            Assert.AreEqual(0.0, frac.GetData<double>()[0]);
+            Assert.IsTrue(double.IsPositiveInfinity(intg.GetData<double>()[0]));
         }
 
         [Test]
-        public async Task Modf_NegativeInfinity()
+        public void Modf_NegativeInfinity()
         {
             // NumPy: modf(-inf) = (-0.0, -inf)
             var x = np.array(new double[] { double.NegativeInfinity });
             var (frac, intg) = np.modf(x);
 
             // Fractional part is -0.0 (or 0.0)
-            await Assert.That(frac.GetData<double>()[0]).IsEqualTo(0.0);
-            await Assert.That(double.IsNegativeInfinity(intg.GetData<double>()[0])).IsTrue();
+            Assert.AreEqual(0.0, frac.GetData<double>()[0]);
+            Assert.IsTrue(double.IsNegativeInfinity(intg.GetData<double>()[0]));
         }
 
         [Test]
-        public async Task Modf_NaN()
+        public void Modf_NaN()
         {
             // NumPy: modf(nan) = (nan, nan)
             var x = np.array(new double[] { double.NaN });
             var (frac, intg) = np.modf(x);
 
-            await Assert.That(double.IsNaN(frac.GetData<double>()[0])).IsTrue();
-            await Assert.That(double.IsNaN(intg.GetData<double>()[0])).IsTrue();
+            Assert.IsTrue(double.IsNaN(frac.GetData<double>()[0]));
+            Assert.IsTrue(double.IsNaN(intg.GetData<double>()[0]));
         }
 
         [Test]
-        public async Task Modf_MixedSpecialValues()
+        public void Modf_MixedSpecialValues()
         {
             // NumPy: modf([inf, -inf, nan])
             var x = np.array(new double[] { double.PositiveInfinity, double.NegativeInfinity, double.NaN });
@@ -142,14 +143,14 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             var fracData = frac.GetData<double>();
             var intgData = intg.GetData<double>();
 
-            await Assert.That(fracData[0]).IsEqualTo(0.0);
-            await Assert.That(double.IsPositiveInfinity(intgData[0])).IsTrue();
+            Assert.AreEqual(0.0, fracData[0]);
+            Assert.IsTrue(double.IsPositiveInfinity(intgData[0]));
 
-            await Assert.That(fracData[1]).IsEqualTo(0.0);
-            await Assert.That(double.IsNegativeInfinity(intgData[1])).IsTrue();
+            Assert.AreEqual(0.0, fracData[1]);
+            Assert.IsTrue(double.IsNegativeInfinity(intgData[1]));
 
-            await Assert.That(double.IsNaN(fracData[2])).IsTrue();
-            await Assert.That(double.IsNaN(intgData[2])).IsTrue();
+            Assert.IsTrue(double.IsNaN(fracData[2]));
+            Assert.IsTrue(double.IsNaN(intgData[2]));
         }
 
         #endregion
@@ -157,23 +158,23 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         #region Dtype Tests
 
         [Test]
-        public async Task Modf_Float32_PreservesDtype()
+        public void Modf_Float32_PreservesDtype()
         {
             var x = np.array(new float[] { 1.5f, 2.7f });
             var (frac, intg) = np.modf(x);
 
-            await Assert.That(frac.dtype).IsEqualTo(np.float32);
-            await Assert.That(intg.dtype).IsEqualTo(np.float32);
+            Assert.AreEqual(np.float32, frac.dtype);
+            Assert.AreEqual(np.float32, intg.dtype);
         }
 
         [Test]
-        public async Task Modf_Float64_PreservesDtype()
+        public void Modf_Float64_PreservesDtype()
         {
             var x = np.array(new double[] { 1.5, 2.7 });
             var (frac, intg) = np.modf(x);
 
-            await Assert.That(frac.dtype).IsEqualTo(np.float64);
-            await Assert.That(intg.dtype).IsEqualTo(np.float64);
+            Assert.AreEqual(np.float64, frac.dtype);
+            Assert.AreEqual(np.float64, intg.dtype);
         }
 
         #endregion
@@ -181,7 +182,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         #region Large Values
 
         [Test]
-        public async Task Modf_LargeValues()
+        public void Modf_LargeValues()
         {
             // NumPy: modf([1e10 + 0.5, -1e10 - 0.5])
             var x = np.array(new double[] { 1e10 + 0.5, -1e10 - 0.5 });
@@ -190,10 +191,10 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             var fracData = frac.GetData<double>();
             var intgData = intg.GetData<double>();
 
-            await Assert.That(Math.Abs(fracData[0] - 0.5)).IsLessThan(1e-5);
-            await Assert.That(Math.Abs(fracData[1] - (-0.5))).IsLessThan(1e-5);
-            await Assert.That(intgData[0]).IsEqualTo(1e10);
-            await Assert.That(intgData[1]).IsEqualTo(-1e10);
+            Assert.IsTrue(Math.Abs(fracData[0] - 0.5) < 1e-5);
+            Assert.IsTrue(Math.Abs(fracData[1] - (-0.5)) < 1e-5);
+            Assert.AreEqual(1e10, intgData[0]);
+            Assert.AreEqual(-1e10, intgData[1]);
         }
 
         #endregion
@@ -201,7 +202,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         #region Multi-dimensional Arrays
 
         [Test]
-        public async Task Modf_2DArray()
+        public void Modf_2DArray()
         {
             // NumPy: modf([[1.5, 2.7], [3.1, 4.9]])
             var x = np.array(new double[,] { { 1.5, 2.7 }, { 3.1, 4.9 } });
@@ -211,16 +212,16 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             intg.Should().BeShaped(2, 2);
 
             var fracData = frac.GetData<double>();
-            await Assert.That(Math.Abs(fracData[0] - 0.5)).IsLessThan(1e-10);
-            await Assert.That(Math.Abs(fracData[1] - 0.7)).IsLessThan(1e-10);
-            await Assert.That(Math.Abs(fracData[2] - 0.1)).IsLessThan(1e-10);
-            await Assert.That(Math.Abs(fracData[3] - 0.9)).IsLessThan(1e-10);
+            Assert.IsTrue(Math.Abs(fracData[0] - 0.5) <1e-10);
+            Assert.IsTrue(Math.Abs(fracData[1] - 0.7) <1e-10);
+            Assert.IsTrue(Math.Abs(fracData[2] - 0.1) <1e-10);
+            Assert.IsTrue(Math.Abs(fracData[3] - 0.9) <1e-10);
 
             var intgData = intg.GetData<double>();
-            await Assert.That(intgData[0]).IsEqualTo(1.0);
-            await Assert.That(intgData[1]).IsEqualTo(2.0);
-            await Assert.That(intgData[2]).IsEqualTo(3.0);
-            await Assert.That(intgData[3]).IsEqualTo(4.0);
+            Assert.AreEqual(1.0, intgData[0]);
+            Assert.AreEqual(2.0, intgData[1]);
+            Assert.AreEqual(3.0, intgData[2]);
+            Assert.AreEqual(4.0, intgData[3]);
         }
 
         #endregion
@@ -228,7 +229,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         #region Whole Numbers
 
         [Test]
-        public async Task Modf_WholeNumbers()
+        public void Modf_WholeNumbers()
         {
             // Whole numbers should have fractional part = 0
             var x = np.array(new double[] { 1.0, 2.0, 3.0, 4.0, 5.0 });
@@ -239,8 +240,8 @@ namespace NumSharp.UnitTest.NumPyPortedTests
 
             for (int i = 0; i < 5; i++)
             {
-                await Assert.That(fracData[i]).IsEqualTo(0.0);
-                await Assert.That(intgData[i]).IsEqualTo((double)(i + 1));
+                Assert.AreEqual(0.0, fracData[i]);
+                Assert.AreEqual((double)(i + 1), intgData[i]);
             }
         }
 
@@ -249,13 +250,13 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         #region Empty Array
 
         [Test]
-        public async Task Modf_EmptyArray()
+        public void Modf_EmptyArray()
         {
             var x = np.array(new double[0]);
             var (frac, intg) = np.modf(x);
 
-            await Assert.That(frac.size).IsEqualTo(0);
-            await Assert.That(intg.size).IsEqualTo(0);
+            Assert.AreEqual(0, frac.size);
+            Assert.AreEqual(0, intg.size);
         }
 
         #endregion
@@ -263,13 +264,13 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         #region Single Element
 
         [Test]
-        public async Task Modf_SingleElement()
+        public void Modf_SingleElement()
         {
             var x = np.array(new double[] { 3.14159 });
             var (frac, intg) = np.modf(x);
 
-            await Assert.That(Math.Abs(frac.GetData<double>()[0] - 0.14159)).IsLessThan(1e-5);
-            await Assert.That(intg.GetData<double>()[0]).IsEqualTo(3.0);
+            Assert.IsTrue(Math.Abs(frac.GetData<double>()[0] - 0.14159) < 1e-5);
+            Assert.AreEqual(3.0, intg.GetData<double>()[0]);
         }
 
         #endregion
@@ -277,7 +278,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         #region Very Small Fractional Parts
 
         [Test]
-        public async Task Modf_VerySmallFraction()
+        public void Modf_VerySmallFraction()
         {
             // Values very close to integers
             var x = np.array(new double[] { 1.0000001, 1.9999999 });
@@ -286,13 +287,13 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             var fracData = frac.GetData<double>();
             var intgData = intg.GetData<double>();
 
-            await Assert.That(fracData[0]).IsGreaterThan(0.0);
-            await Assert.That(fracData[0]).IsLessThan(0.001);
-            await Assert.That(intgData[0]).IsEqualTo(1.0);
+            Assert.IsTrue(fracData[0] > 0.0);
+            Assert.IsTrue(fracData[0] < 0.001);
+            Assert.AreEqual(1.0, intgData[0]);
 
-            await Assert.That(fracData[1]).IsGreaterThan(0.999);
-            await Assert.That(fracData[1]).IsLessThan(1.0);
-            await Assert.That(intgData[1]).IsEqualTo(1.0);
+            Assert.IsTrue(fracData[1] > 0.999);
+            Assert.IsTrue(fracData[1] < 1.0);
+            Assert.AreEqual(1.0, intgData[1]);
         }
 
         #endregion
