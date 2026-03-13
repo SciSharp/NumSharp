@@ -68,5 +68,27 @@ namespace NumSharp.UnitTest.LinearAlgebra
             a.shape.Should().HaveCount(1).And.ContainInOrder(2);
             a.dtype.Should().Be<byte>();
         }
+
+        /// <summary>
+        /// Bug 75 fix verification: np.prod on boolean array should work.
+        /// NumPy: prod([True, True, False, True]) = 0 (False acts as 0)
+        /// NumPy: prod([True, True, True, True]) = 1
+        /// Return type is int64 (NumPy 2.x behavior).
+        /// </summary>
+        [Test]
+        public void BooleanArray_TreatsAsIntAndReturnsInt64()
+        {
+            // Array with False - product is 0
+            var withFalse = np.array(new bool[] { true, true, false, true });
+            var result1 = np.prod(withFalse);
+            result1.GetInt64().Should().Be(0, "prod([T,T,F,T]) = 1*1*0*1 = 0");
+            result1.typecode.Should().Be(NPTypeCode.Int64, "NumPy 2.x: prod(bool) returns int64");
+
+            // Array with all True - product is 1
+            var allTrue = np.array(new bool[] { true, true, true, true });
+            var result2 = np.prod(allTrue);
+            result2.GetInt64().Should().Be(1, "prod([T,T,T,T]) = 1*1*1*1 = 1");
+            result2.typecode.Should().Be(NPTypeCode.Int64, "NumPy 2.x: prod(bool) returns int64");
+        }
     }
 }

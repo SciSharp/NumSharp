@@ -67,5 +67,24 @@ namespace NumSharp.UnitTest.Maths
 
             np.cumsum(arr, axis: 1).Should().Be(expected);
         }
+
+        /// <summary>
+        /// Bug 76 fix verification: np.cumsum on boolean array should work.
+        /// NumPy: cumsum([True, False, True, True, False]) = [1, 1, 2, 3, 3]
+        /// Return type is int64 (NumPy 2.x behavior).
+        /// </summary>
+        [Test]
+        public void BooleanArray_TreatsAsIntAndReturnsInt64()
+        {
+            var a = np.array(new bool[] { true, false, true, true, false });
+            var result = np.cumsum(a);
+
+            result.typecode.Should().Be(NPTypeCode.Int64, "NumPy 2.x: cumsum(bool) returns int64");
+            result.GetInt64(0).Should().Be(1, "cumsum[0] = 1 (True)");
+            result.GetInt64(1).Should().Be(1, "cumsum[1] = 1 (False adds 0)");
+            result.GetInt64(2).Should().Be(2, "cumsum[2] = 2 (True adds 1)");
+            result.GetInt64(3).Should().Be(3, "cumsum[3] = 3 (True adds 1)");
+            result.GetInt64(4).Should().Be(3, "cumsum[4] = 3 (False adds 0)");
+        }
     }
 }
