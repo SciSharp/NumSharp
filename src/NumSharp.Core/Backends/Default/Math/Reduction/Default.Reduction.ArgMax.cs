@@ -1,4 +1,5 @@
 ﻿using System;
+using NumSharp.Backends.Kernels;
 using NumSharp.Utilities;
 
 namespace NumSharp.Backends
@@ -124,7 +125,53 @@ namespace NumSharp.Backends
                 outputShape = new Shape(keepdimsShapeDims);
             }
 
-            //prepare ret
+            // Use IL kernel for axis reduction
+            return ExecuteAxisArgReduction(arr, axis, keepdims, outputShape, axisedShape, ReductionOp.ArgMax);
+        }
+
+        /// <summary>
+        /// Execute axis ArgMax/ArgMin reduction using IL kernels.
+        /// </summary>
+        private unsafe NDArray ExecuteAxisArgReduction(NDArray arr, int axis, bool keepdims, Shape outputShape, Shape axisedShape, ReductionOp op)
+        {
+            var shape = arr.Shape;
+            var inputType = arr.GetTypeCode;
+
+            // ArgMax/ArgMin always output Int64
+            var key = new AxisReductionKernelKey(inputType, NPTypeCode.Int64, op, shape.IsContiguous && axis == arr.ndim - 1);
+            var kernel = ILKernelGenerator.TryGetAxisReductionKernel(key);
+
+            if (kernel != null)
+            {
+                // Use IL kernel path
+                var ret = new NDArray(NPTypeCode.Int64, axisedShape, false);
+                int axisSize = shape.dimensions[axis];
+                int outputSize = ret.size > 0 ? ret.size : 1;
+                byte* inputAddr = (byte*)arr.Address + shape.offset * arr.dtypesize;
+
+                fixed (int* inputStrides = shape.strides)
+                fixed (int* inputDims = shape.dimensions)
+                fixed (int* outputStrides = ret.Shape.strides)
+                {
+                    kernel((void*)inputAddr, (void*)ret.Address, inputStrides, inputDims, outputStrides, axis, axisSize, arr.ndim, outputSize);
+                }
+
+                if (keepdims)
+                    ret.Storage.Reshape(outputShape);
+
+                return ret;
+            }
+
+            // Fallback to iterator-based implementation (should not happen with IL kernels enabled)
+            return ExecuteAxisArgReductionIterator(arr, axis, keepdims, outputShape, axisedShape, op);
+        }
+
+        /// <summary>
+        /// Fallback iterator-based axis ArgMax reduction.
+        /// </summary>
+        private NDArray ExecuteAxisArgReductionIterator(NDArray arr, int axis, bool keepdims, Shape outputShape, Shape axisedShape, ReductionOp op)
+        {
+            var shape = arr.Shape;
             var ret = new NDArray(NPTypeCode.Int64, axisedShape, false);
             var iterAxis = new NDCoordinatesAxisIncrementor(ref shape, axis);
             var iterRet = new ValueCoordinatesIncrementor(ref axisedShape);
@@ -502,6 +549,8 @@ namespace NumSharp.Backends
 
             return ret;
         }
+
+        // ReduceArgMax method end - the main entry point method ends above at the ExecuteAxisArgReduction call
 
         public int ArgMaxElementwise(NDArray arr)
         {

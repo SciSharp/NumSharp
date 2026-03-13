@@ -180,6 +180,18 @@ namespace NumSharp.Backends.Kernels
         NumSharp.Generic.NDArray<int>[] ConvertFlatToCoordinates(System.Collections.Generic.List<int> flatIndices, int[] shape);
 
         /// <summary>
+        /// Find indices of all non-zero elements in a strided (non-contiguous) array.
+        /// Uses coordinate-based iteration to handle arbitrary strides.
+        /// </summary>
+        /// <typeparam name="T">Element type (must be unmanaged).</typeparam>
+        /// <param name="data">Pointer to array data (base address).</param>
+        /// <param name="shape">Array dimensions.</param>
+        /// <param name="strides">Array strides (in elements, not bytes).</param>
+        /// <param name="offset">Base offset into storage.</param>
+        /// <returns>Array of NDArray&lt;int&gt;, one per dimension containing indices of non-zero elements.</returns>
+        unsafe NumSharp.Generic.NDArray<int>[] FindNonZeroStrided<T>(T* data, int[] shape, int[] strides, int offset) where T : unmanaged;
+
+        /// <summary>
         /// Count the number of true values in a boolean array.
         /// Uses SIMD for efficient counting.
         /// </summary>

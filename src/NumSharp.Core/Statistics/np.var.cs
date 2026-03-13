@@ -39,7 +39,7 @@ namespace NumSharp
         /// <returns> returns a new array containing the var values, otherwise a reference to the output array is returned.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.var.html</remarks>
         public static NDArray var(in NDArray a, int? ddof = null)
-        => a.TensorEngine.ReduceVar(a, null);
+        => a.TensorEngine.ReduceVar(a, null, ddof: ddof);
 
         /// <summary>
         ///     Compute the variance along the specified axis.

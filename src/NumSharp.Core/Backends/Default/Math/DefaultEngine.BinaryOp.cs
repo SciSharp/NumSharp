@@ -35,6 +35,30 @@ namespace NumSharp.Backends
                 resultType = NPTypeCode.Double;
             }
 
+            // NumPy Power type promotion rules (special cases):
+            // - int^float → float64 (regardless of float precision)
+            // - float32^float64 → float64 (promoted)
+            // - float32^int → float32 (preserved, matches Python int behavior)
+            // - float32^float32 → float32 (preserved)
+            // - float64^* → float64 (preserved)
+            // - int^int → int (preserved)
+            //
+            // Note: NumPy has a subtle distinction where float32^np.int32 → float64, but
+            // float32^2 (Python int) → float32. Since C# int maps to Python int semantics,
+            // we preserve float32 for int exponents. This matches the common use case.
+            if (op == BinaryOp.Power)
+            {
+                var lhsGroup = lhsType.GetGroup();
+                var rhsGroup = rhsType.GetGroup();
+
+                // int base with float exponent → always float64
+                // (Group 0=Byte/Char, 1=signed int, 2=unsigned int, 3=float, 4=decimal)
+                if (lhsGroup <= 2 && rhsGroup == 3)
+                {
+                    resultType = NPTypeCode.Double;
+                }
+            }
+
             // Handle scalar × scalar case
             if (lhs.Shape.IsScalar && rhs.Shape.IsScalar)
             {
