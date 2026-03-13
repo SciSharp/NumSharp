@@ -29,12 +29,12 @@ namespace NumSharp.UnitTest
     ///       Bug 71:  REMOVED — false positive (NumPy 2.x also rejects int() on 1-d arrays)
     ///       Bug 72:  (double)int32-scalar-NDArray reinterprets bytes instead of converting
     ///       Bug 73:  NDArray.reshape(Shape()) throws NullReferenceException
-    ///       Bug 74:  np.argmin ignores NaN (sibling of Bug 60 for argmax)
+    ///       Bug 74:  FIXED — np.argmin now handles NaN correctly (tests in ArgMaxArgMinEdgeCaseTests.cs)
     ///       Bug 75:  np.prod on bool throws NotSupportedException (sibling of Bug 57)
     ///       Bug 76:  np.cumsum on bool throws NotSupportedException (sibling of Bug 57)
     ///       Bug 77:  np.sign(NaN array) throws ArithmeticException (should return NaN)
     ///       Bug 78:  np.std/np.var crash on empty arrays (sibling of Bug 55)
-    ///       Bug 79:  Modulo uses C# semantics (-7%3=-1) instead of NumPy/Python (-7%3=2)
+    ///       Bug 79:  FIXED — Modulo now uses NumPy/Python semantics (tests in EdgeCaseTests.cs)
     ///       Bug 80:  Fancy indexing (NDArray int indices) setter silently no-ops
     ///
     ///     Overlap notes:
@@ -316,44 +316,10 @@ namespace NumSharp.UnitTest
 
         // ================================================================
         //
-        //  BUG 74: np.argmin ignores NaN values (sibling of Bug 60)
-        //
-        //  SEVERITY: Medium — NumPy propagates NaN in comparisons, so
-        //  argmin returns the index of the first NaN. NumSharp skips NaN
-        //  and returns the index of the actual minimum.
-        //
-        //  Bug 60 (DeprecationAudit) covers argmax ignoring NaN.
-        //  This is the same pattern for argmin.
-        //
-        //  VERIFIED IN NUMSHARP:
-        //    np.argmin([3.0, 1.0, NaN, 2.0]) = 1  (index of 1.0)
-        //
-        //  PYTHON VERIFICATION (NumPy 2.4.2):
-        //    >>> np.argmin(np.array([3.0, 1.0, np.nan, 2.0]))
-        //    2
-        //    >>> np.argmax(np.array([3.0, 1.0, np.nan, 2.0]))
-        //    2
+        //  BUG 74: FIXED — np.argmin now correctly returns index of first NaN.
+        //  Tests moved to NumPyPortedTests/ArgMaxArgMinEdgeCaseTests.cs
         //
         // ================================================================
-
-        /// <summary>
-        ///     BUG 74: np.argmin ignores NaN, should return index of first NaN.
-        ///
-        ///     NumPy:    argmin([3.0, 1.0, NaN, 2.0]) = 2 (NaN index)
-        ///     NumSharp: returns 1 (index of 1.0, ignores NaN)
-        /// </summary>
-        [Test]
-        public void Bug_Argmin_IgnoresNaN()
-        {
-            var a = np.array(new double[] { 3.0, 1.0, double.NaN, 2.0 });
-            long result = np.argmin(a);
-
-            result.Should().Be(2L,
-                "NumPy: argmin([3, 1, NaN, 2]) = 2 because NaN propagates in " +
-                "comparisons (NaN < x is always True in NumPy's argmin). " +
-                "NumSharp returns 1 (index of actual min 1.0), ignoring NaN. " +
-                "Same pattern as Bug 60 (argmax ignoring NaN).");
-        }
 
         // ================================================================
         //
@@ -563,76 +529,10 @@ namespace NumSharp.UnitTest
 
         // ================================================================
         //
-        //  BUG 79: Modulo operator uses C# semantics instead of NumPy/Python
-        //
-        //  SEVERITY: High — silently returns wrong values for negative operands.
-        //
-        //  Python/NumPy modulo: result has the sign of the DIVISOR (floored division).
-        //  C#/Java modulo: result has the sign of the DIVIDEND (truncated division).
-        //
-        //  This means: -7 % 3 = 2 in NumPy, but -1 in C#/NumSharp.
-        //  The difference is: NumPy uses  a - floor(a/b) * b
-        //                     C# uses     a - trunc(a/b) * b
-        //
-        //  This affects all negative-operand modulo operations.
-        //
-        //  VERIFIED IN NUMSHARP:
-        //    [7,-7,7,-7] % [3,3,-3,-3] = [1,-1,1,-1]  (C# semantics)
-        //
-        //  PYTHON VERIFICATION (NumPy 2.4.2):
-        //    >>> np.array([7,-7,7,-7]) % np.array([3,3,-3,-3])
-        //    array([ 1,  2, -2, -1])
-        //    >>> -7 % 3
-        //    2
+        //  BUG 79: FIXED — Modulo now uses NumPy/Python floored division semantics.
+        //  Tests moved to Backends/Kernels/EdgeCaseTests.cs
         //
         // ================================================================
-
-        /// <summary>
-        ///     BUG 79: Modulo uses C# truncated-division semantics instead of
-        ///     NumPy/Python floored-division semantics for negative operands.
-        ///
-        ///     NumPy:    [-7] % [3] = [2]  (sign of divisor)
-        ///     NumSharp: [-7] % [3] = [-1] (sign of dividend, C# semantics)
-        /// </summary>
-        [Test]
-        public void Bug_Modulo_CSharpSemantics_InsteadOfPython()
-        {
-            var a = np.array(new int[] { 7, -7, 7, -7 });
-            var b = np.array(new int[] { 3, 3, -3, -3 });
-            var result = a % b;
-
-            // NumPy: [1, 2, -2, -1]  (floored division: result sign = divisor sign)
-            // C#:    [1, -1, 1, -1]  (truncated division: result sign = dividend sign)
-
-            result.GetInt32(0).Should().Be(1, "7 % 3 = 1 (same in both)");
-            result.GetInt32(1).Should().Be(2,
-                "NumPy: -7 % 3 = 2 (floored division, result has sign of divisor). " +
-                "NumSharp returns -1 (C# truncated division semantics). " +
-                "NumPy uses a - floor(a/b)*b; C# uses a - trunc(a/b)*b.");
-            result.GetInt32(2).Should().Be(-2,
-                "NumPy: 7 % -3 = -2 (result has sign of divisor -3). " +
-                "NumSharp returns 1 (C# semantics).");
-            result.GetInt32(3).Should().Be(-1, "-7 % -3 = -1 (same in both)");
-        }
-
-        /// <summary>
-        ///     BUG 79b: Float modulo also uses C# semantics.
-        ///
-        ///     NumPy:    [-7.5] % [3] = [1.5]
-        ///     NumSharp: [-7.5] % [3] = [-1.5]
-        /// </summary>
-        [Test]
-        public void Bug_Modulo_Float_CSharpSemantics()
-        {
-            var a = np.array(new double[] { 7.5, -7.5 });
-            var b = np.array(new double[] { 3.0, 3.0 });
-            var result = a % b;
-
-            result.GetDouble(0).Should().BeApproximately(1.5, 1e-10, "7.5 % 3 = 1.5 (same in both)");
-            result.GetDouble(1).Should().BeApproximately(1.5, 1e-10,
-                "NumPy: -7.5 % 3.0 = 1.5 (floored division). " +
-                "NumSharp returns -1.5 (C# truncated division semantics).");
-        }
 
         // ================================================================
         //
