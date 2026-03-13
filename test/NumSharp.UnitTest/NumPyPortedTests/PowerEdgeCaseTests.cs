@@ -83,7 +83,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         public void Power_Int32_ZeroExponent_ReturnsOnes()
         {
             // NumPy: power(arr, 0) returns ones_like(arr) for all integer types
-            var arr = np.arange(-10, 10, dtype: np.int32);
+            var arr = np.arange(-10, 10);  // int32 by default
             var result = np.power(arr, 0);
             var expected = np.ones_like(arr);
             result.Should().BeOfValues(expected.GetData<int>());
@@ -92,7 +92,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         [Test]
         public void Power_Int64_ZeroExponent_ReturnsOnes()
         {
-            var arr = np.arange(-10, 10, dtype: np.int64);
+            var arr = np.arange(-10, 10).astype(np.int64);
             var result = np.power(arr, 0);
             var expected = np.ones_like(arr);
             result.Should().BeOfValues(expected.GetData<long>());
@@ -101,7 +101,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         [Test]
         public void Power_UInt32_ZeroExponent_ReturnsOnes()
         {
-            var arr = np.arange(10, dtype: np.uint32);
+            var arr = np.arange(10).astype(np.uint32);
             var result = np.power(arr, 0);
             var expected = np.ones_like(arr);
             result.Should().BeOfValues(expected.GetData<uint>());
@@ -111,7 +111,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         public void Power_OneBase_AnyExponent_ReturnsOnes()
         {
             // NumPy: power(1, arr) returns ones_like(arr)
-            var arr = np.arange(10, dtype: np.int32);
+            var arr = np.arange(10);  // int32 by default
             var result = np.power(1, arr);
             result.Should().BeOfValues(1, 1, 1, 1, 1, 1, 1, 1, 1, 1);
         }
@@ -120,7 +120,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         public void Power_ZeroBase_PositiveExponent_ReturnsZeros()
         {
             // NumPy: power(0, arr) returns zeros for positive exponents
-            var arr = np.arange(1, 10, dtype: np.int32);
+            var arr = np.arange(1, 10);  // int32 by default
             var result = np.power(0, arr);
             result.Should().BeOfValues(0, 0, 0, 0, 0, 0, 0, 0, 0);
         }
@@ -325,11 +325,11 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         }
 
         [Test]
-        public async Task Power_Float64_Float64_ReturnsFloat64()
+        public void Power_Float64_Float64_ReturnsFloat64()
         {
             var a = np.array(new double[] { 2.0, 3.0, 4.0 });
             var result = np.power(a, 2.0);
-            await Assert.That(result.dtype).IsEqualTo(np.float64);
+            Assert.AreEqual(np.float64, result.dtype);
         }
 
         #endregion
@@ -337,17 +337,17 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         #region Cube Root and Other Fractional Powers
 
         [Test]
-        public async Task Power_CubeRoot()
+        public void Power_CubeRoot()
         {
             // NumPy: power([1,8,27,64], 1/3) = [1,2,3,4]
             var a = np.array(new double[] { 1.0, 8.0, 27.0, 64.0 });
             var result = np.power(a, 1.0 / 3.0);
             var data = result.GetData<double>();
 
-            await Assert.That(Math.Abs(data[0] - 1.0)).IsLessThan(1e-10);
-            await Assert.That(Math.Abs(data[1] - 2.0)).IsLessThan(1e-10);
-            await Assert.That(Math.Abs(data[2] - 3.0)).IsLessThan(1e-10);
-            await Assert.That(Math.Abs(data[3] - 4.0)).IsLessThan(1e-10);
+            Assert.IsTrue(Math.Abs(data[0] - 1.0) < 1e-10);
+            Assert.IsTrue(Math.Abs(data[1] - 2.0) < 1e-10);
+            Assert.IsTrue(Math.Abs(data[2] - 3.0) < 1e-10);
+            Assert.IsTrue(Math.Abs(data[3] - 4.0) < 1e-10);
         }
 
         #endregion
@@ -355,20 +355,20 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         #region Very Large/Small Exponent Tests
 
         [Test]
-        public async Task Power_LargeExponent()
+        public void Power_LargeExponent()
         {
             // NumPy: power([1, 1.0001, 0.9999], 10000)
             var a = np.array(new double[] { 1.0, 1.0001, 0.9999 });
             var result = np.power(a, 10000);
             var data = result.GetData<double>();
 
-            await Assert.That(data[0]).IsEqualTo(1.0);
+            Assert.AreEqual(1.0, data[0]);
             // 1.0001^10000 ~ 2.718... (approximately e)
-            await Assert.That(data[1]).IsGreaterThan(2.0);
-            await Assert.That(data[1]).IsLessThan(3.0);
+            Assert.IsTrue(data[1] > 2.0);
+            Assert.IsTrue(data[1] < 3.0);
             // 0.9999^10000 ~ 0.368... (approximately 1/e)
-            await Assert.That(data[2]).IsGreaterThan(0.3);
-            await Assert.That(data[2]).IsLessThan(0.4);
+            Assert.IsTrue(data[2] > 0.3);
+            Assert.IsTrue(data[2] < 0.4);
         }
 
         #endregion

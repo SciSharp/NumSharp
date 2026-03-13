@@ -1,8 +1,9 @@
 using System;
-using System.Threading.Tasks;
 using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.Backends;
+using NumSharp.UnitTest.Utilities;
+using TUnit.Core;
 
 namespace NumSharp.UnitTest.NumPyPortedTests
 {
@@ -15,7 +16,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         #region Basic Tests
 
         [Test]
-        public async Task CumSum_1DArray_Int32()
+        public void CumSum_1DArray_Int32()
         {
             // NumPy: cumsum([1,2,3,4,5]) = [1, 3, 6, 10, 15]
             var a = np.array(new int[] { 1, 2, 3, 4, 5 });
@@ -25,7 +26,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         }
 
         [Test]
-        public async Task CumSum_1DArray_Float64()
+        public void CumSum_1DArray_Float64()
         {
             var a = np.array(new double[] { 1.0, 2.0, 3.0, 4.0, 5.0 });
             var result = np.cumsum(a);
@@ -37,7 +38,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         #region 2D Array Tests
 
         [Test]
-        public async Task CumSum_2DArray_Flattened()
+        public void CumSum_2DArray_Flattened()
         {
             // NumPy: cumsum([[1,2,3],[4,5,6]]) = [1, 3, 6, 10, 15, 21]
             var a = np.array(new int[,] { { 1, 2, 3 }, { 4, 5, 6 } });
@@ -47,7 +48,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         }
 
         [Test]
-        public async Task CumSum_2DArray_Axis0()
+        public void CumSum_2DArray_Axis0()
         {
             // NumPy: cumsum([[1,2,3],[4,5,6]], axis=0) = [[1,2,3],[5,7,9]]
             var a = np.array(new int[,] { { 1, 2, 3 }, { 4, 5, 6 } });
@@ -57,7 +58,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         }
 
         [Test]
-        public async Task CumSum_2DArray_Axis1()
+        public void CumSum_2DArray_Axis1()
         {
             // NumPy: cumsum([[1,2,3],[4,5,6]], axis=1) = [[1,3,6],[4,9,15]]
             var a = np.array(new int[,] { { 1, 2, 3 }, { 4, 5, 6 } });
@@ -71,44 +72,44 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         #region Dtype Handling
 
         [Test]
-        public async Task CumSum_Int32_ReturnsInt64()
+        public void CumSum_Int32_ReturnsInt64()
         {
             // NumPy 2.x: cumsum(int32) returns int64
             var arr = np.array(new int[] { 1, 2, 3 });
             var result = np.cumsum(arr);
-            await Assert.That(result.dtype).IsEqualTo(np.int64);
+            Assert.AreEqual(np.int64, result.dtype);
         }
 
         [Test]
-        public async Task CumSum_Int64_ReturnsInt64()
+        public void CumSum_Int64_ReturnsInt64()
         {
             var arr = np.array(new long[] { 1, 2, 3 });
             var result = np.cumsum(arr);
-            await Assert.That(result.dtype).IsEqualTo(np.int64);
+            Assert.AreEqual(np.int64, result.dtype);
         }
 
         [Test]
-        public async Task CumSum_Float32_ReturnsFloat32()
+        public void CumSum_Float32_ReturnsFloat32()
         {
             var arr = np.array(new float[] { 1f, 2f, 3f });
             var result = np.cumsum(arr);
-            await Assert.That(result.dtype).IsEqualTo(np.float32);
+            Assert.AreEqual(np.float32, result.dtype);
         }
 
         [Test]
-        public async Task CumSum_Float64_ReturnsFloat64()
+        public void CumSum_Float64_ReturnsFloat64()
         {
             var arr = np.array(new double[] { 1.0, 2.0, 3.0 });
             var result = np.cumsum(arr);
-            await Assert.That(result.dtype).IsEqualTo(np.float64);
+            Assert.AreEqual(np.float64, result.dtype);
         }
 
         [Test]
-        public async Task CumSum_WithExplicitDtype()
+        public void CumSum_WithExplicitDtype()
         {
             var arr = np.array(new int[] { 1, 2, 3, 4, 5, 6 });
             var result = np.cumsum(arr, typeCode: NPTypeCode.Single);
-            await Assert.That(result.dtype).IsEqualTo(np.float32);
+            Assert.AreEqual(np.float32, result.dtype);
             result.Should().BeOfValues(1f, 3f, 6f, 10f, 15f, 21f);
         }
 
@@ -117,12 +118,12 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         #region Empty Array
 
         [Test]
-        public async Task CumSum_EmptyArray_ReturnsEmptyArray()
+        public void CumSum_EmptyArray_ReturnsEmptyArray()
         {
             // NumPy: cumsum([]) = array([], dtype=float64)
             var a = np.array(new double[0]);
             var result = np.cumsum(a);
-            await Assert.That(result.size).IsEqualTo(0);
+            Assert.AreEqual(0, result.size);
         }
 
         #endregion
@@ -130,7 +131,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         #region Single Element
 
         [Test]
-        public async Task CumSum_SingleElement()
+        public void CumSum_SingleElement()
         {
             // NumPy: cumsum([5]) = array([5])
             var a = np.array(new int[] { 5 });
@@ -143,7 +144,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         #region 3D Array
 
         [Test]
-        public async Task CumSum_3DArray_Axis0()
+        public void CumSum_3DArray_Axis0()
         {
             // NumPy: cumsum(arange(24).reshape(2,3,4), axis=0).shape = (2, 3, 4)
             var a = np.arange(24).reshape(2, 3, 4);
@@ -152,7 +153,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         }
 
         [Test]
-        public async Task CumSum_3DArray_Axis1()
+        public void CumSum_3DArray_Axis1()
         {
             var a = np.arange(24).reshape(2, 3, 4);
             var result = np.cumsum(a, axis: 1);
@@ -160,7 +161,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         }
 
         [Test]
-        public async Task CumSum_3DArray_Axis2()
+        public void CumSum_3DArray_Axis2()
         {
             var a = np.arange(24).reshape(2, 3, 4);
             var result = np.cumsum(a, axis: 2);
@@ -172,7 +173,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         #region Negative Axis
 
         [Test]
-        public async Task CumSum_NegativeAxis_Minus1()
+        public void CumSum_NegativeAxis_Minus1()
         {
             // NumPy: cumsum(a, axis=-1) is same as axis=last dimension
             var a = np.array(new int[,] { { 1, 2, 3 }, { 4, 5, 6 } });
@@ -182,7 +183,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         }
 
         [Test]
-        public async Task CumSum_NegativeAxis_Minus2()
+        public void CumSum_NegativeAxis_Minus2()
         {
             // NumPy: cumsum(a, axis=-2) for 2D is same as axis=0
             var a = np.array(new int[,] { { 1, 2, 3 }, { 4, 5, 6 } });
@@ -196,7 +197,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         #region Strided Array
 
         [Test]
-        public async Task CumSum_StridedArray()
+        public void CumSum_StridedArray()
         {
             // NumPy: cumsum(arange(10)[::2]) = cumsum([0,2,4,6,8]) = [0,2,6,12,20]
             var a = np.arange(10);
@@ -210,7 +211,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         #region Transposed Array
 
         [Test]
-        public async Task CumSum_TransposedArray_Axis1()
+        public void CumSum_TransposedArray_Axis1()
         {
             // NumPy: cumsum([[1,2,3],[4,5,6]].T, axis=1)
             // [[1,2,3],[4,5,6]].T = [[1,4],[2,5],[3,6]]
@@ -226,9 +227,9 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         #region All Zeros
 
         [Test]
-        public async Task CumSum_AllZeros()
+        public void CumSum_AllZeros()
         {
-            var a = np.zeros(5, np.int32);
+            var a = np.zeros<int>(5);
             var result = np.cumsum(a);
             result.Should().BeOfValues(0L, 0L, 0L, 0L, 0L);
         }
@@ -238,9 +239,9 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         #region All Ones
 
         [Test]
-        public async Task CumSum_AllOnes()
+        public void CumSum_AllOnes()
         {
-            var a = np.ones(5, np.int32);
+            var a = np.ones<int>(5);
             var result = np.cumsum(a);
             result.Should().BeOfValues(1L, 2L, 3L, 4L, 5L);
         }
@@ -250,7 +251,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         #region Large Values (Overflow potential)
 
         [Test]
-        public async Task CumSum_LargeValues_Int64()
+        public void CumSum_LargeValues_Int64()
         {
             // Test that large values don't overflow with int64
             var a = np.array(new long[] { 1_000_000_000L, 2_000_000_000L, 3_000_000_000L });
@@ -263,7 +264,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         #region Mixed Positive/Negative Values
 
         [Test]
-        public async Task CumSum_MixedValues()
+        public void CumSum_MixedValues()
         {
             var a = np.array(new int[] { 1, -2, 3, -4, 5 });
             var result = np.cumsum(a);
@@ -276,25 +277,25 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         #region Float Special Values
 
         [Test]
-        public async Task CumSum_WithNaN()
+        public void CumSum_WithNaN()
         {
             var a = np.array(new double[] { 1.0, double.NaN, 3.0 });
             var result = np.cumsum(a);
             var data = result.GetData<double>();
-            await Assert.That(data[0]).IsEqualTo(1.0);
-            await Assert.That(double.IsNaN(data[1])).IsTrue();
-            await Assert.That(double.IsNaN(data[2])).IsTrue();  // NaN propagates
+            Assert.AreEqual(1.0, data[0]);
+            Assert.IsTrue(double.IsNaN(data[1]));
+            Assert.IsTrue(double.IsNaN(data[2]));  // NaN propagates
         }
 
         [Test]
-        public async Task CumSum_WithInf()
+        public void CumSum_WithInf()
         {
             var a = np.array(new double[] { 1.0, double.PositiveInfinity, 3.0 });
             var result = np.cumsum(a);
             var data = result.GetData<double>();
-            await Assert.That(data[0]).IsEqualTo(1.0);
-            await Assert.That(double.IsPositiveInfinity(data[1])).IsTrue();
-            await Assert.That(double.IsPositiveInfinity(data[2])).IsTrue();  // inf + 3 = inf
+            Assert.AreEqual(1.0, data[0]);
+            Assert.IsTrue(double.IsPositiveInfinity(data[1]));
+            Assert.IsTrue(double.IsPositiveInfinity(data[2]));  // inf + 3 = inf
         }
 
         #endregion
@@ -302,7 +303,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         #region Numerical Precision
 
         [Test]
-        public async Task CumSum_FloatPrecision()
+        public void CumSum_FloatPrecision()
         {
             // Test with values that might lose precision
             var a = np.array(new double[] { 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1 });
@@ -310,7 +311,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             var data = result.GetData<double>();
 
             // Last value should be close to 1.0
-            await Assert.That(Math.Abs(data[9] - 1.0)).IsLessThan(1e-10);
+            Assert.IsTrue(Math.Abs(data[9] - 1.0) < 1e-10);
         }
 
         #endregion
