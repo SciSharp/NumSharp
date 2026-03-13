@@ -1334,6 +1334,98 @@ namespace NumSharp.Backends.Kernels
             return result;
         }
 
+        /// <summary>
+        /// Find non-zero elements in a strided (non-contiguous) array.
+        /// Uses coordinate-based iteration to handle arbitrary strides (transposed, sliced, etc.).
+        /// Returns per-dimension index arrays matching NumPy's nonzero() output.
+        /// </summary>
+        /// <typeparam name="T">Element type</typeparam>
+        /// <param name="data">Pointer to array data (base address)</param>
+        /// <param name="shape">Array dimensions</param>
+        /// <param name="strides">Array strides (in elements, not bytes)</param>
+        /// <param name="offset">Base offset into storage</param>
+        /// <returns>Array of NDArray&lt;int&gt;, one per dimension</returns>
+        internal static unsafe NumSharp.Generic.NDArray<int>[] FindNonZeroStridedHelper<T>(
+            T* data, int[] shape, int[] strides, int offset) where T : unmanaged
+        {
+            int ndim = shape.Length;
+
+            // Handle empty array
+            int size = 1;
+            for (int d = 0; d < ndim; d++)
+                size *= shape[d];
+
+            if (size == 0)
+            {
+                var emptyResult = new NumSharp.Generic.NDArray<int>[ndim];
+                for (int d = 0; d < ndim; d++)
+                    emptyResult[d] = new NumSharp.Generic.NDArray<int>(0);
+                return emptyResult;
+            }
+
+            // Collect coordinates of non-zero elements
+            // Pre-allocate with estimated capacity (assume ~25% non-zero for efficiency)
+            var nonzeroCoords = new System.Collections.Generic.List<int[]>(Math.Max(16, size / 4));
+
+            // Initialize coordinate array
+            var coords = new int[ndim];
+
+            // Iterate through all elements using coordinate-based iteration
+            // This handles arbitrary strides including negative strides
+            while (true)
+            {
+                // Calculate offset for current coordinates: offset + sum(coords[i] * strides[i])
+                int elemOffset = offset;
+                for (int d = 0; d < ndim; d++)
+                    elemOffset += coords[d] * strides[d];
+
+                // Check if element is non-zero
+                if (!System.Collections.Generic.EqualityComparer<T>.Default.Equals(data[elemOffset], default))
+                {
+                    // Clone coordinates and add to result
+                    var coordsCopy = new int[ndim];
+                    Array.Copy(coords, coordsCopy, ndim);
+                    nonzeroCoords.Add(coordsCopy);
+                }
+
+                // Increment coordinates (rightmost dimension first, like C-order iteration)
+                int dim = ndim - 1;
+                while (dim >= 0)
+                {
+                    coords[dim]++;
+                    if (coords[dim] < shape[dim])
+                        break;
+                    coords[dim] = 0;
+                    dim--;
+                }
+
+                // If we've wrapped past the first dimension, we're done
+                if (dim < 0)
+                    break;
+            }
+
+            // Convert collected coordinates to per-dimension arrays
+            int len = nonzeroCoords.Count;
+            var result = new NumSharp.Generic.NDArray<int>[ndim];
+            for (int d = 0; d < ndim; d++)
+                result[d] = new NumSharp.Generic.NDArray<int>(len);
+
+            // Get addresses for direct writing
+            var addresses = new int*[ndim];
+            for (int d = 0; d < ndim; d++)
+                addresses[d] = (int*)result[d].Address;
+
+            // Extract coordinates into per-dimension arrays
+            for (int i = 0; i < len; i++)
+            {
+                var coord = nonzeroCoords[i];
+                for (int d = 0; d < ndim; d++)
+                    addresses[d][i] = coord[d];
+            }
+
+            return result;
+        }
+
         #endregion
 
         #region Boolean Masking SIMD Helpers
@@ -3077,13 +3169,28 @@ namespace NumSharp.Backends.Kernels
             if (!Enabled)
                 return null;
 
-            // Support Sum, Prod, Min, Max, Mean operations
-            // ArgMax/ArgMin require special index tracking - handled separately
+            // Support Sum, Prod, Min, Max, Mean, Var, Std, ArgMax, ArgMin operations
             if (key.Op != ReductionOp.Sum && key.Op != ReductionOp.Prod &&
                 key.Op != ReductionOp.Min && key.Op != ReductionOp.Max &&
-                key.Op != ReductionOp.Mean)
+                key.Op != ReductionOp.Mean && key.Op != ReductionOp.Var &&
+                key.Op != ReductionOp.Std && key.Op != ReductionOp.ArgMax &&
+                key.Op != ReductionOp.ArgMin)
             {
                 return null;
+            }
+
+            // ArgMax/ArgMin always output Int64 (the index), regardless of input type
+            // They use a different kernel path that tracks both value and index
+            if (key.Op == ReductionOp.ArgMax || key.Op == ReductionOp.ArgMin)
+            {
+                return _axisReductionCache.GetOrAdd(key, CreateAxisArgReductionKernel);
+            }
+
+            // Var/Std use two-pass algorithm (mean, then squared differences)
+            // They always output double for accuracy
+            if (key.Op == ReductionOp.Var || key.Op == ReductionOp.Std)
+            {
+                return _axisReductionCache.GetOrAdd(key, CreateAxisVarStdReductionKernel);
             }
 
             // All types supported - SIMD for capable types, scalar for others
@@ -3116,6 +3223,325 @@ namespace NumSharp.Backends.Kernels
                 NPTypeCode.Double => CreateAxisReductionKernelTyped<double>(key),
                 _ => CreateAxisReductionKernelGeneral(key) // Fallback for Boolean, Char, Decimal
             };
+        }
+
+        /// <summary>
+        /// Create an axis ArgMax/ArgMin reduction kernel.
+        /// These operations track both the value (for comparison) and index (for output).
+        /// Output is always Int64 regardless of input type.
+        /// </summary>
+        private static AxisReductionKernel CreateAxisArgReductionKernel(AxisReductionKernelKey key)
+        {
+            // Dispatch based on input type - output is always long (Int64)
+            return key.InputType switch
+            {
+                NPTypeCode.Boolean => CreateAxisArgReductionKernelTyped<bool>(key),
+                NPTypeCode.Byte => CreateAxisArgReductionKernelTyped<byte>(key),
+                NPTypeCode.Int16 => CreateAxisArgReductionKernelTyped<short>(key),
+                NPTypeCode.UInt16 => CreateAxisArgReductionKernelTyped<ushort>(key),
+                NPTypeCode.Int32 => CreateAxisArgReductionKernelTyped<int>(key),
+                NPTypeCode.UInt32 => CreateAxisArgReductionKernelTyped<uint>(key),
+                NPTypeCode.Int64 => CreateAxisArgReductionKernelTyped<long>(key),
+                NPTypeCode.UInt64 => CreateAxisArgReductionKernelTyped<ulong>(key),
+                NPTypeCode.Char => CreateAxisArgReductionKernelTyped<char>(key),
+                NPTypeCode.Single => CreateAxisArgReductionKernelTyped<float>(key),
+                NPTypeCode.Double => CreateAxisArgReductionKernelTyped<double>(key),
+                NPTypeCode.Decimal => CreateAxisArgReductionKernelTyped<decimal>(key),
+                _ => throw new NotSupportedException($"ArgMax/ArgMin not supported for type {key.InputType}")
+            };
+        }
+
+        /// <summary>
+        /// Create a typed axis ArgMax/ArgMin kernel.
+        /// </summary>
+        private static unsafe AxisReductionKernel CreateAxisArgReductionKernelTyped<T>(AxisReductionKernelKey key)
+            where T : unmanaged
+        {
+            return (void* input, void* output, int* inputStrides, int* inputShape,
+                    int* outputStrides, int axis, int axisSize, int ndim, int outputSize) =>
+            {
+                AxisArgReductionHelper<T>(
+                    (T*)input, (long*)output,
+                    inputStrides, inputShape, outputStrides,
+                    axis, axisSize, ndim, outputSize,
+                    key.Op);
+            };
+        }
+
+        /// <summary>
+        /// Helper for axis ArgMax/ArgMin reduction.
+        /// Tracks both value (for comparison) and index (for output).
+        /// </summary>
+        internal static unsafe void AxisArgReductionHelper<T>(
+            T* input, long* output,
+            int* inputStrides, int* inputShape, int* outputStrides,
+            int axis, int axisSize, int ndim, int outputSize,
+            ReductionOp op)
+            where T : unmanaged
+        {
+            int axisStride = inputStrides[axis];
+
+            // Compute output dimension strides for coordinate calculation
+            int outputNdim = ndim - 1;
+            Span<int> outputDimStrides = stackalloc int[outputNdim > 0 ? outputNdim : 1];
+            if (outputNdim > 0)
+            {
+                outputDimStrides[outputNdim - 1] = 1;
+                for (int d = outputNdim - 2; d >= 0; d--)
+                {
+                    int inputDim = d >= axis ? d + 1 : d;
+                    int nextInputDim = (d + 1) >= axis ? d + 2 : d + 1;
+                    outputDimStrides[d] = outputDimStrides[d + 1] * inputShape[nextInputDim];
+                }
+            }
+
+            for (int outIdx = 0; outIdx < outputSize; outIdx++)
+            {
+                // Convert linear output index to coordinates and compute offsets
+                int remaining = outIdx;
+                int inputBaseOffset = 0;
+                int outputOffset = 0;
+
+                for (int d = 0; d < outputNdim; d++)
+                {
+                    int inputDim = d >= axis ? d + 1 : d;
+                    int coord = remaining / outputDimStrides[d];
+                    remaining = remaining % outputDimStrides[d];
+                    inputBaseOffset += coord * inputStrides[inputDim];
+                    outputOffset += coord * outputStrides[d];
+                }
+
+                // Find argmax or argmin along axis
+                T* axisStart = input + inputBaseOffset;
+                long resultIndex = ArgReduceAxis(axisStart, axisSize, axisStride, op);
+
+                output[outputOffset] = resultIndex;
+            }
+        }
+
+        /// <summary>
+        /// Find the index of the max or min value along an axis.
+        /// </summary>
+        private static unsafe long ArgReduceAxis<T>(T* data, int size, int stride, ReductionOp op)
+            where T : unmanaged
+        {
+            if (size == 0)
+                return 0;
+
+            if (size == 1)
+                return 0;
+
+            // Handle floating-point types with NaN awareness
+            if (typeof(T) == typeof(float))
+            {
+                return ArgReduceAxisFloatNaN((float*)data, size, stride, op);
+            }
+            if (typeof(T) == typeof(double))
+            {
+                return ArgReduceAxisDoubleNaN((double*)data, size, stride, op);
+            }
+            // Handle boolean specially
+            if (typeof(T) == typeof(bool))
+            {
+                return ArgReduceAxisBool((bool*)data, size, stride, op);
+            }
+
+            // Generic numeric types
+            return ArgReduceAxisNumeric(data, size, stride, op);
+        }
+
+        /// <summary>
+        /// ArgMax/ArgMin for float with NaN awareness.
+        /// NumPy behavior: first NaN always wins.
+        /// </summary>
+        private static unsafe long ArgReduceAxisFloatNaN(float* data, int size, int stride, ReductionOp op)
+        {
+            float extreme = data[0];
+            long extremeIdx = 0;
+
+            for (int i = 1; i < size; i++)
+            {
+                float val = data[i * stride];
+
+                // NumPy: first NaN always wins
+                if (float.IsNaN(val) && !float.IsNaN(extreme))
+                {
+                    extreme = val;
+                    extremeIdx = i;
+                }
+                else if (!float.IsNaN(extreme))
+                {
+                    if (op == ReductionOp.ArgMax)
+                    {
+                        if (val > extreme)
+                        {
+                            extreme = val;
+                            extremeIdx = i;
+                        }
+                    }
+                    else // ArgMin
+                    {
+                        if (val < extreme)
+                        {
+                            extreme = val;
+                            extremeIdx = i;
+                        }
+                    }
+                }
+            }
+
+            return extremeIdx;
+        }
+
+        /// <summary>
+        /// ArgMax/ArgMin for double with NaN awareness.
+        /// NumPy behavior: first NaN always wins.
+        /// </summary>
+        private static unsafe long ArgReduceAxisDoubleNaN(double* data, int size, int stride, ReductionOp op)
+        {
+            double extreme = data[0];
+            long extremeIdx = 0;
+
+            for (int i = 1; i < size; i++)
+            {
+                double val = data[i * stride];
+
+                // NumPy: first NaN always wins
+                if (double.IsNaN(val) && !double.IsNaN(extreme))
+                {
+                    extreme = val;
+                    extremeIdx = i;
+                }
+                else if (!double.IsNaN(extreme))
+                {
+                    if (op == ReductionOp.ArgMax)
+                    {
+                        if (val > extreme)
+                        {
+                            extreme = val;
+                            extremeIdx = i;
+                        }
+                    }
+                    else // ArgMin
+                    {
+                        if (val < extreme)
+                        {
+                            extreme = val;
+                            extremeIdx = i;
+                        }
+                    }
+                }
+            }
+
+            return extremeIdx;
+        }
+
+        /// <summary>
+        /// ArgMax/ArgMin for boolean.
+        /// For ArgMax: True > False, find first True
+        /// For ArgMin: False < True, find first False
+        /// </summary>
+        private static unsafe long ArgReduceAxisBool(bool* data, int size, int stride, ReductionOp op)
+        {
+            bool extreme = data[0];
+            long extremeIdx = 0;
+
+            for (int i = 1; i < size; i++)
+            {
+                bool val = data[i * stride];
+
+                if (op == ReductionOp.ArgMax)
+                {
+                    // True > False: if val is True and extreme is False, update
+                    if (val && !extreme)
+                    {
+                        extreme = val;
+                        extremeIdx = i;
+                    }
+                }
+                else // ArgMin
+                {
+                    // False < True: if val is False and extreme is True, update
+                    if (!val && extreme)
+                    {
+                        extreme = val;
+                        extremeIdx = i;
+                    }
+                }
+            }
+
+            return extremeIdx;
+        }
+
+        /// <summary>
+        /// ArgMax/ArgMin for generic numeric types (non-NaN, non-boolean).
+        /// </summary>
+        private static unsafe long ArgReduceAxisNumeric<T>(T* data, int size, int stride, ReductionOp op)
+            where T : unmanaged
+        {
+            // Use IComparer to compare values
+            T extreme = data[0];
+            long extremeIdx = 0;
+
+            for (int i = 1; i < size; i++)
+            {
+                T val = data[i * stride];
+
+                if (op == ReductionOp.ArgMax)
+                {
+                    if (CompareGreater(val, extreme))
+                    {
+                        extreme = val;
+                        extremeIdx = i;
+                    }
+                }
+                else // ArgMin
+                {
+                    if (CompareLess(val, extreme))
+                    {
+                        extreme = val;
+                        extremeIdx = i;
+                    }
+                }
+            }
+
+            return extremeIdx;
+        }
+
+        /// <summary>
+        /// Compare if a > b for numeric types.
+        /// </summary>
+        private static bool CompareGreater<T>(T a, T b) where T : unmanaged
+        {
+            if (typeof(T) == typeof(byte)) return (byte)(object)a > (byte)(object)b;
+            if (typeof(T) == typeof(short)) return (short)(object)a > (short)(object)b;
+            if (typeof(T) == typeof(ushort)) return (ushort)(object)a > (ushort)(object)b;
+            if (typeof(T) == typeof(int)) return (int)(object)a > (int)(object)b;
+            if (typeof(T) == typeof(uint)) return (uint)(object)a > (uint)(object)b;
+            if (typeof(T) == typeof(long)) return (long)(object)a > (long)(object)b;
+            if (typeof(T) == typeof(ulong)) return (ulong)(object)a > (ulong)(object)b;
+            if (typeof(T) == typeof(char)) return (char)(object)a > (char)(object)b;
+            if (typeof(T) == typeof(decimal)) return (decimal)(object)a > (decimal)(object)b;
+            // Float/double handled separately with NaN awareness
+            throw new NotSupportedException($"CompareGreater not supported for type {typeof(T)}");
+        }
+
+        /// <summary>
+        /// Compare if a < b for numeric types.
+        /// </summary>
+        private static bool CompareLess<T>(T a, T b) where T : unmanaged
+        {
+            if (typeof(T) == typeof(byte)) return (byte)(object)a < (byte)(object)b;
+            if (typeof(T) == typeof(short)) return (short)(object)a < (short)(object)b;
+            if (typeof(T) == typeof(ushort)) return (ushort)(object)a < (ushort)(object)b;
+            if (typeof(T) == typeof(int)) return (int)(object)a < (int)(object)b;
+            if (typeof(T) == typeof(uint)) return (uint)(object)a < (uint)(object)b;
+            if (typeof(T) == typeof(long)) return (long)(object)a < (long)(object)b;
+            if (typeof(T) == typeof(ulong)) return (ulong)(object)a < (ulong)(object)b;
+            if (typeof(T) == typeof(char)) return (char)(object)a < (char)(object)b;
+            if (typeof(T) == typeof(decimal)) return (decimal)(object)a < (decimal)(object)b;
+            // Float/double handled separately with NaN awareness
+            throw new NotSupportedException($"CompareLess not supported for type {typeof(T)}");
         }
 
         /// <summary>
@@ -4195,6 +4621,12 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <inheritdoc />
+        unsafe NumSharp.Generic.NDArray<int>[] IKernelProvider.FindNonZeroStrided<T>(T* data, int[] shape, int[] strides, int offset)
+        {
+            return FindNonZeroStridedHelper(data, shape, strides, offset);
+        }
+
+        /// <inheritdoc />
         unsafe int IKernelProvider.CountTrue(bool* data, int size)
         {
             return CountTrueSimdHelper(data, size);
@@ -4264,6 +4696,454 @@ namespace NumSharp.Backends.Kernels
         unsafe double IKernelProvider.NanMaxDouble(double* data, int size)
         {
             return NanMaxSimdHelperDouble(data, size);
+        }
+
+        #endregion
+
+        #region Var/Std Axis Reduction
+
+        /// <summary>
+        /// Create an axis Var/Std reduction kernel.
+        /// Uses two-pass algorithm: first compute mean along axis, then sum of squared differences.
+        /// </summary>
+        private static AxisReductionKernel CreateAxisVarStdReductionKernel(AxisReductionKernelKey key)
+        {
+            // Dispatch based on input type - output is always double for accuracy
+            return key.InputType switch
+            {
+                NPTypeCode.Byte => CreateAxisVarStdKernelTyped<byte>(key),
+                NPTypeCode.Int16 => CreateAxisVarStdKernelTyped<short>(key),
+                NPTypeCode.UInt16 => CreateAxisVarStdKernelTyped<ushort>(key),
+                NPTypeCode.Int32 => CreateAxisVarStdKernelTyped<int>(key),
+                NPTypeCode.UInt32 => CreateAxisVarStdKernelTyped<uint>(key),
+                NPTypeCode.Int64 => CreateAxisVarStdKernelTyped<long>(key),
+                NPTypeCode.UInt64 => CreateAxisVarStdKernelTyped<ulong>(key),
+                NPTypeCode.Single => CreateAxisVarStdKernelTyped<float>(key),
+                NPTypeCode.Double => CreateAxisVarStdKernelTyped<double>(key),
+                NPTypeCode.Decimal => CreateAxisVarStdKernelTypedDecimal(key),
+                _ => CreateAxisVarStdKernelGeneral(key) // Fallback for Boolean, Char
+            };
+        }
+
+        /// <summary>
+        /// Create a typed axis Var/Std kernel.
+        /// </summary>
+        private static unsafe AxisReductionKernel CreateAxisVarStdKernelTyped<TInput>(AxisReductionKernelKey key)
+            where TInput : unmanaged
+        {
+            bool isStd = key.Op == ReductionOp.Std;
+            // ddof is not part of kernel key - will be passed as 0 for now
+            // For proper ddof support, we'd need an extended kernel signature
+            // The DefaultEngine handles ddof at a higher level
+
+            return (void* input, void* output, int* inputStrides, int* inputShape,
+                    int* outputStrides, int axis, int axisSize, int ndim, int outputSize) =>
+            {
+                AxisVarStdSimdHelper<TInput>(
+                    (TInput*)input, (double*)output,
+                    inputStrides, inputShape, outputStrides,
+                    axis, axisSize, ndim, outputSize,
+                    isStd, ddof: 0);
+            };
+        }
+
+        /// <summary>
+        /// Create a decimal axis Var/Std kernel.
+        /// </summary>
+        private static unsafe AxisReductionKernel CreateAxisVarStdKernelTypedDecimal(AxisReductionKernelKey key)
+        {
+            bool isStd = key.Op == ReductionOp.Std;
+
+            return (void* input, void* output, int* inputStrides, int* inputShape,
+                    int* outputStrides, int axis, int axisSize, int ndim, int outputSize) =>
+            {
+                AxisVarStdDecimalHelper(
+                    (decimal*)input, (double*)output,
+                    inputStrides, inputShape, outputStrides,
+                    axis, axisSize, ndim, outputSize,
+                    isStd, ddof: 0);
+            };
+        }
+
+        /// <summary>
+        /// Create a general (fallback) axis Var/Std kernel.
+        /// </summary>
+        private static unsafe AxisReductionKernel CreateAxisVarStdKernelGeneral(AxisReductionKernelKey key)
+        {
+            bool isStd = key.Op == ReductionOp.Std;
+
+            return (void* input, void* output, int* inputStrides, int* inputShape,
+                    int* outputStrides, int axis, int axisSize, int ndim, int outputSize) =>
+            {
+                AxisVarStdGeneralHelper(
+                    input, (double*)output,
+                    inputStrides, inputShape, outputStrides,
+                    axis, axisSize, ndim, outputSize,
+                    key.InputType, isStd, ddof: 0);
+            };
+        }
+
+        /// <summary>
+        /// SIMD helper for axis Var/Std reduction.
+        /// Uses two-pass algorithm: first compute mean, then sum of squared differences.
+        /// </summary>
+        internal static unsafe void AxisVarStdSimdHelper<TInput>(
+            TInput* input, double* output,
+            int* inputStrides, int* inputShape, int* outputStrides,
+            int axis, int axisSize, int ndim, int outputSize,
+            bool computeStd, int ddof)
+            where TInput : unmanaged
+        {
+            int axisStride = inputStrides[axis];
+            bool axisContiguous = axisStride == 1;
+
+            // Compute output dimension strides for coordinate calculation
+            int outputNdim = ndim - 1;
+            Span<int> outputDimStrides = stackalloc int[outputNdim > 0 ? outputNdim : 1];
+            if (outputNdim > 0)
+            {
+                outputDimStrides[outputNdim - 1] = 1;
+                for (int d = outputNdim - 2; d >= 0; d--)
+                {
+                    int inputDim = d >= axis ? d + 1 : d;
+                    int nextInputDim = (d + 1) >= axis ? d + 2 : d + 1;
+                    outputDimStrides[d] = outputDimStrides[d + 1] * inputShape[nextInputDim];
+                }
+            }
+
+            // Divisor for variance (size - ddof)
+            double divisor = axisSize - ddof;
+            if (divisor <= 0)
+                divisor = 1; // Prevent division by zero; will produce NaN behavior
+
+            // Iterate over all output elements
+            for (int outIdx = 0; outIdx < outputSize; outIdx++)
+            {
+                // Convert linear output index to coordinates and compute offsets
+                int remaining = outIdx;
+                int inputBaseOffset = 0;
+                int outputOffset = 0;
+
+                for (int d = 0; d < outputNdim; d++)
+                {
+                    int inputDim = d >= axis ? d + 1 : d;
+                    int coord = remaining / outputDimStrides[d];
+                    remaining = remaining % outputDimStrides[d];
+                    inputBaseOffset += coord * inputStrides[inputDim];
+                    outputOffset += coord * outputStrides[d];
+                }
+
+                TInput* axisStart = input + inputBaseOffset;
+
+                // Pass 1: Compute mean along axis
+                double sum = 0;
+                if (axisContiguous)
+                {
+                    sum = SumContiguousAxisDouble(axisStart, axisSize);
+                }
+                else
+                {
+                    for (int i = 0; i < axisSize; i++)
+                        sum += ConvertToDouble(axisStart[i * axisStride]);
+                }
+                double mean = sum / axisSize;
+
+                // Pass 2: Compute sum of squared differences
+                double sqDiffSum = 0;
+                if (axisContiguous)
+                {
+                    sqDiffSum = SumSquaredDiffContiguous(axisStart, axisSize, mean);
+                }
+                else
+                {
+                    for (int i = 0; i < axisSize; i++)
+                    {
+                        double val = ConvertToDouble(axisStart[i * axisStride]);
+                        double diff = val - mean;
+                        sqDiffSum += diff * diff;
+                    }
+                }
+
+                double variance = sqDiffSum / divisor;
+                output[outputOffset] = computeStd ? Math.Sqrt(variance) : variance;
+            }
+        }
+
+        /// <summary>
+        /// Sum contiguous axis as double (for mean computation in Var/Std).
+        /// </summary>
+        private static unsafe double SumContiguousAxisDouble<T>(T* data, int size)
+            where T : unmanaged
+        {
+            double sum = 0;
+
+            if (typeof(T) == typeof(double))
+            {
+                double* p = (double*)(void*)data;
+                if (Vector256.IsHardwareAccelerated && Vector256<double>.IsSupported && size >= Vector256<double>.Count)
+                {
+                    int vectorCount = Vector256<double>.Count;
+                    int vectorEnd = size - vectorCount;
+                    var sumVec = Vector256<double>.Zero;
+                    int i = 0;
+                    for (; i <= vectorEnd; i += vectorCount)
+                        sumVec = Vector256.Add(sumVec, Vector256.Load(p + i));
+                    sum = Vector256.Sum(sumVec);
+                    for (; i < size; i++)
+                        sum += p[i];
+                }
+                else
+                {
+                    for (int i = 0; i < size; i++)
+                        sum += p[i];
+                }
+            }
+            else if (typeof(T) == typeof(float))
+            {
+                float* p = (float*)(void*)data;
+                if (Vector256.IsHardwareAccelerated && Vector256<float>.IsSupported && size >= Vector256<float>.Count)
+                {
+                    int vectorCount = Vector256<float>.Count;
+                    int vectorEnd = size - vectorCount;
+                    var sumVec = Vector256<float>.Zero;
+                    int i = 0;
+                    for (; i <= vectorEnd; i += vectorCount)
+                        sumVec = Vector256.Add(sumVec, Vector256.Load(p + i));
+                    sum = Vector256.Sum(sumVec);
+                    for (; i < size; i++)
+                        sum += p[i];
+                }
+                else
+                {
+                    for (int i = 0; i < size; i++)
+                        sum += p[i];
+                }
+            }
+            else
+            {
+                // For integer types, convert to double
+                for (int i = 0; i < size; i++)
+                    sum += ConvertToDouble(data[i]);
+            }
+
+            return sum;
+        }
+
+        /// <summary>
+        /// Sum squared differences from mean for contiguous axis.
+        /// </summary>
+        private static unsafe double SumSquaredDiffContiguous<T>(T* data, int size, double mean)
+            where T : unmanaged
+        {
+            double sqDiffSum = 0;
+
+            if (typeof(T) == typeof(double))
+            {
+                double* p = (double*)(void*)data;
+                if (Vector256.IsHardwareAccelerated && Vector256<double>.IsSupported && size >= Vector256<double>.Count)
+                {
+                    int vectorCount = Vector256<double>.Count;
+                    int vectorEnd = size - vectorCount;
+                    var meanVec = Vector256.Create(mean);
+                    var sqDiffVec = Vector256<double>.Zero;
+                    int i = 0;
+                    for (; i <= vectorEnd; i += vectorCount)
+                    {
+                        var vec = Vector256.Load(p + i);
+                        var diff = Vector256.Subtract(vec, meanVec);
+                        sqDiffVec = Vector256.Add(sqDiffVec, Vector256.Multiply(diff, diff));
+                    }
+                    sqDiffSum = Vector256.Sum(sqDiffVec);
+                    for (; i < size; i++)
+                    {
+                        double diff = p[i] - mean;
+                        sqDiffSum += diff * diff;
+                    }
+                }
+                else
+                {
+                    for (int i = 0; i < size; i++)
+                    {
+                        double diff = p[i] - mean;
+                        sqDiffSum += diff * diff;
+                    }
+                }
+            }
+            else if (typeof(T) == typeof(float))
+            {
+                float* p = (float*)(void*)data;
+                float fMean = (float)mean;
+                if (Vector256.IsHardwareAccelerated && Vector256<float>.IsSupported && size >= Vector256<float>.Count)
+                {
+                    int vectorCount = Vector256<float>.Count;
+                    int vectorEnd = size - vectorCount;
+                    var meanVec = Vector256.Create(fMean);
+                    var sqDiffVec = Vector256<float>.Zero;
+                    int i = 0;
+                    for (; i <= vectorEnd; i += vectorCount)
+                    {
+                        var vec = Vector256.Load(p + i);
+                        var diff = Vector256.Subtract(vec, meanVec);
+                        sqDiffVec = Vector256.Add(sqDiffVec, Vector256.Multiply(diff, diff));
+                    }
+                    sqDiffSum = Vector256.Sum(sqDiffVec);
+                    for (; i < size; i++)
+                    {
+                        double diff = p[i] - mean;
+                        sqDiffSum += diff * diff;
+                    }
+                }
+                else
+                {
+                    for (int i = 0; i < size; i++)
+                    {
+                        double diff = p[i] - mean;
+                        sqDiffSum += diff * diff;
+                    }
+                }
+            }
+            else
+            {
+                // For integer types
+                for (int i = 0; i < size; i++)
+                {
+                    double diff = ConvertToDouble(data[i]) - mean;
+                    sqDiffSum += diff * diff;
+                }
+            }
+
+            return sqDiffSum;
+        }
+
+        /// <summary>
+        /// Helper for axis Var/Std with decimal input.
+        /// </summary>
+        internal static unsafe void AxisVarStdDecimalHelper(
+            decimal* input, double* output,
+            int* inputStrides, int* inputShape, int* outputStrides,
+            int axis, int axisSize, int ndim, int outputSize,
+            bool computeStd, int ddof)
+        {
+            int axisStride = inputStrides[axis];
+
+            int outputNdim = ndim - 1;
+            Span<int> outputDimStrides = stackalloc int[outputNdim > 0 ? outputNdim : 1];
+            if (outputNdim > 0)
+            {
+                outputDimStrides[outputNdim - 1] = 1;
+                for (int d = outputNdim - 2; d >= 0; d--)
+                {
+                    int inputDim = d >= axis ? d + 1 : d;
+                    int nextInputDim = (d + 1) >= axis ? d + 2 : d + 1;
+                    outputDimStrides[d] = outputDimStrides[d + 1] * inputShape[nextInputDim];
+                }
+            }
+
+            double divisor = axisSize - ddof;
+            if (divisor <= 0) divisor = 1;
+
+            for (int outIdx = 0; outIdx < outputSize; outIdx++)
+            {
+                int remaining = outIdx;
+                int inputBaseOffset = 0;
+                int outputOffset = 0;
+
+                for (int d = 0; d < outputNdim; d++)
+                {
+                    int inputDim = d >= axis ? d + 1 : d;
+                    int coord = remaining / outputDimStrides[d];
+                    remaining = remaining % outputDimStrides[d];
+                    inputBaseOffset += coord * inputStrides[inputDim];
+                    outputOffset += coord * outputStrides[d];
+                }
+
+                decimal* axisStart = input + inputBaseOffset;
+
+                // Pass 1: Compute mean
+                decimal sum = 0;
+                for (int i = 0; i < axisSize; i++)
+                    sum += axisStart[i * axisStride];
+                decimal mean = sum / axisSize;
+
+                // Pass 2: Sum of squared differences
+                decimal sqDiffSum = 0;
+                for (int i = 0; i < axisSize; i++)
+                {
+                    decimal diff = axisStart[i * axisStride] - mean;
+                    sqDiffSum += diff * diff;
+                }
+
+                double variance = (double)(sqDiffSum / (decimal)divisor);
+                output[outputOffset] = computeStd ? Math.Sqrt(variance) : variance;
+            }
+        }
+
+        /// <summary>
+        /// General helper for axis Var/Std with runtime type dispatch.
+        /// </summary>
+        internal static unsafe void AxisVarStdGeneralHelper(
+            void* input, double* output,
+            int* inputStrides, int* inputShape, int* outputStrides,
+            int axis, int axisSize, int ndim, int outputSize,
+            NPTypeCode inputType, bool computeStd, int ddof)
+        {
+            int axisStride = inputStrides[axis];
+            int inputElemSize = inputType.SizeOf();
+
+            int outputNdim = ndim - 1;
+            Span<int> outputDimStrides = stackalloc int[outputNdim > 0 ? outputNdim : 1];
+            if (outputNdim > 0)
+            {
+                outputDimStrides[outputNdim - 1] = 1;
+                for (int d = outputNdim - 2; d >= 0; d--)
+                {
+                    int inputDim = d >= axis ? d + 1 : d;
+                    int nextInputDim = (d + 1) >= axis ? d + 2 : d + 1;
+                    outputDimStrides[d] = outputDimStrides[d + 1] * inputShape[nextInputDim];
+                }
+            }
+
+            byte* inputBytes = (byte*)input;
+            double divisor = axisSize - ddof;
+            if (divisor <= 0) divisor = 1;
+
+            for (int outIdx = 0; outIdx < outputSize; outIdx++)
+            {
+                int remaining = outIdx;
+                int inputBaseOffset = 0;
+                int outputOffset = 0;
+
+                for (int d = 0; d < outputNdim; d++)
+                {
+                    int inputDim = d >= axis ? d + 1 : d;
+                    int coord = remaining / outputDimStrides[d];
+                    remaining = remaining % outputDimStrides[d];
+                    inputBaseOffset += coord * inputStrides[inputDim];
+                    outputOffset += coord * outputStrides[d];
+                }
+
+                // Pass 1: Compute mean
+                double sum = 0;
+                for (int i = 0; i < axisSize; i++)
+                {
+                    int inputOffset = inputBaseOffset + i * axisStride;
+                    sum += ReadAsDouble(inputBytes + inputOffset * inputElemSize, inputType);
+                }
+                double mean = sum / axisSize;
+
+                // Pass 2: Sum of squared differences
+                double sqDiffSum = 0;
+                for (int i = 0; i < axisSize; i++)
+                {
+                    int inputOffset = inputBaseOffset + i * axisStride;
+                    double val = ReadAsDouble(inputBytes + inputOffset * inputElemSize, inputType);
+                    double diff = val - mean;
+                    sqDiffSum += diff * diff;
+                }
+
+                double variance = sqDiffSum / divisor;
+                output[outputOffset] = computeStd ? Math.Sqrt(variance) : variance;
+            }
         }
 
         #endregion

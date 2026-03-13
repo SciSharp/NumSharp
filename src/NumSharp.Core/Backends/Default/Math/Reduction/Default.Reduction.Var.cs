@@ -73,7 +73,8 @@ namespace NumSharp.Backends
 
             if (shape.IsScalar || (shape.size == 1 && shape.NDim == 1))
             {
-                var r = NDArray.Scalar(0);
+                // NumPy: variance of single element is 0.0 (always returns float64 for variance)
+                var r = NDArray.Scalar(0.0);
                 if (keepdims)
                 {
                     // NumPy: keepdims preserves the number of dimensions, all set to 1
@@ -121,6 +122,14 @@ namespace NumSharp.Backends
                     return np.zeros(keepdimsShapeDims, typeCode ?? arr.GetTypeCode.GetComputingType());
                 }
                 return np.zeros(Shape.GetAxis(shape, axis), typeCode ?? arr.GetTypeCode.GetComputingType());
+            }
+
+            // IL-generated axis reduction fast path
+            if (ILKernelGenerator.Enabled)
+            {
+                var ilResult = ExecuteAxisVarReductionIL(arr, axis, keepdims, typeCode ?? NPTypeCode.Double, ddof ?? 0);
+                if (ilResult != null)
+                    return ilResult;
             }
 
             //handle keepdims
@@ -9310,6 +9319,66 @@ namespace NumSharp.Backends
 		    }
             #endregion
 #endif
+        }
+
+        /// <summary>
+        /// IL-generated axis variance reduction. Returns null if kernel not available.
+        /// </summary>
+        private unsafe NDArray ExecuteAxisVarReductionIL(in NDArray arr, int axis, bool keepdims, NPTypeCode outputType, int ddof)
+        {
+            var shape = arr.Shape;
+            var inputType = arr.GetTypeCode;
+
+            // Var axis reduction always outputs double for accuracy
+            var key = new AxisReductionKernelKey(inputType, NPTypeCode.Double, ReductionOp.Var, shape.IsContiguous && axis == arr.ndim - 1);
+            var kernel = ILKernelGenerator.TryGetAxisReductionKernel(key);
+
+            if (kernel == null)
+                return null;
+
+            var outputDims = new int[arr.ndim - 1];
+            for (int d = 0, od = 0; d < arr.ndim; d++)
+                if (d != axis) outputDims[od++] = shape.dimensions[d];
+
+            var outputShape = outputDims.Length > 0 ? new Shape(outputDims) : Shape.Scalar;
+            var result = new NDArray(NPTypeCode.Double, outputShape, false);
+
+            int axisSize = shape.dimensions[axis];
+            int outputSize = result.size > 0 ? result.size : 1;
+            byte* inputAddr = (byte*)arr.Address + shape.offset * arr.dtypesize;
+
+            fixed (int* inputStrides = shape.strides)
+            fixed (int* inputDims = shape.dimensions)
+            fixed (int* outputStrides = result.Shape.strides)
+            {
+                // The kernel computes variance with ddof=0 by default
+                kernel((void*)inputAddr, (void*)result.Address, inputStrides, inputDims, outputStrides, axis, axisSize, arr.ndim, outputSize);
+
+                // For ddof != 0, adjust: var_ddof = var_0 * n / (n - ddof)
+                if (ddof != 0)
+                {
+                    double* resultPtr = (double*)result.Address;
+                    double adjustment = (double)axisSize / (axisSize - ddof);
+                    for (int i = 0; i < outputSize; i++)
+                        resultPtr[i] *= adjustment;
+                }
+            }
+
+            // Convert to requested output type if different from double
+            if (outputType != NPTypeCode.Double)
+            {
+                result = Cast(result, outputType, copy: true);
+            }
+
+            if (keepdims)
+            {
+                var ks = new int[arr.ndim];
+                for (int d = 0, sd = 0; d < arr.ndim; d++)
+                    ks[d] = (d == axis) ? 1 : (sd < outputDims.Length ? outputDims[sd++] : 1);
+                result.Storage.Reshape(new Shape(ks));
+            }
+
+            return result;
         }
     }
 }

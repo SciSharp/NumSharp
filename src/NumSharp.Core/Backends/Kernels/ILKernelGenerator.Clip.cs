@@ -20,13 +20,21 @@ using System.Runtime.Intrinsics;
 // - Min only: Clip to [min, +inf)
 // - Max only: Clip to (-inf, max]
 //
+// Two execution paths:
+// - Contiguous: Direct SIMD vectorization (ClipHelper)
+// - Strided: Coordinate-based iteration with scalar clip (ClipStrided)
+//
+// NaN handling (NumPy behavior):
+// - For floating-point, NaN in data propagates: clip(NaN, min, max) = NaN
+// - For NaN in min/max: entire output becomes NaN (not implemented here - caller handles)
+//
 // =============================================================================
 
 namespace NumSharp.Backends.Kernels
 {
     public sealed partial class ILKernelGenerator
     {
-        #region Clip Helpers
+        #region Clip Helpers (Contiguous)
 
         /// <summary>
         /// SIMD-optimized Clip operation for contiguous arrays (min and max).
@@ -423,6 +431,138 @@ namespace NumSharp.Backends.Kernels
                 if (Comparer<T>.Default.Compare(data[i], maxVal) > 0)
                     data[i] = maxVal;
             }
+        }
+
+        #endregion
+
+        #region Clip Strided (Non-Contiguous)
+
+        /// <summary>
+        /// Clip operation for strided (non-contiguous) arrays.
+        /// Uses coordinate-based iteration via Shape.TransformOffset.
+        /// </summary>
+        /// <remarks>
+        /// This handles arrays that are:
+        /// - Transposed (stride order differs from dimension order)
+        /// - Sliced with step (e.g., arr[::2])
+        /// - Views with non-standard memory layout
+        ///
+        /// Performance is O(n) with coordinate overhead per element.
+        /// For contiguous arrays, use ClipHelper instead.
+        /// </remarks>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static unsafe void ClipStrided<T>(T* data, int size, T minVal, T maxVal, Shape shape) where T : unmanaged, IComparable<T>
+        {
+            if (size == 0) return;
+
+            // Special case: if actually contiguous, use the fast path
+            if (shape.IsContiguous)
+            {
+                ClipHelper(data + shape.Offset, size, minVal, maxVal);
+                return;
+            }
+
+            // Strided iteration using coordinate transformation
+            for (int i = 0; i < size; i++)
+            {
+                int offset = shape.TransformOffset(i);
+                var val = data[offset];
+                if (val.CompareTo(maxVal) > 0)
+                    val = maxVal;
+                else if (val.CompareTo(minVal) < 0)
+                    val = minVal;
+                data[offset] = val;
+            }
+        }
+
+        /// <summary>
+        /// Min-only Clip operation for strided arrays.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static unsafe void ClipMinStrided<T>(T* data, int size, T minVal, Shape shape) where T : unmanaged, IComparable<T>
+        {
+            if (size == 0) return;
+
+            if (shape.IsContiguous)
+            {
+                ClipMinHelper(data + shape.Offset, size, minVal);
+                return;
+            }
+
+            for (int i = 0; i < size; i++)
+            {
+                int offset = shape.TransformOffset(i);
+                if (data[offset].CompareTo(minVal) < 0)
+                    data[offset] = minVal;
+            }
+        }
+
+        /// <summary>
+        /// Max-only Clip operation for strided arrays.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static unsafe void ClipMaxStrided<T>(T* data, int size, T maxVal, Shape shape) where T : unmanaged, IComparable<T>
+        {
+            if (size == 0) return;
+
+            if (shape.IsContiguous)
+            {
+                ClipMaxHelper(data + shape.Offset, size, maxVal);
+                return;
+            }
+
+            for (int i = 0; i < size; i++)
+            {
+                int offset = shape.TransformOffset(i);
+                if (data[offset].CompareTo(maxVal) > 0)
+                    data[offset] = maxVal;
+            }
+        }
+
+        #endregion
+
+        #region Unified Clip Entry Points
+
+        /// <summary>
+        /// Unified Clip operation that handles both contiguous and strided arrays.
+        /// Automatically selects the optimal path based on array contiguity.
+        /// </summary>
+        /// <param name="data">Pointer to the data buffer (at offset 0, not adjusted for shape.offset)</param>
+        /// <param name="size">Number of elements to process</param>
+        /// <param name="minVal">Minimum value to clip to</param>
+        /// <param name="maxVal">Maximum value to clip to</param>
+        /// <param name="shape">Shape describing the memory layout</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static unsafe void ClipUnified<T>(T* data, int size, T minVal, T maxVal, Shape shape) where T : unmanaged, IComparable<T>
+        {
+            if (shape.IsContiguous)
+                ClipHelper(data + shape.Offset, size, minVal, maxVal);
+            else
+                ClipStrided(data, size, minVal, maxVal, shape);
+        }
+
+        /// <summary>
+        /// Unified Min-only Clip operation.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static unsafe void ClipMinUnified<T>(T* data, int size, T minVal, Shape shape) where T : unmanaged, IComparable<T>
+        {
+            if (shape.IsContiguous)
+                ClipMinHelper(data + shape.Offset, size, minVal);
+            else
+                ClipMinStrided(data, size, minVal, shape);
+        }
+
+        /// <summary>
+        /// Unified Max-only Clip operation.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static unsafe void ClipMaxUnified<T>(T* data, int size, T maxVal, Shape shape) where T : unmanaged, IComparable<T>
+        {
+            if (shape.IsContiguous)
+                ClipMaxHelper(data + shape.Offset, size, maxVal);
+            else
+                ClipMaxStrided(data, size, maxVal, shape);
         }
 
         #endregion

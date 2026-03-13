@@ -1,4 +1,5 @@
 ﻿using System;
+using NumSharp.Backends.Kernels;
 using NumSharp.Utilities;
 
 namespace NumSharp.Backends
@@ -123,7 +124,16 @@ namespace NumSharp.Backends
                 outputShape = new Shape(keepdimsShapeDims);
             }
 
-            //prepare ret
+            // Use IL kernel for axis reduction (reuse the ArgMax method which handles both ArgMax and ArgMin)
+            return ExecuteAxisArgReduction(arr, axis, keepdims, outputShape, axisedShape, ReductionOp.ArgMin);
+        }
+
+        /// <summary>
+        /// Fallback iterator-based axis ArgMin reduction.
+        /// </summary>
+        private NDArray ExecuteAxisArgMinReductionIterator(NDArray arr, int axis, bool keepdims, Shape outputShape, Shape axisedShape)
+        {
+            var shape = arr.Shape;
             var ret = new NDArray(NPTypeCode.Int64, axisedShape, false);
             var iterAxis = new NDCoordinatesAxisIncrementor(ref shape, axis);
             var iterRet = new ValueCoordinatesIncrementor(ref axisedShape);
@@ -135,7 +145,7 @@ namespace NumSharp.Backends
             switch (arr.GetTypeCode)
 		    {
 			    %foreach supported_numericals,supported_numericals_lowercase%
-			    case NPTypeCode.#1: 
+			    case NPTypeCode.#1:
                 {
                     int at;
                     do

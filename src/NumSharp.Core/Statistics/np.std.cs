@@ -31,7 +31,7 @@ namespace NumSharp
         /// <returns> returns a new array containing the std values, otherwise a reference to the output array is returned.</returns>
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.std.html</remarks>
         public static NDArray std(in NDArray a, int? ddof = null)
-            => a.TensorEngine.ReduceStd(a, null);
+            => a.TensorEngine.ReduceStd(a, null, ddof: ddof);
 
         /// <summary>
         ///     Compute the standard deviation along the specified axis.

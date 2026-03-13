@@ -117,6 +117,7 @@ namespace NumSharp.Backends.Kernels
             _comparisonCache.Clear();
             _comparisonScalarCache.Clear();
             _elementReductionCache.Clear();
+            _scanCache.Clear();
         }
 
         /// <summary>

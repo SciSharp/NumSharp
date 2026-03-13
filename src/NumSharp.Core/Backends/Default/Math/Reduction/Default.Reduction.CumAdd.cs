@@ -1,4 +1,5 @@
 ﻿using System;
+using NumSharp.Backends.Kernels;
 using NumSharp.Utilities;
 
 namespace NumSharp.Backends
@@ -2406,6 +2407,22 @@ namespace NumSharp.Backends
 
             var retType = typeCode ?? (arr.GetTypeCode.GetAccumulatingType());
             var ret = new NDArray(retType, Shape.Vector(arr.size));
+
+            // Fast path: use IL-generated kernel for contiguous arrays
+            if (arr.Shape.IsContiguous && ILKernelGenerator.Enabled)
+            {
+                var key = new CumulativeKernelKey(arr.GetTypeCode, retType, ReductionOp.CumSum, IsContiguous: true);
+                var kernel = ILKernelGenerator.TryGetCumulativeKernel(key);
+                if (kernel != null)
+                {
+                    fixed (int* strides = arr.strides)
+                    fixed (int* shape = arr.shape)
+                    {
+                        kernel((void*)arr.Address, (void*)ret.Address, strides, shape, arr.ndim, arr.size);
+                    }
+                    return ret;
+                }
+            }
 
 #if _REGEN
             #region Compute
