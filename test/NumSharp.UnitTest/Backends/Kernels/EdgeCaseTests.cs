@@ -15,7 +15,6 @@ public class EdgeCaseTests
     #region Modulo Edge Cases - Python vs C Semantics
 
     [Test]
-    [OpenBugs]  // NumSharp likely uses C semantics, NumPy uses Python semantics
     public void Mod_NegativeDividend_PythonSemantics()
     {
         // NumPy: -7 % 3 = 2 (Python semantics: result has same sign as divisor)
@@ -29,7 +28,6 @@ public class EdgeCaseTests
     }
 
     [Test]
-    [OpenBugs]  // NumSharp likely uses C semantics
     public void Mod_NegativeDivisor_PythonSemantics()
     {
         // NumPy: 7 % -3 = -2 (Python semantics)
