@@ -65,9 +65,6 @@ namespace NumSharp.Backends.Kernels
         // Small matrix threshold - below this, blocking overhead isn't worth it
         private const int SMALL_MATRIX_THRESHOLD = 32;
 
-        // Threshold for enabling parallelization (roughly 256x256 matrix)
-        private const int PARALLEL_THRESHOLD = 65536;
-
         /// <summary>
         /// Cache of generated MatMul kernels by type.
         /// </summary>
@@ -101,23 +98,6 @@ namespace NumSharp.Backends.Kernels
                 return kernel;
 
             return (MatMul2DKernel<T>)_matmulKernelCache[key];
-        }
-
-        /// <summary>
-        /// Get a parallel MatMul kernel for large matrices.
-        /// Uses row-based parallelization.
-        /// </summary>
-        public static unsafe MatMul2DKernel<T>? GetParallelMatMulKernel<T>() where T : unmanaged
-        {
-            if (!Enabled)
-                return null;
-
-            if (typeof(T) == typeof(float))
-                return (MatMul2DKernel<T>)(Delegate)(MatMul2DKernel<float>)MatMulParallel_Float;
-            if (typeof(T) == typeof(double))
-                return (MatMul2DKernel<T>)(Delegate)(MatMul2DKernel<double>)MatMulParallel_Double;
-
-            return null;
         }
 
         /// <summary>
@@ -438,99 +418,6 @@ namespace NumSharp.Backends.Kernels
                     }
                 }
             }
-        }
-
-        #endregion
-
-        #region Parallel Variants (Large Matrices)
-
-        /// <summary>
-        /// Parallel blocked SIMD matrix multiplication for float.
-        /// Parallelizes over row blocks.
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        private static unsafe void MatMulParallel_Float(float* a, float* b, float* c, int M, int N, int K)
-        {
-            // Zero out C first
-            var cSize = M * N;
-            for (int i = 0; i < cSize; i++)
-                c[i] = 0;
-
-            // For small matrices, use sequential version
-            if ((long)M * N * K < PARALLEL_THRESHOLD)
-            {
-                if (M <= SMALL_MATRIX_THRESHOLD && N <= SMALL_MATRIX_THRESHOLD && K <= SMALL_MATRIX_THRESHOLD)
-                    MatMulSimdSmall_Float(a, b, c, M, N, K);
-                else
-                    MatMulBlockedSimd_Float(a, b, c, M, N, K);
-                return;
-            }
-
-            // Parallel over row blocks
-            int numRowBlocks = (M + BLOCK_M - 1) / BLOCK_M;
-
-            System.Threading.Tasks.Parallel.For(0, numRowBlocks, i0Idx =>
-            {
-                int i0 = i0Idx * BLOCK_M;
-                int iEnd = Math.Min(i0 + BLOCK_M, M);
-
-                for (int k0 = 0; k0 < K; k0 += BLOCK_K)
-                {
-                    int kEnd = Math.Min(k0 + BLOCK_K, K);
-
-                    for (int j0 = 0; j0 < N; j0 += BLOCK_N)
-                    {
-                        int jEnd = Math.Min(j0 + BLOCK_N, N);
-
-                        // Process block
-                        MatMulBlockSimd_Float(a, b, c, N, K, i0, iEnd, j0, jEnd, k0, kEnd);
-                    }
-                }
-            });
-        }
-
-        /// <summary>
-        /// Parallel blocked SIMD matrix multiplication for double.
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        private static unsafe void MatMulParallel_Double(double* a, double* b, double* c, int M, int N, int K)
-        {
-            // Zero out C first
-            var cSize = M * N;
-            for (int i = 0; i < cSize; i++)
-                c[i] = 0;
-
-            // For small matrices, use sequential version
-            if ((long)M * N * K < PARALLEL_THRESHOLD)
-            {
-                if (M <= SMALL_MATRIX_THRESHOLD && N <= SMALL_MATRIX_THRESHOLD && K <= SMALL_MATRIX_THRESHOLD)
-                    MatMulSimdSmall_Double(a, b, c, M, N, K);
-                else
-                    MatMulBlockedSimd_Double(a, b, c, M, N, K);
-                return;
-            }
-
-            // Parallel over row blocks
-            int numRowBlocks = (M + BLOCK_M - 1) / BLOCK_M;
-
-            System.Threading.Tasks.Parallel.For(0, numRowBlocks, i0Idx =>
-            {
-                int i0 = i0Idx * BLOCK_M;
-                int iEnd = Math.Min(i0 + BLOCK_M, M);
-
-                for (int k0 = 0; k0 < K; k0 += BLOCK_K)
-                {
-                    int kEnd = Math.Min(k0 + BLOCK_K, K);
-
-                    for (int j0 = 0; j0 < N; j0 += BLOCK_N)
-                    {
-                        int jEnd = Math.Min(j0 + BLOCK_N, N);
-
-                        // Process block
-                        MatMulBlockSimd_Double(a, b, c, N, K, i0, iEnd, j0, jEnd, k0, kEnd);
-                    }
-                }
-            });
         }
 
         #endregion

@@ -88,17 +88,6 @@ namespace NumSharp.Backends
                     float* b = (float*)right.Address;
                     float* c = (float*)result.Address;
 
-                    // Use parallel kernel for large matrices (>= 40x40x40)
-                    if ((long)M * N * K >= 65536)
-                    {
-                        var parallelKernel = ILKernelGenerator.GetParallelMatMulKernel<float>();
-                        if (parallelKernel != null)
-                        {
-                            parallelKernel(a, b, c, M, N, K);
-                            return true;
-                        }
-                    }
-
                     kernel(a, b, c, M, N, K);
                     return true;
                 }
@@ -111,16 +100,6 @@ namespace NumSharp.Backends
                     double* a = (double*)left.Address;
                     double* b = (double*)right.Address;
                     double* c = (double*)result.Address;
-
-                    if ((long)M * N * K >= 65536)
-                    {
-                        var parallelKernel = ILKernelGenerator.GetParallelMatMulKernel<double>();
-                        if (parallelKernel != null)
-                        {
-                            parallelKernel(a, b, c, M, N, K);
-                            return true;
-                        }
-                    }
 
                     kernel(a, b, c, M, N, K);
                     return true;
