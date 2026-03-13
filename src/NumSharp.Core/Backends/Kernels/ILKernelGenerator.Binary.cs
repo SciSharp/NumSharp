@@ -228,30 +228,108 @@ namespace NumSharp.Backends.Kernels
 
             if (!isScalarOnly)
             {
-                // SIMD-capable operations: generate SIMD loop + tail loop
-                var locVectorEnd = il.DeclareLocal(typeof(int));   // totalSize - vectorCount
+                // SIMD-capable operations: generate 4x unrolled SIMD loop + remainder + tail loop
+                var locVectorEnd = il.DeclareLocal(typeof(int));   // count - vectorCount (for remainder loop)
+                var locUnrollEnd = il.DeclareLocal(typeof(int));   // count - vectorCount*4 (for 4x unrolled loop)
 
                 // Define labels
-                var lblSimdLoop = il.DefineLabel();
-                var lblSimdLoopEnd = il.DefineLabel();
+                var lblUnrollLoop = il.DefineLabel();
+                var lblUnrollLoopEnd = il.DefineLabel();
+                var lblRemainderLoop = il.DefineLabel();
+                var lblRemainderLoopEnd = il.DefineLabel();
                 var lblTailLoop = il.DefineLabel();
                 var lblTailLoopEnd = il.DefineLabel();
 
                 int vectorCount = GetVectorCount<T>();
+                int unrollStep = vectorCount * 4;
 
-                // vectorEnd = count - vectorCount
+                // vectorEnd = count - vectorCount (for remainder loop)
                 il.Emit(OpCodes.Ldarg_3);                      // count
                 il.Emit(OpCodes.Ldc_I4, vectorCount);
                 il.Emit(OpCodes.Sub);
                 il.Emit(OpCodes.Stloc, locVectorEnd);
 
-                // ========== SIMD LOOP ==========
-                il.MarkLabel(lblSimdLoop);
+                // unrollEnd = count - vectorCount*4 (for 4x unrolled loop)
+                il.Emit(OpCodes.Ldarg_3);                      // count
+                il.Emit(OpCodes.Ldc_I4, unrollStep);
+                il.Emit(OpCodes.Sub);
+                il.Emit(OpCodes.Stloc, locUnrollEnd);
 
-                // if (i > vectorEnd) goto SimdLoopEnd
+                // ========== 4x UNROLLED SIMD LOOP ==========
+                il.MarkLabel(lblUnrollLoop);
+
+                // if (i > unrollEnd) goto UnrollLoopEnd
+                il.Emit(OpCodes.Ldloc, locI);
+                il.Emit(OpCodes.Ldloc, locUnrollEnd);
+                il.Emit(OpCodes.Bgt, lblUnrollLoopEnd);
+
+                // Process 4 vectors per iteration
+                for (int u = 0; u < 4; u++)
+                {
+                    int offset = vectorCount * u;
+
+                    // Load lhs vector at (i + offset)
+                    il.Emit(OpCodes.Ldarg_0);                      // lhs
+                    il.Emit(OpCodes.Ldloc, locI);
+                    if (offset > 0)
+                    {
+                        il.Emit(OpCodes.Ldc_I4, offset);
+                        il.Emit(OpCodes.Add);
+                    }
+                    il.Emit(OpCodes.Conv_I);
+                    il.Emit(OpCodes.Ldc_I4, elementSize);
+                    il.Emit(OpCodes.Mul);
+                    il.Emit(OpCodes.Add);
+                    EmitVectorLoad<T>(il);
+
+                    // Load rhs vector at (i + offset)
+                    il.Emit(OpCodes.Ldarg_1);                      // rhs
+                    il.Emit(OpCodes.Ldloc, locI);
+                    if (offset > 0)
+                    {
+                        il.Emit(OpCodes.Ldc_I4, offset);
+                        il.Emit(OpCodes.Add);
+                    }
+                    il.Emit(OpCodes.Conv_I);
+                    il.Emit(OpCodes.Ldc_I4, elementSize);
+                    il.Emit(OpCodes.Mul);
+                    il.Emit(OpCodes.Add);
+                    EmitVectorLoad<T>(il);
+
+                    // Perform vector operation
+                    EmitVectorOperation<T>(il, op);
+
+                    // Store result at (i + offset)
+                    il.Emit(OpCodes.Ldarg_2);                      // result
+                    il.Emit(OpCodes.Ldloc, locI);
+                    if (offset > 0)
+                    {
+                        il.Emit(OpCodes.Ldc_I4, offset);
+                        il.Emit(OpCodes.Add);
+                    }
+                    il.Emit(OpCodes.Conv_I);
+                    il.Emit(OpCodes.Ldc_I4, elementSize);
+                    il.Emit(OpCodes.Mul);
+                    il.Emit(OpCodes.Add);
+                    EmitVectorStore<T>(il);
+                }
+
+                // i += vectorCount * 4
+                il.Emit(OpCodes.Ldloc, locI);
+                il.Emit(OpCodes.Ldc_I4, unrollStep);
+                il.Emit(OpCodes.Add);
+                il.Emit(OpCodes.Stloc, locI);
+
+                il.Emit(OpCodes.Br, lblUnrollLoop);
+                il.MarkLabel(lblUnrollLoopEnd);
+
+                // ========== REMAINDER SIMD LOOP (0-3 vectors) ==========
+                il.MarkLabel(lblRemainderLoop);
+
+                // if (i > vectorEnd) goto RemainderLoopEnd
                 il.Emit(OpCodes.Ldloc, locI);
                 il.Emit(OpCodes.Ldloc, locVectorEnd);
-                il.Emit(OpCodes.Bgt, lblSimdLoopEnd);
+                il.Emit(OpCodes.Bgt, lblRemainderLoopEnd);
 
                 // Load lhs vector: Vector256.Load(lhs + i)
                 il.Emit(OpCodes.Ldarg_0);                      // lhs
@@ -289,10 +367,10 @@ namespace NumSharp.Backends.Kernels
                 il.Emit(OpCodes.Add);
                 il.Emit(OpCodes.Stloc, locI);
 
-                il.Emit(OpCodes.Br, lblSimdLoop);
-                il.MarkLabel(lblSimdLoopEnd);
+                il.Emit(OpCodes.Br, lblRemainderLoop);
+                il.MarkLabel(lblRemainderLoopEnd);
 
-                // ========== TAIL LOOP ==========
+                // ========== TAIL LOOP (scalar) ==========
                 il.MarkLabel(lblTailLoop);
 
                 // if (i >= count) goto TailLoopEnd

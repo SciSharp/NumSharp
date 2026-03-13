@@ -236,8 +236,8 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
-        /// Emit a SIMD reduction loop for contiguous arrays.
-        /// Uses vector accumulator for O(N + log(vectorWidth)) instead of O(N * log(vectorWidth)).
+        /// Emit a SIMD reduction loop for contiguous arrays with 4x unrolling.
+        /// Uses 4 independent vector accumulators to break dependency chains.
         /// </summary>
         private static void EmitReductionSimdLoop(ILGenerator il, ElementReductionKernelKey key, int inputSize)
         {
@@ -260,18 +260,38 @@ namespace NumSharp.Backends.Kernels
             var vectorType = GetVectorType(clrType);
 
             var locI = il.DeclareLocal(typeof(int)); // loop counter
+            var locUnrollEnd = il.DeclareLocal(typeof(int)); // totalSize - unrollStep
             var locVectorEnd = il.DeclareLocal(typeof(int)); // totalSize - vectorCount
-            var locVecAccum = il.DeclareLocal(vectorType); // VECTOR accumulator (optimized)
+            var locVecAccum0 = il.DeclareLocal(vectorType); // VECTOR accumulator 0
+            var locVecAccum1 = il.DeclareLocal(vectorType); // VECTOR accumulator 1
+            var locVecAccum2 = il.DeclareLocal(vectorType); // VECTOR accumulator 2
+            var locVecAccum3 = il.DeclareLocal(vectorType); // VECTOR accumulator 3
             var locScalarAccum = il.DeclareLocal(GetClrType(key.AccumulatorType)); // scalar for tail
 
-            var lblSimdLoop = il.DefineLabel();
-            var lblSimdLoopEnd = il.DefineLabel();
+            var lblUnrolledLoop = il.DefineLabel();
+            var lblUnrolledLoopEnd = il.DefineLabel();
+            var lblRemainderLoop = il.DefineLabel();
+            var lblRemainderLoopEnd = il.DefineLabel();
             var lblTailLoop = il.DefineLabel();
             var lblTailLoopEnd = il.DefineLabel();
 
-            // Initialize VECTOR accumulator with identity value broadcast
+            int unrollStep = vectorCount * 4;
+
+            // Initialize 4 VECTOR accumulators with identity value broadcast
             EmitVectorIdentity(il, key.Op, key.InputType);
-            il.Emit(OpCodes.Stloc, locVecAccum);
+            il.Emit(OpCodes.Stloc, locVecAccum0);
+            EmitVectorIdentity(il, key.Op, key.InputType);
+            il.Emit(OpCodes.Stloc, locVecAccum1);
+            EmitVectorIdentity(il, key.Op, key.InputType);
+            il.Emit(OpCodes.Stloc, locVecAccum2);
+            EmitVectorIdentity(il, key.Op, key.InputType);
+            il.Emit(OpCodes.Stloc, locVecAccum3);
+
+            // unrollEnd = totalSize - unrollStep
+            il.Emit(OpCodes.Ldarg_S, (byte)4); // totalSize
+            il.Emit(OpCodes.Ldc_I4, unrollStep);
+            il.Emit(OpCodes.Sub);
+            il.Emit(OpCodes.Stloc, locUnrollEnd);
 
             // vectorEnd = totalSize - vectorCount
             il.Emit(OpCodes.Ldarg_S, (byte)4); // totalSize
@@ -283,16 +303,106 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Ldc_I4_0);
             il.Emit(OpCodes.Stloc, locI);
 
-            // === SIMD LOOP (vector * vector accumulation) ===
-            il.MarkLabel(lblSimdLoop);
+            // === 4x UNROLLED SIMD LOOP ===
+            il.MarkLabel(lblUnrolledLoop);
 
-            // if (i > vectorEnd) goto SimdLoopEnd
+            // if (i > unrollEnd) goto UnrolledLoopEnd
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldloc, locUnrollEnd);
+            il.Emit(OpCodes.Bgt, lblUnrolledLoopEnd);
+
+            // Load and combine vector 0: acc0 = acc0 OP input[i]
+            il.Emit(OpCodes.Ldloc, locVecAccum0);
+            il.Emit(OpCodes.Ldarg_0); // input
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Ldc_I4, inputSize);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Add);
+            EmitVectorLoad(il, key.InputType);
+            EmitVectorBinaryReductionOp(il, key.Op, key.InputType);
+            il.Emit(OpCodes.Stloc, locVecAccum0);
+
+            // Load and combine vector 1: acc1 = acc1 OP input[i + vectorCount]
+            il.Emit(OpCodes.Ldloc, locVecAccum1);
+            il.Emit(OpCodes.Ldarg_0); // input
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldc_I4, vectorCount);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Ldc_I4, inputSize);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Add);
+            EmitVectorLoad(il, key.InputType);
+            EmitVectorBinaryReductionOp(il, key.Op, key.InputType);
+            il.Emit(OpCodes.Stloc, locVecAccum1);
+
+            // Load and combine vector 2: acc2 = acc2 OP input[i + vectorCount * 2]
+            il.Emit(OpCodes.Ldloc, locVecAccum2);
+            il.Emit(OpCodes.Ldarg_0); // input
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldc_I4, vectorCount * 2);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Ldc_I4, inputSize);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Add);
+            EmitVectorLoad(il, key.InputType);
+            EmitVectorBinaryReductionOp(il, key.Op, key.InputType);
+            il.Emit(OpCodes.Stloc, locVecAccum2);
+
+            // Load and combine vector 3: acc3 = acc3 OP input[i + vectorCount * 3]
+            il.Emit(OpCodes.Ldloc, locVecAccum3);
+            il.Emit(OpCodes.Ldarg_0); // input
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldc_I4, vectorCount * 3);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Ldc_I4, inputSize);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Add);
+            EmitVectorLoad(il, key.InputType);
+            EmitVectorBinaryReductionOp(il, key.Op, key.InputType);
+            il.Emit(OpCodes.Stloc, locVecAccum3);
+
+            // i += unrollStep
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldc_I4, unrollStep);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Stloc, locI);
+
+            il.Emit(OpCodes.Br, lblUnrolledLoop);
+            il.MarkLabel(lblUnrolledLoopEnd);
+
+            // === TREE REDUCTION: 4 -> 2 -> 1 ===
+            // acc01 = acc0 OP acc1
+            il.Emit(OpCodes.Ldloc, locVecAccum0);
+            il.Emit(OpCodes.Ldloc, locVecAccum1);
+            EmitVectorBinaryReductionOp(il, key.Op, key.InputType);
+            il.Emit(OpCodes.Stloc, locVecAccum0); // reuse acc0 as acc01
+
+            // acc23 = acc2 OP acc3
+            il.Emit(OpCodes.Ldloc, locVecAccum2);
+            il.Emit(OpCodes.Ldloc, locVecAccum3);
+            EmitVectorBinaryReductionOp(il, key.Op, key.InputType);
+            il.Emit(OpCodes.Stloc, locVecAccum2); // reuse acc2 as acc23
+
+            // final = acc01 OP acc23
+            il.Emit(OpCodes.Ldloc, locVecAccum0);
+            il.Emit(OpCodes.Ldloc, locVecAccum2);
+            EmitVectorBinaryReductionOp(il, key.Op, key.InputType);
+            il.Emit(OpCodes.Stloc, locVecAccum0); // reuse acc0 as final
+
+            // === REMAINDER LOOP (0-3 vectors) ===
+            il.MarkLabel(lblRemainderLoop);
+
+            // if (i > vectorEnd) goto RemainderLoopEnd
             il.Emit(OpCodes.Ldloc, locI);
             il.Emit(OpCodes.Ldloc, locVectorEnd);
-            il.Emit(OpCodes.Bgt, lblSimdLoopEnd);
+            il.Emit(OpCodes.Bgt, lblRemainderLoopEnd);
 
             // Load vector accumulator
-            il.Emit(OpCodes.Ldloc, locVecAccum);
+            il.Emit(OpCodes.Ldloc, locVecAccum0);
 
             // Load vector from input[i]
             il.Emit(OpCodes.Ldarg_0); // input
@@ -303,9 +413,9 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Add);
             EmitVectorLoad(il, key.InputType);
 
-            // vecAccum = vecAccum OP inputVec (vector-vector operation)
+            // vecAccum = vecAccum OP inputVec
             EmitVectorBinaryReductionOp(il, key.Op, key.InputType);
-            il.Emit(OpCodes.Stloc, locVecAccum);
+            il.Emit(OpCodes.Stloc, locVecAccum0);
 
             // i += vectorCount
             il.Emit(OpCodes.Ldloc, locI);
@@ -313,12 +423,12 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Add);
             il.Emit(OpCodes.Stloc, locI);
 
-            il.Emit(OpCodes.Br, lblSimdLoop);
-            il.MarkLabel(lblSimdLoopEnd);
+            il.Emit(OpCodes.Br, lblRemainderLoop);
+            il.MarkLabel(lblRemainderLoopEnd);
 
             // === HORIZONTAL REDUCTION (once at end) ===
             // Reduce vector accumulator to scalar
-            il.Emit(OpCodes.Ldloc, locVecAccum);
+            il.Emit(OpCodes.Ldloc, locVecAccum0);
             EmitVectorHorizontalReduction(il, key.Op, key.InputType);
             il.Emit(OpCodes.Stloc, locScalarAccum);
 
@@ -3578,7 +3688,8 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
-        /// Reduce contiguous axis using Vector256 SIMD.
+        /// Reduce contiguous axis using Vector256 SIMD with 4x unrolling.
+        /// Uses 4 independent accumulators to break dependency chains.
         /// </summary>
         private static unsafe T ReduceContiguousAxisSimd256<T>(T* data, int size, ReductionOp op)
             where T : unmanaged
@@ -3586,10 +3697,36 @@ namespace NumSharp.Backends.Kernels
             int vectorCount = Vector256<T>.Count;
             int vectorEnd = size - vectorCount;
 
-            // Initialize accumulator vector
-            var accumVec = CreateIdentityVector256<T>(op);
+            // Initialize 4 independent accumulators for loop unrolling
+            var acc0 = CreateIdentityVector256<T>(op);
+            var acc1 = CreateIdentityVector256<T>(op);
+            var acc2 = CreateIdentityVector256<T>(op);
+            var acc3 = CreateIdentityVector256<T>(op);
+
+            int unrollStep = vectorCount * 4;
+            int unrollEnd = size - unrollStep;
 
             int i = 0;
+
+            // 4x unrolled loop - process 4 vectors per iteration
+            for (; i <= unrollEnd; i += unrollStep)
+            {
+                var v0 = Vector256.Load(data + i);
+                var v1 = Vector256.Load(data + i + vectorCount);
+                var v2 = Vector256.Load(data + i + vectorCount * 2);
+                var v3 = Vector256.Load(data + i + vectorCount * 3);
+                acc0 = CombineVectors256(acc0, v0, op);
+                acc1 = CombineVectors256(acc1, v1, op);
+                acc2 = CombineVectors256(acc2, v2, op);
+                acc3 = CombineVectors256(acc3, v3, op);
+            }
+
+            // Tree reduction: 4 -> 2 -> 1
+            var acc01 = CombineVectors256(acc0, acc1, op);
+            var acc23 = CombineVectors256(acc2, acc3, op);
+            var accumVec = CombineVectors256(acc01, acc23, op);
+
+            // Remainder loop (0-3 vectors)
             for (; i <= vectorEnd; i += vectorCount)
             {
                 var vec = Vector256.Load(data + i);
@@ -3609,7 +3746,8 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
-        /// Reduce contiguous axis using Vector128 SIMD.
+        /// Reduce contiguous axis using Vector128 SIMD with 4x unrolling.
+        /// Uses 4 independent accumulators to break dependency chains.
         /// </summary>
         private static unsafe T ReduceContiguousAxisSimd128<T>(T* data, int size, ReductionOp op)
             where T : unmanaged
@@ -3617,10 +3755,36 @@ namespace NumSharp.Backends.Kernels
             int vectorCount = Vector128<T>.Count;
             int vectorEnd = size - vectorCount;
 
-            // Initialize accumulator vector
-            var accumVec = CreateIdentityVector128<T>(op);
+            // Initialize 4 independent accumulators for loop unrolling
+            var acc0 = CreateIdentityVector128<T>(op);
+            var acc1 = CreateIdentityVector128<T>(op);
+            var acc2 = CreateIdentityVector128<T>(op);
+            var acc3 = CreateIdentityVector128<T>(op);
+
+            int unrollStep = vectorCount * 4;
+            int unrollEnd = size - unrollStep;
 
             int i = 0;
+
+            // 4x unrolled loop - process 4 vectors per iteration
+            for (; i <= unrollEnd; i += unrollStep)
+            {
+                var v0 = Vector128.Load(data + i);
+                var v1 = Vector128.Load(data + i + vectorCount);
+                var v2 = Vector128.Load(data + i + vectorCount * 2);
+                var v3 = Vector128.Load(data + i + vectorCount * 3);
+                acc0 = CombineVectors128(acc0, v0, op);
+                acc1 = CombineVectors128(acc1, v1, op);
+                acc2 = CombineVectors128(acc2, v2, op);
+                acc3 = CombineVectors128(acc3, v3, op);
+            }
+
+            // Tree reduction: 4 -> 2 -> 1
+            var acc01 = CombineVectors128(acc0, acc1, op);
+            var acc23 = CombineVectors128(acc2, acc3, op);
+            var accumVec = CombineVectors128(acc01, acc23, op);
+
+            // Remainder loop (0-3 vectors)
             for (; i <= vectorEnd; i += vectorCount)
             {
                 var vec = Vector128.Load(data + i);

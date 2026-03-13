@@ -47,15 +47,36 @@ namespace NumSharp.Backends.Kernels
         private static unsafe void SimdFull_Add_Int32(int* lhs, int* rhs, int* result, int totalSize)
         {
             int i = 0;
-            int vectorEnd = totalSize - Vector256<int>.Count;
+            int vc = Vector256<int>.Count;
+            int unrollEnd = totalSize - vc * 4;
+            int vectorEnd = totalSize - vc;
 
-            for (; i <= vectorEnd; i += Vector256<int>.Count)
+            // 4x unrolled main loop
+            for (; i <= unrollEnd; i += vc * 4)
+            {
+                var vl0 = Vector256.Load(lhs + i);
+                var vl1 = Vector256.Load(lhs + i + vc);
+                var vl2 = Vector256.Load(lhs + i + vc * 2);
+                var vl3 = Vector256.Load(lhs + i + vc * 3);
+                var vr0 = Vector256.Load(rhs + i);
+                var vr1 = Vector256.Load(rhs + i + vc);
+                var vr2 = Vector256.Load(rhs + i + vc * 2);
+                var vr3 = Vector256.Load(rhs + i + vc * 3);
+                Vector256.Store(vl0 + vr0, result + i);
+                Vector256.Store(vl1 + vr1, result + i + vc);
+                Vector256.Store(vl2 + vr2, result + i + vc * 2);
+                Vector256.Store(vl3 + vr3, result + i + vc * 3);
+            }
+
+            // Remainder loop (0-3 vectors)
+            for (; i <= vectorEnd; i += vc)
             {
                 var vl = Vector256.Load(lhs + i);
                 var vr = Vector256.Load(rhs + i);
                 Vector256.Store(vl + vr, result + i);
             }
 
+            // Scalar tail
             for (; i < totalSize; i++)
                 result[i] = lhs[i] + rhs[i];
         }
@@ -65,14 +86,31 @@ namespace NumSharp.Backends.Kernels
         {
             var scalarVec = Vector256.Create(scalar);
             int i = 0;
-            int vectorEnd = totalSize - Vector256<int>.Count;
+            int vc = Vector256<int>.Count;
+            int unrollEnd = totalSize - vc * 4;
+            int vectorEnd = totalSize - vc;
 
-            for (; i <= vectorEnd; i += Vector256<int>.Count)
+            // 4x unrolled main loop
+            for (; i <= unrollEnd; i += vc * 4)
+            {
+                var vl0 = Vector256.Load(lhs + i);
+                var vl1 = Vector256.Load(lhs + i + vc);
+                var vl2 = Vector256.Load(lhs + i + vc * 2);
+                var vl3 = Vector256.Load(lhs + i + vc * 3);
+                Vector256.Store(vl0 + scalarVec, result + i);
+                Vector256.Store(vl1 + scalarVec, result + i + vc);
+                Vector256.Store(vl2 + scalarVec, result + i + vc * 2);
+                Vector256.Store(vl3 + scalarVec, result + i + vc * 3);
+            }
+
+            // Remainder loop (0-3 vectors)
+            for (; i <= vectorEnd; i += vc)
             {
                 var vl = Vector256.Load(lhs + i);
                 Vector256.Store(vl + scalarVec, result + i);
             }
 
+            // Scalar tail
             for (; i < totalSize; i++)
                 result[i] = lhs[i] + scalar;
         }
@@ -82,14 +120,31 @@ namespace NumSharp.Backends.Kernels
         {
             var scalarVec = Vector256.Create(scalar);
             int i = 0;
-            int vectorEnd = totalSize - Vector256<int>.Count;
+            int vc = Vector256<int>.Count;
+            int unrollEnd = totalSize - vc * 4;
+            int vectorEnd = totalSize - vc;
 
-            for (; i <= vectorEnd; i += Vector256<int>.Count)
+            // 4x unrolled main loop
+            for (; i <= unrollEnd; i += vc * 4)
+            {
+                var vr0 = Vector256.Load(rhs + i);
+                var vr1 = Vector256.Load(rhs + i + vc);
+                var vr2 = Vector256.Load(rhs + i + vc * 2);
+                var vr3 = Vector256.Load(rhs + i + vc * 3);
+                Vector256.Store(scalarVec + vr0, result + i);
+                Vector256.Store(scalarVec + vr1, result + i + vc);
+                Vector256.Store(scalarVec + vr2, result + i + vc * 2);
+                Vector256.Store(scalarVec + vr3, result + i + vc * 3);
+            }
+
+            // Remainder loop (0-3 vectors)
+            for (; i <= vectorEnd; i += vc)
             {
                 var vr = Vector256.Load(rhs + i);
                 Vector256.Store(scalarVec + vr, result + i);
             }
 
+            // Scalar tail
             for (; i < totalSize; i++)
                 result[i] = scalar + rhs[i];
         }
@@ -200,15 +255,36 @@ namespace NumSharp.Backends.Kernels
         private static unsafe void SimdFull_Add_Double(double* lhs, double* rhs, double* result, int totalSize)
         {
             int i = 0;
-            int vectorEnd = totalSize - Vector256<double>.Count;
+            int vc = Vector256<double>.Count;
+            int unrollEnd = totalSize - vc * 4;
+            int vectorEnd = totalSize - vc;
 
-            for (; i <= vectorEnd; i += Vector256<double>.Count)
+            // 4x unrolled main loop
+            for (; i <= unrollEnd; i += vc * 4)
+            {
+                var vl0 = Vector256.Load(lhs + i);
+                var vl1 = Vector256.Load(lhs + i + vc);
+                var vl2 = Vector256.Load(lhs + i + vc * 2);
+                var vl3 = Vector256.Load(lhs + i + vc * 3);
+                var vr0 = Vector256.Load(rhs + i);
+                var vr1 = Vector256.Load(rhs + i + vc);
+                var vr2 = Vector256.Load(rhs + i + vc * 2);
+                var vr3 = Vector256.Load(rhs + i + vc * 3);
+                Vector256.Store(vl0 + vr0, result + i);
+                Vector256.Store(vl1 + vr1, result + i + vc);
+                Vector256.Store(vl2 + vr2, result + i + vc * 2);
+                Vector256.Store(vl3 + vr3, result + i + vc * 3);
+            }
+
+            // Remainder loop (0-3 vectors)
+            for (; i <= vectorEnd; i += vc)
             {
                 var vl = Vector256.Load(lhs + i);
                 var vr = Vector256.Load(rhs + i);
                 Vector256.Store(vl + vr, result + i);
             }
 
+            // Scalar tail
             for (; i < totalSize; i++)
                 result[i] = lhs[i] + rhs[i];
         }
@@ -218,14 +294,31 @@ namespace NumSharp.Backends.Kernels
         {
             var scalarVec = Vector256.Create(scalar);
             int i = 0;
-            int vectorEnd = totalSize - Vector256<double>.Count;
+            int vc = Vector256<double>.Count;
+            int unrollEnd = totalSize - vc * 4;
+            int vectorEnd = totalSize - vc;
 
-            for (; i <= vectorEnd; i += Vector256<double>.Count)
+            // 4x unrolled main loop
+            for (; i <= unrollEnd; i += vc * 4)
+            {
+                var vl0 = Vector256.Load(lhs + i);
+                var vl1 = Vector256.Load(lhs + i + vc);
+                var vl2 = Vector256.Load(lhs + i + vc * 2);
+                var vl3 = Vector256.Load(lhs + i + vc * 3);
+                Vector256.Store(vl0 + scalarVec, result + i);
+                Vector256.Store(vl1 + scalarVec, result + i + vc);
+                Vector256.Store(vl2 + scalarVec, result + i + vc * 2);
+                Vector256.Store(vl3 + scalarVec, result + i + vc * 3);
+            }
+
+            // Remainder loop (0-3 vectors)
+            for (; i <= vectorEnd; i += vc)
             {
                 var vl = Vector256.Load(lhs + i);
                 Vector256.Store(vl + scalarVec, result + i);
             }
 
+            // Scalar tail
             for (; i < totalSize; i++)
                 result[i] = lhs[i] + scalar;
         }
@@ -235,14 +328,31 @@ namespace NumSharp.Backends.Kernels
         {
             var scalarVec = Vector256.Create(scalar);
             int i = 0;
-            int vectorEnd = totalSize - Vector256<double>.Count;
+            int vc = Vector256<double>.Count;
+            int unrollEnd = totalSize - vc * 4;
+            int vectorEnd = totalSize - vc;
 
-            for (; i <= vectorEnd; i += Vector256<double>.Count)
+            // 4x unrolled main loop
+            for (; i <= unrollEnd; i += vc * 4)
+            {
+                var vr0 = Vector256.Load(rhs + i);
+                var vr1 = Vector256.Load(rhs + i + vc);
+                var vr2 = Vector256.Load(rhs + i + vc * 2);
+                var vr3 = Vector256.Load(rhs + i + vc * 3);
+                Vector256.Store(scalarVec + vr0, result + i);
+                Vector256.Store(scalarVec + vr1, result + i + vc);
+                Vector256.Store(scalarVec + vr2, result + i + vc * 2);
+                Vector256.Store(scalarVec + vr3, result + i + vc * 3);
+            }
+
+            // Remainder loop (0-3 vectors)
+            for (; i <= vectorEnd; i += vc)
             {
                 var vr = Vector256.Load(rhs + i);
                 Vector256.Store(scalarVec + vr, result + i);
             }
 
+            // Scalar tail
             for (; i < totalSize; i++)
                 result[i] = scalar + rhs[i];
         }
@@ -353,15 +463,36 @@ namespace NumSharp.Backends.Kernels
         private static unsafe void SimdFull_Add_Single(float* lhs, float* rhs, float* result, int totalSize)
         {
             int i = 0;
-            int vectorEnd = totalSize - Vector256<float>.Count;
+            int vc = Vector256<float>.Count;
+            int unrollEnd = totalSize - vc * 4;
+            int vectorEnd = totalSize - vc;
 
-            for (; i <= vectorEnd; i += Vector256<float>.Count)
+            // 4x unrolled main loop
+            for (; i <= unrollEnd; i += vc * 4)
+            {
+                var vl0 = Vector256.Load(lhs + i);
+                var vl1 = Vector256.Load(lhs + i + vc);
+                var vl2 = Vector256.Load(lhs + i + vc * 2);
+                var vl3 = Vector256.Load(lhs + i + vc * 3);
+                var vr0 = Vector256.Load(rhs + i);
+                var vr1 = Vector256.Load(rhs + i + vc);
+                var vr2 = Vector256.Load(rhs + i + vc * 2);
+                var vr3 = Vector256.Load(rhs + i + vc * 3);
+                Vector256.Store(vl0 + vr0, result + i);
+                Vector256.Store(vl1 + vr1, result + i + vc);
+                Vector256.Store(vl2 + vr2, result + i + vc * 2);
+                Vector256.Store(vl3 + vr3, result + i + vc * 3);
+            }
+
+            // Remainder loop (0-3 vectors)
+            for (; i <= vectorEnd; i += vc)
             {
                 var vl = Vector256.Load(lhs + i);
                 var vr = Vector256.Load(rhs + i);
                 Vector256.Store(vl + vr, result + i);
             }
 
+            // Scalar tail
             for (; i < totalSize; i++)
                 result[i] = lhs[i] + rhs[i];
         }
@@ -371,14 +502,31 @@ namespace NumSharp.Backends.Kernels
         {
             var scalarVec = Vector256.Create(scalar);
             int i = 0;
-            int vectorEnd = totalSize - Vector256<float>.Count;
+            int vc = Vector256<float>.Count;
+            int unrollEnd = totalSize - vc * 4;
+            int vectorEnd = totalSize - vc;
 
-            for (; i <= vectorEnd; i += Vector256<float>.Count)
+            // 4x unrolled main loop
+            for (; i <= unrollEnd; i += vc * 4)
+            {
+                var vl0 = Vector256.Load(lhs + i);
+                var vl1 = Vector256.Load(lhs + i + vc);
+                var vl2 = Vector256.Load(lhs + i + vc * 2);
+                var vl3 = Vector256.Load(lhs + i + vc * 3);
+                Vector256.Store(vl0 + scalarVec, result + i);
+                Vector256.Store(vl1 + scalarVec, result + i + vc);
+                Vector256.Store(vl2 + scalarVec, result + i + vc * 2);
+                Vector256.Store(vl3 + scalarVec, result + i + vc * 3);
+            }
+
+            // Remainder loop (0-3 vectors)
+            for (; i <= vectorEnd; i += vc)
             {
                 var vl = Vector256.Load(lhs + i);
                 Vector256.Store(vl + scalarVec, result + i);
             }
 
+            // Scalar tail
             for (; i < totalSize; i++)
                 result[i] = lhs[i] + scalar;
         }
@@ -388,14 +536,31 @@ namespace NumSharp.Backends.Kernels
         {
             var scalarVec = Vector256.Create(scalar);
             int i = 0;
-            int vectorEnd = totalSize - Vector256<float>.Count;
+            int vc = Vector256<float>.Count;
+            int unrollEnd = totalSize - vc * 4;
+            int vectorEnd = totalSize - vc;
 
-            for (; i <= vectorEnd; i += Vector256<float>.Count)
+            // 4x unrolled main loop
+            for (; i <= unrollEnd; i += vc * 4)
+            {
+                var vr0 = Vector256.Load(rhs + i);
+                var vr1 = Vector256.Load(rhs + i + vc);
+                var vr2 = Vector256.Load(rhs + i + vc * 2);
+                var vr3 = Vector256.Load(rhs + i + vc * 3);
+                Vector256.Store(scalarVec + vr0, result + i);
+                Vector256.Store(scalarVec + vr1, result + i + vc);
+                Vector256.Store(scalarVec + vr2, result + i + vc * 2);
+                Vector256.Store(scalarVec + vr3, result + i + vc * 3);
+            }
+
+            // Remainder loop (0-3 vectors)
+            for (; i <= vectorEnd; i += vc)
             {
                 var vr = Vector256.Load(rhs + i);
                 Vector256.Store(scalarVec + vr, result + i);
             }
 
+            // Scalar tail
             for (; i < totalSize; i++)
                 result[i] = scalar + rhs[i];
         }
@@ -506,15 +671,36 @@ namespace NumSharp.Backends.Kernels
         private static unsafe void SimdFull_Add_Int64(long* lhs, long* rhs, long* result, int totalSize)
         {
             int i = 0;
-            int vectorEnd = totalSize - Vector256<long>.Count;
+            int vc = Vector256<long>.Count;
+            int unrollEnd = totalSize - vc * 4;
+            int vectorEnd = totalSize - vc;
 
-            for (; i <= vectorEnd; i += Vector256<long>.Count)
+            // 4x unrolled main loop
+            for (; i <= unrollEnd; i += vc * 4)
+            {
+                var vl0 = Vector256.Load(lhs + i);
+                var vl1 = Vector256.Load(lhs + i + vc);
+                var vl2 = Vector256.Load(lhs + i + vc * 2);
+                var vl3 = Vector256.Load(lhs + i + vc * 3);
+                var vr0 = Vector256.Load(rhs + i);
+                var vr1 = Vector256.Load(rhs + i + vc);
+                var vr2 = Vector256.Load(rhs + i + vc * 2);
+                var vr3 = Vector256.Load(rhs + i + vc * 3);
+                Vector256.Store(vl0 + vr0, result + i);
+                Vector256.Store(vl1 + vr1, result + i + vc);
+                Vector256.Store(vl2 + vr2, result + i + vc * 2);
+                Vector256.Store(vl3 + vr3, result + i + vc * 3);
+            }
+
+            // Remainder loop (0-3 vectors)
+            for (; i <= vectorEnd; i += vc)
             {
                 var vl = Vector256.Load(lhs + i);
                 var vr = Vector256.Load(rhs + i);
                 Vector256.Store(vl + vr, result + i);
             }
 
+            // Scalar tail
             for (; i < totalSize; i++)
                 result[i] = lhs[i] + rhs[i];
         }
@@ -524,14 +710,31 @@ namespace NumSharp.Backends.Kernels
         {
             var scalarVec = Vector256.Create(scalar);
             int i = 0;
-            int vectorEnd = totalSize - Vector256<long>.Count;
+            int vc = Vector256<long>.Count;
+            int unrollEnd = totalSize - vc * 4;
+            int vectorEnd = totalSize - vc;
 
-            for (; i <= vectorEnd; i += Vector256<long>.Count)
+            // 4x unrolled main loop
+            for (; i <= unrollEnd; i += vc * 4)
+            {
+                var vl0 = Vector256.Load(lhs + i);
+                var vl1 = Vector256.Load(lhs + i + vc);
+                var vl2 = Vector256.Load(lhs + i + vc * 2);
+                var vl3 = Vector256.Load(lhs + i + vc * 3);
+                Vector256.Store(vl0 + scalarVec, result + i);
+                Vector256.Store(vl1 + scalarVec, result + i + vc);
+                Vector256.Store(vl2 + scalarVec, result + i + vc * 2);
+                Vector256.Store(vl3 + scalarVec, result + i + vc * 3);
+            }
+
+            // Remainder loop (0-3 vectors)
+            for (; i <= vectorEnd; i += vc)
             {
                 var vl = Vector256.Load(lhs + i);
                 Vector256.Store(vl + scalarVec, result + i);
             }
 
+            // Scalar tail
             for (; i < totalSize; i++)
                 result[i] = lhs[i] + scalar;
         }
@@ -541,14 +744,31 @@ namespace NumSharp.Backends.Kernels
         {
             var scalarVec = Vector256.Create(scalar);
             int i = 0;
-            int vectorEnd = totalSize - Vector256<long>.Count;
+            int vc = Vector256<long>.Count;
+            int unrollEnd = totalSize - vc * 4;
+            int vectorEnd = totalSize - vc;
 
-            for (; i <= vectorEnd; i += Vector256<long>.Count)
+            // 4x unrolled main loop
+            for (; i <= unrollEnd; i += vc * 4)
+            {
+                var vr0 = Vector256.Load(rhs + i);
+                var vr1 = Vector256.Load(rhs + i + vc);
+                var vr2 = Vector256.Load(rhs + i + vc * 2);
+                var vr3 = Vector256.Load(rhs + i + vc * 3);
+                Vector256.Store(scalarVec + vr0, result + i);
+                Vector256.Store(scalarVec + vr1, result + i + vc);
+                Vector256.Store(scalarVec + vr2, result + i + vc * 2);
+                Vector256.Store(scalarVec + vr3, result + i + vc * 3);
+            }
+
+            // Remainder loop (0-3 vectors)
+            for (; i <= vectorEnd; i += vc)
             {
                 var vr = Vector256.Load(rhs + i);
                 Vector256.Store(scalarVec + vr, result + i);
             }
 
+            // Scalar tail
             for (; i < totalSize; i++)
                 result[i] = scalar + rhs[i];
         }
