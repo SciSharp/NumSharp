@@ -241,16 +241,16 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         }
 
         [Test]
-        public async Task Power_NegativeHalfExponent()
+        public void Power_NegativeHalfExponent()
         {
             // NumPy: power([1,4,9], -0.5) = [1, 0.5, 0.33333...]
             var a = np.array(new double[] { 1.0, 4.0, 9.0 });
             var result = np.power(a, -0.5);
             var data = result.GetData<double>();
 
-            await Assert.That(Math.Abs(data[0] - 1.0)).IsLessThan(1e-10);
-            await Assert.That(Math.Abs(data[1] - 0.5)).IsLessThan(1e-10);
-            await Assert.That(Math.Abs(data[2] - (1.0/3.0))).IsLessThan(1e-10);
+            Assert.IsTrue(Math.Abs(data[0] - 1.0) < 1e-10);
+            Assert.IsTrue(Math.Abs(data[1] - 0.5) < 1e-10);
+            Assert.IsTrue(Math.Abs(data[2] - (1.0/3.0)) < 1e-10);
         }
 
         #endregion
@@ -258,7 +258,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         #region Broadcasting Tests
 
         [Test]
-        public async Task Power_Broadcasting_2DArray_1DExponent()
+        public void Power_Broadcasting_2DArray_1DExponent()
         {
             // NumPy: power([[1,2],[3,4]], [2,3]) = [[1,8],[9,64]]
             var a = np.array(new int[,] { { 1, 2 }, { 3, 4 } });
@@ -270,7 +270,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         }
 
         [Test]
-        public async Task Power_Broadcasting_1DArray_2DExponent()
+        public void Power_Broadcasting_1DArray_2DExponent()
         {
             // NumPy: power([1,2,3,4], [[1],[2],[3]]).shape = (3,4)
             var a = np.array(new int[] { 1, 2, 3, 4 });
@@ -285,7 +285,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         #region Strided Array Tests
 
         [Test]
-        public async Task Power_StridedArray()
+        public void Power_StridedArray()
         {
             // NumPy: power(a[::2], 2) where a = [0,1,2,3,4,5,6,7,8,9]
             // a[::2] = [0,2,4,6,8], power = [0,4,16,36,64]
@@ -301,27 +301,27 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         #region Dtype Preservation Tests
 
         [Test]
-        public async Task Power_Int32_Int32_ReturnsInt32()
+        public void Power_Int32_Int32_ReturnsInt32()
         {
             var a = np.array(new int[] { 2, 3, 4 });
             var result = np.power(a, 2);
-            await Assert.That(result.dtype).IsEqualTo(np.int32);
+            Assert.AreEqual(np.int32, result.dtype);
         }
 
         [Test]
-        public async Task Power_Int64_Int64_ReturnsInt64()
+        public void Power_Int64_Int64_ReturnsInt64()
         {
             var a = np.array(new long[] { 2, 3, 4 });
             var result = np.power(a, 2L);
-            await Assert.That(result.dtype).IsEqualTo(np.int64);
+            Assert.AreEqual(np.int64, result.dtype);
         }
 
         [Test]
-        public async Task Power_Float32_Float32_ReturnsFloat32()
+        public void Power_Float32_Float32_ReturnsFloat32()
         {
             var a = np.array(new float[] { 2f, 3f, 4f });
             var result = np.power(a, 2f);
-            await Assert.That(result.dtype).IsEqualTo(np.float32);
+            Assert.AreEqual(np.float32, result.dtype);
         }
 
         [Test]
