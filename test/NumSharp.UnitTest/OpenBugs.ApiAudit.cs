@@ -30,8 +30,8 @@ namespace NumSharp.UnitTest
     ///       Bug 72:  (double)int32-scalar-NDArray reinterprets bytes instead of converting
     ///       Bug 73:  NDArray.reshape(Shape()) throws NullReferenceException
     ///       Bug 74:  FIXED — np.argmin now handles NaN correctly (tests in ArgMaxArgMinEdgeCaseTests.cs)
-    ///       Bug 75:  np.prod on bool throws NotSupportedException (sibling of Bug 57)
-    ///       Bug 76:  np.cumsum on bool throws NotSupportedException (sibling of Bug 57)
+    ///       Bug 75:  FIXED — np.prod on bool now works (converts to int64, same as NumPy)
+    ///       Bug 76:  FIXED — np.cumsum on bool now works (converts to int64, same as NumPy)
     ///       Bug 77:  np.sign(NaN array) throws ArithmeticException (should return NaN)
     ///       Bug 78:  np.std/np.var crash on empty arrays (sibling of Bug 55)
     ///       Bug 79:  FIXED — Modulo now uses NumPy/Python semantics (tests in EdgeCaseTests.cs)
@@ -321,103 +321,13 @@ namespace NumSharp.UnitTest
         //
         // ================================================================
 
-        // ================================================================
-        //
-        //  BUG 75: np.prod on bool throws NotSupportedException
-        //
-        //  SEVERITY: Medium — boolean reductions are common for checking
-        //  if ALL elements match a condition (np.prod(mask) == 1 iff all True).
-        //
-        //  Bug 57 (DeprecationAudit) covers np.sum/np.mean on bool.
-        //  np.prod on bool has the same issue — NotSupportedException.
-        //
-        //  VERIFIED IN NUMSHARP:
-        //    np.prod(bool[]) throws NotSupportedException
-        //
-        //  PYTHON VERIFICATION (NumPy 2.4.2):
-        //    >>> np.prod(np.array([True, True, False, True]))
-        //    0
-        //    >>> np.prod(np.array([True, True, True, True]))
-        //    1
-        //    >>> np.prod(np.array([True, True, False, True])).dtype
-        //    dtype('int64')
-        //
-        // ================================================================
+        // BUG 75 (np.prod on bool) — FIXED and moved to:
+        // test/NumSharp.UnitTest/Backends/Unmanaged/Math/np.prod.tests.cs
+        // Test: BooleanArray_TreatsAsIntAndReturnsInt64
 
-        /// <summary>
-        ///     BUG 75: np.prod on boolean array throws NotSupportedException.
-        ///
-        ///     NumPy:    prod([T, T, F, T]) = 0
-        ///     NumSharp: NotSupportedException
-        ///
-        ///     FIXED: Boolean arrays are now converted to Int64 for accumulation.
-        /// </summary>
-        [Test]
-        public void Bug_Prod_BoolArray_Crashes()
-        {
-            var a = np.array(new bool[] { true, true, false, true });
-
-            NDArray result = null;
-            new Action(() => result = np.prod(a))
-                .Should().NotThrow(
-                    "NumPy: prod([True, True, False, True]) = 0 (False acts as 0). " +
-                    "NumSharp treats boolean as int64 for accumulation (True=1, False=0).");
-
-            // Verify correct value: True * True * False * True = 1 * 1 * 0 * 1 = 0
-            result.Should().NotBeNull();
-            result.GetInt64().Should().Be(0, "prod([T,T,F,T]) = 0 because False acts as 0");
-            result.typecode.Should().Be(NPTypeCode.Int64, "NumPy: prod(bool) returns int64");
-        }
-
-        // ================================================================
-        //
-        //  BUG 76: np.cumsum on bool throws NotSupportedException
-        //
-        //  SEVERITY: Medium — cumulative sum of boolean mask is a common
-        //  idiom for computing running counts of matching elements.
-        //
-        //  Bug 57 covers np.sum/np.mean on bool; Bug 75 covers np.prod on bool.
-        //  np.cumsum on bool has the same issue.
-        //
-        //  VERIFIED IN NUMSHARP:
-        //    np.cumsum(bool[]) throws NotSupportedException
-        //
-        //  PYTHON VERIFICATION (NumPy 2.4.2):
-        //    >>> np.cumsum(np.array([True, False, True, True, False]))
-        //    array([1, 1, 2, 3, 3])
-        //    >>> np.cumsum(np.array([True, False, True, True, False])).dtype
-        //    dtype('int64')
-        //
-        // ================================================================
-
-        /// <summary>
-        ///     BUG 76: np.cumsum on boolean array throws NotSupportedException.
-        ///
-        ///     NumPy:    cumsum([T, F, T, T, F]) = [1, 1, 2, 3, 3]
-        ///     NumSharp: NotSupportedException
-        ///
-        ///     FIXED: Boolean arrays are now converted to Int64 for cumsum.
-        /// </summary>
-        [Test]
-        public void Bug_Cumsum_BoolArray_Crashes()
-        {
-            var a = np.array(new bool[] { true, false, true, true, false });
-
-            NDArray result = null;
-            new Action(() => result = np.cumsum(a))
-                .Should().NotThrow(
-                    "NumPy: cumsum([True, False, True, True, False]) = [1, 1, 2, 3, 3]. " +
-                    "NumSharp converts boolean to int64 (True=1, False=0) before cumsum.");
-
-            // Verify correct values: cumsum([1,0,1,1,0]) = [1,1,2,3,3]
-            result.Should().NotBeNull();
-            result.typecode.Should().Be(NPTypeCode.Int64, "NumPy: cumsum(bool) returns int64");
-            result.GetInt64(0).Should().Be(1, "cumsum[0] = 1");
-            result.GetInt64(1).Should().Be(1, "cumsum[1] = 1 (0 added)");
-            result.GetInt64(2).Should().Be(2, "cumsum[2] = 2");
-            result.GetInt64(3).Should().Be(3, "cumsum[3] = 3");
-            result.GetInt64(4).Should().Be(3, "cumsum[4] = 3 (0 added)");
-        }
+        // BUG 76 (np.cumsum on bool) — FIXED and moved to:
+        // test/NumSharp.UnitTest/Math/NDArray.cumsum.Test.cs
+        // Test: BooleanArray_TreatsAsIntAndReturnsInt64
 
         // ================================================================
         //
