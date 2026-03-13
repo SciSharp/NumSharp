@@ -64,11 +64,12 @@ namespace NumSharp.Backends.Kernels
         public static int ScanCachedCount => _scanCache.Count;
 
         /// <summary>
-        /// Clear the scan kernel caches.
+        /// Clear all scan kernel caches (element-wise and axis).
         /// </summary>
         public static void ClearScan()
         {
             _scanCache.Clear();
+            _axisScanCache.Clear();
         }
 
         /// <summary>
@@ -436,6 +437,720 @@ namespace NumSharp.Backends.Kernels
         }
 
         // Note: EmitLoadZero is defined in ILKernelGenerator.Reduction.cs
+
+        #endregion
+
+        #region Axis Scan Kernel Generation
+
+        /// <summary>
+        /// Cache for cumulative axis (scan along axis) kernels.
+        /// Key: CumulativeAxisKernelKey (InputType, OutputType, Op, InnerAxisContiguous)
+        /// </summary>
+        private static readonly ConcurrentDictionary<CumulativeAxisKernelKey, Delegate> _axisScanCache = new();
+
+        /// <summary>
+        /// Number of axis scan kernels in cache.
+        /// </summary>
+        public static int AxisScanCachedCount => _axisScanCache.Count;
+
+        /// <summary>
+        /// Clear the axis scan kernel caches.
+        /// </summary>
+        public static void ClearAxisScan()
+        {
+            _axisScanCache.Clear();
+        }
+
+        /// <summary>
+        /// Get or generate a cumulative axis (scan along axis) kernel.
+        /// Returns a delegate that computes running accumulation along a specific axis.
+        /// </summary>
+        public static CumulativeAxisKernel GetCumulativeAxisKernel(CumulativeAxisKernelKey key)
+        {
+            if (!Enabled)
+                throw new InvalidOperationException("IL generation is disabled");
+
+            var kernel = _axisScanCache.GetOrAdd(key, GenerateCumulativeAxisKernel);
+            return (CumulativeAxisKernel)kernel;
+        }
+
+        /// <summary>
+        /// Try to get or generate a cumulative axis kernel.
+        /// </summary>
+        public static CumulativeAxisKernel? TryGetCumulativeAxisKernel(CumulativeAxisKernelKey key)
+        {
+            if (!Enabled)
+                return null;
+
+            try
+            {
+                var kernel = _axisScanCache.GetOrAdd(key, GenerateCumulativeAxisKernel);
+                return (CumulativeAxisKernel)kernel;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Generate a cumulative axis (scan along axis) kernel.
+        /// </summary>
+        private static Delegate GenerateCumulativeAxisKernel(CumulativeAxisKernelKey key)
+        {
+            // CumulativeAxisKernel signature:
+            // void(void* input, void* output, int* inputStrides, int* shape, int axis, int ndim, int totalSize)
+            var dm = new DynamicMethod(
+                name: $"AxisScan_{key}",
+                returnType: typeof(void),
+                parameterTypes: new[]
+                {
+                    typeof(void*),  // input
+                    typeof(void*),  // output
+                    typeof(int*),   // inputStrides
+                    typeof(int*),   // shape
+                    typeof(int),    // axis
+                    typeof(int),    // ndim
+                    typeof(int)     // totalSize
+                },
+                owner: typeof(ILKernelGenerator),
+                skipVisibility: true
+            );
+
+            var il = dm.GetILGenerator();
+
+            // For axis cumsum, we call a helper method that handles the iteration
+            // The IL kernel just dispatches to the right helper based on types
+            EmitAxisScanHelperCall(il, key);
+
+            il.Emit(OpCodes.Ret);
+            return dm.CreateDelegate<CumulativeAxisKernel>();
+        }
+
+        /// <summary>
+        /// Emit a call to the appropriate axis scan helper method.
+        /// </summary>
+        private static void EmitAxisScanHelperCall(ILGenerator il, CumulativeAxisKernelKey key)
+        {
+            // Find the appropriate helper method based on operation
+            string helperName = key.Op switch
+            {
+                ReductionOp.CumSum => nameof(AxisCumSumHelper),
+                // ReductionOp.CumProd => nameof(AxisCumProdHelper), // Future
+                _ => throw new NotSupportedException($"Axis scan operation {key.Op} not supported")
+            };
+
+            var helperMethod = typeof(ILKernelGenerator).GetMethod(
+                helperName,
+                BindingFlags.NonPublic | BindingFlags.Static);
+
+            var genericHelper = helperMethod!.MakeGenericMethod(
+                GetClrType(key.InputType),
+                GetClrType(key.OutputType));
+
+            // Call helper: AxisCumSumHelper<TIn, TOut>(input, output, inputStrides, shape, axis, ndim, totalSize)
+            il.Emit(OpCodes.Ldarg_0); // input
+            il.Emit(OpCodes.Ldarg_1); // output
+            il.Emit(OpCodes.Ldarg_2); // inputStrides
+            il.Emit(OpCodes.Ldarg_3); // shape
+            il.Emit(OpCodes.Ldarg_S, (byte)4); // axis
+            il.Emit(OpCodes.Ldarg_S, (byte)5); // ndim
+            il.Emit(OpCodes.Ldarg_S, (byte)6); // totalSize
+            il.EmitCall(OpCodes.Call, genericHelper, null);
+        }
+
+        /// <summary>
+        /// Axis cumulative sum helper. Computes cumsum along a specific axis.
+        /// Uses optimized iteration pattern based on axis position.
+        /// </summary>
+        internal static unsafe void AxisCumSumHelper<TIn, TOut>(
+            void* input, void* output, int* inputStrides, int* shape,
+            int axis, int ndim, int totalSize)
+            where TIn : unmanaged
+            where TOut : unmanaged
+        {
+            if (totalSize == 0)
+                return;
+
+            TIn* src = (TIn*)input;
+            TOut* dst = (TOut*)output;
+
+            int axisSize = shape[axis];
+            int axisStride = inputStrides[axis];
+
+            // Calculate outer size (product of dimensions before axis)
+            // and inner size (product of dimensions after axis)
+            int outerSize = 1;
+            int innerSize = 1;
+            for (int d = 0; d < axis; d++)
+                outerSize *= shape[d];
+            for (int d = axis + 1; d < ndim; d++)
+                innerSize *= shape[d];
+
+            // Calculate output strides (output is always contiguous)
+            int outputAxisStride = innerSize;
+            int outputOuterStride = axisSize * innerSize;
+
+            // Dispatch to specialized helper based on types
+            if (typeof(TIn) == typeof(TOut))
+            {
+                // When TIn == TOut, we can cast safely and use same-type optimized path
+                AxisCumSumSameType<TIn>((TIn*)src, (TIn*)(void*)dst, inputStrides, shape, axis, ndim,
+                    axisSize, axisStride, outerSize, innerSize, outputAxisStride, outputOuterStride);
+            }
+            else
+            {
+                AxisCumSumWithConversion<TIn, TOut>(src, dst, inputStrides, shape, axis, ndim,
+                    axisSize, axisStride, outerSize, innerSize, outputAxisStride, outputOuterStride);
+            }
+        }
+
+        /// <summary>
+        /// Same-type axis cumsum implementation.
+        /// </summary>
+        private static unsafe void AxisCumSumSameType<T>(
+            T* src, T* dst, int* inputStrides, int* shape, int axis, int ndim,
+            int axisSize, int axisStride, int outerSize, int innerSize,
+            int outputAxisStride, int outputOuterStride)
+            where T : unmanaged
+        {
+            // Special case: innermost axis (axis = ndim - 1)
+            // This is the most common case and can be optimized
+            if (axis == ndim - 1 && axisStride == 1)
+            {
+                AxisCumSumInnerContiguous(src, dst, inputStrides, shape, ndim,
+                    axisSize, outerSize, outputOuterStride);
+                return;
+            }
+
+            // General case: iterate using coordinate-based access
+            AxisCumSumGeneral(src, dst, inputStrides, shape, axis, ndim,
+                axisSize, axisStride, outerSize, innerSize, outputAxisStride, outputOuterStride);
+        }
+
+        /// <summary>
+        /// Optimized cumsum for innermost contiguous axis.
+        /// Each "row" is a contiguous block that we can scan directly.
+        /// </summary>
+        private static unsafe void AxisCumSumInnerContiguous<T>(
+            T* src, T* dst, int* inputStrides, int* shape, int ndim,
+            int axisSize, int outerSize, int outputOuterStride)
+            where T : unmanaged
+        {
+            // For innermost axis with stride=1, we can process each row directly
+            // Calculate input row stride (total stride for incrementing outer dimensions)
+            int inputRowStride = inputStrides[ndim - 2 >= 0 ? ndim - 2 : 0];
+            if (ndim == 1) inputRowStride = axisSize;
+
+            // Dispatch to type-specific implementation for best performance
+            if (typeof(T) == typeof(double))
+            {
+                AxisCumSumInnerContiguousDouble((double*)src, (double*)dst, inputRowStride, axisSize, outerSize, outputOuterStride);
+            }
+            else if (typeof(T) == typeof(float))
+            {
+                AxisCumSumInnerContiguousFloat((float*)src, (float*)dst, inputRowStride, axisSize, outerSize, outputOuterStride);
+            }
+            else if (typeof(T) == typeof(long))
+            {
+                AxisCumSumInnerContiguousInt64((long*)src, (long*)dst, inputRowStride, axisSize, outerSize, outputOuterStride);
+            }
+            else if (typeof(T) == typeof(int))
+            {
+                AxisCumSumInnerContiguousInt32((int*)src, (int*)dst, inputRowStride, axisSize, outerSize, outputOuterStride);
+            }
+            else
+            {
+                // Generic fallback using dynamic
+                for (int outer = 0; outer < outerSize; outer++)
+                {
+                    T* srcRow = src + outer * inputRowStride;
+                    T* dstRow = dst + outer * outputOuterStride;
+
+                    dynamic sum = default(T)!;
+                    for (int i = 0; i < axisSize; i++)
+                    {
+                        sum += (dynamic)srcRow[i];
+                        dstRow[i] = sum;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Type-specific inner contiguous cumsum for double.
+        /// </summary>
+        private static unsafe void AxisCumSumInnerContiguousDouble(
+            double* src, double* dst, int inputRowStride, int axisSize, int outerSize, int outputOuterStride)
+        {
+            for (int outer = 0; outer < outerSize; outer++)
+            {
+                double* srcRow = src + outer * inputRowStride;
+                double* dstRow = dst + outer * outputOuterStride;
+
+                double sum = 0.0;
+                for (int i = 0; i < axisSize; i++)
+                {
+                    sum += srcRow[i];
+                    dstRow[i] = sum;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Type-specific inner contiguous cumsum for float.
+        /// </summary>
+        private static unsafe void AxisCumSumInnerContiguousFloat(
+            float* src, float* dst, int inputRowStride, int axisSize, int outerSize, int outputOuterStride)
+        {
+            for (int outer = 0; outer < outerSize; outer++)
+            {
+                float* srcRow = src + outer * inputRowStride;
+                float* dstRow = dst + outer * outputOuterStride;
+
+                float sum = 0f;
+                for (int i = 0; i < axisSize; i++)
+                {
+                    sum += srcRow[i];
+                    dstRow[i] = sum;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Type-specific inner contiguous cumsum for long.
+        /// </summary>
+        private static unsafe void AxisCumSumInnerContiguousInt64(
+            long* src, long* dst, int inputRowStride, int axisSize, int outerSize, int outputOuterStride)
+        {
+            for (int outer = 0; outer < outerSize; outer++)
+            {
+                long* srcRow = src + outer * inputRowStride;
+                long* dstRow = dst + outer * outputOuterStride;
+
+                long sum = 0L;
+                for (int i = 0; i < axisSize; i++)
+                {
+                    sum += srcRow[i];
+                    dstRow[i] = sum;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Type-specific inner contiguous cumsum for int.
+        /// </summary>
+        private static unsafe void AxisCumSumInnerContiguousInt32(
+            int* src, int* dst, int inputRowStride, int axisSize, int outerSize, int outputOuterStride)
+        {
+            for (int outer = 0; outer < outerSize; outer++)
+            {
+                int* srcRow = src + outer * inputRowStride;
+                int* dstRow = dst + outer * outputOuterStride;
+
+                int sum = 0;
+                for (int i = 0; i < axisSize; i++)
+                {
+                    sum += srcRow[i];
+                    dstRow[i] = sum;
+                }
+            }
+        }
+
+        /// <summary>
+        /// General axis cumsum using coordinate-based iteration.
+        /// Handles non-contiguous axes and complex stride patterns.
+        /// </summary>
+        private static unsafe void AxisCumSumGeneral<T>(
+            T* src, T* dst, int* inputStrides, int* shape, int axis, int ndim,
+            int axisSize, int axisStride, int outerSize, int innerSize,
+            int outputAxisStride, int outputOuterStride)
+            where T : unmanaged
+        {
+            // For each combination of outer and inner indices, compute cumsum along axis
+            // Output is always contiguous, input may be strided
+
+            // Precompute inner and outer strides for input
+            int* outerStrides = stackalloc int[ndim];
+            int* innerStrides = stackalloc int[ndim];
+
+            int outerStride = 1;
+            int innerStride = 1;
+
+            // Outer dimensions: 0 to axis-1
+            for (int d = axis - 1; d >= 0; d--)
+            {
+                outerStrides[d] = outerStride;
+                outerStride *= shape[d];
+            }
+
+            // Inner dimensions: axis+1 to ndim-1
+            for (int d = ndim - 1; d > axis; d--)
+            {
+                innerStrides[d] = innerStride;
+                innerStride *= shape[d];
+            }
+
+            // Type-specific dispatch for common types
+            if (typeof(T) == typeof(double))
+            {
+                AxisCumSumGeneralDouble((double*)src, (double*)dst, inputStrides, shape, axis, ndim,
+                    axisSize, axisStride, outerSize, innerSize, outputAxisStride, outputOuterStride,
+                    outerStrides, innerStrides);
+            }
+            else if (typeof(T) == typeof(float))
+            {
+                AxisCumSumGeneralFloat((float*)src, (float*)dst, inputStrides, shape, axis, ndim,
+                    axisSize, axisStride, outerSize, innerSize, outputAxisStride, outputOuterStride,
+                    outerStrides, innerStrides);
+            }
+            else if (typeof(T) == typeof(long))
+            {
+                AxisCumSumGeneralInt64((long*)src, (long*)dst, inputStrides, shape, axis, ndim,
+                    axisSize, axisStride, outerSize, innerSize, outputAxisStride, outputOuterStride,
+                    outerStrides, innerStrides);
+            }
+            else if (typeof(T) == typeof(int))
+            {
+                AxisCumSumGeneralInt32((int*)src, (int*)dst, inputStrides, shape, axis, ndim,
+                    axisSize, axisStride, outerSize, innerSize, outputAxisStride, outputOuterStride,
+                    outerStrides, innerStrides);
+            }
+            else
+            {
+                // Generic fallback
+                AxisCumSumGeneralGeneric(src, dst, inputStrides, shape, axis, ndim,
+                    axisSize, axisStride, outerSize, innerSize, outputAxisStride, outputOuterStride,
+                    outerStrides, innerStrides);
+            }
+        }
+
+        /// <summary>
+        /// General axis cumsum for double type.
+        /// </summary>
+        private static unsafe void AxisCumSumGeneralDouble(
+            double* src, double* dst, int* inputStrides, int* shape, int axis, int ndim,
+            int axisSize, int axisStride, int outerSize, int innerSize,
+            int outputAxisStride, int outputOuterStride, int* outerStrides, int* innerStrides)
+        {
+            for (int outer = 0; outer < outerSize; outer++)
+            {
+                for (int inner = 0; inner < innerSize; inner++)
+                {
+                    // Calculate input base offset for this (outer, inner) combination
+                    int inputOffset = 0;
+                    int outerIdx = outer;
+                    for (int d = axis - 1; d >= 0; d--)
+                    {
+                        int coord = outerIdx % shape[d];
+                        outerIdx /= shape[d];
+                        inputOffset += coord * inputStrides[d];
+                    }
+
+                    int innerIdx = inner;
+                    for (int d = ndim - 1; d > axis; d--)
+                    {
+                        int coord = innerIdx % shape[d];
+                        innerIdx /= shape[d];
+                        inputOffset += coord * inputStrides[d];
+                    }
+
+                    // Calculate output base offset
+                    int outputOffset = outer * outputOuterStride + inner;
+
+                    // Cumsum along axis
+                    double sum = 0.0;
+                    for (int i = 0; i < axisSize; i++)
+                    {
+                        sum += src[inputOffset + i * axisStride];
+                        dst[outputOffset + i * outputAxisStride] = sum;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// General axis cumsum for float type.
+        /// </summary>
+        private static unsafe void AxisCumSumGeneralFloat(
+            float* src, float* dst, int* inputStrides, int* shape, int axis, int ndim,
+            int axisSize, int axisStride, int outerSize, int innerSize,
+            int outputAxisStride, int outputOuterStride, int* outerStrides, int* innerStrides)
+        {
+            for (int outer = 0; outer < outerSize; outer++)
+            {
+                for (int inner = 0; inner < innerSize; inner++)
+                {
+                    int inputOffset = 0;
+                    int outerIdx = outer;
+                    for (int d = axis - 1; d >= 0; d--)
+                    {
+                        int coord = outerIdx % shape[d];
+                        outerIdx /= shape[d];
+                        inputOffset += coord * inputStrides[d];
+                    }
+
+                    int innerIdx = inner;
+                    for (int d = ndim - 1; d > axis; d--)
+                    {
+                        int coord = innerIdx % shape[d];
+                        innerIdx /= shape[d];
+                        inputOffset += coord * inputStrides[d];
+                    }
+
+                    int outputOffset = outer * outputOuterStride + inner;
+
+                    float sum = 0f;
+                    for (int i = 0; i < axisSize; i++)
+                    {
+                        sum += src[inputOffset + i * axisStride];
+                        dst[outputOffset + i * outputAxisStride] = sum;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// General axis cumsum for long type.
+        /// </summary>
+        private static unsafe void AxisCumSumGeneralInt64(
+            long* src, long* dst, int* inputStrides, int* shape, int axis, int ndim,
+            int axisSize, int axisStride, int outerSize, int innerSize,
+            int outputAxisStride, int outputOuterStride, int* outerStrides, int* innerStrides)
+        {
+            for (int outer = 0; outer < outerSize; outer++)
+            {
+                for (int inner = 0; inner < innerSize; inner++)
+                {
+                    int inputOffset = 0;
+                    int outerIdx = outer;
+                    for (int d = axis - 1; d >= 0; d--)
+                    {
+                        int coord = outerIdx % shape[d];
+                        outerIdx /= shape[d];
+                        inputOffset += coord * inputStrides[d];
+                    }
+
+                    int innerIdx = inner;
+                    for (int d = ndim - 1; d > axis; d--)
+                    {
+                        int coord = innerIdx % shape[d];
+                        innerIdx /= shape[d];
+                        inputOffset += coord * inputStrides[d];
+                    }
+
+                    int outputOffset = outer * outputOuterStride + inner;
+
+                    long sum = 0L;
+                    for (int i = 0; i < axisSize; i++)
+                    {
+                        sum += src[inputOffset + i * axisStride];
+                        dst[outputOffset + i * outputAxisStride] = sum;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// General axis cumsum for int type.
+        /// </summary>
+        private static unsafe void AxisCumSumGeneralInt32(
+            int* src, int* dst, int* inputStrides, int* shape, int axis, int ndim,
+            int axisSize, int axisStride, int outerSize, int innerSize,
+            int outputAxisStride, int outputOuterStride, int* outerStrides, int* innerStrides)
+        {
+            for (int outer = 0; outer < outerSize; outer++)
+            {
+                for (int inner = 0; inner < innerSize; inner++)
+                {
+                    int inputOffset = 0;
+                    int outerIdx = outer;
+                    for (int d = axis - 1; d >= 0; d--)
+                    {
+                        int coord = outerIdx % shape[d];
+                        outerIdx /= shape[d];
+                        inputOffset += coord * inputStrides[d];
+                    }
+
+                    int innerIdx = inner;
+                    for (int d = ndim - 1; d > axis; d--)
+                    {
+                        int coord = innerIdx % shape[d];
+                        innerIdx /= shape[d];
+                        inputOffset += coord * inputStrides[d];
+                    }
+
+                    int outputOffset = outer * outputOuterStride + inner;
+
+                    int sum = 0;
+                    for (int i = 0; i < axisSize; i++)
+                    {
+                        sum += src[inputOffset + i * axisStride];
+                        dst[outputOffset + i * outputAxisStride] = sum;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Generic fallback for axis cumsum.
+        /// </summary>
+        private static unsafe void AxisCumSumGeneralGeneric<T>(
+            T* src, T* dst, int* inputStrides, int* shape, int axis, int ndim,
+            int axisSize, int axisStride, int outerSize, int innerSize,
+            int outputAxisStride, int outputOuterStride, int* outerStrides, int* innerStrides)
+            where T : unmanaged
+        {
+            for (int outer = 0; outer < outerSize; outer++)
+            {
+                for (int inner = 0; inner < innerSize; inner++)
+                {
+                    int inputOffset = 0;
+                    int outerIdx = outer;
+                    for (int d = axis - 1; d >= 0; d--)
+                    {
+                        int coord = outerIdx % shape[d];
+                        outerIdx /= shape[d];
+                        inputOffset += coord * inputStrides[d];
+                    }
+
+                    int innerIdx = inner;
+                    for (int d = ndim - 1; d > axis; d--)
+                    {
+                        int coord = innerIdx % shape[d];
+                        innerIdx /= shape[d];
+                        inputOffset += coord * inputStrides[d];
+                    }
+
+                    int outputOffset = outer * outputOuterStride + inner;
+
+                    dynamic sum = default(T)!;
+                    for (int i = 0; i < axisSize; i++)
+                    {
+                        sum += (dynamic)src[inputOffset + i * axisStride];
+                        dst[outputOffset + i * outputAxisStride] = sum;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Axis cumsum with type conversion (e.g., int32 input -> int64 output).
+        /// </summary>
+        private static unsafe void AxisCumSumWithConversion<TIn, TOut>(
+            TIn* src, TOut* dst, int* inputStrides, int* shape, int axis, int ndim,
+            int axisSize, int axisStride, int outerSize, int innerSize,
+            int outputAxisStride, int outputOuterStride)
+            where TIn : unmanaged
+            where TOut : unmanaged
+        {
+            // Common case: int32 -> int64
+            if (typeof(TIn) == typeof(int) && typeof(TOut) == typeof(long))
+            {
+                AxisCumSumInt32ToInt64((int*)src, (long*)dst, inputStrides, shape, axis, ndim,
+                    axisSize, axisStride, outerSize, innerSize, outputAxisStride, outputOuterStride);
+                return;
+            }
+
+            // General fallback using Convert
+            for (int outer = 0; outer < outerSize; outer++)
+            {
+                for (int inner = 0; inner < innerSize; inner++)
+                {
+                    int inputOffset = 0;
+                    int outerIdx = outer;
+                    for (int d = axis - 1; d >= 0; d--)
+                    {
+                        int coord = outerIdx % shape[d];
+                        outerIdx /= shape[d];
+                        inputOffset += coord * inputStrides[d];
+                    }
+
+                    int innerIdx = inner;
+                    for (int d = ndim - 1; d > axis; d--)
+                    {
+                        int coord = innerIdx % shape[d];
+                        innerIdx /= shape[d];
+                        inputOffset += coord * inputStrides[d];
+                    }
+
+                    int outputOffset = outer * outputOuterStride + inner;
+
+                    // Use appropriate accumulator type
+                    if (typeof(TOut) == typeof(long))
+                    {
+                        long sum = 0L;
+                        long* dstTyped = (long*)dst;
+                        for (int i = 0; i < axisSize; i++)
+                        {
+                            sum += Convert.ToInt64(src[inputOffset + i * axisStride]);
+                            dstTyped[outputOffset + i * outputAxisStride] = sum;
+                        }
+                    }
+                    else if (typeof(TOut) == typeof(double))
+                    {
+                        double sum = 0.0;
+                        double* dstTyped = (double*)dst;
+                        for (int i = 0; i < axisSize; i++)
+                        {
+                            sum += Convert.ToDouble(src[inputOffset + i * axisStride]);
+                            dstTyped[outputOffset + i * outputAxisStride] = sum;
+                        }
+                    }
+                    else
+                    {
+                        // Ultimate fallback using dynamic
+                        dynamic sum = default(TOut)!;
+                        for (int i = 0; i < axisSize; i++)
+                        {
+                            sum += (dynamic)Convert.ChangeType(src[inputOffset + i * axisStride], typeof(TOut))!;
+                            dst[outputOffset + i * outputAxisStride] = sum;
+                        }
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Specialized int32 -> int64 axis cumsum.
+        /// </summary>
+        private static unsafe void AxisCumSumInt32ToInt64(
+            int* src, long* dst, int* inputStrides, int* shape, int axis, int ndim,
+            int axisSize, int axisStride, int outerSize, int innerSize,
+            int outputAxisStride, int outputOuterStride)
+        {
+            for (int outer = 0; outer < outerSize; outer++)
+            {
+                for (int inner = 0; inner < innerSize; inner++)
+                {
+                    int inputOffset = 0;
+                    int outerIdx = outer;
+                    for (int d = axis - 1; d >= 0; d--)
+                    {
+                        int coord = outerIdx % shape[d];
+                        outerIdx /= shape[d];
+                        inputOffset += coord * inputStrides[d];
+                    }
+
+                    int innerIdx = inner;
+                    for (int d = ndim - 1; d > axis; d--)
+                    {
+                        int coord = innerIdx % shape[d];
+                        innerIdx /= shape[d];
+                        inputOffset += coord * inputStrides[d];
+                    }
+
+                    int outputOffset = outer * outputOuterStride + inner;
+
+                    long sum = 0L;
+                    for (int i = 0; i < axisSize; i++)
+                    {
+                        sum += src[inputOffset + i * axisStride];
+                        dst[outputOffset + i * outputAxisStride] = sum;
+                    }
+                }
+            }
+        }
 
         #endregion
 

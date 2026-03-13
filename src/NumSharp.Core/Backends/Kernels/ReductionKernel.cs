@@ -106,6 +106,23 @@ namespace NumSharp.Backends.Kernels
     }
 
     /// <summary>
+    /// Cache key for cumulative axis reduction kernels (cumsum along axis, etc.).
+    /// Output has same shape as input, cumulative accumulation along specified axis.
+    /// </summary>
+    public readonly record struct CumulativeAxisKernelKey(
+        NPTypeCode InputType,
+        NPTypeCode OutputType,
+        ReductionOp Op,
+        bool InnerAxisContiguous  // True when axis is the last dimension (stride=1)
+    )
+    {
+        public bool IsSameType => InputType == OutputType;
+
+        public override string ToString() =>
+            $"CumAxis_{Op}_{InputType}_{OutputType}_{(InnerAxisContiguous ? "InnerContig" : "Strided")}";
+    }
+
+    /// <summary>
     /// Delegate for element-wise reduction kernels.
     /// Reduces all elements of an array to a single value.
     /// </summary>

@@ -1,10 +1,12 @@
 using System;
+using NumSharp.Backends.Kernels;
 
 namespace NumSharp.Backends
 {
     /// <summary>
     /// Bit shift operations: left_shift and right_shift.
     /// Integer types only. Uses arithmetic shift for signed types.
+    /// SIMD optimized for scalar shift amounts, scalar loop for array shifts.
     /// </summary>
     public partial class DefaultEngine
     {
@@ -20,6 +22,7 @@ namespace NumSharp.Backends
 
         /// <summary>
         /// Bitwise left shift (x1 &lt;&lt; scalar).
+        /// SIMD optimized for contiguous arrays.
         /// </summary>
         public override NDArray LeftShift(in NDArray lhs, in ValueType rhs)
         {
@@ -41,6 +44,7 @@ namespace NumSharp.Backends
 
         /// <summary>
         /// Bitwise right shift (x1 &gt;&gt; scalar).
+        /// SIMD optimized for contiguous arrays.
         /// </summary>
         public override NDArray RightShift(in NDArray lhs, in ValueType rhs)
         {
@@ -64,7 +68,8 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        /// Execute shift operation with array operands.
+        /// Execute shift operation with array operands (element-wise shifts).
+        /// Uses IL kernel for scalar loop (no SIMD for variable shift amounts).
         /// </summary>
         private unsafe NDArray ExecuteShiftOp(in NDArray lhs, in NDArray rhs, bool isLeftShift)
         {
@@ -85,95 +90,31 @@ namespace NumSharp.Backends
                 : broadcastedRhs.astype(NPTypeCode.Int32);
             var contiguousRhs = rhsInt32.Shape.IsContiguous ? rhsInt32 : rhsInt32.copy();
 
-
             var shiftPtr = (int*)contiguousRhs.Address;
 
             switch (lhs.GetTypeCode)
             {
                 case NPTypeCode.Byte:
-                {
-                    var lhsPtr = (byte*)contiguousLhs.Address;
-                    var resPtr = (byte*)result.Address;
-                    if (isLeftShift)
-                        for (int i = 0; i < len; i++)
-                            resPtr[i] = (byte)(lhsPtr[i] << shiftPtr[i]);
-                    else
-                        for (int i = 0; i < len; i++)
-                            resPtr[i] = (byte)(lhsPtr[i] >> shiftPtr[i]);
+                    ExecuteShiftArray<byte>(contiguousLhs, shiftPtr, result, len, isLeftShift);
                     break;
-                }
                 case NPTypeCode.Int16:
-                {
-                    var lhsPtr = (short*)contiguousLhs.Address;
-                    var resPtr = (short*)result.Address;
-                    if (isLeftShift)
-                        for (int i = 0; i < len; i++)
-                            resPtr[i] = (short)(lhsPtr[i] << shiftPtr[i]);
-                    else
-                        for (int i = 0; i < len; i++)
-                            resPtr[i] = (short)(lhsPtr[i] >> shiftPtr[i]);
+                    ExecuteShiftArray<short>(contiguousLhs, shiftPtr, result, len, isLeftShift);
                     break;
-                }
                 case NPTypeCode.UInt16:
-                {
-                    var lhsPtr = (ushort*)contiguousLhs.Address;
-                    var resPtr = (ushort*)result.Address;
-                    if (isLeftShift)
-                        for (int i = 0; i < len; i++)
-                            resPtr[i] = (ushort)(lhsPtr[i] << shiftPtr[i]);
-                    else
-                        for (int i = 0; i < len; i++)
-                            resPtr[i] = (ushort)(lhsPtr[i] >> shiftPtr[i]);
+                    ExecuteShiftArray<ushort>(contiguousLhs, shiftPtr, result, len, isLeftShift);
                     break;
-                }
                 case NPTypeCode.Int32:
-                {
-                    var lhsPtr = (int*)contiguousLhs.Address;
-                    var resPtr = (int*)result.Address;
-                    if (isLeftShift)
-                        for (int i = 0; i < len; i++)
-                            resPtr[i] = lhsPtr[i] << shiftPtr[i];
-                    else
-                        for (int i = 0; i < len; i++)
-                            resPtr[i] = lhsPtr[i] >> shiftPtr[i];
+                    ExecuteShiftArray<int>(contiguousLhs, shiftPtr, result, len, isLeftShift);
                     break;
-                }
                 case NPTypeCode.UInt32:
-                {
-                    var lhsPtr = (uint*)contiguousLhs.Address;
-                    var resPtr = (uint*)result.Address;
-                    if (isLeftShift)
-                        for (int i = 0; i < len; i++)
-                            resPtr[i] = lhsPtr[i] << shiftPtr[i];
-                    else
-                        for (int i = 0; i < len; i++)
-                            resPtr[i] = lhsPtr[i] >> shiftPtr[i];
+                    ExecuteShiftArray<uint>(contiguousLhs, shiftPtr, result, len, isLeftShift);
                     break;
-                }
                 case NPTypeCode.Int64:
-                {
-                    var lhsPtr = (long*)contiguousLhs.Address;
-                    var resPtr = (long*)result.Address;
-                    if (isLeftShift)
-                        for (int i = 0; i < len; i++)
-                            resPtr[i] = lhsPtr[i] << shiftPtr[i];
-                    else
-                        for (int i = 0; i < len; i++)
-                            resPtr[i] = lhsPtr[i] >> shiftPtr[i];
+                    ExecuteShiftArray<long>(contiguousLhs, shiftPtr, result, len, isLeftShift);
                     break;
-                }
                 case NPTypeCode.UInt64:
-                {
-                    var lhsPtr = (ulong*)contiguousLhs.Address;
-                    var resPtr = (ulong*)result.Address;
-                    if (isLeftShift)
-                        for (int i = 0; i < len; i++)
-                            resPtr[i] = lhsPtr[i] << shiftPtr[i];
-                    else
-                        for (int i = 0; i < len; i++)
-                            resPtr[i] = lhsPtr[i] >> shiftPtr[i];
+                    ExecuteShiftArray<ulong>(contiguousLhs, shiftPtr, result, len, isLeftShift);
                     break;
-                }
                 default:
                     throw new NotSupportedException($"Shift operations not supported for {lhs.GetTypeCode}");
             }
@@ -182,98 +123,148 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        /// Execute shift operation with scalar operand.
+        /// Execute element-wise shift using IL kernel.
+        /// </summary>
+        private static unsafe void ExecuteShiftArray<T>(NDArray input, int* shifts, NDArray output, int count, bool isLeftShift) where T : unmanaged
+        {
+            var kernel = ILKernelGenerator.GetShiftArrayKernel<T>(isLeftShift);
+            if (kernel != null)
+            {
+                kernel((T*)input.Address, shifts, (T*)output.Address, count);
+            }
+            else
+            {
+                // Fallback: scalar loop (should not happen if IL generation is enabled)
+                var inPtr = (T*)input.Address;
+                var outPtr = (T*)output.Address;
+                for (int i = 0; i < count; i++)
+                {
+                    outPtr[i] = ShiftScalar(inPtr[i], shifts[i], isLeftShift);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Execute shift operation with scalar operand (uniform shift).
+        /// SIMD optimized path for contiguous arrays.
         /// </summary>
         private unsafe NDArray ExecuteShiftOpScalar(in NDArray lhs, in ValueType rhs, bool isLeftShift)
         {
-            var result = lhs.Clone();
-            var len = result.size;
             int shiftAmount = Convert.ToInt32(rhs);
+
+            // For contiguous arrays, allocate result and use SIMD kernel
+            // For sliced arrays, clone first then apply shift in-place
+            NDArray result;
+            NDArray input;
+
+            if (lhs.Shape.IsContiguous)
+            {
+                result = new NDArray(lhs.typecode, new Shape(lhs.shape), fillZeros: false);
+                input = lhs;
+            }
+            else
+            {
+                result = lhs.Clone();  // Clone also handles non-contiguous arrays
+                input = result;        // Shift in-place on the cloned result
+            }
+
+            var len = result.size;
 
             switch (lhs.GetTypeCode)
             {
                 case NPTypeCode.Byte:
-                {
-                    var ptr = (byte*)result.Address;
-                    if (isLeftShift)
-                        for (int i = 0; i < len; i++)
-                            ptr[i] = (byte)(ptr[i] << shiftAmount);
-                    else
-                        for (int i = 0; i < len; i++)
-                            ptr[i] = (byte)(ptr[i] >> shiftAmount);
+                    ExecuteShiftScalar<byte>(input, result, shiftAmount, len, isLeftShift);
                     break;
-                }
                 case NPTypeCode.Int16:
-                {
-                    var ptr = (short*)result.Address;
-                    if (isLeftShift)
-                        for (int i = 0; i < len; i++)
-                            ptr[i] = (short)(ptr[i] << shiftAmount);
-                    else
-                        for (int i = 0; i < len; i++)
-                            ptr[i] = (short)(ptr[i] >> shiftAmount);
+                    ExecuteShiftScalar<short>(input, result, shiftAmount, len, isLeftShift);
                     break;
-                }
                 case NPTypeCode.UInt16:
-                {
-                    var ptr = (ushort*)result.Address;
-                    if (isLeftShift)
-                        for (int i = 0; i < len; i++)
-                            ptr[i] = (ushort)(ptr[i] << shiftAmount);
-                    else
-                        for (int i = 0; i < len; i++)
-                            ptr[i] = (ushort)(ptr[i] >> shiftAmount);
+                    ExecuteShiftScalar<ushort>(input, result, shiftAmount, len, isLeftShift);
                     break;
-                }
                 case NPTypeCode.Int32:
-                {
-                    var ptr = (int*)result.Address;
-                    if (isLeftShift)
-                        for (int i = 0; i < len; i++)
-                            ptr[i] = ptr[i] << shiftAmount;
-                    else
-                        for (int i = 0; i < len; i++)
-                            ptr[i] = ptr[i] >> shiftAmount;
+                    ExecuteShiftScalar<int>(input, result, shiftAmount, len, isLeftShift);
                     break;
-                }
                 case NPTypeCode.UInt32:
-                {
-                    var ptr = (uint*)result.Address;
-                    if (isLeftShift)
-                        for (int i = 0; i < len; i++)
-                            ptr[i] = ptr[i] << shiftAmount;
-                    else
-                        for (int i = 0; i < len; i++)
-                            ptr[i] = ptr[i] >> shiftAmount;
+                    ExecuteShiftScalar<uint>(input, result, shiftAmount, len, isLeftShift);
                     break;
-                }
                 case NPTypeCode.Int64:
-                {
-                    var ptr = (long*)result.Address;
-                    if (isLeftShift)
-                        for (int i = 0; i < len; i++)
-                            ptr[i] = ptr[i] << shiftAmount;
-                    else
-                        for (int i = 0; i < len; i++)
-                            ptr[i] = ptr[i] >> shiftAmount;
+                    ExecuteShiftScalar<long>(input, result, shiftAmount, len, isLeftShift);
                     break;
-                }
                 case NPTypeCode.UInt64:
-                {
-                    var ptr = (ulong*)result.Address;
-                    if (isLeftShift)
-                        for (int i = 0; i < len; i++)
-                            ptr[i] = ptr[i] << shiftAmount;
-                    else
-                        for (int i = 0; i < len; i++)
-                            ptr[i] = ptr[i] >> shiftAmount;
+                    ExecuteShiftScalar<ulong>(input, result, shiftAmount, len, isLeftShift);
                     break;
-                }
                 default:
                     throw new NotSupportedException($"Shift operations not supported for {lhs.GetTypeCode}");
             }
 
             return result;
+        }
+
+        /// <summary>
+        /// Execute scalar shift using IL kernel (SIMD optimized).
+        /// </summary>
+        private static unsafe void ExecuteShiftScalar<T>(NDArray input, NDArray output, int shiftAmount, int count, bool isLeftShift) where T : unmanaged
+        {
+            var kernel = ILKernelGenerator.GetShiftScalarKernel<T>(isLeftShift);
+            if (kernel != null)
+            {
+                kernel((T*)input.Address, (T*)output.Address, shiftAmount, count);
+            }
+            else
+            {
+                // Fallback: scalar loop (should not happen if IL generation is enabled)
+                var inPtr = (T*)input.Address;
+                var outPtr = (T*)output.Address;
+                for (int i = 0; i < count; i++)
+                {
+                    outPtr[i] = ShiftScalar(inPtr[i], shiftAmount, isLeftShift);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Fallback scalar shift operation for a single element.
+        /// </summary>
+        private static T ShiftScalar<T>(T value, int shift, bool isLeftShift) where T : unmanaged
+        {
+            // Use dynamic to handle all integer types
+            // This is only used as fallback when IL kernel is not available
+            if (typeof(T) == typeof(byte))
+            {
+                var v = (byte)(object)value;
+                return (T)(object)(byte)(isLeftShift ? (v << shift) : (v >> shift));
+            }
+            if (typeof(T) == typeof(short))
+            {
+                var v = (short)(object)value;
+                return (T)(object)(short)(isLeftShift ? (v << shift) : (v >> shift));
+            }
+            if (typeof(T) == typeof(ushort))
+            {
+                var v = (ushort)(object)value;
+                return (T)(object)(ushort)(isLeftShift ? (v << shift) : (v >> shift));
+            }
+            if (typeof(T) == typeof(int))
+            {
+                var v = (int)(object)value;
+                return (T)(object)(isLeftShift ? (v << shift) : (v >> shift));
+            }
+            if (typeof(T) == typeof(uint))
+            {
+                var v = (uint)(object)value;
+                return (T)(object)(isLeftShift ? (v << shift) : (v >> shift));
+            }
+            if (typeof(T) == typeof(long))
+            {
+                var v = (long)(object)value;
+                return (T)(object)(isLeftShift ? (v << shift) : (v >> shift));
+            }
+            if (typeof(T) == typeof(ulong))
+            {
+                var v = (ulong)(object)value;
+                return (T)(object)(isLeftShift ? (v << shift) : (v >> shift));
+            }
+            throw new NotSupportedException($"Shift not supported for type {typeof(T)}");
         }
     }
 }

@@ -94,7 +94,9 @@ Runtime IL generation via `System.Reflection.Emit.DynamicMethod` for high-perfor
 | `.MixedType.cs` | Mixed-type binary ops with promotion; owns `ClearAll()` |
 | `.Unary.cs` | Math functions (Negate, Abs, Sqrt, Sin, Cos, Exp, Log, Sign, etc.) |
 | `.Comparison.cs` | Comparisons (==, !=, <, >, <=, >=) returning bool arrays |
-| `.Reduction.cs` | Reductions (Sum, Prod, Min, Max, ArgMax, ArgMin, All, Any) |
+| `.Reduction.cs` | Reductions (Sum, Prod, Min, Max, Mean, ArgMax, ArgMin, All, Any) |
+| `.Scan.cs` | Cumulative ops (CumSum) with element-wise SIMD + axis support |
+| `.Shift.cs` | Bit shift ops (LeftShift, RightShift) with SIMD for scalar shifts |
 
 **Execution Paths:**
 1. **SimdFull** - Both operands contiguous, SIMD-capable dtype → Vector loop + scalar tail
@@ -114,16 +116,21 @@ Runtime IL generation via `System.Reflection.Emit.DynamicMethod` for high-perfor
 **ILKernel Status (0.41.x):**
 | Category | Implemented | Pending |
 |----------|-------------|---------|
-| Binary | Add, Sub, Mul, Div, Power, FloorDivide, BitwiseAnd/Or/Xor | LeftShift, RightShift (use Default.Shift.cs) |
+| Binary | Add, Sub, Mul, Div, Power, FloorDivide, BitwiseAnd/Or/Xor | — |
+| Shift | LeftShift, RightShift (SIMD for scalar, scalar loop for array) | — |
 | Unary | Negate, Abs, Sign, Sqrt, Cbrt, Square, Reciprocal, Floor, Ceil, Truncate, Trig, Exp, Log, BitwiseNot | Deg2Rad, Rad2Deg (use DefaultEngine) |
-| Reduction | Sum, Prod, Min, Max, Mean, ArgMax, ArgMin, All, Any, CumSum | Std, Var (use Regen templates) |
+| Reduction | Sum, Prod, Min, Max, Mean, ArgMax, ArgMin, All, Any, Std, Var | — |
+| Scan | CumSum (element-wise SIMD + axis support) | CumProd |
 | NaN Reduction | — | NanSum, NanProd, NanMin, NanMax (Task #88) |
 | Comparison | Equal, NotEqual, Less, Greater, LessEqual, GreaterEqual | — |
 | Clip/Modf | Clip, Modf (SIMD helpers) | — |
-| Axis reductions | Uses iterator path (no SIMD) | SIMD axis kernels (Task #89) |
+| Axis reductions | Sum, Prod, Min, Max, Mean, Std, Var (iterator path) | SIMD axis kernels (Task #89) |
 
 **DefaultEngine ops needing IL migration:**
-- High impact: `MatMul`, `Dot` (complex - consider BLAS integration)
+- High impact: `MatMul` (complex - consider BLAS integration)
+
+**Recently migrated:**
+- `Dot.NDMD` — Migrated to cache-blocked SIMD (15,880 lines Regen → 419 lines IL)
 
 ## Shape Architecture (NumPy-Aligned)
 
@@ -211,6 +218,7 @@ These bugs were fixed in recent commits:
 | BUG-18 | `np.convolve` | `0857d109` — NullReferenceException fixed |
 | BUG-15 | `np.abs` | `0857d109` — int dtype preserved (no longer converts to Double) |
 | BUG-13 | `np.linspace` | `0857d109` — returns float64 (was float32) |
+| BUG-22 | `np.var`/`np.std` | IL migration — single element with ddof returns NaN (NumPy-aligned) |
 
 ### Dead Code (Returns null/default)
 

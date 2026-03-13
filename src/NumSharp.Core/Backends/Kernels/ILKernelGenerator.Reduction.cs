@@ -4919,9 +4919,119 @@ namespace NumSharp.Backends.Kernels
                         sum += p[i];
                 }
             }
+            else if (typeof(T) == typeof(int))
+            {
+                int* p = (int*)(void*)data;
+                if (Vector256.IsHardwareAccelerated && Vector256<int>.IsSupported && size >= Vector256<int>.Count)
+                {
+                    // Process int vectors, widening to long for accumulation to avoid overflow
+                    int vectorCount = Vector256<int>.Count;  // 8 ints per vector
+                    int vectorEnd = size - vectorCount;
+                    long totalSum = 0;
+                    int i = 0;
+                    for (; i <= vectorEnd; i += vectorCount)
+                    {
+                        var intVec = Vector256.Load(p + i);
+                        // Sum all 8 ints - Vector256.Sum returns int, then add to long
+                        totalSum += Vector256.Sum(intVec);
+                    }
+                    sum = totalSum;
+                    for (; i < size; i++)
+                        sum += p[i];
+                }
+                else
+                {
+                    long totalSum = 0;
+                    for (int i = 0; i < size; i++)
+                        totalSum += p[i];
+                    sum = totalSum;
+                }
+            }
+            else if (typeof(T) == typeof(long))
+            {
+                long* p = (long*)(void*)data;
+                if (Vector256.IsHardwareAccelerated && Vector256<long>.IsSupported && size >= Vector256<long>.Count)
+                {
+                    int vectorCount = Vector256<long>.Count;  // 4 longs per vector
+                    int vectorEnd = size - vectorCount;
+                    var sumVec = Vector256<long>.Zero;
+                    int i = 0;
+                    for (; i <= vectorEnd; i += vectorCount)
+                        sumVec = Vector256.Add(sumVec, Vector256.Load(p + i));
+                    sum = Vector256.Sum(sumVec);
+                    for (; i < size; i++)
+                        sum += p[i];
+                }
+                else
+                {
+                    for (int i = 0; i < size; i++)
+                        sum += p[i];
+                }
+            }
+            else if (typeof(T) == typeof(short))
+            {
+                short* p = (short*)(void*)data;
+                if (Vector256.IsHardwareAccelerated && Vector256<short>.IsSupported && size >= Vector256<short>.Count)
+                {
+                    // Process short vectors - 16 shorts per vector
+                    int vectorCount = Vector256<short>.Count;
+                    int vectorEnd = size - vectorCount;
+                    long totalSum = 0;
+                    int i = 0;
+                    for (; i <= vectorEnd; i += vectorCount)
+                    {
+                        var shortVec = Vector256.Load(p + i);
+                        // Convert to ints, then sum (avoids overflow)
+                        var (lower, upper) = Vector256.Widen(shortVec);
+                        totalSum += Vector256.Sum(lower) + Vector256.Sum(upper);
+                    }
+                    sum = totalSum;
+                    for (; i < size; i++)
+                        sum += p[i];
+                }
+                else
+                {
+                    long totalSum = 0;
+                    for (int i = 0; i < size; i++)
+                        totalSum += p[i];
+                    sum = totalSum;
+                }
+            }
+            else if (typeof(T) == typeof(byte))
+            {
+                byte* p = (byte*)(void*)data;
+                if (Vector256.IsHardwareAccelerated && Vector256<byte>.IsSupported && size >= Vector256<byte>.Count)
+                {
+                    // Process byte vectors - 32 bytes per vector
+                    int vectorCount = Vector256<byte>.Count;
+                    int vectorEnd = size - vectorCount;
+                    long totalSum = 0;
+                    int i = 0;
+                    for (; i <= vectorEnd; i += vectorCount)
+                    {
+                        var byteVec = Vector256.Load(p + i);
+                        // Widen byte->ushort->uint and sum
+                        var (lower16, upper16) = Vector256.Widen(byteVec);
+                        var (ll32, lu32) = Vector256.Widen(lower16);
+                        var (ul32, uu32) = Vector256.Widen(upper16);
+                        totalSum += Vector256.Sum(ll32) + Vector256.Sum(lu32) +
+                                    Vector256.Sum(ul32) + Vector256.Sum(uu32);
+                    }
+                    sum = totalSum;
+                    for (; i < size; i++)
+                        sum += p[i];
+                }
+                else
+                {
+                    long totalSum = 0;
+                    for (int i = 0; i < size; i++)
+                        totalSum += p[i];
+                    sum = totalSum;
+                }
+            }
             else
             {
-                // For integer types, convert to double
+                // For other types (ushort, uint, ulong, char), use scalar loop
                 for (int i = 0; i < size; i++)
                     sum += ConvertToDouble(data[i]);
             }
@@ -5002,9 +5112,86 @@ namespace NumSharp.Backends.Kernels
                     }
                 }
             }
+            else if (typeof(T) == typeof(int))
+            {
+                int* p = (int*)(void*)data;
+                // 4x loop unrolling for better performance
+                int unrollEnd = size - 4;
+                int i = 0;
+                for (; i <= unrollEnd; i += 4)
+                {
+                    double d0 = p[i] - mean;
+                    double d1 = p[i + 1] - mean;
+                    double d2 = p[i + 2] - mean;
+                    double d3 = p[i + 3] - mean;
+                    sqDiffSum += d0 * d0 + d1 * d1 + d2 * d2 + d3 * d3;
+                }
+                for (; i < size; i++)
+                {
+                    double diff = p[i] - mean;
+                    sqDiffSum += diff * diff;
+                }
+            }
+            else if (typeof(T) == typeof(long))
+            {
+                long* p = (long*)(void*)data;
+                int unrollEnd = size - 4;
+                int i = 0;
+                for (; i <= unrollEnd; i += 4)
+                {
+                    double d0 = p[i] - mean;
+                    double d1 = p[i + 1] - mean;
+                    double d2 = p[i + 2] - mean;
+                    double d3 = p[i + 3] - mean;
+                    sqDiffSum += d0 * d0 + d1 * d1 + d2 * d2 + d3 * d3;
+                }
+                for (; i < size; i++)
+                {
+                    double diff = p[i] - mean;
+                    sqDiffSum += diff * diff;
+                }
+            }
+            else if (typeof(T) == typeof(short))
+            {
+                short* p = (short*)(void*)data;
+                int unrollEnd = size - 4;
+                int i = 0;
+                for (; i <= unrollEnd; i += 4)
+                {
+                    double d0 = p[i] - mean;
+                    double d1 = p[i + 1] - mean;
+                    double d2 = p[i + 2] - mean;
+                    double d3 = p[i + 3] - mean;
+                    sqDiffSum += d0 * d0 + d1 * d1 + d2 * d2 + d3 * d3;
+                }
+                for (; i < size; i++)
+                {
+                    double diff = p[i] - mean;
+                    sqDiffSum += diff * diff;
+                }
+            }
+            else if (typeof(T) == typeof(byte))
+            {
+                byte* p = (byte*)(void*)data;
+                int unrollEnd = size - 4;
+                int i = 0;
+                for (; i <= unrollEnd; i += 4)
+                {
+                    double d0 = p[i] - mean;
+                    double d1 = p[i + 1] - mean;
+                    double d2 = p[i + 2] - mean;
+                    double d3 = p[i + 3] - mean;
+                    sqDiffSum += d0 * d0 + d1 * d1 + d2 * d2 + d3 * d3;
+                }
+                for (; i < size; i++)
+                {
+                    double diff = p[i] - mean;
+                    sqDiffSum += diff * diff;
+                }
+            }
             else
             {
-                // For integer types
+                // For other types (ushort, uint, ulong, char)
                 for (int i = 0; i < size; i++)
                 {
                     double diff = ConvertToDouble(data[i]) - mean;
