@@ -20,6 +20,14 @@ using System.Runtime.Intrinsics;
 // SUPPORTED TYPES: Byte, Int16, UInt16, Int32, UInt32, Int64, UInt64
 // NOT SUPPORTED: Boolean, Char, Single, Double, Decimal (non-integer)
 //
+// NUMPY COMPATIBILITY (BUG 81 FIX):
+//   C# masks shift amount to bit width: x << 32 becomes x << (32 & 31) = x << 0 = x
+//   NumPy behavior for shift >= bit width:
+//     - Left shift: always returns 0
+//     - Right shift (unsigned): always returns 0
+//     - Right shift (signed positive): returns 0
+//     - Right shift (signed negative): returns -1 (all ones, sign extension)
+//
 // =============================================================================
 
 namespace NumSharp.Backends.Kernels
@@ -135,6 +143,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Generate IL kernel for shift with scalar shift amount.
         /// Uses SIMD for the main loop and scalar for the tail.
+        /// Handles shift >= bit width per NumPy semantics (BUG 81 fix).
         /// </summary>
         private static unsafe ShiftScalarKernel<T> GenerateShiftScalarKernel<T>(bool isLeftShift) where T : unmanaged
         {
@@ -154,6 +163,7 @@ namespace NumSharp.Backends.Kernels
             var locUnrollEnd = il.DeclareLocal(typeof(int));   // count - vectorCount*4
 
             int elementSize = Unsafe.SizeOf<T>();
+            int bitWidth = GetBitWidth<T>();
             int vectorCount = GetShiftVectorCount<T>();
             int unrollStep = vectorCount * 4;
 
@@ -164,6 +174,47 @@ namespace NumSharp.Backends.Kernels
             var lblRemainderLoopEnd = il.DefineLabel();
             var lblTailLoop = il.DefineLabel();
             var lblTailLoopEnd = il.DefineLabel();
+            var lblOverflowHandled = il.DefineLabel();
+            var lblNormalShift = il.DefineLabel();
+
+            // ========== OVERFLOW CHECK (BUG 81 FIX) ==========
+            // NumPy: shift >= bitWidth has special handling
+            // Left shift: always 0
+            // Right shift unsigned: always 0
+            // Right shift signed: 0 for positive, -1 for negative (handled per-element in non-overflow path)
+            // For scalar shift, we can check once and fill entire output with appropriate value
+
+            // if (shiftAmount < bitWidth) goto NormalShift
+            il.Emit(OpCodes.Ldarg_2);                      // shiftAmount
+            il.Emit(OpCodes.Ldc_I4, bitWidth);
+            il.Emit(OpCodes.Blt, lblNormalShift);
+
+            // Overflow case: shift >= bitWidth
+            if (isLeftShift || IsUnsignedType<T>())
+            {
+                // Left shift or unsigned right shift: fill with zeros
+                // Use Unsafe.InitBlockUnaligned(output, 0, count * elementSize)
+                il.Emit(OpCodes.Ldarg_1);                  // output
+                il.Emit(OpCodes.Ldc_I4_0);                 // value = 0
+                il.Emit(OpCodes.Ldarg_3);                  // count
+                il.Emit(OpCodes.Ldc_I4, elementSize);
+                il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Conv_U4);                  // size as uint
+                var initBlock = typeof(Unsafe).GetMethod(nameof(Unsafe.InitBlockUnaligned),
+                    new[] { typeof(void*), typeof(byte), typeof(uint) })!;
+                il.EmitCall(OpCodes.Call, initBlock, null);
+                il.Emit(OpCodes.Ret);
+            }
+            else
+            {
+                // Signed right shift: need to check sign of each element
+                // For negative values, fill with -1; for positive/zero, fill with 0
+                // We'll use a simple loop for this edge case
+                EmitSignedRightShiftOverflow<T>(il, elementSize);
+                il.Emit(OpCodes.Ret);
+            }
+
+            il.MarkLabel(lblNormalShift);
 
             // i = 0
             il.Emit(OpCodes.Ldc_I4_0);
@@ -392,6 +443,108 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
+        /// Get bit width for a type (for shift overflow checking).
+        /// </summary>
+        private static int GetBitWidth<T>() where T : unmanaged
+        {
+            return Unsafe.SizeOf<T>() * 8;
+        }
+
+        /// <summary>
+        /// Emit code for signed right shift overflow case (shift >= bitWidth).
+        /// For negative values, result is -1 (all ones); for positive/zero, result is 0.
+        /// Stack: empty, Params: input (arg0), output (arg1), shiftAmount (arg2), count (arg3)
+        /// </summary>
+        private static void EmitSignedRightShiftOverflow<T>(ILGenerator il, int elementSize) where T : unmanaged
+        {
+            // Simple loop: for (i = 0; i < count; i++)
+            //   output[i] = input[i] < 0 ? -1 : 0
+            var locI = il.DeclareLocal(typeof(int));
+            var lblLoop = il.DefineLabel();
+            var lblLoopEnd = il.DefineLabel();
+            var lblNegative = il.DefineLabel();
+            var lblStoreResult = il.DefineLabel();
+
+            // i = 0
+            il.Emit(OpCodes.Ldc_I4_0);
+            il.Emit(OpCodes.Stloc, locI);
+
+            il.MarkLabel(lblLoop);
+
+            // if (i >= count) goto LoopEnd
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldarg_3);                      // count
+            il.Emit(OpCodes.Bge, lblLoopEnd);
+
+            // Load output address for store
+            il.Emit(OpCodes.Ldarg_1);                      // output
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Ldc_I4, elementSize);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Add);
+
+            // Load input[i] and check if negative
+            il.Emit(OpCodes.Ldarg_0);                      // input
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Conv_I);
+            il.Emit(OpCodes.Ldc_I4, elementSize);
+            il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Add);
+            EmitLoadIndirect<T>(il);
+
+            // Compare with 0
+            il.Emit(OpCodes.Ldc_I4_0);
+            if (typeof(T) == typeof(long))
+            {
+                il.Emit(OpCodes.Conv_I8);
+            }
+            else if (typeof(T) == typeof(short))
+            {
+                il.Emit(OpCodes.Conv_I2);
+            }
+            // int and sbyte work with I4
+
+            il.Emit(OpCodes.Blt, lblNegative);
+
+            // Positive/zero case: store 0
+            il.Emit(OpCodes.Ldc_I4_0);
+            if (typeof(T) == typeof(long))
+            {
+                il.Emit(OpCodes.Conv_I8);
+            }
+            else if (typeof(T) == typeof(short))
+            {
+                il.Emit(OpCodes.Conv_I2);
+            }
+            il.Emit(OpCodes.Br, lblStoreResult);
+
+            // Negative case: store -1
+            il.MarkLabel(lblNegative);
+            il.Emit(OpCodes.Ldc_I4_M1);
+            if (typeof(T) == typeof(long))
+            {
+                il.Emit(OpCodes.Conv_I8);
+            }
+            else if (typeof(T) == typeof(short))
+            {
+                il.Emit(OpCodes.Conv_I2);
+            }
+
+            il.MarkLabel(lblStoreResult);
+            EmitStoreIndirect<T>(il);
+
+            // i++
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Ldc_I4_1);
+            il.Emit(OpCodes.Add);
+            il.Emit(OpCodes.Stloc, locI);
+
+            il.Emit(OpCodes.Br, lblLoop);
+            il.MarkLabel(lblLoopEnd);
+        }
+
+        /// <summary>
         /// Get vector count for shift operations based on current SIMD width.
         /// </summary>
         private static int GetShiftVectorCount<T>() where T : unmanaged
@@ -449,37 +602,22 @@ namespace NumSharp.Backends.Kernels
         /// Emit scalar shift operation body.
         /// For scalar shift (useArrayShift=false): output[i] = input[i] << shiftAmount (arg2)
         /// For array shift (useArrayShift=true): output[i] = input[i] << shifts[i] (arg1)
+        /// Handles shift >= bit width per NumPy semantics (BUG 81 fix).
         /// </summary>
         private static void EmitScalarShiftBody<T>(ILGenerator il, bool isLeftShift, LocalBuilder locI, int elementSize, bool useArrayShift) where T : unmanaged
         {
-            // Address: output + i * elementSize
+            int bitWidth = GetBitWidth<T>();
+
             if (useArrayShift)
             {
-                il.Emit(OpCodes.Ldarg_2);                      // output (arg2 for array shift)
-            }
-            else
-            {
-                il.Emit(OpCodes.Ldarg_1);                      // output (arg1 for scalar shift)
-            }
-            il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Conv_I);
-            il.Emit(OpCodes.Ldc_I4, elementSize);
-            il.Emit(OpCodes.Mul);
-            il.Emit(OpCodes.Add);
+                // For array shifts, each shift amount may be different, so we need per-element overflow check
+                var lblNoOverflow = il.DefineLabel();
+                var lblStoreZero = il.DefineLabel();
+                var lblStoreNegOne = il.DefineLabel();
+                var lblStore = il.DefineLabel();
+                var lblDone = il.DefineLabel();
 
-            // Load input[i]
-            il.Emit(OpCodes.Ldarg_0);                      // input
-            il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Conv_I);
-            il.Emit(OpCodes.Ldc_I4, elementSize);
-            il.Emit(OpCodes.Mul);
-            il.Emit(OpCodes.Add);
-            EmitLoadIndirect<T>(il);
-
-            // Load shift amount
-            if (useArrayShift)
-            {
-                // Load shifts[i]
+                // Load shift amount first to check for overflow
                 il.Emit(OpCodes.Ldarg_1);                  // shifts (arg1 for array shift)
                 il.Emit(OpCodes.Ldloc, locI);
                 il.Emit(OpCodes.Conv_I);
@@ -487,18 +625,141 @@ namespace NumSharp.Backends.Kernels
                 il.Emit(OpCodes.Mul);
                 il.Emit(OpCodes.Add);
                 il.Emit(OpCodes.Ldind_I4);
+
+                // Duplicate shift amount for comparison and potential use
+                il.Emit(OpCodes.Dup);
+
+                // if (shiftAmount < bitWidth) goto NoOverflow
+                il.Emit(OpCodes.Ldc_I4, bitWidth);
+                il.Emit(OpCodes.Blt, lblNoOverflow);
+
+                // Overflow case: shift >= bitWidth
+                il.Emit(OpCodes.Pop);  // remove duplicate shift amount
+
+                // Load output address for overflow store
+                il.Emit(OpCodes.Ldarg_2);                      // output (arg2 for array shift)
+                il.Emit(OpCodes.Ldloc, locI);
+                il.Emit(OpCodes.Conv_I);
+                il.Emit(OpCodes.Ldc_I4, elementSize);
+                il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Add);
+
+                if (isLeftShift || IsUnsignedType<T>())
+                {
+                    // Left shift or unsigned right shift: result is 0
+                    il.Emit(OpCodes.Ldc_I4_0);
+                    if (typeof(T) == typeof(long) || typeof(T) == typeof(ulong))
+                    {
+                        il.Emit(OpCodes.Conv_I8);
+                    }
+                    EmitStoreIndirect<T>(il);
+                }
+                else
+                {
+                    // Signed right shift: result is 0 for positive, -1 for negative
+                    // Load input[i] to check sign
+                    il.Emit(OpCodes.Ldarg_0);                      // input
+                    il.Emit(OpCodes.Ldloc, locI);
+                    il.Emit(OpCodes.Conv_I);
+                    il.Emit(OpCodes.Ldc_I4, elementSize);
+                    il.Emit(OpCodes.Mul);
+                    il.Emit(OpCodes.Add);
+                    EmitLoadIndirect<T>(il);
+
+                    // Compare with 0
+                    il.Emit(OpCodes.Ldc_I4_0);
+                    if (typeof(T) == typeof(long))
+                    {
+                        il.Emit(OpCodes.Conv_I8);
+                    }
+                    il.Emit(OpCodes.Blt, lblStoreNegOne);
+
+                    // Positive/zero: store 0
+                    il.Emit(OpCodes.Ldc_I4_0);
+                    if (typeof(T) == typeof(long))
+                    {
+                        il.Emit(OpCodes.Conv_I8);
+                    }
+                    il.Emit(OpCodes.Br, lblStore);
+
+                    // Negative: store -1
+                    il.MarkLabel(lblStoreNegOne);
+                    il.Emit(OpCodes.Ldc_I4_M1);
+                    if (typeof(T) == typeof(long))
+                    {
+                        il.Emit(OpCodes.Conv_I8);
+                    }
+
+                    il.MarkLabel(lblStore);
+                    EmitStoreIndirect<T>(il);
+                }
+                il.Emit(OpCodes.Br, lblDone);
+
+                // Normal shift case
+                il.MarkLabel(lblNoOverflow);
+
+                // Stack has: shiftAmount
+                // Store it in a temp local for reuse
+                var locShift = il.DeclareLocal(typeof(int));
+                il.Emit(OpCodes.Stloc, locShift);
+
+                // Address: output + i * elementSize
+                il.Emit(OpCodes.Ldarg_2);                      // output (arg2 for array shift)
+                il.Emit(OpCodes.Ldloc, locI);
+                il.Emit(OpCodes.Conv_I);
+                il.Emit(OpCodes.Ldc_I4, elementSize);
+                il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Add);
+
+                // Load input[i]
+                il.Emit(OpCodes.Ldarg_0);                      // input
+                il.Emit(OpCodes.Ldloc, locI);
+                il.Emit(OpCodes.Conv_I);
+                il.Emit(OpCodes.Ldc_I4, elementSize);
+                il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Add);
+                EmitLoadIndirect<T>(il);
+
+                // Load shift amount from local
+                il.Emit(OpCodes.Ldloc, locShift);
+
+                // Perform scalar shift
+                EmitScalarShift<T>(il, isLeftShift);
+
+                // Store to output[i]
+                EmitStoreIndirect<T>(il);
+
+                il.MarkLabel(lblDone);
             }
             else
             {
+                // Scalar shift: overflow already handled at the start of the kernel
+                // Address: output + i * elementSize
+                il.Emit(OpCodes.Ldarg_1);                      // output (arg1 for scalar shift)
+                il.Emit(OpCodes.Ldloc, locI);
+                il.Emit(OpCodes.Conv_I);
+                il.Emit(OpCodes.Ldc_I4, elementSize);
+                il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Add);
+
+                // Load input[i]
+                il.Emit(OpCodes.Ldarg_0);                      // input
+                il.Emit(OpCodes.Ldloc, locI);
+                il.Emit(OpCodes.Conv_I);
+                il.Emit(OpCodes.Ldc_I4, elementSize);
+                il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Add);
+                EmitLoadIndirect<T>(il);
+
                 // Load scalar shift amount
                 il.Emit(OpCodes.Ldarg_2);                  // shiftAmount
+
+                // Perform scalar shift
+                EmitScalarShift<T>(il, isLeftShift);
+
+                // Store to output[i]
+                EmitStoreIndirect<T>(il);
             }
-
-            // Perform scalar shift
-            EmitScalarShift<T>(il, isLeftShift);
-
-            // Store to output[i]
-            EmitStoreIndirect<T>(il);
         }
 
         /// <summary>

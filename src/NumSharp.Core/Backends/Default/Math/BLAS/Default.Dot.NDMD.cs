@@ -365,11 +365,14 @@ namespace NumSharp.Backends
                     {
                         // lhs[..., k] - last dim is contract dim
                         lhsCoords[lhsNdim - 1] = k;
-                        double lVal = Convert.ToDouble(lhs.GetAtIndex(lhs.Shape.GetOffset(lhsCoords)));
+                        // Use GetValue(coords) which correctly applies Shape.GetOffset internally
+                        // Note: GetAtIndex(Shape.GetOffset(coords)) is wrong because GetAtIndex
+                        // applies TransformOffset again, double-transforming for non-contiguous arrays
+                        double lVal = Convert.ToDouble(lhs.GetValue(lhsCoords));
 
                         // rhs[..., k, ...] - second-to-last dim is contract dim
                         rhsCoords[rhsNdim - 2] = k;
-                        double rVal = Convert.ToDouble(rhs.GetAtIndex(rhs.Shape.GetOffset(rhsCoords)));
+                        double rVal = Convert.ToDouble(rhs.GetValue(rhsCoords));
 
                         sum += lVal * rVal;
                     }

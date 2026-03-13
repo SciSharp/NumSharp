@@ -293,18 +293,29 @@ namespace NumSharp.Backends
             // Use double accumulator for precision
             var accumulator = new double[N];
 
+            // Temporary arrays for coordinates to avoid allocation in inner loop
+            var leftCoords = new int[2];
+            var rightCoords = new int[2];
+
             for (int i = 0; i < M; i++)
             {
                 // Clear accumulator for this row
                 Array.Clear(accumulator, 0, N);
 
+                leftCoords[0] = i;
                 for (int k = 0; k < K; k++)
                 {
-                    double aik = left.GetAtIndex<double>(i * left.strides[0] + k * left.strides[1]);
+                    leftCoords[1] = k;
+                    // Use GetValue which correctly handles strided/non-contiguous arrays
+                    // Note: GetAtIndex with manual stride calculation was wrong for transposed arrays
+                    // because GetAtIndex applies TransformOffset which double-transforms for non-contiguous
+                    double aik = Convert.ToDouble(left.GetValue(leftCoords));
 
+                    rightCoords[0] = k;
                     for (int j = 0; j < N; j++)
                     {
-                        double bkj = right.GetAtIndex<double>(k * right.strides[0] + j * right.strides[1]);
+                        rightCoords[1] = j;
+                        double bkj = Convert.ToDouble(right.GetValue(rightCoords));
                         accumulator[j] += aik * bkj;
                     }
                 }
