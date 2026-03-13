@@ -5,7 +5,6 @@ using NumSharp;
 
 namespace NumSharp.UnitTest.Logic
 {
-    [OpenBugs]
     public class NpAnyTest
     {
         [Test]
@@ -82,25 +81,28 @@ namespace NumSharp.UnitTest.Logic
         [Test]
         public void AnyInvalidAxisTest()
         {
-            // 测试无效轴
+            // Test invalid axis - should throw ArgumentOutOfRangeException
             var arr = np.array(new int[,] { { 0, 1 }, { 2, 3 } });
-            np.any(arr, axis: 5, keepdims: false); // 轴5不存在
+            Assert.ThrowsException<ArgumentOutOfRangeException>(() => np.any(arr, axis: 5, keepdims: false));
         }
 
         [Test]
-        public void AnyZeroDimensionalArrayTest()
+        [Misaligned]  // NumPy: np.array(5) creates 0D, NumSharp: creates 1D with shape (1,)
+        public void AnyScalarArrayTest()
         {
-            // 测试零维数组
-            var arr = np.array(5); // 零维数组
-            np.any(arr, axis: 0, keepdims: false);
+            // NumPy: np.array(5) creates 0D array, np.any(a, axis=0) returns True
+            // NumSharp: np.array(5) creates 1D array with shape (1,), np.any(a, axis=0) also returns True
+            var arr = np.array(5);
+            var result = np.any(arr, axis: 0, keepdims: false);
+            Assert.AreEqual(true, result.GetBoolean(0));
         }
 
         [Test]
         public void AnyNullArrayTest()
         {
-            // 测试空数组
+            // Test null array - should throw ArgumentNullException
             NDArray arr = null;
-            np.any(arr, axis: 0, keepdims: false);
+            Assert.ThrowsException<ArgumentNullException>(() => np.any(arr, axis: 0, keepdims: false));
         }
     }
 }

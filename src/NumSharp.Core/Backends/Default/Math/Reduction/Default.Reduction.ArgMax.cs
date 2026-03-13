@@ -141,464 +141,42 @@ namespace NumSharp.Backends
             var key = new AxisReductionKernelKey(inputType, NPTypeCode.Int64, op, shape.IsContiguous && axis == arr.ndim - 1);
             var kernel = ILKernelGenerator.TryGetAxisReductionKernel(key);
 
-            if (kernel != null)
-            {
-                // Use IL kernel path
-                var ret = new NDArray(NPTypeCode.Int64, axisedShape, false);
-                int axisSize = shape.dimensions[axis];
-                int outputSize = ret.size > 0 ? ret.size : 1;
-                byte* inputAddr = (byte*)arr.Address + shape.offset * arr.dtypesize;
+            if (kernel == null)
+                throw new InvalidOperationException($"IL kernel not available for ArgMax/ArgMin axis reduction. Ensure ILKernelGenerator.Enabled is true. Type: {inputType}");
 
-                fixed (int* inputStrides = shape.strides)
-                fixed (int* inputDims = shape.dimensions)
-                fixed (int* outputStrides = ret.Shape.strides)
-                {
-                    kernel((void*)inputAddr, (void*)ret.Address, inputStrides, inputDims, outputStrides, axis, axisSize, arr.ndim, outputSize);
-                }
-
-                if (keepdims)
-                    ret.Storage.Reshape(outputShape);
-
-                return ret;
-            }
-
-            // Fallback to iterator-based implementation (should not happen with IL kernels enabled)
-            return ExecuteAxisArgReductionIterator(arr, axis, keepdims, outputShape, axisedShape, op);
-        }
-
-        /// <summary>
-        /// Fallback iterator-based axis ArgMax reduction.
-        /// </summary>
-        private NDArray ExecuteAxisArgReductionIterator(NDArray arr, int axis, bool keepdims, Shape outputShape, Shape axisedShape, ReductionOp op)
-        {
-            var shape = arr.Shape;
+            // Use IL kernel path
             var ret = new NDArray(NPTypeCode.Int64, axisedShape, false);
-            var iterAxis = new NDCoordinatesAxisIncrementor(ref shape, axis);
-            var iterRet = new ValueCoordinatesIncrementor(ref axisedShape);
-            var iterIndex = iterRet.Index;
-            var slices = iterAxis.Slices;
+            int axisSize = shape.dimensions[axis];
+            int outputSize = ret.size > 0 ? ret.size : 1;
+            byte* inputAddr = (byte*)arr.Address + shape.offset * arr.dtypesize;
 
-#if _REGEN
-            #region Compute
-            switch (arr.GetTypeCode)
-		    {
-			    %foreach supported_numericals,supported_numericals_lowercase%
-			    case NPTypeCode.#1: 
-                {
-                    int at;
-                    do
-                    {
-                        var iter = arr[slices].AsIterator<#2>();
-                        var moveNext = iter.MoveNext;
-                        var hasNext = iter.HasNext;
-                        int idx = 1, maxAt = 0;
-                        |#2 max = moveNext();
-                        while (hasNext())
-                        {
-                            var val = moveNext();
-                            if (val > max)
-                            {
-                                max = val;
-                                maxAt = idx;
-                            }
-
-                            idx++;
-                        }
-
-                        ret.SetInt64(maxAt, iterIndex);
-                    } while (iterAxis.Next() != null && iterRet.Next() != null);
-                    break;
-                }
-			    %
-			    default:
-				    throw new NotSupportedException();
-		    }
-            #endregion
-#else
-
-            #region Compute
-            switch (arr.GetTypeCode)
-		    {
-			    case NPTypeCode.Boolean:
-                {
-                    // Boolean: True=1, False=0, so argmax finds first True
-                    int at;
-                    do
-                    {
-                        var iter = arr[slices].AsIterator<bool>();
-                        var moveNext = iter.MoveNext;
-                        var hasNext = iter.HasNext;
-                        int idx = 1, maxAt = 0;
-                        bool max = moveNext();
-                        while (hasNext())
-                        {
-                            var val = moveNext();
-                            // For argmax: True > False, so if val is True and max is False
-                            if (val && !max)
-                            {
-                                max = val;
-                                maxAt = idx;
-                            }
-
-                            idx++;
-                        }
-
-                        ret.SetInt64(maxAt, iterIndex);
-                    } while (iterAxis.Next() != null && iterRet.Next() != null);
-                    break;
-                }
-			    case NPTypeCode.Byte:
-                {
-                    int at;
-                    do
-                    {
-                        var iter = arr[slices].AsIterator<byte>();
-                        var moveNext = iter.MoveNext;
-                        var hasNext = iter.HasNext;
-                        int idx = 1, maxAt = 0;
-                        byte max = moveNext();
-                        while (hasNext())
-                        {
-                            var val = moveNext();
-                            if (val > max)
-                            {
-                                max = val;
-                                maxAt = idx;
-                            }
-
-                            idx++;
-                        }
-
-                        ret.SetInt64(maxAt, iterIndex);
-                    } while (iterAxis.Next() != null && iterRet.Next() != null);
-                    break;
-                }
-			    case NPTypeCode.Int16: 
-                {
-                    int at;
-                    do
-                    {
-                        var iter = arr[slices].AsIterator<short>();
-                        var moveNext = iter.MoveNext;
-                        var hasNext = iter.HasNext;
-                        int idx = 1, maxAt = 0;
-                        short max = moveNext();
-                        while (hasNext())
-                        {
-                            var val = moveNext();
-                            if (val > max)
-                            {
-                                max = val;
-                                maxAt = idx;
-                            }
-
-                            idx++;
-                        }
-
-                        ret.SetInt64(maxAt, iterIndex);
-                    } while (iterAxis.Next() != null && iterRet.Next() != null);
-                    break;
-                }
-			    case NPTypeCode.UInt16: 
-                {
-                    int at;
-                    do
-                    {
-                        var iter = arr[slices].AsIterator<ushort>();
-                        var moveNext = iter.MoveNext;
-                        var hasNext = iter.HasNext;
-                        int idx = 1, maxAt = 0;
-                        ushort max = moveNext();
-                        while (hasNext())
-                        {
-                            var val = moveNext();
-                            if (val > max)
-                            {
-                                max = val;
-                                maxAt = idx;
-                            }
-
-                            idx++;
-                        }
-
-                        ret.SetInt64(maxAt, iterIndex);
-                    } while (iterAxis.Next() != null && iterRet.Next() != null);
-                    break;
-                }
-			    case NPTypeCode.Int32: 
-                {
-                    int at;
-                    do
-                    {
-                        var iter = arr[slices].AsIterator<int>();
-                        var moveNext = iter.MoveNext;
-                        var hasNext = iter.HasNext;
-                        int idx = 1, maxAt = 0;
-                        int max = moveNext();
-                        while (hasNext())
-                        {
-                            var val = moveNext();
-                            if (val > max)
-                            {
-                                max = val;
-                                maxAt = idx;
-                            }
-
-                            idx++;
-                        }
-
-                        ret.SetInt64(maxAt, iterIndex);
-                    } while (iterAxis.Next() != null && iterRet.Next() != null);
-                    break;
-                }
-			    case NPTypeCode.UInt32: 
-                {
-                    int at;
-                    do
-                    {
-                        var iter = arr[slices].AsIterator<uint>();
-                        var moveNext = iter.MoveNext;
-                        var hasNext = iter.HasNext;
-                        int idx = 1, maxAt = 0;
-                        uint max = moveNext();
-                        while (hasNext())
-                        {
-                            var val = moveNext();
-                            if (val > max)
-                            {
-                                max = val;
-                                maxAt = idx;
-                            }
-
-                            idx++;
-                        }
-
-                        ret.SetInt64(maxAt, iterIndex);
-                    } while (iterAxis.Next() != null && iterRet.Next() != null);
-                    break;
-                }
-			    case NPTypeCode.Int64: 
-                {
-                    int at;
-                    do
-                    {
-                        var iter = arr[slices].AsIterator<long>();
-                        var moveNext = iter.MoveNext;
-                        var hasNext = iter.HasNext;
-                        int idx = 1, maxAt = 0;
-                        long max = moveNext();
-                        while (hasNext())
-                        {
-                            var val = moveNext();
-                            if (val > max)
-                            {
-                                max = val;
-                                maxAt = idx;
-                            }
-
-                            idx++;
-                        }
-
-                        ret.SetInt64(maxAt, iterIndex);
-                    } while (iterAxis.Next() != null && iterRet.Next() != null);
-                    break;
-                }
-			    case NPTypeCode.UInt64: 
-                {
-                    int at;
-                    do
-                    {
-                        var iter = arr[slices].AsIterator<ulong>();
-                        var moveNext = iter.MoveNext;
-                        var hasNext = iter.HasNext;
-                        int idx = 1, maxAt = 0;
-                        ulong max = moveNext();
-                        while (hasNext())
-                        {
-                            var val = moveNext();
-                            if (val > max)
-                            {
-                                max = val;
-                                maxAt = idx;
-                            }
-
-                            idx++;
-                        }
-
-                        ret.SetInt64(maxAt, iterIndex);
-                    } while (iterAxis.Next() != null && iterRet.Next() != null);
-                    break;
-                }
-			    case NPTypeCode.Char: 
-                {
-                    int at;
-                    do
-                    {
-                        var iter = arr[slices].AsIterator<char>();
-                        var moveNext = iter.MoveNext;
-                        var hasNext = iter.HasNext;
-                        int idx = 1, maxAt = 0;
-                        char max = moveNext();
-                        while (hasNext())
-                        {
-                            var val = moveNext();
-                            if (val > max)
-                            {
-                                max = val;
-                                maxAt = idx;
-                            }
-
-                            idx++;
-                        }
-
-                        ret.SetInt64(maxAt, iterIndex);
-                    } while (iterAxis.Next() != null && iterRet.Next() != null);
-                    break;
-                }
-			    case NPTypeCode.Double:
-                {
-                    int at;
-                    do
-                    {
-                        var iter = arr[slices].AsIterator<double>();
-                        var moveNext = iter.MoveNext;
-                        var hasNext = iter.HasNext;
-                        int idx = 1, maxAt = 0;
-                        double max = moveNext();
-                        while (hasNext())
-                        {
-                            var val = moveNext();
-                            // NumPy: first NaN always wins
-                            if (val > max || (double.IsNaN(val) && !double.IsNaN(max)))
-                            {
-                                max = val;
-                                maxAt = idx;
-                            }
-
-                            idx++;
-                        }
-
-                        ret.SetInt64(maxAt, iterIndex);
-                    } while (iterAxis.Next() != null && iterRet.Next() != null);
-                    break;
-                }
-			    case NPTypeCode.Single:
-                {
-                    int at;
-                    do
-                    {
-                        var iter = arr[slices].AsIterator<float>();
-                        var moveNext = iter.MoveNext;
-                        var hasNext = iter.HasNext;
-                        int idx = 1, maxAt = 0;
-                        float max = moveNext();
-                        while (hasNext())
-                        {
-                            var val = moveNext();
-                            // NumPy: first NaN always wins
-                            if (val > max || (float.IsNaN(val) && !float.IsNaN(max)))
-                            {
-                                max = val;
-                                maxAt = idx;
-                            }
-
-                            idx++;
-                        }
-
-                        ret.SetInt64(maxAt, iterIndex);
-                    } while (iterAxis.Next() != null && iterRet.Next() != null);
-                    break;
-                }
-			    case NPTypeCode.Decimal: 
-                {
-                    int at;
-                    do
-                    {
-                        var iter = arr[slices].AsIterator<decimal>();
-                        var moveNext = iter.MoveNext;
-                        var hasNext = iter.HasNext;
-                        int idx = 1, maxAt = 0;
-                        decimal max = moveNext();
-                        while (hasNext())
-                        {
-                            var val = moveNext();
-                            if (val > max)
-                            {
-                                max = val;
-                                maxAt = idx;
-                            }
-
-                            idx++;
-                        }
-
-                        ret.SetInt64(maxAt, iterIndex);
-                    } while (iterAxis.Next() != null && iterRet.Next() != null);
-                    break;
-                }
-			    default:
-				    throw new NotSupportedException();
-		    }
-            #endregion
-#endif
-
-            // Apply keepdims reshape if needed
-            if (keepdims)
+            fixed (int* inputStrides = shape.strides)
+            fixed (int* inputDims = shape.dimensions)
+            fixed (int* outputStrides = ret.Shape.strides)
             {
-                ret.Storage.Reshape(outputShape);
+                kernel((void*)inputAddr, (void*)ret.Address, inputStrides, inputDims, outputStrides, axis, axisSize, arr.ndim, outputSize);
             }
+
+            if (keepdims)
+                ret.Storage.Reshape(outputShape);
 
             return ret;
         }
 
-        // ReduceArgMax method end - the main entry point method ends above at the ExecuteAxisArgReduction call
-
-        public int ArgMaxElementwise(NDArray arr)
-        {
-            return Converts.ToInt32(argmax_elementwise(arr));
-        }
-
+        /// <summary>
+        /// Element-wise argmax for types requiring special handling (Boolean, Single, Double with NaN).
+        /// Called by argmax_elementwise_il for these types only.
+        /// </summary>
         protected object argmax_elementwise(NDArray arr)
         {
             if (arr.Shape.IsScalar || (arr.Shape.size == 1 && arr.Shape.NDim == 1))
-                return NDArray.Scalar(0);
+                return 0;
 
-#if _REGEN
-            #region Compute
+            // This method is only called for Boolean, Single, Double types
+            // All other types use IL-generated kernels via argmax_elementwise_il
             switch (arr.GetTypeCode)
-		    {
-			    %foreach supported_numericals,supported_numericals_lowercase%
-			    case NPTypeCode.#1: 
-                {
-                    var iter = arr.AsIterator<#2>();
-                    var moveNext = iter.MoveNext;
-                    var hasNext = iter.HasNext;
-                    int idx = 1, maxAt = 0;
-                    |#2 max = moveNext();
-                    while (hasNext())
-                    {
-                        var val = moveNext();
-                        if (val > max)
-                        {
-                            max = val;
-                            maxAt = idx;
-                        }
-
-                        idx++;
-                    }
-
-                    return maxAt;
-                }
-			    %
-			    default:
-				    throw new NotSupportedException();
-		    }
-            #endregion
-#else
-
-            #region Compute
-            switch (arr.GetTypeCode)
-		    {
-			    case NPTypeCode.Boolean:
+            {
+                case NPTypeCode.Boolean:
                 {
                     // Boolean: True=1, False=0, so argmax finds first True
                     var iter = arr.AsIterator<bool>();
@@ -615,203 +193,11 @@ namespace NumSharp.Backends
                             max = val;
                             maxAt = idx;
                         }
-
                         idx++;
                     }
-
                     return maxAt;
                 }
-			    case NPTypeCode.Byte:
-                {
-                    var iter = arr.AsIterator<byte>();
-                    var moveNext = iter.MoveNext;
-                    var hasNext = iter.HasNext;
-                    int idx = 1, maxAt = 0;
-                    byte max = moveNext();
-                    while (hasNext())
-                    {
-                        var val = moveNext();
-                        if (val > max)
-                        {
-                            max = val;
-                            maxAt = idx;
-                        }
-
-                        idx++;
-                    }
-
-                    return maxAt;
-                }
-			    case NPTypeCode.Int16: 
-                {
-                    var iter = arr.AsIterator<short>();
-                    var moveNext = iter.MoveNext;
-                    var hasNext = iter.HasNext;
-                    int idx = 1, maxAt = 0;
-                    short max = moveNext();
-                    while (hasNext())
-                    {
-                        var val = moveNext();
-                        if (val > max)
-                        {
-                            max = val;
-                            maxAt = idx;
-                        }
-
-                        idx++;
-                    }
-
-                    return maxAt;
-                }
-			    case NPTypeCode.UInt16: 
-                {
-                    var iter = arr.AsIterator<ushort>();
-                    var moveNext = iter.MoveNext;
-                    var hasNext = iter.HasNext;
-                    int idx = 1, maxAt = 0;
-                    ushort max = moveNext();
-                    while (hasNext())
-                    {
-                        var val = moveNext();
-                        if (val > max)
-                        {
-                            max = val;
-                            maxAt = idx;
-                        }
-
-                        idx++;
-                    }
-
-                    return maxAt;
-                }
-			    case NPTypeCode.Int32: 
-                {
-                    var iter = arr.AsIterator<int>();
-                    var moveNext = iter.MoveNext;
-                    var hasNext = iter.HasNext;
-                    int idx = 1, maxAt = 0;
-                    int max = moveNext();
-                    while (hasNext())
-                    {
-                        var val = moveNext();
-                        if (val > max)
-                        {
-                            max = val;
-                            maxAt = idx;
-                        }
-
-                        idx++;
-                    }
-
-                    return maxAt;
-                }
-			    case NPTypeCode.UInt32: 
-                {
-                    var iter = arr.AsIterator<uint>();
-                    var moveNext = iter.MoveNext;
-                    var hasNext = iter.HasNext;
-                    int idx = 1, maxAt = 0;
-                    uint max = moveNext();
-                    while (hasNext())
-                    {
-                        var val = moveNext();
-                        if (val > max)
-                        {
-                            max = val;
-                            maxAt = idx;
-                        }
-
-                        idx++;
-                    }
-
-                    return maxAt;
-                }
-			    case NPTypeCode.Int64: 
-                {
-                    var iter = arr.AsIterator<long>();
-                    var moveNext = iter.MoveNext;
-                    var hasNext = iter.HasNext;
-                    int idx = 1, maxAt = 0;
-                    long max = moveNext();
-                    while (hasNext())
-                    {
-                        var val = moveNext();
-                        if (val > max)
-                        {
-                            max = val;
-                            maxAt = idx;
-                        }
-
-                        idx++;
-                    }
-
-                    return maxAt;
-                }
-			    case NPTypeCode.UInt64: 
-                {
-                    var iter = arr.AsIterator<ulong>();
-                    var moveNext = iter.MoveNext;
-                    var hasNext = iter.HasNext;
-                    int idx = 1, maxAt = 0;
-                    ulong max = moveNext();
-                    while (hasNext())
-                    {
-                        var val = moveNext();
-                        if (val > max)
-                        {
-                            max = val;
-                            maxAt = idx;
-                        }
-
-                        idx++;
-                    }
-
-                    return maxAt;
-                }
-			    case NPTypeCode.Char: 
-                {
-                    var iter = arr.AsIterator<char>();
-                    var moveNext = iter.MoveNext;
-                    var hasNext = iter.HasNext;
-                    int idx = 1, maxAt = 0;
-                    char max = moveNext();
-                    while (hasNext())
-                    {
-                        var val = moveNext();
-                        if (val > max)
-                        {
-                            max = val;
-                            maxAt = idx;
-                        }
-
-                        idx++;
-                    }
-
-                    return maxAt;
-                }
-			    case NPTypeCode.Double:
-                {
-                    var iter = arr.AsIterator<double>();
-                    var moveNext = iter.MoveNext;
-                    var hasNext = iter.HasNext;
-                    int idx = 1, maxAt = 0;
-                    double max = moveNext();
-                    while (hasNext())
-                    {
-                        var val = moveNext();
-                        // NumPy: first NaN always wins
-                        if (val > max || (double.IsNaN(val) && !double.IsNaN(max)))
-                        {
-                            max = val;
-                            maxAt = idx;
-                        }
-
-                        idx++;
-                    }
-
-                    return maxAt;
-                }
-			    case NPTypeCode.Single:
+                case NPTypeCode.Single:
                 {
                     var iter = arr.AsIterator<float>();
                     var moveNext = iter.MoveNext;
@@ -827,38 +213,33 @@ namespace NumSharp.Backends
                             max = val;
                             maxAt = idx;
                         }
-
                         idx++;
                     }
-
                     return maxAt;
                 }
-			    case NPTypeCode.Decimal: 
+                case NPTypeCode.Double:
                 {
-                    var iter = arr.AsIterator<decimal>();
+                    var iter = arr.AsIterator<double>();
                     var moveNext = iter.MoveNext;
                     var hasNext = iter.HasNext;
                     int idx = 1, maxAt = 0;
-                    decimal max = moveNext();
+                    double max = moveNext();
                     while (hasNext())
                     {
                         var val = moveNext();
-                        if (val > max)
+                        // NumPy: first NaN always wins
+                        if (val > max || (double.IsNaN(val) && !double.IsNaN(max)))
                         {
                             max = val;
                             maxAt = idx;
                         }
-
                         idx++;
                     }
-
                     return maxAt;
                 }
-			    default:
-				    throw new NotSupportedException();
-		    }
-            #endregion
-#endif
+                default:
+                    throw new NotSupportedException($"argmax_elementwise should only be called for Boolean, Single, Double. Got: {arr.GetTypeCode}");
+            }
         }
     }
 }

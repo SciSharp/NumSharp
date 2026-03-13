@@ -1,5 +1,4 @@
-﻿using System;
-using NumSharp.Generic;
+﻿using NumSharp.Generic;
 
 namespace NumSharp.Backends
 {
@@ -8,13 +7,13 @@ namespace NumSharp.Backends
         /// <summary>
         /// Returns a boolean array where two arrays are element-wise equal within a
         /// tolerance.
-        /// The tolerance values are positive, typically very small numbers.The    
+        /// The tolerance values are positive, typically very small numbers.The
         /// relative difference (`rtol` * abs(`b`)) and the absolute difference
         /// `atol` are added together to compare against the absolute difference
         /// between `a` and `b`.
         /// Warning: The default `atol` is not appropriate for comparing numbers
         /// that are much smaller than one(see Notes).
-        /// 
+        ///
         /// See also <seealso cref="allclose"/>
         ///
         ///Notes:
@@ -44,42 +43,40 @@ namespace NumSharp.Backends
         ///</returns>
         public override NDArray<bool> IsClose(NDArray a, NDArray b, double rtol = 1.0E-5, double atol = 1.0E-8, bool equal_nan = false)
         {
-            // Broadcast arrays to common shape
-            var (ba, bb) = np.broadcast_arrays(a, b);
+            // NumPy implementation (from numpy/_core/numeric.py):
+            // result = (less_equal(abs(x - y), atol + rtol * abs(y))
+            //           & isfinite(y)
+            //           | (x == y))
+            // if equal_nan:
+            //     result |= isnan(x) & isnan(y)
 
-            var result = new NDArray<bool>(ba.Shape, true);
-            int size = ba.size;
+            // Convert to double for comparison (NumPy casts to inexact type)
+            var x = a.astype(NPTypeCode.Double, copy: false);
+            var y = b.astype(NPTypeCode.Double, copy: false);
 
-            unsafe
+            // Vectorized computation using existing np operations
+            var diff = np.abs(x - y);                    // |a - b|
+            var tolerance = atol + rtol * np.abs(y);     // atol + rtol * |b|
+
+            // Core formula: |a - b| <= tolerance AND diff is finite AND y is finite, OR exact equality
+            // Note: We explicitly check diffFinite because NumSharp's <= operator has a bug where
+            // NaN <= value returns True instead of False (IEEE 754 requires False for all NaN comparisons)
+            var diffFinite = np.isfinite(diff);          // diff must be finite for tolerance check
+            var withinTolerance = diff <= tolerance;     // |a - b| <= (atol + rtol * |b|)
+            var yFinite = np.isfinite(y);                // Only apply tolerance to finite values
+            var exactEqual = x == y;                     // Handles infinities (inf == inf is true)
+
+            // Combine: (within tolerance & diff finite & y finite) | exact equality
+            NDArray<bool> result = ((withinTolerance & diffFinite & yFinite) | exactEqual).MakeGeneric<bool>();
+
+            // Handle NaN comparison if requested
+            if (equal_nan)
             {
-                var dst = (bool*)result.Address;
-
-                // Convert both to double for comparison (NumPy behavior)
-                for (int i = 0; i < size; i++)
-                {
-                    double aVal = ba.GetAtIndex<double>(i);
-                    double bVal = bb.GetAtIndex<double>(i);
-                    dst[i] = IsCloseValue(aVal, bVal, rtol, atol, equal_nan);
-                }
+                NDArray<bool> bothNan = (np.isnan(x) & np.isnan(y)).MakeGeneric<bool>();
+                result = (result | bothNan).MakeGeneric<bool>();
             }
 
-            return result.MakeGeneric<bool>();
-        }
-
-        private static bool IsCloseValue(double a, double b, double rtol, double atol, bool equal_nan)
-        {
-            // Handle NaN
-            if (double.IsNaN(a) && double.IsNaN(b))
-                return equal_nan;
-            if (double.IsNaN(a) || double.IsNaN(b))
-                return false;
-
-            // Handle infinities - must be same sign
-            if (double.IsInfinity(a) || double.IsInfinity(b))
-                return a == b;
-
-            // NumPy formula: |a - b| <= (atol + rtol * |b|)
-            return Math.Abs(a - b) <= (atol + rtol * Math.Abs(b));
+            return result;
         }
     }
 }
