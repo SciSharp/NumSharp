@@ -10,7 +10,6 @@ namespace NumSharp.UnitTest.Logic
     public class np_isclose_Test
     {
         [Test]
-        [OpenBugs]
         public void np_isclose_1D()
         {
             //>>> np.isclose([1e10, 1e-7], [1.00001e10,1e-8])
