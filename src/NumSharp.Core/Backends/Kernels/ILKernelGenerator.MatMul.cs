@@ -144,6 +144,7 @@ namespace NumSharp.Backends.Kernels
             var locCRow = il.DeclareLocal(typeof(float*));  // 5: pointer to C[i,:]
             var locARow = il.DeclareLocal(typeof(float*));  // 6: pointer to A[i,:]
             var locBRow = il.DeclareLocal(typeof(float*));  // 7: pointer to B[k,:]
+            var locCAddr = il.DeclareLocal(typeof(float*)); // 8: temp C address for SIMD store
 
             const int vectorCount = 8; // Vector256<float>.Count
             const int elementSize = 4; // sizeof(float)
@@ -280,7 +281,7 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Bgt, lblInnerSimdEnd);
 
             // Emit SIMD body: C[i,j:j+8] += aik * B[k,j:j+8]
-            EmitSimdBodyFloat(il, locCRow, locBRow, locJ, locAik);
+            EmitSimdBodyFloat(il, locCRow, locBRow, locJ, locAik, locCAddr);
 
             // j += 8
             il.Emit(OpCodes.Ldloc, locJ);
@@ -360,7 +361,7 @@ namespace NumSharp.Backends.Kernels
         /// Emit SIMD body for float: C[i,j:j+8] += aik * B[k,j:j+8]
         /// Uses Vector256 with FMA when available.
         /// </summary>
-        private static void EmitSimdBodyFloat(ILGenerator il, LocalBuilder locCRow, LocalBuilder locBRow, LocalBuilder locJ, LocalBuilder locAik)
+        private static void EmitSimdBodyFloat(ILGenerator il, LocalBuilder locCRow, LocalBuilder locBRow, LocalBuilder locJ, LocalBuilder locAik, LocalBuilder locCAddr)
         {
             const int elementSize = 4;
 
@@ -395,8 +396,7 @@ namespace NumSharp.Backends.Kernels
             // Clean stack management for SIMD body
             // Store signature: Store(Vector256<T> source, T* destination)
 
-            // Save C address for later
-            var locCAddr = il.DeclareLocal(typeof(float*));
+            // Compute C address: cRow + j * elementSize
             il.Emit(OpCodes.Ldloc, locCRow);
             il.Emit(OpCodes.Ldloc, locJ);
             il.Emit(OpCodes.Conv_I);
@@ -450,6 +450,7 @@ namespace NumSharp.Backends.Kernels
             var locCRow = il.DeclareLocal(typeof(double*));
             var locARow = il.DeclareLocal(typeof(double*));
             var locBRow = il.DeclareLocal(typeof(double*));
+            var locCAddr = il.DeclareLocal(typeof(double*)); // temp C address for SIMD store
 
             const int vectorCount = 4; // Vector256<double>.Count
             const int elementSize = 8; // sizeof(double)
@@ -575,7 +576,7 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Ldloc, locJEnd);
             il.Emit(OpCodes.Bgt, lblInnerSimdEnd);
 
-            EmitSimdBodyDouble(il, locCRow, locBRow, locJ, locAik);
+            EmitSimdBodyDouble(il, locCRow, locBRow, locJ, locAik, locCAddr);
 
             il.Emit(OpCodes.Ldloc, locJ);
             il.Emit(OpCodes.Ldc_I4, vectorCount);
@@ -643,7 +644,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Emit SIMD body for double: C[i,j:j+4] += aik * B[k,j:j+4]
         /// </summary>
-        private static void EmitSimdBodyDouble(ILGenerator il, LocalBuilder locCRow, LocalBuilder locBRow, LocalBuilder locJ, LocalBuilder locAik)
+        private static void EmitSimdBodyDouble(ILGenerator il, LocalBuilder locCRow, LocalBuilder locBRow, LocalBuilder locJ, LocalBuilder locAik, LocalBuilder locCAddr)
         {
             const int elementSize = 8;
 
@@ -677,8 +678,7 @@ namespace NumSharp.Backends.Kernels
             // Clean stack management for SIMD body
             // Store signature: Store(Vector256<T> source, T* destination)
 
-            // Save C address for later
-            var locCAddr = il.DeclareLocal(typeof(double*));
+            // Compute C address: cRow + j * elementSize
             il.Emit(OpCodes.Ldloc, locCRow);
             il.Emit(OpCodes.Ldloc, locJ);
             il.Emit(OpCodes.Conv_I);
