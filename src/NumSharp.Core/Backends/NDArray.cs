@@ -327,7 +327,7 @@ namespace NumSharp
         /// <summary>
         ///     Data length of every dimension
         /// </summary>
-        public int[] shape
+        public long[] shape
         {
             get => Storage.Shape.Dimensions;
             set => Storage.Reshape(value);
@@ -341,13 +341,13 @@ namespace NumSharp
         /// <summary>
         ///     Total of elements
         /// </summary>
-        public int size => Storage.Shape.Size;
+        public long size => Storage.Shape.Size;
 
         public int dtypesize => Storage.DTypeSize;
 
         public char order => Storage.Shape.Order;
 
-        public int[] strides => Storage.Shape.Strides;
+        public long[] strides => Storage.Shape.Strides;
 
         /// <summary>
         ///     A 1-D iterator over the array.
@@ -568,12 +568,12 @@ namespace NumSharp
 
             //get all the dimensions involved till the axis
             var dims = Storage.Shape.dimensions;
-            int[] selectDimensions = new int[axis];
+            long[] selectDimensions = new long[axis];
             for (int i = 0; i < axis; i++)
                 selectDimensions[i] = dims[i];
 
             //compute len
-            int len = 1;
+            long len = 1;
             foreach (var i in selectDimensions)
                 len = len * i;
 
@@ -607,7 +607,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="indices">The coordinates to the wanted value</param>
         /// <remarks>Does not copy, returns a memory slice - this is similar to this[int[]]</remarks>
-        public NDArray GetData(params int[] indices) => new NDArray(Storage.GetData(indices)) {tensorEngine = this.tensorEngine};
+        public NDArray GetData(params int[] indices) => new NDArray(Storage.GetData(Shape.ComputeLongShape(indices))) {tensorEngine = this.tensorEngine};
 
         /// <summary>
         ///     Retrieves value of type <see cref="bool"/>.

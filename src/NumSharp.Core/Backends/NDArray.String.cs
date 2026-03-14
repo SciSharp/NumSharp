@@ -28,7 +28,8 @@ namespace NumSharp
             unsafe
             {
                 Debug.Assert(arr.typecode == NPTypeCode.Char);
-                return new string((char*)arr.Address, 0, arr.size);
+                Debug.Assert(arr.size < int.MaxValue);
+                return new string((char*)arr.Address, 0, (int)arr.size);
             }
         }
 
@@ -67,6 +68,17 @@ namespace NumSharp
         /// <remarks>Performs a copy due to String .net-framework limitations.</remarks>
         public string GetString(params int[] indices)
         {
+            return GetString(NumSharp.Shape.ComputeLongShape(indices));
+        }
+
+        /// <summary>
+        ///     Get a string out of a vector of chars.
+        /// </summary>
+        /// <param name="indices"></param>
+        /// <returns></returns>
+        /// <remarks>Performs a copy due to String .net-framework limitations.</remarks>
+        public string GetString(params long[] indices)
+        {
             unsafe
             {
                 if (Shape.dimensions.Length - 1 != indices.Length)
@@ -96,6 +108,10 @@ namespace NumSharp
         }
 
         public void SetString(string value, params int[] indices)
+        {
+        }
+
+        public void SetString(string value, params long[] indices)
         {
             Debug.Assert(typecode == NPTypeCode.Char);
             NumSharpException.ThrowIfNotWriteable(Shape);

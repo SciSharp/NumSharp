@@ -112,7 +112,7 @@ namespace NumSharp.Backends
         /// <seealso cref="GetView(Slice[])"/>
         /// <seealso cref="Alias()"/>
         [MethodImpl(OptimizeAndInline)]
-        public UnmanagedStorage GetData(params int[] indices)
+        public UnmanagedStorage GetData(params long[] indices)
         {
             var this_shape = Shape;
 
@@ -123,7 +123,7 @@ namespace NumSharp.Backends
                 var (shape, offset) = this_shape.GetSubshape(indices);
                 // For non-broadcasted contiguous subshapes, use size (the actual data extent).
                 // Only use BufferSize when the subshape itself is broadcasted.
-                int sliceSize = shape.IsBroadcasted
+                long sliceSize = shape.IsBroadcasted
                     ? (shape.BufferSize > 0 ? shape.BufferSize : shape.size)
                     : shape.size;
                 // Create shape with offset=0 since InternalArray.Slice already accounts for the offset

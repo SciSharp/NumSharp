@@ -7,10 +7,10 @@ namespace NumSharp.Utilities
     {
         public delegate void EndCallbackHandler(ref ValueCoordinatesIncrementor incr);
         private readonly EndCallbackHandler endCallback;
-        private readonly int[] dimensions;
-        private readonly int resetto;
-        public readonly int[] Index;
-        private int subcursor;
+        private readonly long[] dimensions;
+        private readonly long resetto;
+        public readonly long[] Index;
+        private long subcursor;
 
         /// <summary>Initializes a new instance of the <see cref="T:System.Object"></see> class.</summary>
         public ValueCoordinatesIncrementor(ref Shape shape)
@@ -18,8 +18,8 @@ namespace NumSharp.Utilities
             if (shape.IsEmpty || shape.size == 0)
                 throw new InvalidOperationException("Can't construct ValueCoordinatesIncrementor with an empty shape.");
 
-            dimensions = shape.IsScalar ? new[] {1} : shape.dimensions;
-            Index = new int[dimensions.Length];
+            dimensions = shape.IsScalar ? new[] {1L} : shape.dimensions;
+            Index = new long[dimensions.Length];
             resetto = subcursor = dimensions.Length - 1;
             endCallback = null;
         }
@@ -29,16 +29,20 @@ namespace NumSharp.Utilities
             this.endCallback = endCallback;
         }
 
-        public ValueCoordinatesIncrementor(int[] dims)
+        public ValueCoordinatesIncrementor(int[] dims) : this(Shape.ComputeLongShape(dims))
+        {
+        }
+        
+        public ValueCoordinatesIncrementor(long[] dims)
         {
             if (dims == null)
                 throw new InvalidOperationException("Can't construct ValueCoordinatesIncrementor with an empty shape.");
 
             if (dims.Length == 0)
-                dims = new int[] {1};
+                dims = new long[] {1};
 
             dimensions = dims;
-            Index = new int[dims.Length];
+            Index = new long[dims.Length];
             resetto = subcursor = dimensions.Length - 1;
             endCallback = null;
         }
@@ -90,10 +94,10 @@ namespace NumSharp.Utilities
 
     public struct ValueCoordinatesIncrementorAutoResetting
     {
-        private readonly int[] dimensions;
-        private readonly int resetto;
-        public readonly int[] Index;
-        private int subcursor;
+        private readonly long[] dimensions;
+        private readonly long resetto;
+        public readonly long[] Index;
+        private long subcursor;
 
         /// <summary>Initializes a new instance of the <see cref="T:System.Object"></see> class.</summary>
         public ValueCoordinatesIncrementorAutoResetting(ref Shape shape)
@@ -106,16 +110,16 @@ namespace NumSharp.Utilities
             resetto = subcursor = dimensions.Length - 1;
         }
 
-        public ValueCoordinatesIncrementorAutoResetting(int[] dims)
+        public ValueCoordinatesIncrementorAutoResetting(long[] dims)
         {
             if (dims == null)
                 throw new InvalidOperationException("Can't construct ValueCoordinatesIncrementorAutoResetting with an empty shape.");
 
             if (dims.Length == 0)
-                dims = new int[] {1};
+                dims = new long[] {1};
 
             dimensions = dims;
-            Index = new int[dims.Length];
+            Index = new long[dims.Length];
             resetto = subcursor = dimensions.Length - 1;
         }
 

@@ -80,7 +80,7 @@ namespace NumSharp
         /// <param name="index"></param>
         /// <returns></returns>
         [MethodImpl(Inline)]
-        public static Slice Index(int index) => new Slice(index, index + 1) { IsIndex = true };
+        public static Slice Index(long index) => new Slice(index, index + 1) { IsIndex = true };
 
         ///// <summary>
         ///// return multiple elements for this dimension specified by the given index array (or boolean mask array)
@@ -90,9 +90,9 @@ namespace NumSharp
         //[MethodImpl(Inline)]
         //public static Slice Select(NDArray index_array_or_mask) => new Slice(null, null) { Selection=index_array_or_mask };
 
-        public int? Start;
-        public int? Stop;
-        public int Step;
+        public long? Start;
+        public long? Stop;
+        public long Step;
         public bool IsIndex;
         public bool IsEllipsis;
         public bool IsNewAxis;
@@ -108,7 +108,7 @@ namespace NumSharp
         /// The length is not guaranteed to be known for i.e. a slice like ":". Make sure to check Start and Stop 
         /// for null before using it</remarks>
         /// </summary>
-        public int? Length => Stop - Start;
+        public long? Length => Stop - Start;
 
         /// <summary>
         /// ndarray can be indexed using slicing
@@ -117,7 +117,7 @@ namespace NumSharp
         /// <param name="start">Start index of the slice, null means from the start of the array</param>
         /// <param name="stop">Stop index (first index after end of slice), null means to the end of the array</param>
         /// <param name="step">Optional step to select every n-th element, defaults to 1</param>
-        public Slice(int? start = null, int? stop = null, int step = 1)
+        public Slice(long? start = null, long? stop = null, long step = 1)
         {
             Start = start;
             Stop = stop;
@@ -186,7 +186,7 @@ namespace NumSharp
                 Start = null;
             else
             {
-                if (!int.TryParse(start_string, out var start))
+                if (!long.TryParse(start_string, out var start))
                     throw new ArgumentException($"Invalid value for start: {start_string}");
                 Start = start;
             }
@@ -195,7 +195,7 @@ namespace NumSharp
                 Stop = null;
             else
             {
-                if (!int.TryParse(stop_string, out var stop))
+                if (!long.TryParse(stop_string, out var stop))
                     throw new ArgumentException($"Invalid value for start: {stop_string}");
                 Stop = stop;
             }
@@ -204,7 +204,7 @@ namespace NumSharp
                 Step = 1;
             else
             {
-                if (!int.TryParse(step_string, out var step))
+                if (!long.TryParse(step_string, out var step))
                     throw new ArgumentException($"Invalid value for start: {step_string}");
                 Step = step;
             }
@@ -262,7 +262,7 @@ namespace NumSharp
         // return the size of the slice, given the data dimension on this axis
         // note: this works only with sanitized shapes!
         [MethodImpl(Inline)]
-        public int GetSize()
+        public long GetSize()
         {
             var astep = Math.Abs(Step);
             return (Math.Abs(Start.Value - Stop.Value) + (astep - 1)) / astep;
@@ -274,7 +274,7 @@ namespace NumSharp
         /// <param name="dim"></param>
         /// <returns></returns>
         [MethodImpl(OptimizeAndInline)]
-        public SliceDef ToSliceDef(int dim)
+        public SliceDef ToSliceDef(long dim)
         {
             if (IsIndex)
             {
@@ -351,7 +351,7 @@ namespace NumSharp
             return a;
         }
 
-        public static implicit operator Slice(int index) => Slice.Index(index);
+        public static implicit operator Slice(long index) => Slice.Index(index);
         public static implicit operator Slice(string slice) => new Slice(slice);
         //public static implicit operator Slice(NDArray selection) => Slice.Select(selection);
 
@@ -360,16 +360,16 @@ namespace NumSharp
 
     public struct SliceDef
     {
-        public int Start; // start index in array
-        public int Step; // positive => forward from Start, 
-        public int Count; // number of steps to take from Start (1 means just take Start, 0 means take nothing, -1 means this is an index)
+        public long Start; // start index in array
+        public long Step; // positive => forward from Start, 
+        public long Count; // number of steps to take from Start (1 means just take Start, 0 means take nothing, -1 means this is an index)
 
-        public SliceDef(int start, int step, int count)
+        public SliceDef(long start, long step, long count)
         {
             (Start, Step, Count) = (start, step, count);
         }
 
-        public SliceDef(int idx)
+        public SliceDef(long idx)
         {
             (Start, Step, Count) = (idx, 1, -1);
         }

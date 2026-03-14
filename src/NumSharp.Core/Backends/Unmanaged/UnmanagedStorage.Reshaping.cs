@@ -13,7 +13,7 @@ namespace NumSharp.Backends
         ///     Changes the shape representing this storage.
         /// </summary>
         /// <exception cref="IncorrectShapeException">If shape's size mismatches current shape size.</exception>
-        public void Reshape(params int[] dimensions)
+        public void Reshape(params long[] dimensions)
         {
             if (dimensions == null || dimensions.Length == 0)
                 throw new ArgumentException(nameof(dimensions));
@@ -26,7 +26,7 @@ namespace NumSharp.Backends
         /// </summary>
         /// <exception cref="IncorrectShapeException">If shape's size mismatches current shape size.</exception>
         /// <exception cref="ArgumentException">If <paramref name="dimensions"/>'s size == 0</exception>
-        public void Reshape(int[] dimensions, bool @unsafe)
+        public void Reshape(long[] dimensions, bool @unsafe)
         {
             if (dimensions == null)
                 throw new ArgumentNullException(nameof(dimensions));
