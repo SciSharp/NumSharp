@@ -56,7 +56,7 @@ namespace NumSharp.Utilities
         }
 
         [MethodImpl(Optimize)]
-        public int[] Next()
+        public long[] Next()
         {
             if (subcursor <= -1)
                 return null;
@@ -91,10 +91,10 @@ namespace NumSharp.Utilities
 
     public class NDCoordinatesIncrementorAutoResetting
     {
-        private readonly int[] dimensions;
-        private readonly int resetto;
-        public readonly int[] Index;
-        private int subcursor;
+        private readonly long[] dimensions;
+        private readonly long resetto;
+        public readonly long[] Index;
+        private long subcursor;
 
         /// <summary>Initializes a new instance of the <see cref="T:System.Object"></see> class.</summary>
         public NDCoordinatesIncrementorAutoResetting(ref Shape shape)
@@ -103,20 +103,20 @@ namespace NumSharp.Utilities
                 throw new InvalidOperationException("Can't construct NDCoordinatesIncrementorAutoResetting with an empty shape.");
 
             dimensions = shape.dimensions;
-            Index = new int[dimensions.Length];
+            Index = new long[dimensions.Length];
             resetto = subcursor = dimensions.Length - 1;
         }
 
-        public NDCoordinatesIncrementorAutoResetting(int[] dims)
+        public NDCoordinatesIncrementorAutoResetting(long[] dims)
         {
             if (dims == null)
                 throw new InvalidOperationException("Can't construct NDCoordinatesIncrementorAutoResetting with an empty shape.");
 
             if (dims.Length == 0)
-                dims = new int[] {1};
+                dims = new long[] {1};
 
             dimensions = dims;
-            Index = new int[dims.Length];
+            Index = new long[dims.Length];
             resetto = subcursor = dimensions.Length - 1;
         }
 
@@ -127,7 +127,7 @@ namespace NumSharp.Utilities
         }
 
         [MethodImpl(Optimize)]
-        public int[] Next()
+        public long[] Next()
         {
             if (++Index[subcursor] >= dimensions[subcursor])
             {
@@ -151,13 +151,6 @@ namespace NumSharp.Utilities
                 subcursor = resetto;
             }
 
-            //Console.Write("[");
-            //for (int i = 0; i < dimensions.Length; i++)
-            //{
-            //    Console.Write($"{Index[i]}, ");
-            //}
-            //
-            //Console.WriteLine("]");
             return Index;
         }
     }

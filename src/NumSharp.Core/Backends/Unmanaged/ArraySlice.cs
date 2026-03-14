@@ -294,7 +294,7 @@ namespace NumSharp.Backends.Unmanaged
         public static ArraySlice<decimal> FromArray(decimal[] decimals, bool copy = false) => new ArraySlice<decimal>(UnmanagedMemoryBlock<decimal>.FromArray(decimals, copy));
 #endif
 
-        public static IArraySlice Allocate(Type elementType, int count, object fill)
+        public static IArraySlice Allocate(Type elementType, long count, object fill)
         {
             switch (elementType.GetTypeCode())
             {
@@ -323,7 +323,7 @@ namespace NumSharp.Backends.Unmanaged
             }
         }
 
-        public static IArraySlice Allocate(Type elementType, int count, bool fillDefault)
+        public static IArraySlice Allocate(Type elementType, long count, bool fillDefault)
         {
             if (!fillDefault)
                 return Allocate(elementType, count);
@@ -355,7 +355,7 @@ namespace NumSharp.Backends.Unmanaged
             }
         }
 
-        public static IArraySlice Allocate(Type elementType, int count)
+        public static IArraySlice Allocate(Type elementType, long count)
         {
             switch (elementType.GetTypeCode())
             {
@@ -384,7 +384,7 @@ namespace NumSharp.Backends.Unmanaged
             }
         }
 
-        public static IArraySlice Allocate(NPTypeCode typeCode, int count, object fill)
+        public static IArraySlice Allocate(NPTypeCode typeCode, long count, object fill)
         {
             switch (typeCode)
             {
@@ -413,7 +413,7 @@ namespace NumSharp.Backends.Unmanaged
             }
         }
 
-        public static IArraySlice Allocate(NPTypeCode typeCode, int count, bool fillDefault)
+        public static IArraySlice Allocate(NPTypeCode typeCode, long count, bool fillDefault)
         {
             if (!fillDefault)
                 return Allocate(typeCode, count);
@@ -445,7 +445,7 @@ namespace NumSharp.Backends.Unmanaged
             }
         }
 
-        public static IArraySlice Allocate(NPTypeCode typeCode, int count)
+        public static IArraySlice Allocate(NPTypeCode typeCode, long count)
         {
             switch (typeCode)
             {
@@ -489,7 +489,7 @@ namespace NumSharp.Backends.Unmanaged
         /// <param name="count">How many items this array will have (aka Count).</param>
         /// <param name="fillDefault">Should the newly allocated memory be filled with the default of <typeparamref name="T"/></param>
         /// <returns>A newly allocated array.</returns>
-        public static ArraySlice<T> Allocate<T>(int count, bool fillDefault) where T : unmanaged
+        public static ArraySlice<T> Allocate<T>(long count, bool fillDefault) where T : unmanaged
             => !fillDefault ? Allocate<T>(count) : new ArraySlice<T>(new UnmanagedMemoryBlock<T>(count, default(T)));
 
         /// <summary>

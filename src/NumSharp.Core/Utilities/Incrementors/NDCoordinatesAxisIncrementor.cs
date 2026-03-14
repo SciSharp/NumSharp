@@ -75,7 +75,7 @@ namespace NumSharp.Utilities
             Slices[Axis] = Slice.All;
         }
 
-        public NDCoordinatesAxisIncrementor(int[] dims, int axis, Action<NDCoordinatesAxisIncrementor> endCallback) : this(dims, axis)
+        public NDCoordinatesAxisIncrementor(long[] dims, int axis, Action<NDCoordinatesAxisIncrementor> endCallback) : this(dims, axis)
         {
             this.endCallback = endCallback;
         }

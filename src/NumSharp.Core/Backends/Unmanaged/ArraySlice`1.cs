@@ -167,7 +167,7 @@ namespace NumSharp.Backends.Unmanaged
             var addr = Address;
             var len = Count;
             var eq = EqualityComparer<T>.Default;
-            for (int i = 0; i < len; i++)
+            for (long i = 0; i < len; i++)
             {
                 if (eq.Equals(addr[i], item))
                 {
@@ -340,7 +340,9 @@ namespace NumSharp.Backends.Unmanaged
         /// <remarks>Does not perform copy.</remarks>
         Span<T1> IArraySlice.AsSpan<T1>()
         {
-            return new Span<T1>(VoidAddress, Count);
+            if (Count > int.MaxValue)
+                throw new InvalidOperationException("ArraySlice size exceeds Span<T> maximum length. Use pointer access instead.");
+            return new Span<T1>(VoidAddress, (int)Count);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -482,7 +484,10 @@ namespace NumSharp.Backends.Unmanaged
             if (Count == 0)
                 return Array.Empty<T>();
 
-            var destination = new T[Count];
+            if (Count > int.MaxValue)
+                throw new InvalidOperationException("ArraySlice size exceeds maximum .NET array length.");
+
+            var destination = new T[(int)Count];
             var len = Count * ItemLength;
             fixed (T* dst = destination)
                 Buffer.MemoryCopy(Address, dst, len, len);
@@ -497,7 +502,7 @@ namespace NumSharp.Backends.Unmanaged
         /// <param name="count">How many items this array will have (aka Count).</param>
         /// <param name="fill">The item to fill the newly allocated memory with.</param>
         /// <returns>A newly allocated array.</returns>
-        public static ArraySlice<T> Allocate(int count, T fill)
+        public static ArraySlice<T> Allocate(long count, T fill)
             => new ArraySlice<T>(new UnmanagedMemoryBlock<T>(count, fill));
 
         /// <summary>
@@ -506,7 +511,7 @@ namespace NumSharp.Backends.Unmanaged
         /// <param name="count">How many items this array will have (aka Count).</param>
         /// <param name="fillDefault">Should the newly allocated memory be filled with the default of <typeparamref name="T"/></param>
         /// <returns>A newly allocated array.</returns>
-        public static ArraySlice<T> Allocate(int count, bool fillDefault)
+        public static ArraySlice<T> Allocate(long count, bool fillDefault)
             => !fillDefault ? Allocate(count) : new ArraySlice<T>(new UnmanagedMemoryBlock<T>(count, default(T)));
 
         /// <summary>
@@ -514,7 +519,7 @@ namespace NumSharp.Backends.Unmanaged
         /// </summary>
         /// <param name="count">How many items this array will have (aka Count).</param>
         /// <returns>A newly allocated array.</returns>
-        public static ArraySlice<T> Allocate(int count)
+        public static ArraySlice<T> Allocate(long count)
             => new ArraySlice<T>(new UnmanagedMemoryBlock<T>(count));
 
         #endregion
@@ -531,7 +536,7 @@ namespace NumSharp.Backends.Unmanaged
         private IEnumerable<T> _enumerate()
         {
             var len = this.Count;
-            for (int i = 0; i < len; i++)
+            for (long i = 0; i < len; i++)
             {
                 yield return this[i];
             }

@@ -5,7 +5,7 @@ namespace NumSharp.Utilities
     public class NDOffsetIncrementor
     {
         private readonly ValueCoordinatesIncrementor incr;
-        private readonly int[] index;
+        private readonly long[] index;
         private bool hasNext;
         private readonly Shape shape;
 
@@ -17,7 +17,7 @@ namespace NumSharp.Utilities
             hasNext = true;
         }
 
-        public NDOffsetIncrementor(int[] dims) : this(new Shape(dims)) {}
+        public NDOffsetIncrementor(long[] dims) : this(new Shape(dims)) {}
 
         public bool HasNext => hasNext;
 
@@ -28,12 +28,12 @@ namespace NumSharp.Utilities
         }
 
         [MethodImpl(Optimize)]
-        public int Next()
+        public long Next()
         {
             if (!hasNext)
                 return -1;
 
-            int offset = 0;
+            long offset = 0;
             if (shape.IsSliced)
             {
                 offset = shape.GetOffset(index);
@@ -57,7 +57,7 @@ namespace NumSharp.Utilities
     public class NDOffsetIncrementorAutoresetting
     {
         private readonly ValueCoordinatesIncrementor incr;
-        private readonly int[] index;
+        private readonly long[] index;
         private readonly Shape shape;
 
         public NDOffsetIncrementorAutoresetting(Shape shape)
@@ -67,7 +67,7 @@ namespace NumSharp.Utilities
             index = incr.Index;
         }
 
-        public NDOffsetIncrementorAutoresetting(int[] dims) : this(new Shape(dims)) { }
+        public NDOffsetIncrementorAutoresetting(long[] dims) : this(new Shape(dims)) { }
 
 
         public bool HasNext => true;
@@ -78,9 +78,9 @@ namespace NumSharp.Utilities
         }
 
         [MethodImpl(Optimize)]
-        public int Next()
+        public long Next()
         {
-            int offset = 0;
+            long offset = 0;
             if (shape.IsSliced)
             {
                 offset = shape.GetOffset(index);

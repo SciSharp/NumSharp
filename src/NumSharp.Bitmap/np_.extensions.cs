@@ -309,6 +309,8 @@ namespace NumSharp
 
             var height = nd.shape[1];
             var width = nd.shape[2];
+            
+            //TODO: if bigger than int.maxvalue then throw execption about bitmap supporting only up to int.maxvalue.
 
             return ToBitmap(nd, width, height, format);
         }

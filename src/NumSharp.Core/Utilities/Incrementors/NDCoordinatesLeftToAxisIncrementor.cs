@@ -8,12 +8,12 @@ namespace NumSharp.Utilities
     {
         public int Axis;
         private readonly Action<NDCoordinatesLeftToAxisIncrementor> endCallback;
-        private readonly int[] dimensions;
-        private readonly int resetto;
+        private readonly long[] dimensions;
+        private readonly long resetto;
         private int ndim = 0;
         public readonly Slice[] Slices;
-        public readonly int[] Index;
-        private int subcursor;
+        public readonly long[] Index;
+        private long subcursor;
 
         public NDCoordinatesLeftToAxisIncrementor(ref Shape shape, int axis)
         {
@@ -29,7 +29,7 @@ namespace NumSharp.Utilities
             Axis = axis;
             ndim = shape.NDim;
             dimensions = shape.dimensions.Take(axis + 1).ToArray();
-            Index = new int[dimensions.Length];
+            Index = new long[dimensions.Length];
             if (axis == shape.dimensions.Length - 1)
                 resetto = subcursor = dimensions.Length - 2;
             else
