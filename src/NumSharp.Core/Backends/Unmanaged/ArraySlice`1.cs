@@ -33,7 +33,7 @@ namespace NumSharp.Backends.Unmanaged
         public readonly T* Address;
         public readonly void* VoidAddress;
 
-        public readonly int Count;
+        public readonly long Count;
 
         /// <summary>
         ///     Is this <see cref="ArraySlice{T}"/> a smaller part/slice of an unmanaged allocation?
@@ -106,7 +106,7 @@ namespace NumSharp.Backends.Unmanaged
 
         /// <param name="index"></param>
         /// <returns></returns>
-        object IArraySlice.this[int index]
+        object IArraySlice.this[long index]
         {
             get
             {
@@ -122,7 +122,7 @@ namespace NumSharp.Backends.Unmanaged
 
         /// <param name="index"></param>
         /// <returns></returns>
-        public T this[int index]
+        public T this[long index]
         {
             [MethodImpl(OptimizeAndInline)]
             get
@@ -139,20 +139,20 @@ namespace NumSharp.Backends.Unmanaged
         }
 
         [MethodImpl(OptimizeAndInline)]
-        public T GetIndex(int index)
+        public T GetIndex(long index)
         {
             return *(Address + index);
         }
 
         [MethodImpl(OptimizeAndInline)]
-        public void SetIndex(int index, object value)
+        public void SetIndex(long index, object value)
         {
             Debug.Assert(index < Count, "index < Count, Memory corruption expected.");
             *(Address + index) = (T)value;
         }
 
         [MethodImpl(OptimizeAndInline)]
-        public void SetIndex(int index, T value)
+        public void SetIndex(long index, T value)
         {
             Debug.Assert(index < Count, "index < Count, Memory corruption expected.");
             *(Address + index) = value;
@@ -234,9 +234,9 @@ namespace NumSharp.Backends.Unmanaged
         /// <param name="start"></param>
         /// <returns></returns>
         [MethodImpl(OptimizeAndInline)]
-        public ArraySlice<T> Slice(int start)
+        public ArraySlice<T> Slice(long start)
         {
-            if ((uint)start > (uint)Count)
+            if ((ulong)start > (ulong)Count)
                 throw new ArgumentOutOfRangeException(nameof(start));
 
             return new ArraySlice<T>(MemoryBlock, Address + start, Count - start);
@@ -246,21 +246,11 @@ namespace NumSharp.Backends.Unmanaged
         /// <param name="length"></param>
         /// <returns></returns>
         [MethodImpl(OptimizeAndInline)]
-        public ArraySlice<T> Slice(int start, int length)
+        public ArraySlice<T> Slice(long start, long length)
         {
-#if BIT64
-            // Since start and length are both 32-bit, their sum can be computed across a 64-bit domain
-            // without loss of fidelity. The cast to uint before the cast to ulong ensures that the
-            // extension from 32- to 64-bit is zero-extending rather than sign-extending. The end result
-            // of this is that if either input is negative or if the input sum overflows past Int32.MaxValue,
-            // that information is captured correctly in the comparison against the backing _length field.
-            // We don't use this same mechanism in a 32-bit process due to the overhead of 64-bit arithmetic.
-            if ((ulong)(uint)start + (ulong)(uint)length > (ulong)(uint)Count)
+            if ((ulong)start + (ulong)length > (ulong)Count)
                 throw new ArgumentOutOfRangeException(nameof(length));
-#else
-            if ((uint)start > (uint)Count || (uint)length > (uint)(Count - start))
-                throw new ArgumentOutOfRangeException(nameof(length));
-#endif
+
             return new ArraySlice<T>(MemoryBlock, Address + start, length);
         }
 
@@ -309,7 +299,7 @@ namespace NumSharp.Backends.Unmanaged
         /// <param name="dst">The address to copy to</param>
         /// <remarks>The destiniton has to be atleast the size of this array, otherwise memory corruption is likely to occur.</remarks>
         [MethodImpl(OptimizeAndInline)]
-        public void CopyTo(IntPtr dst, int sourceOffset, int sourceCount)
+        public void CopyTo(IntPtr dst, long sourceOffset, long sourceCount)
         {
             // Using "if (!TryCopyTo(...))" results in two branches: one for the length
             // check, and one for the result of TryCopyTo. Since these checks are equivalent,
@@ -321,7 +311,7 @@ namespace NumSharp.Backends.Unmanaged
         /// <param name="destination"></param>
         /// <param name="sourceOffset">offset of source via count (not bytes)</param>
         [MethodImpl(OptimizeAndInline)]
-        public void CopyTo(Span<T> destination, int sourceOffset)
+        public void CopyTo(Span<T> destination, long sourceOffset)
         {
             CopyTo(destination, sourceOffset, Count - sourceOffset);
         }
@@ -330,7 +320,7 @@ namespace NumSharp.Backends.Unmanaged
         /// <param name="sourceOffset">offset of source via count (not bytes)</param>
         /// <param name="sourceLength">How many items to copy</param>
         [MethodImpl(OptimizeAndInline)]
-        public void CopyTo(Span<T> destination, int sourceOffset, int sourceLength)
+        public void CopyTo(Span<T> destination, long sourceOffset, long sourceLength)
         {
             CopyTo(destination, sourceOffset, sourceLength);
         }
@@ -354,14 +344,14 @@ namespace NumSharp.Backends.Unmanaged
         }
 
         [MethodImpl(OptimizeAndInline)]
-        TRet IArraySlice.GetIndex<TRet>(int index)
+        TRet IArraySlice.GetIndex<TRet>(long index)
         {
             Debug.Assert(InfoOf<TRet>.Size == InfoOf<T>.Size);
             return *((TRet*)VoidAddress + index);
         }
 
         [MethodImpl(OptimizeAndInline)]
-        void IArraySlice.SetIndex<TVal>(int index, TVal value)
+        void IArraySlice.SetIndex<TVal>(long index, TVal value)
         {
             Debug.Assert(InfoOf<TVal>.Size == InfoOf<T>.Size);
             Debug.Assert(index < Count, "index < Count, Memory corruption expected.");
@@ -369,7 +359,7 @@ namespace NumSharp.Backends.Unmanaged
         }
 
         [MethodImpl(OptimizeAndInline)]
-        object IArraySlice.GetIndex(int index)
+        object IArraySlice.GetIndex(long index)
         {
             Debug.Assert(index < Count, "index < Count, Memory corruption expected.");
             return *(Address + index);
@@ -391,7 +381,7 @@ namespace NumSharp.Backends.Unmanaged
         /// </summary>
         /// <param name="start">The index to start from</param>
         /// <remarks>Creates a slice without copying.</remarks>
-        IArraySlice IArraySlice.Slice(int start) => Slice(start);
+        IArraySlice IArraySlice.Slice(long start) => Slice(start);
 
         /// <summary>
         ///     Perform a slicing on this <see cref="IMemoryBlock"/> without copying data.
@@ -399,7 +389,7 @@ namespace NumSharp.Backends.Unmanaged
         /// <param name="start">The index to start from</param>
         /// <param name="count">The number of items to slice (not bytes)</param>
         /// <remarks>Creates a slice without copying.</remarks>
-        IArraySlice IArraySlice.Slice(int start, int count) => Slice(start, count);
+        IArraySlice IArraySlice.Slice(long start, long count) => Slice(start, count);
 
         /// <param name="destination"></param>
         void IArraySlice.CopyTo<T1>(Span<T1> destination)

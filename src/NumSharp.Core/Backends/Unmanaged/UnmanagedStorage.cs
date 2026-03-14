@@ -44,7 +44,7 @@ namespace NumSharp.Backends
 #endif
         public IArraySlice InternalArray;
         public unsafe byte* Address;
-        public int Count;
+        public long Count;
 
         protected Type _dtype;
         protected NPTypeCode _typecode;

@@ -2,6 +2,7 @@ using System;
 using NumSharp.Generic;
 using System.Collections.Generic;
 using NumSharp.Backends.Kernels;
+using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp.Backends
 {
@@ -66,7 +67,7 @@ namespace NumSharp.Backends
             // SIMD fast path for contiguous arrays
             if (shape.IsContiguous && ILKernelGenerator.Enabled && ILKernelGenerator.VectorBits > 0)
             {
-                var flatIndices = new List<long>(Math.Max(16, size / 4));
+                var flatIndices = new ArraySlice<long>(Math.Max(16L, size / 4L));
                 kp.FindNonZero((T*)x.Address, size, flatIndices);
                 return kp.ConvertFlatToCoordinates(flatIndices, x.shape);
             }
