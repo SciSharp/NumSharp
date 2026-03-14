@@ -20,9 +20,31 @@ namespace NumSharp
         ///     Return a new double array of given shape, filled with zeros.
         /// </summary>
         /// <param name="shapes">Shape of the new array,</param>
+        /// <returns>Array of zeros with the given shape, dtype.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.zeros.html</remarks>
+        public static NDArray zeros(params long[] shapes)
+        {
+            return zeros(shapes, null);
+        }
+
+        /// <summary>
+        ///     Return a new double array of given shape, filled with zeros.
+        /// </summary>
+        /// <param name="shapes">Shape of the new array,</param>
         /// <returns>Array of zeros with the given shape, type <typeparamref name="T"/>.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.zeros.html</remarks>
         public static NDArray zeros<T>(params int[] shapes) where T : unmanaged
+        {
+            return zeros(shapes, typeof(T));
+        }
+
+        /// <summary>
+        ///     Return a new double array of given shape, filled with zeros.
+        /// </summary>
+        /// <param name="shapes">Shape of the new array,</param>
+        /// <returns>Array of zeros with the given shape, type <typeparamref name="T"/>.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.zeros.html</remarks>
+        public static NDArray zeros<T>(params long[] shapes) where T : unmanaged
         {
             return zeros(shapes, typeof(T));
         }

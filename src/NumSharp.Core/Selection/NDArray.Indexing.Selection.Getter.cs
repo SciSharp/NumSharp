@@ -379,7 +379,7 @@ namespace NumSharp
             //resolve retShape
             if (!isSubshaped)
             {
-                retShape = indicesImpliedShape ?? (int[])idxs.shape.Clone();
+                retShape = indicesImpliedShape ?? (long[])idxs.shape.Clone();
             }
             else
             {
@@ -433,7 +433,7 @@ namespace NumSharp
                 largestOffset = source.size - 1;
             else
             {
-                var largestIndices = (int[])source.shape.Clone();
+                var largestIndices = (long[])source.shape.Clone();
                 for (int i = 0; i < largestIndices.Length; i++)
                     largestIndices[i] = largestIndices[i] - 1;
 

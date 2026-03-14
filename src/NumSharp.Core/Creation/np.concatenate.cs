@@ -30,12 +30,12 @@ namespace NumSharp
                 return arrays[0];
 
             var first = arrays[0];
-            var firstShape = (int[])first.shape.Clone();
+            var firstShape = (long[])first.shape.Clone();
 
             while (axis < 0)
                 axis = first.ndim + axis; //translate negative axis
             int i, j;
-            int axisSize = 0; //accumulated shape[axis] size for return shape.
+            long axisSize = 0; //accumulated shape[axis] size for return shape.
             NPTypeCode retType = first.GetTypeCode;
             foreach (var src in arrays)
             {

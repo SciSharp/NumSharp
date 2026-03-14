@@ -59,7 +59,7 @@ namespace NumSharp.Utilities
         }
 
         [MethodImpl(Optimize)]
-        public int[] Next()
+        public long[] Next()
         {
             if (subcursor <= -1)
                 return null;
@@ -106,7 +106,7 @@ namespace NumSharp.Utilities
                 throw new InvalidOperationException("Can't construct ValueCoordinatesIncrementorAutoResetting with an empty shape.");
 
             dimensions = shape.dimensions;
-            Index = new int[dimensions.Length];
+            Index = new long[dimensions.Length];
             resetto = subcursor = dimensions.Length - 1;
         }
 
@@ -130,7 +130,7 @@ namespace NumSharp.Utilities
         }
 
         [MethodImpl(Optimize)]
-        public int[] Next()
+        public long[] Next()
         {
             if (++Index[subcursor] >= dimensions[subcursor])
             {

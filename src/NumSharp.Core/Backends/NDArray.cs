@@ -226,7 +226,7 @@ namespace NumSharp
         /// <param name="dtype">Internal data type</param>
         /// <param name="size">The size as a single dimension shape</param>
         /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
-        public NDArray(Type dtype, int size) : this(dtype, Shape.Vector(size), true) { }
+        public NDArray(Type dtype, long size) : this(dtype, Shape.Vector(size), true) { }
 
         /// <summary>
         ///     Constructor which initialize elements with length of <paramref name="size"/>
@@ -235,7 +235,7 @@ namespace NumSharp
         /// <param name="size">The size as a single dimension shape</param>
         /// <param name="fillZeros">Should set the values of the new allocation to default(dtype)? otherwise - old memory noise</param>
         /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
-        public NDArray(Type dtype, int size, bool fillZeros) : this(dtype, Shape.Vector(size), fillZeros) { }
+        public NDArray(Type dtype, long size, bool fillZeros) : this(dtype, Shape.Vector(size), fillZeros) { }
 
         /// <summary>
         /// Constructor which initialize elements with 0
@@ -741,15 +741,15 @@ namespace NumSharp
         /// <param name="index"></param>
         /// <returns></returns>
         [MethodImpl(Inline)]
-        public ValueType GetAtIndex(int index) => Storage.GetAtIndex(index);
+        public ValueType GetAtIndex(long index) => Storage.GetAtIndex(index);
 
         /// <summary>
-        ///     Retrieves value of 
+        ///     Retrieves value of
         /// </summary>
         /// <param name="index"></param>
         /// <returns></returns>
         [MethodImpl(Inline)]
-        public T GetAtIndex<T>(int index) where T : unmanaged => Storage.GetAtIndex<T>(index);
+        public T GetAtIndex<T>(long index) where T : unmanaged => Storage.GetAtIndex<T>(index);
 
         #endregion
 
@@ -909,15 +909,15 @@ namespace NumSharp
         /// <param name="index"></param>
         /// <returns></returns>
         [MethodImpl(Inline)]
-        public void SetAtIndex(object obj, int index) => Storage.SetAtIndex(obj, index);
+        public void SetAtIndex(object obj, long index) => Storage.SetAtIndex(obj, index);
 
         /// <summary>
-        ///     Retrieves value of 
+        ///     Sets value at given linear (offset) <paramref name="index"/>.
         /// </summary>
         /// <param name="index"></param>
         /// <returns></returns>
         [MethodImpl(Inline)]
-        public void SetAtIndex<T>(T value, int index) where T : unmanaged => Storage.SetAtIndex(value, index);
+        public void SetAtIndex<T>(T value, long index) where T : unmanaged => Storage.SetAtIndex(value, index);
 
 #if _REGEN
 	%foreach supported_dtypes,supported_dtypes_lowercase%

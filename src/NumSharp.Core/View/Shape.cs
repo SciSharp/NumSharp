@@ -1006,7 +1006,7 @@ namespace NumSharp
 #region Implicit Operators
 
         public static explicit operator int[](Shape shape) =>
-            (int[])shape.dimensions.Clone(); //we clone to avoid any changes
+            ((long[])shape.dimensions.Clone()).Select(x => (int)x).ToArray();
 
         public static implicit operator Shape(int[] dims) =>
             new Shape(dims);

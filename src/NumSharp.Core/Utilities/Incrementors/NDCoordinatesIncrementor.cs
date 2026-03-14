@@ -6,10 +6,10 @@ namespace NumSharp.Utilities
     public class NDCoordinatesIncrementor
     {
         private readonly Action<NDCoordinatesIncrementor> endCallback;
-        private readonly int[] dimensions;
-        private readonly int resetto;
-        public readonly int[] Index;
-        private int subcursor;
+        private readonly long[] dimensions;
+        private readonly long resetto;
+        public readonly long[] Index;
+        private long subcursor;
 
         /// <summary>Initializes a new instance of the <see cref="T:System.Object"></see> class.</summary>
         public NDCoordinatesIncrementor(ref Shape shape)
@@ -17,8 +17,8 @@ namespace NumSharp.Utilities
             if (shape.IsEmpty || shape.size == 0)
                 throw new InvalidOperationException("Can't construct NDCoordinatesIncrementor with an empty shape.");
 
-            dimensions = shape.IsScalar ? new[] {1} : shape.dimensions;
-            Index = new int[dimensions.Length];
+            dimensions = shape.IsScalar ? new[] {1L} : shape.dimensions;
+            Index = new long[dimensions.Length];
             resetto = subcursor = dimensions.Length - 1;
         }
 
@@ -27,16 +27,20 @@ namespace NumSharp.Utilities
             this.endCallback = endCallback;
         }
 
-        public NDCoordinatesIncrementor(int[] dims)
+        public NDCoordinatesIncrementor(int[] dims) : this(Shape.ComputeLongShape(dims))
+        {
+        }
+
+        public NDCoordinatesIncrementor(long[] dims)
         {
             if (dims == null)
                 throw new InvalidOperationException("Can't construct NDCoordinatesIncrementor with an empty shape.");
 
             if (dims.Length == 0)
-                dims = new int[] {1};
+                dims = new long[] {1};
 
             dimensions = dims;
-            Index = new int[dims.Length];
+            Index = new long[dims.Length];
             resetto = subcursor = dimensions.Length - 1;
         }
 

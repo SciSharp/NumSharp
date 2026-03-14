@@ -22,17 +22,17 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        ///     Performs a set of index without calling <see cref="Shape.TransformOffset(int)"/>.
+        ///     Performs a set of index without calling <see cref="Shape.TransformOffset(long)"/>.
         /// </summary>
-        public void SetAtIndexUnsafe(ValueType value, int index)
+        public void SetAtIndexUnsafe(ValueType value, long index)
         {
             InternalArray.SetIndex(index, value);
         }
 
         /// <summary>
-        ///     Performs a set of index without calling <see cref="Shape.TransformOffset(int)"/>.
+        ///     Performs a set of index without calling <see cref="Shape.TransformOffset(long)"/>.
         /// </summary>
-        public void SetAtIndexUnsafe<T>(T value, int index) where T : unmanaged
+        public void SetAtIndexUnsafe<T>(T value, long index) where T : unmanaged
         {
             unsafe
             {
@@ -40,13 +40,13 @@ namespace NumSharp.Backends
             }
         }
 
-        public unsafe void SetAtIndex<T>(T value, int index) where T : unmanaged
+        public unsafe void SetAtIndex<T>(T value, long index) where T : unmanaged
         {
             ThrowIfNotWriteable();
             *((T*)Address + _shape.TransformOffset(index)) = value;
         }
 
-        public unsafe void SetAtIndex(object value, int index)
+        public unsafe void SetAtIndex(object value, long index)
         {
             ThrowIfNotWriteable();
             switch (_typecode)

@@ -21,8 +21,8 @@ namespace NumSharp
             // Right-align: iterate from the rightmost dimension
             for (int i = 0; i < from.NDim; i++)
             {
-                int fromDim = from.dimensions[from.NDim - 1 - i];
-                int targetDim = target.dimensions[target.NDim - 1 - i];
+                long fromDim = from.dimensions[from.NDim - 1 - i];
+                long targetDim = target.dimensions[target.NDim - 1 - i];
 
                 if (fromDim != 1 && fromDim != targetDim)
                     throw new IncorrectShapeException(

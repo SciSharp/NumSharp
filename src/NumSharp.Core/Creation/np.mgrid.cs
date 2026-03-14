@@ -24,7 +24,7 @@ namespace NumSharp
             IArraySlice nd1Data = lhs.Storage.GetData();
             IArraySlice nd2Data = rhs.Storage.GetData();
 
-            int[] resultDims = new int[] { lhs.Storage.Shape.Dimensions[0], rhs.Storage.Shape.Dimensions[0] };
+            long[] resultDims = new long[] { lhs.Storage.Shape.Dimensions[0], rhs.Storage.Shape.Dimensions[0] };
 
             NDArray res1 = new NDArray(lhs.dtype, resultDims);
             NDArray res2 = new NDArray(lhs.dtype, resultDims);

@@ -44,7 +44,7 @@ namespace NumSharp.Backends
             }
         }
 
-        public unsafe ValueType GetAtIndex(int index)
+        public unsafe ValueType GetAtIndex(long index)
         {
 #if _REGEN
             switch (TypeCode)
@@ -77,7 +77,7 @@ namespace NumSharp.Backends
         }
 
         [MethodImpl(OptimizeAndInline)]
-        public unsafe T GetAtIndex<T>(int index) where T : unmanaged => *((T*)Address + _shape.TransformOffset(index));
+        public unsafe T GetAtIndex<T>(long index) where T : unmanaged => *((T*)Address + _shape.TransformOffset(index));
 
         /// <summary>
         /// Gets a sub-array based on the given indices, returning a view that shares memory.
@@ -177,9 +177,9 @@ namespace NumSharp.Backends
         /// </list>
         /// </para>
         /// </remarks>
-        /// <seealso cref="GetData(int[])"/>
+        /// <seealso cref="GetData(long[])"/>
         [MethodImpl(OptimizeAndInline)]
-        public unsafe UnmanagedStorage GetData(int* dims, int ndims)
+        public unsafe UnmanagedStorage GetData(long* dims, int ndims)
         {
             var this_shape = Shape;
 

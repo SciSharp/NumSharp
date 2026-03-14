@@ -159,7 +159,7 @@ namespace NumSharp.Backends
             if (@out != null) return null;
             var shape = arr.Shape;
             int[] resultDims;
-            if (keepdims) { resultDims = (int[])shape.dimensions.Clone(); resultDims[axis] = 1; }
+            if (keepdims) { resultDims = (long[])shape.dimensions.Clone(); resultDims[axis] = 1; }
             else { resultDims = new int[arr.ndim - 1]; for (int d = 0, rd = 0; d < arr.ndim; d++) if (d != axis) resultDims[rd++] = shape.dimensions[d]; }
             if (resultDims.Length == 0)
             {

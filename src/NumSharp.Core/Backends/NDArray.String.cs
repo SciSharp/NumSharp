@@ -82,7 +82,7 @@ namespace NumSharp
             unsafe
             {
                 if (Shape.dimensions.Length - 1 != indices.Length)
-                    throw new ArgumentOutOfRangeException(nameof(indices), "GetString(int[]) can only accept coordinates that point to a vector of chars.");
+                    throw new ArgumentOutOfRangeException(nameof(indices), "GetString(long[]) can only accept coordinates that point to a vector of chars.");
 
                 Debug.Assert(typecode == NPTypeCode.Char);
 

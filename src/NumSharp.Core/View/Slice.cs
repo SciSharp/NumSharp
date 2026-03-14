@@ -170,7 +170,7 @@ namespace NumSharp
             }
             if (match.Groups["index"].Success)
             {
-                if (!int.TryParse(Regex.Replace(match.Groups["index"].Value ?? "", @"\s+", ""), out var start))
+                if (!long.TryParse(Regex.Replace(match.Groups["index"].Value ?? "", @"\s+", ""), out var start))
                     throw new ArgumentException($"Invalid value for index: '{match.Groups["index"].Value}'");
                 Start = start;
                 Stop = start + 1;
@@ -387,9 +387,9 @@ namespace NumSharp
             }
 
             var m = Regex.Match(def, @"\((\d+)>>(-?\d+)\*(\d+)\)");
-            Start = int.Parse(m.Groups[1].Value);
-            Step = int.Parse(m.Groups[2].Value);
-            Count = int.Parse(m.Groups[3].Value);
+            Start = long.Parse(m.Groups[1].Value);
+            Step = long.Parse(m.Groups[2].Value);
+            Count = long.Parse(m.Groups[3].Value);
         }
 
         public bool IsIndex
