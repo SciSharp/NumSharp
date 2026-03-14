@@ -118,8 +118,9 @@ namespace NumSharp.Backends.Kernels
 
                 return dm.CreateDelegate<MatMul2DKernel<T>>();
             }
-            catch
+            catch (Exception ex)
             {
+                System.Diagnostics.Debug.WriteLine($"[ILKernel] GenerateMatMulKernelIL<{typeof(T).Name}>: {ex.GetType().Name}: {ex.Message}");
                 return null;
             }
         }
@@ -385,10 +386,8 @@ namespace NumSharp.Backends.Kernels
                 .First(m => m.Name == "Create" && !m.IsGenericMethod &&
                            m.GetParameters().Length == 1 && m.GetParameters()[0].ParameterType == typeof(float));
 
-            var addMethod = vector256Type.GetMethod("op_Addition", BindingFlags.Public | BindingFlags.Static,
-                new[] { vector256Type, vector256Type })!;
-            var mulMethod = vector256Type.GetMethod("op_Multiply", BindingFlags.Public | BindingFlags.Static,
-                new[] { vector256Type, vector256Type })!;
+            var addMethod = CachedMethods.Vector256FloatAdd;
+            var mulMethod = CachedMethods.Vector256FloatMul;
 
             // Clean stack management for SIMD body
             // Store signature: Store(Vector256<T> source, T* destination)
@@ -667,10 +666,8 @@ namespace NumSharp.Backends.Kernels
                 .First(m => m.Name == "Create" && !m.IsGenericMethod &&
                            m.GetParameters().Length == 1 && m.GetParameters()[0].ParameterType == typeof(double));
 
-            var addMethod = vector256Type.GetMethod("op_Addition", BindingFlags.Public | BindingFlags.Static,
-                new[] { vector256Type, vector256Type })!;
-            var mulMethod = vector256Type.GetMethod("op_Multiply", BindingFlags.Public | BindingFlags.Static,
-                new[] { vector256Type, vector256Type })!;
+            var addMethod = CachedMethods.Vector256DoubleAdd;
+            var mulMethod = CachedMethods.Vector256DoubleMul;
 
             // Clean stack management for SIMD body
             // Store signature: Store(Vector256<T> source, T* destination)

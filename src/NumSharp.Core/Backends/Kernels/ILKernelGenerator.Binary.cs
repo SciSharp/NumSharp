@@ -165,9 +165,10 @@ namespace NumSharp.Backends.Kernels
             {
                 return GenerateContiguousKernelIL<T>(op);
             }
-            catch
+            catch (Exception ex)
             {
                 // IL generation failed - fall back to C#
+                System.Diagnostics.Debug.WriteLine($"[ILKernel] TryGenerateContiguousKernel<{typeof(T).Name}>({op}): {ex.GetType().Name}: {ex.Message}");
                 return null;
             }
         }

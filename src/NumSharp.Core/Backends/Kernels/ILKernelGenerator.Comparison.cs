@@ -129,8 +129,9 @@ namespace NumSharp.Backends.Kernels
             {
                 return _comparisonCache.GetOrAdd(key, GenerateComparisonKernel);
             }
-            catch
+            catch (Exception ex)
             {
+                System.Diagnostics.Debug.WriteLine($"[ILKernel] TryGetComparisonKernel({key}): {ex.GetType().Name}: {ex.Message}");
                 return null;
             }
         }

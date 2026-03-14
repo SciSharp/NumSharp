@@ -89,8 +89,9 @@ namespace NumSharp.Backends.Kernels
                 var kernel = _scanCache.GetOrAdd(key, GenerateCumulativeKernel);
                 return (CumulativeKernel)kernel;
             }
-            catch
+            catch (Exception ex)
             {
+                System.Diagnostics.Debug.WriteLine($"[ILKernel] GetCumulativeKernel({key}): {ex.GetType().Name}: {ex.Message}");
                 return null;
             }
         }
@@ -489,8 +490,9 @@ namespace NumSharp.Backends.Kernels
                 var kernel = _axisScanCache.GetOrAdd(key, GenerateCumulativeAxisKernel);
                 return (CumulativeAxisKernel)kernel;
             }
-            catch
+            catch (Exception ex)
             {
+                System.Diagnostics.Debug.WriteLine($"[ILKernel] TryGetCumulativeAxisKernel({key}): {ex.GetType().Name}: {ex.Message}");
                 return null;
             }
         }
@@ -697,11 +699,39 @@ namespace NumSharp.Backends.Kernels
                 AxisCumProdGeneralInt32((int*)src, (int*)dst, inputStrides, shape, axis, ndim,
                     axisSize, axisStride, outerSize, innerSize, outputAxisStride, outputOuterStride);
             }
+            else if (typeof(T) == typeof(byte))
+            {
+                AxisCumProdGeneralByte((byte*)src, (byte*)dst, inputStrides, shape, axis, ndim,
+                    axisSize, axisStride, outerSize, innerSize, outputAxisStride, outputOuterStride);
+            }
+            else if (typeof(T) == typeof(short))
+            {
+                AxisCumProdGeneralInt16((short*)src, (short*)dst, inputStrides, shape, axis, ndim,
+                    axisSize, axisStride, outerSize, innerSize, outputAxisStride, outputOuterStride);
+            }
+            else if (typeof(T) == typeof(ushort))
+            {
+                AxisCumProdGeneralUInt16((ushort*)src, (ushort*)dst, inputStrides, shape, axis, ndim,
+                    axisSize, axisStride, outerSize, innerSize, outputAxisStride, outputOuterStride);
+            }
+            else if (typeof(T) == typeof(uint))
+            {
+                AxisCumProdGeneralUInt32((uint*)src, (uint*)dst, inputStrides, shape, axis, ndim,
+                    axisSize, axisStride, outerSize, innerSize, outputAxisStride, outputOuterStride);
+            }
+            else if (typeof(T) == typeof(ulong))
+            {
+                AxisCumProdGeneralUInt64((ulong*)src, (ulong*)dst, inputStrides, shape, axis, ndim,
+                    axisSize, axisStride, outerSize, innerSize, outputAxisStride, outputOuterStride);
+            }
+            else if (typeof(T) == typeof(decimal))
+            {
+                AxisCumProdGeneralDecimal((decimal*)src, (decimal*)dst, inputStrides, shape, axis, ndim,
+                    axisSize, axisStride, outerSize, innerSize, outputAxisStride, outputOuterStride);
+            }
             else
             {
-                // Generic fallback
-                AxisCumProdGeneralGeneric(src, dst, inputStrides, shape, axis, ndim,
-                    axisSize, axisStride, outerSize, innerSize, outputAxisStride, outputOuterStride);
+                throw new NotSupportedException($"AxisCumProd not supported for type {typeof(T).Name}");
             }
         }
 
@@ -873,46 +903,177 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
-        /// Generic fallback for axis cumprod.
+        /// General axis cumprod for byte type.
         /// </summary>
-        private static unsafe void AxisCumProdGeneralGeneric<T>(
-            T* src, T* dst, int* inputStrides, int* shape, int axis, int ndim,
+        private static unsafe void AxisCumProdGeneralByte(
+            byte* src, byte* dst, int* inputStrides, int* shape, int axis, int ndim,
             int axisSize, int axisStride, int outerSize, int innerSize,
             int outputAxisStride, int outputOuterStride)
-            where T : unmanaged
         {
             for (int outer = 0; outer < outerSize; outer++)
             {
                 for (int inner = 0; inner < innerSize; inner++)
                 {
-                    int inputOffset = 0;
-                    int outerIdx = outer;
-                    for (int d = axis - 1; d >= 0; d--)
-                    {
-                        int coord = outerIdx % shape[d];
-                        outerIdx /= shape[d];
-                        inputOffset += coord * inputStrides[d];
-                    }
-
-                    int innerIdx = inner;
-                    for (int d = ndim - 1; d > axis; d--)
-                    {
-                        int coord = innerIdx % shape[d];
-                        innerIdx /= shape[d];
-                        inputOffset += coord * inputStrides[d];
-                    }
-
+                    int inputOffset = CalculateInputOffset(inputStrides, shape, axis, ndim, outer, inner);
                     int outputOffset = outer * outputOuterStride + inner;
 
-                    // Initialize product to 1 using dynamic
-                    dynamic product = (dynamic)Convert.ChangeType(1, typeof(T))!;
+                    byte product = 1;
                     for (int i = 0; i < axisSize; i++)
                     {
-                        product *= (dynamic)src[inputOffset + i * axisStride];
+                        product *= src[inputOffset + i * axisStride];
                         dst[outputOffset + i * outputAxisStride] = product;
                     }
                 }
             }
+        }
+
+        /// <summary>
+        /// General axis cumprod for short type.
+        /// </summary>
+        private static unsafe void AxisCumProdGeneralInt16(
+            short* src, short* dst, int* inputStrides, int* shape, int axis, int ndim,
+            int axisSize, int axisStride, int outerSize, int innerSize,
+            int outputAxisStride, int outputOuterStride)
+        {
+            for (int outer = 0; outer < outerSize; outer++)
+            {
+                for (int inner = 0; inner < innerSize; inner++)
+                {
+                    int inputOffset = CalculateInputOffset(inputStrides, shape, axis, ndim, outer, inner);
+                    int outputOffset = outer * outputOuterStride + inner;
+
+                    short product = 1;
+                    for (int i = 0; i < axisSize; i++)
+                    {
+                        product *= src[inputOffset + i * axisStride];
+                        dst[outputOffset + i * outputAxisStride] = product;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// General axis cumprod for ushort type.
+        /// </summary>
+        private static unsafe void AxisCumProdGeneralUInt16(
+            ushort* src, ushort* dst, int* inputStrides, int* shape, int axis, int ndim,
+            int axisSize, int axisStride, int outerSize, int innerSize,
+            int outputAxisStride, int outputOuterStride)
+        {
+            for (int outer = 0; outer < outerSize; outer++)
+            {
+                for (int inner = 0; inner < innerSize; inner++)
+                {
+                    int inputOffset = CalculateInputOffset(inputStrides, shape, axis, ndim, outer, inner);
+                    int outputOffset = outer * outputOuterStride + inner;
+
+                    ushort product = 1;
+                    for (int i = 0; i < axisSize; i++)
+                    {
+                        product *= src[inputOffset + i * axisStride];
+                        dst[outputOffset + i * outputAxisStride] = product;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// General axis cumprod for uint type.
+        /// </summary>
+        private static unsafe void AxisCumProdGeneralUInt32(
+            uint* src, uint* dst, int* inputStrides, int* shape, int axis, int ndim,
+            int axisSize, int axisStride, int outerSize, int innerSize,
+            int outputAxisStride, int outputOuterStride)
+        {
+            for (int outer = 0; outer < outerSize; outer++)
+            {
+                for (int inner = 0; inner < innerSize; inner++)
+                {
+                    int inputOffset = CalculateInputOffset(inputStrides, shape, axis, ndim, outer, inner);
+                    int outputOffset = outer * outputOuterStride + inner;
+
+                    uint product = 1;
+                    for (int i = 0; i < axisSize; i++)
+                    {
+                        product *= src[inputOffset + i * axisStride];
+                        dst[outputOffset + i * outputAxisStride] = product;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// General axis cumprod for ulong type.
+        /// </summary>
+        private static unsafe void AxisCumProdGeneralUInt64(
+            ulong* src, ulong* dst, int* inputStrides, int* shape, int axis, int ndim,
+            int axisSize, int axisStride, int outerSize, int innerSize,
+            int outputAxisStride, int outputOuterStride)
+        {
+            for (int outer = 0; outer < outerSize; outer++)
+            {
+                for (int inner = 0; inner < innerSize; inner++)
+                {
+                    int inputOffset = CalculateInputOffset(inputStrides, shape, axis, ndim, outer, inner);
+                    int outputOffset = outer * outputOuterStride + inner;
+
+                    ulong product = 1;
+                    for (int i = 0; i < axisSize; i++)
+                    {
+                        product *= src[inputOffset + i * axisStride];
+                        dst[outputOffset + i * outputAxisStride] = product;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// General axis cumprod for decimal type.
+        /// </summary>
+        private static unsafe void AxisCumProdGeneralDecimal(
+            decimal* src, decimal* dst, int* inputStrides, int* shape, int axis, int ndim,
+            int axisSize, int axisStride, int outerSize, int innerSize,
+            int outputAxisStride, int outputOuterStride)
+        {
+            for (int outer = 0; outer < outerSize; outer++)
+            {
+                for (int inner = 0; inner < innerSize; inner++)
+                {
+                    int inputOffset = CalculateInputOffset(inputStrides, shape, axis, ndim, outer, inner);
+                    int outputOffset = outer * outputOuterStride + inner;
+
+                    decimal product = 1m;
+                    for (int i = 0; i < axisSize; i++)
+                    {
+                        product *= src[inputOffset + i * axisStride];
+                        dst[outputOffset + i * outputAxisStride] = product;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Helper to calculate input offset for general axis operations.
+        /// </summary>
+        private static unsafe int CalculateInputOffset(int* inputStrides, int* shape, int axis, int ndim, int outer, int inner)
+        {
+            int inputOffset = 0;
+            int outerIdx = outer;
+            for (int d = axis - 1; d >= 0; d--)
+            {
+                int coord = outerIdx % shape[d];
+                outerIdx /= shape[d];
+                inputOffset += coord * inputStrides[d];
+            }
+
+            int innerIdx = inner;
+            for (int d = ndim - 1; d > axis; d--)
+            {
+                int coord = innerIdx % shape[d];
+                innerIdx /= shape[d];
+                inputOffset += coord * inputStrides[d];
+            }
+            return inputOffset;
         }
 
         /// <summary>
@@ -978,15 +1139,19 @@ namespace NumSharp.Backends.Kernels
                             dstTyped[outputOffset + i * outputAxisStride] = product;
                         }
                     }
-                    else
+                    else if (typeof(TOut) == typeof(decimal))
                     {
-                        // Ultimate fallback using dynamic
-                        dynamic product = (dynamic)Convert.ChangeType(1, typeof(TOut))!;
+                        decimal product = 1m;
+                        decimal* dstTyped = (decimal*)dst;
                         for (int i = 0; i < axisSize; i++)
                         {
-                            product *= (dynamic)Convert.ChangeType(src[inputOffset + i * axisStride], typeof(TOut))!;
-                            dst[outputOffset + i * outputAxisStride] = product;
+                            product *= Convert.ToDecimal(src[inputOffset + i * axisStride]);
+                            dstTyped[outputOffset + i * outputAxisStride] = product;
                         }
+                    }
+                    else
+                    {
+                        throw new NotSupportedException($"AxisCumProd type conversion to {typeof(TOut).Name} not supported");
                     }
                 }
             }
@@ -1087,21 +1252,33 @@ namespace NumSharp.Backends.Kernels
             {
                 AxisCumSumInnerContiguousInt32((int*)src, (int*)dst, inputRowStride, axisSize, outerSize, outputOuterStride);
             }
+            else if (typeof(T) == typeof(byte))
+            {
+                AxisCumSumInnerContiguousByte((byte*)src, (byte*)dst, inputRowStride, axisSize, outerSize, outputOuterStride);
+            }
+            else if (typeof(T) == typeof(short))
+            {
+                AxisCumSumInnerContiguousInt16((short*)src, (short*)dst, inputRowStride, axisSize, outerSize, outputOuterStride);
+            }
+            else if (typeof(T) == typeof(ushort))
+            {
+                AxisCumSumInnerContiguousUInt16((ushort*)src, (ushort*)dst, inputRowStride, axisSize, outerSize, outputOuterStride);
+            }
+            else if (typeof(T) == typeof(uint))
+            {
+                AxisCumSumInnerContiguousUInt32((uint*)src, (uint*)dst, inputRowStride, axisSize, outerSize, outputOuterStride);
+            }
+            else if (typeof(T) == typeof(ulong))
+            {
+                AxisCumSumInnerContiguousUInt64((ulong*)src, (ulong*)dst, inputRowStride, axisSize, outerSize, outputOuterStride);
+            }
+            else if (typeof(T) == typeof(decimal))
+            {
+                AxisCumSumInnerContiguousDecimal((decimal*)src, (decimal*)dst, inputRowStride, axisSize, outerSize, outputOuterStride);
+            }
             else
             {
-                // Generic fallback using dynamic
-                for (int outer = 0; outer < outerSize; outer++)
-                {
-                    T* srcRow = src + outer * inputRowStride;
-                    T* dstRow = dst + outer * outputOuterStride;
-
-                    dynamic sum = default(T)!;
-                    for (int i = 0; i < axisSize; i++)
-                    {
-                        sum += (dynamic)srcRow[i];
-                        dstRow[i] = sum;
-                    }
-                }
+                throw new NotSupportedException($"AxisCumSum not supported for type {typeof(T).Name}");
             }
         }
 
@@ -1186,6 +1363,126 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
+        /// Type-specific inner contiguous cumsum for byte.
+        /// </summary>
+        private static unsafe void AxisCumSumInnerContiguousByte(
+            byte* src, byte* dst, int inputRowStride, int axisSize, int outerSize, int outputOuterStride)
+        {
+            for (int outer = 0; outer < outerSize; outer++)
+            {
+                byte* srcRow = src + outer * inputRowStride;
+                byte* dstRow = dst + outer * outputOuterStride;
+
+                byte sum = 0;
+                for (int i = 0; i < axisSize; i++)
+                {
+                    sum += srcRow[i];
+                    dstRow[i] = sum;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Type-specific inner contiguous cumsum for short.
+        /// </summary>
+        private static unsafe void AxisCumSumInnerContiguousInt16(
+            short* src, short* dst, int inputRowStride, int axisSize, int outerSize, int outputOuterStride)
+        {
+            for (int outer = 0; outer < outerSize; outer++)
+            {
+                short* srcRow = src + outer * inputRowStride;
+                short* dstRow = dst + outer * outputOuterStride;
+
+                short sum = 0;
+                for (int i = 0; i < axisSize; i++)
+                {
+                    sum += srcRow[i];
+                    dstRow[i] = sum;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Type-specific inner contiguous cumsum for ushort.
+        /// </summary>
+        private static unsafe void AxisCumSumInnerContiguousUInt16(
+            ushort* src, ushort* dst, int inputRowStride, int axisSize, int outerSize, int outputOuterStride)
+        {
+            for (int outer = 0; outer < outerSize; outer++)
+            {
+                ushort* srcRow = src + outer * inputRowStride;
+                ushort* dstRow = dst + outer * outputOuterStride;
+
+                ushort sum = 0;
+                for (int i = 0; i < axisSize; i++)
+                {
+                    sum += srcRow[i];
+                    dstRow[i] = sum;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Type-specific inner contiguous cumsum for uint.
+        /// </summary>
+        private static unsafe void AxisCumSumInnerContiguousUInt32(
+            uint* src, uint* dst, int inputRowStride, int axisSize, int outerSize, int outputOuterStride)
+        {
+            for (int outer = 0; outer < outerSize; outer++)
+            {
+                uint* srcRow = src + outer * inputRowStride;
+                uint* dstRow = dst + outer * outputOuterStride;
+
+                uint sum = 0;
+                for (int i = 0; i < axisSize; i++)
+                {
+                    sum += srcRow[i];
+                    dstRow[i] = sum;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Type-specific inner contiguous cumsum for ulong.
+        /// </summary>
+        private static unsafe void AxisCumSumInnerContiguousUInt64(
+            ulong* src, ulong* dst, int inputRowStride, int axisSize, int outerSize, int outputOuterStride)
+        {
+            for (int outer = 0; outer < outerSize; outer++)
+            {
+                ulong* srcRow = src + outer * inputRowStride;
+                ulong* dstRow = dst + outer * outputOuterStride;
+
+                ulong sum = 0;
+                for (int i = 0; i < axisSize; i++)
+                {
+                    sum += srcRow[i];
+                    dstRow[i] = sum;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Type-specific inner contiguous cumsum for decimal.
+        /// </summary>
+        private static unsafe void AxisCumSumInnerContiguousDecimal(
+            decimal* src, decimal* dst, int inputRowStride, int axisSize, int outerSize, int outputOuterStride)
+        {
+            for (int outer = 0; outer < outerSize; outer++)
+            {
+                decimal* srcRow = src + outer * inputRowStride;
+                decimal* dstRow = dst + outer * outputOuterStride;
+
+                decimal sum = 0m;
+                for (int i = 0; i < axisSize; i++)
+                {
+                    sum += srcRow[i];
+                    dstRow[i] = sum;
+                }
+            }
+        }
+
+        /// <summary>
         /// General axis cumsum using coordinate-based iteration.
         /// Handles non-contiguous axes and complex stride patterns.
         /// </summary>
@@ -1244,12 +1541,45 @@ namespace NumSharp.Backends.Kernels
                     axisSize, axisStride, outerSize, innerSize, outputAxisStride, outputOuterStride,
                     outerStrides, innerStrides);
             }
-            else
+            else if (typeof(T) == typeof(byte))
             {
-                // Generic fallback
-                AxisCumSumGeneralGeneric(src, dst, inputStrides, shape, axis, ndim,
+                AxisCumSumGeneralByte((byte*)src, (byte*)dst, inputStrides, shape, axis, ndim,
                     axisSize, axisStride, outerSize, innerSize, outputAxisStride, outputOuterStride,
                     outerStrides, innerStrides);
+            }
+            else if (typeof(T) == typeof(short))
+            {
+                AxisCumSumGeneralInt16((short*)src, (short*)dst, inputStrides, shape, axis, ndim,
+                    axisSize, axisStride, outerSize, innerSize, outputAxisStride, outputOuterStride,
+                    outerStrides, innerStrides);
+            }
+            else if (typeof(T) == typeof(ushort))
+            {
+                AxisCumSumGeneralUInt16((ushort*)src, (ushort*)dst, inputStrides, shape, axis, ndim,
+                    axisSize, axisStride, outerSize, innerSize, outputAxisStride, outputOuterStride,
+                    outerStrides, innerStrides);
+            }
+            else if (typeof(T) == typeof(uint))
+            {
+                AxisCumSumGeneralUInt32((uint*)src, (uint*)dst, inputStrides, shape, axis, ndim,
+                    axisSize, axisStride, outerSize, innerSize, outputAxisStride, outputOuterStride,
+                    outerStrides, innerStrides);
+            }
+            else if (typeof(T) == typeof(ulong))
+            {
+                AxisCumSumGeneralUInt64((ulong*)src, (ulong*)dst, inputStrides, shape, axis, ndim,
+                    axisSize, axisStride, outerSize, innerSize, outputAxisStride, outputOuterStride,
+                    outerStrides, innerStrides);
+            }
+            else if (typeof(T) == typeof(decimal))
+            {
+                AxisCumSumGeneralDecimal((decimal*)src, (decimal*)dst, inputStrides, shape, axis, ndim,
+                    axisSize, axisStride, outerSize, innerSize, outputAxisStride, outputOuterStride,
+                    outerStrides, innerStrides);
+            }
+            else
+            {
+                throw new NotSupportedException($"AxisCumSum not supported for type {typeof(T).Name}");
             }
         }
 
@@ -1420,42 +1750,128 @@ namespace NumSharp.Backends.Kernels
             }
         }
 
-        /// <summary>
-        /// Generic fallback for axis cumsum.
-        /// </summary>
-        private static unsafe void AxisCumSumGeneralGeneric<T>(
-            T* src, T* dst, int* inputStrides, int* shape, int axis, int ndim,
+        // Type-specific AxisCumSumGeneral methods for remaining types
+
+        private static unsafe void AxisCumSumGeneralByte(
+            byte* src, byte* dst, int* inputStrides, int* shape, int axis, int ndim,
             int axisSize, int axisStride, int outerSize, int innerSize,
             int outputAxisStride, int outputOuterStride, int* outerStrides, int* innerStrides)
-            where T : unmanaged
         {
             for (int outer = 0; outer < outerSize; outer++)
             {
                 for (int inner = 0; inner < innerSize; inner++)
                 {
-                    int inputOffset = 0;
-                    int outerIdx = outer;
-                    for (int d = axis - 1; d >= 0; d--)
-                    {
-                        int coord = outerIdx % shape[d];
-                        outerIdx /= shape[d];
-                        inputOffset += coord * inputStrides[d];
-                    }
-
-                    int innerIdx = inner;
-                    for (int d = ndim - 1; d > axis; d--)
-                    {
-                        int coord = innerIdx % shape[d];
-                        innerIdx /= shape[d];
-                        inputOffset += coord * inputStrides[d];
-                    }
-
+                    int inputOffset = CalculateInputOffset(inputStrides, shape, axis, ndim, outer, inner);
                     int outputOffset = outer * outputOuterStride + inner;
-
-                    dynamic sum = default(T)!;
+                    byte sum = 0;
                     for (int i = 0; i < axisSize; i++)
                     {
-                        sum += (dynamic)src[inputOffset + i * axisStride];
+                        sum += src[inputOffset + i * axisStride];
+                        dst[outputOffset + i * outputAxisStride] = sum;
+                    }
+                }
+            }
+        }
+
+        private static unsafe void AxisCumSumGeneralInt16(
+            short* src, short* dst, int* inputStrides, int* shape, int axis, int ndim,
+            int axisSize, int axisStride, int outerSize, int innerSize,
+            int outputAxisStride, int outputOuterStride, int* outerStrides, int* innerStrides)
+        {
+            for (int outer = 0; outer < outerSize; outer++)
+            {
+                for (int inner = 0; inner < innerSize; inner++)
+                {
+                    int inputOffset = CalculateInputOffset(inputStrides, shape, axis, ndim, outer, inner);
+                    int outputOffset = outer * outputOuterStride + inner;
+                    short sum = 0;
+                    for (int i = 0; i < axisSize; i++)
+                    {
+                        sum += src[inputOffset + i * axisStride];
+                        dst[outputOffset + i * outputAxisStride] = sum;
+                    }
+                }
+            }
+        }
+
+        private static unsafe void AxisCumSumGeneralUInt16(
+            ushort* src, ushort* dst, int* inputStrides, int* shape, int axis, int ndim,
+            int axisSize, int axisStride, int outerSize, int innerSize,
+            int outputAxisStride, int outputOuterStride, int* outerStrides, int* innerStrides)
+        {
+            for (int outer = 0; outer < outerSize; outer++)
+            {
+                for (int inner = 0; inner < innerSize; inner++)
+                {
+                    int inputOffset = CalculateInputOffset(inputStrides, shape, axis, ndim, outer, inner);
+                    int outputOffset = outer * outputOuterStride + inner;
+                    ushort sum = 0;
+                    for (int i = 0; i < axisSize; i++)
+                    {
+                        sum += src[inputOffset + i * axisStride];
+                        dst[outputOffset + i * outputAxisStride] = sum;
+                    }
+                }
+            }
+        }
+
+        private static unsafe void AxisCumSumGeneralUInt32(
+            uint* src, uint* dst, int* inputStrides, int* shape, int axis, int ndim,
+            int axisSize, int axisStride, int outerSize, int innerSize,
+            int outputAxisStride, int outputOuterStride, int* outerStrides, int* innerStrides)
+        {
+            for (int outer = 0; outer < outerSize; outer++)
+            {
+                for (int inner = 0; inner < innerSize; inner++)
+                {
+                    int inputOffset = CalculateInputOffset(inputStrides, shape, axis, ndim, outer, inner);
+                    int outputOffset = outer * outputOuterStride + inner;
+                    uint sum = 0;
+                    for (int i = 0; i < axisSize; i++)
+                    {
+                        sum += src[inputOffset + i * axisStride];
+                        dst[outputOffset + i * outputAxisStride] = sum;
+                    }
+                }
+            }
+        }
+
+        private static unsafe void AxisCumSumGeneralUInt64(
+            ulong* src, ulong* dst, int* inputStrides, int* shape, int axis, int ndim,
+            int axisSize, int axisStride, int outerSize, int innerSize,
+            int outputAxisStride, int outputOuterStride, int* outerStrides, int* innerStrides)
+        {
+            for (int outer = 0; outer < outerSize; outer++)
+            {
+                for (int inner = 0; inner < innerSize; inner++)
+                {
+                    int inputOffset = CalculateInputOffset(inputStrides, shape, axis, ndim, outer, inner);
+                    int outputOffset = outer * outputOuterStride + inner;
+                    ulong sum = 0;
+                    for (int i = 0; i < axisSize; i++)
+                    {
+                        sum += src[inputOffset + i * axisStride];
+                        dst[outputOffset + i * outputAxisStride] = sum;
+                    }
+                }
+            }
+        }
+
+        private static unsafe void AxisCumSumGeneralDecimal(
+            decimal* src, decimal* dst, int* inputStrides, int* shape, int axis, int ndim,
+            int axisSize, int axisStride, int outerSize, int innerSize,
+            int outputAxisStride, int outputOuterStride, int* outerStrides, int* innerStrides)
+        {
+            for (int outer = 0; outer < outerSize; outer++)
+            {
+                for (int inner = 0; inner < innerSize; inner++)
+                {
+                    int inputOffset = CalculateInputOffset(inputStrides, shape, axis, ndim, outer, inner);
+                    int outputOffset = outer * outputOuterStride + inner;
+                    decimal sum = 0m;
+                    for (int i = 0; i < axisSize; i++)
+                    {
+                        sum += src[inputOffset + i * axisStride];
                         dst[outputOffset + i * outputAxisStride] = sum;
                     }
                 }
@@ -1465,6 +1881,23 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Axis cumsum with type conversion (e.g., int32 input -> int64 output).
         /// </summary>
+        /// <remarks>
+        /// TODO: MIGRATE TO IL GENERATION
+        /// ==============================
+        /// This method uses runtime type checking (typeof(TOut) == typeof(long), etc.) which:
+        /// 1. Causes JIT to generate bloated code with dead branches for each generic instantiation
+        /// 2. Prevents inlining due to method size
+        /// 3. Has runtime overhead from type comparisons (though JIT may optimize some away)
+        ///
+        /// Should be replaced with IL-generated kernels like other operations in ILKernelGenerator:
+        /// - Generate a DynamicMethod for each (TIn, TOut) type pair at first use
+        /// - Emit tight loops with direct pointer arithmetic and no type checks
+        /// - Cache generated delegates in ConcurrentDictionary keyed by type pair
+        ///
+        /// This would match the pattern used in ILKernelGenerator.MixedType.cs for binary ops.
+        /// The IL kernel would directly emit the correct Convert.ToXxx call and accumulator type
+        /// based on the concrete types, eliminating all branching.
+        /// </remarks>
         private static unsafe void AxisCumSumWithConversion<TIn, TOut>(
             TIn* src, TOut* dst, int* inputStrides, int* shape, int axis, int ndim,
             int axisSize, int axisStride, int outerSize, int innerSize,
@@ -1525,15 +1958,39 @@ namespace NumSharp.Backends.Kernels
                             dstTyped[outputOffset + i * outputAxisStride] = sum;
                         }
                     }
-                    else
+                    else if (typeof(TOut) == typeof(float))
                     {
-                        // Ultimate fallback using dynamic
-                        dynamic sum = default(TOut)!;
+                        float sum = 0f;
+                        float* dstTyped = (float*)dst;
                         for (int i = 0; i < axisSize; i++)
                         {
-                            sum += (dynamic)Convert.ChangeType(src[inputOffset + i * axisStride], typeof(TOut))!;
-                            dst[outputOffset + i * outputAxisStride] = sum;
+                            sum += Convert.ToSingle(src[inputOffset + i * axisStride]);
+                            dstTyped[outputOffset + i * outputAxisStride] = sum;
                         }
+                    }
+                    else if (typeof(TOut) == typeof(ulong))
+                    {
+                        ulong sum = 0UL;
+                        ulong* dstTyped = (ulong*)dst;
+                        for (int i = 0; i < axisSize; i++)
+                        {
+                            sum += Convert.ToUInt64(src[inputOffset + i * axisStride]);
+                            dstTyped[outputOffset + i * outputAxisStride] = sum;
+                        }
+                    }
+                    else if (typeof(TOut) == typeof(decimal))
+                    {
+                        decimal sum = 0m;
+                        decimal* dstTyped = (decimal*)dst;
+                        for (int i = 0; i < axisSize; i++)
+                        {
+                            sum += Convert.ToDecimal(src[inputOffset + i * axisStride]);
+                            dstTyped[outputOffset + i * outputAxisStride] = sum;
+                        }
+                    }
+                    else
+                    {
+                        throw new NotSupportedException($"CumSum conversion to {typeof(TOut).Name} is not supported");
                     }
                 }
             }
@@ -1660,25 +2117,27 @@ namespace NumSharp.Backends.Kernels
             {
                 CumSumDecimal((decimal*)input, (decimal*)output, totalSize);
             }
+            else if (typeof(T) == typeof(char))
+            {
+                // Treat char as ushort for arithmetic
+                CumSumChar((char*)input, (char*)output, totalSize);
+            }
             else
             {
-                // Fallback for char and other types
-                CumSumGeneric<T>((T*)input, (T*)output, totalSize);
+                throw new NotSupportedException($"CumSum not supported for type {typeof(T).Name}");
             }
         }
 
         /// <summary>
-        /// Generic cumsum using IAdditionOperators constraint.
+        /// Optimized cumsum for char arrays (arithmetic as ushort).
         /// </summary>
-        private static unsafe void CumSumGeneric<T>(T* src, T* dst, int size)
-            where T : unmanaged
+        private static unsafe void CumSumChar(char* src, char* dst, int size)
         {
-            // Use dynamic for types that don't have IAdditionOperators
-            dynamic sum = default(T)!;
+            int sum = 0; // Use int to avoid overflow
             for (int i = 0; i < size; i++)
             {
-                sum += (dynamic)src[i];
-                dst[i] = sum;
+                sum += src[i];
+                dst[i] = (char)sum;
             }
         }
 
@@ -1899,6 +2358,23 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// General cumsum with type conversion using Convert class.
         /// </summary>
+        /// <remarks>
+        /// TODO: MIGRATE TO IL GENERATION
+        /// ==============================
+        /// This method uses runtime type checking (typeof(TOut) == typeof(double), etc.) which:
+        /// 1. Causes JIT to generate bloated code with dead branches for each generic instantiation
+        /// 2. Prevents inlining due to method size
+        /// 3. Has runtime overhead from type comparisons (though JIT may optimize some away)
+        ///
+        /// Should be replaced with IL-generated kernels like other operations in ILKernelGenerator:
+        /// - Generate a DynamicMethod for each (TIn, TOut) type pair at first use
+        /// - Emit tight loops with direct pointer arithmetic and no type checks
+        /// - Cache generated delegates in ConcurrentDictionary keyed by type pair
+        ///
+        /// This would match the pattern used in ILKernelGenerator.MixedType.cs for binary ops.
+        /// The IL kernel would directly emit the correct Convert.ToXxx call and accumulator type
+        /// based on the concrete types, eliminating all branching.
+        /// </remarks>
         private static unsafe void CumSumWithConversionGeneral<TIn, TOut>(void* input, void* output, int totalSize)
             where TIn : unmanaged
             where TOut : unmanaged
@@ -1937,15 +2413,29 @@ namespace NumSharp.Backends.Kernels
                     dstDecimal[i] = sum;
                 }
             }
-            else
+            else if (typeof(TOut) == typeof(float))
             {
-                // Ultimate fallback using dynamic
-                dynamic sum = default(TOut)!;
+                float sum = 0f;
+                float* dstFloat = (float*)dst;
                 for (int i = 0; i < totalSize; i++)
                 {
-                    sum += (dynamic)Convert.ChangeType(src[i], typeof(TOut))!;
-                    dst[i] = sum;
+                    sum += Convert.ToSingle(src[i]);
+                    dstFloat[i] = sum;
                 }
+            }
+            else if (typeof(TOut) == typeof(ulong))
+            {
+                ulong sum = 0UL;
+                ulong* dstUlong = (ulong*)dst;
+                for (int i = 0; i < totalSize; i++)
+                {
+                    sum += Convert.ToUInt64(src[i]);
+                    dstUlong[i] = sum;
+                }
+            }
+            else
+            {
+                throw new NotSupportedException($"CumSum conversion to {typeof(TOut).Name} is not supported");
             }
         }
 

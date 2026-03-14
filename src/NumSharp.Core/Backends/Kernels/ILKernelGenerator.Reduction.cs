@@ -68,8 +68,9 @@ namespace NumSharp.Backends.Kernels
                 var kernel = _elementReductionCache.GetOrAdd(key, GenerateTypedElementReductionKernel<TResult>);
                 return (TypedElementReductionKernel<TResult>)kernel;
             }
-            catch
+            catch (Exception ex)
             {
+                System.Diagnostics.Debug.WriteLine($"[ILKernel] TryGetTypedElementReductionKernel<{typeof(TResult).Name}>({key}): {ex.GetType().Name}: {ex.Message}");
                 return null;
             }
         }
@@ -738,7 +739,7 @@ namespace NumSharp.Backends.Kernels
                     il.Emit(OpCodes.Ldc_R8, 0d);
                     break;
                 case NPTypeCode.Decimal:
-                    il.Emit(OpCodes.Ldsfld, typeof(decimal).GetField("Zero")!);
+                    il.Emit(OpCodes.Ldsfld, CachedMethods.DecimalZero);
                     break;
                 default:
                     throw new NotSupportedException($"Type {type} not supported");
@@ -772,7 +773,7 @@ namespace NumSharp.Backends.Kernels
                     il.Emit(OpCodes.Ldc_R8, 1d);
                     break;
                 case NPTypeCode.Decimal:
-                    il.Emit(OpCodes.Ldsfld, typeof(decimal).GetField("One")!);
+                    il.Emit(OpCodes.Ldsfld, CachedMethods.DecimalOne);
                     break;
                 default:
                     throw new NotSupportedException($"Type {type} not supported");
@@ -815,7 +816,7 @@ namespace NumSharp.Backends.Kernels
                     il.Emit(OpCodes.Ldc_R8, double.NegativeInfinity);
                     break;
                 case NPTypeCode.Decimal:
-                    il.Emit(OpCodes.Ldsfld, typeof(decimal).GetField("MinValue")!);
+                    il.Emit(OpCodes.Ldsfld, CachedMethods.DecimalMinValue);
                     break;
                 default:
                     throw new NotSupportedException($"Type {type} not supported");
@@ -858,7 +859,7 @@ namespace NumSharp.Backends.Kernels
                     il.Emit(OpCodes.Ldc_R8, double.PositiveInfinity);
                     break;
                 case NPTypeCode.Decimal:
-                    il.Emit(OpCodes.Ldsfld, typeof(decimal).GetField("MaxValue")!);
+                    il.Emit(OpCodes.Ldsfld, CachedMethods.DecimalMaxValue);
                     break;
                 default:
                     throw new NotSupportedException($"Type {type} not supported");
@@ -1170,7 +1171,7 @@ namespace NumSharp.Backends.Kernels
                     // Add
                     if (type == NPTypeCode.Decimal)
                     {
-                        il.EmitCall(OpCodes.Call, typeof(decimal).GetMethod("op_Addition", new[] { typeof(decimal), typeof(decimal) })!, null);
+                        il.EmitCall(OpCodes.Call, CachedMethods.DecimalOpAddition, null);
                     }
                     else
                     {
@@ -1182,7 +1183,7 @@ namespace NumSharp.Backends.Kernels
                     // Multiply
                     if (type == NPTypeCode.Decimal)
                     {
-                        il.EmitCall(OpCodes.Call, typeof(decimal).GetMethod("op_Multiply", new[] { typeof(decimal), typeof(decimal) })!, null);
+                        il.EmitCall(OpCodes.Call, CachedMethods.DecimalOpMultiply, null);
                     }
                     else
                     {

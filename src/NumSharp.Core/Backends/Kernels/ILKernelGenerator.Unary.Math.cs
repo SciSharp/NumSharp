@@ -284,12 +284,12 @@ namespace NumSharp.Backends.Kernels
             {
                 case NPTypeCode.Single:
                     // Use MathF.Abs for float - has hardware support
-                    il.EmitCall(OpCodes.Call, typeof(MathF).GetMethod("Abs", new[] { typeof(float) })!, null);
+                    il.EmitCall(OpCodes.Call, CachedMethods.MathFAbsFloat, null);
                     break;
 
                 case NPTypeCode.Double:
                     // Use Math.Abs for double - has hardware support
-                    il.EmitCall(OpCodes.Call, typeof(Math).GetMethod("Abs", new[] { typeof(double) })!, null);
+                    il.EmitCall(OpCodes.Call, CachedMethods.MathAbsDouble, null);
                     break;
 
                 case NPTypeCode.Byte:
@@ -373,7 +373,7 @@ namespace NumSharp.Backends.Kernels
                 // Now push base then exponent
                 il.Emit(OpCodes.Ldc_R8, 2.0);
                 il.Emit(OpCodes.Ldloc, locExp);
-                il.EmitCall(OpCodes.Call, typeof(Math).GetMethod("Pow", new[] { typeof(double), typeof(double) })!, null);
+                il.EmitCall(OpCodes.Call, CachedMethods.MathPow, null);
                 il.Emit(OpCodes.Conv_R4);
             }
             else if (type == NPTypeCode.Double)
@@ -383,7 +383,7 @@ namespace NumSharp.Backends.Kernels
                 il.Emit(OpCodes.Stloc, locExp);  // Save exponent
                 il.Emit(OpCodes.Ldc_R8, 2.0);
                 il.Emit(OpCodes.Ldloc, locExp);
-                il.EmitCall(OpCodes.Call, typeof(Math).GetMethod("Pow", new[] { typeof(double), typeof(double) })!, null);
+                il.EmitCall(OpCodes.Call, CachedMethods.MathPow, null);
             }
             else
             {
@@ -393,7 +393,7 @@ namespace NumSharp.Backends.Kernels
                 il.Emit(OpCodes.Stloc, locExp);  // Save exponent
                 il.Emit(OpCodes.Ldc_R8, 2.0);
                 il.Emit(OpCodes.Ldloc, locExp);
-                il.EmitCall(OpCodes.Call, typeof(Math).GetMethod("Pow", new[] { typeof(double), typeof(double) })!, null);
+                il.EmitCall(OpCodes.Call, CachedMethods.MathPow, null);
                 EmitConvertFromDouble(il, type);
             }
         }
@@ -469,7 +469,7 @@ namespace NumSharp.Backends.Kernels
                         var lblEnd = il.DefineLabel();
 
                         il.Emit(OpCodes.Dup);  // duplicate for NaN check
-                        il.EmitCall(OpCodes.Call, typeof(float).GetMethod("IsNaN", new[] { typeof(float) })!, null);
+                        il.EmitCall(OpCodes.Call, CachedMethods.FloatIsNaN, null);
                         il.Emit(OpCodes.Brfalse, lblNotNaN);
 
                         // Is NaN - value is already on stack, jump to end
@@ -477,8 +477,7 @@ namespace NumSharp.Backends.Kernels
 
                         il.MarkLabel(lblNotNaN);
                         // Not NaN - call MathF.Sign
-                        var method = typeof(MathF).GetMethod("Sign", new[] { typeof(float) });
-                        il.EmitCall(OpCodes.Call, method!, null);
+                        il.EmitCall(OpCodes.Call, CachedMethods.MathFSign, null);
                         il.Emit(OpCodes.Conv_R4);
 
                         il.MarkLabel(lblEnd);
@@ -493,7 +492,7 @@ namespace NumSharp.Backends.Kernels
                         var lblEnd = il.DefineLabel();
 
                         il.Emit(OpCodes.Dup);  // duplicate for NaN check
-                        il.EmitCall(OpCodes.Call, typeof(double).GetMethod("IsNaN", new[] { typeof(double) })!, null);
+                        il.EmitCall(OpCodes.Call, CachedMethods.DoubleIsNaN, null);
                         il.Emit(OpCodes.Brfalse, lblNotNaN);
 
                         // Is NaN - value is already on stack, jump to end
@@ -501,8 +500,7 @@ namespace NumSharp.Backends.Kernels
 
                         il.MarkLabel(lblNotNaN);
                         // Not NaN - call Math.Sign
-                        var method = typeof(Math).GetMethod("Sign", new[] { typeof(double) });
-                        il.EmitCall(OpCodes.Call, method!, null);
+                        il.EmitCall(OpCodes.Call, CachedMethods.MathSignDouble, null);
                         il.Emit(OpCodes.Conv_R8);
 
                         il.MarkLabel(lblEnd);
@@ -512,10 +510,9 @@ namespace NumSharp.Backends.Kernels
                 case NPTypeCode.Decimal:
                     {
                         // Decimal has its own Sign method that returns int
-                        var method = typeof(Math).GetMethod("Sign", new[] { typeof(decimal) });
-                        il.EmitCall(OpCodes.Call, method!, null);
+                        il.EmitCall(OpCodes.Call, CachedMethods.MathSignDecimal, null);
                         // Convert int to decimal
-                        il.EmitCall(OpCodes.Call, typeof(decimal).GetMethod("op_Implicit", new[] { typeof(int) })!, null);
+                        il.EmitCall(OpCodes.Call, CachedMethods.DecimalImplicitFromInt, null);
                     }
                     break;
 

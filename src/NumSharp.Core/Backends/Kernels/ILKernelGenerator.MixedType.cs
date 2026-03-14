@@ -125,8 +125,9 @@ namespace NumSharp.Backends.Kernels
             {
                 return _mixedTypeCache.GetOrAdd(key, GenerateMixedTypeKernel);
             }
-            catch
+            catch (Exception ex)
             {
+                System.Diagnostics.Debug.WriteLine($"[ILKernel] TryGetMixedTypeKernel({key}): {ex.GetType().Name}: {ex.Message}");
                 return null;
             }
         }
