@@ -48,6 +48,11 @@ namespace NumSharp.Utilities
             this.endCallback = endCallback;
         }
 
+        public ValueCoordinatesIncrementor(long[] dims, EndCallbackHandler endCallback) : this(dims)
+        {
+            this.endCallback = endCallback;
+        }
+
         public void Reset()
         {
             Array.Clear(Index, 0, Index.Length);
