@@ -732,7 +732,7 @@ public class BinaryOpTests
         var result = np.arctan2(y, x);
 
         // Result shape should be (3, 2)
-        Assert.AreEqual(new[] { 3, 2 }, result.shape);
+        Assert.IsTrue(System.Linq.Enumerable.SequenceEqual(result.shape, new[] { 3, 2 }));
 
         // Row 0: arctan2(1, 1) = π/4, arctan2(1, -1) = 3π/4
         Assert.IsTrue(Math.Abs(result.GetDouble(0, 0) - Math.PI / 4) < 1e-10);
