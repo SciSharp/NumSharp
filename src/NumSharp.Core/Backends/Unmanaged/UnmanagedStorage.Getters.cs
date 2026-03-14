@@ -259,9 +259,15 @@ namespace NumSharp.Backends
 
             // ReSharper disable once ConvertIfStatementToReturnStatement
             Shape.InferNegativeCoordinates(Shape.dimensions, dims, ndims);
+
+            // Convert int* to long* for GetSubshape
+            long* longDims = stackalloc long[ndims];
+            for (int i = 0; i < ndims; i++)
+                longDims[i] = dims[i];
+
             if (this_shape.IsBroadcasted)
             {
-                var (shape, offset) = this_shape.GetSubshape(dims, ndims);
+                var (shape, offset) = this_shape.GetSubshape(longDims, ndims);
                 // For non-broadcasted contiguous subshapes, use size (the actual data extent).
                 // Only use BufferSize when the subshape itself is broadcasted.
                 long sliceSize = shape.IsBroadcasted
@@ -289,7 +295,7 @@ namespace NumSharp.Backends
             {
                 // Contiguous shape: can take a direct memory slice.
                 // GetSubshape computes the correct offset accounting for shape.offset.
-                var (shape, offset) = this_shape.GetSubshape(dims, ndims);
+                var (shape, offset) = this_shape.GetSubshape(longDims, ndims);
                 var view = new UnmanagedStorage(InternalArray.Slice(offset, shape.Size), shape);
                 view._baseStorage = _baseStorage ?? this;
                 return view;
@@ -515,6 +521,118 @@ namespace NumSharp.Backends
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="decimal"/></exception>
         public decimal GetDecimal(params int[] indices)
+            => _arrayDecimal[_shape.GetOffset(indices)];
+
+        #endregion
+
+        #region Direct Getters (long[] overloads)
+
+        /// <summary>
+        ///     Retrieves value of type <see cref="bool"/> from internal storage.
+        /// </summary>
+        /// <param name="indices">The shape's indices to get (long version).</param>
+        /// <returns></returns>
+        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="bool"/></exception>
+        public bool GetBoolean(params long[] indices)
+            => _arrayBoolean[_shape.GetOffset(indices)];
+
+        /// <summary>
+        ///     Retrieves value of type <see cref="byte"/> from internal storage.
+        /// </summary>
+        /// <param name="indices">The shape's indices to get (long version).</param>
+        /// <returns></returns>
+        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="byte"/></exception>
+        public byte GetByte(params long[] indices)
+            => _arrayByte[_shape.GetOffset(indices)];
+
+        /// <summary>
+        ///     Retrieves value of type <see cref="short"/> from internal storage.
+        /// </summary>
+        /// <param name="indices">The shape's indices to get (long version).</param>
+        /// <returns></returns>
+        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="short"/></exception>
+        public short GetInt16(params long[] indices)
+            => _arrayInt16[_shape.GetOffset(indices)];
+
+        /// <summary>
+        ///     Retrieves value of type <see cref="ushort"/> from internal storage.
+        /// </summary>
+        /// <param name="indices">The shape's indices to get (long version).</param>
+        /// <returns></returns>
+        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="ushort"/></exception>
+        public ushort GetUInt16(params long[] indices)
+            => _arrayUInt16[_shape.GetOffset(indices)];
+
+        /// <summary>
+        ///     Retrieves value of type <see cref="int"/> from internal storage.
+        /// </summary>
+        /// <param name="indices">The shape's indices to get (long version).</param>
+        /// <returns></returns>
+        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="int"/></exception>
+        public int GetInt32(params long[] indices)
+            => _arrayInt32[_shape.GetOffset(indices)];
+
+        /// <summary>
+        ///     Retrieves value of type <see cref="uint"/> from internal storage.
+        /// </summary>
+        /// <param name="indices">The shape's indices to get (long version).</param>
+        /// <returns></returns>
+        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="uint"/></exception>
+        public uint GetUInt32(params long[] indices)
+            => _arrayUInt32[_shape.GetOffset(indices)];
+
+        /// <summary>
+        ///     Retrieves value of type <see cref="long"/> from internal storage.
+        /// </summary>
+        /// <param name="indices">The shape's indices to get (long version).</param>
+        /// <returns></returns>
+        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="long"/></exception>
+        public long GetInt64(params long[] indices)
+            => _arrayInt64[_shape.GetOffset(indices)];
+
+        /// <summary>
+        ///     Retrieves value of type <see cref="ulong"/> from internal storage.
+        /// </summary>
+        /// <param name="indices">The shape's indices to get (long version).</param>
+        /// <returns></returns>
+        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="ulong"/></exception>
+        public ulong GetUInt64(params long[] indices)
+            => _arrayUInt64[_shape.GetOffset(indices)];
+
+        /// <summary>
+        ///     Retrieves value of type <see cref="char"/> from internal storage.
+        /// </summary>
+        /// <param name="indices">The shape's indices to get (long version).</param>
+        /// <returns></returns>
+        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="char"/></exception>
+        public char GetChar(params long[] indices)
+            => _arrayChar[_shape.GetOffset(indices)];
+
+        /// <summary>
+        ///     Retrieves value of type <see cref="double"/> from internal storage.
+        /// </summary>
+        /// <param name="indices">The shape's indices to get (long version).</param>
+        /// <returns></returns>
+        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="double"/></exception>
+        public double GetDouble(params long[] indices)
+            => _arrayDouble[_shape.GetOffset(indices)];
+
+        /// <summary>
+        ///     Retrieves value of type <see cref="float"/> from internal storage.
+        /// </summary>
+        /// <param name="indices">The shape's indices to get (long version).</param>
+        /// <returns></returns>
+        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="float"/></exception>
+        public float GetSingle(params long[] indices)
+            => _arraySingle[_shape.GetOffset(indices)];
+
+        /// <summary>
+        ///     Retrieves value of type <see cref="decimal"/> from internal storage.
+        /// </summary>
+        /// <param name="indices">The shape's indices to get (long version).</param>
+        /// <returns></returns>
+        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="decimal"/></exception>
+        public decimal GetDecimal(params long[] indices)
             => _arrayDecimal[_shape.GetOffset(indices)];
 
         #endregion

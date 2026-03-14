@@ -16,9 +16,10 @@ namespace NumSharp.UnitTest.View
     {
         private unsafe void TestGetOffset(Shape shape, int[] indices)
         {
-            fixed (int* p = &indices[0])
+            var longIndices = System.Array.ConvertAll(indices, i => (long)i);
+            fixed (long* p = &longIndices[0])
             {
-                var managed_result = shape.GetOffset(indices);
+                var managed_result = shape.GetOffset(longIndices);
                 shape.GetOffset(p, indices.Length).Should().Be(managed_result);
             }
         }

@@ -19,9 +19,7 @@ namespace NumSharp
         {
             var typeCode = (dtype ?? fill_value?.GetType() ?? a.dtype).GetTypeCode();
             var shape = new Shape((long[])a.shape.Clone());
-            if (shape.size > int.MaxValue)
-                throw new ArgumentException($"Array size {shape.size} exceeds int.MaxValue limit for Allocate with fill value");
-            return new NDArray(new UnmanagedStorage(ArraySlice.Allocate(typeCode, (int)shape.size, Converts.ChangeType(fill_value, (TypeCode) typeCode)), shape));
+            return new NDArray(new UnmanagedStorage(ArraySlice.Allocate(typeCode, shape.size, Converts.ChangeType(fill_value, (TypeCode) typeCode)), shape));
         }
     }
 }

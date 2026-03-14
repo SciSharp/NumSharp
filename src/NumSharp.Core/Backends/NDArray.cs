@@ -196,7 +196,7 @@ namespace NumSharp
             // Note: F-order not supported, order parameter is accepted but ignored (C-order only)
 
             if (shape.IsEmpty)
-                shape = Shape.Vector((int) values.Count); //TODO! when long index, remove cast int
+                shape = Shape.Vector(values.Count);
 
             Storage.Allocate(values, shape);
         }

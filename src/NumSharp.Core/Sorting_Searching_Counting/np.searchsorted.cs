@@ -11,7 +11,7 @@ namespace NumSharp
         /// <param name="v">Value to insert into a.</param>
         /// <returns>Scalar index for insertion point.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.searchsorted.html</remarks>
-        public static int searchsorted(NDArray a, int v)
+        public static long searchsorted(NDArray a, int v)
         {
             return binarySearchRightmost(a, v);
         }
@@ -23,7 +23,7 @@ namespace NumSharp
         /// <param name="v">Value to insert into a.</param>
         /// <returns>Scalar index for insertion point.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.searchsorted.html</remarks>
-        public static int searchsorted(NDArray a, double v)
+        public static long searchsorted(NDArray a, double v)
         {
             return binarySearchRightmost(a, v);
         }
@@ -48,19 +48,23 @@ namespace NumSharp
                     return new NDArray(typeof(int), Shape.Vector(0), false);
 
                 // Use Convert.ToDouble for type-agnostic value extraction
-                double target = Convert.ToDouble(v.Storage.GetValue(new int[0]));
-                int idx = binarySearchRightmost(a, target);
+                double target = Convert.ToDouble(v.Storage.GetValue(new long[0]));
+                long idx = binarySearchRightmost(a, target);
                 return NDArray.Scalar(idx);
             }
 
             // Handle 1D array input
-            NDArray output = new int[v.size];
-            for (int i = 0; i < v.size; i++)
+            // For now, limit to int.MaxValue elements since SetInt64 uses int indices
+            if (v.size > int.MaxValue)
+                throw new OverflowException("searchsorted not supported for arrays larger than int.MaxValue elements");
+
+            NDArray output = new long[v.size];
+            for (int i = 0; i < (int)v.size; i++)
             {
                 // Use Convert.ToDouble for type-agnostic value extraction
                 double target = Convert.ToDouble(v.Storage.GetValue(i));
-                int idx = binarySearchRightmost(a, target);
-                output.SetInt32(idx, i);
+                long idx = binarySearchRightmost(a, target);
+                output.SetInt64(idx, i);
             }
 
             return output;
@@ -74,13 +78,13 @@ namespace NumSharp
         /// <param name="target">Target value to find position for.</param>
         /// <returns>Index where target should be inserted.</returns>
         /// <remarks>https://en.wikipedia.org/wiki/Binary_search_algorithm</remarks>
-        private static int binarySearchRightmost(NDArray arr, double target)
+        private static long binarySearchRightmost(NDArray arr, double target)
         {
-            int L = 0;
-            int R = (int)arr.size;
+            long L = 0;
+            long R = arr.size;
             while (L < R)
             {
-                int m = (L + R) / 2;
+                long m = (L + R) / 2;
                 // Use Convert.ToDouble for type-agnostic value extraction
                 double val = Convert.ToDouble(arr.Storage.GetValue(m));
                 if (val < target)

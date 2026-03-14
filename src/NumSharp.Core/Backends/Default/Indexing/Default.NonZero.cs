@@ -163,7 +163,7 @@ namespace NumSharp.Backends
 
             if (keepdims)
             {
-                var ks = new int[nd.ndim];
+                var ks = new long[nd.ndim];
                 for (int d = 0, sd = 0; d < nd.ndim; d++)
                     ks[d] = (d == axis) ? 1 : (sd < outputDims.Length ? outputDims[sd++] : 1);
                 result.Storage.Reshape(new Shape(ks));

@@ -59,7 +59,7 @@ Every np.* function and DefaultEngine operation MUST:
 | BitwiseXor | ✅ | ✅ | ⚠️ int only | ✅ | 🔲 |
 | LeftShift | ✅ | ✅ | ⚠️ int only | ⚠️ | ✅ |
 | RightShift | ✅ | ✅ | ⚠️ int only | ⚠️ | ✅ |
-| ATan2 | ✅ | ❌ **BUG** | ⚠️ float only | ✅ | ✅ |
+| ATan2 | ✅ | ✅ | ⚠️ float only | ✅ | ✅ |
 
 Legend: ✅ Complete | ⚠️ Partial | 🔲 Not verified | ❌ Missing/Bug
 
@@ -67,7 +67,7 @@ Legend: ✅ Complete | ⚠️ Partial | 🔲 Not verified | ❌ Missing/Bug
 - Add/Sub/Mul/Div/Mod/Power/FloorDivide: Use ILKernelGenerator with proper path classification
 - BitwiseAnd/Or/Xor: Integer types only (correct behavior)
 - LeftShift/RightShift: Use `.copy()` pattern to materialize non-contiguous before processing
-- **ATan2 BUG**: Uses flat indexing, ignores strides/offset/broadcast (Task #73)
+- ATan2: FIXED - Now uses IL kernels with proper stride/offset/broadcast handling
 
 ### Unary Operations (ILKernelGenerator.Unary.cs)
 

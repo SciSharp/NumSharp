@@ -80,7 +80,13 @@ namespace NumSharp
         /// <param name="index"></param>
         /// <returns></returns>
         [MethodImpl(Inline)]
-        public static Slice Index(int index) => new Slice(index, index + 1) { IsIndex = true };
+        public static Slice Index(long index) => new Slice(index, index + 1) { IsIndex = true };
+
+        /// <summary>
+        /// Backwards-compatible overload accepting int index.
+        /// </summary>
+        [MethodImpl(Inline)]
+        public static Slice Index(int index) => Index((long)index);
 
         ///// <summary>
         ///// return multiple elements for this dimension specified by the given index array (or boolean mask array)
@@ -90,9 +96,9 @@ namespace NumSharp
         //[MethodImpl(Inline)]
         //public static Slice Select(NDArray index_array_or_mask) => new Slice(null, null) { Selection=index_array_or_mask };
 
-        public int? Start;
-        public int? Stop;
-        public int Step;
+        public long? Start;
+        public long? Stop;
+        public long Step;
         public bool IsIndex;
         public bool IsEllipsis;
         public bool IsNewAxis;
@@ -103,12 +109,12 @@ namespace NumSharp
         //public NDArray Selection = null;
 
         /// <summary>
-        /// Length of the slice. 
+        /// Length of the slice.
         /// <remarks>
-        /// The length is not guaranteed to be known for i.e. a slice like ":". Make sure to check Start and Stop 
+        /// The length is not guaranteed to be known for i.e. a slice like ":". Make sure to check Start and Stop
         /// for null before using it</remarks>
         /// </summary>
-        public int? Length => Stop - Start;
+        public long? Length => Stop - Start;
 
         /// <summary>
         /// ndarray can be indexed using slicing
@@ -117,11 +123,18 @@ namespace NumSharp
         /// <param name="start">Start index of the slice, null means from the start of the array</param>
         /// <param name="stop">Stop index (first index after end of slice), null means to the end of the array</param>
         /// <param name="step">Optional step to select every n-th element, defaults to 1</param>
-        public Slice(int? start = null, int? stop = null, int step = 1)
+        public Slice(long? start = null, long? stop = null, long step = 1)
         {
             Start = start;
             Stop = stop;
             Step = step;
+        }
+
+        /// <summary>
+        /// Backwards-compatible constructor accepting int parameters.
+        /// </summary>
+        public Slice(int? start, int? stop, int step = 1) : this((long?)start, (long?)stop, (long)step)
+        {
         }
 
         public Slice(string slice_notation)
@@ -170,7 +183,7 @@ namespace NumSharp
             }
             if (match.Groups["index"].Success)
             {
-                if (!int.TryParse(Regex.Replace(match.Groups["index"].Value ?? "", @"\s+", ""), out var start))
+                if (!long.TryParse(Regex.Replace(match.Groups["index"].Value ?? "", @"\s+", ""), out var start))
                     throw new ArgumentException($"Invalid value for index: '{match.Groups["index"].Value}'");
                 Start = start;
                 Stop = start + 1;
@@ -186,7 +199,7 @@ namespace NumSharp
                 Start = null;
             else
             {
-                if (!int.TryParse(start_string, out var start))
+                if (!long.TryParse(start_string, out var start))
                     throw new ArgumentException($"Invalid value for start: {start_string}");
                 Start = start;
             }
@@ -195,8 +208,8 @@ namespace NumSharp
                 Stop = null;
             else
             {
-                if (!int.TryParse(stop_string, out var stop))
-                    throw new ArgumentException($"Invalid value for start: {stop_string}");
+                if (!long.TryParse(stop_string, out var stop))
+                    throw new ArgumentException($"Invalid value for stop: {stop_string}");
                 Stop = stop;
             }
 
@@ -204,8 +217,8 @@ namespace NumSharp
                 Step = 1;
             else
             {
-                if (!int.TryParse(step_string, out var step))
-                    throw new ArgumentException($"Invalid value for start: {step_string}");
+                if (!long.TryParse(step_string, out var step))
+                    throw new ArgumentException($"Invalid value for step: {step_string}");
                 Step = step;
             }
         }
@@ -262,7 +275,7 @@ namespace NumSharp
         // return the size of the slice, given the data dimension on this axis
         // note: this works only with sanitized shapes!
         [MethodImpl(Inline)]
-        public int GetSize()
+        public long GetSize()
         {
             var astep = Math.Abs(Step);
             return (Math.Abs(Start.Value - Stop.Value) + (astep - 1)) / astep;
@@ -274,20 +287,26 @@ namespace NumSharp
         /// <param name="dim"></param>
         /// <returns></returns>
         [MethodImpl(OptimizeAndInline)]
-        public SliceDef ToSliceDef(int dim)
+        public SliceDef ToSliceDef(long dim)
         {
+            // Slice indices are int, but dim can be long. Results must fit in int for SliceDef.
+            if (dim > int.MaxValue)
+                throw new OverflowException($"Dimension {dim} exceeds int.MaxValue. SliceDef indices limited to int range.");
+
+            int intDim = (int)dim;
+
             if (IsIndex)
             {
                 var index = Start ?? 0;
                 if (index < 0)
                 {
-                    if (Math.Abs(index) > dim)
-                        throw new ArgumentException($"Index {index} is out of bounds for the axis with size {dim}");
-                    return new SliceDef(dim + index);
+                    if (Math.Abs(index) > intDim)
+                        throw new ArgumentException($"Index {index} is out of bounds for the axis with size {intDim}");
+                    return new SliceDef(intDim + index);
                 }
 
-                if (index > 0 && index >= dim)
-                    throw new ArgumentException($"Index {index} is out of bounds for the axis with size {dim}");
+                if (index > 0 && index >= intDim)
+                    throw new ArgumentException($"Index {index} is out of bounds for the axis with size {intDim}");
                 return new SliceDef(index);
             }
 
@@ -297,15 +316,15 @@ namespace NumSharp
             if (Step > 0)
             {
                 var start = Start ?? 0;
-                var stop = Stop ?? dim;
-                if (start >= dim)
+                var stop = Stop ?? intDim;
+                if (start >= intDim)
                     return new SliceDef() {Count = 0, Start = 0, Step = 0};
                 if (start < 0)
-                    start = Math.Abs(start) <= dim ? dim + start : 0;
-                if (stop > dim)
-                    stop = dim;
+                    start = Math.Abs(start) <= intDim ? intDim + start : 0;
+                if (stop > intDim)
+                    stop = intDim;
                 if (stop < 0)
-                    stop = Math.Abs(stop) <= dim ? dim + stop : 0;
+                    stop = Math.Abs(stop) <= intDim ? intDim + stop : 0;
                 if (start >= stop)
                     return new SliceDef() {Count = 0, Start = 0, Step = 0};
                 var count = (Math.Abs(start - stop) + (astep - 1)) / astep;
@@ -314,14 +333,14 @@ namespace NumSharp
             else
             {
                 // negative step!
-                var start = Start ?? dim - 1;
+                var start = Start ?? intDim - 1;
                 var stop = Stop ?? -1;
                 if (start < 0)
-                    start = Math.Abs(start) <= dim ? dim + start : 0;
-                if (start >= dim)
-                    start = dim - 1;
+                    start = Math.Abs(start) <= intDim ? intDim + start : 0;
+                if (start >= intDim)
+                    start = intDim - 1;
                 if (Stop < 0)
-                    stop = Math.Abs(stop) <= dim ? dim + stop : -1;
+                    stop = Math.Abs(stop) <= intDim ? intDim + stop : -1;
                 if (start <= stop)
                     return new SliceDef() {Count = 0, Start = 0, Step = 0};
                 var count = (Math.Abs(start - stop) + (astep - 1)) / astep;
@@ -331,17 +350,10 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Long dimension overload for int64 indexing support.
+        /// Backwards-compatible overload accepting int dimension.
         /// </summary>
         [MethodImpl(OptimizeAndInline)]
-        public SliceDef ToSliceDef(long dim)
-        {
-            // For now, cast to int with overflow check since SliceDef uses int internally
-            // Python slice semantics typically don't exceed int.MaxValue
-            if (dim > int.MaxValue)
-                throw new ArgumentOutOfRangeException(nameof(dim), $"Dimension {dim} exceeds maximum slice dimension (int.MaxValue)");
-            return ToSliceDef((int)dim);
-        }
+        public SliceDef ToSliceDef(int dim) => ToSliceDef((long)dim);
 
 
         #region Operators
@@ -364,6 +376,7 @@ namespace NumSharp
             return a;
         }
 
+        public static implicit operator Slice(long index) => Slice.Index(index);
         public static implicit operator Slice(int index) => Slice.Index(index);
         public static implicit operator Slice(string slice) => new Slice(slice);
         //public static implicit operator Slice(NDArray selection) => Slice.Select(selection);
@@ -373,18 +386,32 @@ namespace NumSharp
 
     public struct SliceDef
     {
-        public int Start; // start index in array
-        public int Step; // positive => forward from Start, 
-        public int Count; // number of steps to take from Start (1 means just take Start, 0 means take nothing, -1 means this is an index)
+        public long Start; // start index in array
+        public long Step; // positive => forward from Start,
+        public long Count; // number of steps to take from Start (1 means just take Start, 0 means take nothing, -1 means this is an index)
 
-        public SliceDef(int start, int step, int count)
+        public SliceDef(long start, long step, long count)
         {
             (Start, Step, Count) = (start, step, count);
         }
 
-        public SliceDef(int idx)
+        public SliceDef(long idx)
         {
             (Start, Step, Count) = (idx, 1, -1);
+        }
+
+        /// <summary>
+        /// Backwards-compatible constructor accepting int parameters.
+        /// </summary>
+        public SliceDef(int start, int step, int count) : this((long)start, (long)step, (long)count)
+        {
+        }
+
+        /// <summary>
+        /// Backwards-compatible constructor accepting int index.
+        /// </summary>
+        public SliceDef(int idx) : this((long)idx)
+        {
         }
 
         /// <summary>
@@ -400,9 +427,9 @@ namespace NumSharp
             }
 
             var m = Regex.Match(def, @"\((\d+)>>(-?\d+)\*(\d+)\)");
-            Start = int.Parse(m.Groups[1].Value);
-            Step = int.Parse(m.Groups[2].Value);
-            Count = int.Parse(m.Groups[3].Value);
+            Start = long.Parse(m.Groups[1].Value);
+            Step = long.Parse(m.Groups[2].Value);
+            Count = long.Parse(m.Groups[3].Value);
         }
 
         public bool IsIndex

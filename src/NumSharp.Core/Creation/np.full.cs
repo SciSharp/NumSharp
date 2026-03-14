@@ -16,7 +16,19 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.full.html</remarks>
         public static NDArray full(ValueType fill_value, params int[] shapes)
         {
-            return full(fill_value, shapes, null);
+            return full(fill_value, System.Array.ConvertAll(shapes, i => (long)i));
+        }
+
+        /// <summary>
+        ///     Return a new array of given shape and type, filled with fill_value.
+        /// </summary>
+        /// <param name="fill_value">Fill value.</param>
+        /// <param name="shapes">Shape of the empty array, e.g., (2, 3) or 2.</param>
+        /// <returns>Array of fill_value with the given shape, dtype, and order.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.full.html</remarks>
+        public static NDArray full(ValueType fill_value, params long[] shapes)
+        {
+            return full(fill_value, new Shape(shapes), (Type)null);
         }
 
         /// <summary>
@@ -28,7 +40,19 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.full.html</remarks>
         public static NDArray full<T>(ValueType fill_value, params int[] shapes) where T : unmanaged
         {
-            return full(fill_value, shapes, typeof(T));
+            return full<T>(fill_value, System.Array.ConvertAll(shapes, i => (long)i));
+        }
+
+        /// <summary>
+        ///     Return a new array of given shape and type, filled with fill_value.
+        /// </summary>
+        /// <param name="fill_value">Fill value.</param>
+        /// <param name="shapes">Shape of the empty array, e.g., (2, 3) or 2.</param>
+        /// <returns>Array of fill_value with the given shape, dtype, and order.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.full.html</remarks>
+        public static NDArray full<T>(ValueType fill_value, params long[] shapes) where T : unmanaged
+        {
+            return full(fill_value, new Shape(shapes), typeof(T));
         }
 
         /// <summary>
@@ -61,7 +85,7 @@ namespace NumSharp
         {
             // TODO: NumPy 2.x promotes int32 to int64 for scalar integer values (NEP50)
             // Keeping original type for now to avoid breaking existing tests
-            return new NDArray(new UnmanagedStorage(ArraySlice.Allocate(fill_value.GetType(), (int)shape.size, fill_value), shape));
+            return new NDArray(new UnmanagedStorage(ArraySlice.Allocate(fill_value.GetType(), shape.size, fill_value), shape));
         }
 
 
@@ -116,7 +140,7 @@ namespace NumSharp
             if (typeCode == NPTypeCode.Empty)
                 throw new ArgumentNullException(nameof(typeCode));
 
-            return new NDArray(new UnmanagedStorage(ArraySlice.Allocate(typeCode.AsType(), (int)shape.size, Converts.ChangeType(fill_value, (TypeCode)typeCode)), shape));
+            return new NDArray(new UnmanagedStorage(ArraySlice.Allocate(typeCode.AsType(), shape.size, Converts.ChangeType(fill_value, (TypeCode)typeCode)), shape));
         }
     }
 }

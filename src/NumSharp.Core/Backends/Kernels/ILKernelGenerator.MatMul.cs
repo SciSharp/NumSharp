@@ -98,11 +98,11 @@ namespace NumSharp.Backends.Kernels
         {
             try
             {
-                // Signature: void MatMul(T* a, T* b, T* c, int M, int N, int K)
+                // Signature: void MatMul(T* a, T* b, T* c, long M, long N, long K)
                 var dm = new DynamicMethod(
                     name: $"IL_MatMul_{typeof(T).Name}",
                     returnType: typeof(void),
-                    parameterTypes: new[] { typeof(T*), typeof(T*), typeof(T*), typeof(int), typeof(int), typeof(int) },
+                    parameterTypes: new[] { typeof(T*), typeof(T*), typeof(T*), typeof(long), typeof(long), typeof(long) },
                     owner: typeof(ILKernelGenerator),
                     skipVisibility: true
                 );
@@ -132,10 +132,10 @@ namespace NumSharp.Backends.Kernels
         {
             // Parameters: arg0=a, arg1=b, arg2=c, arg3=M, arg4=N, arg5=K
             // Local variables
-            var locI = il.DeclareLocal(typeof(int));        // 0: outer loop i
-            var locK = il.DeclareLocal(typeof(int));        // 1: middle loop k
-            var locJ = il.DeclareLocal(typeof(int));        // 2: inner loop j
-            var locJEnd = il.DeclareLocal(typeof(int));     // 3: SIMD end point
+            var locI = il.DeclareLocal(typeof(long));       // 0: outer loop i
+            var locK = il.DeclareLocal(typeof(long));       // 1: middle loop k
+            var locJ = il.DeclareLocal(typeof(long));       // 2: inner loop j
+            var locJEnd = il.DeclareLocal(typeof(long));    // 3: SIMD end point
             var locAik = il.DeclareLocal(typeof(float));    // 4: A[i,k] scalar
             var locCRow = il.DeclareLocal(typeof(float*));  // 5: pointer to C[i,:]
             var locARow = il.DeclareLocal(typeof(float*));  // 6: pointer to A[i,:]
@@ -160,9 +160,9 @@ namespace NumSharp.Backends.Kernels
             // ========== ZERO OUT C ==========
             // TODO: Use SIMD zeroing (Vector256.Store with Vector256<T>.Zero) or
             // allocate with NativeMemory.AllocZeroed / fillZeros:true for faster initialization
-            // for (int idx = 0; idx < M * N; idx++) c[idx] = 0;
-            var locIdx = il.DeclareLocal(typeof(int));      // 8: zero loop index
-            var locSize = il.DeclareLocal(typeof(int));     // 9: M * N
+            // for (long idx = 0; idx < M * N; idx++) c[idx] = 0;
+            var locIdx = il.DeclareLocal(typeof(long));     // 8: zero loop index
+            var locSize = il.DeclareLocal(typeof(long));    // 9: M * N
 
             // size = M * N
             il.Emit(OpCodes.Ldarg_3);      // M
@@ -172,6 +172,7 @@ namespace NumSharp.Backends.Kernels
 
             // idx = 0
             il.Emit(OpCodes.Ldc_I4_0);
+            il.Emit(OpCodes.Conv_I8);       // Convert to long
             il.Emit(OpCodes.Stloc, locIdx);
 
             il.MarkLabel(lblZeroLoop);
@@ -192,7 +193,7 @@ namespace NumSharp.Backends.Kernels
 
             // idx++
             il.Emit(OpCodes.Ldloc, locIdx);
-            il.Emit(OpCodes.Ldc_I4_1);
+            il.Emit(OpCodes.Ldc_I8, 1L);
             il.Emit(OpCodes.Add);
             il.Emit(OpCodes.Stloc, locIdx);
             il.Emit(OpCodes.Br, lblZeroLoop);
@@ -202,11 +203,13 @@ namespace NumSharp.Backends.Kernels
             // ========== COMPUTE jEnd = N - vectorCount ==========
             il.Emit(OpCodes.Ldarg, 4);     // N
             il.Emit(OpCodes.Ldc_I4, vectorCount);
+            il.Emit(OpCodes.Conv_I8);       // Convert to long
             il.Emit(OpCodes.Sub);
             il.Emit(OpCodes.Stloc, locJEnd);
 
             // ========== OUTER LOOP: for (i = 0; i < M; i++) ==========
             il.Emit(OpCodes.Ldc_I4_0);
+            il.Emit(OpCodes.Conv_I8);       // Convert to long
             il.Emit(OpCodes.Stloc, locI);
 
             il.MarkLabel(lblOuterLoop);
@@ -239,6 +242,7 @@ namespace NumSharp.Backends.Kernels
 
             // ========== MIDDLE LOOP: for (k = 0; k < K; k++) ==========
             il.Emit(OpCodes.Ldc_I4_0);
+            il.Emit(OpCodes.Conv_I8);       // Convert to long
             il.Emit(OpCodes.Stloc, locK);
 
             il.MarkLabel(lblMiddleLoop);
@@ -270,6 +274,7 @@ namespace NumSharp.Backends.Kernels
 
             // ========== INNER SIMD LOOP: for (j = 0; j <= jEnd; j += 8) ==========
             il.Emit(OpCodes.Ldc_I4_0);
+            il.Emit(OpCodes.Conv_I8);       // Convert to long
             il.Emit(OpCodes.Stloc, locJ);
 
             il.MarkLabel(lblInnerSimd);
@@ -283,7 +288,7 @@ namespace NumSharp.Backends.Kernels
 
             // j += 8
             il.Emit(OpCodes.Ldloc, locJ);
-            il.Emit(OpCodes.Ldc_I4, vectorCount);
+            il.Emit(OpCodes.Ldc_I8, (long)vectorCount);
             il.Emit(OpCodes.Add);
             il.Emit(OpCodes.Stloc, locJ);
             il.Emit(OpCodes.Br, lblInnerSimd);
@@ -327,7 +332,7 @@ namespace NumSharp.Backends.Kernels
 
             // j++
             il.Emit(OpCodes.Ldloc, locJ);
-            il.Emit(OpCodes.Ldc_I4_1);
+            il.Emit(OpCodes.Ldc_I8, 1L);
             il.Emit(OpCodes.Add);
             il.Emit(OpCodes.Stloc, locJ);
             il.Emit(OpCodes.Br, lblInnerScalar);
@@ -336,7 +341,7 @@ namespace NumSharp.Backends.Kernels
 
             // k++
             il.Emit(OpCodes.Ldloc, locK);
-            il.Emit(OpCodes.Ldc_I4_1);
+            il.Emit(OpCodes.Ldc_I8, 1L);
             il.Emit(OpCodes.Add);
             il.Emit(OpCodes.Stloc, locK);
             il.Emit(OpCodes.Br, lblMiddleLoop);
@@ -345,7 +350,7 @@ namespace NumSharp.Backends.Kernels
 
             // i++
             il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Ldc_I4_1);
+            il.Emit(OpCodes.Ldc_I8, 1L);
             il.Emit(OpCodes.Add);
             il.Emit(OpCodes.Stloc, locI);
             il.Emit(OpCodes.Br, lblOuterLoop);
@@ -438,10 +443,10 @@ namespace NumSharp.Backends.Kernels
         private static void EmitMatMulDouble(ILGenerator il)
         {
             // Parameters: arg0=a, arg1=b, arg2=c, arg3=M, arg4=N, arg5=K
-            var locI = il.DeclareLocal(typeof(int));
-            var locK = il.DeclareLocal(typeof(int));
-            var locJ = il.DeclareLocal(typeof(int));
-            var locJEnd = il.DeclareLocal(typeof(int));
+            var locI = il.DeclareLocal(typeof(long));
+            var locK = il.DeclareLocal(typeof(long));
+            var locJ = il.DeclareLocal(typeof(long));
+            var locJEnd = il.DeclareLocal(typeof(long));
             var locAik = il.DeclareLocal(typeof(double));
             var locCRow = il.DeclareLocal(typeof(double*));
             var locARow = il.DeclareLocal(typeof(double*));
@@ -463,8 +468,8 @@ namespace NumSharp.Backends.Kernels
             var lblInnerScalarEnd = il.DefineLabel();
 
             // Zero out C
-            var locIdx = il.DeclareLocal(typeof(int));
-            var locSize = il.DeclareLocal(typeof(int));
+            var locIdx = il.DeclareLocal(typeof(long));
+            var locSize = il.DeclareLocal(typeof(long));
 
             il.Emit(OpCodes.Ldarg_3);
             il.Emit(OpCodes.Ldarg, 4);
@@ -472,6 +477,7 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Stloc, locSize);
 
             il.Emit(OpCodes.Ldc_I4_0);
+            il.Emit(OpCodes.Conv_I8);       // Convert to long
             il.Emit(OpCodes.Stloc, locIdx);
 
             il.MarkLabel(lblZeroLoop);

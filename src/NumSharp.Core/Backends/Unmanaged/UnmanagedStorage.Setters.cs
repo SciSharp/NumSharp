@@ -305,7 +305,7 @@ namespace NumSharp.Backends
 
             if (this._shape.IsBroadcasted || _shape.IsSliced || lhs.Count != value.Count) //if broadcast required
             {
-                MultiIterator.Assign(lhs, new UnmanagedStorage(value, value.Count == this.Count ? _shape.Clean(): Shape.Vector((int) value.Count))); //TODO! when long index, remove cast int
+                MultiIterator.Assign(lhs, new UnmanagedStorage(value, value.Count == this.Count ? _shape.Clean(): Shape.Vector(value.Count)));
                 return;
             }
 
@@ -632,6 +632,175 @@ namespace NumSharp.Backends
         }
 #endif
 
+        #region Typed Setters (long[] overloads)
+
+        /// <summary>
+        ///     Sets a bool at specific coordinates.
+        /// </summary>
+        /// <param name="value">The values to assign</param>
+        /// <param name="indices">The coordinates to set <paramref name="value"/> at (long version).</param>
+        [MethodImpl(Inline)]
+        public void SetBoolean(bool value, params long[] indices)
+        {
+            ThrowIfNotWriteable();
+            unsafe
+            {
+                *((bool*)Address + _shape.GetOffset(indices)) = value;
+            }
+        }
+
+        /// <summary>
+        ///     Sets a byte at specific coordinates.
+        /// </summary>
+        /// <param name="value">The values to assign</param>
+        /// <param name="indices">The coordinates to set <paramref name="value"/> at (long version).</param>
+        [MethodImpl(Inline)]
+        public void SetByte(byte value, params long[] indices)
+        {
+            ThrowIfNotWriteable();
+            unsafe
+            {
+                *((byte*)Address + _shape.GetOffset(indices)) = value;
+            }
+        }
+
+        /// <summary>
+        ///     Sets a short at specific coordinates.
+        /// </summary>
+        /// <param name="value">The values to assign</param>
+        /// <param name="indices">The coordinates to set <paramref name="value"/> at (long version).</param>
+        [MethodImpl(Inline)]
+        public void SetInt16(short value, params long[] indices)
+        {
+            ThrowIfNotWriteable();
+            unsafe
+            {
+                *((short*)Address + _shape.GetOffset(indices)) = value;
+            }
+        }
+
+        /// <summary>
+        ///     Sets a ushort at specific coordinates.
+        /// </summary>
+        /// <param name="value">The values to assign</param>
+        /// <param name="indices">The coordinates to set <paramref name="value"/> at (long version).</param>
+        [MethodImpl(Inline)]
+        public void SetUInt16(ushort value, params long[] indices)
+        {
+            ThrowIfNotWriteable();
+            unsafe
+            {
+                *((ushort*)Address + _shape.GetOffset(indices)) = value;
+            }
+        }
+
+        /// <summary>
+        ///     Sets a int at specific coordinates.
+        /// </summary>
+        /// <param name="value">The values to assign</param>
+        /// <param name="indices">The coordinates to set <paramref name="value"/> at (long version).</param>
+        [MethodImpl(Inline)]
+        public void SetInt32(int value, params long[] indices)
+        {
+            ThrowIfNotWriteable();
+            unsafe
+            {
+                *((int*)Address + _shape.GetOffset(indices)) = value;
+            }
+        }
+
+        /// <summary>
+        ///     Sets a uint at specific coordinates.
+        /// </summary>
+        /// <param name="value">The values to assign</param>
+        /// <param name="indices">The coordinates to set <paramref name="value"/> at (long version).</param>
+        [MethodImpl(Inline)]
+        public void SetUInt32(uint value, params long[] indices)
+        {
+            ThrowIfNotWriteable();
+            unsafe
+            {
+                *((uint*)Address + _shape.GetOffset(indices)) = value;
+            }
+        }
+
+        /// <summary>
+        ///     Sets a long at specific coordinates.
+        /// </summary>
+        /// <param name="value">The values to assign</param>
+        /// <param name="indices">The coordinates to set <paramref name="value"/> at (long version).</param>
+        [MethodImpl(Inline)]
+        public void SetInt64(long value, params long[] indices)
+        {
+            ThrowIfNotWriteable();
+            unsafe
+            {
+                *((long*)Address + _shape.GetOffset(indices)) = value;
+            }
+        }
+
+        /// <summary>
+        ///     Sets a ulong at specific coordinates.
+        /// </summary>
+        /// <param name="value">The values to assign</param>
+        /// <param name="indices">The coordinates to set <paramref name="value"/> at (long version).</param>
+        [MethodImpl(Inline)]
+        public void SetUInt64(ulong value, params long[] indices)
+        {
+            ThrowIfNotWriteable();
+            unsafe
+            {
+                *((ulong*)Address + _shape.GetOffset(indices)) = value;
+            }
+        }
+
+        /// <summary>
+        ///     Sets a char at specific coordinates.
+        /// </summary>
+        /// <param name="value">The values to assign</param>
+        /// <param name="indices">The coordinates to set <paramref name="value"/> at (long version).</param>
+        [MethodImpl(Inline)]
+        public void SetChar(char value, params long[] indices)
+        {
+            ThrowIfNotWriteable();
+            unsafe
+            {
+                *((char*)Address + _shape.GetOffset(indices)) = value;
+            }
+        }
+
+        /// <summary>
+        ///     Sets a float at specific coordinates.
+        /// </summary>
+        /// <param name="value">The values to assign</param>
+        /// <param name="indices">The coordinates to set <paramref name="value"/> at (long version).</param>
+        [MethodImpl(Inline)]
+        public void SetSingle(float value, params long[] indices)
+        {
+            ThrowIfNotWriteable();
+            unsafe
+            {
+                *((float*)Address + _shape.GetOffset(indices)) = value;
+            }
+        }
+
+        /// <summary>
+        ///     Sets a decimal at specific coordinates.
+        /// </summary>
+        /// <param name="value">The values to assign</param>
+        /// <param name="indices">The coordinates to set <paramref name="value"/> at (long version).</param>
+        [MethodImpl(Inline)]
+        public void SetDecimal(decimal value, params long[] indices)
+        {
+            ThrowIfNotWriteable();
+            unsafe
+            {
+                *((decimal*)Address + _shape.GetOffset(indices)) = value;
+            }
+        }
+
+        #endregion
+
         #endregion
 
         /// <summary>
@@ -661,7 +830,7 @@ namespace NumSharp.Backends
             SetInternalArray(values);
 
             if (_shape.IsEmpty)
-                _shape = new Shape((int)values.Count); //TODO! when long index, remove cast int
+                _shape = Shape.Vector(values.Count);
         }
 
         /// <summary>
@@ -675,7 +844,7 @@ namespace NumSharp.Backends
             SetInternalArray(values);
 
             if (_shape.IsEmpty)
-                _shape = new Shape((int) values.Count); //TODO! when long index, remove cast int
+                _shape = Shape.Vector(values.Count);
         }
 
         /// <summary>

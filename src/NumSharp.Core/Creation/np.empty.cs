@@ -13,7 +13,18 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.empty.html</remarks>
         public static NDArray empty(params int[] shapes)
         {
-            return empty(shapes, null);
+            return empty(System.Array.ConvertAll(shapes, i => (long)i));
+        }
+
+        /// <summary>
+        ///     Return a new array of given shape and type, without initializing entries.
+        /// </summary>
+        /// <param name="shapes">Shape of the empty array, e.g., (2, 3) or 2.</param>
+        /// <returns>Array of uninitialized (arbitrary) data of the given shape, dtype, and order. Object arrays will be initialized to None.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.empty.html</remarks>
+        public static NDArray empty(params long[] shapes)
+        {
+            return empty(new Shape(shapes), (Type)null);
         }
 
         /// <summary>
@@ -24,7 +35,18 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.empty.html</remarks>
         public static NDArray empty<T>(params int[] shapes)
         {
-            return empty(shapes, typeof(T));
+            return empty<T>(System.Array.ConvertAll(shapes, i => (long)i));
+        }
+
+        /// <summary>
+        ///     Return a new array of given shape and type, without initializing entries.
+        /// </summary>
+        /// <param name="shapes">Shape of the empty array, e.g., (2, 3) or 2.</param>
+        /// <returns>Array of uninitialized (arbitrary) data of the given shape, dtype, and order. Object arrays will be initialized to None.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.empty.html</remarks>
+        public static NDArray empty<T>(params long[] shapes)
+        {
+            return empty(new Shape(shapes), typeof(T));
         }
 
         /// <summary>

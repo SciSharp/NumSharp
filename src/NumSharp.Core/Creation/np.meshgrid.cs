@@ -22,12 +22,12 @@
 
             int ndim = 2;
             var s0 = (1, 1);
-            var output = new NDArray[] {x1.reshape((int)x1.size, 1), x2.reshape(1, (int)x2.size)};
+            var output = new NDArray[] {x1.reshape(x1.size, 1), x2.reshape(1, x2.size)};
 
             if (kwargs.indexing == "xy" && ndim > 1)
             {
                 // Switch first and second axis
-                output = new NDArray[] {x1.reshape(1, (int)x1.size), x2.reshape((int)x2.size, 1)};
+                output = new NDArray[] {x1.reshape(1, x1.size), x2.reshape(x2.size, 1)};
             }
 
             if (!kwargs.sparse)
