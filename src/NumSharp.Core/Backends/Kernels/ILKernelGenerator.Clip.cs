@@ -465,7 +465,7 @@ namespace NumSharp.Backends.Kernels
             // Strided iteration using coordinate transformation
             for (long i = 0; i < size; i++)
             {
-                int offset = shape.TransformOffset(i);
+                long offset = shape.TransformOffset(i);
                 var val = data[offset];
                 if (val.CompareTo(maxVal) > 0)
                     val = maxVal;
@@ -491,7 +491,7 @@ namespace NumSharp.Backends.Kernels
 
             for (long i = 0; i < size; i++)
             {
-                int offset = shape.TransformOffset(i);
+                long offset = shape.TransformOffset(i);
                 if (data[offset].CompareTo(minVal) < 0)
                     data[offset] = minVal;
             }
@@ -513,7 +513,7 @@ namespace NumSharp.Backends.Kernels
 
             for (long i = 0; i < size; i++)
             {
-                int offset = shape.TransformOffset(i);
+                long offset = shape.TransformOffset(i);
                 if (data[offset].CompareTo(maxVal) > 0)
                     data[offset] = maxVal;
             }

@@ -91,9 +91,9 @@ namespace NumSharp.Backends
 
             // Classify execution path using strides
             ExecutionPath path;
-            fixed (int* yStrides = yShape.strides)
-            fixed (int* xStrides = xShape.strides)
-            fixed (int* shape = resultShape.dimensions)
+            fixed (long* yStrides = yShape.strides)
+            fixed (long* xStrides = xShape.strides)
+            fixed (long* shape = resultShape.dimensions)
             {
                 path = ClassifyATan2Path(yStrides, xStrides, shape, resultShape.NDim);
             }
@@ -193,7 +193,7 @@ namespace NumSharp.Backends
         /// Classify execution path for ATan2 based on strides.
         /// </summary>
         private static unsafe ExecutionPath ClassifyATan2Path(
-            int* yStrides, int* xStrides, int* shape, int ndim)
+            long* yStrides, long* xStrides, long* shape, int ndim)
         {
             if (ndim == 0)
                 return ExecutionPath.SimdFull;
@@ -214,8 +214,8 @@ namespace NumSharp.Backends
                 return ExecutionPath.SimdScalarLeft;
 
             // Check for inner-contiguous (chunk-able)
-            int yInner = yStrides[ndim - 1];
-            int xInner = xStrides[ndim - 1];
+            long yInner = yStrides[ndim - 1];
+            long xInner = xStrides[ndim - 1];
             if ((yInner == 1 || yInner == 0) && (xInner == 1 || xInner == 0))
                 return ExecutionPath.SimdChunk;
 
@@ -238,9 +238,9 @@ namespace NumSharp.Backends
             byte* yAddr = (byte*)y.Address + yShape.offset * yElemSize;
             byte* xAddr = (byte*)x.Address + xShape.offset * xElemSize;
 
-            fixed (int* yStrides = yShape.strides)
-            fixed (int* xStrides = xShape.strides)
-            fixed (int* shape = result.shape)
+            fixed (long* yStrides = yShape.strides)
+            fixed (long* xStrides = xShape.strides)
+            fixed (long* shape = result.shape)
             {
                 kernel(
                     (void*)yAddr,
