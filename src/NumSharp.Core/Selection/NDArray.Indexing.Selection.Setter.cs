@@ -55,6 +55,9 @@ namespace NumSharp
                     case int[] coords:
                         SetData(values, coords);
                         return;
+                    case long[] coords:
+                        SetData(values, coords);
+                        return;
                     case NDArray[] nds:
                         this[nds] = values;
                         return;

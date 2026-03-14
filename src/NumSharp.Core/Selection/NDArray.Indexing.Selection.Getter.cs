@@ -46,6 +46,8 @@ namespace NumSharp
 
                     case int[] coords:
                         return GetData(coords);
+                    case long[] coords:
+                        return GetData(coords);
                     case NDArray[] nds:
                         return this[nds];
                     case object[] objs:

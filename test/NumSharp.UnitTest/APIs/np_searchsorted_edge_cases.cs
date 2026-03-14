@@ -160,7 +160,7 @@ public class NpSearchsortedEdgeCaseTests
     [Test]
     public void Int32Array_IntSearch()
     {
-        var arr = np.array(new int[] { 1, 2, 3, 4, 5 });
+        var arr = np.array(new long[] { 1, 2, 3, 4, 5 });
         var result = np.searchsorted(arr, 3);
         Assert.AreEqual(2, result);
     }

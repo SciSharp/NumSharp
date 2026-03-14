@@ -210,7 +210,7 @@ namespace NumSharp
                     {
                         var hasNext = new Reference<bool>(true);
                         var iterator = new ValueCoordinatesIncrementor(ref shape, delegate(ref ValueCoordinatesIncrementor _) { hasNext.Value = false; });
-                        Func<int[], int> getOffset = shape.GetOffset;
+                        Func<long[], long> getOffset = shape.GetOffset;
                         var index = iterator.Index;
 
                         MoveNext = () =>
@@ -333,7 +333,7 @@ namespace NumSharp
                     {
                         var iterator = new ValueCoordinatesIncrementor(ref shape, delegate(ref ValueCoordinatesIncrementor incr) { incr.Reset(); });
                         var index = iterator.Index;
-                        Func<int[], int> getOffset = shape.GetOffset;
+                        Func<long[], long> getOffset = shape.GetOffset;
                         MoveNext = () =>
                         {
                             var ret = *((TOut*)localBlock.Address + getOffset(index));
