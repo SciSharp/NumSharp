@@ -107,9 +107,39 @@ namespace NumSharp.Backends.Kernels
             int i = 0;
 
 #if NET9_0_OR_GREATER
-            // Vector256 path (.NET 9+ has Vector.Truncate)
+            // Vector512 path (.NET 9+ has Vector.Truncate)
             // Note: SIMD path produces NaN for inf-inf, we fixup afterwards
-            if (VectorBits >= 256 && size >= Vector256<float>.Count)
+            if (VectorBits >= 512 && size >= Vector512<float>.Count)
+            {
+                int vectorCount = Vector512<float>.Count;
+                int vectorEnd = size - vectorCount;
+                var signBitMask = Vector512.Create(-0f); // Sign bit mask: 0x80000000
+                var zero = Vector512<float>.Zero;
+                var posInf = Vector512.Create(float.PositiveInfinity);
+
+                for (; i <= vectorEnd; i += vectorCount)
+                {
+                    var vec = Vector512.Load(data + i);
+                    var truncVec = Vector512.Truncate(vec);
+                    var fracVec = vec - truncVec;
+
+                    // Extract sign bits from input
+                    var signedZero = vec & signBitMask;
+
+                    // Fixup 1: where input is inf, frac should be copysign(0, input)
+                    var infMask = Vector512.Equals(Vector512.Abs(vec), posInf);
+                    fracVec = Vector512.ConditionalSelect(infMask, signedZero, fracVec);
+
+                    // Fixup 2: where frac is zero, preserve sign from input
+                    var zeroMask = Vector512.Equals(fracVec, zero);
+                    fracVec = Vector512.ConditionalSelect(zeroMask, signedZero | fracVec, fracVec);
+
+                    fracVec.Store(data + i);
+                    truncVec.Store(integral + i);
+                }
+            }
+            // Vector256 path
+            else if (VectorBits >= 256 && size >= Vector256<float>.Count)
             {
                 int vectorCount = Vector256<float>.Count;
                 int vectorEnd = size - vectorCount;
@@ -193,9 +223,39 @@ namespace NumSharp.Backends.Kernels
             int i = 0;
 
 #if NET9_0_OR_GREATER
-            // Vector256 path (.NET 9+ has Vector.Truncate)
+            // Vector512 path (.NET 9+ has Vector.Truncate)
             // Note: SIMD path produces NaN for inf-inf, we fixup afterwards
-            if (VectorBits >= 256 && size >= Vector256<double>.Count)
+            if (VectorBits >= 512 && size >= Vector512<double>.Count)
+            {
+                int vectorCount = Vector512<double>.Count;
+                int vectorEnd = size - vectorCount;
+                var signBitMask = Vector512.Create(-0d); // Sign bit mask: 0x8000000000000000
+                var zero = Vector512<double>.Zero;
+                var posInf = Vector512.Create(double.PositiveInfinity);
+
+                for (; i <= vectorEnd; i += vectorCount)
+                {
+                    var vec = Vector512.Load(data + i);
+                    var truncVec = Vector512.Truncate(vec);
+                    var fracVec = vec - truncVec;
+
+                    // Extract sign bits from input
+                    var signedZero = vec & signBitMask;
+
+                    // Fixup 1: where input is inf, frac should be copysign(0, input)
+                    var infMask = Vector512.Equals(Vector512.Abs(vec), posInf);
+                    fracVec = Vector512.ConditionalSelect(infMask, signedZero, fracVec);
+
+                    // Fixup 2: where frac is zero, preserve sign from input
+                    var zeroMask = Vector512.Equals(fracVec, zero);
+                    fracVec = Vector512.ConditionalSelect(zeroMask, signedZero | fracVec, fracVec);
+
+                    fracVec.Store(data + i);
+                    truncVec.Store(integral + i);
+                }
+            }
+            // Vector256 path
+            else if (VectorBits >= 256 && size >= Vector256<double>.Count)
             {
                 int vectorCount = Vector256<double>.Count;
                 int vectorEnd = size - vectorCount;

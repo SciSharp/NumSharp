@@ -602,8 +602,31 @@ namespace NumSharp.Backends.Kernels
         {
             if (size == 0) return;
 
-            // Try SIMD path for supported types with sufficient size
-            if (VectorBits >= 256 && size >= 32)
+            // Try SIMD path for supported types with sufficient size (V512 -> V256 -> V128 -> scalar)
+            if (VectorBits >= 512 && size >= 64)
+            {
+                if (typeof(T) == typeof(float))
+                {
+                    ClipArrayBoundsSimd512((float*)output, (float*)minArr, (float*)maxArr, size);
+                    return;
+                }
+                if (typeof(T) == typeof(double))
+                {
+                    ClipArrayBoundsSimd512((double*)output, (double*)minArr, (double*)maxArr, size);
+                    return;
+                }
+                if (typeof(T) == typeof(int))
+                {
+                    ClipArrayBoundsSimd512((int*)output, (int*)minArr, (int*)maxArr, size);
+                    return;
+                }
+                if (typeof(T) == typeof(long))
+                {
+                    ClipArrayBoundsSimd512((long*)output, (long*)minArr, (long*)maxArr, size);
+                    return;
+                }
+            }
+            else if (VectorBits >= 256 && size >= 32)
             {
                 if (typeof(T) == typeof(float))
                 {
@@ -663,8 +686,31 @@ namespace NumSharp.Backends.Kernels
         {
             if (size == 0) return;
 
-            // Try SIMD path
-            if (VectorBits >= 256 && size >= 32)
+            // Try SIMD path (V512 -> V256 -> V128 -> scalar)
+            if (VectorBits >= 512 && size >= 64)
+            {
+                if (typeof(T) == typeof(float))
+                {
+                    ClipArrayMinSimd512((float*)output, (float*)minArr, size);
+                    return;
+                }
+                if (typeof(T) == typeof(double))
+                {
+                    ClipArrayMinSimd512((double*)output, (double*)minArr, size);
+                    return;
+                }
+                if (typeof(T) == typeof(int))
+                {
+                    ClipArrayMinSimd512((int*)output, (int*)minArr, size);
+                    return;
+                }
+                if (typeof(T) == typeof(long))
+                {
+                    ClipArrayMinSimd512((long*)output, (long*)minArr, size);
+                    return;
+                }
+            }
+            else if (VectorBits >= 256 && size >= 32)
             {
                 if (typeof(T) == typeof(float))
                 {
@@ -723,8 +769,31 @@ namespace NumSharp.Backends.Kernels
         {
             if (size == 0) return;
 
-            // Try SIMD path
-            if (VectorBits >= 256 && size >= 32)
+            // Try SIMD path (V512 -> V256 -> V128 -> scalar)
+            if (VectorBits >= 512 && size >= 64)
+            {
+                if (typeof(T) == typeof(float))
+                {
+                    ClipArrayMaxSimd512((float*)output, (float*)maxArr, size);
+                    return;
+                }
+                if (typeof(T) == typeof(double))
+                {
+                    ClipArrayMaxSimd512((double*)output, (double*)maxArr, size);
+                    return;
+                }
+                if (typeof(T) == typeof(int))
+                {
+                    ClipArrayMaxSimd512((int*)output, (int*)maxArr, size);
+                    return;
+                }
+                if (typeof(T) == typeof(long))
+                {
+                    ClipArrayMaxSimd512((long*)output, (long*)maxArr, size);
+                    return;
+                }
+            }
+            else if (VectorBits >= 256 && size >= 32)
             {
                 if (typeof(T) == typeof(float))
                 {
@@ -812,6 +881,90 @@ namespace NumSharp.Backends.Kernels
             for (int i = 0; i < size; i++)
             {
                 if (output[i].CompareTo(maxArr[i]) > 0)
+                    output[i] = maxArr[i];
+            }
+        }
+
+        #endregion
+
+        #region Array Bounds - Vector512 SIMD Implementations
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe void ClipArrayBoundsSimd512<T>(T* output, T* minArr, T* maxArr, int size)
+            where T : unmanaged
+        {
+            int vectorCount = Vector512<T>.Count;
+            int vectorEnd = size - vectorCount;
+
+            int i = 0;
+            for (; i <= vectorEnd; i += vectorCount)
+            {
+                var vec = Vector512.Load(output + i);
+                var minVec = Vector512.Load(minArr + i);
+                var maxVec = Vector512.Load(maxArr + i);
+                vec = Vector512.Max(vec, minVec);
+                vec = Vector512.Min(vec, maxVec);
+                vec.Store(output + i);
+            }
+
+            // Scalar tail
+            for (; i < size; i++)
+            {
+                var val = output[i];
+                var minVal = minArr[i];
+                var maxVal = maxArr[i];
+                if (Comparer<T>.Default.Compare(val, minVal) < 0)
+                    val = minVal;
+                if (Comparer<T>.Default.Compare(val, maxVal) > 0)
+                    val = maxVal;
+                output[i] = val;
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe void ClipArrayMinSimd512<T>(T* output, T* minArr, int size)
+            where T : unmanaged
+        {
+            int vectorCount = Vector512<T>.Count;
+            int vectorEnd = size - vectorCount;
+
+            int i = 0;
+            for (; i <= vectorEnd; i += vectorCount)
+            {
+                var vec = Vector512.Load(output + i);
+                var minVec = Vector512.Load(minArr + i);
+                vec = Vector512.Max(vec, minVec);
+                vec.Store(output + i);
+            }
+
+            // Scalar tail
+            for (; i < size; i++)
+            {
+                if (Comparer<T>.Default.Compare(output[i], minArr[i]) < 0)
+                    output[i] = minArr[i];
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe void ClipArrayMaxSimd512<T>(T* output, T* maxArr, int size)
+            where T : unmanaged
+        {
+            int vectorCount = Vector512<T>.Count;
+            int vectorEnd = size - vectorCount;
+
+            int i = 0;
+            for (; i <= vectorEnd; i += vectorCount)
+            {
+                var vec = Vector512.Load(output + i);
+                var maxVec = Vector512.Load(maxArr + i);
+                vec = Vector512.Min(vec, maxVec);
+                vec.Store(output + i);
+            }
+
+            // Scalar tail
+            for (; i < size; i++)
+            {
+                if (Comparer<T>.Default.Compare(output[i], maxArr[i]) > 0)
                     output[i] = maxArr[i];
             }
         }

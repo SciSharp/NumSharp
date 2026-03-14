@@ -179,6 +179,64 @@ namespace NumSharp.Backends.Kernels
 
         #endregion
 
+        #region Cached MethodInfo Lookups
+
+        /// <summary>
+        /// Pre-cached MethodInfo references for frequently used reflection calls.
+        /// Caching these avoids repeated GetMethod() lookups during kernel generation.
+        /// </summary>
+        private static class CachedMethods
+        {
+            // Math methods (double versions)
+            public static readonly MethodInfo MathPow = typeof(Math).GetMethod(nameof(Math.Pow), new[] { typeof(double), typeof(double) })!;
+            public static readonly MethodInfo MathFloor = typeof(Math).GetMethod(nameof(Math.Floor), new[] { typeof(double) })!;
+            public static readonly MethodInfo MathAtan2 = typeof(Math).GetMethod(nameof(Math.Atan2), new[] { typeof(double), typeof(double) })!;
+
+            // Decimal conversion methods (to decimal)
+            public static readonly MethodInfo DecimalImplicitFromInt = typeof(decimal).GetMethod("op_Implicit", new[] { typeof(int) })!;
+            public static readonly MethodInfo DecimalImplicitFromByte = typeof(decimal).GetMethod("op_Implicit", new[] { typeof(byte) })!;
+            public static readonly MethodInfo DecimalImplicitFromShort = typeof(decimal).GetMethod("op_Implicit", new[] { typeof(short) })!;
+            public static readonly MethodInfo DecimalImplicitFromUShort = typeof(decimal).GetMethod("op_Implicit", new[] { typeof(ushort) })!;
+            public static readonly MethodInfo DecimalImplicitFromUInt = typeof(decimal).GetMethod("op_Implicit", new[] { typeof(uint) })!;
+            public static readonly MethodInfo DecimalImplicitFromLong = typeof(decimal).GetMethod("op_Implicit", new[] { typeof(long) })!;
+            public static readonly MethodInfo DecimalImplicitFromULong = typeof(decimal).GetMethod("op_Implicit", new[] { typeof(ulong) })!;
+            public static readonly MethodInfo DecimalExplicitFromFloat = typeof(decimal).GetMethod("op_Explicit", new[] { typeof(float) })!;
+            public static readonly MethodInfo DecimalExplicitFromDouble = typeof(decimal).GetMethod("op_Explicit", new[] { typeof(double) })!;
+
+            // Decimal conversion methods (from decimal)
+            public static readonly MethodInfo DecimalToByte = typeof(decimal).GetMethod("ToByte", new[] { typeof(decimal) })!;
+            public static readonly MethodInfo DecimalToInt16 = typeof(decimal).GetMethod("ToInt16", new[] { typeof(decimal) })!;
+            public static readonly MethodInfo DecimalToUInt16 = typeof(decimal).GetMethod("ToUInt16", new[] { typeof(decimal) })!;
+            public static readonly MethodInfo DecimalToInt32 = typeof(decimal).GetMethod("ToInt32", new[] { typeof(decimal) })!;
+            public static readonly MethodInfo DecimalToUInt32 = typeof(decimal).GetMethod("ToUInt32", new[] { typeof(decimal) })!;
+            public static readonly MethodInfo DecimalToInt64 = typeof(decimal).GetMethod("ToInt64", new[] { typeof(decimal) })!;
+            public static readonly MethodInfo DecimalToUInt64 = typeof(decimal).GetMethod("ToUInt64", new[] { typeof(decimal) })!;
+            public static readonly MethodInfo DecimalToSingle = typeof(decimal).GetMethod("ToSingle", new[] { typeof(decimal) })!;
+            public static readonly MethodInfo DecimalToDouble = typeof(decimal).GetMethod("ToDouble", new[] { typeof(decimal) })!;
+
+            // Decimal operator methods
+            public static readonly MethodInfo DecimalOpAddition = typeof(decimal).GetMethod("op_Addition",
+                BindingFlags.Public | BindingFlags.Static, null, new[] { typeof(decimal), typeof(decimal) }, null)!;
+            public static readonly MethodInfo DecimalOpSubtraction = typeof(decimal).GetMethod("op_Subtraction",
+                BindingFlags.Public | BindingFlags.Static, null, new[] { typeof(decimal), typeof(decimal) }, null)!;
+            public static readonly MethodInfo DecimalOpMultiply = typeof(decimal).GetMethod("op_Multiply",
+                BindingFlags.Public | BindingFlags.Static, null, new[] { typeof(decimal), typeof(decimal) }, null)!;
+            public static readonly MethodInfo DecimalOpDivision = typeof(decimal).GetMethod("op_Division",
+                BindingFlags.Public | BindingFlags.Static, null, new[] { typeof(decimal), typeof(decimal) }, null)!;
+            public static readonly MethodInfo DecimalFloor = typeof(decimal).GetMethod(nameof(decimal.Floor),
+                BindingFlags.Public | BindingFlags.Static, null, new[] { typeof(decimal) }, null)!;
+
+            // DecimalMath.DecimalEx methods
+            public static readonly MethodInfo DecimalExPow = typeof(DecimalMath.DecimalEx).GetMethod(
+                nameof(DecimalMath.DecimalEx.Pow), BindingFlags.Public | BindingFlags.Static, null,
+                new[] { typeof(decimal), typeof(decimal) }, null)!;
+            public static readonly MethodInfo DecimalExATan2 = typeof(DecimalMath.DecimalEx).GetMethod(
+                nameof(DecimalMath.DecimalEx.ATan2), BindingFlags.Public | BindingFlags.Static, null,
+                new[] { typeof(decimal), typeof(decimal) }, null)!;
+        }
+
+        #endregion
+
         /// <summary>
         /// Get the Vector container type (Vector128, Vector256, or Vector512).
         /// </summary>
@@ -431,31 +489,31 @@ namespace NumSharp.Backends.Kernels
                 {
                     // bool -> int -> decimal
                     il.Emit(OpCodes.Conv_I4);
-                    il.EmitCall(OpCodes.Call, typeof(decimal).GetMethod("op_Implicit", new[] { typeof(int) })!, null);
+                    il.EmitCall(OpCodes.Call, CachedMethods.DecimalImplicitFromInt, null);
                     return;
                 }
                 if (from == NPTypeCode.Char)
                 {
                     // char -> int -> decimal
                     il.Emit(OpCodes.Conv_I4);
-                    il.EmitCall(OpCodes.Call, typeof(decimal).GetMethod("op_Implicit", new[] { typeof(int) })!, null);
+                    il.EmitCall(OpCodes.Call, CachedMethods.DecimalImplicitFromInt, null);
                     return;
                 }
 
                 var method = from switch
                 {
-                    NPTypeCode.Byte => typeof(decimal).GetMethod("op_Implicit", new[] { typeof(byte) }),
-                    NPTypeCode.Int16 => typeof(decimal).GetMethod("op_Implicit", new[] { typeof(short) }),
-                    NPTypeCode.UInt16 => typeof(decimal).GetMethod("op_Implicit", new[] { typeof(ushort) }),
-                    NPTypeCode.Int32 => typeof(decimal).GetMethod("op_Implicit", new[] { typeof(int) }),
-                    NPTypeCode.UInt32 => typeof(decimal).GetMethod("op_Implicit", new[] { typeof(uint) }),
-                    NPTypeCode.Int64 => typeof(decimal).GetMethod("op_Implicit", new[] { typeof(long) }),
-                    NPTypeCode.UInt64 => typeof(decimal).GetMethod("op_Implicit", new[] { typeof(ulong) }),
-                    NPTypeCode.Single => typeof(decimal).GetMethod("op_Explicit", new[] { typeof(float) }),
-                    NPTypeCode.Double => typeof(decimal).GetMethod("op_Explicit", new[] { typeof(double) }),
+                    NPTypeCode.Byte => CachedMethods.DecimalImplicitFromByte,
+                    NPTypeCode.Int16 => CachedMethods.DecimalImplicitFromShort,
+                    NPTypeCode.UInt16 => CachedMethods.DecimalImplicitFromUShort,
+                    NPTypeCode.Int32 => CachedMethods.DecimalImplicitFromInt,
+                    NPTypeCode.UInt32 => CachedMethods.DecimalImplicitFromUInt,
+                    NPTypeCode.Int64 => CachedMethods.DecimalImplicitFromLong,
+                    NPTypeCode.UInt64 => CachedMethods.DecimalImplicitFromULong,
+                    NPTypeCode.Single => CachedMethods.DecimalExplicitFromFloat,
+                    NPTypeCode.Double => CachedMethods.DecimalExplicitFromDouble,
                     _ => throw new NotSupportedException($"Cannot convert {from} to decimal")
                 };
-                il.EmitCall(OpCodes.Call, method!, null);
+                il.EmitCall(OpCodes.Call, method, null);
             }
             else
             {
@@ -463,7 +521,7 @@ namespace NumSharp.Backends.Kernels
                 if (to == NPTypeCode.Boolean)
                 {
                     // decimal -> int -> bool (compare with 0)
-                    il.EmitCall(OpCodes.Call, typeof(decimal).GetMethod("ToInt32", new[] { typeof(decimal) })!, null);
+                    il.EmitCall(OpCodes.Call, CachedMethods.DecimalToInt32, null);
                     il.Emit(OpCodes.Ldc_I4_0);
                     il.Emit(OpCodes.Cgt_Un);
                     return;
@@ -471,25 +529,25 @@ namespace NumSharp.Backends.Kernels
                 if (to == NPTypeCode.Char)
                 {
                     // decimal -> int -> char
-                    il.EmitCall(OpCodes.Call, typeof(decimal).GetMethod("ToInt32", new[] { typeof(decimal) })!, null);
+                    il.EmitCall(OpCodes.Call, CachedMethods.DecimalToInt32, null);
                     il.Emit(OpCodes.Conv_U2);
                     return;
                 }
 
                 var method = to switch
                 {
-                    NPTypeCode.Byte => typeof(decimal).GetMethod("ToByte", new[] { typeof(decimal) }),
-                    NPTypeCode.Int16 => typeof(decimal).GetMethod("ToInt16", new[] { typeof(decimal) }),
-                    NPTypeCode.UInt16 => typeof(decimal).GetMethod("ToUInt16", new[] { typeof(decimal) }),
-                    NPTypeCode.Int32 => typeof(decimal).GetMethod("ToInt32", new[] { typeof(decimal) }),
-                    NPTypeCode.UInt32 => typeof(decimal).GetMethod("ToUInt32", new[] { typeof(decimal) }),
-                    NPTypeCode.Int64 => typeof(decimal).GetMethod("ToInt64", new[] { typeof(decimal) }),
-                    NPTypeCode.UInt64 => typeof(decimal).GetMethod("ToUInt64", new[] { typeof(decimal) }),
-                    NPTypeCode.Single => typeof(decimal).GetMethod("ToSingle", new[] { typeof(decimal) }),
-                    NPTypeCode.Double => typeof(decimal).GetMethod("ToDouble", new[] { typeof(decimal) }),
+                    NPTypeCode.Byte => CachedMethods.DecimalToByte,
+                    NPTypeCode.Int16 => CachedMethods.DecimalToInt16,
+                    NPTypeCode.UInt16 => CachedMethods.DecimalToUInt16,
+                    NPTypeCode.Int32 => CachedMethods.DecimalToInt32,
+                    NPTypeCode.UInt32 => CachedMethods.DecimalToUInt32,
+                    NPTypeCode.Int64 => CachedMethods.DecimalToInt64,
+                    NPTypeCode.UInt64 => CachedMethods.DecimalToUInt64,
+                    NPTypeCode.Single => CachedMethods.DecimalToSingle,
+                    NPTypeCode.Double => CachedMethods.DecimalToDouble,
                     _ => throw new NotSupportedException($"Cannot convert decimal to {to}")
                 };
-                il.EmitCall(OpCodes.Call, method!, null);
+                il.EmitCall(OpCodes.Call, method, null);
             }
         }
 
@@ -600,8 +658,7 @@ namespace NumSharp.Backends.Kernels
             }
 
             // Call Math.Pow(double, double)
-            var powMethod = typeof(Math).GetMethod(nameof(Math.Pow), new[] { typeof(double), typeof(double) });
-            il.EmitCall(OpCodes.Call, powMethod!, null);
+            il.EmitCall(OpCodes.Call, CachedMethods.MathPow, null);
 
             // Convert result back to target type
             if (resultType != NPTypeCode.Double)
@@ -628,14 +685,12 @@ namespace NumSharp.Backends.Kernels
                 if (resultType == NPTypeCode.Single)
                 {
                     il.Emit(OpCodes.Conv_R8);
-                    var floorMethod = typeof(Math).GetMethod(nameof(Math.Floor), new[] { typeof(double) });
-                    il.EmitCall(OpCodes.Call, floorMethod!, null);
+                    il.EmitCall(OpCodes.Call, CachedMethods.MathFloor, null);
                     il.Emit(OpCodes.Conv_R4);
                 }
                 else
                 {
-                    var floorMethod = typeof(Math).GetMethod(nameof(Math.Floor), new[] { typeof(double) });
-                    il.EmitCall(OpCodes.Call, floorMethod!, null);
+                    il.EmitCall(OpCodes.Call, CachedMethods.MathFloor, null);
                 }
             }
             else if (IsUnsigned(resultType))
@@ -672,8 +727,7 @@ namespace NumSharp.Backends.Kernels
 
                 // Divide and floor
                 il.Emit(OpCodes.Div);
-                var floorMethod = typeof(Math).GetMethod(nameof(Math.Floor), new[] { typeof(double) });
-                il.EmitCall(OpCodes.Call, floorMethod!, null);
+                il.EmitCall(OpCodes.Call, CachedMethods.MathFloor, null);
 
                 // Convert back to result type
                 EmitConvertFromDouble(il, resultType);
@@ -721,14 +775,12 @@ namespace NumSharp.Backends.Kernels
                 if (resultType == NPTypeCode.Single)
                 {
                     il.Emit(OpCodes.Conv_R8);  // Math.Floor takes double
-                    var floorMethod = typeof(Math).GetMethod(nameof(Math.Floor), new[] { typeof(double) });
-                    il.EmitCall(OpCodes.Call, floorMethod!, null);
+                    il.EmitCall(OpCodes.Call, CachedMethods.MathFloor, null);
                     il.Emit(OpCodes.Conv_R4);  // Convert back to float
                 }
                 else
                 {
-                    var floorMethod = typeof(Math).GetMethod(nameof(Math.Floor), new[] { typeof(double) });
-                    il.EmitCall(OpCodes.Call, floorMethod!, null);
+                    il.EmitCall(OpCodes.Call, CachedMethods.MathFloor, null);
                 }
 
                 // Multiply by b
@@ -764,8 +816,7 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Div);
 
             // Floor
-            var floorMethodInt = typeof(Math).GetMethod(nameof(Math.Floor), new[] { typeof(double) });
-            il.EmitCall(OpCodes.Call, floorMethodInt!, null);
+            il.EmitCall(OpCodes.Call, CachedMethods.MathFloor, null);
 
             // Convert back to long and multiply by b
             il.Emit(OpCodes.Conv_I8);
@@ -822,8 +873,7 @@ namespace NumSharp.Backends.Kernels
             }
 
             // Call Math.Atan2(double y, double x)
-            var atan2Method = typeof(Math).GetMethod(nameof(Math.Atan2), new[] { typeof(double), typeof(double) });
-            il.EmitCall(OpCodes.Call, atan2Method!, null);
+            il.EmitCall(OpCodes.Call, CachedMethods.MathAtan2, null);
 
             // Convert result back to target type
             if (resultType != NPTypeCode.Double)
@@ -887,14 +937,7 @@ namespace NumSharp.Backends.Kernels
             // Power for decimal uses DecimalEx.Pow
             if (op == BinaryOp.Power)
             {
-                var powMethod = typeof(DecimalMath.DecimalEx).GetMethod(
-                    nameof(DecimalMath.DecimalEx.Pow),
-                    BindingFlags.Public | BindingFlags.Static,
-                    null,
-                    new[] { typeof(decimal), typeof(decimal) },
-                    null
-                );
-                il.EmitCall(OpCodes.Call, powMethod!, null);
+                il.EmitCall(OpCodes.Call, CachedMethods.DecimalExPow, null);
                 return;
             }
 
@@ -911,16 +954,10 @@ namespace NumSharp.Backends.Kernels
                 // Compute a / b
                 il.Emit(OpCodes.Ldloc, locDividend);
                 il.Emit(OpCodes.Ldloc, locDivisor);
-                var divideMethod = typeof(decimal).GetMethod("op_Division",
-                    BindingFlags.Public | BindingFlags.Static,
-                    null, new[] { typeof(decimal), typeof(decimal) }, null);
-                il.EmitCall(OpCodes.Call, divideMethod!, null);
+                il.EmitCall(OpCodes.Call, CachedMethods.DecimalOpDivision, null);
 
                 // Call decimal.Floor for floored division toward negative infinity
-                var floorMethod = typeof(decimal).GetMethod(nameof(decimal.Floor),
-                    BindingFlags.Public | BindingFlags.Static,
-                    null, new[] { typeof(decimal) }, null);
-                il.EmitCall(OpCodes.Call, floorMethod!, null);
+                il.EmitCall(OpCodes.Call, CachedMethods.DecimalFloor, null);
                 return;
             }
 
@@ -940,62 +977,35 @@ namespace NumSharp.Backends.Kernels
                 // Compute floor(a / b)
                 il.Emit(OpCodes.Ldloc, locDividend);
                 il.Emit(OpCodes.Ldloc, locDivisor);
-                var divideMethod = typeof(decimal).GetMethod("op_Division",
-                    BindingFlags.Public | BindingFlags.Static,
-                    null, new[] { typeof(decimal), typeof(decimal) }, null);
-                il.EmitCall(OpCodes.Call, divideMethod!, null);
-                var floorMethod = typeof(decimal).GetMethod(nameof(decimal.Floor),
-                    BindingFlags.Public | BindingFlags.Static,
-                    null, new[] { typeof(decimal) }, null);
-                il.EmitCall(OpCodes.Call, floorMethod!, null);
+                il.EmitCall(OpCodes.Call, CachedMethods.DecimalOpDivision, null);
+                il.EmitCall(OpCodes.Call, CachedMethods.DecimalFloor, null);
 
                 // Multiply by b
                 il.Emit(OpCodes.Ldloc, locDivisor);
-                var multiplyMethod = typeof(decimal).GetMethod("op_Multiply",
-                    BindingFlags.Public | BindingFlags.Static,
-                    null, new[] { typeof(decimal), typeof(decimal) }, null);
-                il.EmitCall(OpCodes.Call, multiplyMethod!, null);
+                il.EmitCall(OpCodes.Call, CachedMethods.DecimalOpMultiply, null);
 
                 // Subtract: a - floor(a/b)*b
-                var subtractMethod = typeof(decimal).GetMethod("op_Subtraction",
-                    BindingFlags.Public | BindingFlags.Static,
-                    null, new[] { typeof(decimal), typeof(decimal) }, null);
-                il.EmitCall(OpCodes.Call, subtractMethod!, null);
+                il.EmitCall(OpCodes.Call, CachedMethods.DecimalOpSubtraction, null);
                 return;
             }
 
             // ATan2 for decimal uses DecimalEx.ATan2
             if (op == BinaryOp.ATan2)
             {
-                var atan2Method = typeof(DecimalMath.DecimalEx).GetMethod(
-                    nameof(DecimalMath.DecimalEx.ATan2),
-                    BindingFlags.Public | BindingFlags.Static,
-                    null,
-                    new[] { typeof(decimal), typeof(decimal) },
-                    null
-                );
-                il.EmitCall(OpCodes.Call, atan2Method!, null);
+                il.EmitCall(OpCodes.Call, CachedMethods.DecimalExATan2, null);
                 return;
             }
 
-            var methodName = op switch
+            var method = op switch
             {
-                BinaryOp.Add => "op_Addition",
-                BinaryOp.Subtract => "op_Subtraction",
-                BinaryOp.Multiply => "op_Multiply",
-                BinaryOp.Divide => "op_Division",
+                BinaryOp.Add => CachedMethods.DecimalOpAddition,
+                BinaryOp.Subtract => CachedMethods.DecimalOpSubtraction,
+                BinaryOp.Multiply => CachedMethods.DecimalOpMultiply,
+                BinaryOp.Divide => CachedMethods.DecimalOpDivision,
                 _ => throw new NotSupportedException($"Operation {op} not supported for decimal")
             };
 
-            var method = typeof(decimal).GetMethod(
-                methodName,
-                BindingFlags.Public | BindingFlags.Static,
-                null,
-                new[] { typeof(decimal), typeof(decimal) },
-                null
-            );
-
-            il.EmitCall(OpCodes.Call, method!, null);
+            il.EmitCall(OpCodes.Call, method, null);
         }
 
         /// <summary>
