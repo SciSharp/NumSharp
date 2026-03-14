@@ -216,8 +216,8 @@ namespace NumSharp.Backends.Kernels
             var lblLoop = il.DefineLabel();
             var lblLoopEnd = il.DefineLabel();
 
-            // Initialize accumulator to 0 (identity for addition)
-            EmitLoadZero(il, key.OutputType);
+            // Initialize accumulator to identity value (0 for sum, 1 for prod)
+            EmitScanIdentity(il, key.Op, key.OutputType);
             il.Emit(OpCodes.Stloc, locAccum);
 
             // i = 0
@@ -285,8 +285,8 @@ namespace NumSharp.Backends.Kernels
             var lblDimLoop = il.DefineLabel();
             var lblDimLoopEnd = il.DefineLabel();
 
-            // Initialize accumulator
-            EmitLoadZero(il, key.OutputType);
+            // Initialize accumulator to identity value (0 for sum, 1 for prod)
+            EmitScanIdentity(il, key.Op, key.OutputType);
             il.Emit(OpCodes.Stloc, locAccum);
 
             // i = 0
@@ -436,7 +436,26 @@ namespace NumSharp.Backends.Kernels
             }
         }
 
-        // Note: EmitLoadZero is defined in ILKernelGenerator.Reduction.cs
+        /// <summary>
+        /// Emit identity value for scan operations.
+        /// CumSum uses 0 (additive identity), CumProd uses 1 (multiplicative identity).
+        /// </summary>
+        private static void EmitScanIdentity(ILGenerator il, ReductionOp op, NPTypeCode type)
+        {
+            switch (op)
+            {
+                case ReductionOp.CumSum:
+                    EmitLoadZero(il, type);
+                    break;
+                case ReductionOp.CumProd:
+                    EmitLoadOne(il, type);
+                    break;
+                default:
+                    throw new NotSupportedException($"Scan operation {op} has no identity");
+            }
+        }
+
+        // Note: EmitLoadZero and EmitLoadOne are defined in ILKernelGenerator.Reduction.cs
 
         #endregion
 
@@ -602,6 +621,432 @@ namespace NumSharp.Backends.Kernels
             {
                 AxisCumSumWithConversion<TIn, TOut>(src, dst, inputStrides, shape, axis, ndim,
                     axisSize, axisStride, outerSize, innerSize, outputAxisStride, outputOuterStride);
+            }
+        }
+
+        /// <summary>
+        /// Axis cumulative product helper. Computes cumprod along a specific axis.
+        /// Uses optimized iteration pattern based on axis position.
+        /// </summary>
+        internal static unsafe void AxisCumProdHelper<TIn, TOut>(
+            void* input, void* output, int* inputStrides, int* shape,
+            int axis, int ndim, int totalSize)
+            where TIn : unmanaged
+            where TOut : unmanaged
+        {
+            if (totalSize == 0)
+                return;
+
+            TIn* src = (TIn*)input;
+            TOut* dst = (TOut*)output;
+
+            int axisSize = shape[axis];
+            int axisStride = inputStrides[axis];
+
+            // Calculate outer size (product of dimensions before axis)
+            // and inner size (product of dimensions after axis)
+            int outerSize = 1;
+            int innerSize = 1;
+            for (int d = 0; d < axis; d++)
+                outerSize *= shape[d];
+            for (int d = axis + 1; d < ndim; d++)
+                innerSize *= shape[d];
+
+            // Calculate output strides (output is always contiguous)
+            int outputAxisStride = innerSize;
+            int outputOuterStride = axisSize * innerSize;
+
+            // Dispatch to specialized helper based on types
+            if (typeof(TIn) == typeof(TOut))
+            {
+                // When TIn == TOut, we can cast safely and use same-type optimized path
+                AxisCumProdSameType<TIn>((TIn*)src, (TIn*)(void*)dst, inputStrides, shape, axis, ndim,
+                    axisSize, axisStride, outerSize, innerSize, outputAxisStride, outputOuterStride);
+            }
+            else
+            {
+                AxisCumProdWithConversion<TIn, TOut>(src, dst, inputStrides, shape, axis, ndim,
+                    axisSize, axisStride, outerSize, innerSize, outputAxisStride, outputOuterStride);
+            }
+        }
+
+        /// <summary>
+        /// Same-type axis cumprod implementation.
+        /// </summary>
+        private static unsafe void AxisCumProdSameType<T>(
+            T* src, T* dst, int* inputStrides, int* shape, int axis, int ndim,
+            int axisSize, int axisStride, int outerSize, int innerSize,
+            int outputAxisStride, int outputOuterStride)
+            where T : unmanaged
+        {
+            // General case: iterate using coordinate-based access with multiplication
+            AxisCumProdGeneral(src, dst, inputStrides, shape, axis, ndim,
+                axisSize, axisStride, outerSize, innerSize, outputAxisStride, outputOuterStride);
+        }
+
+        /// <summary>
+        /// General axis cumprod using coordinate-based iteration.
+        /// </summary>
+        private static unsafe void AxisCumProdGeneral<T>(
+            T* src, T* dst, int* inputStrides, int* shape, int axis, int ndim,
+            int axisSize, int axisStride, int outerSize, int innerSize,
+            int outputAxisStride, int outputOuterStride)
+            where T : unmanaged
+        {
+            // Type-specific dispatch for common types
+            if (typeof(T) == typeof(double))
+            {
+                AxisCumProdGeneralDouble((double*)src, (double*)dst, inputStrides, shape, axis, ndim,
+                    axisSize, axisStride, outerSize, innerSize, outputAxisStride, outputOuterStride);
+            }
+            else if (typeof(T) == typeof(float))
+            {
+                AxisCumProdGeneralFloat((float*)src, (float*)dst, inputStrides, shape, axis, ndim,
+                    axisSize, axisStride, outerSize, innerSize, outputAxisStride, outputOuterStride);
+            }
+            else if (typeof(T) == typeof(long))
+            {
+                AxisCumProdGeneralInt64((long*)src, (long*)dst, inputStrides, shape, axis, ndim,
+                    axisSize, axisStride, outerSize, innerSize, outputAxisStride, outputOuterStride);
+            }
+            else if (typeof(T) == typeof(int))
+            {
+                AxisCumProdGeneralInt32((int*)src, (int*)dst, inputStrides, shape, axis, ndim,
+                    axisSize, axisStride, outerSize, innerSize, outputAxisStride, outputOuterStride);
+            }
+            else
+            {
+                // Generic fallback
+                AxisCumProdGeneralGeneric(src, dst, inputStrides, shape, axis, ndim,
+                    axisSize, axisStride, outerSize, innerSize, outputAxisStride, outputOuterStride);
+            }
+        }
+
+        /// <summary>
+        /// General axis cumprod for double type.
+        /// </summary>
+        private static unsafe void AxisCumProdGeneralDouble(
+            double* src, double* dst, int* inputStrides, int* shape, int axis, int ndim,
+            int axisSize, int axisStride, int outerSize, int innerSize,
+            int outputAxisStride, int outputOuterStride)
+        {
+            for (int outer = 0; outer < outerSize; outer++)
+            {
+                for (int inner = 0; inner < innerSize; inner++)
+                {
+                    // Calculate input base offset for this (outer, inner) combination
+                    int inputOffset = 0;
+                    int outerIdx = outer;
+                    for (int d = axis - 1; d >= 0; d--)
+                    {
+                        int coord = outerIdx % shape[d];
+                        outerIdx /= shape[d];
+                        inputOffset += coord * inputStrides[d];
+                    }
+
+                    int innerIdx = inner;
+                    for (int d = ndim - 1; d > axis; d--)
+                    {
+                        int coord = innerIdx % shape[d];
+                        innerIdx /= shape[d];
+                        inputOffset += coord * inputStrides[d];
+                    }
+
+                    // Calculate output base offset
+                    int outputOffset = outer * outputOuterStride + inner;
+
+                    // Cumprod along axis
+                    double product = 1.0;
+                    for (int i = 0; i < axisSize; i++)
+                    {
+                        product *= src[inputOffset + i * axisStride];
+                        dst[outputOffset + i * outputAxisStride] = product;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// General axis cumprod for float type.
+        /// </summary>
+        private static unsafe void AxisCumProdGeneralFloat(
+            float* src, float* dst, int* inputStrides, int* shape, int axis, int ndim,
+            int axisSize, int axisStride, int outerSize, int innerSize,
+            int outputAxisStride, int outputOuterStride)
+        {
+            for (int outer = 0; outer < outerSize; outer++)
+            {
+                for (int inner = 0; inner < innerSize; inner++)
+                {
+                    int inputOffset = 0;
+                    int outerIdx = outer;
+                    for (int d = axis - 1; d >= 0; d--)
+                    {
+                        int coord = outerIdx % shape[d];
+                        outerIdx /= shape[d];
+                        inputOffset += coord * inputStrides[d];
+                    }
+
+                    int innerIdx = inner;
+                    for (int d = ndim - 1; d > axis; d--)
+                    {
+                        int coord = innerIdx % shape[d];
+                        innerIdx /= shape[d];
+                        inputOffset += coord * inputStrides[d];
+                    }
+
+                    int outputOffset = outer * outputOuterStride + inner;
+
+                    float product = 1f;
+                    for (int i = 0; i < axisSize; i++)
+                    {
+                        product *= src[inputOffset + i * axisStride];
+                        dst[outputOffset + i * outputAxisStride] = product;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// General axis cumprod for long type.
+        /// </summary>
+        private static unsafe void AxisCumProdGeneralInt64(
+            long* src, long* dst, int* inputStrides, int* shape, int axis, int ndim,
+            int axisSize, int axisStride, int outerSize, int innerSize,
+            int outputAxisStride, int outputOuterStride)
+        {
+            for (int outer = 0; outer < outerSize; outer++)
+            {
+                for (int inner = 0; inner < innerSize; inner++)
+                {
+                    int inputOffset = 0;
+                    int outerIdx = outer;
+                    for (int d = axis - 1; d >= 0; d--)
+                    {
+                        int coord = outerIdx % shape[d];
+                        outerIdx /= shape[d];
+                        inputOffset += coord * inputStrides[d];
+                    }
+
+                    int innerIdx = inner;
+                    for (int d = ndim - 1; d > axis; d--)
+                    {
+                        int coord = innerIdx % shape[d];
+                        innerIdx /= shape[d];
+                        inputOffset += coord * inputStrides[d];
+                    }
+
+                    int outputOffset = outer * outputOuterStride + inner;
+
+                    long product = 1L;
+                    for (int i = 0; i < axisSize; i++)
+                    {
+                        product *= src[inputOffset + i * axisStride];
+                        dst[outputOffset + i * outputAxisStride] = product;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// General axis cumprod for int type.
+        /// </summary>
+        private static unsafe void AxisCumProdGeneralInt32(
+            int* src, int* dst, int* inputStrides, int* shape, int axis, int ndim,
+            int axisSize, int axisStride, int outerSize, int innerSize,
+            int outputAxisStride, int outputOuterStride)
+        {
+            for (int outer = 0; outer < outerSize; outer++)
+            {
+                for (int inner = 0; inner < innerSize; inner++)
+                {
+                    int inputOffset = 0;
+                    int outerIdx = outer;
+                    for (int d = axis - 1; d >= 0; d--)
+                    {
+                        int coord = outerIdx % shape[d];
+                        outerIdx /= shape[d];
+                        inputOffset += coord * inputStrides[d];
+                    }
+
+                    int innerIdx = inner;
+                    for (int d = ndim - 1; d > axis; d--)
+                    {
+                        int coord = innerIdx % shape[d];
+                        innerIdx /= shape[d];
+                        inputOffset += coord * inputStrides[d];
+                    }
+
+                    int outputOffset = outer * outputOuterStride + inner;
+
+                    int product = 1;
+                    for (int i = 0; i < axisSize; i++)
+                    {
+                        product *= src[inputOffset + i * axisStride];
+                        dst[outputOffset + i * outputAxisStride] = product;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Generic fallback for axis cumprod.
+        /// </summary>
+        private static unsafe void AxisCumProdGeneralGeneric<T>(
+            T* src, T* dst, int* inputStrides, int* shape, int axis, int ndim,
+            int axisSize, int axisStride, int outerSize, int innerSize,
+            int outputAxisStride, int outputOuterStride)
+            where T : unmanaged
+        {
+            for (int outer = 0; outer < outerSize; outer++)
+            {
+                for (int inner = 0; inner < innerSize; inner++)
+                {
+                    int inputOffset = 0;
+                    int outerIdx = outer;
+                    for (int d = axis - 1; d >= 0; d--)
+                    {
+                        int coord = outerIdx % shape[d];
+                        outerIdx /= shape[d];
+                        inputOffset += coord * inputStrides[d];
+                    }
+
+                    int innerIdx = inner;
+                    for (int d = ndim - 1; d > axis; d--)
+                    {
+                        int coord = innerIdx % shape[d];
+                        innerIdx /= shape[d];
+                        inputOffset += coord * inputStrides[d];
+                    }
+
+                    int outputOffset = outer * outputOuterStride + inner;
+
+                    // Initialize product to 1 using dynamic
+                    dynamic product = (dynamic)Convert.ChangeType(1, typeof(T))!;
+                    for (int i = 0; i < axisSize; i++)
+                    {
+                        product *= (dynamic)src[inputOffset + i * axisStride];
+                        dst[outputOffset + i * outputAxisStride] = product;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Axis cumprod with type conversion (e.g., int32 input -> int64 output).
+        /// </summary>
+        private static unsafe void AxisCumProdWithConversion<TIn, TOut>(
+            TIn* src, TOut* dst, int* inputStrides, int* shape, int axis, int ndim,
+            int axisSize, int axisStride, int outerSize, int innerSize,
+            int outputAxisStride, int outputOuterStride)
+            where TIn : unmanaged
+            where TOut : unmanaged
+        {
+            // Common case: int32 -> int64
+            if (typeof(TIn) == typeof(int) && typeof(TOut) == typeof(long))
+            {
+                AxisCumProdInt32ToInt64((int*)src, (long*)dst, inputStrides, shape, axis, ndim,
+                    axisSize, axisStride, outerSize, innerSize, outputAxisStride, outputOuterStride);
+                return;
+            }
+
+            // General fallback using Convert
+            for (int outer = 0; outer < outerSize; outer++)
+            {
+                for (int inner = 0; inner < innerSize; inner++)
+                {
+                    int inputOffset = 0;
+                    int outerIdx = outer;
+                    for (int d = axis - 1; d >= 0; d--)
+                    {
+                        int coord = outerIdx % shape[d];
+                        outerIdx /= shape[d];
+                        inputOffset += coord * inputStrides[d];
+                    }
+
+                    int innerIdx = inner;
+                    for (int d = ndim - 1; d > axis; d--)
+                    {
+                        int coord = innerIdx % shape[d];
+                        innerIdx /= shape[d];
+                        inputOffset += coord * inputStrides[d];
+                    }
+
+                    int outputOffset = outer * outputOuterStride + inner;
+
+                    // Use appropriate accumulator type
+                    if (typeof(TOut) == typeof(long))
+                    {
+                        long product = 1L;
+                        long* dstTyped = (long*)dst;
+                        for (int i = 0; i < axisSize; i++)
+                        {
+                            product *= Convert.ToInt64(src[inputOffset + i * axisStride]);
+                            dstTyped[outputOffset + i * outputAxisStride] = product;
+                        }
+                    }
+                    else if (typeof(TOut) == typeof(double))
+                    {
+                        double product = 1.0;
+                        double* dstTyped = (double*)dst;
+                        for (int i = 0; i < axisSize; i++)
+                        {
+                            product *= Convert.ToDouble(src[inputOffset + i * axisStride]);
+                            dstTyped[outputOffset + i * outputAxisStride] = product;
+                        }
+                    }
+                    else
+                    {
+                        // Ultimate fallback using dynamic
+                        dynamic product = (dynamic)Convert.ChangeType(1, typeof(TOut))!;
+                        for (int i = 0; i < axisSize; i++)
+                        {
+                            product *= (dynamic)Convert.ChangeType(src[inputOffset + i * axisStride], typeof(TOut))!;
+                            dst[outputOffset + i * outputAxisStride] = product;
+                        }
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Specialized int32 -> int64 axis cumprod.
+        /// </summary>
+        private static unsafe void AxisCumProdInt32ToInt64(
+            int* src, long* dst, int* inputStrides, int* shape, int axis, int ndim,
+            int axisSize, int axisStride, int outerSize, int innerSize,
+            int outputAxisStride, int outputOuterStride)
+        {
+            for (int outer = 0; outer < outerSize; outer++)
+            {
+                for (int inner = 0; inner < innerSize; inner++)
+                {
+                    int inputOffset = 0;
+                    int outerIdx = outer;
+                    for (int d = axis - 1; d >= 0; d--)
+                    {
+                        int coord = outerIdx % shape[d];
+                        outerIdx /= shape[d];
+                        inputOffset += coord * inputStrides[d];
+                    }
+
+                    int innerIdx = inner;
+                    for (int d = ndim - 1; d > axis; d--)
+                    {
+                        int coord = innerIdx % shape[d];
+                        innerIdx /= shape[d];
+                        inputOffset += coord * inputStrides[d];
+                    }
+
+                    int outputOffset = outer * outputOuterStride + inner;
+
+                    long product = 1L;
+                    for (int i = 0; i < axisSize; i++)
+                    {
+                        product *= src[inputOffset + i * axisStride];
+                        dst[outputOffset + i * outputAxisStride] = product;
+                    }
+                }
             }
         }
 

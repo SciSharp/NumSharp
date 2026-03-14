@@ -27,6 +27,7 @@ namespace NumSharp
 
         public abstract NDArray ReduceAdd(in NDArray arr, int? axis_, bool keepdims = false, NPTypeCode? typeCode = null, NDArray @out = null);
         public abstract NDArray ReduceCumAdd(in NDArray arr, int? axis_, NPTypeCode? typeCode = null);
+        public abstract NDArray ReduceCumMul(in NDArray arr, int? axis_, NPTypeCode? typeCode = null);
         public abstract NDArray ReduceMean(in NDArray arr, int? axis_, bool keepdims = false, NPTypeCode? typeCode = null);
 
         #endregion

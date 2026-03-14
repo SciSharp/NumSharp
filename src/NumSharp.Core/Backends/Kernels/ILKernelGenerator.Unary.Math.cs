@@ -61,7 +61,7 @@ namespace NumSharp.Backends.Kernels
                     break;
 
                 case UnaryOp.Abs:
-                    EmitMathCall(il, "Abs", type);
+                    EmitAbsCall(il, type);
                     break;
 
                 case UnaryOp.Sqrt:
@@ -273,6 +273,90 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
+        /// Emit abs operation with optimized bitwise implementation for integers.
+        /// For signed integers: abs(x) = (x ^ (x >> (bits-1))) - (x >> (bits-1))
+        /// For unsigned integers: identity (already non-negative)
+        /// For float/double: use Math.Abs/MathF.Abs (hardware-optimized)
+        /// </summary>
+        private static void EmitAbsCall(ILGenerator il, NPTypeCode type)
+        {
+            switch (type)
+            {
+                case NPTypeCode.Single:
+                    // Use MathF.Abs for float - has hardware support
+                    il.EmitCall(OpCodes.Call, typeof(MathF).GetMethod("Abs", new[] { typeof(float) })!, null);
+                    break;
+
+                case NPTypeCode.Double:
+                    // Use Math.Abs for double - has hardware support
+                    il.EmitCall(OpCodes.Call, typeof(Math).GetMethod("Abs", new[] { typeof(double) })!, null);
+                    break;
+
+                case NPTypeCode.Byte:
+                case NPTypeCode.UInt16:
+                case NPTypeCode.UInt32:
+                case NPTypeCode.UInt64:
+                case NPTypeCode.Char:
+                case NPTypeCode.Boolean:
+                    // Unsigned types are already non-negative - abs is identity
+                    // Value is already on stack, nothing to do
+                    break;
+
+                case NPTypeCode.Int16:
+                    // abs(x) = (x ^ (x >> 15)) - (x >> 15)
+                    // Stack: x
+                    {
+                        var locSign = il.DeclareLocal(typeof(int));
+                        il.Emit(OpCodes.Dup);           // x, x
+                        il.Emit(OpCodes.Ldc_I4, 15);    // x, x, 15
+                        il.Emit(OpCodes.Shr);           // x, (x >> 15) = sign extension (-1 or 0)
+                        il.Emit(OpCodes.Stloc, locSign);// x            ; locSign = s
+                        il.Emit(OpCodes.Ldloc, locSign);// x, s
+                        il.Emit(OpCodes.Xor);           // x ^ s
+                        il.Emit(OpCodes.Ldloc, locSign);// (x ^ s), s
+                        il.Emit(OpCodes.Sub);           // (x ^ s) - s = abs(x)
+                        il.Emit(OpCodes.Conv_I2);       // Ensure result fits in short
+                    }
+                    break;
+
+                case NPTypeCode.Int32:
+                    // abs(x) = (x ^ (x >> 31)) - (x >> 31)
+                    // Stack: x
+                    {
+                        var locSign = il.DeclareLocal(typeof(int));
+                        il.Emit(OpCodes.Dup);           // x, x
+                        il.Emit(OpCodes.Ldc_I4, 31);    // x, x, 31
+                        il.Emit(OpCodes.Shr);           // x, (x >> 31) = sign extension (-1 or 0)
+                        il.Emit(OpCodes.Stloc, locSign);// x            ; locSign = s
+                        il.Emit(OpCodes.Ldloc, locSign);// x, s
+                        il.Emit(OpCodes.Xor);           // x ^ s
+                        il.Emit(OpCodes.Ldloc, locSign);// (x ^ s), s
+                        il.Emit(OpCodes.Sub);           // (x ^ s) - s = abs(x)
+                    }
+                    break;
+
+                case NPTypeCode.Int64:
+                    // abs(x) = (x ^ (x >> 63)) - (x >> 63)
+                    // Stack: x (as int64)
+                    {
+                        var locSign = il.DeclareLocal(typeof(long));
+                        il.Emit(OpCodes.Dup);           // x, x
+                        il.Emit(OpCodes.Ldc_I4, 63);    // x, x, 63
+                        il.Emit(OpCodes.Shr);           // x, (x >> 63) = sign extension (-1 or 0)
+                        il.Emit(OpCodes.Stloc, locSign);// x            ; locSign = s
+                        il.Emit(OpCodes.Ldloc, locSign);// x, s
+                        il.Emit(OpCodes.Xor);           // x ^ s
+                        il.Emit(OpCodes.Ldloc, locSign);// (x ^ s), s
+                        il.Emit(OpCodes.Sub);           // (x ^ s) - s = abs(x)
+                    }
+                    break;
+
+                default:
+                    throw new NotSupportedException($"Abs not supported for type {type}");
+            }
+        }
+
+        /// <summary>
         /// Emit 2^x calculation using Math.Pow(2, x).
         /// </summary>
         private static void EmitExp2Call(ILGenerator il, NPTypeCode type)
@@ -366,73 +450,163 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
-        /// Emit Math.Sign call with proper type conversion.
-        /// Math.Sign returns int, so we need to convert back to target type.
+        /// Emit sign operation with optimized bitwise implementation for integers.
+        /// For signed integers: sign(x) = (x >> (bits-1)) | ((-x) >> (bits-1) &amp; 1)
+        ///   This produces: -1 for negative, 0 for zero, 1 for positive
+        /// For unsigned integers: sign(x) = (x != 0) ? 1 : 0
+        /// For float/double: use Math.Sign/MathF.Sign with NaN handling
         /// NumPy: sign(NaN) returns NaN, but .NET Math.Sign throws ArithmeticException.
-        /// We check for NaN first and return it directly.
         /// </summary>
         private static void EmitSignCall(ILGenerator il, NPTypeCode type)
         {
-            if (type == NPTypeCode.Single)
+            switch (type)
             {
-                // NumPy: sign(NaN) = NaN. .NET MathF.Sign(NaN) throws.
-                // Check for NaN first: if (float.IsNaN(x)) return x; else return MathF.Sign(x);
-                var lblNotNaN = il.DefineLabel();
-                var lblEnd = il.DefineLabel();
+                case NPTypeCode.Single:
+                    {
+                        // NumPy: sign(NaN) = NaN. .NET MathF.Sign(NaN) throws.
+                        // Check for NaN first: if (float.IsNaN(x)) return x; else return MathF.Sign(x);
+                        var lblNotNaN = il.DefineLabel();
+                        var lblEnd = il.DefineLabel();
 
-                il.Emit(OpCodes.Dup);  // duplicate for NaN check
-                il.EmitCall(OpCodes.Call, typeof(float).GetMethod("IsNaN", new[] { typeof(float) })!, null);
-                il.Emit(OpCodes.Brfalse, lblNotNaN);
+                        il.Emit(OpCodes.Dup);  // duplicate for NaN check
+                        il.EmitCall(OpCodes.Call, typeof(float).GetMethod("IsNaN", new[] { typeof(float) })!, null);
+                        il.Emit(OpCodes.Brfalse, lblNotNaN);
 
-                // Is NaN - value is already on stack, jump to end
-                il.Emit(OpCodes.Br, lblEnd);
+                        // Is NaN - value is already on stack, jump to end
+                        il.Emit(OpCodes.Br, lblEnd);
 
-                il.MarkLabel(lblNotNaN);
-                // Not NaN - call MathF.Sign
-                var method = typeof(MathF).GetMethod("Sign", new[] { typeof(float) });
-                il.EmitCall(OpCodes.Call, method!, null);
-                il.Emit(OpCodes.Conv_R4);
+                        il.MarkLabel(lblNotNaN);
+                        // Not NaN - call MathF.Sign
+                        var method = typeof(MathF).GetMethod("Sign", new[] { typeof(float) });
+                        il.EmitCall(OpCodes.Call, method!, null);
+                        il.Emit(OpCodes.Conv_R4);
 
-                il.MarkLabel(lblEnd);
-            }
-            else if (type == NPTypeCode.Double)
-            {
-                // NumPy: sign(NaN) = NaN. .NET Math.Sign(NaN) throws.
-                // Check for NaN first: if (double.IsNaN(x)) return x; else return Math.Sign(x);
-                var lblNotNaN = il.DefineLabel();
-                var lblEnd = il.DefineLabel();
+                        il.MarkLabel(lblEnd);
+                    }
+                    break;
 
-                il.Emit(OpCodes.Dup);  // duplicate for NaN check
-                il.EmitCall(OpCodes.Call, typeof(double).GetMethod("IsNaN", new[] { typeof(double) })!, null);
-                il.Emit(OpCodes.Brfalse, lblNotNaN);
+                case NPTypeCode.Double:
+                    {
+                        // NumPy: sign(NaN) = NaN. .NET Math.Sign(NaN) throws.
+                        // Check for NaN first: if (double.IsNaN(x)) return x; else return Math.Sign(x);
+                        var lblNotNaN = il.DefineLabel();
+                        var lblEnd = il.DefineLabel();
 
-                // Is NaN - value is already on stack, jump to end
-                il.Emit(OpCodes.Br, lblEnd);
+                        il.Emit(OpCodes.Dup);  // duplicate for NaN check
+                        il.EmitCall(OpCodes.Call, typeof(double).GetMethod("IsNaN", new[] { typeof(double) })!, null);
+                        il.Emit(OpCodes.Brfalse, lblNotNaN);
 
-                il.MarkLabel(lblNotNaN);
-                // Not NaN - call Math.Sign
-                var method = typeof(Math).GetMethod("Sign", new[] { typeof(double) });
-                il.EmitCall(OpCodes.Call, method!, null);
-                il.Emit(OpCodes.Conv_R8);
+                        // Is NaN - value is already on stack, jump to end
+                        il.Emit(OpCodes.Br, lblEnd);
 
-                il.MarkLabel(lblEnd);
-            }
-            else if (type == NPTypeCode.Decimal)
-            {
-                // Decimal has its own Sign method that returns int
-                var method = typeof(Math).GetMethod("Sign", new[] { typeof(decimal) });
-                il.EmitCall(OpCodes.Call, method!, null);
-                // Convert int to decimal
-                il.EmitCall(OpCodes.Call, typeof(decimal).GetMethod("op_Implicit", new[] { typeof(int) })!, null);
-            }
-            else
-            {
-                // For integer types: convert to double, call Math.Sign, convert back
-                EmitConvertToDouble(il, type);
-                var method = typeof(Math).GetMethod("Sign", new[] { typeof(double) });
-                il.EmitCall(OpCodes.Call, method!, null);
-                // Convert int result back to target type
-                EmitConvertFromInt(il, type);
+                        il.MarkLabel(lblNotNaN);
+                        // Not NaN - call Math.Sign
+                        var method = typeof(Math).GetMethod("Sign", new[] { typeof(double) });
+                        il.EmitCall(OpCodes.Call, method!, null);
+                        il.Emit(OpCodes.Conv_R8);
+
+                        il.MarkLabel(lblEnd);
+                    }
+                    break;
+
+                case NPTypeCode.Decimal:
+                    {
+                        // Decimal has its own Sign method that returns int
+                        var method = typeof(Math).GetMethod("Sign", new[] { typeof(decimal) });
+                        il.EmitCall(OpCodes.Call, method!, null);
+                        // Convert int to decimal
+                        il.EmitCall(OpCodes.Call, typeof(decimal).GetMethod("op_Implicit", new[] { typeof(int) })!, null);
+                    }
+                    break;
+
+                case NPTypeCode.Boolean:
+                    // sign(true) = 1, sign(false) = 0 - value is already correct (0 or 1)
+                    break;
+
+                case NPTypeCode.Byte:
+                case NPTypeCode.UInt16:
+                case NPTypeCode.UInt32:
+                case NPTypeCode.UInt64:
+                case NPTypeCode.Char:
+                    // For unsigned: sign(x) = (x != 0) ? 1 : 0
+                    // Stack: x
+                    il.Emit(OpCodes.Ldc_I4_0);      // x, 0
+                    il.Emit(OpCodes.Cgt_Un);        // (x > 0) as 0 or 1
+                    // Convert back to original type
+                    EmitConvertFromInt(il, type);
+                    break;
+
+                case NPTypeCode.Int16:
+                    // sign(x) = (x >> 15) | ((int)(-x) >> 31 & 1)
+                    // Simplified: (x > 0) - (x < 0)
+                    // Stack: x
+                    {
+                        var locX = il.DeclareLocal(typeof(int));
+                        il.Emit(OpCodes.Stloc, locX);   // save x
+
+                        // (x > 0) ? 1 : 0
+                        il.Emit(OpCodes.Ldloc, locX);   // x
+                        il.Emit(OpCodes.Ldc_I4_0);      // x, 0
+                        il.Emit(OpCodes.Cgt);           // (x > 0) as 0 or 1
+
+                        // (x < 0) ? 1 : 0
+                        il.Emit(OpCodes.Ldloc, locX);   // (x>0), x
+                        il.Emit(OpCodes.Ldc_I4_0);      // (x>0), x, 0
+                        il.Emit(OpCodes.Clt);           // (x>0), (x<0)
+
+                        // result = (x > 0) - (x < 0)
+                        il.Emit(OpCodes.Sub);           // (x>0) - (x<0) = -1, 0, or 1
+                        il.Emit(OpCodes.Conv_I2);       // Convert to short
+                    }
+                    break;
+
+                case NPTypeCode.Int32:
+                    // sign(x) = (x > 0) - (x < 0)
+                    // Stack: x
+                    {
+                        var locX = il.DeclareLocal(typeof(int));
+                        il.Emit(OpCodes.Stloc, locX);   // save x
+
+                        // (x > 0) ? 1 : 0
+                        il.Emit(OpCodes.Ldloc, locX);   // x
+                        il.Emit(OpCodes.Ldc_I4_0);      // x, 0
+                        il.Emit(OpCodes.Cgt);           // (x > 0) as 0 or 1
+
+                        // (x < 0) ? 1 : 0
+                        il.Emit(OpCodes.Ldloc, locX);   // (x>0), x
+                        il.Emit(OpCodes.Ldc_I4_0);      // (x>0), x, 0
+                        il.Emit(OpCodes.Clt);           // (x>0), (x<0)
+
+                        // result = (x > 0) - (x < 0)
+                        il.Emit(OpCodes.Sub);           // (x>0) - (x<0) = -1, 0, or 1
+                    }
+                    break;
+
+                case NPTypeCode.Int64:
+                    // sign(x) = (x > 0) - (x < 0)
+                    // Stack: x (as int64)
+                    {
+                        var locX = il.DeclareLocal(typeof(long));
+                        il.Emit(OpCodes.Stloc, locX);   // save x
+
+                        // (x > 0L) ? 1 : 0
+                        il.Emit(OpCodes.Ldloc, locX);   // x
+                        il.Emit(OpCodes.Ldc_I8, 0L);    // x, 0L
+                        il.Emit(OpCodes.Cgt);           // (x > 0) as 0 or 1
+
+                        // (x < 0L) ? 1 : 0
+                        il.Emit(OpCodes.Ldloc, locX);   // (x>0), x
+                        il.Emit(OpCodes.Ldc_I8, 0L);    // (x>0), x, 0L
+                        il.Emit(OpCodes.Clt);           // (x>0), (x<0)
+
+                        // result = (x > 0) - (x < 0), then convert to long
+                        il.Emit(OpCodes.Sub);           // (x>0) - (x<0) = -1, 0, or 1 (as int32)
+                        il.Emit(OpCodes.Conv_I8);       // Convert to long
+                    }
+                    break;
+
+                default:
+                    throw new NotSupportedException($"Sign not supported for type {type}");
             }
         }
 

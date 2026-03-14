@@ -98,6 +98,8 @@ namespace NumSharp.Backends.Kernels
         Mean,
         /// <summary>Cumulative sum (running total)</summary>
         CumSum,
+        /// <summary>Cumulative product (running product)</summary>
+        CumProd,
         /// <summary>All elements non-zero (logical AND reduction, returns bool)</summary>
         All,
         /// <summary>Any element non-zero (logical OR reduction, returns bool)</summary>

@@ -49,7 +49,27 @@ namespace NumSharp.Backends.Kernels
             {
                 double* p = (double*)(void*)src;
 
-                if (Vector256.IsHardwareAccelerated && Vector256<double>.IsSupported && size >= Vector256<double>.Count)
+                // V512 -> V256 -> V128 -> scalar cascade
+                if (Vector512.IsHardwareAccelerated && Vector512<double>.IsSupported && size >= Vector512<double>.Count)
+                {
+                    int vectorCount = Vector512<double>.Count;
+                    int vectorEnd = size - vectorCount;
+                    var sumVec = Vector512<double>.Zero;
+                    int i = 0;
+
+                    for (; i <= vectorEnd; i += vectorCount)
+                    {
+                        sumVec = Vector512.Add(sumVec, Vector512.Load(p + i));
+                    }
+
+                    // Horizontal sum
+                    sum = Vector512.Sum(sumVec);
+
+                    // Scalar tail
+                    for (; i < size; i++)
+                        sum += p[i];
+                }
+                else if (Vector256.IsHardwareAccelerated && Vector256<double>.IsSupported && size >= Vector256<double>.Count)
                 {
                     int vectorCount = Vector256<double>.Count;
                     int vectorEnd = size - vectorCount;
@@ -96,7 +116,30 @@ namespace NumSharp.Backends.Kernels
                 // Pass 2: Sum of squared differences
                 double sqDiffSum = 0;
 
-                if (Vector256.IsHardwareAccelerated && Vector256<double>.IsSupported && size >= Vector256<double>.Count)
+                if (Vector512.IsHardwareAccelerated && Vector512<double>.IsSupported && size >= Vector512<double>.Count)
+                {
+                    int vectorCount = Vector512<double>.Count;
+                    int vectorEnd = size - vectorCount;
+                    var meanVec = Vector512.Create(mean);
+                    var sqDiffVec = Vector512<double>.Zero;
+                    int i = 0;
+
+                    for (; i <= vectorEnd; i += vectorCount)
+                    {
+                        var vec = Vector512.Load(p + i);
+                        var diff = Vector512.Subtract(vec, meanVec);
+                        sqDiffVec = Vector512.Add(sqDiffVec, Vector512.Multiply(diff, diff));
+                    }
+
+                    sqDiffSum = Vector512.Sum(sqDiffVec);
+
+                    for (; i < size; i++)
+                    {
+                        double diff = p[i] - mean;
+                        sqDiffSum += diff * diff;
+                    }
+                }
+                else if (Vector256.IsHardwareAccelerated && Vector256<double>.IsSupported && size >= Vector256<double>.Count)
                 {
                     int vectorCount = Vector256<double>.Count;
                     int vectorEnd = size - vectorCount;
@@ -157,7 +200,25 @@ namespace NumSharp.Backends.Kernels
             {
                 float* p = (float*)(void*)src;
 
-                if (Vector256.IsHardwareAccelerated && Vector256<float>.IsSupported && size >= Vector256<float>.Count)
+                // V512 -> V256 -> V128 -> scalar cascade
+                if (Vector512.IsHardwareAccelerated && Vector512<float>.IsSupported && size >= Vector512<float>.Count)
+                {
+                    int vectorCount = Vector512<float>.Count;
+                    int vectorEnd = size - vectorCount;
+                    var sumVec = Vector512<float>.Zero;
+                    int i = 0;
+
+                    for (; i <= vectorEnd; i += vectorCount)
+                    {
+                        sumVec = Vector512.Add(sumVec, Vector512.Load(p + i));
+                    }
+
+                    sum = Vector512.Sum(sumVec);
+
+                    for (; i < size; i++)
+                        sum += p[i];
+                }
+                else if (Vector256.IsHardwareAccelerated && Vector256<float>.IsSupported && size >= Vector256<float>.Count)
                 {
                     int vectorCount = Vector256<float>.Count;
                     int vectorEnd = size - vectorCount;
@@ -202,7 +263,30 @@ namespace NumSharp.Backends.Kernels
                 // Pass 2: Sum of squared differences (compute in double for precision)
                 double sqDiffSum = 0;
 
-                if (Vector256.IsHardwareAccelerated && Vector256<float>.IsSupported && size >= Vector256<float>.Count)
+                if (Vector512.IsHardwareAccelerated && Vector512<float>.IsSupported && size >= Vector512<float>.Count)
+                {
+                    int vectorCount = Vector512<float>.Count;
+                    int vectorEnd = size - vectorCount;
+                    var meanVec = Vector512.Create((float)mean);
+                    var sqDiffVec = Vector512<float>.Zero;
+                    int i = 0;
+
+                    for (; i <= vectorEnd; i += vectorCount)
+                    {
+                        var vec = Vector512.Load(p + i);
+                        var diff = Vector512.Subtract(vec, meanVec);
+                        sqDiffVec = Vector512.Add(sqDiffVec, Vector512.Multiply(diff, diff));
+                    }
+
+                    sqDiffSum = Vector512.Sum(sqDiffVec);
+
+                    for (; i < size; i++)
+                    {
+                        double diff = p[i] - mean;
+                        sqDiffSum += diff * diff;
+                    }
+                }
+                else if (Vector256.IsHardwareAccelerated && Vector256<float>.IsSupported && size >= Vector256<float>.Count)
                 {
                     int vectorCount = Vector256<float>.Count;
                     int vectorEnd = size - vectorCount;
