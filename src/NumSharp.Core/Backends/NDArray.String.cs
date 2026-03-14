@@ -83,16 +83,19 @@ namespace NumSharp
             {
                 if (Shape.dimensions.Length - 1 != indices.Length)
                     throw new ArgumentOutOfRangeException(nameof(indices), "GetString(long[]) can only accept coordinates that point to a vector of chars.");
-
+                
                 Debug.Assert(typecode == NPTypeCode.Char);
 
                 UnmanagedStorage src = Storage.GetData(indices);
                 Debug.Assert(src.Shape.NDim == 1);
 
+                if (src.Count > int.MaxValue)
+                    throw new ArgumentOutOfRangeException(nameof(indices), "The length of the string exceeds the maximum allowed length for a .NET string.");
+
                 if (!Shape.IsContiguous)
                 {
                     //this works faster than cloning.
-                    var ret = new string('\0', src.Count);
+                    var ret = new string('\0', (int)src.Count); //We downcast to int because C# doesn't support long string.
                     fixed (char* retChars = ret)
                     {
                         var dst = new UnmanagedStorage(new ArraySlice<char>(new UnmanagedMemoryBlock<char>(retChars, ret.Length)), src.Shape.Clean());
@@ -103,7 +106,7 @@ namespace NumSharp
                 }
 
                 //new string always performs a copy, there is no need to keep reference to arr's unmanaged storage.
-                return new string((char*)src.Address, 0, src.Count);
+                return new string((char*)src.Address, 0, (int)src.Count);
             }
         }
 
