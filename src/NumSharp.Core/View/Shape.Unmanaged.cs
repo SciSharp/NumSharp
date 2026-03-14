@@ -111,7 +111,7 @@ namespace NumSharp
         /// <param name="coords">The coordinates.</param>
         /// <returns>Coordinates without negative indices.</returns>
         [SuppressMessage("ReSharper", "ParameterHidesMember"), MethodImpl(Optimize)]
-        public static unsafe void InferNegativeCoordinates(int[] dimensions, int* coords, int coordsCount)
+        public static unsafe void InferNegativeCoordinates(long[] dimensions, long* coords, int coordsCount)
         {
             for (int i = 0; i < coordsCount; i++)
             {

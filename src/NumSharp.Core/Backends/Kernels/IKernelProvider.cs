@@ -149,7 +149,7 @@ namespace NumSharp.Backends.Kernels
         /// <param name="data">Pointer to contiguous array data.</param>
         /// <param name="size">Number of elements.</param>
         /// <returns>True if all elements are non-zero.</returns>
-        unsafe bool All<T>(T* data, int size) where T : unmanaged;
+        unsafe bool All<T>(T* data, long size) where T : unmanaged;
 
         /// <summary>
         /// Test whether any array element evaluates to true (non-zero).
@@ -159,7 +159,7 @@ namespace NumSharp.Backends.Kernels
         /// <param name="data">Pointer to contiguous array data.</param>
         /// <param name="size">Number of elements.</param>
         /// <returns>True if any element is non-zero.</returns>
-        unsafe bool Any<T>(T* data, int size) where T : unmanaged;
+        unsafe bool Any<T>(T* data, long size) where T : unmanaged;
 
         /// <summary>
         /// Find indices of all non-zero elements.
@@ -169,7 +169,7 @@ namespace NumSharp.Backends.Kernels
         /// <param name="data">Pointer to contiguous array data.</param>
         /// <param name="size">Number of elements.</param>
         /// <param name="indices">Output list to populate with non-zero indices.</param>
-        unsafe void FindNonZero<T>(T* data, int size, System.Collections.Generic.List<int> indices) where T : unmanaged;
+        unsafe void FindNonZero<T>(T* data, long size, System.Collections.Generic.List<long> indices) where T : unmanaged;
 
         /// <summary>
         /// Convert flat (linear) indices to per-dimension coordinate arrays.
@@ -177,7 +177,7 @@ namespace NumSharp.Backends.Kernels
         /// <param name="flatIndices">List of flat indices.</param>
         /// <param name="shape">Shape of the array.</param>
         /// <returns>Array of NDArray&lt;int&gt;, one per dimension.</returns>
-        NumSharp.Generic.NDArray<int>[] ConvertFlatToCoordinates(System.Collections.Generic.List<int> flatIndices, int[] shape);
+        NumSharp.Generic.NDArray<long>[] ConvertFlatToCoordinates(System.Collections.Generic.List<long> flatIndices, long[] shape);
 
         /// <summary>
         /// Find indices of all non-zero elements in a strided (non-contiguous) array.
@@ -189,7 +189,7 @@ namespace NumSharp.Backends.Kernels
         /// <param name="strides">Array strides (in elements, not bytes).</param>
         /// <param name="offset">Base offset into storage.</param>
         /// <returns>Array of NDArray&lt;int&gt;, one per dimension containing indices of non-zero elements.</returns>
-        unsafe NumSharp.Generic.NDArray<int>[] FindNonZeroStrided<T>(T* data, int[] shape, int[] strides, int offset) where T : unmanaged;
+        unsafe NumSharp.Generic.NDArray<long>[] FindNonZeroStrided<T>(T* data, long[] shape, long[] strides, long offset) where T : unmanaged;
 
         /// <summary>
         /// Count the number of true values in a boolean array.
@@ -198,7 +198,7 @@ namespace NumSharp.Backends.Kernels
         /// <param name="data">Pointer to boolean array.</param>
         /// <param name="size">Number of elements.</param>
         /// <returns>Count of true values.</returns>
-        unsafe int CountTrue(bool* data, int size);
+        unsafe long CountTrue(bool* data, long size);
 
         /// <summary>
         /// Copy elements from source to destination where mask is true.
@@ -210,7 +210,7 @@ namespace NumSharp.Backends.Kernels
         /// <param name="dest">Destination array pointer (must have capacity for all true elements).</param>
         /// <param name="size">Number of elements in source and mask.</param>
         /// <returns>Number of elements copied.</returns>
-        unsafe int CopyMasked<T>(T* src, bool* mask, T* dest, int size) where T : unmanaged;
+        unsafe long CopyMasked<T>(T* src, bool* mask, T* dest, long size) where T : unmanaged;
 
         /// <summary>
         /// Compute variance of a contiguous array.
@@ -237,46 +237,46 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// NaN-aware sum: sums all non-NaN values (NaN treated as 0).
         /// </summary>
-        unsafe float NanSumFloat(float* data, int size);
+        unsafe float NanSumFloat(float* data, long size);
 
         /// <summary>
         /// NaN-aware sum: sums all non-NaN values (NaN treated as 0).
         /// </summary>
-        unsafe double NanSumDouble(double* data, int size);
+        unsafe double NanSumDouble(double* data, long size);
 
         /// <summary>
         /// NaN-aware product: multiplies all non-NaN values (NaN treated as 1).
         /// </summary>
-        unsafe float NanProdFloat(float* data, int size);
+        unsafe float NanProdFloat(float* data, long size);
 
         /// <summary>
         /// NaN-aware product: multiplies all non-NaN values (NaN treated as 1).
         /// </summary>
-        unsafe double NanProdDouble(double* data, int size);
+        unsafe double NanProdDouble(double* data, long size);
 
         /// <summary>
         /// NaN-aware minimum: finds minimum ignoring NaN values.
         /// Returns NaN if all values are NaN.
         /// </summary>
-        unsafe float NanMinFloat(float* data, int size);
+        unsafe float NanMinFloat(float* data, long size);
 
         /// <summary>
         /// NaN-aware minimum: finds minimum ignoring NaN values.
         /// Returns NaN if all values are NaN.
         /// </summary>
-        unsafe double NanMinDouble(double* data, int size);
+        unsafe double NanMinDouble(double* data, long size);
 
         /// <summary>
         /// NaN-aware maximum: finds maximum ignoring NaN values.
         /// Returns NaN if all values are NaN.
         /// </summary>
-        unsafe float NanMaxFloat(float* data, int size);
+        unsafe float NanMaxFloat(float* data, long size);
 
         /// <summary>
         /// NaN-aware maximum: finds maximum ignoring NaN values.
         /// Returns NaN if all values are NaN.
         /// </summary>
-        unsafe double NanMaxDouble(double* data, int size);
+        unsafe double NanMaxDouble(double* data, long size);
 
         // ===================
         // Cache Management
