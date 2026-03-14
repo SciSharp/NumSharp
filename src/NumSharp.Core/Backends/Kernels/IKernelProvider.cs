@@ -278,14 +278,5 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         unsafe double NanMaxDouble(double* data, int size);
 
-        // ===================
-        // Cache Management
-        // ===================
-
-        /// <summary>Clear all cached kernels.</summary>
-        void Clear();
-
-        /// <summary>Number of cached kernels.</summary>
-        int CacheCount { get; }
     }
 }

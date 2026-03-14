@@ -38,14 +38,12 @@ using System.Runtime.Intrinsics;
 //   RESPONSIBILITY:
 //     - Optimized kernels when both operands have identical type and layout
 //     - SIMD loop + scalar tail for Add, Sub, Mul, Div
-//     - Dispatching kernel that routes to IL or C# based on stride detection
 //   DEPENDENCIES: Uses core emit helpers from ILKernelGenerator.cs
 //   FLOW: Called by DefaultEngine for same-type contiguous operations
 //   KEY MEMBERS:
 //     - ContiguousKernel<T> delegate - simplified signature for contiguous arrays
 //     - _contiguousKernelCache - caches generated kernels by (BinaryOp, Type)
 //     - GetContiguousKernel<T>() - main entry point for contiguous kernels
-//     - GenerateUnifiedKernel<T>() - creates dispatcher with IL fast path
 //     - TryGenerateContiguousKernelIL<T>() - IL generation with SIMD loop
 //     - Generic helpers duplicated for type safety: IsSimdSupported<T>(), etc.
 //
@@ -54,7 +52,6 @@ using System.Runtime.Intrinsics;
 //   RESPONSIBILITY:
 //     - Handles all binary ops where operand types may differ
 //     - Generates path-specific kernels based on stride patterns
-//     - Owns ClearAll() which clears ALL caches across all partials
 //   DEPENDENCIES: Uses core emit helpers from ILKernelGenerator.cs
 //   FLOW: Called by DefaultEngine for general binary operations
 //
@@ -102,11 +99,6 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         public static int CachedCount => _contiguousKernelCache.Count;
 
-        /// <summary>
-        /// Clear the contiguous kernel cache.
-        /// </summary>
-        public static void Clear() => _contiguousKernelCache.Clear();
-
         #region Public API
 
         /// <summary>
@@ -135,24 +127,6 @@ namespace NumSharp.Backends.Kernels
 
             // Another thread beat us - return the cached version
             return (ContiguousKernel<T>)_contiguousKernelCache[key];
-        }
-
-        /// <summary>
-        /// Generate a full unified kernel that handles all execution paths.
-        /// Uses IL-generated code for hot paths, falls back to C# for others.
-        /// </summary>
-        public static BinaryKernel<T>? GenerateUnifiedKernel<T>(BinaryOp op) where T : unmanaged
-        {
-            if (!Enabled)
-                return null;
-
-            // Get the IL-generated contiguous kernel
-            var contiguousKernel = GetContiguousKernel<T>(op);
-            if (contiguousKernel == null)
-                return null;
-
-            // Create a wrapper that dispatches based on strides
-            return CreateDispatchingKernel<T>(op, contiguousKernel);
         }
 
         #endregion
@@ -457,57 +431,6 @@ namespace NumSharp.Backends.Kernels
 
             // Store to result[i]
             EmitStoreIndirect<T>(il);
-        }
-
-        #endregion
-
-        #region Unified Kernel with Dispatch
-
-        /// <summary>
-        /// Create a unified kernel that dispatches to IL-generated code for contiguous arrays.
-        /// </summary>
-        private static unsafe BinaryKernel<T> CreateDispatchingKernel<T>(BinaryOp op, ContiguousKernel<T> contiguousKernel)
-            where T : unmanaged
-        {
-            // Get the C# fallback kernel method
-            var csharpKernel = GetCSharpKernel<T>(op);
-
-            return (T* lhs, T* rhs, T* result, int* lhsStrides, int* rhsStrides, int* shape, int ndim, int totalSize) =>
-            {
-                var path = StrideDetector.Classify<T>(lhsStrides, rhsStrides, shape, ndim);
-
-                if (path == ExecutionPath.SimdFull)
-                {
-                    // Use IL-generated kernel for contiguous arrays
-                    contiguousKernel(lhs, rhs, result, totalSize);
-                }
-                else
-                {
-                    // Fall back to C# implementation for other paths
-                    csharpKernel(lhs, rhs, result, lhsStrides, rhsStrides, shape, ndim, totalSize);
-                }
-            };
-        }
-
-        /// <summary>
-        /// Get the C# reference implementation for fallback.
-        /// </summary>
-        private static unsafe BinaryKernel<T> GetCSharpKernel<T>(BinaryOp op) where T : unmanaged
-        {
-            // Return the appropriate C# kernel based on type and operation
-            if (op == BinaryOp.Add)
-            {
-                if (typeof(T) == typeof(int))
-                    return (BinaryKernel<T>)(Delegate)(BinaryKernel<int>)SimdKernels.Add_Int32;
-                if (typeof(T) == typeof(long))
-                    return (BinaryKernel<T>)(Delegate)(BinaryKernel<long>)SimdKernels.Add_Int64;
-                if (typeof(T) == typeof(float))
-                    return (BinaryKernel<T>)(Delegate)(BinaryKernel<float>)SimdKernels.Add_Single;
-                if (typeof(T) == typeof(double))
-                    return (BinaryKernel<T>)(Delegate)(BinaryKernel<double>)SimdKernels.Add_Double;
-            }
-
-            throw new NotSupportedException($"C# kernel not available for {op} on {typeof(T).Name}");
         }
 
         #endregion

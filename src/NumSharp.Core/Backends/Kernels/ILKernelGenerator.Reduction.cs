@@ -41,14 +41,6 @@ namespace NumSharp.Backends.Kernels
         public static int ElementReductionCachedCount => _elementReductionCache.Count;
 
         /// <summary>
-        /// Clear the reduction kernel caches.
-        /// </summary>
-        public static void ClearReduction()
-        {
-            _elementReductionCache.Clear();
-        }
-
-        /// <summary>
         /// Get or generate a typed element-wise reduction kernel.
         /// Returns a delegate that reduces all elements to a single value of type TResult.
         /// </summary>

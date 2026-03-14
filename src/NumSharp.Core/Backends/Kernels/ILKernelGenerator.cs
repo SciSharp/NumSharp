@@ -24,6 +24,25 @@ using NumSharp.Utilities;
 // Use ILKernelGenerator.Instance for instance methods, or static facades for
 // backward compatibility with existing code.
 //
+// EXCEPTION HANDLING
+// ------------------
+// All TryGet*Kernel() methods use catch-all exception handling that returns null.
+// This is intentional graceful degradation: if IL generation fails for any reason
+// (unsupported type, reflection error, invalid IL sequence), the caller receives
+// null and falls back to an alternative code path (typically scalar loops or
+// throwing NotSupportedException with a descriptive message).
+//
+// This pattern exists in 14 locations across the partial class files:
+//   - Binary.cs: TryGenerateContiguousKernel
+//   - MixedType.cs: TryGetMixedTypeKernel
+//   - MatMul.cs: GenerateMatMulKernelIL
+//   - Unary.cs: TryGetUnaryKernel
+//   - Shift.cs: GetShiftScalarKernel, GetShiftArrayKernel
+//   - Scan.cs: TryGetCumulativeKernel, TryGetCumulativeAxisKernel
+//   - Reduction.cs: TryGetTypedElementReductionKernel
+//   - Comparison.cs: TryGetComparisonKernel
+//   - ILKernelGenerator.cs: IKernelProvider interface implementations
+//
 // =============================================================================
 // PARTIAL CLASS FILES
 // =============================================================================
@@ -54,7 +73,7 @@ using NumSharp.Utilities;
 //   FLOW: Called by DefaultEngine for same-type contiguous operations
 //   KEY MEMBERS:
 //     - ContiguousKernel<T> delegate, _contiguousKernelCache
-//     - GetContiguousKernel<T>(), GenerateUnifiedKernel<T>()
+//     - GetContiguousKernel<T>()
 //     - Generic helpers: IsSimdSupported<T>(), EmitLoadIndirect<T>(), etc.
 //
 // ILKernelGenerator.MixedType.cs
@@ -62,12 +81,11 @@ using NumSharp.Utilities;
 //   RESPONSIBILITY:
 //     - Handles all binary ops where operand types may differ
 //     - Generates path-specific kernels based on stride patterns
-//     - Owns ClearAll() which clears ALL caches across all partials
 //   DEPENDENCIES: Uses core emit helpers from ILKernelGenerator.cs
 //   FLOW: Called by DefaultEngine for general binary operations
 //   KEY MEMBERS:
 //     - MixedTypeKernel delegate, _mixedTypeCache
-//     - GetMixedTypeKernel(), TryGetMixedTypeKernel(), ClearAll()
+//     - GetMixedTypeKernel(), TryGetMixedTypeKernel()
 //     - Path generators: GenerateSimdFullKernel(), GenerateGeneralKernel(), etc.
 //     - Loop emitters: EmitScalarFullLoop(), EmitSimdFullLoop(), EmitGeneralLoop()
 //
@@ -110,7 +128,7 @@ using NumSharp.Utilities;
 //   FLOW: Kernels called by DefaultEngine; helpers called directly by np.all/any/nonzero/masking
 //   KEY MEMBERS:
 //     - TypedElementReductionKernel<T> delegate, _elementReductionCache
-//     - GetTypedElementReductionKernel<T>(), ClearReduction()
+//     - GetTypedElementReductionKernel<T>()
 //     - AllSimdHelper<T>(), AnySimdHelper<T>() - early-exit boolean reductions
 //     - ArgMaxSimdHelper<T>(), ArgMinSimdHelper<T>() - index-tracking reductions
 //     - NonZeroSimdHelper<T>(), ConvertFlatIndicesToCoordinates()
@@ -1225,35 +1243,6 @@ namespace NumSharp.Backends.Kernels
         {
             try { return GetComparisonScalarDelegate(key); }
             catch { return null; }
-        }
-
-        /// <summary>
-        /// Clear all cached kernels (IKernelProvider interface).
-        /// </summary>
-        void IKernelProvider.Clear() => ClearAll();
-
-        /// <summary>
-        /// Total number of cached kernels across all caches.
-        /// </summary>
-        int IKernelProvider.CacheCount => GetTotalCacheCount();
-
-        /// <summary>
-        /// Get total count of all cached kernels.
-        /// </summary>
-        private static int GetTotalCacheCount()
-        {
-            // Sum counts from all partial class caches
-            int count = 0;
-            count += CachedCount;           // Binary: _contiguousKernelCache
-            count += MixedTypeCachedCount;  // MixedType: _mixedTypeCache
-            count += UnaryCachedCount;      // Unary: _unaryCache
-            count += UnaryScalarCachedCount; // Unary: _unaryScalarCache
-            count += ComparisonCachedCount; // Comparison: _comparisonCache
-            count += ComparisonScalarCachedCount; // Comparison: _comparisonScalarCache
-            count += ElementReductionCachedCount;  // Reduction: _elementReductionCache
-            count += AxisReductionCachedCount;     // Reduction: _axisReductionCache
-            count += NanAxisReductionCachedCount;  // Reduction.Axis.NaN: _nanAxisReductionCache
-            return count;
         }
 
         #endregion

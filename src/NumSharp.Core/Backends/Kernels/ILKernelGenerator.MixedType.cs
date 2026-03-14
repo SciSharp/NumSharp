@@ -46,14 +46,12 @@ using System.Reflection.Emit;
 //       * SimdScalarRight/Left: one operand is scalar -> broadcast SIMD
 //       * SimdChunk: inner dimension contiguous -> chunked SIMD
 //       * General: arbitrary strides -> coordinate-based iteration
-//     - Owns ClearAll() which clears ALL caches across ALL partial files
 //   DEPENDENCIES: Uses core emit helpers from ILKernelGenerator.cs
 //   FLOW: Called by DefaultEngine as the general binary operation handler
 //   KEY MEMBERS:
 //     - MixedTypeKernel delegate - full signature with strides/shape/ndim
 //     - _mixedTypeCache - caches by MixedTypeKernelKey (types, op, path)
 //     - GetMixedTypeKernel(), TryGetMixedTypeKernel() - main entry points
-//     - ClearAll() - clears ALL caches (this file owns global cleanup)
 //     - GenerateSimdFullKernel(), GenerateSimdScalarRight/LeftKernel()
 //     - GenerateSimdChunkKernel(), GenerateGeneralKernel()
 //     - EmitScalarFullLoop(), EmitSimdFullLoop(), EmitGeneralLoop(), etc.
@@ -103,25 +101,6 @@ namespace NumSharp.Backends.Kernels
         /// Number of mixed-type kernels in cache.
         /// </summary>
         public static int MixedTypeCachedCount => _mixedTypeCache.Count;
-
-        /// <summary>
-        /// Clear all kernel caches.
-        /// </summary>
-        public static void ClearAll()
-        {
-            _contiguousKernelCache.Clear();
-            _mixedTypeCache.Clear();
-            _unaryCache.Clear();
-            _unaryScalarCache.Clear();
-            _binaryScalarCache.Clear();
-            _comparisonCache.Clear();
-            _comparisonScalarCache.Clear();
-            _elementReductionCache.Clear();
-            _scanCache.Clear();
-            _axisScanCache.Clear();
-            _shiftKernelCache.Clear();
-            ClearNanAxisReduction();
-        }
 
         /// <summary>
         /// Get or generate a mixed-type kernel for the specified key.

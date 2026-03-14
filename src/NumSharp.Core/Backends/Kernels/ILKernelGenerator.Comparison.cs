@@ -45,7 +45,6 @@ using System.Runtime.Intrinsics;
 //   RESPONSIBILITY:
 //     - Handles all binary ops where operand types may differ
 //     - Generates path-specific kernels based on stride patterns
-//     - Owns ClearAll() which clears ALL caches across all partials
 //   DEPENDENCIES: Uses core emit helpers from ILKernelGenerator.cs
 //   FLOW: Called by DefaultEngine for general binary operations
 //
@@ -73,7 +72,7 @@ using System.Runtime.Intrinsics;
 //     - ComparisonKernel delegate - writes bool* result array
 //     - _comparisonCache - caches by ComparisonKernelKey (types, op, path)
 //     - _comparisonScalarCache - Func<TLhs, TRhs, bool> for scalar comparisons
-//     - GetComparisonKernel(), TryGetComparisonKernel(), ClearComparison()
+//     - GetComparisonKernel(), TryGetComparisonKernel()
 //     - GetComparisonScalarDelegate() - for element-by-element comparison
 //     - EmitVectorComparison() - SIMD comparison producing mask vector
 //     - EmitMaskToBoolExtraction() - efficient mask bits -> bool array
@@ -106,11 +105,6 @@ namespace NumSharp.Backends.Kernels
         /// Number of comparison kernels in cache.
         /// </summary>
         public static int ComparisonCachedCount => _comparisonCache.Count;
-
-        /// <summary>
-        /// Clear the comparison kernel cache.
-        /// </summary>
-        public static void ClearComparison() => _comparisonCache.Clear();
 
         /// <summary>
         /// Get or generate a comparison kernel for the specified key.
