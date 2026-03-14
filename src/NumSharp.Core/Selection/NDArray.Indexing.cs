@@ -28,8 +28,8 @@ namespace NumSharp
         ///     Used to perform selection based on given indices.
         /// </summary>
         /// <param name="dims">The pointer to the dimensions</param>
-        /// <param name="ndims">The count of ints in <paramref name="dims"/></param>
-        public unsafe NDArray this[int* dims, int ndims]
+        /// <param name="ndims">The count of longs in <paramref name="dims"/></param>
+        public unsafe NDArray this[long* dims, int ndims]
         {
             get => new NDArray(Storage.GetData(dims, ndims));
             set { ThrowIfNotWriteable(); Storage.GetData(dims, ndims).SetData(value); }

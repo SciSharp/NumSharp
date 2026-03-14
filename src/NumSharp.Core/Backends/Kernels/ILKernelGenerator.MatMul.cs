@@ -44,7 +44,7 @@ namespace NumSharp.Backends.Kernels
     /// </summary>
     public unsafe delegate void MatMul2DKernel<T>(
         T* a, T* b, T* c,
-        int M, int N, int K) where T : unmanaged;
+        long M, long N, long K) where T : unmanaged;
 
     /// <summary>
     /// IL-generated matrix multiplication kernels with SIMD optimization.

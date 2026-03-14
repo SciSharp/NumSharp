@@ -34,20 +34,35 @@ namespace NumSharp.Backends.Kernels
         /// All matrices must be row-major contiguous.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public static unsafe void MatMulFloat(float* A, float* B, float* C, int M, int N, int K)
+        public static unsafe void MatMulFloat(float* A, float* B, float* C, long M, long N, long K)
         {
+            // Validate dimensions fit in int for internal operations
+            // (Span and blocking require int, and matrices > 2B elements are impractical)
+            if (M > int.MaxValue || N > int.MaxValue || K > int.MaxValue)
+                throw new ArgumentException("Matrix dimensions exceed int.MaxValue, which is not supported for SIMD matmul.");
+
+            int m = (int)M, n = (int)N, k = (int)K;
+
             // Zero output
-            new Span<float>(C, M * N).Clear();
+            long outputSize = M * N;
+            if (outputSize <= int.MaxValue)
+                new Span<float>(C, (int)outputSize).Clear();
+            else
+            {
+                // Clear in chunks for very large outputs
+                for (long i = 0; i < outputSize; i++)
+                    C[i] = 0f;
+            }
 
             // Small matrices: use simple IKJ loop (blocking overhead not worth it)
-            if (M <= BLOCKING_THRESHOLD && N <= BLOCKING_THRESHOLD && K <= BLOCKING_THRESHOLD)
+            if (m <= BLOCKING_THRESHOLD && n <= BLOCKING_THRESHOLD && k <= BLOCKING_THRESHOLD)
             {
-                MatMulFloatSimple(A, B, C, M, N, K);
+                MatMulFloatSimple(A, B, C, m, n, k);
                 return;
             }
 
             // Large matrices: cache-blocked GEBP algorithm with full panel packing
-            MatMulFloatBlocked(A, B, C, M, N, K);
+            MatMulFloatBlocked(A, B, C, m, n, k);
         }
 
         /// <summary>

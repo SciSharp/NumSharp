@@ -82,7 +82,7 @@ namespace NumSharp.Backends
         public override NDArray SwapAxes(NDArray nd, int axis1, int axis2)
         {
             var ndims = nd.ndim;
-            var dims = new int[ndims];
+            var dims = new long[ndims];
             for (int i = 0; i < ndims; i++)
                 dims[i] = i;
 
