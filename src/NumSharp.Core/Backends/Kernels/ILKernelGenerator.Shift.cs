@@ -20,7 +20,7 @@ using System.Runtime.Intrinsics;
 // SUPPORTED TYPES: Byte, Int16, UInt16, Int32, UInt32, Int64, UInt64
 // NOT SUPPORTED: Boolean, Char, Single, Double, Decimal (non-integer)
 //
-// NUMPY COMPATIBILITY (BUG 81 FIX):
+// NUMPY COMPATIBILITY - Shift Overflow Handling:
 //   C# masks shift amount to bit width: x << 32 becomes x << (32 & 31) = x << 0 = x
 //   NumPy behavior for shift >= bit width:
 //     - Left shift: always returns 0
@@ -66,11 +66,6 @@ namespace NumSharp.Backends.Kernels
         #region Shift Kernel Cache
 
         private static readonly ConcurrentDictionary<(BinaryOp, Type, bool), Delegate> _shiftKernelCache = new();
-
-        /// <summary>
-        /// Clear the shift kernel cache.
-        /// </summary>
-        public static void ClearShiftCache() => _shiftKernelCache.Clear();
 
         #endregion
 
@@ -143,7 +138,6 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Generate IL kernel for shift with scalar shift amount.
         /// Uses SIMD for the main loop and scalar for the tail.
-        /// Handles shift >= bit width per NumPy semantics (BUG 81 fix).
         /// </summary>
         private static unsafe ShiftScalarKernel<T> GenerateShiftScalarKernel<T>(bool isLeftShift) where T : unmanaged
         {
@@ -177,7 +171,7 @@ namespace NumSharp.Backends.Kernels
             var lblOverflowHandled = il.DefineLabel();
             var lblNormalShift = il.DefineLabel();
 
-            // ========== OVERFLOW CHECK (BUG 81 FIX) ==========
+            // ========== OVERFLOW CHECK ==========
             // NumPy: shift >= bitWidth has special handling
             // Left shift: always 0
             // Right shift unsigned: always 0
@@ -602,7 +596,6 @@ namespace NumSharp.Backends.Kernels
         /// Emit scalar shift operation body.
         /// For scalar shift (useArrayShift=false): output[i] = input[i] << shiftAmount (arg2)
         /// For array shift (useArrayShift=true): output[i] = input[i] << shifts[i] (arg1)
-        /// Handles shift >= bit width per NumPy semantics (BUG 81 fix).
         /// </summary>
         private static void EmitScalarShiftBody<T>(ILGenerator il, bool isLeftShift, LocalBuilder locI, int elementSize, bool useArrayShift) where T : unmanaged
         {
