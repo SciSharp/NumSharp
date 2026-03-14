@@ -122,7 +122,7 @@ namespace NumSharp
             for (int i = 0; i < inputShape.Length; i++)
             {
                 if (i != axis)
-                    outputShapeList.Add(inputShape[i]);
+                    outputShapeList.Add((int)inputShape[i]);
             }
             if (outputShapeList.Count == 0)
                 outputShapeList.Add(1);

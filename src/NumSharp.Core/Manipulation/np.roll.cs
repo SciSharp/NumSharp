@@ -55,10 +55,10 @@ namespace NumSharp
             {
                 if (i == ax)
                 {
-                    srcBody[i] = new Slice(null, -offset);  // :-offset
-                    dstBody[i] = new Slice(offset, null);    // offset:
-                    srcTail[i] = new Slice(-offset, null);   // -offset:
-                    dstTail[i] = new Slice(null, offset);    // :offset
+                    srcBody[i] = new Slice(null, (int)-offset);  // :-offset
+                    dstBody[i] = new Slice((int)offset, null);    // offset:
+                    srcTail[i] = new Slice((int)-offset, null);   // -offset:
+                    dstTail[i] = new Slice(null, (int)offset);    // :offset
                 }
                 else
                 {

@@ -137,7 +137,7 @@ namespace NumSharp.Backends.Unmanaged
         }
 
         [MethodImpl(OptimizeAndInline)]
-        public void SetIndex(long index, T value)
+        public void SetIndex(int index, T value)
         {
             Debug.Assert(index < Count, "index < Count, Memory corruption expected.");
             *(Address + index) = value;

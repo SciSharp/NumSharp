@@ -46,7 +46,7 @@ namespace NumSharp
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.zeros.html</remarks>
         public static NDArray zeros(params long[] shapes)
         {
-            return zeros(shapes, null);
+            return zeros(new Shape(shapes), (Type)null);
         }
 
         /// <summary>
@@ -68,7 +68,7 @@ namespace NumSharp
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.zeros.html</remarks>
         public static NDArray zeros<T>(params long[] shapes) where T : unmanaged
         {
-            return zeros(shapes, typeof(T));
+            return zeros(new Shape(shapes), typeof(T));
         }
 
         /// <summary>

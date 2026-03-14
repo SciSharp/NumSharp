@@ -67,7 +67,7 @@ namespace NumSharp.Backends
         /// <para>
         /// <b>Set by:</b> All three <see cref="Alias()"/> overloads,
         /// <see cref="CreateBroadcastedUnsafe(UnmanagedStorage, Shape)"/>,
-        /// and both <see cref="GetData(long[])"/> overloads when creating views.
+        /// and both <see cref="GetData(int[])"/> overloads when creating views.
         /// </para>
         /// </remarks>
         /// <seealso cref="BaseStorage"/>
@@ -1010,7 +1010,7 @@ namespace NumSharp.Backends
             if (shape.IsEmpty)
                 throw new ArgumentNullException(nameof(shape));
 
-            _Allocate(shape, ArraySlice.Allocate(dtype ?? DType, shape.size, true));
+            _Allocate(shape, ArraySlice.Allocate(dtype ?? DType, (int)shape.size, true));
         }
 
         /// <summary>
@@ -1023,7 +1023,7 @@ namespace NumSharp.Backends
             if (shape.IsEmpty)
                 throw new ArgumentNullException(nameof(shape));
 
-            _Allocate(shape, ArraySlice.Allocate(dtype ?? DType, shape.size, fillZeros));
+            _Allocate(shape, ArraySlice.Allocate(dtype ?? DType, (int)shape.size, fillZeros));
         }
 
         /// <summary>

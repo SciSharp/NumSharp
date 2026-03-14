@@ -106,7 +106,7 @@ namespace NumSharp
                 {
                     var src = (T*)this.Address;
                     long len = this.size;
-                    for (long i = 0; i < len; i++)
+                    for (int i = 0; i < len; i++)
                         hashset.Add(src[i]);
 
                     var dst = new NDArray(InfoOf<T>.NPTypeCode, Shape.Vector(hashset.Count));
