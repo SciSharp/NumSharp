@@ -488,7 +488,7 @@ namespace NumSharp.Backends.Unmanaged
         /// <param name="count">How many <typeparamref name="T"/> to copy, not how many bytes.</param>
         /// <returns></returns>
         [MethodImpl(OptimizeAndInline)]
-        public static UnmanagedMemoryBlock<T> Copy(void* address, int count)
+        public static UnmanagedMemoryBlock<T> Copy(void* address, long count)
         {
             var len = count * InfoOf<T>.Size;
             var ret = new UnmanagedMemoryBlock<T>(count);
@@ -498,25 +498,25 @@ namespace NumSharp.Backends.Unmanaged
         }
 
         /// <summary>
-        ///     
+        ///
         /// </summary>
         /// <param name="address"></param>
         /// <param name="count">How many <typeparamref name="T"/> to copy, not how many bytes.</param>
         /// <returns></returns>
         [MethodImpl(OptimizeAndInline)]
-        public static UnmanagedMemoryBlock<T> Copy(IntPtr address, int count)
+        public static UnmanagedMemoryBlock<T> Copy(IntPtr address, long count)
         {
             return Copy((void*)address, count);
         }
 
         /// <summary>
-        ///     
+        ///
         /// </summary>
         /// <param name="address">The address of the first <typeparamref name="T"/></param>
         /// <param name="count">How many <typeparamref name="T"/> to copy, not how many bytes.</param>
         /// <returns></returns>
         [MethodImpl(OptimizeAndInline)]
-        public static UnmanagedMemoryBlock<T> Copy(T* address, int count)
+        public static UnmanagedMemoryBlock<T> Copy(T* address, long count)
         {
             return Copy((void*)address, count);
         }
