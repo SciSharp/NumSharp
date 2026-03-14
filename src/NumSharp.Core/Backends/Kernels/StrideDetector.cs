@@ -15,11 +15,11 @@ namespace NumSharp.Backends.Kernels
         /// strides[n-1] = 1, strides[i] = strides[i+1] * shape[i+1]
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static unsafe bool IsContiguous(int* strides, int* shape, int ndim)
+        public static unsafe bool IsContiguous(long* strides, long* shape, int ndim)
         {
             if (ndim == 0) return true;
 
-            int expectedStride = 1;
+            long expectedStride = 1;
             for (int d = ndim - 1; d >= 0; d--)
             {
                 // Skip dimensions of size 1 (they don't affect contiguity)
@@ -35,7 +35,7 @@ namespace NumSharp.Backends.Kernels
         /// A scalar is broadcast to any shape - each element accesses the same value.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static unsafe bool IsScalar(int* strides, int ndim)
+        public static unsafe bool IsScalar(long* strides, int ndim)
         {
             for (int d = 0; d < ndim; d++)
             {
@@ -50,20 +50,20 @@ namespace NumSharp.Backends.Kernels
         /// Returns true if both operands have inner stride of 1 (contiguous) or 0 (broadcast).
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static unsafe bool CanSimdChunk<T>(int* lhsStrides, int* rhsStrides, int* shape, int ndim)
+        public static unsafe bool CanSimdChunk<T>(long* lhsStrides, long* rhsStrides, long* shape, int ndim)
             where T : unmanaged
         {
             if (ndim == 0) return false;
 
-            int innerSize = shape[ndim - 1];
+            long innerSize = shape[ndim - 1];
             int minVectorSize = Vector256<T>.Count;
 
             // Inner dimension must be large enough for SIMD
             if (innerSize < minVectorSize)
                 return false;
 
-            int lhsInner = lhsStrides[ndim - 1];
-            int rhsInner = rhsStrides[ndim - 1];
+            long lhsInner = lhsStrides[ndim - 1];
+            long rhsInner = rhsStrides[ndim - 1];
 
             // Both must be contiguous (1) or broadcast (0) in inner dimension
             return (lhsInner == 1 || lhsInner == 0) &&
@@ -80,9 +80,9 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static unsafe ExecutionPath Classify<T>(
-            int* lhsStrides,
-            int* rhsStrides,
-            int* shape,
+            long* lhsStrides,
+            long* rhsStrides,
+            long* shape,
             int ndim)
             where T : unmanaged
         {
