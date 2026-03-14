@@ -5,6 +5,8 @@ using System.Numerics;
 using System.Reflection;
 using System.Reflection.Emit;
 using System.Runtime.Intrinsics;
+using System.Runtime.Intrinsics.X86;
+using System.Threading.Tasks;
 
 // =============================================================================
 // ILKernelGenerator.Reduction.Axis.Simd.cs - SIMD Axis Reduction Kernels
@@ -14,6 +16,8 @@ using System.Runtime.Intrinsics;
 //   - CreateAxisReductionKernelTyped<T> - typed SIMD kernel
 //   - AxisReductionSimdHelper<T> - main SIMD helper
 //   - ReduceContiguousAxis variants (SIMD256, SIMD128, scalar)
+//   - ReduceStridedAxis with AVX2 gather for float/double
+//   - Parallel outer loop for large output sizes
 //   - Vector identity/combine/horizontal helpers
 //   - IKernelProvider interface implementation
 //
@@ -39,8 +43,15 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
+        /// Threshold for parallelizing the outer loop in axis reductions.
+        /// Only parallelize when output size exceeds this threshold.
+        /// </summary>
+        private const int AxisReductionParallelThreshold = 1000;
+
+        /// <summary>
         /// SIMD helper for axis reduction operations.
         /// Reduces along a specific axis, writing results to output array.
+        /// Uses parallel outer loop for large output sizes.
         /// </summary>
         /// <typeparam name="T">Element type</typeparam>
         /// <param name="input">Input data pointer</param>
@@ -68,63 +79,143 @@ namespace NumSharp.Backends.Kernels
             // Compute output shape strides for coordinate calculation
             // Output has ndim-1 dimensions (axis removed)
             int outputNdim = ndim - 1;
-            Span<int> outputDimStrides = stackalloc int[outputNdim > 0 ? outputNdim : 1];
+
+            // Store output dimension strides in a fixed array for parallel access
+            int[] outputDimStridesArray = new int[outputNdim > 0 ? outputNdim : 1];
             if (outputNdim > 0)
             {
-                outputDimStrides[outputNdim - 1] = 1;
+                outputDimStridesArray[outputNdim - 1] = 1;
                 for (int d = outputNdim - 2; d >= 0; d--)
                 {
                     // Map output dimension d to input dimension (d if d < axis, d+1 if d >= axis)
-                    int inputDim = d >= axis ? d + 1 : d;
                     int nextInputDim = (d + 1) >= axis ? d + 2 : d + 1;
-                    outputDimStrides[d] = outputDimStrides[d + 1] * inputShape[nextInputDim];
+                    outputDimStridesArray[d] = outputDimStridesArray[d + 1] * inputShape[nextInputDim];
                 }
             }
 
-            // Iterate over all output elements
-            for (int outIdx = 0; outIdx < outputSize; outIdx++)
+            // For Mean, use Sum operation then divide
+            ReductionOp actualOp = op == ReductionOp.Mean ? ReductionOp.Sum : op;
+            bool isMean = op == ReductionOp.Mean;
+
+            // Use parallel loop for large output sizes
+            if (outputSize > AxisReductionParallelThreshold)
             {
-                // Convert linear output index to coordinates and compute input base offset
-                int remaining = outIdx;
-                int inputBaseOffset = 0;
-                int outputOffset = 0;
+                // Copy strides to managed arrays for safe parallel access
+                int[] inputStridesArray = new int[ndim];
+                for (int i = 0; i < ndim; i++)
+                    inputStridesArray[i] = inputStrides[i];
 
-                for (int d = 0; d < outputNdim; d++)
+                int[] outputStridesArray = new int[outputNdim > 0 ? outputNdim : 1];
+                for (int i = 0; i < outputStridesArray.Length && i < outputNdim; i++)
+                    outputStridesArray[i] = outputStrides[i];
+
+                // Capture pointers for lambda
+                T* inputPtr = input;
+                T* outputPtr = output;
+
+                Parallel.For(0, outputSize, outIdx =>
                 {
-                    // Map output dimension d to input dimension
-                    int inputDim = d >= axis ? d + 1 : d;
-
-                    int coord = remaining / outputDimStrides[d];
-                    remaining = remaining % outputDimStrides[d];
-
-                    inputBaseOffset += coord * inputStrides[inputDim];
-                    outputOffset += coord * outputStrides[d];
-                }
-
-                // Now reduce along the axis
-                T* axisStart = input + inputBaseOffset;
-
-                // For Mean, use Sum operation then divide
-                ReductionOp actualOp = op == ReductionOp.Mean ? ReductionOp.Sum : op;
-
-                T result;
-                if (axisContiguous)
-                {
-                    // Fast path: axis is contiguous, use SIMD
-                    result = ReduceContiguousAxis(axisStart, axisSize, actualOp);
-                }
-                else
-                {
-                    // Strided path: axis is not contiguous
-                    result = ReduceStridedAxis(axisStart, axisSize, axisStride, actualOp);
-                }
-
-                // For Mean, divide by count
-                if (op == ReductionOp.Mean)
-                    result = DivideByCountTyped(result, axisSize);
-
-                output[outputOffset] = result;
+                    ReduceAxisElement(
+                        inputPtr, outputPtr,
+                        inputStridesArray, outputStridesArray, outputDimStridesArray,
+                        axis, axisSize, axisStride, outputNdim,
+                        axisContiguous, actualOp, isMean, outIdx);
+                });
             }
+            else
+            {
+                // Sequential loop for small output sizes
+                for (int outIdx = 0; outIdx < outputSize; outIdx++)
+                {
+                    // Convert linear output index to coordinates and compute input base offset
+                    int remaining = outIdx;
+                    int inputBaseOffset = 0;
+                    int outputOffset = 0;
+
+                    for (int d = 0; d < outputNdim; d++)
+                    {
+                        // Map output dimension d to input dimension
+                        int inputDim = d >= axis ? d + 1 : d;
+
+                        int coord = remaining / outputDimStridesArray[d];
+                        remaining = remaining % outputDimStridesArray[d];
+
+                        inputBaseOffset += coord * inputStrides[inputDim];
+                        outputOffset += coord * outputStrides[d];
+                    }
+
+                    // Now reduce along the axis
+                    T* axisStart = input + inputBaseOffset;
+
+                    T result;
+                    if (axisContiguous)
+                    {
+                        // Fast path: axis is contiguous, use SIMD
+                        result = ReduceContiguousAxis(axisStart, axisSize, actualOp);
+                    }
+                    else
+                    {
+                        // Strided path: axis is not contiguous, use SIMD gather if beneficial
+                        result = ReduceStridedAxis(axisStart, axisSize, axisStride, actualOp);
+                    }
+
+                    // For Mean, divide by count
+                    if (isMean)
+                        result = DivideByCountTyped(result, axisSize);
+
+                    output[outputOffset] = result;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Process a single output element for axis reduction.
+        /// Used by parallel loop to process each output position independently.
+        /// </summary>
+        private static unsafe void ReduceAxisElement<T>(
+            T* input, T* output,
+            int[] inputStrides, int[] outputStrides, int[] outputDimStrides,
+            int axis, int axisSize, int axisStride, int outputNdim,
+            bool axisContiguous, ReductionOp op, bool isMean, int outIdx)
+            where T : unmanaged
+        {
+            // Convert linear output index to coordinates and compute input base offset
+            int remaining = outIdx;
+            int inputBaseOffset = 0;
+            int outputOffset = 0;
+
+            for (int d = 0; d < outputNdim; d++)
+            {
+                // Map output dimension d to input dimension
+                int inputDim = d >= axis ? d + 1 : d;
+
+                int coord = remaining / outputDimStrides[d];
+                remaining = remaining % outputDimStrides[d];
+
+                inputBaseOffset += coord * inputStrides[inputDim];
+                outputOffset += coord * outputStrides[d];
+            }
+
+            // Now reduce along the axis
+            T* axisStart = input + inputBaseOffset;
+
+            T result;
+            if (axisContiguous)
+            {
+                // Fast path: axis is contiguous, use SIMD
+                result = ReduceContiguousAxis(axisStart, axisSize, op);
+            }
+            else
+            {
+                // Strided path: axis is not contiguous, use SIMD gather if beneficial
+                result = ReduceStridedAxis(axisStart, axisSize, axisStride, op);
+            }
+
+            // For Mean, divide by count
+            if (isMean)
+                result = DivideByCountTyped(result, axisSize);
+
+            output[outputOffset] = result;
         }
 
         /// <summary>
@@ -348,13 +439,139 @@ namespace NumSharp.Backends.Kernels
 
         /// <summary>
         /// Reduce a strided axis (non-contiguous).
+        /// Uses AVX2 gather instructions for float/double when beneficial (stride fits in int32).
         /// </summary>
         private static unsafe T ReduceStridedAxis<T>(T* data, int size, int stride, ReductionOp op)
             where T : unmanaged
         {
+            if (size == 0)
+                return GetIdentityValue<T>(op);
+
+            if (size == 1)
+                return data[0];
+
+            // Try AVX2 gather for float/double - provides ~2-3x speedup for strided access
+            // Only beneficial when we have enough elements to amortize gather overhead
+            if (Avx2.IsSupported && size >= 8)
+            {
+                if (typeof(T) == typeof(float))
+                {
+                    return (T)(object)ReduceStridedAxisGatherFloat((float*)data, size, stride, op);
+                }
+                if (typeof(T) == typeof(double))
+                {
+                    return (T)(object)ReduceStridedAxisGatherDouble((double*)data, size, stride, op);
+                }
+            }
+
+            // Scalar fallback with 4x loop unrolling for better ILP
+            return ReduceStridedAxisScalar(data, size, stride, op);
+        }
+
+        /// <summary>
+        /// Strided reduction using AVX2 gather for float.
+        /// Uses Vector256 gather to load 8 floats at once from strided positions.
+        /// </summary>
+        private static unsafe float ReduceStridedAxisGatherFloat(float* data, int size, int stride, ReductionOp op)
+        {
+            // Create index vector: [0, stride, 2*stride, ..., 7*stride]
+            var indices = Vector256.Create(
+                0, stride, stride * 2, stride * 3,
+                stride * 4, stride * 5, stride * 6, stride * 7);
+
+            int vectorCount = 8; // Vector256<float>.Count
+            int vectorEnd = size - vectorCount;
+
+            var accum = CreateIdentityVector256<float>(op);
+
+            int i = 0;
+
+            // Main gather loop - process 8 elements per iteration
+            for (; i <= vectorEnd; i += vectorCount)
+            {
+                // GatherVector256: load data[indices[j]] for j in 0..7
+                // Scale = 4 because float is 4 bytes
+                var gathered = Avx2.GatherVector256(data + i * stride, indices, 4);
+                accum = CombineVectors256(accum, gathered, op);
+            }
+
+            // Horizontal reduce the vector
+            float result = HorizontalReduce256(accum, op);
+
+            // Process remaining elements with scalar loop
+            for (; i < size; i++)
+            {
+                result = CombineScalars(result, data[i * stride], op);
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Strided reduction using AVX2 gather for double.
+        /// Uses Vector256 gather to load 4 doubles at once from strided positions.
+        /// </summary>
+        private static unsafe double ReduceStridedAxisGatherDouble(double* data, int size, int stride, ReductionOp op)
+        {
+            // Create index vector: [0, stride, 2*stride, 3*stride]
+            // Note: For double, we use int indices but gather doubles
+            var indices = Vector128.Create(0, stride, stride * 2, stride * 3);
+
+            int vectorCount = 4; // Vector256<double>.Count
+            int vectorEnd = size - vectorCount;
+
+            var accum = CreateIdentityVector256<double>(op);
+
+            int i = 0;
+
+            // Main gather loop - process 4 elements per iteration
+            for (; i <= vectorEnd; i += vectorCount)
+            {
+                // GatherVector256: load data[indices[j]] for j in 0..3
+                // Scale = 8 because double is 8 bytes
+                var gathered = Avx2.GatherVector256(data + i * stride, indices, 8);
+                accum = CombineVectors256(accum, gathered, op);
+            }
+
+            // Horizontal reduce the vector
+            double result = HorizontalReduce256(accum, op);
+
+            // Process remaining elements with scalar loop
+            for (; i < size; i++)
+            {
+                result = CombineScalars(result, data[i * stride], op);
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Scalar strided reduction with 4x loop unrolling.
+        /// </summary>
+        private static unsafe T ReduceStridedAxisScalar<T>(T* data, int size, int stride, ReductionOp op)
+            where T : unmanaged
+        {
             T result = GetIdentityValue<T>(op);
 
-            for (int i = 0; i < size; i++)
+            // 4x unrolled loop for better instruction-level parallelism
+            int unrollEnd = size - 4;
+            int i = 0;
+
+            for (; i <= unrollEnd; i += 4)
+            {
+                T v0 = data[i * stride];
+                T v1 = data[(i + 1) * stride];
+                T v2 = data[(i + 2) * stride];
+                T v3 = data[(i + 3) * stride];
+
+                result = CombineScalars(result, v0, op);
+                result = CombineScalars(result, v1, op);
+                result = CombineScalars(result, v2, op);
+                result = CombineScalars(result, v3, op);
+            }
+
+            // Handle remaining elements
+            for (; i < size; i++)
             {
                 result = CombineScalars(result, data[i * stride], op);
             }
