@@ -29,7 +29,6 @@ public class ReductionOpTests
     }
 
     [Test]
-    [OpenBugs] // Sum may have memory corruption issues
     public void Sum_Int32_1D()
     {
         var a = np.array(new[] { 1, 2, 3, 4, 5 });
@@ -458,7 +457,6 @@ public class ReductionOpTests
     #region Boolean Reduction Tests
 
     [Test]
-    [OpenBugs] // Bool sum may have issues
     public void Sum_Bool()
     {
         // NumPy: sum([True, False, True, True]) = 3
@@ -492,7 +490,6 @@ public class ReductionOpTests
     #region Integer Type Tests
 
     [Test]
-    [OpenBugs] // Sum may have memory corruption issues
     public void Sum_Int32_PromotesToInt64()
     {
         // NumPy: int32 sum returns int64
@@ -530,7 +527,6 @@ public class ReductionOpTests
     #region Sliced Array Tests
 
     [Test]
-    [OpenBugs] // Sum may have memory corruption issues
     public void Sum_SlicedArray()
     {
         var a = np.array(new[] { 1, 2, 3, 4, 5, 6 });

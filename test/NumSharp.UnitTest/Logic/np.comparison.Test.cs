@@ -20,7 +20,7 @@ namespace NumSharp.UnitTest.Logic
             var b = np.array(new[] { 1, 0, 3 });
             var result = np.equal(a, b);
 
-            Assert.AreEqual(new[] { 3 }, result.shape);
+            CollectionAssert.AreEqual(new[] { 3 }, result.shape);
             Assert.IsTrue(result.GetBoolean(0));
             Assert.IsFalse(result.GetBoolean(1));
             Assert.IsTrue(result.GetBoolean(2));
@@ -33,7 +33,7 @@ namespace NumSharp.UnitTest.Logic
             var a = np.array(new[] { 1, 2, 3 });
             var result = np.equal(a, 2);
 
-            Assert.AreEqual(new[] { 3 }, result.shape);
+            CollectionAssert.AreEqual(new[] { 3 }, result.shape);
             Assert.IsFalse(result.GetBoolean(0));
             Assert.IsTrue(result.GetBoolean(1));
             Assert.IsFalse(result.GetBoolean(2));
@@ -46,7 +46,7 @@ namespace NumSharp.UnitTest.Logic
             var b = np.array(new[] { 1, 2, 3 });
             var result = np.equal(2, b);
 
-            Assert.AreEqual(new[] { 3 }, result.shape);
+            CollectionAssert.AreEqual(new[] { 3 }, result.shape);
             Assert.IsFalse(result.GetBoolean(0));
             Assert.IsTrue(result.GetBoolean(1));
             Assert.IsFalse(result.GetBoolean(2));
@@ -234,7 +234,7 @@ namespace NumSharp.UnitTest.Logic
             var b = np.array(new[] { 1, 4 });
             var result = np.equal(a, b);
 
-            Assert.AreEqual(new[] { 2, 2 }, result.shape);
+            CollectionAssert.AreEqual(new[] { 2, 2 }, result.shape);
             Assert.IsTrue(result.GetBoolean(0, 0));
             Assert.IsFalse(result.GetBoolean(0, 1));
             Assert.IsFalse(result.GetBoolean(1, 0));
@@ -250,7 +250,7 @@ namespace NumSharp.UnitTest.Logic
             var result = np.less(a, b);
 
             // Result shape should be (3, 3)
-            Assert.AreEqual(new[] { 3, 3 }, result.shape);
+            CollectionAssert.AreEqual(new[] { 3, 3 }, result.shape);
 
             // Row 0: [1 < 1, 1 < 2, 1 < 3] = [False, True, True]
             Assert.IsFalse(result.GetBoolean(0, 0));

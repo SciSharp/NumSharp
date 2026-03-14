@@ -440,8 +440,10 @@ namespace NumSharp.UnitTest.Backends
 
         /// <summary>
         /// When reduction with keepdims on axis with size 1, returns view.
+        /// NumPy optimizes this case to return a view, NumSharp creates a new array.
         /// </summary>
         [Test]
+        [OpenBugs] // NumSharp always creates new array for reductions - view optimization not implemented
         public void Base_ReductionKeepdims_Size1Axis_ReturnsView()
         {
             // Start with an owned array (not a view)

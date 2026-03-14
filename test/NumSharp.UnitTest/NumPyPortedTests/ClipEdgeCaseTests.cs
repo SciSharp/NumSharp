@@ -288,7 +288,8 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         [Test]
         public void Clip_AllSameValue_BelowMin()
         {
-            var a = np.full(10, -5);
+            // NumSharp: np.full(fill_value, ...shapes) - note order differs from NumPy
+            var a = np.full(-5, 10);
             var result = np.clip(a, 0, 10);
             result.GetData<int>().Should().AllBeEquivalentTo(0);
         }
@@ -296,7 +297,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         [Test]
         public void Clip_AllSameValue_AboveMax()
         {
-            var a = np.full(10, 15);
+            var a = np.full(15, 10);
             var result = np.clip(a, 0, 10);
             result.GetData<int>().Should().AllBeEquivalentTo(10);
         }
@@ -304,7 +305,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         [Test]
         public void Clip_AllSameValue_InRange()
         {
-            var a = np.full(10, 5);
+            var a = np.full(5, 10);
             var result = np.clip(a, 0, 10);
             result.GetData<int>().Should().AllBeEquivalentTo(5);
         }

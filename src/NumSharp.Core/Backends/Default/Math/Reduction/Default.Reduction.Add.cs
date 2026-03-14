@@ -82,6 +82,44 @@ namespace NumSharp.Backends
             return result;
         }
 
+        /// <summary>
+        /// Handle empty array min/max reductions.
+        /// NumPy behavior:
+        /// - np.min([]) raises ValueError (no identity for min/max)
+        /// - np.min(zeros((0,3)), axis=0) raises ValueError (reducing along empty dimension)
+        /// - np.min(zeros((0,3)), axis=1) returns [] with shape (0,) (output is also empty)
+        /// </summary>
+        private NDArray HandleEmptyArrayMinMaxReduction(in NDArray arr, int? axis_, bool keepdims, NPTypeCode? typeCode, string opName)
+        {
+            var shape = arr.Shape;
+
+            // No axis specified - always throw for empty arrays (no identity element for min/max)
+            if (axis_ == null)
+                throw new ArgumentException($"zero-size array to reduction operation {opName} which has no identity");
+
+            var axis = NormalizeAxis(axis_.Value, arr.ndim);
+
+            // If the axis being reduced has size 0, we're reducing over an empty dimension
+            // which results in an error (no values to take min/max of)
+            if (shape.dimensions[axis] == 0)
+                throw new ArgumentException($"zero-size array to reduction operation {opName} which has no identity");
+
+            // If the axis being reduced has size > 0, but the result would be empty,
+            // return an empty array of the correct shape
+            var resultShape = Shape.GetAxis(shape, axis);
+            var outputType = typeCode ?? arr.GetTypeCode;
+            var result = new NDArray(outputType, new Shape(resultShape), false);
+
+            if (keepdims)
+            {
+                var ks = new int[arr.ndim];
+                for (int d = 0, sd = 0; d < arr.ndim; d++)
+                    ks[d] = (d == axis) ? 1 : resultShape[sd++];
+                result.Storage.Reshape(new Shape(ks));
+            }
+            return result;
+        }
+
         private NDArray HandleEmptyArrayReduction(in NDArray arr, int? axis_, bool keepdims, NPTypeCode? typeCode, NDArray @out, ReductionOp op)
         {
             var shape = arr.Shape;
