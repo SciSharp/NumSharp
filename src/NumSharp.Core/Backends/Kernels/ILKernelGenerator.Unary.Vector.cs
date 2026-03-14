@@ -147,10 +147,11 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Stloc, locX);
 
             // Create ones vector: Vector<T>.One
-            var oneProperty = vectorType.GetProperty("One", BindingFlags.Public | BindingFlags.Static);
-            if (oneProperty == null)
-                throw new InvalidOperationException($"Could not find Vector<{clrType.Name}>.One");
-            il.EmitCall(OpCodes.Call, oneProperty.GetGetMethod()!, null);
+            var oneProperty = vectorType.GetProperty("One", BindingFlags.Public | BindingFlags.Static)
+                ?? throw new InvalidOperationException($"Could not find Vector<{clrType.Name}>.One");
+            var oneGetter = oneProperty.GetGetMethod()
+                ?? throw new InvalidOperationException($"Could not find getter for Vector<{clrType.Name}>.One");
+            il.EmitCall(OpCodes.Call, oneGetter, null);
 
             // Load x
             il.Emit(OpCodes.Ldloc, locX);

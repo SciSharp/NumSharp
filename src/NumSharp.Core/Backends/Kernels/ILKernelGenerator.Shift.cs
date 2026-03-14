@@ -95,8 +95,9 @@ namespace NumSharp.Backends.Kernels
                     return kernel;
                 return (ShiftScalarKernel<T>)_shiftKernelCache[key];
             }
-            catch
+            catch (Exception ex)
             {
+                System.Diagnostics.Debug.WriteLine($"[ILKernel] GetShiftScalarKernel<{typeof(T).Name}>({(isLeftShift ? "Left" : "Right")}): {ex.GetType().Name}: {ex.Message}");
                 return null;
             }
         }
@@ -125,8 +126,9 @@ namespace NumSharp.Backends.Kernels
                     return kernel;
                 return (ShiftArrayKernel<T>)_shiftKernelCache[key];
             }
-            catch
+            catch (Exception ex)
             {
+                System.Diagnostics.Debug.WriteLine($"[ILKernel] GetShiftArrayKernel<{typeof(T).Name}>({(isLeftShift ? "Left" : "Right")}): {ex.GetType().Name}: {ex.Message}");
                 return null;
             }
         }
@@ -194,9 +196,7 @@ namespace NumSharp.Backends.Kernels
                 il.Emit(OpCodes.Ldc_I4, elementSize);
                 il.Emit(OpCodes.Mul);
                 il.Emit(OpCodes.Conv_U4);                  // size as uint
-                var initBlock = typeof(Unsafe).GetMethod(nameof(Unsafe.InitBlockUnaligned),
-                    new[] { typeof(void*), typeof(byte), typeof(uint) })!;
-                il.EmitCall(OpCodes.Call, initBlock, null);
+                il.EmitCall(OpCodes.Call, CachedMethods.UnsafeInitBlockUnaligned, null);
                 il.Emit(OpCodes.Ret);
             }
             else

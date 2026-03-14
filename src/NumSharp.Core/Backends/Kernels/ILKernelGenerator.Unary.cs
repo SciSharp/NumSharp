@@ -65,8 +65,9 @@ namespace NumSharp.Backends.Kernels
             {
                 return _unaryCache.GetOrAdd(key, GenerateUnaryKernel);
             }
-            catch
+            catch (Exception ex)
             {
+                System.Diagnostics.Debug.WriteLine($"[ILKernel] TryGetUnaryKernel({key}): {ex.GetType().Name}: {ex.Message}");
                 return null;
             }
         }

@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
+using System.Runtime.CompilerServices;
 using System.Runtime.Intrinsics;
 using NumSharp.Utilities;
 
@@ -202,55 +203,159 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Pre-cached MethodInfo references for frequently used reflection calls.
         /// Caching these avoids repeated GetMethod() lookups during kernel generation.
+        /// All fields use ?? throw to fail fast at type load if a method is not found.
         /// </summary>
         private static class CachedMethods
         {
             // Math methods (double versions)
-            public static readonly MethodInfo MathPow = typeof(Math).GetMethod(nameof(Math.Pow), new[] { typeof(double), typeof(double) })!;
-            public static readonly MethodInfo MathFloor = typeof(Math).GetMethod(nameof(Math.Floor), new[] { typeof(double) })!;
-            public static readonly MethodInfo MathAtan2 = typeof(Math).GetMethod(nameof(Math.Atan2), new[] { typeof(double), typeof(double) })!;
+            public static readonly MethodInfo MathPow = typeof(Math).GetMethod(nameof(Math.Pow), new[] { typeof(double), typeof(double) })
+                ?? throw new MissingMethodException(typeof(Math).FullName, nameof(Math.Pow));
+            public static readonly MethodInfo MathFloor = typeof(Math).GetMethod(nameof(Math.Floor), new[] { typeof(double) })
+                ?? throw new MissingMethodException(typeof(Math).FullName, nameof(Math.Floor));
+            public static readonly MethodInfo MathAtan2 = typeof(Math).GetMethod(nameof(Math.Atan2), new[] { typeof(double), typeof(double) })
+                ?? throw new MissingMethodException(typeof(Math).FullName, nameof(Math.Atan2));
 
             // Decimal conversion methods (to decimal)
-            public static readonly MethodInfo DecimalImplicitFromInt = typeof(decimal).GetMethod("op_Implicit", new[] { typeof(int) })!;
-            public static readonly MethodInfo DecimalImplicitFromByte = typeof(decimal).GetMethod("op_Implicit", new[] { typeof(byte) })!;
-            public static readonly MethodInfo DecimalImplicitFromShort = typeof(decimal).GetMethod("op_Implicit", new[] { typeof(short) })!;
-            public static readonly MethodInfo DecimalImplicitFromUShort = typeof(decimal).GetMethod("op_Implicit", new[] { typeof(ushort) })!;
-            public static readonly MethodInfo DecimalImplicitFromUInt = typeof(decimal).GetMethod("op_Implicit", new[] { typeof(uint) })!;
-            public static readonly MethodInfo DecimalImplicitFromLong = typeof(decimal).GetMethod("op_Implicit", new[] { typeof(long) })!;
-            public static readonly MethodInfo DecimalImplicitFromULong = typeof(decimal).GetMethod("op_Implicit", new[] { typeof(ulong) })!;
-            public static readonly MethodInfo DecimalExplicitFromFloat = typeof(decimal).GetMethod("op_Explicit", new[] { typeof(float) })!;
-            public static readonly MethodInfo DecimalExplicitFromDouble = typeof(decimal).GetMethod("op_Explicit", new[] { typeof(double) })!;
+            public static readonly MethodInfo DecimalImplicitFromInt = typeof(decimal).GetMethod("op_Implicit", new[] { typeof(int) })
+                ?? throw new MissingMethodException(typeof(decimal).FullName, "op_Implicit(int)");
+            public static readonly MethodInfo DecimalImplicitFromByte = typeof(decimal).GetMethod("op_Implicit", new[] { typeof(byte) })
+                ?? throw new MissingMethodException(typeof(decimal).FullName, "op_Implicit(byte)");
+            public static readonly MethodInfo DecimalImplicitFromShort = typeof(decimal).GetMethod("op_Implicit", new[] { typeof(short) })
+                ?? throw new MissingMethodException(typeof(decimal).FullName, "op_Implicit(short)");
+            public static readonly MethodInfo DecimalImplicitFromUShort = typeof(decimal).GetMethod("op_Implicit", new[] { typeof(ushort) })
+                ?? throw new MissingMethodException(typeof(decimal).FullName, "op_Implicit(ushort)");
+            public static readonly MethodInfo DecimalImplicitFromUInt = typeof(decimal).GetMethod("op_Implicit", new[] { typeof(uint) })
+                ?? throw new MissingMethodException(typeof(decimal).FullName, "op_Implicit(uint)");
+            public static readonly MethodInfo DecimalImplicitFromLong = typeof(decimal).GetMethod("op_Implicit", new[] { typeof(long) })
+                ?? throw new MissingMethodException(typeof(decimal).FullName, "op_Implicit(long)");
+            public static readonly MethodInfo DecimalImplicitFromULong = typeof(decimal).GetMethod("op_Implicit", new[] { typeof(ulong) })
+                ?? throw new MissingMethodException(typeof(decimal).FullName, "op_Implicit(ulong)");
+            public static readonly MethodInfo DecimalExplicitFromFloat = typeof(decimal).GetMethod("op_Explicit", new[] { typeof(float) })
+                ?? throw new MissingMethodException(typeof(decimal).FullName, "op_Explicit(float)");
+            public static readonly MethodInfo DecimalExplicitFromDouble = typeof(decimal).GetMethod("op_Explicit", new[] { typeof(double) })
+                ?? throw new MissingMethodException(typeof(decimal).FullName, "op_Explicit(double)");
 
             // Decimal conversion methods (from decimal)
-            public static readonly MethodInfo DecimalToByte = typeof(decimal).GetMethod("ToByte", new[] { typeof(decimal) })!;
-            public static readonly MethodInfo DecimalToInt16 = typeof(decimal).GetMethod("ToInt16", new[] { typeof(decimal) })!;
-            public static readonly MethodInfo DecimalToUInt16 = typeof(decimal).GetMethod("ToUInt16", new[] { typeof(decimal) })!;
-            public static readonly MethodInfo DecimalToInt32 = typeof(decimal).GetMethod("ToInt32", new[] { typeof(decimal) })!;
-            public static readonly MethodInfo DecimalToUInt32 = typeof(decimal).GetMethod("ToUInt32", new[] { typeof(decimal) })!;
-            public static readonly MethodInfo DecimalToInt64 = typeof(decimal).GetMethod("ToInt64", new[] { typeof(decimal) })!;
-            public static readonly MethodInfo DecimalToUInt64 = typeof(decimal).GetMethod("ToUInt64", new[] { typeof(decimal) })!;
-            public static readonly MethodInfo DecimalToSingle = typeof(decimal).GetMethod("ToSingle", new[] { typeof(decimal) })!;
-            public static readonly MethodInfo DecimalToDouble = typeof(decimal).GetMethod("ToDouble", new[] { typeof(decimal) })!;
+            public static readonly MethodInfo DecimalToByte = typeof(decimal).GetMethod("ToByte", new[] { typeof(decimal) })
+                ?? throw new MissingMethodException(typeof(decimal).FullName, "ToByte");
+            public static readonly MethodInfo DecimalToInt16 = typeof(decimal).GetMethod("ToInt16", new[] { typeof(decimal) })
+                ?? throw new MissingMethodException(typeof(decimal).FullName, "ToInt16");
+            public static readonly MethodInfo DecimalToUInt16 = typeof(decimal).GetMethod("ToUInt16", new[] { typeof(decimal) })
+                ?? throw new MissingMethodException(typeof(decimal).FullName, "ToUInt16");
+            public static readonly MethodInfo DecimalToInt32 = typeof(decimal).GetMethod("ToInt32", new[] { typeof(decimal) })
+                ?? throw new MissingMethodException(typeof(decimal).FullName, "ToInt32");
+            public static readonly MethodInfo DecimalToUInt32 = typeof(decimal).GetMethod("ToUInt32", new[] { typeof(decimal) })
+                ?? throw new MissingMethodException(typeof(decimal).FullName, "ToUInt32");
+            public static readonly MethodInfo DecimalToInt64 = typeof(decimal).GetMethod("ToInt64", new[] { typeof(decimal) })
+                ?? throw new MissingMethodException(typeof(decimal).FullName, "ToInt64");
+            public static readonly MethodInfo DecimalToUInt64 = typeof(decimal).GetMethod("ToUInt64", new[] { typeof(decimal) })
+                ?? throw new MissingMethodException(typeof(decimal).FullName, "ToUInt64");
+            public static readonly MethodInfo DecimalToSingle = typeof(decimal).GetMethod("ToSingle", new[] { typeof(decimal) })
+                ?? throw new MissingMethodException(typeof(decimal).FullName, "ToSingle");
+            public static readonly MethodInfo DecimalToDouble = typeof(decimal).GetMethod("ToDouble", new[] { typeof(decimal) })
+                ?? throw new MissingMethodException(typeof(decimal).FullName, "ToDouble");
 
             // Decimal operator methods
             public static readonly MethodInfo DecimalOpAddition = typeof(decimal).GetMethod("op_Addition",
-                BindingFlags.Public | BindingFlags.Static, null, new[] { typeof(decimal), typeof(decimal) }, null)!;
+                BindingFlags.Public | BindingFlags.Static, null, new[] { typeof(decimal), typeof(decimal) }, null)
+                ?? throw new MissingMethodException(typeof(decimal).FullName, "op_Addition");
             public static readonly MethodInfo DecimalOpSubtraction = typeof(decimal).GetMethod("op_Subtraction",
-                BindingFlags.Public | BindingFlags.Static, null, new[] { typeof(decimal), typeof(decimal) }, null)!;
+                BindingFlags.Public | BindingFlags.Static, null, new[] { typeof(decimal), typeof(decimal) }, null)
+                ?? throw new MissingMethodException(typeof(decimal).FullName, "op_Subtraction");
             public static readonly MethodInfo DecimalOpMultiply = typeof(decimal).GetMethod("op_Multiply",
-                BindingFlags.Public | BindingFlags.Static, null, new[] { typeof(decimal), typeof(decimal) }, null)!;
+                BindingFlags.Public | BindingFlags.Static, null, new[] { typeof(decimal), typeof(decimal) }, null)
+                ?? throw new MissingMethodException(typeof(decimal).FullName, "op_Multiply");
             public static readonly MethodInfo DecimalOpDivision = typeof(decimal).GetMethod("op_Division",
-                BindingFlags.Public | BindingFlags.Static, null, new[] { typeof(decimal), typeof(decimal) }, null)!;
+                BindingFlags.Public | BindingFlags.Static, null, new[] { typeof(decimal), typeof(decimal) }, null)
+                ?? throw new MissingMethodException(typeof(decimal).FullName, "op_Division");
             public static readonly MethodInfo DecimalFloor = typeof(decimal).GetMethod(nameof(decimal.Floor),
-                BindingFlags.Public | BindingFlags.Static, null, new[] { typeof(decimal) }, null)!;
+                BindingFlags.Public | BindingFlags.Static, null, new[] { typeof(decimal) }, null)
+                ?? throw new MissingMethodException(typeof(decimal).FullName, nameof(decimal.Floor));
 
             // DecimalMath.DecimalEx methods
             public static readonly MethodInfo DecimalExPow = typeof(DecimalMath.DecimalEx).GetMethod(
                 nameof(DecimalMath.DecimalEx.Pow), BindingFlags.Public | BindingFlags.Static, null,
-                new[] { typeof(decimal), typeof(decimal) }, null)!;
+                new[] { typeof(decimal), typeof(decimal) }, null)
+                ?? throw new MissingMethodException(typeof(DecimalMath.DecimalEx).FullName, nameof(DecimalMath.DecimalEx.Pow));
             public static readonly MethodInfo DecimalExATan2 = typeof(DecimalMath.DecimalEx).GetMethod(
                 nameof(DecimalMath.DecimalEx.ATan2), BindingFlags.Public | BindingFlags.Static, null,
-                new[] { typeof(decimal), typeof(decimal) }, null)!;
+                new[] { typeof(decimal), typeof(decimal) }, null)
+                ?? throw new MissingMethodException(typeof(DecimalMath.DecimalEx).FullName, nameof(DecimalMath.DecimalEx.ATan2));
+
+            // Decimal fields
+            public static readonly FieldInfo DecimalZero = typeof(decimal).GetField(nameof(decimal.Zero))
+                ?? throw new MissingFieldException(typeof(decimal).FullName, nameof(decimal.Zero));
+            public static readonly FieldInfo DecimalOne = typeof(decimal).GetField(nameof(decimal.One))
+                ?? throw new MissingFieldException(typeof(decimal).FullName, nameof(decimal.One));
+            public static readonly FieldInfo DecimalMinValue = typeof(decimal).GetField(nameof(decimal.MinValue))
+                ?? throw new MissingFieldException(typeof(decimal).FullName, nameof(decimal.MinValue));
+            public static readonly FieldInfo DecimalMaxValue = typeof(decimal).GetField(nameof(decimal.MaxValue))
+                ?? throw new MissingFieldException(typeof(decimal).FullName, nameof(decimal.MaxValue));
+
+            // Additional decimal operator methods
+            public static readonly MethodInfo DecimalOpUnaryNegation = typeof(decimal).GetMethod("op_UnaryNegation", new[] { typeof(decimal) })
+                ?? throw new MissingMethodException(typeof(decimal).FullName, "op_UnaryNegation");
+            public static readonly MethodInfo DecimalOpEquality = typeof(decimal).GetMethod("op_Equality", new[] { typeof(decimal), typeof(decimal) })
+                ?? throw new MissingMethodException(typeof(decimal).FullName, "op_Equality");
+            public static readonly MethodInfo DecimalTruncate = typeof(decimal).GetMethod(nameof(decimal.Truncate), new[] { typeof(decimal) })
+                ?? throw new MissingMethodException(typeof(decimal).FullName, nameof(decimal.Truncate));
+
+            // Math methods for decimal
+            public static readonly MethodInfo MathAbsDecimal = typeof(Math).GetMethod(nameof(Math.Abs), new[] { typeof(decimal) })
+                ?? throw new MissingMethodException(typeof(Math).FullName, "Abs(decimal)");
+            public static readonly MethodInfo MathSignDecimal = typeof(Math).GetMethod(nameof(Math.Sign), new[] { typeof(decimal) })
+                ?? throw new MissingMethodException(typeof(Math).FullName, "Sign(decimal)");
+            public static readonly MethodInfo MathCeilingDecimal = typeof(Math).GetMethod(nameof(Math.Ceiling), new[] { typeof(decimal) })
+                ?? throw new MissingMethodException(typeof(Math).FullName, "Ceiling(decimal)");
+            public static readonly MethodInfo MathFloorDecimal = typeof(Math).GetMethod(nameof(Math.Floor), new[] { typeof(decimal) })
+                ?? throw new MissingMethodException(typeof(Math).FullName, "Floor(decimal)");
+            public static readonly MethodInfo MathRoundDecimal = typeof(Math).GetMethod(nameof(Math.Round), new[] { typeof(decimal) })
+                ?? throw new MissingMethodException(typeof(Math).FullName, "Round(decimal)");
+
+            // Math methods for double
+            public static readonly MethodInfo MathAbsDouble = typeof(Math).GetMethod(nameof(Math.Abs), new[] { typeof(double) })
+                ?? throw new MissingMethodException(typeof(Math).FullName, "Abs(double)");
+            public static readonly MethodInfo MathExp = typeof(Math).GetMethod(nameof(Math.Exp), new[] { typeof(double) })
+                ?? throw new MissingMethodException(typeof(Math).FullName, nameof(Math.Exp));
+            public static readonly MethodInfo MathLog = typeof(Math).GetMethod(nameof(Math.Log), new[] { typeof(double) })
+                ?? throw new MissingMethodException(typeof(Math).FullName, nameof(Math.Log));
+            public static readonly MethodInfo MathCbrt = typeof(Math).GetMethod(nameof(Math.Cbrt), new[] { typeof(double) })
+                ?? throw new MissingMethodException(typeof(Math).FullName, nameof(Math.Cbrt));
+
+            // MathF methods for float
+            public static readonly MethodInfo MathFAbsFloat = typeof(MathF).GetMethod(nameof(MathF.Abs), new[] { typeof(float) })
+                ?? throw new MissingMethodException(typeof(MathF).FullName, nameof(MathF.Abs));
+            public static readonly MethodInfo MathFSign = typeof(MathF).GetMethod(nameof(MathF.Sign), new[] { typeof(float) })
+                ?? throw new MissingMethodException(typeof(MathF).FullName, nameof(MathF.Sign));
+
+            // Math.Sign methods
+            public static readonly MethodInfo MathSignDouble = typeof(Math).GetMethod(nameof(Math.Sign), new[] { typeof(double) })
+                ?? throw new MissingMethodException(typeof(Math).FullName, "Sign(double)");
+
+            // IsNaN methods
+            public static readonly MethodInfo FloatIsNaN = typeof(float).GetMethod(nameof(float.IsNaN), new[] { typeof(float) })
+                ?? throw new MissingMethodException(typeof(float).FullName, nameof(float.IsNaN));
+            public static readonly MethodInfo DoubleIsNaN = typeof(double).GetMethod(nameof(double.IsNaN), new[] { typeof(double) })
+                ?? throw new MissingMethodException(typeof(double).FullName, nameof(double.IsNaN));
+
+            // Unsafe methods
+            public static readonly MethodInfo UnsafeInitBlockUnaligned = typeof(Unsafe).GetMethod(nameof(Unsafe.InitBlockUnaligned),
+                new[] { typeof(void*), typeof(byte), typeof(uint) })
+                ?? throw new MissingMethodException(typeof(Unsafe).FullName, nameof(Unsafe.InitBlockUnaligned));
+
+            // Vector256 operator methods for MatMul
+            public static readonly MethodInfo Vector256FloatAdd = typeof(Vector256<float>).GetMethod("op_Addition",
+                BindingFlags.Public | BindingFlags.Static, new[] { typeof(Vector256<float>), typeof(Vector256<float>) })
+                ?? throw new MissingMethodException(typeof(Vector256<float>).FullName, "op_Addition");
+            public static readonly MethodInfo Vector256FloatMul = typeof(Vector256<float>).GetMethod("op_Multiply",
+                BindingFlags.Public | BindingFlags.Static, new[] { typeof(Vector256<float>), typeof(Vector256<float>) })
+                ?? throw new MissingMethodException(typeof(Vector256<float>).FullName, "op_Multiply");
+            public static readonly MethodInfo Vector256DoubleAdd = typeof(Vector256<double>).GetMethod("op_Addition",
+                BindingFlags.Public | BindingFlags.Static, new[] { typeof(Vector256<double>), typeof(Vector256<double>) })
+                ?? throw new MissingMethodException(typeof(Vector256<double>).FullName, "op_Addition");
+            public static readonly MethodInfo Vector256DoubleMul = typeof(Vector256<double>).GetMethod("op_Multiply",
+                BindingFlags.Public | BindingFlags.Static, new[] { typeof(Vector256<double>), typeof(Vector256<double>) })
+                ?? throw new MissingMethodException(typeof(Vector256<double>).FullName, "op_Multiply");
         }
 
         #endregion
@@ -1173,8 +1278,9 @@ namespace NumSharp.Backends.Kernels
                 var del = GetUnaryScalarDelegate(key);
                 return del as UnaryScalar<TIn, TOut>;
             }
-            catch
+            catch (Exception ex)
             {
+                System.Diagnostics.Debug.WriteLine($"[ILKernel] GetUnaryScalar<{typeof(TIn).Name},{typeof(TOut).Name}>({op}): {ex.GetType().Name}: {ex.Message}");
                 return null;
             }
         }
@@ -1212,8 +1318,9 @@ namespace NumSharp.Backends.Kernels
                 var del = GetComparisonScalarDelegate(key);
                 return del as ComparisonScalar<TLhs, TRhs>;
             }
-            catch
+            catch (Exception ex)
             {
+                System.Diagnostics.Debug.WriteLine($"[ILKernel] GetComparisonScalar<{typeof(TLhs).Name},{typeof(TRhs).Name}>({op}): {ex.GetType().Name}: {ex.Message}");
                 return null;
             }
         }
@@ -1224,7 +1331,11 @@ namespace NumSharp.Backends.Kernels
         Delegate? IKernelProvider.GetUnaryScalarDelegate(UnaryScalarKernelKey key)
         {
             try { return GetUnaryScalarDelegate(key); }
-            catch { return null; }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ILKernel] IKernelProvider.GetUnaryScalarDelegate({key}): {ex.GetType().Name}: {ex.Message}");
+                return null;
+            }
         }
 
         /// <summary>
@@ -1233,7 +1344,11 @@ namespace NumSharp.Backends.Kernels
         Delegate? IKernelProvider.GetBinaryScalarDelegate(BinaryScalarKernelKey key)
         {
             try { return GetBinaryScalarDelegate(key); }
-            catch { return null; }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ILKernel] IKernelProvider.GetBinaryScalarDelegate({key}): {ex.GetType().Name}: {ex.Message}");
+                return null;
+            }
         }
 
         /// <summary>
@@ -1242,7 +1357,11 @@ namespace NumSharp.Backends.Kernels
         Delegate? IKernelProvider.GetComparisonScalarDelegate(ComparisonScalarKernelKey key)
         {
             try { return GetComparisonScalarDelegate(key); }
-            catch { return null; }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ILKernel] IKernelProvider.GetComparisonScalarDelegate({key}): {ex.GetType().Name}: {ex.Message}");
+                return null;
+            }
         }
 
         #endregion
