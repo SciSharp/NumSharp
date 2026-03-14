@@ -44,8 +44,8 @@ namespace NumSharp
                 v = temp;
             }
 
-            int na = a.size;
-            int nv = v.size;
+            int na = (int)a.size;
+            int nv = (int)v.size;
 
             // Determine output type using NumPy's type promotion rules
             var retType = np._FindCommonType(a, v);
@@ -80,8 +80,8 @@ namespace NumSharp
         /// </summary>
         private static NDArray ConvolveFull(NDArray a, NDArray v, NPTypeCode retType)
         {
-            int na = a.size;
-            int nv = v.size;
+            int na = (int)a.size;
+            int nv = (int)v.size;
             int outLen = na + nv - 1;
 
             var result = new NDArray(retType, Shape.Vector(outLen), true);
@@ -182,8 +182,8 @@ namespace NumSharp
             // Compute full convolution first
             var full = ConvolveFull(a, v, retType);
 
-            int na = a.size;
-            int nv = v.size;
+            int na = (int)a.size;
+            int nv = (int)v.size;
             int outLen = Math.Max(na, nv);
 
             // For 'same' mode, we return the center portion of length max(na, nv)
@@ -203,8 +203,8 @@ namespace NumSharp
             // Compute full convolution first
             var full = ConvolveFull(a, v, retType);
 
-            int na = a.size;
-            int nv = v.size;
+            int na = (int)a.size;
+            int nv = (int)v.size;
             int outLen = Math.Max(na, nv) - Math.Min(na, nv) + 1;
 
             // For 'valid' mode, we skip (min(na, nv) - 1) elements from start

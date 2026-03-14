@@ -105,8 +105,8 @@ namespace NumSharp
                 if (Shape.IsContiguous)
                 {
                     var src = (T*)this.Address;
-                    int len = this.size;
-                    for (int i = 0; i < len; i++)
+                    long len = this.size;
+                    for (long i = 0; i < len; i++)
                         hashset.Add(src[i]);
 
                     var dst = new NDArray(InfoOf<T>.NPTypeCode, Shape.Vector(hashset.Count));
@@ -117,11 +117,11 @@ namespace NumSharp
                 }
                 else
                 {
-                    int len = this.size;
+                    long len = this.size;
                     var flat = this.flat;
                     var src = (T*)flat.Address;
-                    Func<int, int> getOffset = flat.Shape.GetOffset_1D;
-                    for (int i = 0; i < len; i++)
+                    Func<long, long> getOffset = flat.Shape.GetOffset_1D;
+                    for (long i = 0; i < len; i++)
                         hashset.Add(src[getOffset(i)]);
 
                     var dst = new NDArray(InfoOf<T>.NPTypeCode, Shape.Vector(hashset.Count));

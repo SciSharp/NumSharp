@@ -28,9 +28,9 @@ namespace NumSharp.Backends
             Debug.Assert(left.Shape.NDim == 2);
             Debug.Assert(right.Shape.NDim == 2);
 
-            int M = left.shape[0];   // rows of A
-            int K = left.shape[1];   // cols of A = rows of B
-            int N = right.shape[1];  // cols of B
+            long M = left.shape[0];   // rows of A
+            long K = left.shape[1];   // cols of A = rows of B
+            long N = right.shape[1];  // cols of B
 
             if (K != right.shape[0])
                 throw new IncorrectShapeException(
@@ -64,7 +64,7 @@ namespace NumSharp.Backends
         /// Uses cache-blocked algorithm with Vector256 FMA operations.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe bool TryMatMulSimd(NDArray left, NDArray right, NDArray result, int M, int K, int N)
+        private static unsafe bool TryMatMulSimd(NDArray left, NDArray right, NDArray result, long M, long K, long N)
         {
             if (!ILKernelGenerator.Enabled)
                 return false;
@@ -113,7 +113,7 @@ namespace NumSharp.Backends
         /// Uses ikj loop order for better cache utilization.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        private static unsafe void MatMulGeneric(NDArray left, NDArray right, NDArray result, int M, int K, int N)
+        private static unsafe void MatMulGeneric(NDArray left, NDArray right, NDArray result, long M, long K, long N)
         {
             // Dispatch based on result type for optimal inner loop
             switch (result.typecode)
@@ -164,15 +164,15 @@ namespace NumSharp.Backends
         /// Handles mixed input types by converting to double for computation.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        private static unsafe void MatMulCore<TResult>(NDArray left, NDArray right, NDArray result, int M, int K, int N)
+        private static unsafe void MatMulCore<TResult>(NDArray left, NDArray right, NDArray result, long M, long K, long N)
             where TResult : unmanaged
         {
             // Get typed result pointer
             var resultPtr = (TResult*)result.Address;
 
             // Zero out result
-            int resultSize = M * N;
-            for (int i = 0; i < resultSize; i++)
+            long resultSize = M * N;
+            for (long i = 0; i < resultSize; i++)
                 resultPtr[i] = default;
 
             // Check if we can use fast contiguous path (same types, contiguous)
@@ -196,7 +196,7 @@ namespace NumSharp.Backends
         /// Dispatches to type-specific implementation.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        private static unsafe void MatMulSameType<T>(NDArray left, NDArray right, T* result, int M, int K, int N)
+        private static unsafe void MatMulSameType<T>(NDArray left, NDArray right, T* result, long M, long K, long N)
             where T : unmanaged
         {
             // For same-type contiguous, dispatch to specific implementations
@@ -215,68 +215,68 @@ namespace NumSharp.Backends
         }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        private static unsafe void MatMulContiguous(float* a, float* b, float* result, int M, int K, int N)
+        private static unsafe void MatMulContiguous(float* a, float* b, float* result, long M, long K, long N)
         {
-            for (int i = 0; i < M; i++)
+            for (long i = 0; i < M; i++)
             {
                 float* resultRow = result + i * N;
                 float* aRow = a + i * K;
-                for (int k = 0; k < K; k++)
+                for (long k = 0; k < K; k++)
                 {
                     float aik = aRow[k];
                     float* bRow = b + k * N;
-                    for (int j = 0; j < N; j++)
+                    for (long j = 0; j < N; j++)
                         resultRow[j] += aik * bRow[j];
                 }
             }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        private static unsafe void MatMulContiguous(double* a, double* b, double* result, int M, int K, int N)
+        private static unsafe void MatMulContiguous(double* a, double* b, double* result, long M, long K, long N)
         {
-            for (int i = 0; i < M; i++)
+            for (long i = 0; i < M; i++)
             {
                 double* resultRow = result + i * N;
                 double* aRow = a + i * K;
-                for (int k = 0; k < K; k++)
+                for (long k = 0; k < K; k++)
                 {
                     double aik = aRow[k];
                     double* bRow = b + k * N;
-                    for (int j = 0; j < N; j++)
+                    for (long j = 0; j < N; j++)
                         resultRow[j] += aik * bRow[j];
                 }
             }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        private static unsafe void MatMulContiguous(int* a, int* b, int* result, int M, int K, int N)
+        private static unsafe void MatMulContiguous(int* a, int* b, int* result, long M, long K, long N)
         {
-            for (int i = 0; i < M; i++)
+            for (long i = 0; i < M; i++)
             {
                 int* resultRow = result + i * N;
                 int* aRow = a + i * K;
-                for (int k = 0; k < K; k++)
+                for (long k = 0; k < K; k++)
                 {
                     int aik = aRow[k];
                     int* bRow = b + k * N;
-                    for (int j = 0; j < N; j++)
+                    for (long j = 0; j < N; j++)
                         resultRow[j] += aik * bRow[j];
                 }
             }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        private static unsafe void MatMulContiguous(long* a, long* b, long* result, int M, int K, int N)
+        private static unsafe void MatMulContiguous(long* a, long* b, long* result, long M, long K, long N)
         {
-            for (int i = 0; i < M; i++)
+            for (long i = 0; i < M; i++)
             {
                 long* resultRow = result + i * N;
                 long* aRow = a + i * K;
-                for (int k = 0; k < K; k++)
+                for (long k = 0; k < K; k++)
                 {
                     long aik = aRow[k];
                     long* bRow = b + k * N;
-                    for (int j = 0; j < N; j++)
+                    for (long j = 0; j < N; j++)
                         resultRow[j] += aik * bRow[j];
                 }
             }
@@ -287,23 +287,23 @@ namespace NumSharp.Backends
         /// Converts to double for computation, then back to result type.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        private static unsafe void MatMulMixedType<TResult>(NDArray left, NDArray right, TResult* result, int M, int K, int N)
+        private static unsafe void MatMulMixedType<TResult>(NDArray left, NDArray right, TResult* result, long M, long K, long N)
             where TResult : unmanaged
         {
             // Use double accumulator for precision
             var accumulator = new double[N];
 
             // Temporary arrays for coordinates to avoid allocation in inner loop
-            var leftCoords = new int[2];
-            var rightCoords = new int[2];
+            var leftCoords = new long[2];
+            var rightCoords = new long[2];
 
-            for (int i = 0; i < M; i++)
+            for (long i = 0; i < M; i++)
             {
                 // Clear accumulator for this row
-                Array.Clear(accumulator, 0, N);
+                Array.Clear(accumulator, 0, (int)N);
 
                 leftCoords[0] = i;
-                for (int k = 0; k < K; k++)
+                for (long k = 0; k < K; k++)
                 {
                     leftCoords[1] = k;
                     // Use GetValue which correctly handles strided/non-contiguous arrays
@@ -312,7 +312,7 @@ namespace NumSharp.Backends
                     double aik = Convert.ToDouble(left.GetValue(leftCoords));
 
                     rightCoords[0] = k;
-                    for (int j = 0; j < N; j++)
+                    for (long j = 0; j < N; j++)
                     {
                         rightCoords[1] = j;
                         double bkj = Convert.ToDouble(right.GetValue(rightCoords));
@@ -322,7 +322,7 @@ namespace NumSharp.Backends
 
                 // Write row to result with type conversion
                 TResult* resultRow = result + i * N;
-                for (int j = 0; j < N; j++)
+                for (long j = 0; j < N; j++)
                 {
                     resultRow[j] = Converts.ChangeType<TResult>(accumulator[j]);
                 }
