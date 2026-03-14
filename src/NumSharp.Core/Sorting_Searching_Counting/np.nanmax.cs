@@ -22,6 +22,10 @@ namespace NumSharp
             var arr = a;
             var shape = arr.Shape;
 
+            // Non-float types: fall back to regular amax (no NaN possible)
+            if (arr.GetTypeCode != NPTypeCode.Single && arr.GetTypeCode != NPTypeCode.Double)
+                return amax(arr, axis.GetValueOrDefault(0));
+
             if (shape.IsEmpty)
                 return arr;
 
@@ -47,7 +51,6 @@ namespace NumSharp
                                 result = ILKernelGenerator.NanMaxSimdHelperDouble((double*)arr.Address, arr.size);
                                 break;
                             default:
-                                // Non-float types: fall back to regular amax (no NaN possible)
                                 return amax(arr);
                         }
                     }
@@ -69,8 +72,8 @@ namespace NumSharp
             }
             else
             {
-                // Axis reduction: not yet implemented with SIMD
-                return amax(arr, axis.Value);
+                // Axis reduction: use NaN-aware axis reduction kernel
+                return ExecuteNanAxisReduction(arr, axis.Value, keepdims, ReductionOp.NanMax);
             }
         }
 

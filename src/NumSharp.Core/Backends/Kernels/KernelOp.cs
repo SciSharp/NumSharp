@@ -19,7 +19,10 @@ namespace NumSharp.Backends.Kernels
         Power,
         FloorDivide,
         LeftShift,
-        RightShift
+        RightShift,
+        // Transcendental binary
+        /// <summary>Element-wise arc tangent of y/x choosing the quadrant correctly (np.arctan2)</summary>
+        ATan2
     }
 
     /// <summary>
@@ -99,12 +102,17 @@ namespace NumSharp.Backends.Kernels
         All,
         /// <summary>Any element non-zero (logical OR reduction, returns bool)</summary>
         Any,
-        // Future
+        /// <summary>Standard deviation</summary>
         Std,
+        /// <summary>Variance</summary>
         Var,
+        /// <summary>Sum ignoring NaN values (treats NaN as 0)</summary>
         NanSum,
+        /// <summary>Product ignoring NaN values (treats NaN as 1)</summary>
         NanProd,
+        /// <summary>Minimum ignoring NaN values (all-NaN returns NaN)</summary>
         NanMin,
+        /// <summary>Maximum ignoring NaN values (all-NaN returns NaN)</summary>
         NanMax
     }
 

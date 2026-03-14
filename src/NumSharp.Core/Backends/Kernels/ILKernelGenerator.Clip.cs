@@ -566,5 +566,426 @@ namespace NumSharp.Backends.Kernels
         }
 
         #endregion
+
+        #region Array Bounds Clip (Element-wise min/max from arrays)
+
+        // =============================================================================
+        // Array Bounds Clip - when min and/or max are arrays instead of scalars
+        // =============================================================================
+        //
+        // This section handles np.clip(a, min_array, max_array) where min/max are arrays
+        // that may be broadcast to match the input shape.
+        //
+        // Unlike scalar clip which can use SIMD with broadcast vectors, array bounds
+        // require element-wise reading from min/max arrays. We still use SIMD where
+        // all three arrays are contiguous and aligned.
+        //
+        // NumPy behavior:
+        // - min > max at any position: result = max (per NumPy documentation)
+        // - NaN in bounds: result = NaN (IEEE semantics via comparison)
+        // - Broadcasting handled by caller (np.broadcast_to)
+        //
+        // =============================================================================
+
+        /// <summary>
+        /// Clip with element-wise array bounds (both min and max arrays).
+        /// All three arrays must be broadcast to the same shape by the caller.
+        /// For contiguous arrays of SIMD-supported types, uses Vector operations.
+        /// </summary>
+        /// <remarks>
+        /// NumPy clip semantics: result[i] = min(max(a[i], min[i]), max[i])
+        /// When min[i] > max[i], result is max[i] (per NumPy behavior).
+        /// </remarks>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static unsafe void ClipArrayBounds<T>(T* output, T* minArr, T* maxArr, int size)
+            where T : unmanaged, IComparable<T>
+        {
+            if (size == 0) return;
+
+            // Try SIMD path for supported types with sufficient size
+            if (VectorBits >= 256 && size >= 32)
+            {
+                if (typeof(T) == typeof(float))
+                {
+                    ClipArrayBoundsSimd256((float*)output, (float*)minArr, (float*)maxArr, size);
+                    return;
+                }
+                if (typeof(T) == typeof(double))
+                {
+                    ClipArrayBoundsSimd256((double*)output, (double*)minArr, (double*)maxArr, size);
+                    return;
+                }
+                if (typeof(T) == typeof(int))
+                {
+                    ClipArrayBoundsSimd256((int*)output, (int*)minArr, (int*)maxArr, size);
+                    return;
+                }
+                if (typeof(T) == typeof(long))
+                {
+                    ClipArrayBoundsSimd256((long*)output, (long*)minArr, (long*)maxArr, size);
+                    return;
+                }
+            }
+            else if (VectorBits >= 128 && size >= 16)
+            {
+                if (typeof(T) == typeof(float))
+                {
+                    ClipArrayBoundsSimd128((float*)output, (float*)minArr, (float*)maxArr, size);
+                    return;
+                }
+                if (typeof(T) == typeof(double))
+                {
+                    ClipArrayBoundsSimd128((double*)output, (double*)minArr, (double*)maxArr, size);
+                    return;
+                }
+                if (typeof(T) == typeof(int))
+                {
+                    ClipArrayBoundsSimd128((int*)output, (int*)minArr, (int*)maxArr, size);
+                    return;
+                }
+                if (typeof(T) == typeof(long))
+                {
+                    ClipArrayBoundsSimd128((long*)output, (long*)minArr, (long*)maxArr, size);
+                    return;
+                }
+            }
+
+            // Scalar fallback for all types
+            ClipArrayBoundsScalar(output, minArr, maxArr, size);
+        }
+
+        /// <summary>
+        /// Clip with element-wise min array bounds only (no max).
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static unsafe void ClipArrayMin<T>(T* output, T* minArr, int size)
+            where T : unmanaged, IComparable<T>
+        {
+            if (size == 0) return;
+
+            // Try SIMD path
+            if (VectorBits >= 256 && size >= 32)
+            {
+                if (typeof(T) == typeof(float))
+                {
+                    ClipArrayMinSimd256((float*)output, (float*)minArr, size);
+                    return;
+                }
+                if (typeof(T) == typeof(double))
+                {
+                    ClipArrayMinSimd256((double*)output, (double*)minArr, size);
+                    return;
+                }
+                if (typeof(T) == typeof(int))
+                {
+                    ClipArrayMinSimd256((int*)output, (int*)minArr, size);
+                    return;
+                }
+                if (typeof(T) == typeof(long))
+                {
+                    ClipArrayMinSimd256((long*)output, (long*)minArr, size);
+                    return;
+                }
+            }
+            else if (VectorBits >= 128 && size >= 16)
+            {
+                if (typeof(T) == typeof(float))
+                {
+                    ClipArrayMinSimd128((float*)output, (float*)minArr, size);
+                    return;
+                }
+                if (typeof(T) == typeof(double))
+                {
+                    ClipArrayMinSimd128((double*)output, (double*)minArr, size);
+                    return;
+                }
+                if (typeof(T) == typeof(int))
+                {
+                    ClipArrayMinSimd128((int*)output, (int*)minArr, size);
+                    return;
+                }
+                if (typeof(T) == typeof(long))
+                {
+                    ClipArrayMinSimd128((long*)output, (long*)minArr, size);
+                    return;
+                }
+            }
+
+            ClipArrayMinScalar(output, minArr, size);
+        }
+
+        /// <summary>
+        /// Clip with element-wise max array bounds only (no min).
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static unsafe void ClipArrayMax<T>(T* output, T* maxArr, int size)
+            where T : unmanaged, IComparable<T>
+        {
+            if (size == 0) return;
+
+            // Try SIMD path
+            if (VectorBits >= 256 && size >= 32)
+            {
+                if (typeof(T) == typeof(float))
+                {
+                    ClipArrayMaxSimd256((float*)output, (float*)maxArr, size);
+                    return;
+                }
+                if (typeof(T) == typeof(double))
+                {
+                    ClipArrayMaxSimd256((double*)output, (double*)maxArr, size);
+                    return;
+                }
+                if (typeof(T) == typeof(int))
+                {
+                    ClipArrayMaxSimd256((int*)output, (int*)maxArr, size);
+                    return;
+                }
+                if (typeof(T) == typeof(long))
+                {
+                    ClipArrayMaxSimd256((long*)output, (long*)maxArr, size);
+                    return;
+                }
+            }
+            else if (VectorBits >= 128 && size >= 16)
+            {
+                if (typeof(T) == typeof(float))
+                {
+                    ClipArrayMaxSimd128((float*)output, (float*)maxArr, size);
+                    return;
+                }
+                if (typeof(T) == typeof(double))
+                {
+                    ClipArrayMaxSimd128((double*)output, (double*)maxArr, size);
+                    return;
+                }
+                if (typeof(T) == typeof(int))
+                {
+                    ClipArrayMaxSimd128((int*)output, (int*)maxArr, size);
+                    return;
+                }
+                if (typeof(T) == typeof(long))
+                {
+                    ClipArrayMaxSimd128((long*)output, (long*)maxArr, size);
+                    return;
+                }
+            }
+
+            ClipArrayMaxScalar(output, maxArr, size);
+        }
+
+        #region Array Bounds - Scalar Implementations
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe void ClipArrayBoundsScalar<T>(T* output, T* minArr, T* maxArr, int size)
+            where T : unmanaged, IComparable<T>
+        {
+            for (int i = 0; i < size; i++)
+            {
+                var val = output[i];
+                var minVal = minArr[i];
+                var maxVal = maxArr[i];
+                // NumPy semantics: min(max(val, minVal), maxVal)
+                if (val.CompareTo(minVal) < 0)
+                    val = minVal;
+                if (val.CompareTo(maxVal) > 0)
+                    val = maxVal;
+                output[i] = val;
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe void ClipArrayMinScalar<T>(T* output, T* minArr, int size)
+            where T : unmanaged, IComparable<T>
+        {
+            for (int i = 0; i < size; i++)
+            {
+                if (output[i].CompareTo(minArr[i]) < 0)
+                    output[i] = minArr[i];
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe void ClipArrayMaxScalar<T>(T* output, T* maxArr, int size)
+            where T : unmanaged, IComparable<T>
+        {
+            for (int i = 0; i < size; i++)
+            {
+                if (output[i].CompareTo(maxArr[i]) > 0)
+                    output[i] = maxArr[i];
+            }
+        }
+
+        #endregion
+
+        #region Array Bounds - Vector256 SIMD Implementations
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe void ClipArrayBoundsSimd256<T>(T* output, T* minArr, T* maxArr, int size)
+            where T : unmanaged
+        {
+            int vectorCount = Vector256<T>.Count;
+            int vectorEnd = size - vectorCount;
+
+            int i = 0;
+            for (; i <= vectorEnd; i += vectorCount)
+            {
+                var vec = Vector256.Load(output + i);
+                var minVec = Vector256.Load(minArr + i);
+                var maxVec = Vector256.Load(maxArr + i);
+                vec = Vector256.Max(vec, minVec);
+                vec = Vector256.Min(vec, maxVec);
+                vec.Store(output + i);
+            }
+
+            // Scalar tail
+            for (; i < size; i++)
+            {
+                var val = output[i];
+                var minVal = minArr[i];
+                var maxVal = maxArr[i];
+                if (Comparer<T>.Default.Compare(val, minVal) < 0)
+                    val = minVal;
+                if (Comparer<T>.Default.Compare(val, maxVal) > 0)
+                    val = maxVal;
+                output[i] = val;
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe void ClipArrayMinSimd256<T>(T* output, T* minArr, int size)
+            where T : unmanaged
+        {
+            int vectorCount = Vector256<T>.Count;
+            int vectorEnd = size - vectorCount;
+
+            int i = 0;
+            for (; i <= vectorEnd; i += vectorCount)
+            {
+                var vec = Vector256.Load(output + i);
+                var minVec = Vector256.Load(minArr + i);
+                vec = Vector256.Max(vec, minVec);
+                vec.Store(output + i);
+            }
+
+            // Scalar tail
+            for (; i < size; i++)
+            {
+                if (Comparer<T>.Default.Compare(output[i], minArr[i]) < 0)
+                    output[i] = minArr[i];
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe void ClipArrayMaxSimd256<T>(T* output, T* maxArr, int size)
+            where T : unmanaged
+        {
+            int vectorCount = Vector256<T>.Count;
+            int vectorEnd = size - vectorCount;
+
+            int i = 0;
+            for (; i <= vectorEnd; i += vectorCount)
+            {
+                var vec = Vector256.Load(output + i);
+                var maxVec = Vector256.Load(maxArr + i);
+                vec = Vector256.Min(vec, maxVec);
+                vec.Store(output + i);
+            }
+
+            // Scalar tail
+            for (; i < size; i++)
+            {
+                if (Comparer<T>.Default.Compare(output[i], maxArr[i]) > 0)
+                    output[i] = maxArr[i];
+            }
+        }
+
+        #endregion
+
+        #region Array Bounds - Vector128 SIMD Implementations
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe void ClipArrayBoundsSimd128<T>(T* output, T* minArr, T* maxArr, int size)
+            where T : unmanaged
+        {
+            int vectorCount = Vector128<T>.Count;
+            int vectorEnd = size - vectorCount;
+
+            int i = 0;
+            for (; i <= vectorEnd; i += vectorCount)
+            {
+                var vec = Vector128.Load(output + i);
+                var minVec = Vector128.Load(minArr + i);
+                var maxVec = Vector128.Load(maxArr + i);
+                vec = Vector128.Max(vec, minVec);
+                vec = Vector128.Min(vec, maxVec);
+                vec.Store(output + i);
+            }
+
+            // Scalar tail
+            for (; i < size; i++)
+            {
+                var val = output[i];
+                var minVal = minArr[i];
+                var maxVal = maxArr[i];
+                if (Comparer<T>.Default.Compare(val, minVal) < 0)
+                    val = minVal;
+                if (Comparer<T>.Default.Compare(val, maxVal) > 0)
+                    val = maxVal;
+                output[i] = val;
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe void ClipArrayMinSimd128<T>(T* output, T* minArr, int size)
+            where T : unmanaged
+        {
+            int vectorCount = Vector128<T>.Count;
+            int vectorEnd = size - vectorCount;
+
+            int i = 0;
+            for (; i <= vectorEnd; i += vectorCount)
+            {
+                var vec = Vector128.Load(output + i);
+                var minVec = Vector128.Load(minArr + i);
+                vec = Vector128.Max(vec, minVec);
+                vec.Store(output + i);
+            }
+
+            // Scalar tail
+            for (; i < size; i++)
+            {
+                if (Comparer<T>.Default.Compare(output[i], minArr[i]) < 0)
+                    output[i] = minArr[i];
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe void ClipArrayMaxSimd128<T>(T* output, T* maxArr, int size)
+            where T : unmanaged
+        {
+            int vectorCount = Vector128<T>.Count;
+            int vectorEnd = size - vectorCount;
+
+            int i = 0;
+            for (; i <= vectorEnd; i += vectorCount)
+            {
+                var vec = Vector128.Load(output + i);
+                var maxVec = Vector128.Load(maxArr + i);
+                vec = Vector128.Min(vec, maxVec);
+                vec.Store(output + i);
+            }
+
+            // Scalar tail
+            for (; i < size; i++)
+            {
+                if (Comparer<T>.Default.Compare(output[i], maxArr[i]) > 0)
+                    output[i] = maxArr[i];
+            }
+        }
+
+        #endregion
+
+        #endregion
     }
 }

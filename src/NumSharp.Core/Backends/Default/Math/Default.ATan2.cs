@@ -1,140 +1,257 @@
-﻿using System;
-using System.Threading.Tasks;
-using DecimalMath;
-using NumSharp.Utilities;
+using System;
+using NumSharp.Backends.Kernels;
 
 namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public override NDArray ATan2(in NDArray y, in NDArray x, Type dtype) => ATan2(y, x, dtype?.GetTypeCode());
+        /// <summary>
+        /// Element-wise arc tangent of y/x choosing the quadrant correctly.
+        /// NumPy: arctan2(y, x) returns the angle in radians between the positive x-axis
+        /// and the point (x, y), with correct quadrant determination.
+        /// </summary>
+        /// <param name="y">y-coordinates</param>
+        /// <param name="x">x-coordinates. If y.shape != x.shape, they must be broadcastable.</param>
+        /// <param name="dtype">Output dtype (overrides type promotion)</param>
+        /// <returns>Array of angles in radians, range [-pi, pi]</returns>
+        public override NDArray ATan2(in NDArray y, in NDArray x, Type dtype)
+            => ATan2(y, x, dtype?.GetTypeCode());
 
+        /// <summary>
+        /// Element-wise arc tangent of y/x choosing the quadrant correctly.
+        /// NumPy: arctan2(y, x) returns the angle in radians between the positive x-axis
+        /// and the point (x, y), with correct quadrant determination.
+        /// </summary>
+        /// <param name="y">y-coordinates</param>
+        /// <param name="x">x-coordinates. If y.shape != x.shape, they must be broadcastable.</param>
+        /// <param name="typeCode">Output dtype (overrides type promotion). If null, uses NumPy rules.</param>
+        /// <returns>Array of angles in radians, range [-pi, pi]</returns>
         public override NDArray ATan2(in NDArray y, in NDArray x, NPTypeCode? typeCode = null)
         {
+            // Handle empty array
             if (y.size == 0)
                 return y.Clone();
 
-            // Broadcast arrays to compatible shapes (handles broadcasting like np.arctan2)
-            var (broadcastedY, broadcastedX) = np.broadcast_arrays(y, x);
+            if (x.size == 0)
+                return x.Clone();
 
-            // Determine result type
-            var resultType = ResolveUnaryReturnType(broadcastedY, typeCode);
+            // Execute using IL kernel infrastructure
+            // ATan2 is a binary operation: atan2(y, x)
+            return ExecuteATan2Op(y, x, typeCode);
+        }
 
-            // Cast and materialize to contiguous arrays for safe raw pointer access
-            // This handles: sliced views, transposed arrays, broadcast arrays (stride=0)
-            var castY = Cast(broadcastedY, resultType, copy: false);
-            var castX = Cast(broadcastedX, resultType, copy: false);
+        /// <summary>
+        /// Execute ATan2 using IL-generated kernels.
+        /// Handles type promotion, broadcasting, and kernel dispatch.
+        /// </summary>
+        private unsafe NDArray ExecuteATan2Op(in NDArray y, in NDArray x, NPTypeCode? typeCode)
+        {
+            var yType = y.GetTypeCode;
+            var xType = x.GetTypeCode;
 
-            // Ensure contiguous memory layout for raw pointer iteration
-            var out_y = castY.Shape.IsContiguous ? castY.Clone() : castY.copy();
-            var out_x = castX.Shape.IsContiguous ? castX : castX.copy();
-
-            var len = out_y.size;
-
-            unsafe
+            // Determine result type using NumPy arctan2 rules:
+            // - float32 inputs -> float32 output
+            // - float64 or integer inputs -> float64 output
+            NPTypeCode resultType;
+            if (typeCode.HasValue)
             {
-                switch (out_y.GetTypeCode)
+                resultType = typeCode.Value;
+            }
+            else
+            {
+                // NumPy arctan2 type promotion:
+                // float32 + float32 -> float32
+                // anything else -> float64
+                if (yType == NPTypeCode.Single && xType == NPTypeCode.Single)
                 {
-#if _REGEN
-                    %foreach except(supported_numericals, "Decimal"),except(supported_numericals_lowercase, "decimal")%
-	                case NPTypeCode.#1:
-	                {
-                        var out_addr = (#2*)@out.Address;
-                        for (int i = 0; i < len; i++) out_addr[i] = Converts.To#1(Math.Atan2(out_addr[i]));
-                        return @out;
-	                }
-	                %
-                    case NPTypeCode.Decimal:
-	                {
-                        var out_addr = (decimal*)@out.Address;
-                        for (int i = 0; i < len; i++) out_addr[i] = (DecimalEx.Tan(out_addr[i]));
-                        return @out;
-	                }
-	                default:
-		                throw new NotSupportedException();
-#else
-	                case NPTypeCode.Byte:
-	                {
-                        var out_addr = (byte*)out_y.Address;
-                            var out_addr_x = (byte*)out_x.Address;
-
-                            for (int i = 0; i < len; i++) out_addr[i] = Converts.ToByte(Math.Atan2(out_addr[i], out_addr_x[i]));
-                        return out_y;
-	                }
-	                case NPTypeCode.Int16:
-	                {
-                        var out_addr = (short*)out_y.Address;
-                            var out_addr_x = (short*)out_x.Address;
-                            for (int i = 0; i < len; i++) out_addr[i] = Converts.ToInt16(Math.Atan2(out_addr[i], out_addr_x[i]));
-                        return out_y;
-	                }
-	                case NPTypeCode.UInt16:
-	                {
-                        var out_addr = (ushort*)out_y.Address;
-                            var out_addr_x = (ushort*)out_x.Address;
-                            for (int i = 0; i < len; i++) out_addr[i] = Converts.ToUInt16(Math.Atan2(out_addr[i], out_addr_x[i]));
-                        return out_y;
-	                }
-	                case NPTypeCode.Int32:
-	                {
-                        var out_addr = (int*)out_y.Address;
-                            var out_addr_x = (int*)out_x.Address;
-                            for (int i = 0; i < len; i++) out_addr[i] = Converts.ToInt32(Math.Atan2(out_addr[i], out_addr_x[i]));
-                        return out_y;
-	                }
-	                case NPTypeCode.UInt32:
-	                {
-                        var out_addr = (uint*)out_y.Address;
-                            var out_addr_x = (uint*)out_x.Address;
-                            for (int i = 0; i < len; i++) out_addr[i] = Converts.ToUInt32(Math.Atan2(out_addr[i], out_addr_x[i]));
-                        return out_y;
-	                }
-	                case NPTypeCode.Int64:
-	                {
-                        var out_addr = (long*)out_y.Address;
-                            var out_addr_x = (long*)out_x.Address;
-                            for (int i = 0; i < len; i++) out_addr[i] = Converts.ToInt64(Math.Atan2(out_addr[i], out_addr_x[i]));
-                        return out_y;
-	                }
-	                case NPTypeCode.UInt64:
-	                {
-                        var out_addr = (ulong*)out_y.Address;
-                            var out_addr_x = (ulong*)out_x.Address;
-                            for (int i = 0; i < len; i++) out_addr[i] = Converts.ToUInt64(Math.Atan2(out_addr[i], out_addr_x[i]));
-                        return out_y;
-	                }
-	                case NPTypeCode.Char:
-	                {
-                        var out_addr = (char*)out_y.Address;
-                            var out_addr_x = (char*)out_x.Address;
-                            for (int i = 0; i < len; i++) out_addr[i] = Converts.ToChar(Math.Atan2(out_addr[i], out_addr_x[i]));
-                        return out_y;
-	                }
-	                case NPTypeCode.Double:
-	                {
-                        var out_addr = (double*)out_y.Address;
-                            var out_addr_x = (double*)out_x.Address;
-                            for (int i = 0; i < len; i++) out_addr[i] = Math.Atan2(out_addr[i], out_addr_x[i]);
-                        return out_y;
-	                }
-	                case NPTypeCode.Single:
-	                {
-                        var out_addr = (float*)out_y.Address;
-                            var out_addr_x = (float*)out_x.Address;
-                            for (int i = 0; i < len; i++) out_addr[i] = (float)Math.Atan2(out_addr[i], out_addr_x[i]);
-                        return out_y;
-	                }
-                    case NPTypeCode.Decimal:
-	                {
-                        var out_addr = (decimal*)out_y.Address;
-                            var out_addr_x = (decimal*)out_x.Address;
-                            for (int i = 0; i < len; i++) out_addr[i] = DecimalEx.ATan2(out_addr[i], out_addr_x[i]);
-                        return out_y;
-	                }
-	                default:
-		                throw new NotSupportedException();
-#endif
+                    resultType = NPTypeCode.Single;
                 }
+                else if (yType == NPTypeCode.Decimal || xType == NPTypeCode.Decimal)
+                {
+                    resultType = NPTypeCode.Decimal;
+                }
+                else
+                {
+                    resultType = NPTypeCode.Double;
+                }
+            }
+
+            // Handle scalar x scalar case
+            if (y.Shape.IsScalar && x.Shape.IsScalar)
+            {
+                return ExecuteATan2ScalarScalar(y, x, yType, xType, resultType);
+            }
+
+            // Broadcast shapes
+            var (yShape, xShape) = Broadcast(y.Shape, x.Shape);
+            var resultShape = yShape.Clean();
+
+            // Allocate result
+            var result = new NDArray(resultType, resultShape, false);
+
+            // Classify execution path using strides
+            ExecutionPath path;
+            fixed (int* yStrides = yShape.strides)
+            fixed (int* xStrides = xShape.strides)
+            fixed (int* shape = resultShape.dimensions)
+            {
+                path = ClassifyATan2Path(yStrides, xStrides, shape, resultShape.NDim);
+            }
+
+            // Get kernel key
+            var key = new MixedTypeKernelKey(yType, xType, resultType, BinaryOp.ATan2, path);
+
+            // Get or generate kernel via provider interface
+            var kernel = KernelProvider.GetMixedTypeKernel(key);
+
+            if (kernel != null)
+            {
+                // Execute IL kernel
+                ExecuteATan2Kernel(kernel, y, x, result, yShape, xShape);
+            }
+            else
+            {
+                throw new NotSupportedException(
+                    $"IL kernel not available for arctan2({yType}, {xType}) -> {resultType}. " +
+                    "Please report this as a bug.");
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Execute scalar x scalar ATan2 operation.
+        /// </summary>
+        private static NDArray ExecuteATan2ScalarScalar(
+            in NDArray y, in NDArray x,
+            NPTypeCode yType, NPTypeCode xType, NPTypeCode resultType)
+        {
+            // Get values as double for Math.Atan2
+            double yVal = ConvertToDouble(y, yType);
+            double xVal = ConvertToDouble(x, xType);
+
+            double result = Math.Atan2(yVal, xVal);
+
+            // Convert to result type
+            return resultType switch
+            {
+                NPTypeCode.Single => NDArray.Scalar((float)result),
+                NPTypeCode.Double => NDArray.Scalar(result),
+                NPTypeCode.Decimal => NDArray.Scalar(DecimalMath.DecimalEx.ATan2(
+                    ConvertToDecimal(y, yType), ConvertToDecimal(x, xType))),
+                _ => NDArray.Scalar(result)
+            };
+        }
+
+        /// <summary>
+        /// Convert NDArray scalar to double.
+        /// </summary>
+        private static double ConvertToDouble(in NDArray arr, NPTypeCode type)
+        {
+            return type switch
+            {
+                NPTypeCode.Boolean => arr.GetBoolean() ? 1.0 : 0.0,
+                NPTypeCode.Byte => arr.GetByte(),
+                NPTypeCode.Int16 => arr.GetInt16(),
+                NPTypeCode.UInt16 => arr.GetUInt16(),
+                NPTypeCode.Int32 => arr.GetInt32(),
+                NPTypeCode.UInt32 => arr.GetUInt32(),
+                NPTypeCode.Int64 => arr.GetInt64(),
+                NPTypeCode.UInt64 => arr.GetUInt64(),
+                NPTypeCode.Char => arr.GetChar(),
+                NPTypeCode.Single => arr.GetSingle(),
+                NPTypeCode.Double => arr.GetDouble(),
+                NPTypeCode.Decimal => (double)arr.GetDecimal(),
+                _ => throw new NotSupportedException($"Type {type} not supported")
+            };
+        }
+
+        /// <summary>
+        /// Convert NDArray scalar to decimal.
+        /// </summary>
+        private static decimal ConvertToDecimal(in NDArray arr, NPTypeCode type)
+        {
+            return type switch
+            {
+                NPTypeCode.Boolean => arr.GetBoolean() ? 1m : 0m,
+                NPTypeCode.Byte => arr.GetByte(),
+                NPTypeCode.Int16 => arr.GetInt16(),
+                NPTypeCode.UInt16 => arr.GetUInt16(),
+                NPTypeCode.Int32 => arr.GetInt32(),
+                NPTypeCode.UInt32 => arr.GetUInt32(),
+                NPTypeCode.Int64 => arr.GetInt64(),
+                NPTypeCode.UInt64 => arr.GetUInt64(),
+                NPTypeCode.Char => arr.GetChar(),
+                NPTypeCode.Single => (decimal)arr.GetSingle(),
+                NPTypeCode.Double => (decimal)arr.GetDouble(),
+                NPTypeCode.Decimal => arr.GetDecimal(),
+                _ => throw new NotSupportedException($"Type {type} not supported")
+            };
+        }
+
+        /// <summary>
+        /// Classify execution path for ATan2 based on strides.
+        /// </summary>
+        private static unsafe ExecutionPath ClassifyATan2Path(
+            int* yStrides, int* xStrides, int* shape, int ndim)
+        {
+            if (ndim == 0)
+                return ExecutionPath.SimdFull;
+
+            bool yContiguous = StrideDetector.IsContiguous(yStrides, shape, ndim);
+            bool xContiguous = StrideDetector.IsContiguous(xStrides, shape, ndim);
+
+            if (yContiguous && xContiguous)
+                return ExecutionPath.SimdFull;
+
+            // SimdScalarRight/Left require the non-scalar operand to be contiguous
+            bool xScalar = StrideDetector.IsScalar(xStrides, ndim);
+            if (xScalar && yContiguous)
+                return ExecutionPath.SimdScalarRight;
+
+            bool yScalar = StrideDetector.IsScalar(yStrides, ndim);
+            if (yScalar && xContiguous)
+                return ExecutionPath.SimdScalarLeft;
+
+            // Check for inner-contiguous (chunk-able)
+            int yInner = yStrides[ndim - 1];
+            int xInner = xStrides[ndim - 1];
+            if ((yInner == 1 || yInner == 0) && (xInner == 1 || xInner == 0))
+                return ExecutionPath.SimdChunk;
+
+            return ExecutionPath.General;
+        }
+
+        /// <summary>
+        /// Execute the IL-generated ATan2 kernel.
+        /// </summary>
+        private static unsafe void ExecuteATan2Kernel(
+            MixedTypeKernel kernel,
+            in NDArray y, in NDArray x, NDArray result,
+            Shape yShape, Shape xShape)
+        {
+            // Get element sizes for offset calculation
+            int yElemSize = y.dtypesize;
+            int xElemSize = x.dtypesize;
+
+            // Calculate base addresses accounting for shape offsets (for sliced views)
+            byte* yAddr = (byte*)y.Address + yShape.offset * yElemSize;
+            byte* xAddr = (byte*)x.Address + xShape.offset * xElemSize;
+
+            fixed (int* yStrides = yShape.strides)
+            fixed (int* xStrides = xShape.strides)
+            fixed (int* shape = result.shape)
+            {
+                kernel(
+                    (void*)yAddr,
+                    (void*)xAddr,
+                    (void*)result.Address,
+                    yStrides,
+                    xStrides,
+                    shape,
+                    result.ndim,
+                    result.size
+                );
             }
         }
     }

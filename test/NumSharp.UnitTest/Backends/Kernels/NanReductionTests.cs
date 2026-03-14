@@ -426,4 +426,217 @@ public class NanReductionTests
     }
 
     #endregion
+
+    #region Axis Reduction Tests
+
+    [Test]
+    public void NanSum_Axis0_2D_IgnoresNaN()
+    {
+        // NumPy: np.nansum([[1, np.nan], [np.nan, 4]], axis=0) == [1, 4]
+        var arr = np.array(new double[,] { { 1.0, double.NaN }, { double.NaN, 4.0 } });
+        var result = np.nansum(arr, axis: 0);
+        Assert.AreEqual(1, result.ndim);
+        Assert.AreEqual(2, result.size);
+        Assert.AreEqual(1.0, (double)result.GetAtIndex(0), 1e-10);
+        Assert.AreEqual(4.0, (double)result.GetAtIndex(1), 1e-10);
+    }
+
+    [Test]
+    public void NanSum_Axis1_2D_IgnoresNaN()
+    {
+        // NumPy: np.nansum([[1, np.nan], [np.nan, 4]], axis=1) == [1, 4]
+        var arr = np.array(new double[,] { { 1.0, double.NaN }, { double.NaN, 4.0 } });
+        var result = np.nansum(arr, axis: 1);
+        Assert.AreEqual(1, result.ndim);
+        Assert.AreEqual(2, result.size);
+        Assert.AreEqual(1.0, (double)result.GetAtIndex(0), 1e-10);
+        Assert.AreEqual(4.0, (double)result.GetAtIndex(1), 1e-10);
+    }
+
+    [Test]
+    public void NanSum_Axis_AllNaNRow_ReturnsZero()
+    {
+        // NumPy: np.nansum([[np.nan, np.nan], [1.0, 2.0]], axis=1) == [0.0, 3.0]
+        var arr = np.array(new double[,] { { double.NaN, double.NaN }, { 1.0, 2.0 } });
+        var result = np.nansum(arr, axis: 1);
+        Assert.AreEqual(0.0, (double)result.GetAtIndex(0), 1e-10);
+        Assert.AreEqual(3.0, (double)result.GetAtIndex(1), 1e-10);
+    }
+
+    [Test]
+    public void NanProd_Axis0_2D_IgnoresNaN()
+    {
+        // NumPy: np.nanprod([[1, np.nan], [np.nan, 4]], axis=0) == [1, 4]
+        var arr = np.array(new double[,] { { 1.0, double.NaN }, { double.NaN, 4.0 } });
+        var result = np.nanprod(arr, axis: 0);
+        Assert.AreEqual(1, result.ndim);
+        Assert.AreEqual(2, result.size);
+        Assert.AreEqual(1.0, (double)result.GetAtIndex(0), 1e-10);
+        Assert.AreEqual(4.0, (double)result.GetAtIndex(1), 1e-10);
+    }
+
+    [Test]
+    public void NanProd_Axis1_2D_IgnoresNaN()
+    {
+        // NumPy: np.nanprod([[2, np.nan], [np.nan, 3]], axis=1) == [2, 3]
+        var arr = np.array(new double[,] { { 2.0, double.NaN }, { double.NaN, 3.0 } });
+        var result = np.nanprod(arr, axis: 1);
+        Assert.AreEqual(2.0, (double)result.GetAtIndex(0), 1e-10);
+        Assert.AreEqual(3.0, (double)result.GetAtIndex(1), 1e-10);
+    }
+
+    [Test]
+    public void NanProd_Axis_AllNaNRow_ReturnsOne()
+    {
+        // NumPy: np.nanprod([[np.nan, np.nan], [1.0, 2.0]], axis=1) == [1.0, 2.0]
+        var arr = np.array(new double[,] { { double.NaN, double.NaN }, { 1.0, 2.0 } });
+        var result = np.nanprod(arr, axis: 1);
+        Assert.AreEqual(1.0, (double)result.GetAtIndex(0), 1e-10);
+        Assert.AreEqual(2.0, (double)result.GetAtIndex(1), 1e-10);
+    }
+
+    [Test]
+    public void NanMin_Axis0_2D_IgnoresNaN()
+    {
+        // NumPy: np.nanmin([[1, np.nan], [np.nan, 4]], axis=0) == [1, 4]
+        var arr = np.array(new double[,] { { 1.0, double.NaN }, { double.NaN, 4.0 } });
+        var result = np.nanmin(arr, axis: 0);
+        Assert.AreEqual(1, result.ndim);
+        Assert.AreEqual(2, result.size);
+        Assert.AreEqual(1.0, (double)result.GetAtIndex(0), 1e-10);
+        Assert.AreEqual(4.0, (double)result.GetAtIndex(1), 1e-10);
+    }
+
+    [Test]
+    public void NanMin_Axis1_2D_IgnoresNaN()
+    {
+        // NumPy: np.nanmin([[5, np.nan, 2], [np.nan, 3, 1]], axis=1) == [2, 1]
+        var arr = np.array(new double[,] { { 5.0, double.NaN, 2.0 }, { double.NaN, 3.0, 1.0 } });
+        var result = np.nanmin(arr, axis: 1);
+        Assert.AreEqual(2.0, (double)result.GetAtIndex(0), 1e-10);
+        Assert.AreEqual(1.0, (double)result.GetAtIndex(1), 1e-10);
+    }
+
+    [Test]
+    public void NanMin_Axis_AllNaNRow_ReturnsNaN()
+    {
+        // NumPy: np.nanmin([[np.nan, np.nan], [1.0, 2.0]], axis=1) == [nan, 1.0]
+        var arr = np.array(new double[,] { { double.NaN, double.NaN }, { 1.0, 2.0 } });
+        var result = np.nanmin(arr, axis: 1);
+        Assert.IsTrue(double.IsNaN((double)result.GetAtIndex(0)));
+        Assert.AreEqual(1.0, (double)result.GetAtIndex(1), 1e-10);
+    }
+
+    [Test]
+    public void NanMax_Axis0_2D_IgnoresNaN()
+    {
+        // NumPy: np.nanmax([[1, np.nan], [np.nan, 4]], axis=0) == [1, 4]
+        var arr = np.array(new double[,] { { 1.0, double.NaN }, { double.NaN, 4.0 } });
+        var result = np.nanmax(arr, axis: 0);
+        Assert.AreEqual(1, result.ndim);
+        Assert.AreEqual(2, result.size);
+        Assert.AreEqual(1.0, (double)result.GetAtIndex(0), 1e-10);
+        Assert.AreEqual(4.0, (double)result.GetAtIndex(1), 1e-10);
+    }
+
+    [Test]
+    public void NanMax_Axis1_2D_IgnoresNaN()
+    {
+        // NumPy: np.nanmax([[5, np.nan, 2], [np.nan, 3, 1]], axis=1) == [5, 3]
+        var arr = np.array(new double[,] { { 5.0, double.NaN, 2.0 }, { double.NaN, 3.0, 1.0 } });
+        var result = np.nanmax(arr, axis: 1);
+        Assert.AreEqual(5.0, (double)result.GetAtIndex(0), 1e-10);
+        Assert.AreEqual(3.0, (double)result.GetAtIndex(1), 1e-10);
+    }
+
+    [Test]
+    public void NanMax_Axis_AllNaNRow_ReturnsNaN()
+    {
+        // NumPy: np.nanmax([[np.nan, np.nan], [1.0, 2.0]], axis=1) == [nan, 2.0]
+        var arr = np.array(new double[,] { { double.NaN, double.NaN }, { 1.0, 2.0 } });
+        var result = np.nanmax(arr, axis: 1);
+        Assert.IsTrue(double.IsNaN((double)result.GetAtIndex(0)));
+        Assert.AreEqual(2.0, (double)result.GetAtIndex(1), 1e-10);
+    }
+
+    [Test]
+    public void NanSum_Axis_Keepdims_PreservesShape()
+    {
+        // NumPy: np.nansum([[1, np.nan], [np.nan, 4]], axis=0, keepdims=True).shape == (1, 2)
+        var arr = np.array(new double[,] { { 1.0, double.NaN }, { double.NaN, 4.0 } });
+        var result = np.nansum(arr, axis: 0, keepdims: true);
+        Assert.AreEqual(2, result.ndim);
+        Assert.AreEqual(1, result.shape[0]);
+        Assert.AreEqual(2, result.shape[1]);
+    }
+
+    [Test]
+    public void NanSum_Axis_Float_IgnoresNaN()
+    {
+        // Same as double but with float32
+        var arr = np.array(new float[,] { { 1.0f, float.NaN }, { float.NaN, 4.0f } });
+        var result = np.nansum(arr, axis: 0);
+        Assert.AreEqual(1.0f, (float)result.GetAtIndex(0), 1e-6f);
+        Assert.AreEqual(4.0f, (float)result.GetAtIndex(1), 1e-6f);
+    }
+
+    [Test]
+    public void NanMin_Axis_Float_IgnoresNaN()
+    {
+        var arr = np.array(new float[,] { { 5.0f, float.NaN }, { float.NaN, 2.0f } });
+        var result = np.nanmin(arr, axis: 0);
+        Assert.AreEqual(5.0f, (float)result.GetAtIndex(0), 1e-6f);
+        Assert.AreEqual(2.0f, (float)result.GetAtIndex(1), 1e-6f);
+    }
+
+    [Test]
+    public void NanMax_Axis_Float_IgnoresNaN()
+    {
+        var arr = np.array(new float[,] { { 5.0f, float.NaN }, { float.NaN, 2.0f } });
+        var result = np.nanmax(arr, axis: 0);
+        Assert.AreEqual(5.0f, (float)result.GetAtIndex(0), 1e-6f);
+        Assert.AreEqual(2.0f, (float)result.GetAtIndex(1), 1e-6f);
+    }
+
+    [Test]
+    public void NanSum_3D_Axis1()
+    {
+        // 3D array with NaN, reduce along middle axis
+        // Shape: (2, 2, 2) -> (2, 2)
+        var data = new double[2, 2, 2];
+        data[0, 0, 0] = 1.0; data[0, 0, 1] = 2.0;
+        data[0, 1, 0] = double.NaN; data[0, 1, 1] = 3.0;
+        data[1, 0, 0] = 4.0; data[1, 0, 1] = double.NaN;
+        data[1, 1, 0] = 5.0; data[1, 1, 1] = 6.0;
+
+        var arr = np.array(data);
+        var result = np.nansum(arr, axis: 1);
+
+        Assert.AreEqual(2, result.ndim);
+        Assert.AreEqual(2, result.shape[0]);
+        Assert.AreEqual(2, result.shape[1]);
+
+        // [0, :, 0]: 1 + 0(NaN) = 1
+        // [0, :, 1]: 2 + 3 = 5
+        // [1, :, 0]: 4 + 5 = 9
+        // [1, :, 1]: 0(NaN) + 6 = 6
+        Assert.AreEqual(1.0, (double)result[0, 0], 1e-10);
+        Assert.AreEqual(5.0, (double)result[0, 1], 1e-10);
+        Assert.AreEqual(9.0, (double)result[1, 0], 1e-10);
+        Assert.AreEqual(6.0, (double)result[1, 1], 1e-10);
+    }
+
+    [Test]
+    public void NanSum_NegativeAxis()
+    {
+        // NumPy: np.nansum([[1, np.nan], [np.nan, 4]], axis=-1) == [1, 4]
+        var arr = np.array(new double[,] { { 1.0, double.NaN }, { double.NaN, 4.0 } });
+        var result = np.nansum(arr, axis: -1);
+        Assert.AreEqual(1, result.ndim);
+        Assert.AreEqual(2, result.size);
+        Assert.AreEqual(1.0, (double)result.GetAtIndex(0), 1e-10);
+        Assert.AreEqual(4.0, (double)result.GetAtIndex(1), 1e-10);
+    }
+
+    #endregion
 }

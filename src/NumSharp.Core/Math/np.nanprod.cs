@@ -22,6 +22,10 @@ namespace NumSharp
             var arr = a;
             var shape = arr.Shape;
 
+            // Non-float types: fall back to regular prod (no NaN possible)
+            if (arr.GetTypeCode != NPTypeCode.Single && arr.GetTypeCode != NPTypeCode.Double)
+                return prod(arr);
+
             if (shape.IsEmpty)
                 return arr;
 
@@ -60,7 +64,6 @@ namespace NumSharp
                                 result = ILKernelGenerator.NanProdSimdHelperDouble((double*)arr.Address, arr.size);
                                 break;
                             default:
-                                // Non-float types: fall back to regular prod (no NaN possible)
                                 return prod(arr);
                         }
                     }
@@ -82,8 +85,8 @@ namespace NumSharp
             }
             else
             {
-                // Axis reduction: not yet implemented with SIMD
-                return prod(arr);
+                // Axis reduction: use NaN-aware axis reduction kernel
+                return ExecuteNanAxisReduction(arr, axis.Value, keepdims, ReductionOp.NanProd);
             }
         }
 

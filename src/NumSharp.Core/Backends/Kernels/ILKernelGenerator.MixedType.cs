@@ -120,6 +120,7 @@ namespace NumSharp.Backends.Kernels
             _scanCache.Clear();
             _axisScanCache.Clear();
             _shiftKernelCache.Clear();
+            ClearNanAxisReduction();
         }
 
         /// <summary>

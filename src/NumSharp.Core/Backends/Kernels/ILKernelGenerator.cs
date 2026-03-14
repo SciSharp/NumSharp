@@ -537,6 +537,13 @@ namespace NumSharp.Backends.Kernels
                 return;
             }
 
+            // Special handling for ATan2 - requires Math.Atan2 call
+            if (op == BinaryOp.ATan2)
+            {
+                EmitATan2Operation(il, resultType);
+                return;
+            }
+
             // Special handling for boolean
             if (resultType == NPTypeCode.Boolean)
             {
@@ -782,6 +789,50 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
+        /// Emit ATan2 operation using Math.Atan2.
+        /// NumPy arctan2(y, x) computes the angle in radians between the positive x-axis
+        /// and the point (x, y), with the correct quadrant determination.
+        /// Stack: [y, x] -> [result] (angle in radians, range [-pi, pi])
+        /// </summary>
+        private static void EmitATan2Operation(ILGenerator il, NPTypeCode resultType)
+        {
+            // Math.Atan2(double y, double x) -> double
+            // Stack has: y (resultType), x (resultType)
+            // We need to convert both to double for Math.Atan2
+
+            // Store x temporarily
+            var locX = il.DeclareLocal(GetClrType(resultType));
+            il.Emit(OpCodes.Stloc, locX);
+
+            // Convert y to double
+            if (resultType != NPTypeCode.Double)
+            {
+                if (IsUnsigned(resultType))
+                    il.Emit(OpCodes.Conv_R_Un);
+                il.Emit(OpCodes.Conv_R8);
+            }
+
+            // Load and convert x to double
+            il.Emit(OpCodes.Ldloc, locX);
+            if (resultType != NPTypeCode.Double)
+            {
+                if (IsUnsigned(resultType))
+                    il.Emit(OpCodes.Conv_R_Un);
+                il.Emit(OpCodes.Conv_R8);
+            }
+
+            // Call Math.Atan2(double y, double x)
+            var atan2Method = typeof(Math).GetMethod(nameof(Math.Atan2), new[] { typeof(double), typeof(double) });
+            il.EmitCall(OpCodes.Call, atan2Method!, null);
+
+            // Convert result back to target type
+            if (resultType != NPTypeCode.Double)
+            {
+                EmitConvertFromDouble(il, resultType);
+            }
+        }
+
+        /// <summary>
         /// Emit conversion from double to target type.
         /// </summary>
         private static void EmitConvertFromDouble(ILGenerator il, NPTypeCode targetType)
@@ -910,6 +961,20 @@ namespace NumSharp.Backends.Kernels
                     BindingFlags.Public | BindingFlags.Static,
                     null, new[] { typeof(decimal), typeof(decimal) }, null);
                 il.EmitCall(OpCodes.Call, subtractMethod!, null);
+                return;
+            }
+
+            // ATan2 for decimal uses DecimalEx.ATan2
+            if (op == BinaryOp.ATan2)
+            {
+                var atan2Method = typeof(DecimalMath.DecimalEx).GetMethod(
+                    nameof(DecimalMath.DecimalEx.ATan2),
+                    BindingFlags.Public | BindingFlags.Static,
+                    null,
+                    new[] { typeof(decimal), typeof(decimal) },
+                    null
+                );
+                il.EmitCall(OpCodes.Call, atan2Method!, null);
                 return;
             }
 
@@ -1177,6 +1242,7 @@ namespace NumSharp.Backends.Kernels
             count += ComparisonScalarCachedCount; // Comparison: _comparisonScalarCache
             count += ElementReductionCachedCount;  // Reduction: _elementReductionCache
             count += AxisReductionCachedCount;     // Reduction: _axisReductionCache
+            count += NanAxisReductionCachedCount;  // Reduction.Axis.NaN: _nanAxisReductionCache
             return count;
         }
 
