@@ -78,7 +78,7 @@ namespace NumSharp
                 else if (axis_obj is int)
                     axis = new int[] {(int)axis_obj};
                 else if (axis_obj is int[])
-                    axis = (int[])axis_obj;
+                    axis = (long[])axis_obj;
                 else
                     throw new ArgumentException($"Invalid axis type: {axis_obj}");
 //                if (axis.Length == 1)

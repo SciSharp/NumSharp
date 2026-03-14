@@ -67,7 +67,7 @@ namespace NumSharp.Backends
         /// <para>
         /// <b>Set by:</b> All three <see cref="Alias()"/> overloads,
         /// <see cref="CreateBroadcastedUnsafe(UnmanagedStorage, Shape)"/>,
-        /// and both <see cref="GetData(int[])"/> overloads when creating views.
+        /// and both <see cref="GetData(long[])"/> overloads when creating views.
         /// </para>
         /// </remarks>
         /// <seealso cref="BaseStorage"/>
