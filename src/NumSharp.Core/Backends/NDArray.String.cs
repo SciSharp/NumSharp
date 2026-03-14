@@ -28,7 +28,8 @@ namespace NumSharp
             unsafe
             {
                 Debug.Assert(arr.typecode == NPTypeCode.Char);
-                Debug.Assert(arr.size < int.MaxValue);
+                if (arr.size > int.MaxValue)
+                    throw new InvalidOperationException("Array size exceeds maximum .NET string length.");
                 return new string((char*)arr.Address, 0, (int)arr.size);
             }
         }
@@ -112,6 +113,7 @@ namespace NumSharp
 
         public void SetString(string value, params int[] indices)
         {
+            SetString(value, Shape.ComputeLongShape(indices));
         }
 
         public void SetString(string value, params long[] indices)
@@ -151,7 +153,7 @@ namespace NumSharp
         ///     Get a string out of a vector of chars.
         /// </summary>
         /// <remarks>Performs a copy due to String .net-framework limitations.</remarks>
-        public string GetStringAt(int offset)
+        public string GetStringAt(long offset)
         {
             Debug.Assert(typecode == NPTypeCode.Char);
             Debug.Assert(offset < Array.Count);
@@ -159,7 +161,7 @@ namespace NumSharp
             return GetString(Shape.GetCoordinates(offset));
         }
 
-        public void SetStringAt(string value, int offset)
+        public void SetStringAt(string value, long offset)
         {
             Debug.Assert(typecode == NPTypeCode.Char);
             Debug.Assert(offset < Array.Count);
