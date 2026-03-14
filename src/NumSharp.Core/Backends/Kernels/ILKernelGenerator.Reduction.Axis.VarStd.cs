@@ -5,6 +5,7 @@ using System.Numerics;
 using System.Reflection;
 using System.Reflection.Emit;
 using System.Runtime.Intrinsics;
+using System.Threading.Tasks;
 
 // =============================================================================
 // ILKernelGenerator.Reduction.Axis.VarStd.cs - Variance/StdDev Axis Reductions
@@ -109,6 +110,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// SIMD helper for axis Var/Std reduction.
         /// Uses two-pass algorithm: first compute mean, then sum of squared differences.
+        /// Uses parallel outer loop for large output sizes.
         /// </summary>
         internal static unsafe void AxisVarStdSimdHelper<TInput>(
             TInput* input, double* output,
@@ -122,15 +124,16 @@ namespace NumSharp.Backends.Kernels
 
             // Compute output dimension strides for coordinate calculation
             int outputNdim = ndim - 1;
-            Span<int> outputDimStrides = stackalloc int[outputNdim > 0 ? outputNdim : 1];
+
+            // Store output dimension strides in a fixed array for parallel access
+            int[] outputDimStridesArray = new int[outputNdim > 0 ? outputNdim : 1];
             if (outputNdim > 0)
             {
-                outputDimStrides[outputNdim - 1] = 1;
+                outputDimStridesArray[outputNdim - 1] = 1;
                 for (int d = outputNdim - 2; d >= 0; d--)
                 {
-                    int inputDim = d >= axis ? d + 1 : d;
                     int nextInputDim = (d + 1) >= axis ? d + 2 : d + 1;
-                    outputDimStrides[d] = outputDimStrides[d + 1] * inputShape[nextInputDim];
+                    outputDimStridesArray[d] = outputDimStridesArray[d + 1] * inputShape[nextInputDim];
                 }
             }
 
@@ -139,57 +142,146 @@ namespace NumSharp.Backends.Kernels
             if (divisor <= 0)
                 divisor = 1; // Prevent division by zero; will produce NaN behavior
 
-            // Iterate over all output elements
-            for (int outIdx = 0; outIdx < outputSize; outIdx++)
+            // Use parallel loop for large output sizes (same threshold as main axis reductions)
+            const int parallelThreshold = 1000;
+
+            if (outputSize > parallelThreshold)
             {
-                // Convert linear output index to coordinates and compute offsets
-                int remaining = outIdx;
-                int inputBaseOffset = 0;
-                int outputOffset = 0;
+                // Copy strides to managed arrays for safe parallel access
+                int[] inputStridesArray = new int[ndim];
+                for (int i = 0; i < ndim; i++)
+                    inputStridesArray[i] = inputStrides[i];
 
-                for (int d = 0; d < outputNdim; d++)
-                {
-                    int inputDim = d >= axis ? d + 1 : d;
-                    int coord = remaining / outputDimStrides[d];
-                    remaining = remaining % outputDimStrides[d];
-                    inputBaseOffset += coord * inputStrides[inputDim];
-                    outputOffset += coord * outputStrides[d];
-                }
+                int[] outputStridesArray = new int[outputNdim > 0 ? outputNdim : 1];
+                for (int i = 0; i < outputStridesArray.Length && i < outputNdim; i++)
+                    outputStridesArray[i] = outputStrides[i];
 
-                TInput* axisStart = input + inputBaseOffset;
+                // Capture pointers for lambda
+                TInput* inputPtr = input;
+                double* outputPtr = output;
 
-                // Pass 1: Compute mean along axis
-                double sum = 0;
-                if (axisContiguous)
+                Parallel.For(0, outputSize, outIdx =>
                 {
-                    sum = SumContiguousAxisDouble(axisStart, axisSize);
-                }
-                else
-                {
-                    for (int i = 0; i < axisSize; i++)
-                        sum += ConvertToDouble(axisStart[i * axisStride]);
-                }
-                double mean = sum / axisSize;
-
-                // Pass 2: Compute sum of squared differences
-                double sqDiffSum = 0;
-                if (axisContiguous)
-                {
-                    sqDiffSum = SumSquaredDiffContiguous(axisStart, axisSize, mean);
-                }
-                else
-                {
-                    for (int i = 0; i < axisSize; i++)
-                    {
-                        double val = ConvertToDouble(axisStart[i * axisStride]);
-                        double diff = val - mean;
-                        sqDiffSum += diff * diff;
-                    }
-                }
-
-                double variance = sqDiffSum / divisor;
-                output[outputOffset] = computeStd ? Math.Sqrt(variance) : variance;
+                    ComputeVarStdElement(
+                        inputPtr, outputPtr,
+                        inputStridesArray, outputStridesArray, outputDimStridesArray,
+                        axis, axisSize, axisStride, outputNdim,
+                        axisContiguous, computeStd, divisor, outIdx);
+                });
             }
+            else
+            {
+                // Sequential loop for small output sizes
+                for (int outIdx = 0; outIdx < outputSize; outIdx++)
+                {
+                    // Convert linear output index to coordinates and compute offsets
+                    int remaining = outIdx;
+                    int inputBaseOffset = 0;
+                    int outputOffset = 0;
+
+                    for (int d = 0; d < outputNdim; d++)
+                    {
+                        int inputDim = d >= axis ? d + 1 : d;
+                        int coord = remaining / outputDimStridesArray[d];
+                        remaining = remaining % outputDimStridesArray[d];
+                        inputBaseOffset += coord * inputStrides[inputDim];
+                        outputOffset += coord * outputStrides[d];
+                    }
+
+                    TInput* axisStart = input + inputBaseOffset;
+
+                    // Pass 1: Compute mean along axis
+                    double sum = 0;
+                    if (axisContiguous)
+                    {
+                        sum = SumContiguousAxisDouble(axisStart, axisSize);
+                    }
+                    else
+                    {
+                        for (int i = 0; i < axisSize; i++)
+                            sum += ConvertToDouble(axisStart[i * axisStride]);
+                    }
+                    double mean = sum / axisSize;
+
+                    // Pass 2: Compute sum of squared differences
+                    double sqDiffSum = 0;
+                    if (axisContiguous)
+                    {
+                        sqDiffSum = SumSquaredDiffContiguous(axisStart, axisSize, mean);
+                    }
+                    else
+                    {
+                        for (int i = 0; i < axisSize; i++)
+                        {
+                            double val = ConvertToDouble(axisStart[i * axisStride]);
+                            double diff = val - mean;
+                            sqDiffSum += diff * diff;
+                        }
+                    }
+
+                    double variance = sqDiffSum / divisor;
+                    output[outputOffset] = computeStd ? Math.Sqrt(variance) : variance;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Compute a single Var/Std element for parallel execution.
+        /// </summary>
+        private static unsafe void ComputeVarStdElement<TInput>(
+            TInput* input, double* output,
+            int[] inputStrides, int[] outputStrides, int[] outputDimStrides,
+            int axis, int axisSize, int axisStride, int outputNdim,
+            bool axisContiguous, bool computeStd, double divisor, int outIdx)
+            where TInput : unmanaged
+        {
+            // Convert linear output index to coordinates and compute offsets
+            int remaining = outIdx;
+            int inputBaseOffset = 0;
+            int outputOffset = 0;
+
+            for (int d = 0; d < outputNdim; d++)
+            {
+                int inputDim = d >= axis ? d + 1 : d;
+                int coord = remaining / outputDimStrides[d];
+                remaining = remaining % outputDimStrides[d];
+                inputBaseOffset += coord * inputStrides[inputDim];
+                outputOffset += coord * outputStrides[d];
+            }
+
+            TInput* axisStart = input + inputBaseOffset;
+
+            // Pass 1: Compute mean along axis
+            double sum = 0;
+            if (axisContiguous)
+            {
+                sum = SumContiguousAxisDouble(axisStart, axisSize);
+            }
+            else
+            {
+                for (int i = 0; i < axisSize; i++)
+                    sum += ConvertToDouble(axisStart[i * axisStride]);
+            }
+            double mean = sum / axisSize;
+
+            // Pass 2: Compute sum of squared differences
+            double sqDiffSum = 0;
+            if (axisContiguous)
+            {
+                sqDiffSum = SumSquaredDiffContiguous(axisStart, axisSize, mean);
+            }
+            else
+            {
+                for (int i = 0; i < axisSize; i++)
+                {
+                    double val = ConvertToDouble(axisStart[i * axisStride]);
+                    double diff = val - mean;
+                    sqDiffSum += diff * diff;
+                }
+            }
+
+            double variance = sqDiffSum / divisor;
+            output[outputOffset] = computeStd ? Math.Sqrt(variance) : variance;
         }
 
         /// <summary>
