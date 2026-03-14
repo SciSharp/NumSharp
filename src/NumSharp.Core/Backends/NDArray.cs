@@ -607,7 +607,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="indices">The coordinates to the wanted value</param>
         /// <remarks>Does not copy, returns a memory slice - this is similar to this[int[]]</remarks>
-        public NDArray GetData(params int[] indices) => new NDArray(Storage.GetData(indices)) {tensorEngine = this.tensorEngine};
+        public NDArray GetData(int[] indices) => new NDArray(Storage.GetData(indices)) {tensorEngine = this.tensorEngine};
 
         /// <summary>
         ///     Retrieves value of type <see cref="bool"/>.
@@ -616,7 +616,7 @@ namespace NumSharp
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="bool"/></exception>
         [MethodImpl(Inline)]
-        public bool GetBoolean(params int[] indices) => Storage.GetBoolean(indices);
+        public bool GetBoolean(int[] indices) => Storage.GetBoolean(indices);
 
         /// <summary>
         ///     Retrieves value of type <see cref="byte"/>.
@@ -625,7 +625,7 @@ namespace NumSharp
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="byte"/></exception>
         [MethodImpl(Inline)]
-        public byte GetByte(params int[] indices) => Storage.GetByte(indices);
+        public byte GetByte(int[] indices) => Storage.GetByte(indices);
 
         /// <summary>
         ///     Retrieves value of type <see cref="char"/>.
@@ -634,7 +634,7 @@ namespace NumSharp
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="char"/></exception>
         [MethodImpl(Inline)]
-        public char GetChar(params int[] indices) => Storage.GetChar(indices);
+        public char GetChar(int[] indices) => Storage.GetChar(indices);
 
         /// <summary>
         ///     Retrieves value of type <see cref="decimal"/>.
@@ -643,7 +643,7 @@ namespace NumSharp
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="decimal"/></exception>
         [MethodImpl(Inline)]
-        public decimal GetDecimal(params int[] indices) => Storage.GetDecimal(indices);
+        public decimal GetDecimal(int[] indices) => Storage.GetDecimal(indices);
 
         /// <summary>
         ///     Retrieves value of type <see cref="double"/>.
@@ -652,7 +652,7 @@ namespace NumSharp
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="double"/></exception>
         [MethodImpl(Inline)]
-        public double GetDouble(params int[] indices) => Storage.GetDouble(indices);
+        public double GetDouble(int[] indices) => Storage.GetDouble(indices);
 
         /// <summary>
         ///     Retrieves value of type <see cref="short"/>.
@@ -661,7 +661,7 @@ namespace NumSharp
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="short"/></exception>
         [MethodImpl(Inline)]
-        public short GetInt16(params int[] indices) => Storage.GetInt16(indices);
+        public short GetInt16(int[] indices) => Storage.GetInt16(indices);
 
         /// <summary>
         ///     Retrieves value of type <see cref="int"/>.
@@ -670,7 +670,7 @@ namespace NumSharp
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="int"/></exception>
         [MethodImpl(Inline)]
-        public int GetInt32(params int[] indices) => Storage.GetInt32(indices);
+        public int GetInt32(int[] indices) => Storage.GetInt32(indices);
 
         /// <summary>
         ///     Retrieves value of type <see cref="long"/>.
@@ -679,7 +679,7 @@ namespace NumSharp
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="long"/></exception>
         [MethodImpl(Inline)]
-        public long GetInt64(params int[] indices) => Storage.GetInt64(indices);
+        public long GetInt64(int[] indices) => Storage.GetInt64(indices);
 
         /// <summary>
         ///     Retrieves value of type <see cref="float"/>.
@@ -688,7 +688,7 @@ namespace NumSharp
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="float"/></exception>
         [MethodImpl(Inline)]
-        public float GetSingle(params int[] indices) => Storage.GetSingle(indices);
+        public float GetSingle(int[] indices) => Storage.GetSingle(indices);
 
         /// <summary>
         ///     Retrieves value of type <see cref="ushort"/>.
@@ -697,7 +697,7 @@ namespace NumSharp
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="ushort"/></exception>
         [MethodImpl(Inline)]
-        public ushort GetUInt16(params int[] indices) => Storage.GetUInt16(indices);
+        public ushort GetUInt16(int[] indices) => Storage.GetUInt16(indices);
 
         /// <summary>
         ///     Retrieves value of type <see cref="uint"/>.
@@ -706,7 +706,7 @@ namespace NumSharp
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="uint"/></exception>
         [MethodImpl(Inline)]
-        public uint GetUInt32(params int[] indices) => Storage.GetUInt32(indices);
+        public uint GetUInt32(int[] indices) => Storage.GetUInt32(indices);
 
         /// <summary>
         ///     Retrieves value of type <see cref="ulong"/>.
@@ -715,7 +715,47 @@ namespace NumSharp
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="ulong"/></exception>
         [MethodImpl(Inline)]
-        public ulong GetUInt64(params int[] indices) => Storage.GetUInt64(indices);
+        public ulong GetUInt64(int[] indices) => Storage.GetUInt64(indices);
+
+        #region Typed Getters (long[] overloads for int64 indexing)
+
+        [MethodImpl(Inline)]
+        public bool GetBoolean(params long[] indices) => Storage.GetBoolean(indices);
+
+        [MethodImpl(Inline)]
+        public byte GetByte(params long[] indices) => Storage.GetByte(indices);
+
+        [MethodImpl(Inline)]
+        public char GetChar(params long[] indices) => Storage.GetChar(indices);
+
+        [MethodImpl(Inline)]
+        public decimal GetDecimal(params long[] indices) => Storage.GetDecimal(indices);
+
+        [MethodImpl(Inline)]
+        public double GetDouble(params long[] indices) => Storage.GetDouble(indices);
+
+        [MethodImpl(Inline)]
+        public short GetInt16(params long[] indices) => Storage.GetInt16(indices);
+
+        [MethodImpl(Inline)]
+        public int GetInt32(params long[] indices) => Storage.GetInt32(indices);
+
+        [MethodImpl(Inline)]
+        public long GetInt64(params long[] indices) => Storage.GetInt64(indices);
+
+        [MethodImpl(Inline)]
+        public float GetSingle(params long[] indices) => Storage.GetSingle(indices);
+
+        [MethodImpl(Inline)]
+        public ushort GetUInt16(params long[] indices) => Storage.GetUInt16(indices);
+
+        [MethodImpl(Inline)]
+        public uint GetUInt32(params long[] indices) => Storage.GetUInt32(indices);
+
+        [MethodImpl(Inline)]
+        public ulong GetUInt64(params long[] indices) => Storage.GetUInt64(indices);
+
+        #endregion
 
         /// <summary>
         ///     Retrieves value of unspecified type (will figure using <see cref="DType"/>).
@@ -724,7 +764,7 @@ namespace NumSharp
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="object"/></exception>
         [MethodImpl(Inline)]
-        public ValueType GetValue(params int[] indices) => Storage.GetValue(indices);
+        public ValueType GetValue(int[] indices) => Storage.GetValue(indices);
 
         /// <summary>
         ///     Retrieves value of unspecified type (will figure using <see cref="DType"/>).
