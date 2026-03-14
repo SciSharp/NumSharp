@@ -16,7 +16,7 @@ namespace NumSharp
         public static NDArray empty_like(NDArray prototype, Type dtype = null, Shape shape = default)
         {
             var resolvedShape = shape.IsEmpty
-                ? new Shape((int[])prototype.shape.Clone())
+                ? new Shape((long[])prototype.shape.Clone())
                 : shape;
             return new NDArray(dtype ?? prototype.dtype, resolvedShape, false);
         }
@@ -32,7 +32,7 @@ namespace NumSharp
         public static NDArray empty_like(NDArray prototype, NPTypeCode typeCode, Shape shape = default)
         {
             var resolvedShape = shape.IsEmpty
-                ? new Shape((int[])prototype.shape.Clone())
+                ? new Shape((long[])prototype.shape.Clone())
                 : shape;
             return empty(resolvedShape, typeCode);
         }

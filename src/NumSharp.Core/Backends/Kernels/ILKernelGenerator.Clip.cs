@@ -244,6 +244,18 @@ namespace NumSharp.Backends.Kernels
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static unsafe void ClipScalar<T>(T* data, long size, T minVal, T maxVal) where T : unmanaged, IComparable<T>
         {
+            // Use specialized implementations for float/double to handle NaN correctly
+            if (typeof(T) == typeof(float))
+            {
+                ClipScalarFloat((float*)data, size, Unsafe.As<T, float>(ref minVal), Unsafe.As<T, float>(ref maxVal));
+                return;
+            }
+            if (typeof(T) == typeof(double))
+            {
+                ClipScalarDouble((double*)data, size, Unsafe.As<T, double>(ref minVal), Unsafe.As<T, double>(ref maxVal));
+                return;
+            }
+
             for (long i = 0; i < size; i++)
             {
                 var val = data[i];
@@ -258,6 +270,18 @@ namespace NumSharp.Backends.Kernels
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static unsafe void ClipMinScalar<T>(T* data, long size, T minVal) where T : unmanaged, IComparable<T>
         {
+            // Use specialized implementations for float/double to handle NaN correctly
+            if (typeof(T) == typeof(float))
+            {
+                ClipMinScalarFloat((float*)data, size, Unsafe.As<T, float>(ref minVal));
+                return;
+            }
+            if (typeof(T) == typeof(double))
+            {
+                ClipMinScalarDouble((double*)data, size, Unsafe.As<T, double>(ref minVal));
+                return;
+            }
+
             for (long i = 0; i < size; i++)
             {
                 if (data[i].CompareTo(minVal) < 0)
@@ -268,12 +292,85 @@ namespace NumSharp.Backends.Kernels
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static unsafe void ClipMaxScalar<T>(T* data, long size, T maxVal) where T : unmanaged, IComparable<T>
         {
+            // Use specialized implementations for float/double to handle NaN correctly
+            if (typeof(T) == typeof(float))
+            {
+                ClipMaxScalarFloat((float*)data, size, Unsafe.As<T, float>(ref maxVal));
+                return;
+            }
+            if (typeof(T) == typeof(double))
+            {
+                ClipMaxScalarDouble((double*)data, size, Unsafe.As<T, double>(ref maxVal));
+                return;
+            }
+
             for (long i = 0; i < size; i++)
             {
                 if (data[i].CompareTo(maxVal) > 0)
                     data[i] = maxVal;
             }
         }
+
+        #region Floating-Point Scalar Implementations (NaN-aware)
+
+        // These use Math.Max/Min which properly propagate NaN per IEEE semantics
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe void ClipScalarFloat(float* data, long size, float minVal, float maxVal)
+        {
+            for (long i = 0; i < size; i++)
+            {
+                // Math.Max/Min propagate NaN: if either operand is NaN, result is NaN
+                data[i] = Math.Min(Math.Max(data[i], minVal), maxVal);
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe void ClipScalarDouble(double* data, long size, double minVal, double maxVal)
+        {
+            for (long i = 0; i < size; i++)
+            {
+                data[i] = Math.Min(Math.Max(data[i], minVal), maxVal);
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe void ClipMinScalarFloat(float* data, long size, float minVal)
+        {
+            for (long i = 0; i < size; i++)
+            {
+                data[i] = Math.Max(data[i], minVal);
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe void ClipMinScalarDouble(double* data, long size, double minVal)
+        {
+            for (long i = 0; i < size; i++)
+            {
+                data[i] = Math.Max(data[i], minVal);
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe void ClipMaxScalarFloat(float* data, long size, float maxVal)
+        {
+            for (long i = 0; i < size; i++)
+            {
+                data[i] = Math.Min(data[i], maxVal);
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe void ClipMaxScalarDouble(double* data, long size, double maxVal)
+        {
+            for (long i = 0; i < size; i++)
+            {
+                data[i] = Math.Min(data[i], maxVal);
+            }
+        }
+
+        #endregion
 
         #endregion
 
@@ -296,16 +393,8 @@ namespace NumSharp.Backends.Kernels
                 vec.Store(data + i);
             }
 
-            // Scalar tail
-            for (; i < size; i++)
-            {
-                var val = data[i];
-                if (Comparer<T>.Default.Compare(val, maxVal) > 0)
-                    val = maxVal;
-                else if (Comparer<T>.Default.Compare(val, minVal) < 0)
-                    val = minVal;
-                data[i] = val;
-            }
+            // Scalar tail - use NaN-aware helpers for float/double
+            ClipScalarTail(data + i, size - i, minVal, maxVal);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -323,12 +412,8 @@ namespace NumSharp.Backends.Kernels
                 vec.Store(data + i);
             }
 
-            // Scalar tail
-            for (; i < size; i++)
-            {
-                if (Comparer<T>.Default.Compare(data[i], minVal) < 0)
-                    data[i] = minVal;
-            }
+            // Scalar tail - use NaN-aware helpers for float/double
+            ClipMinScalarTail(data + i, size - i, minVal);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -346,11 +431,104 @@ namespace NumSharp.Backends.Kernels
                 vec.Store(data + i);
             }
 
-            // Scalar tail
-            for (; i < size; i++)
+            // Scalar tail - use NaN-aware helpers for float/double
+            ClipMaxScalarTail(data + i, size - i, maxVal);
+        }
+
+        #endregion
+
+        #region Scalar Tail Helpers (NaN-aware for float/double)
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe void ClipScalarTail<T>(T* data, long size, T minVal, T maxVal) where T : unmanaged
+        {
+            if (size <= 0) return;
+
+            if (typeof(T) == typeof(float))
             {
-                if (Comparer<T>.Default.Compare(data[i], maxVal) > 0)
-                    data[i] = maxVal;
+                var fMin = Unsafe.As<T, float>(ref minVal);
+                var fMax = Unsafe.As<T, float>(ref maxVal);
+                var fData = (float*)data;
+                for (long i = 0; i < size; i++)
+                    fData[i] = Math.Min(Math.Max(fData[i], fMin), fMax);
+            }
+            else if (typeof(T) == typeof(double))
+            {
+                var dMin = Unsafe.As<T, double>(ref minVal);
+                var dMax = Unsafe.As<T, double>(ref maxVal);
+                var dData = (double*)data;
+                for (long i = 0; i < size; i++)
+                    dData[i] = Math.Min(Math.Max(dData[i], dMin), dMax);
+            }
+            else
+            {
+                for (long i = 0; i < size; i++)
+                {
+                    var val = data[i];
+                    if (Comparer<T>.Default.Compare(val, maxVal) > 0)
+                        val = maxVal;
+                    else if (Comparer<T>.Default.Compare(val, minVal) < 0)
+                        val = minVal;
+                    data[i] = val;
+                }
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe void ClipMinScalarTail<T>(T* data, long size, T minVal) where T : unmanaged
+        {
+            if (size <= 0) return;
+
+            if (typeof(T) == typeof(float))
+            {
+                var fMin = Unsafe.As<T, float>(ref minVal);
+                var fData = (float*)data;
+                for (long i = 0; i < size; i++)
+                    fData[i] = Math.Max(fData[i], fMin);
+            }
+            else if (typeof(T) == typeof(double))
+            {
+                var dMin = Unsafe.As<T, double>(ref minVal);
+                var dData = (double*)data;
+                for (long i = 0; i < size; i++)
+                    dData[i] = Math.Max(dData[i], dMin);
+            }
+            else
+            {
+                for (long i = 0; i < size; i++)
+                {
+                    if (Comparer<T>.Default.Compare(data[i], minVal) < 0)
+                        data[i] = minVal;
+                }
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe void ClipMaxScalarTail<T>(T* data, long size, T maxVal) where T : unmanaged
+        {
+            if (size <= 0) return;
+
+            if (typeof(T) == typeof(float))
+            {
+                var fMax = Unsafe.As<T, float>(ref maxVal);
+                var fData = (float*)data;
+                for (long i = 0; i < size; i++)
+                    fData[i] = Math.Min(fData[i], fMax);
+            }
+            else if (typeof(T) == typeof(double))
+            {
+                var dMax = Unsafe.As<T, double>(ref maxVal);
+                var dData = (double*)data;
+                for (long i = 0; i < size; i++)
+                    dData[i] = Math.Min(dData[i], dMax);
+            }
+            else
+            {
+                for (long i = 0; i < size; i++)
+                {
+                    if (Comparer<T>.Default.Compare(data[i], maxVal) > 0)
+                        data[i] = maxVal;
+                }
             }
         }
 
@@ -375,16 +553,8 @@ namespace NumSharp.Backends.Kernels
                 vec.Store(data + i);
             }
 
-            // Scalar tail
-            for (; i < size; i++)
-            {
-                var val = data[i];
-                if (Comparer<T>.Default.Compare(val, maxVal) > 0)
-                    val = maxVal;
-                else if (Comparer<T>.Default.Compare(val, minVal) < 0)
-                    val = minVal;
-                data[i] = val;
-            }
+            // Scalar tail - use NaN-aware helpers for float/double
+            ClipScalarTail(data + i, size - i, minVal, maxVal);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -402,12 +572,8 @@ namespace NumSharp.Backends.Kernels
                 vec.Store(data + i);
             }
 
-            // Scalar tail
-            for (; i < size; i++)
-            {
-                if (Comparer<T>.Default.Compare(data[i], minVal) < 0)
-                    data[i] = minVal;
-            }
+            // Scalar tail - use NaN-aware helpers for float/double
+            ClipMinScalarTail(data + i, size - i, minVal);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -425,12 +591,8 @@ namespace NumSharp.Backends.Kernels
                 vec.Store(data + i);
             }
 
-            // Scalar tail
-            for (; i < size; i++)
-            {
-                if (Comparer<T>.Default.Compare(data[i], maxVal) > 0)
-                    data[i] = maxVal;
-            }
+            // Scalar tail - use NaN-aware helpers for float/double
+            ClipMaxScalarTail(data + i, size - i, maxVal);
         }
 
         #endregion
@@ -849,6 +1011,18 @@ namespace NumSharp.Backends.Kernels
         private static unsafe void ClipArrayBoundsScalar<T>(T* output, T* minArr, T* maxArr, long size)
             where T : unmanaged, IComparable<T>
         {
+            // Use specialized implementations for float/double to handle NaN correctly
+            if (typeof(T) == typeof(float))
+            {
+                ClipArrayBoundsScalarFloat((float*)output, (float*)minArr, (float*)maxArr, size);
+                return;
+            }
+            if (typeof(T) == typeof(double))
+            {
+                ClipArrayBoundsScalarDouble((double*)output, (double*)minArr, (double*)maxArr, size);
+                return;
+            }
+
             for (long i = 0; i < size; i++)
             {
                 var val = output[i];
@@ -867,6 +1041,18 @@ namespace NumSharp.Backends.Kernels
         private static unsafe void ClipArrayMinScalar<T>(T* output, T* minArr, long size)
             where T : unmanaged, IComparable<T>
         {
+            // Use specialized implementations for float/double to handle NaN correctly
+            if (typeof(T) == typeof(float))
+            {
+                ClipArrayMinScalarFloat((float*)output, (float*)minArr, size);
+                return;
+            }
+            if (typeof(T) == typeof(double))
+            {
+                ClipArrayMinScalarDouble((double*)output, (double*)minArr, size);
+                return;
+            }
+
             for (long i = 0; i < size; i++)
             {
                 if (output[i].CompareTo(minArr[i]) < 0)
@@ -878,12 +1064,152 @@ namespace NumSharp.Backends.Kernels
         private static unsafe void ClipArrayMaxScalar<T>(T* output, T* maxArr, long size)
             where T : unmanaged, IComparable<T>
         {
+            // Use specialized implementations for float/double to handle NaN correctly
+            if (typeof(T) == typeof(float))
+            {
+                ClipArrayMaxScalarFloat((float*)output, (float*)maxArr, size);
+                return;
+            }
+            if (typeof(T) == typeof(double))
+            {
+                ClipArrayMaxScalarDouble((double*)output, (double*)maxArr, size);
+                return;
+            }
+
             for (long i = 0; i < size; i++)
             {
                 if (output[i].CompareTo(maxArr[i]) > 0)
                     output[i] = maxArr[i];
             }
         }
+
+        #region Array Bounds - Float/Double Scalar (NaN-aware)
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe void ClipArrayBoundsScalarFloat(float* output, float* minArr, float* maxArr, long size)
+        {
+            for (long i = 0; i < size; i++)
+                output[i] = Math.Min(Math.Max(output[i], minArr[i]), maxArr[i]);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe void ClipArrayBoundsScalarDouble(double* output, double* minArr, double* maxArr, long size)
+        {
+            for (long i = 0; i < size; i++)
+                output[i] = Math.Min(Math.Max(output[i], minArr[i]), maxArr[i]);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe void ClipArrayMinScalarFloat(float* output, float* minArr, long size)
+        {
+            for (long i = 0; i < size; i++)
+                output[i] = Math.Max(output[i], minArr[i]);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe void ClipArrayMinScalarDouble(double* output, double* minArr, long size)
+        {
+            for (long i = 0; i < size; i++)
+                output[i] = Math.Max(output[i], minArr[i]);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe void ClipArrayMaxScalarFloat(float* output, float* maxArr, long size)
+        {
+            for (long i = 0; i < size; i++)
+                output[i] = Math.Min(output[i], maxArr[i]);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe void ClipArrayMaxScalarDouble(double* output, double* maxArr, long size)
+        {
+            for (long i = 0; i < size; i++)
+                output[i] = Math.Min(output[i], maxArr[i]);
+        }
+
+        #endregion
+
+        #region Array Bounds - Scalar Tail Helpers (NaN-aware)
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe void ClipArrayBoundsScalarTail<T>(T* output, T* minArr, T* maxArr, long size)
+            where T : unmanaged
+        {
+            if (size <= 0) return;
+
+            if (typeof(T) == typeof(float))
+            {
+                ClipArrayBoundsScalarFloat((float*)output, (float*)minArr, (float*)maxArr, size);
+            }
+            else if (typeof(T) == typeof(double))
+            {
+                ClipArrayBoundsScalarDouble((double*)output, (double*)minArr, (double*)maxArr, size);
+            }
+            else
+            {
+                for (long i = 0; i < size; i++)
+                {
+                    var val = output[i];
+                    var minVal = minArr[i];
+                    var maxVal = maxArr[i];
+                    if (Comparer<T>.Default.Compare(val, minVal) < 0)
+                        val = minVal;
+                    if (Comparer<T>.Default.Compare(val, maxVal) > 0)
+                        val = maxVal;
+                    output[i] = val;
+                }
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe void ClipArrayMinScalarTail<T>(T* output, T* minArr, long size)
+            where T : unmanaged
+        {
+            if (size <= 0) return;
+
+            if (typeof(T) == typeof(float))
+            {
+                ClipArrayMinScalarFloat((float*)output, (float*)minArr, size);
+            }
+            else if (typeof(T) == typeof(double))
+            {
+                ClipArrayMinScalarDouble((double*)output, (double*)minArr, size);
+            }
+            else
+            {
+                for (long i = 0; i < size; i++)
+                {
+                    if (Comparer<T>.Default.Compare(output[i], minArr[i]) < 0)
+                        output[i] = minArr[i];
+                }
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe void ClipArrayMaxScalarTail<T>(T* output, T* maxArr, long size)
+            where T : unmanaged
+        {
+            if (size <= 0) return;
+
+            if (typeof(T) == typeof(float))
+            {
+                ClipArrayMaxScalarFloat((float*)output, (float*)maxArr, size);
+            }
+            else if (typeof(T) == typeof(double))
+            {
+                ClipArrayMaxScalarDouble((double*)output, (double*)maxArr, size);
+            }
+            else
+            {
+                for (long i = 0; i < size; i++)
+                {
+                    if (Comparer<T>.Default.Compare(output[i], maxArr[i]) > 0)
+                        output[i] = maxArr[i];
+                }
+            }
+        }
+
+        #endregion
 
         #endregion
 
@@ -907,18 +1233,8 @@ namespace NumSharp.Backends.Kernels
                 vec.Store(output + i);
             }
 
-            // Scalar tail
-            for (; i < size; i++)
-            {
-                var val = output[i];
-                var minVal = minArr[i];
-                var maxVal = maxArr[i];
-                if (Comparer<T>.Default.Compare(val, minVal) < 0)
-                    val = minVal;
-                if (Comparer<T>.Default.Compare(val, maxVal) > 0)
-                    val = maxVal;
-                output[i] = val;
-            }
+            // Scalar tail - use NaN-aware helper
+            ClipArrayBoundsScalarTail(output + i, minArr + i, maxArr + i, size - i);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -937,12 +1253,8 @@ namespace NumSharp.Backends.Kernels
                 vec.Store(output + i);
             }
 
-            // Scalar tail
-            for (; i < size; i++)
-            {
-                if (Comparer<T>.Default.Compare(output[i], minArr[i]) < 0)
-                    output[i] = minArr[i];
-            }
+            // Scalar tail - use NaN-aware helper
+            ClipArrayMinScalarTail(output + i, minArr + i, size - i);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -961,12 +1273,8 @@ namespace NumSharp.Backends.Kernels
                 vec.Store(output + i);
             }
 
-            // Scalar tail
-            for (; i < size; i++)
-            {
-                if (Comparer<T>.Default.Compare(output[i], maxArr[i]) > 0)
-                    output[i] = maxArr[i];
-            }
+            // Scalar tail - use NaN-aware helper
+            ClipArrayMaxScalarTail(output + i, maxArr + i, size - i);
         }
 
         #endregion
@@ -991,18 +1299,8 @@ namespace NumSharp.Backends.Kernels
                 vec.Store(output + i);
             }
 
-            // Scalar tail
-            for (; i < size; i++)
-            {
-                var val = output[i];
-                var minVal = minArr[i];
-                var maxVal = maxArr[i];
-                if (Comparer<T>.Default.Compare(val, minVal) < 0)
-                    val = minVal;
-                if (Comparer<T>.Default.Compare(val, maxVal) > 0)
-                    val = maxVal;
-                output[i] = val;
-            }
+            // Scalar tail - use NaN-aware helper
+            ClipArrayBoundsScalarTail(output + i, minArr + i, maxArr + i, size - i);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -1021,12 +1319,8 @@ namespace NumSharp.Backends.Kernels
                 vec.Store(output + i);
             }
 
-            // Scalar tail
-            for (; i < size; i++)
-            {
-                if (Comparer<T>.Default.Compare(output[i], minArr[i]) < 0)
-                    output[i] = minArr[i];
-            }
+            // Scalar tail - use NaN-aware helper
+            ClipArrayMinScalarTail(output + i, minArr + i, size - i);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -1045,12 +1339,8 @@ namespace NumSharp.Backends.Kernels
                 vec.Store(output + i);
             }
 
-            // Scalar tail
-            for (; i < size; i++)
-            {
-                if (Comparer<T>.Default.Compare(output[i], maxArr[i]) > 0)
-                    output[i] = maxArr[i];
-            }
+            // Scalar tail - use NaN-aware helper
+            ClipArrayMaxScalarTail(output + i, maxArr + i, size - i);
         }
 
         #endregion
@@ -1075,18 +1365,8 @@ namespace NumSharp.Backends.Kernels
                 vec.Store(output + i);
             }
 
-            // Scalar tail
-            for (; i < size; i++)
-            {
-                var val = output[i];
-                var minVal = minArr[i];
-                var maxVal = maxArr[i];
-                if (Comparer<T>.Default.Compare(val, minVal) < 0)
-                    val = minVal;
-                if (Comparer<T>.Default.Compare(val, maxVal) > 0)
-                    val = maxVal;
-                output[i] = val;
-            }
+            // Scalar tail - use NaN-aware helper
+            ClipArrayBoundsScalarTail(output + i, minArr + i, maxArr + i, size - i);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -1105,12 +1385,8 @@ namespace NumSharp.Backends.Kernels
                 vec.Store(output + i);
             }
 
-            // Scalar tail
-            for (; i < size; i++)
-            {
-                if (Comparer<T>.Default.Compare(output[i], minArr[i]) < 0)
-                    output[i] = minArr[i];
-            }
+            // Scalar tail - use NaN-aware helper
+            ClipArrayMinScalarTail(output + i, minArr + i, size - i);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -1129,12 +1405,8 @@ namespace NumSharp.Backends.Kernels
                 vec.Store(output + i);
             }
 
-            // Scalar tail
-            for (; i < size; i++)
-            {
-                if (Comparer<T>.Default.Compare(output[i], maxArr[i]) > 0)
-                    output[i] = maxArr[i];
-            }
+            // Scalar tail - use NaN-aware helper
+            ClipArrayMaxScalarTail(output + i, maxArr + i, size - i);
         }
 
         #endregion

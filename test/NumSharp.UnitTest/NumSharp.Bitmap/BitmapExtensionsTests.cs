@@ -147,7 +147,7 @@ namespace NumSharp.UnitTest
             var bitmap2 = EmbeddedBitmap("captcha-a");
             var wrapped = bitmap2.ToNDArray(copy: false, discardAlpha: false);
 
-            copied.Should().BeShaped(wrapped.shape[0], wrapped.shape[1], wrapped.shape[2], wrapped.shape[3]);
+            copied.Should().BeShaped((int)wrapped.shape[0], (int)wrapped.shape[1], (int)wrapped.shape[2], (int)wrapped.shape[3]);
 
             // Compare first row of pixels
             var row1_copy = copied["0, 0, :, :"].flat;
@@ -265,7 +265,7 @@ namespace NumSharp.UnitTest
 
             // Round-trip back and compare
             var nd2 = bmp2.ToNDArray(copy: true, discardAlpha: false);
-            nd2.Should().BeShaped(nd.shape[0], nd.shape[1], nd.shape[2], nd.shape[3]);
+            nd2.Should().BeShaped((int)nd.shape[0], (int)nd.shape[1], (int)nd.shape[2], (int)nd.shape[3]);
             np.array_equal(nd, nd2).Should().BeTrue("embedded image round-trip should be lossless");
         }
 
@@ -405,7 +405,7 @@ namespace NumSharp.UnitTest
             Image image = bitmap; // Bitmap inherits from Image
             var fromImage = image.ToNDArray(copy: true, discardAlpha: false);
 
-            fromImage.Should().BeShaped(fromBitmap.shape[0], fromBitmap.shape[1], fromBitmap.shape[2], fromBitmap.shape[3]);
+            fromImage.Should().BeShaped((int)fromBitmap.shape[0], (int)fromBitmap.shape[1], (int)fromBitmap.shape[2], (int)fromBitmap.shape[3]);
             np.array_equal(fromBitmap, fromImage).Should().BeTrue("Image.ToNDArray should produce same data as Bitmap.ToNDArray");
         }
 

@@ -116,7 +116,7 @@ namespace NumSharp.UnitTest.View
 
             // Modify v3 - changes propagate to v2 (shared memory via slicing)
             // but NOT to v1 or t (reshape created copies)
-            v3.SetData(ArraySlice.FromArray(new int[] { 99, 11, -18, -10 }));
+            v3.SetData(ArraySlice.FromArray(new int[] { 99, 11, -18, -10 }), new int[0]);
             new NDArray(v3).ToString(flat: true).Should().Be("array([[99, 11], [-18, -10]])");
             new NDArray(v2).ToString(flat: true).Should().Be("array([[[11], [5], [99]], [[-10], [14], [-18]]])");
             // v1 unchanged (reshape made a copy)

@@ -48,7 +48,7 @@ namespace NumSharp
                     return new NDArray(typeof(int), Shape.Vector(0), false);
 
                 // Use Convert.ToDouble for type-agnostic value extraction
-                double target = Convert.ToDouble(v.Storage.GetValue());
+                double target = Convert.ToDouble(v.Storage.GetValue(new int[0]));
                 int idx = binarySearchRightmost(a, target);
                 return NDArray.Scalar(idx);
             }
@@ -77,7 +77,7 @@ namespace NumSharp
         private static int binarySearchRightmost(NDArray arr, double target)
         {
             int L = 0;
-            int R = arr.size;
+            int R = (int)arr.size;
             while (L < R)
             {
                 int m = (L + R) / 2;

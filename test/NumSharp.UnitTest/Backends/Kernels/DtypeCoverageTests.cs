@@ -529,8 +529,8 @@ namespace NumSharp.UnitTest.Backends.Kernels
             var arr = np.array(new[] { 1, 2, 3, 4, 5, 6 }).astype(dtype);
             var reshaped = arr.reshape(2, 3);
 
-            CollectionAssert.AreEqual(new[] { 2, 3 }, reshaped.shape);
-            Assert.AreEqual(6, reshaped.size);
+            CollectionAssert.AreEqual(new long[] { 2, 3 }, reshaped.shape);
+            Assert.AreEqual(6L, reshaped.size);
         }
 
         [Test]

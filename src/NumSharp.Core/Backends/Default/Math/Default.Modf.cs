@@ -68,9 +68,9 @@ namespace NumSharp.Backends
         /// <summary>
         /// Scalar modf for decimal type (no SIMD, decimal is 128-bit).
         /// </summary>
-        private static unsafe void ModfDecimal(decimal* data, decimal* integral, int size)
+        private static unsafe void ModfDecimal(decimal* data, decimal* integral, long size)
         {
-            for (int i = 0; i < size; i++)
+            for (long i = 0; i < size; i++)
             {
                 var trunc = Math.Truncate(data[i]);
                 integral[i] = trunc;

@@ -17,8 +17,8 @@ namespace NumSharp.UnitTest
             var shape = new Shape(5);
             for (int i = 0; i < 5; i++)
             {
-                int expected = shape.GetOffset(i);
-                int actual = shape.GetOffsetSimple(i);
+                long expected = shape.GetOffset(i);
+                long actual = shape.GetOffsetSimple(i);
                 actual.Should().Be(expected, because: $"index {i} should match");
             }
         }
@@ -32,8 +32,8 @@ namespace NumSharp.UnitTest
             {
                 for (int j = 0; j < 3; j++)
                 {
-                    int expected = shape.GetOffset(i, j);
-                    int actual = shape.GetOffsetSimple(i, j);
+                    long expected = shape.GetOffset(i, j);
+                    long actual = shape.GetOffsetSimple(i, j);
                     actual.Should().Be(expected, because: $"indices ({i},{j}) should match");
                 }
             }
@@ -50,8 +50,8 @@ namespace NumSharp.UnitTest
                 {
                     for (int k = 0; k < 4; k++)
                     {
-                        int expected = shape.GetOffset(i, j, k);
-                        int actual = shape.GetOffsetSimple(i, j, k);
+                        long expected = shape.GetOffset(i, j, k);
+                        long actual = shape.GetOffsetSimple(i, j, k);
                         actual.Should().Be(expected, because: $"indices ({i},{j},{k}) should match");
                     }
                 }
@@ -63,17 +63,17 @@ namespace NumSharp.UnitTest
         {
             // 4D array (sample indices to keep test fast)
             var shape = new Shape(2, 3, 4, 5);
-            var indices = new[] { 1, 2, 3, 4 };
-            int expected = shape.GetOffset(indices);
-            int actual = shape.GetOffsetSimple(indices);
+            var indices = new long[] { 1, 2, 3, 4 };
+            long expected = shape.GetOffset(indices);
+            long actual = shape.GetOffsetSimple(indices);
             actual.Should().Be(expected);
 
-            indices = new[] { 0, 0, 0, 0 };
+            indices = new long[] { 0, 0, 0, 0 };
             expected = shape.GetOffset(indices);
             actual = shape.GetOffsetSimple(indices);
             actual.Should().Be(expected);
 
-            indices = new[] { 1, 2, 0, 1 };
+            indices = new long[] { 1, 2, 0, 1 };
             expected = shape.GetOffset(indices);
             actual = shape.GetOffsetSimple(indices);
             actual.Should().Be(expected);
@@ -131,15 +131,15 @@ namespace NumSharp.UnitTest
 
             for (int trial = 0; trial < 20; trial++)
             {
-                var indices = new[]
+                var indices = new long[]
                 {
                     rnd.Next(0, dims[0]),
                     rnd.Next(0, dims[1]),
                     rnd.Next(0, dims[2])
                 };
 
-                int expected = shape.GetOffset(indices);
-                int actual = shape.GetOffsetSimple(indices);
+                long expected = shape.GetOffset(indices);
+                long actual = shape.GetOffsetSimple(indices);
                 actual.Should().Be(expected, because: $"trial {trial}, indices ({indices[0]},{indices[1]},{indices[2]}) should match");
             }
         }
@@ -192,8 +192,8 @@ namespace NumSharp.UnitTest
             {
                 for (int j = 0; j < 3; j++)
                 {
-                    int expected = sliced.GetOffset(i, j);
-                    int actual = sliced.GetOffsetSimple(i, j);
+                    long expected = sliced.GetOffset(i, j);
+                    long actual = sliced.GetOffsetSimple(i, j);
                     actual.Should().Be(expected, because: $"sliced indices ({i},{j}) should match");
                 }
             }
@@ -232,8 +232,8 @@ namespace NumSharp.UnitTest
             // Verify parity: indices 0,1,2 should map to linear offsets 1,3,5
             for (int i = 0; i < 3; i++)
             {
-                int expected = sliced.GetOffset(i);
-                int actual = sliced.GetOffsetSimple(i);
+                long expected = sliced.GetOffset(i);
+                long actual = sliced.GetOffsetSimple(i);
                 actual.Should().Be(expected);
             }
         }
@@ -253,8 +253,8 @@ namespace NumSharp.UnitTest
             // Values: 1, 4, 7, 10 (column 1 of each row)
             for (int i = 0; i < 4; i++)
             {
-                int expected = sliced.GetOffset(i);
-                int actual = sliced.GetOffsetSimple(i);
+                long expected = sliced.GetOffset(i);
+                long actual = sliced.GetOffsetSimple(i);
                 actual.Should().Be(expected);
             }
         }

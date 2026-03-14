@@ -61,7 +61,7 @@ namespace NumSharp
         {
             // TODO: NumPy 2.x promotes int32 to int64 for scalar integer values (NEP50)
             // Keeping original type for now to avoid breaking existing tests
-            return new NDArray(new UnmanagedStorage(ArraySlice.Allocate(fill_value.GetType(), shape.size, fill_value), shape));
+            return new NDArray(new UnmanagedStorage(ArraySlice.Allocate(fill_value.GetType(), (int)shape.size, fill_value), shape));
         }
 
 
@@ -116,7 +116,7 @@ namespace NumSharp
             if (typeCode == NPTypeCode.Empty)
                 throw new ArgumentNullException(nameof(typeCode));
 
-            return new NDArray(new UnmanagedStorage(ArraySlice.Allocate(typeCode, shape.size, Converts.ChangeType(fill_value, (TypeCode)typeCode)), shape));
+            return new NDArray(new UnmanagedStorage(ArraySlice.Allocate(typeCode.AsType(), (int)shape.size, Converts.ChangeType(fill_value, (TypeCode)typeCode)), shape));
         }
     }
 }

@@ -74,9 +74,9 @@ namespace NumSharp.Backends
 
             // Classify execution path using strides
             ExecutionPath path;
-            fixed (int* lhsStrides = leftShape.strides)
-            fixed (int* rhsStrides = rightShape.strides)
-            fixed (int* shape = resultShape.dimensions)
+            fixed (long* lhsStrides = leftShape.strides)
+            fixed (long* rhsStrides = rightShape.strides)
+            fixed (long* shape = resultShape.dimensions)
             {
                 path = ClassifyPath(lhsStrides, rhsStrides, shape, resultShape.NDim, resultType);
             }
@@ -187,7 +187,7 @@ namespace NumSharp.Backends
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static unsafe ExecutionPath ClassifyPath(
-            int* lhsStrides, int* rhsStrides, int* shape, int ndim, NPTypeCode resultType)
+            long* lhsStrides, long* rhsStrides, long* shape, int ndim, NPTypeCode resultType)
         {
             if (ndim == 0)
                 return ExecutionPath.SimdFull;
@@ -209,8 +209,8 @@ namespace NumSharp.Backends
                 return ExecutionPath.SimdScalarLeft;
 
             // Check for inner-contiguous (chunk-able)
-            int lhsInner = lhsStrides[ndim - 1];
-            int rhsInner = rhsStrides[ndim - 1];
+            long lhsInner = lhsStrides[ndim - 1];
+            long rhsInner = rhsStrides[ndim - 1];
             if ((lhsInner == 1 || lhsInner == 0) && (rhsInner == 1 || rhsInner == 0))
                 return ExecutionPath.SimdChunk;
 
@@ -235,9 +235,9 @@ namespace NumSharp.Backends
             byte* lhsAddr = (byte*)lhs.Address + lhsShape.offset * lhsElemSize;
             byte* rhsAddr = (byte*)rhs.Address + rhsShape.offset * rhsElemSize;
 
-            fixed (int* lhsStrides = lhsShape.strides)
-            fixed (int* rhsStrides = rhsShape.strides)
-            fixed (int* shape = result.shape)
+            fixed (long* lhsStrides = lhsShape.strides)
+            fixed (long* rhsStrides = rhsShape.strides)
+            fixed (long* shape = result.shape)
             {
                 kernel(
                     (void*)lhsAddr,

@@ -230,7 +230,7 @@ namespace NumSharp
             if (nd.shape[0] != 1)
                 throw new ArgumentException($"ndarray has more than one picture in it ({nd.shape[0]}) based on the first dimension.");
 
-            var bbp = nd.shape[3]; //bytes per pixel.
+            var bbp = (int)nd.shape[3]; //bytes per pixel.
             if (bbp != extractFormatNumber())
                 throw new ArgumentException($"Given PixelFormat: {format} does not match the number of bytes per pixel in the 4th dimension of given ndarray.");
 
@@ -284,7 +284,7 @@ namespace NumSharp
                             break;
                     }
 
-                    return (int)bbp;
+                    return bbp;
                 }
 
                 return format.ToBytesPerPixel();
@@ -307,10 +307,8 @@ namespace NumSharp
             if (nd.shape[0] != 1)
                 throw new ArgumentException($"ndarray has more than one picture in it ({nd.shape[0]}) based on the first dimension.");
 
-            var height = nd.shape[1];
-            var width = nd.shape[2];
-            
-            //TODO: if bigger than int.maxvalue then throw execption about bitmap supporting only up to int.maxvalue.
+            var height = (int)nd.shape[1];
+            var width = (int)nd.shape[2];
 
             return ToBitmap(nd, width, height, format);
         }

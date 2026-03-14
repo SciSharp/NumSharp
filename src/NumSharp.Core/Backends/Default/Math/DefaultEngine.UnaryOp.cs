@@ -153,8 +153,8 @@ namespace NumSharp.Backends
             // Calculate base address accounting for shape offset (for sliced views)
             byte* inputAddr = (byte*)input.Address + inputShape.offset * inputElemSize;
 
-            fixed (int* strides = inputShape.strides)
-            fixed (int* shape = result.shape)
+            fixed (long* strides = inputShape.strides)
+            fixed (long* shape = result.shape)
             {
                 kernel(
                     (void*)inputAddr,

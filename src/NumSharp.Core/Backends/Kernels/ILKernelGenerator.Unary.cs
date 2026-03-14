@@ -163,15 +163,15 @@ namespace NumSharp.Backends.Kernels
         private static UnaryKernel GenerateUnaryKernel(UnaryKernelKey key)
         {
             // UnaryKernel signature:
-            // void(void* input, void* output, int* strides, int* shape, int ndim, int totalSize)
+            // void(void* input, void* output, long* strides, long* shape, int ndim, long totalSize)
             var dm = new DynamicMethod(
                 name: $"Unary_{key}",
                 returnType: typeof(void),
                 parameterTypes: new[]
                 {
                     typeof(void*), typeof(void*),
-                    typeof(int*), typeof(int*),
-                    typeof(int), typeof(int)
+                    typeof(long*), typeof(long*),
+                    typeof(int), typeof(long)
                 },
                 owner: typeof(ILKernelGenerator),
                 skipVisibility: true
@@ -255,9 +255,9 @@ namespace NumSharp.Backends.Kernels
             int unrollFactor = 4;
             int unrollStep = vectorCount * unrollFactor;
 
-            var locI = il.DeclareLocal(typeof(int)); // loop counter
-            var locUnrollEnd = il.DeclareLocal(typeof(int)); // totalSize - unrollStep
-            var locVectorEnd = il.DeclareLocal(typeof(int)); // totalSize - vectorCount
+            var locI = il.DeclareLocal(typeof(long)); // loop counter
+            var locUnrollEnd = il.DeclareLocal(typeof(long)); // totalSize - unrollStep
+            var locVectorEnd = il.DeclareLocal(typeof(long)); // totalSize - vectorCount
 
             var lblUnrollLoop = il.DefineLabel();
             var lblUnrollLoopEnd = il.DefineLabel();
@@ -429,9 +429,9 @@ namespace NumSharp.Backends.Kernels
         {
             // Args: void* input (0), void* output (1),
             //       int* strides (2), int* shape (3),
-            //       int ndim (4), int totalSize (5)
+            //       int ndim (4), long totalSize (5)
 
-            var locI = il.DeclareLocal(typeof(int)); // loop counter
+            var locI = il.DeclareLocal(typeof(long)); // loop counter
 
             var lblLoop = il.DefineLabel();
             var lblLoopEnd = il.DefineLabel();
@@ -500,14 +500,14 @@ namespace NumSharp.Backends.Kernels
             int inputSize, int outputSize)
         {
             // Args: void* input (0), void* output (1),
-            //       int* strides (2), int* shape (3),
-            //       int ndim (4), int totalSize (5)
+            //       long* strides (2), long* shape (3),
+            //       int ndim (4), long totalSize (5)
 
-            var locI = il.DeclareLocal(typeof(int)); // linear index
+            var locI = il.DeclareLocal(typeof(long)); // linear index
             var locD = il.DeclareLocal(typeof(int)); // dimension counter
-            var locInputOffset = il.DeclareLocal(typeof(int)); // input offset
-            var locCoord = il.DeclareLocal(typeof(int)); // current coordinate
-            var locIdx = il.DeclareLocal(typeof(int)); // temp for coordinate calculation
+            var locInputOffset = il.DeclareLocal(typeof(long)); // input offset
+            var locCoord = il.DeclareLocal(typeof(long)); // current coordinate (long for int64 shapes)
+            var locIdx = il.DeclareLocal(typeof(long)); // temp for coordinate calculation (long for int64 shapes)
 
             var lblLoop = il.DefineLabel();
             var lblLoopEnd = il.DefineLabel();
@@ -516,6 +516,7 @@ namespace NumSharp.Backends.Kernels
 
             // i = 0
             il.Emit(OpCodes.Ldc_I4_0);
+            il.Emit(OpCodes.Conv_I8);
             il.Emit(OpCodes.Stloc, locI);
 
             // Main loop
@@ -529,6 +530,7 @@ namespace NumSharp.Backends.Kernels
             // Calculate inputOffset from linear index
             // inputOffset = 0
             il.Emit(OpCodes.Ldc_I4_0);
+            il.Emit(OpCodes.Conv_I8);
             il.Emit(OpCodes.Stloc, locInputOffset);
 
             // idx = i (for coordinate calculation)
@@ -554,10 +556,10 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Ldarg_3); // shape
             il.Emit(OpCodes.Ldloc, locD);
             il.Emit(OpCodes.Conv_I);
-            il.Emit(OpCodes.Ldc_I4_4); // sizeof(int)
+            il.Emit(OpCodes.Ldc_I4_8); // sizeof(long)
             il.Emit(OpCodes.Mul);
             il.Emit(OpCodes.Add);
-            il.Emit(OpCodes.Ldind_I4);
+            il.Emit(OpCodes.Ldind_I8);
             il.Emit(OpCodes.Rem);
             il.Emit(OpCodes.Stloc, locCoord);
 
@@ -566,10 +568,10 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Ldarg_3); // shape
             il.Emit(OpCodes.Ldloc, locD);
             il.Emit(OpCodes.Conv_I);
-            il.Emit(OpCodes.Ldc_I4_4);
+            il.Emit(OpCodes.Ldc_I4_8);
             il.Emit(OpCodes.Mul);
             il.Emit(OpCodes.Add);
-            il.Emit(OpCodes.Ldind_I4);
+            il.Emit(OpCodes.Ldind_I8);
             il.Emit(OpCodes.Div);
             il.Emit(OpCodes.Stloc, locIdx);
 
@@ -579,10 +581,10 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Ldarg_2); // strides
             il.Emit(OpCodes.Ldloc, locD);
             il.Emit(OpCodes.Conv_I);
-            il.Emit(OpCodes.Ldc_I4_4);
+            il.Emit(OpCodes.Ldc_I4_8);
             il.Emit(OpCodes.Mul);
             il.Emit(OpCodes.Add);
-            il.Emit(OpCodes.Ldind_I4);
+            il.Emit(OpCodes.Ldind_I8);
             il.Emit(OpCodes.Mul);
             il.Emit(OpCodes.Add);
             il.Emit(OpCodes.Stloc, locInputOffset);

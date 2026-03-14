@@ -8,9 +8,9 @@ namespace NumSharp.Utilities
         public delegate void EndCallbackHandler(ref ValueCoordinatesIncrementor incr);
         private readonly EndCallbackHandler endCallback;
         private readonly long[] dimensions;
-        private readonly long resetto;
+        private readonly int resetto;
         public readonly long[] Index;
-        private long subcursor;
+        private int subcursor;
 
         /// <summary>Initializes a new instance of the <see cref="T:System.Object"></see> class.</summary>
         public ValueCoordinatesIncrementor(ref Shape shape)
@@ -18,7 +18,7 @@ namespace NumSharp.Utilities
             if (shape.IsEmpty || shape.size == 0)
                 throw new InvalidOperationException("Can't construct ValueCoordinatesIncrementor with an empty shape.");
 
-            dimensions = shape.IsScalar ? new[] {1L} : shape.dimensions;
+            dimensions = shape.IsScalar ? new long[] {1} : shape.dimensions;
             Index = new long[dimensions.Length];
             resetto = subcursor = dimensions.Length - 1;
             endCallback = null;
@@ -29,10 +29,6 @@ namespace NumSharp.Utilities
             this.endCallback = endCallback;
         }
 
-        public ValueCoordinatesIncrementor(int[] dims) : this(Shape.ComputeLongShape(dims))
-        {
-        }
-        
         public ValueCoordinatesIncrementor(long[] dims)
         {
             if (dims == null)
@@ -45,11 +41,6 @@ namespace NumSharp.Utilities
             Index = new long[dims.Length];
             resetto = subcursor = dimensions.Length - 1;
             endCallback = null;
-        }
-
-        public ValueCoordinatesIncrementor(int[] dims, EndCallbackHandler endCallback) : this(dims)
-        {
-            this.endCallback = endCallback;
         }
 
         public ValueCoordinatesIncrementor(long[] dims, EndCallbackHandler endCallback) : this(dims)
@@ -100,9 +91,9 @@ namespace NumSharp.Utilities
     public struct ValueCoordinatesIncrementorAutoResetting
     {
         private readonly long[] dimensions;
-        private readonly long resetto;
+        private readonly int resetto;
         public readonly long[] Index;
-        private long subcursor;
+        private int subcursor;
 
         /// <summary>Initializes a new instance of the <see cref="T:System.Object"></see> class.</summary>
         public ValueCoordinatesIncrementorAutoResetting(ref Shape shape)

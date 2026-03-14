@@ -29,7 +29,7 @@ namespace NumSharp
             {
                 Debug.Assert(arr.typecode == NPTypeCode.Char);
                 if (arr.size > int.MaxValue)
-                    throw new InvalidOperationException("Array size exceeds maximum .NET string length.");
+                    throw new InvalidOperationException("String size exceeds int.MaxValue.");
                 return new string((char*)arr.Address, 0, (int)arr.size);
             }
         }
@@ -67,36 +67,24 @@ namespace NumSharp
         /// <param name="indices"></param>
         /// <returns></returns>
         /// <remarks>Performs a copy due to String .net-framework limitations.</remarks>
-        public string GetString(params int[] indices)
-        {
-            return GetString(NumSharp.Shape.ComputeLongShape(indices));
-        }
-
-        /// <summary>
-        ///     Get a string out of a vector of chars.
-        /// </summary>
-        /// <param name="indices"></param>
-        /// <returns></returns>
-        /// <remarks>Performs a copy due to String .net-framework limitations.</remarks>
         public string GetString(params long[] indices)
         {
             unsafe
             {
                 if (Shape.dimensions.Length - 1 != indices.Length)
                     throw new ArgumentOutOfRangeException(nameof(indices), "GetString(long[]) can only accept coordinates that point to a vector of chars.");
-                
+
                 Debug.Assert(typecode == NPTypeCode.Char);
 
                 UnmanagedStorage src = Storage.GetData(indices);
                 Debug.Assert(src.Shape.NDim == 1);
 
-                if (src.Count > int.MaxValue)
-                    throw new ArgumentOutOfRangeException(nameof(indices), "The length of the string exceeds the maximum allowed length for a .NET string.");
-
                 if (!Shape.IsContiguous)
                 {
                     //this works faster than cloning.
-                    var ret = new string('\0', (int)src.Count); //We downcast to int because C# doesn't support long string.
+                    if (src.Count > int.MaxValue)
+                        throw new InvalidOperationException("String size exceeds int.MaxValue.");
+                    var ret = new string('\0', (int)src.Count);
                     fixed (char* retChars = ret)
                     {
                         var dst = new UnmanagedStorage(new ArraySlice<char>(new UnmanagedMemoryBlock<char>(retChars, ret.Length)), src.Shape.Clean());
@@ -107,13 +95,10 @@ namespace NumSharp
                 }
 
                 //new string always performs a copy, there is no need to keep reference to arr's unmanaged storage.
+                if (src.Count > int.MaxValue)
+                    throw new InvalidOperationException("String size exceeds int.MaxValue.");
                 return new string((char*)src.Address, 0, (int)src.Count);
             }
-        }
-
-        public void SetString(string value, params int[] indices)
-        {
-            SetString(value, Shape.ComputeLongShape(indices));
         }
 
         public void SetString(string value, params long[] indices)
@@ -126,7 +111,7 @@ namespace NumSharp
                 throw new ArgumentException("Value cannot be null or empty.", nameof(value));
 
             if (Shape.dimensions.Length - 1 != indices.Length)
-                throw new ArgumentOutOfRangeException(nameof(indices), "SetString(string, int[] indices) can only accept coordinates that point to a vector of chars.");
+                throw new ArgumentOutOfRangeException(nameof(indices), "SetString(string, long[] indices) can only accept coordinates that point to a vector of chars.");
 
             unsafe
             {

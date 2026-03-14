@@ -181,7 +181,7 @@ namespace NumSharp.Backends.Kernels
             var dm = new DynamicMethod(
                 name: $"IL_Contiguous_{op}_{typeof(T).Name}",
                 returnType: typeof(void),
-                parameterTypes: new[] { typeof(T*), typeof(T*), typeof(T*), typeof(int) },
+                parameterTypes: new[] { typeof(T*), typeof(T*), typeof(T*), typeof(long) },
                 owner: typeof(ILKernelGenerator),
                 skipVisibility: true
             );
@@ -192,19 +192,19 @@ namespace NumSharp.Backends.Kernels
             bool isScalarOnly = op == BinaryOp.Power || op == BinaryOp.FloorDivide;
 
             // Declare locals
-            var locI = il.DeclareLocal(typeof(int));           // loop counter
+            var locI = il.DeclareLocal(typeof(long));           // loop counter
 
             int elementSize = Unsafe.SizeOf<T>();
 
             // i = 0
-            il.Emit(OpCodes.Ldc_I4_0);
+            il.Emit(OpCodes.Ldc_I8, 0L);
             il.Emit(OpCodes.Stloc, locI);
 
             if (!isScalarOnly)
             {
                 // SIMD-capable operations: generate 4x unrolled SIMD loop + remainder + tail loop
-                var locVectorEnd = il.DeclareLocal(typeof(int));   // count - vectorCount (for remainder loop)
-                var locUnrollEnd = il.DeclareLocal(typeof(int));   // count - vectorCount*4 (for 4x unrolled loop)
+                var locVectorEnd = il.DeclareLocal(typeof(long));   // count - vectorCount (for remainder loop)
+                var locUnrollEnd = il.DeclareLocal(typeof(long));   // count - vectorCount*4 (for 4x unrolled loop)
 
                 // Define labels
                 var lblUnrollLoop = il.DefineLabel();
@@ -218,14 +218,14 @@ namespace NumSharp.Backends.Kernels
                 int unrollStep = vectorCount * 4;
 
                 // vectorEnd = count - vectorCount (for remainder loop)
-                il.Emit(OpCodes.Ldarg_3);                      // count
-                il.Emit(OpCodes.Ldc_I4, vectorCount);
+                il.Emit(OpCodes.Ldarg_3);                      // count (now long)
+                il.Emit(OpCodes.Ldc_I8, (long)vectorCount);
                 il.Emit(OpCodes.Sub);
                 il.Emit(OpCodes.Stloc, locVectorEnd);
 
                 // unrollEnd = count - vectorCount*4 (for 4x unrolled loop)
-                il.Emit(OpCodes.Ldarg_3);                      // count
-                il.Emit(OpCodes.Ldc_I4, unrollStep);
+                il.Emit(OpCodes.Ldarg_3);                      // count (now long)
+                il.Emit(OpCodes.Ldc_I8, (long)unrollStep);
                 il.Emit(OpCodes.Sub);
                 il.Emit(OpCodes.Stloc, locUnrollEnd);
 
@@ -247,7 +247,7 @@ namespace NumSharp.Backends.Kernels
                     il.Emit(OpCodes.Ldloc, locI);
                     if (offset > 0)
                     {
-                        il.Emit(OpCodes.Ldc_I4, offset);
+                        il.Emit(OpCodes.Ldc_I8, (long)offset);
                         il.Emit(OpCodes.Add);
                     }
                     il.Emit(OpCodes.Conv_I);
@@ -261,7 +261,7 @@ namespace NumSharp.Backends.Kernels
                     il.Emit(OpCodes.Ldloc, locI);
                     if (offset > 0)
                     {
-                        il.Emit(OpCodes.Ldc_I4, offset);
+                        il.Emit(OpCodes.Ldc_I8, (long)offset);
                         il.Emit(OpCodes.Add);
                     }
                     il.Emit(OpCodes.Conv_I);
@@ -278,7 +278,7 @@ namespace NumSharp.Backends.Kernels
                     il.Emit(OpCodes.Ldloc, locI);
                     if (offset > 0)
                     {
-                        il.Emit(OpCodes.Ldc_I4, offset);
+                        il.Emit(OpCodes.Ldc_I8, (long)offset);
                         il.Emit(OpCodes.Add);
                     }
                     il.Emit(OpCodes.Conv_I);
@@ -290,7 +290,7 @@ namespace NumSharp.Backends.Kernels
 
                 // i += vectorCount * 4
                 il.Emit(OpCodes.Ldloc, locI);
-                il.Emit(OpCodes.Ldc_I4, unrollStep);
+                il.Emit(OpCodes.Ldc_I8, (long)unrollStep);
                 il.Emit(OpCodes.Add);
                 il.Emit(OpCodes.Stloc, locI);
 
@@ -337,7 +337,7 @@ namespace NumSharp.Backends.Kernels
 
                 // i += vectorCount
                 il.Emit(OpCodes.Ldloc, locI);
-                il.Emit(OpCodes.Ldc_I4, vectorCount);
+                il.Emit(OpCodes.Ldc_I8, (long)vectorCount);
                 il.Emit(OpCodes.Add);
                 il.Emit(OpCodes.Stloc, locI);
 
@@ -349,7 +349,7 @@ namespace NumSharp.Backends.Kernels
 
                 // if (i >= count) goto TailLoopEnd
                 il.Emit(OpCodes.Ldloc, locI);
-                il.Emit(OpCodes.Ldarg_3);                      // count
+                il.Emit(OpCodes.Ldarg_3);                      // count (now long)
                 il.Emit(OpCodes.Bge, lblTailLoopEnd);
 
                 // result[i] = lhs[i] op rhs[i]
@@ -357,7 +357,7 @@ namespace NumSharp.Backends.Kernels
 
                 // i++
                 il.Emit(OpCodes.Ldloc, locI);
-                il.Emit(OpCodes.Ldc_I4_1);
+                il.Emit(OpCodes.Ldc_I8, 1L);
                 il.Emit(OpCodes.Add);
                 il.Emit(OpCodes.Stloc, locI);
 
@@ -374,7 +374,7 @@ namespace NumSharp.Backends.Kernels
 
                 // if (i >= count) goto LoopEnd
                 il.Emit(OpCodes.Ldloc, locI);
-                il.Emit(OpCodes.Ldarg_3);                      // count
+                il.Emit(OpCodes.Ldarg_3);                      // count (now long)
                 il.Emit(OpCodes.Bge, lblLoopEnd);
 
                 // result[i] = lhs[i] op rhs[i]
@@ -382,7 +382,7 @@ namespace NumSharp.Backends.Kernels
 
                 // i++
                 il.Emit(OpCodes.Ldloc, locI);
-                il.Emit(OpCodes.Ldc_I4_1);
+                il.Emit(OpCodes.Ldc_I8, 1L);
                 il.Emit(OpCodes.Add);
                 il.Emit(OpCodes.Stloc, locI);
 

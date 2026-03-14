@@ -177,8 +177,8 @@ namespace NumSharp.Backends.Kernels
         private static unsafe AxisReductionKernel CreateAxisReductionKernelWithConversion(AxisReductionKernelKey key)
         {
             // For rare combinations, use a runtime conversion approach via double
-            return (void* input, void* output, int* inputStrides, int* inputShape,
-                    int* outputStrides, int axis, int axisSize, int ndim, int outputSize) =>
+            return (void* input, void* output, long* inputStrides, long* inputShape,
+                    long* outputStrides, int axis, long axisSize, int ndim, long outputSize) =>
             {
                 AxisReductionWithConversionHelper(
                     input, output,
@@ -193,17 +193,17 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         private static unsafe void AxisReductionWithConversionHelper(
             void* input, void* output,
-            int* inputStrides, int* inputShape, int* outputStrides,
-            int axis, int axisSize, int ndim, int outputSize,
+            long* inputStrides, long* inputShape, long* outputStrides,
+            int axis, long axisSize, int ndim, long outputSize,
             NPTypeCode inputType, NPTypeCode accumType, ReductionOp op)
         {
-            int axisStride = inputStrides[axis];
+            long axisStride = inputStrides[axis];
             int inputElemSize = inputType.SizeOf();
             int outputElemSize = accumType.SizeOf();
 
             // Compute output dimension strides for coordinate calculation
             int outputNdim = ndim - 1;
-            Span<int> outputDimStrides = stackalloc int[outputNdim > 0 ? outputNdim : 1];
+            Span<long> outputDimStrides = stackalloc long[outputNdim > 0 ? outputNdim : 1];
             if (outputNdim > 0)
             {
                 outputDimStrides[outputNdim - 1] = 1;
@@ -218,17 +218,17 @@ namespace NumSharp.Backends.Kernels
             byte* inputBytes = (byte*)input;
             byte* outputBytes = (byte*)output;
 
-            for (int outIdx = 0; outIdx < outputSize; outIdx++)
+            for (long outIdx = 0; outIdx < outputSize; outIdx++)
             {
                 // Convert linear output index to coordinates and compute input base offset
-                int remaining = outIdx;
-                int inputBaseOffset = 0;
-                int outputOffset = 0;
+                long remaining = outIdx;
+                long inputBaseOffset = 0;
+                long outputOffset = 0;
 
                 for (int d = 0; d < outputNdim; d++)
                 {
                     int inputDim = d >= axis ? d + 1 : d;
-                    int coord = remaining / outputDimStrides[d];
+                    long coord = remaining / outputDimStrides[d];
                     remaining = remaining % outputDimStrides[d];
                     inputBaseOffset += coord * inputStrides[inputDim];
                     outputOffset += coord * outputStrides[d];
@@ -246,7 +246,7 @@ namespace NumSharp.Backends.Kernels
 
                 for (int i = 0; i < axisSize; i++)
                 {
-                    int inputOffset = inputBaseOffset + i * axisStride;
+                    long inputOffset = inputBaseOffset + i * axisStride;
                     double val = ReadAsDouble(inputBytes + inputOffset * inputElemSize, inputType);
 
                     accum = op switch
@@ -321,8 +321,8 @@ namespace NumSharp.Backends.Kernels
             where TInput : unmanaged
             where TAccum : unmanaged
         {
-            return (void* input, void* output, int* inputStrides, int* inputShape,
-                    int* outputStrides, int axis, int axisSize, int ndim, int outputSize) =>
+            return (void* input, void* output, long* inputStrides, long* inputShape,
+                    long* outputStrides, int axis, long axisSize, int ndim, long outputSize) =>
             {
                 AxisReductionScalarHelper<TInput, TAccum>(
                     (TInput*)input, (TAccum*)output,
@@ -337,17 +337,17 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         internal static unsafe void AxisReductionScalarHelper<TInput, TAccum>(
             TInput* input, TAccum* output,
-            int* inputStrides, int* inputShape, int* outputStrides,
-            int axis, int axisSize, int ndim, int outputSize,
+            long* inputStrides, long* inputShape, long* outputStrides,
+            int axis, long axisSize, int ndim, long outputSize,
             ReductionOp op)
             where TInput : unmanaged
             where TAccum : unmanaged
         {
-            int axisStride = inputStrides[axis];
+            long axisStride = inputStrides[axis];
 
             // Compute output dimension strides for coordinate calculation
             int outputNdim = ndim - 1;
-            Span<int> outputDimStrides = stackalloc int[outputNdim > 0 ? outputNdim : 1];
+            Span<long> outputDimStrides = stackalloc long[outputNdim > 0 ? outputNdim : 1];
             if (outputNdim > 0)
             {
                 outputDimStrides[outputNdim - 1] = 1;
@@ -362,14 +362,14 @@ namespace NumSharp.Backends.Kernels
             for (int outIdx = 0; outIdx < outputSize; outIdx++)
             {
                 // Convert linear output index to coordinates and compute offsets
-                int remaining = outIdx;
-                int inputBaseOffset = 0;
-                int outputOffset = 0;
+                long remaining = outIdx;
+                long inputBaseOffset = 0;
+                long outputOffset = 0;
 
                 for (int d = 0; d < outputNdim; d++)
                 {
                     int inputDim = d >= axis ? d + 1 : d;
-                    int coord = remaining / outputDimStrides[d];
+                    long coord = remaining / outputDimStrides[d];
                     remaining = remaining % outputDimStrides[d];
                     inputBaseOffset += coord * inputStrides[inputDim];
                     outputOffset += coord * outputStrides[d];
@@ -419,7 +419,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Divide accumulator by count (for Mean).
         /// </summary>
-        private static TAccum DivideByCount<TAccum>(TAccum accum, int count) where TAccum : unmanaged
+        private static TAccum DivideByCount<TAccum>(TAccum accum, long count) where TAccum : unmanaged
         {
             double result = ConvertToDouble(accum) / count;
             return ConvertFromDouble<TAccum>(result);

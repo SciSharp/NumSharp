@@ -54,9 +54,9 @@ namespace NumSharp
         /// <param name="axis"></param>
         /// <returns></returns>
         [MethodImpl(Inline)]
-        protected internal static NDArray<int> GetIndicesFromSlice(int[] shape, Slice slice, int axis)
+        protected internal static NDArray<int> GetIndicesFromSlice(long[] shape, Slice slice, int axis)
         {
-            var dim = shape[axis];
+            var dim = (int)shape[axis];
             var slice_def = slice.ToSliceDef(dim); // this resolves negative slice indices
             return np.arange(slice_def.Start, slice_def.Start + slice_def.Step * slice_def.Count, slice.Step).MakeGeneric<int>();
         }
@@ -66,9 +66,9 @@ namespace NumSharp
         /// </summary>
         /// <param name="srcShape">The shape to get indice from</param>
         /// <param name="indices">The indices trying to index.</param>
-        protected static unsafe Func<int, int>[] PrepareIndexGetters(Shape srcShape, NDArray[] indices)
+        protected static unsafe Func<long, long>[] PrepareIndexGetters(Shape srcShape, NDArray[] indices)
         {
-            var indexGetters = new Func<int, int>[indices.Length];
+            var indexGetters = new Func<long, long>[indices.Length];
             for (int i = 0; i < indices.Length; i++)
             {
                 var idxs = indices[i];
@@ -88,7 +88,7 @@ namespace NumSharp
                     {
                         //we are basically flatten the shape.
                         var flatSrcShape = new Shape(srcShape.size);
-                        indexGetters[i] = flatSrcShape.GetOffset_1D;
+                        indexGetters[i] = idx => flatSrcShape.GetOffset_1D(idx);
                     }
                 }
                 else
@@ -106,10 +106,10 @@ namespace NumSharp
                     else
                     {
                         idxs = idxs.flat;
-                        Func<int, int> offset = idxs.Shape.GetOffset_1D;
+                        var idxShape = idxs.Shape;
                         indexGetters[i] = idx =>
                         {
-                            var val = idxAddr[offset(idx)];
+                            var val = idxAddr[idxShape.GetOffset_1D(idx)];
                             if (val < 0)
                                 return dimensionSize + val;
                             return val;

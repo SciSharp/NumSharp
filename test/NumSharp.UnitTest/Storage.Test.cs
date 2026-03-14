@@ -122,18 +122,18 @@ namespace NumSharp.UnitTest
         {
             var strg2DCpy = (UnmanagedStorage)strg2D.Clone();
 
-            Assert.IsTrue(Enumerable.SequenceEqual(strg2DCpy.Shape.Dimensions, new int[] {3, 3}));
+            Assert.IsTrue(Enumerable.SequenceEqual(strg2DCpy.Shape.Dimensions, new long[] {3, 3}));
             Assert.IsTrue(Enumerable.SequenceEqual(strg2DCpy.GetData<long>(), new long[] {0, 3, 6, 1, 4, 7, 2, 5, 8}));
 
-            Assert.IsTrue(Enumerable.SequenceEqual(strg2DCpy.Shape.Dimensions, new int[] {3, 3}));
+            Assert.IsTrue(Enumerable.SequenceEqual(strg2DCpy.Shape.Dimensions, new long[] {3, 3}));
             Assert.IsTrue(Enumerable.SequenceEqual(strg2DCpy.GetData<long>(), strg2D.GetData<long>()));
 
             strg2DCpy = (UnmanagedStorage)strg2DNonFull.Clone();
 
-            Assert.IsTrue(Enumerable.SequenceEqual(strg2DCpy.Shape.Dimensions, new int[] {5, 2}));
+            Assert.IsTrue(Enumerable.SequenceEqual(strg2DCpy.Shape.Dimensions, new long[] {5, 2}));
             Assert.IsTrue(Enumerable.SequenceEqual(strg2DCpy.GetData<long>(), new long[] {0, 5, 1, 6, 2, 7, 3, 8, 4, 9}));
 
-            Assert.IsTrue(Enumerable.SequenceEqual(strg2DCpy.Shape.Dimensions, new int[] {5, 2}));
+            Assert.IsTrue(Enumerable.SequenceEqual(strg2DCpy.Shape.Dimensions, new long[] {5, 2}));
             Assert.IsTrue(Enumerable.SequenceEqual(strg2DCpy.GetData<long>(), strg2DNonFull.GetData<long>()));
 
             strg2DCpy = new UnmanagedStorage(typeof(long));

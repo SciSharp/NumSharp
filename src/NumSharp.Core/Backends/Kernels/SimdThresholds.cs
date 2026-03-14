@@ -57,7 +57,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Returns true if the array size is above the SIMD threshold for the given type.
         /// </summary>
-        public static bool ShouldUseSIMD(NPTypeCode typeCode, int size)
+        public static bool ShouldUseSIMD(NPTypeCode typeCode, long size)
         {
             return size >= GetThreshold(typeCode);
         }

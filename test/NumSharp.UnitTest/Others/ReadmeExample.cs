@@ -3,8 +3,8 @@
     public class LinearRegression {
         private float alpha;
         private int n_iter;
-        private int n_samples;
-        private int n_features;
+        private long n_samples;
+        private long n_features;
         private NDArray X;
         private NDArray y;
         private NDArray @params;

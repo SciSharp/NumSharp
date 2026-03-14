@@ -70,8 +70,8 @@ namespace NumSharp.Backends
                 var kernel = ILKernelGenerator.TryGetCumulativeAxisKernel(key);
                 if (kernel != null)
                 {
-                    fixed (int* inputStrides = arr.strides)
-                    fixed (int* shapePtr = arr.shape)
+                    fixed (long* inputStrides = arr.strides)
+                    fixed (long* shapePtr = arr.shape)
                     {
                         kernel((void*)arr.Address, (void*)ret.Address, inputStrides, shapePtr, axis, arr.ndim, arr.size);
                     }
@@ -140,8 +140,8 @@ namespace NumSharp.Backends
                 var kernel = ILKernelGenerator.TryGetCumulativeKernel(key);
                 if (kernel != null)
                 {
-                    fixed (int* strides = arr.strides)
-                    fixed (int* shape = arr.shape)
+                    fixed (long* strides = arr.strides)
+                    fixed (long* shape = arr.shape)
                     {
                         kernel((void*)arr.Address, (void*)ret.Address, strides, shape, arr.ndim, arr.size);
                     }

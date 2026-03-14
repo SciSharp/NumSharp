@@ -128,7 +128,7 @@ namespace NumSharp.Backends.Kernels
         /// SIMD helper for Any reduction with early-exit.
         /// Returns true if ANY element is non-zero.
         /// </summary>
-        internal static unsafe bool AnySimdHelper<T>(void* input, int totalSize) where T : unmanaged
+        internal static unsafe bool AnySimdHelper<T>(void* input, long totalSize) where T : unmanaged
         {
             if (totalSize == 0)
                 return false; // NumPy: any([]) == False
@@ -138,10 +138,10 @@ namespace NumSharp.Backends.Kernels
             if (Vector256.IsHardwareAccelerated && Vector256<T>.IsSupported && totalSize >= Vector256<T>.Count)
             {
                 int vectorCount = Vector256<T>.Count;
-                int vectorEnd = totalSize - vectorCount;
+                long vectorEnd = totalSize - vectorCount;
                 var zero = Vector256<T>.Zero;
                 uint allZeroMask = (1u << vectorCount) - 1;
-                int i = 0;
+                long i = 0;
 
                 // SIMD loop with early exit
                 for (; i <= vectorEnd; i += vectorCount)
@@ -167,10 +167,10 @@ namespace NumSharp.Backends.Kernels
             else if (Vector128.IsHardwareAccelerated && Vector128<T>.IsSupported && totalSize >= Vector128<T>.Count)
             {
                 int vectorCount = Vector128<T>.Count;
-                int vectorEnd = totalSize - vectorCount;
+                long vectorEnd = totalSize - vectorCount;
                 var zero = Vector128<T>.Zero;
                 uint allZeroMask = (1u << vectorCount) - 1;
-                int i = 0;
+                long i = 0;
 
                 for (; i <= vectorEnd; i += vectorCount)
                 {
@@ -193,7 +193,7 @@ namespace NumSharp.Backends.Kernels
             else
             {
                 // Scalar fallback
-                for (int i = 0; i < totalSize; i++)
+                for (long i = 0; i < totalSize; i++)
                 {
                     if (!System.Collections.Generic.EqualityComparer<T>.Default.Equals(src[i], default))
                         return true;

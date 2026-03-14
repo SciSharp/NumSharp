@@ -93,8 +93,8 @@ namespace NumSharp.Backends
             // Calculate base address accounting for shape offset (for sliced views)
             byte* inputAddr = (byte*)input.Address + inputShape.offset * inputElemSize;
 
-            fixed (int* strides = inputShape.strides)
-            fixed (int* shape = inputShape.dimensions)
+            fixed (long* strides = inputShape.strides)
+            fixed (long* shape = inputShape.dimensions)
             {
                 return kernel(
                     (void*)inputAddr,
@@ -297,7 +297,7 @@ namespace NumSharp.Backends
 
             // Mean always computes in double for precision
             var retType = typeCode ?? NPTypeCode.Double;
-            int count = arr.size;
+            long count = arr.size;
 
             // Sum in accumulating type, then divide
             var sumType = arr.GetTypeCode.GetAccumulatingType();
@@ -364,7 +364,7 @@ namespace NumSharp.Backends
                 return null;
 
             // Compute output shape (remove the axis dimension)
-            var outputDims = new int[arr.ndim - 1];
+            var outputDims = new long[arr.ndim - 1];
             for (int d = 0, od = 0; d < arr.ndim; d++)
             {
                 if (d != axis)
@@ -376,8 +376,8 @@ namespace NumSharp.Backends
             var output = new NDArray(outputTypeCode, outputShape, false);
 
             // Execute the kernel
-            int axisSize = inputShape.dimensions[axis];
-            int outputSize = output.size > 0 ? output.size : 1;
+            long axisSize = inputShape.dimensions[axis];
+            long outputSize = output.size > 0 ? output.size : 1;
 
             // Get element size
             int elemSize = arr.dtypesize;
@@ -385,9 +385,9 @@ namespace NumSharp.Backends
             // Calculate base address accounting for shape offset (for sliced views)
             byte* inputAddr = (byte*)arr.Address + inputShape.offset * elemSize;
 
-            fixed (int* inputStrides = inputShape.strides)
-            fixed (int* inputDims = inputShape.dimensions)
-            fixed (int* outputStrides = output.Shape.strides)
+            fixed (long* inputStrides = inputShape.strides)
+            fixed (long* inputDims = inputShape.dimensions)
+            fixed (long* outputStrides = output.Shape.strides)
             {
                 kernel(
                     (void*)inputAddr,

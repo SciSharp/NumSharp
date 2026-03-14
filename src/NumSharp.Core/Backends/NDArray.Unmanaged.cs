@@ -88,13 +88,13 @@ namespace NumSharp
             ///     How many bytes are stored in this memory block.
             /// </summary>
             /// <remarks>Calculated by <see cref="Count"/>*<see cref="ItemLength"/></remarks>
-            public int BytesLength => ((IConvertible)Array.BytesLength).ToInt32(CultureInfo.InvariantCulture);
+            public long BytesLength => Array.BytesLength;
 
             /// <summary>
             ///     How many items are stored in <see cref="Address"/>.
             /// </summary>
             /// <remarks>Not to confuse with <see cref="BytesLength"/></remarks>
-            public int Count => (int) Array.Count;
+            public long Count => Array.Count;
 
             /// <summary>
             ///     Fills all indexes with <paramref name="value"/>.
@@ -105,12 +105,12 @@ namespace NumSharp
                 Array.Fill(value);
             }
 
-            public T GetIndex<T>(int index) where T : unmanaged
+            public T GetIndex<T>(long index) where T : unmanaged
             {
                 return Array.GetIndex<T>(index);
             }
 
-            public object GetIndex(int index)
+            public object GetIndex(long index)
             {
                 return Array.GetIndex(index);
             }

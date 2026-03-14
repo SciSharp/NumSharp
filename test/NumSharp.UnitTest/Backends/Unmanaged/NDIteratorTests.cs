@@ -148,7 +148,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             for (int i = 0; i < nd.size; i++, sh.HasNext())
                 Console.WriteLine(acc += sh.MoveNext());
 
-            acc.Should().Be(nd.size);
+            acc.Should().Be((int)nd.size);
         }
 
         [Test]
@@ -164,7 +164,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             for (int i = 0; i < nd.size; i++, sh.HasNext())
                 Console.WriteLine(acc += sh.MoveNext());
 
-            acc.Should().Be(nd.size);
+            acc.Should().Be((int)nd.size);
         }
 
         [Test]

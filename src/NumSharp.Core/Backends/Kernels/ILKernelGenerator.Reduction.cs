@@ -82,13 +82,13 @@ namespace NumSharp.Backends.Kernels
             where TResult : unmanaged
         {
             // TypedElementReductionKernel<TResult> signature:
-            // TResult(void* input, int* strides, int* shape, int ndim, int totalSize)
+            // TResult(void* input, long* strides, long* shape, int ndim, long totalSize)
             var dm = new DynamicMethod(
                 name: $"ElemReduce_{key}",
                 returnType: typeof(TResult),
                 parameterTypes: new[]
                 {
-                    typeof(void*), typeof(int*), typeof(int*), typeof(int), typeof(int)
+                    typeof(void*), typeof(long*), typeof(long*), typeof(int), typeof(long)
                 },
                 owner: typeof(ILKernelGenerator),
                 skipVisibility: true
@@ -177,9 +177,9 @@ namespace NumSharp.Backends.Kernels
             var clrType = GetClrType(key.InputType);
             var vectorType = GetVectorType(clrType);
 
-            var locI = il.DeclareLocal(typeof(int)); // loop counter
-            var locUnrollEnd = il.DeclareLocal(typeof(int)); // totalSize - unrollStep
-            var locVectorEnd = il.DeclareLocal(typeof(int)); // totalSize - vectorCount
+            var locI = il.DeclareLocal(typeof(long)); // loop counter
+            var locUnrollEnd = il.DeclareLocal(typeof(long)); // totalSize - unrollStep
+            var locVectorEnd = il.DeclareLocal(typeof(long)); // totalSize - vectorCount
             var locVecAccum0 = il.DeclareLocal(vectorType); // VECTOR accumulator 0
             var locVecAccum1 = il.DeclareLocal(vectorType); // VECTOR accumulator 1
             var locVecAccum2 = il.DeclareLocal(vectorType); // VECTOR accumulator 2
@@ -489,6 +489,7 @@ namespace NumSharp.Backends.Kernels
             // i++
             il.Emit(OpCodes.Ldloc, locI);
             il.Emit(OpCodes.Ldc_I4_1);
+            il.Emit(OpCodes.Conv_I8);
             il.Emit(OpCodes.Add);
             il.Emit(OpCodes.Stloc, locI);
 
@@ -513,13 +514,13 @@ namespace NumSharp.Backends.Kernels
         {
             // Args: void* input (0), int* strides (1), int* shape (2), int ndim (3), int totalSize (4)
 
-            var locI = il.DeclareLocal(typeof(int)); // linear index
+            var locI = il.DeclareLocal(typeof(long)); // linear index
             var locD = il.DeclareLocal(typeof(int)); // dimension counter
-            var locOffset = il.DeclareLocal(typeof(int)); // input offset
-            var locCoord = il.DeclareLocal(typeof(int)); // current coordinate
-            var locIdx = il.DeclareLocal(typeof(int)); // temp for coordinate calculation
+            var locOffset = il.DeclareLocal(typeof(long)); // input offset
+            var locCoord = il.DeclareLocal(typeof(long)); // current coordinate (long for int64 shapes)
+            var locIdx = il.DeclareLocal(typeof(long)); // temp for coordinate calculation (long for int64 shapes)
             var locAccum = il.DeclareLocal(GetClrType(key.AccumulatorType)); // accumulator
-            var locArgIdx = il.DeclareLocal(typeof(int)); // index for ArgMax/ArgMin
+            var locArgIdx = il.DeclareLocal(typeof(long)); // index for ArgMax/ArgMin
 
             var lblLoop = il.DefineLabel();
             var lblLoopEnd = il.DefineLabel();
@@ -534,11 +535,13 @@ namespace NumSharp.Backends.Kernels
             if (key.Op == ReductionOp.ArgMax || key.Op == ReductionOp.ArgMin)
             {
                 il.Emit(OpCodes.Ldc_I4_0);
+                il.Emit(OpCodes.Conv_I8);
                 il.Emit(OpCodes.Stloc, locArgIdx);
             }
 
             // i = 0
             il.Emit(OpCodes.Ldc_I4_0);
+            il.Emit(OpCodes.Conv_I8);
             il.Emit(OpCodes.Stloc, locI);
 
             // Main loop
@@ -551,6 +554,7 @@ namespace NumSharp.Backends.Kernels
 
             // Calculate offset from linear index
             il.Emit(OpCodes.Ldc_I4_0);
+            il.Emit(OpCodes.Conv_I8);
             il.Emit(OpCodes.Stloc, locOffset);
             il.Emit(OpCodes.Ldloc, locI);
             il.Emit(OpCodes.Stloc, locIdx);
@@ -573,10 +577,10 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Ldarg_2); // shape
             il.Emit(OpCodes.Ldloc, locD);
             il.Emit(OpCodes.Conv_I);
-            il.Emit(OpCodes.Ldc_I4_4);
+            il.Emit(OpCodes.Ldc_I4_8); // sizeof(long)
             il.Emit(OpCodes.Mul);
             il.Emit(OpCodes.Add);
-            il.Emit(OpCodes.Ldind_I4);
+            il.Emit(OpCodes.Ldind_I8);
             il.Emit(OpCodes.Rem);
             il.Emit(OpCodes.Stloc, locCoord);
 
@@ -585,10 +589,10 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Ldarg_2); // shape
             il.Emit(OpCodes.Ldloc, locD);
             il.Emit(OpCodes.Conv_I);
-            il.Emit(OpCodes.Ldc_I4_4);
+            il.Emit(OpCodes.Ldc_I4_8);
             il.Emit(OpCodes.Mul);
             il.Emit(OpCodes.Add);
-            il.Emit(OpCodes.Ldind_I4);
+            il.Emit(OpCodes.Ldind_I8);
             il.Emit(OpCodes.Div);
             il.Emit(OpCodes.Stloc, locIdx);
 
@@ -598,10 +602,10 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Ldarg_1); // strides
             il.Emit(OpCodes.Ldloc, locD);
             il.Emit(OpCodes.Conv_I);
-            il.Emit(OpCodes.Ldc_I4_4);
+            il.Emit(OpCodes.Ldc_I4_8);
             il.Emit(OpCodes.Mul);
             il.Emit(OpCodes.Add);
-            il.Emit(OpCodes.Ldind_I4);
+            il.Emit(OpCodes.Ldind_I8);
             il.Emit(OpCodes.Mul);
             il.Emit(OpCodes.Add);
             il.Emit(OpCodes.Stloc, locOffset);
@@ -640,16 +644,18 @@ namespace NumSharp.Backends.Kernels
             // i++
             il.Emit(OpCodes.Ldloc, locI);
             il.Emit(OpCodes.Ldc_I4_1);
+            il.Emit(OpCodes.Conv_I8);
             il.Emit(OpCodes.Add);
             il.Emit(OpCodes.Stloc, locI);
 
             il.Emit(OpCodes.Br, lblLoop);
             il.MarkLabel(lblLoopEnd);
 
-            // Return accumulator or index
+            // Return accumulator or index (ArgMax/ArgMin returns int32 per NumPy)
             if (key.Op == ReductionOp.ArgMax || key.Op == ReductionOp.ArgMin)
             {
                 il.Emit(OpCodes.Ldloc, locArgIdx);
+                il.Emit(OpCodes.Conv_I4); // Convert long index to int32 for NumPy compatibility
             }
             else
             {

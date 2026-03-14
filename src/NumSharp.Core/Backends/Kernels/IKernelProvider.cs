@@ -177,7 +177,7 @@ namespace NumSharp.Backends.Kernels
         /// <param name="flatIndices">List of flat indices.</param>
         /// <param name="shape">Shape of the array.</param>
         /// <returns>Array of NDArray&lt;int&gt;, one per dimension.</returns>
-        NumSharp.Generic.NDArray<long>[] ConvertFlatToCoordinates(System.Collections.Generic.List<long> flatIndices, long[] shape);
+        NumSharp.Generic.NDArray<long>[] ConvertFlatToCoordinates(System.Collections.Generic.List<long> flatIndices, int[] shape);
 
         /// <summary>
         /// Find indices of all non-zero elements in a strided (non-contiguous) array.
@@ -189,7 +189,7 @@ namespace NumSharp.Backends.Kernels
         /// <param name="strides">Array strides (in elements, not bytes).</param>
         /// <param name="offset">Base offset into storage.</param>
         /// <returns>Array of NDArray&lt;int&gt;, one per dimension containing indices of non-zero elements.</returns>
-        unsafe NumSharp.Generic.NDArray<long>[] FindNonZeroStrided<T>(T* data, long[] shape, long[] strides, long offset) where T : unmanaged;
+        unsafe NumSharp.Generic.NDArray<long>[] FindNonZeroStrided<T>(T* data, int[] shape, long[] strides, long offset) where T : unmanaged;
 
         /// <summary>
         /// Count the number of true values in a boolean array.
@@ -221,7 +221,7 @@ namespace NumSharp.Backends.Kernels
         /// <param name="size">Number of elements.</param>
         /// <param name="ddof">Delta degrees of freedom (0 for population, 1 for sample).</param>
         /// <returns>Variance as double.</returns>
-        unsafe double Variance<T>(T* data, int size, int ddof = 0) where T : unmanaged;
+        unsafe double Variance<T>(T* data, long size, int ddof = 0) where T : unmanaged;
 
         /// <summary>
         /// Compute standard deviation of a contiguous array.
@@ -232,7 +232,7 @@ namespace NumSharp.Backends.Kernels
         /// <param name="size">Number of elements.</param>
         /// <param name="ddof">Delta degrees of freedom (0 for population, 1 for sample).</param>
         /// <returns>Standard deviation as double.</returns>
-        unsafe double StandardDeviation<T>(T* data, int size, int ddof = 0) where T : unmanaged;
+        unsafe double StandardDeviation<T>(T* data, long size, int ddof = 0) where T : unmanaged;
 
         /// <summary>
         /// NaN-aware sum: sums all non-NaN values (NaN treated as 0).

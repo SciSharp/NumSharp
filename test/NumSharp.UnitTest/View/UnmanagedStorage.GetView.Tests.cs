@@ -175,7 +175,7 @@ namespace NumSharp.UnitTest.View
             AssertAreEqual(new int[] { 2, 8 }, view3.ToArray<int>());
             // all must see the same modifications, no matter if original or any view is modified
             // modify original
-            data.SetData(ArraySlice.FromArray(new int[] { 0, -1, -2, -3, -4, -5, -6, -7, -8, -9 }));
+            data.SetData(ArraySlice.FromArray(new int[] { 0, -1, -2, -3, -4, -5, -6, -7, -8, -9 }), new int[0]);
             var arr = view1.ToArray<int>();
             AssertAreEqual(new int[] { -1, -2, -3, -4, -5, -6, -7, -8, }, view1.ToArray<int>());
             AssertAreEqual(new int[] { -8, -6, -4, -2, }, view2.ToArray<int>());
@@ -321,7 +321,7 @@ namespace NumSharp.UnitTest.View
             AssertAreEqual(new int[] { 2, 8, 2, 8 }, view3.ToArray<int>());
             // all must see the same modifications, no matter if original or any view is modified
             // modify original
-            data.SetData(ArraySlice.FromArray(new int[] { 0, -1, -2, -3, -4, -5, -6, -7, -8, -9, 0, -1, -2, -3, -4, -5, -6, -7, -8, -9 }));
+            data.SetData(ArraySlice.FromArray(new int[] { 0, -1, -2, -3, -4, -5, -6, -7, -8, -9, 0, -1, -2, -3, -4, -5, -6, -7, -8, -9 }), new int[0]);
             AssertAreEqual(new int[] { -1, -2, -3, -4, -5, -6, -7, -8, -1, -2, -3, -4, -5, -6, -7, -8 }, view1.ToArray<int>());
             AssertAreEqual(new int[] { -8, -6, -4, -2, -8, -6, -4, -2 }, view2.ToArray<int>());
             AssertAreEqual(new int[] { -2, -8, -2, -8 }, view3.ToArray<int>());

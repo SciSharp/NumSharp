@@ -24,13 +24,13 @@ namespace NumSharp
             }
 
             // Example: If shape is 3x2x3 and we are soritng w.r.t axis = 2 required size is 3x2
-            var requiredSize = shape.Take(axis).Concat(shape.Skip(axis + 1)).ToArray();
+            var requiredSize = shape.Take(axis).Concat(shape.Skip(axis + 1)).Select(x => (int)x).ToArray();
 
             if (requiredSize.Length == 0)
             {
                 // NumPy argsort always returns int64 (long) indices
                 // Use NumPy-compatible comparison that puts NaN at the end
-                var sorted = Enumerable.Range(0, size)
+                var sorted = Enumerable.Range(0, (int)size)
                     .Select(i => new {Data = GetAtIndex<T>(i), Index = (long)i})
                     .OrderBy(item => item.Data, NumPyComparer<T>.Instance)
                     .Select(item => item.Index)
@@ -44,7 +44,7 @@ namespace NumSharp
             var accessingIndices = AccessorCreator(requiredSize, Enumerable.Empty<int>(), 0);
 
             // Append the previous indices the sorting accessors
-            var append = Enumerable.Range(0, shape[axis]);
+            var append = Enumerable.Range(0, (int)shape[axis]);
             var argSort = accessingIndices.Aggregate(Enumerable.Empty<SortedData>(), (allSortedData, seq) =>
             {
                 var sortMe = append.Select(value => Appendor(value, axis, seq));

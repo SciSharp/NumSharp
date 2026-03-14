@@ -193,9 +193,9 @@ namespace NumSharp.Backends
 
         #region Scalar Fallbacks for Non-SIMD Types (Decimal, Char)
 
-        private static unsafe void ClipDecimal(decimal* data, int size, decimal minVal, decimal maxVal)
+        private static unsafe void ClipDecimal(decimal* data, long size, decimal minVal, decimal maxVal)
         {
-            for (int i = 0; i < size; i++)
+            for (long i = 0; i < size; i++)
             {
                 var val = data[i];
                 if (val > maxVal) val = maxVal;
@@ -204,21 +204,21 @@ namespace NumSharp.Backends
             }
         }
 
-        private static unsafe void ClipMinDecimal(decimal* data, int size, decimal minVal)
+        private static unsafe void ClipMinDecimal(decimal* data, long size, decimal minVal)
         {
-            for (int i = 0; i < size; i++)
+            for (long i = 0; i < size; i++)
                 if (data[i] < minVal) data[i] = minVal;
         }
 
-        private static unsafe void ClipMaxDecimal(decimal* data, int size, decimal maxVal)
+        private static unsafe void ClipMaxDecimal(decimal* data, long size, decimal maxVal)
         {
-            for (int i = 0; i < size; i++)
+            for (long i = 0; i < size; i++)
                 if (data[i] > maxVal) data[i] = maxVal;
         }
 
-        private static unsafe void ClipChar(char* data, int size, char minVal, char maxVal)
+        private static unsafe void ClipChar(char* data, long size, char minVal, char maxVal)
         {
-            for (int i = 0; i < size; i++)
+            for (long i = 0; i < size; i++)
             {
                 var val = data[i];
                 if (val > maxVal) val = maxVal;
@@ -227,15 +227,15 @@ namespace NumSharp.Backends
             }
         }
 
-        private static unsafe void ClipMinChar(char* data, int size, char minVal)
+        private static unsafe void ClipMinChar(char* data, long size, char minVal)
         {
-            for (int i = 0; i < size; i++)
+            for (long i = 0; i < size; i++)
                 if (data[i] < minVal) data[i] = minVal;
         }
 
-        private static unsafe void ClipMaxChar(char* data, int size, char maxVal)
+        private static unsafe void ClipMaxChar(char* data, long size, char maxVal)
         {
-            for (int i = 0; i < size; i++)
+            for (long i = 0; i < size; i++)
                 if (data[i] > maxVal) data[i] = maxVal;
         }
 

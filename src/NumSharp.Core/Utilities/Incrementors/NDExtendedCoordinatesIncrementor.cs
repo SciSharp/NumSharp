@@ -9,9 +9,9 @@ namespace NumSharp.Utilities
         private readonly int _extendBy;
         private readonly int nonExtendedLength;
         private readonly long[] dimensions;
-        private readonly long resetto;
+        private readonly int resetto;
         public long[] Index;
-        private long subcursor;
+        private int subcursor;
         public bool ResetEntireArray { get; set; }
 
         /// <param name="extendBy">By how many items should <see cref="Index"/> be extended</param>

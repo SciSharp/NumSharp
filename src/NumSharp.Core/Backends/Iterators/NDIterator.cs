@@ -10,7 +10,7 @@ namespace NumSharp
 {
     public unsafe partial class NDIterator<TOut> : NDIterator, IEnumerable<TOut>, IDisposable where TOut : unmanaged
     {
-        private int index;
+        private long index;
         public readonly IMemoryBlock Block;
         public readonly IteratorType Type;
 

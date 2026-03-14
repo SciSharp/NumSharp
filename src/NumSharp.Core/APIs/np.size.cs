@@ -19,7 +19,7 @@ namespace NumSharp
             if (!axis.HasValue)
                 return a.size;
 
-            if (axis.Value <= -1) 
+            if (axis.Value <= -1)
                 axis = a.ndim + axis.Value;
 
             return a.Shape.dimensions[axis.Value];

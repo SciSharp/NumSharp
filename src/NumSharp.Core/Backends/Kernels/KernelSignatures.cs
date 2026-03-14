@@ -36,7 +36,7 @@ namespace NumSharp.Backends.Kernels
     /// <param name="rhs">Pointer to right operand data.</param>
     /// <param name="result">Pointer to output data.</param>
     /// <param name="count">Number of elements to process.</param>
-    public unsafe delegate void ContiguousKernel<T>(T* lhs, T* rhs, T* result, int count) where T : unmanaged;
+    public unsafe delegate void ContiguousKernel<T>(T* lhs, T* rhs, T* result, long count) where T : unmanaged;
 
     // ===================
     // Strided Unary Kernel
@@ -56,9 +56,9 @@ namespace NumSharp.Backends.Kernels
     /// <param name="outStride">Stride between output elements (element units)</param>
     /// <param name="count">Number of elements to process</param>
     public unsafe delegate void UnaryKernelStrided<TIn, TOut>(
-        TIn* input, int inOffset, int inStride,
-        TOut* output, int outOffset, int outStride,
-        int count) where TIn : unmanaged where TOut : unmanaged;
+        TIn* input, long inOffset, long inStride,
+        TOut* output, long outOffset, long outStride,
+        long count) where TIn : unmanaged where TOut : unmanaged;
 
     // ===================
     // Scalar Delegates (for broadcasting and element-wise operations)
@@ -113,7 +113,7 @@ namespace NumSharp.Backends.Kernels
     /// <param name="innerSize">Product of dimensions after the reduction axis</param>
     public unsafe delegate void TypedAxisReductionKernel<T>(
         T* input, T* output,
-        int outerSize, int axisSize, int innerSize) where T : unmanaged;
+        long outerSize, long axisSize, long innerSize) where T : unmanaged;
 
     /// <summary>
     /// Simple contiguous reduction kernel returning single value.
@@ -123,5 +123,5 @@ namespace NumSharp.Backends.Kernels
     /// <param name="input">Pointer to contiguous input data</param>
     /// <param name="count">Number of elements</param>
     /// <returns>Reduced value</returns>
-    public unsafe delegate T SimpleReductionKernel<T>(T* input, int count) where T : unmanaged;
+    public unsafe delegate T SimpleReductionKernel<T>(T* input, long count) where T : unmanaged;
 }

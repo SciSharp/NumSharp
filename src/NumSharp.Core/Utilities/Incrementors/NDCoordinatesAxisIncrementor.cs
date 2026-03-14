@@ -8,10 +8,10 @@ namespace NumSharp.Utilities
         public int Axis;
         private readonly Action<NDCoordinatesAxisIncrementor> endCallback;
         private readonly long[] dimensions;
-        private readonly long resetto;
+        private readonly int resetto;
         public readonly Slice[] Slices;
         public readonly long[] Index;
-        private long subcursor;
+        private int subcursor;
 
         public NDCoordinatesAxisIncrementor(ref Shape shape, int axis)
         {

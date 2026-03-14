@@ -25,19 +25,19 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// SIMD helper to count true values in a boolean array.
         /// </summary>
-        internal static unsafe int CountTrueSimdHelper(bool* mask, int size)
+        internal static unsafe long CountTrueSimdHelper(bool* mask, long size)
         {
             if (size == 0)
                 return 0;
 
-            int count = 0;
+            long count = 0;
 
             if (Vector256.IsHardwareAccelerated && Vector256<byte>.IsSupported && size >= Vector256<byte>.Count)
             {
                 int vectorCount = Vector256<byte>.Count;
-                int vectorEnd = size - vectorCount;
+                long vectorEnd = size - vectorCount;
                 var zero = Vector256<byte>.Zero;
-                int i = 0;
+                long i = 0;
 
                 for (; i <= vectorEnd; i += vectorCount)
                 {
@@ -60,9 +60,9 @@ namespace NumSharp.Backends.Kernels
             else if (Vector128.IsHardwareAccelerated && Vector128<byte>.IsSupported && size >= Vector128<byte>.Count)
             {
                 int vectorCount = Vector128<byte>.Count;
-                int vectorEnd = size - vectorCount;
+                long vectorEnd = size - vectorCount;
                 var zero = Vector128<byte>.Zero;
-                int i = 0;
+                long i = 0;
 
                 for (; i <= vectorEnd; i += vectorCount)
                 {
@@ -83,7 +83,7 @@ namespace NumSharp.Backends.Kernels
             else
             {
                 // Scalar fallback
-                for (int i = 0; i < size; i++)
+                for (long i = 0; i < size; i++)
                 {
                     if (mask[i])
                         count++;
@@ -98,19 +98,19 @@ namespace NumSharp.Backends.Kernels
         /// Copies from src to dst where mask[i] is true.
         /// </summary>
         /// <returns>Number of elements copied</returns>
-        internal static unsafe int CopyMaskedElementsHelper<T>(T* src, bool* mask, T* dst, int size)
+        internal static unsafe long CopyMaskedElementsHelper<T>(T* src, bool* mask, T* dst, long size)
             where T : unmanaged
         {
-            int dstIdx = 0;
+            long dstIdx = 0;
 
             // For masking, we can't easily vectorize the gather/scatter
             // But we can vectorize the mask scanning to find true indices faster
             if (Vector256.IsHardwareAccelerated && Vector256<byte>.IsSupported && size >= Vector256<byte>.Count)
             {
                 int vectorCount = Vector256<byte>.Count;
-                int vectorEnd = size - vectorCount;
+                long vectorEnd = size - vectorCount;
                 var zero = Vector256<byte>.Zero;
-                int i = 0;
+                long i = 0;
 
                 for (; i <= vectorEnd; i += vectorCount)
                 {
@@ -138,9 +138,9 @@ namespace NumSharp.Backends.Kernels
             else if (Vector128.IsHardwareAccelerated && Vector128<byte>.IsSupported && size >= Vector128<byte>.Count)
             {
                 int vectorCount = Vector128<byte>.Count;
-                int vectorEnd = size - vectorCount;
+                long vectorEnd = size - vectorCount;
                 var zero = Vector128<byte>.Zero;
-                int i = 0;
+                long i = 0;
 
                 for (; i <= vectorEnd; i += vectorCount)
                 {
@@ -166,7 +166,7 @@ namespace NumSharp.Backends.Kernels
             else
             {
                 // Scalar fallback
-                for (int i = 0; i < size; i++)
+                for (long i = 0; i < size; i++)
                 {
                     if (mask[i])
                         dst[dstIdx++] = src[i];

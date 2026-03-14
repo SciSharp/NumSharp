@@ -139,7 +139,7 @@ namespace NumSharp
             var Rhs_MoveNext = rhs.MoveNext<T>();
             var Lhs_MoveNextReference = lhs.MoveNextReference<T>();
 
-            for (int i = 0; i < len; i++) 
+            for (long i = 0; i < len; i++)
                 Lhs_MoveNextReference() = Rhs_MoveNext();
         }
 

@@ -22,7 +22,7 @@ namespace NumSharp
             if (a.size == 0 || repeats == 0)
                 return new NDArray(a.GetTypeCode, Shape.Vector(0));
 
-            int totalSize = a.size * repeats;
+            long totalSize = a.size * repeats;
             a = a.ravel(); // After ravel(), array is guaranteed contiguous
 
             return a.GetTypeCode switch
@@ -116,12 +116,12 @@ namespace NumSharp
         ///     Generic implementation for repeating with scalar repeat count.
         ///     Uses direct pointer access for performance (no allocations per element).
         /// </summary>
-        private static unsafe NDArray RepeatScalarTyped<T>(NDArray a, int repeats, int totalSize) where T : unmanaged
+        private static unsafe NDArray RepeatScalarTyped<T>(NDArray a, int repeats, long totalSize) where T : unmanaged
         {
             var ret = new NDArray(a.GetTypeCode, Shape.Vector(totalSize));
             var src = (T*)a.Address;
             var dst = (T*)ret.Address;
-            int srcSize = a.size;
+            long srcSize = a.size;
 
             int outIdx = 0;
             for (int i = 0; i < srcSize; i++)
@@ -138,12 +138,12 @@ namespace NumSharp
         ///     Generic implementation for repeating with per-element repeat counts.
         ///     Uses direct pointer access for performance (no allocations per element).
         /// </summary>
-        private static unsafe NDArray RepeatArrayTyped<T>(NDArray a, NDArray repeatsFlat, int totalSize) where T : unmanaged
+        private static unsafe NDArray RepeatArrayTyped<T>(NDArray a, NDArray repeatsFlat, long totalSize) where T : unmanaged
         {
             var ret = new NDArray(a.GetTypeCode, Shape.Vector(totalSize));
             var src = (T*)a.Address;
             var dst = (T*)ret.Address;
-            int srcSize = a.size;
+            long srcSize = a.size;
 
             int outIdx = 0;
             for (int i = 0; i < srcSize; i++)

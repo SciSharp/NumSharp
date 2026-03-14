@@ -192,7 +192,7 @@ namespace NumSharp
                         throw new ArgumentException($"Effective axis {axis} is less than 0");
                 }
 
-                Arrays.Insert(ref newDims, axis, 1);
+                Arrays.Insert(ref newDims, axis, 1L);
 
                 // Calculate proper stride for C-contiguous layout
                 long newStride;

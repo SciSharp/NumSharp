@@ -29,11 +29,11 @@ namespace NumSharp
                 throw new ArgumentException(
                     $"axis {axis.Value} is out of bounds for array of dimension {a.ndim}");
 
-            int n = a.shape[ax];
+            long n = a.shape[ax];
 
             // Python-style modulo: always non-negative when n > 0.
             // If n == 0 (empty axis), offset stays 0 — nothing to roll.
-            int offset = n == 0 ? 0 : ((shift % n) + n) % n;
+            long offset = n == 0 ? 0 : ((shift % n) + n) % n;
 
             if (offset == 0)
                 return a.copy();
@@ -55,10 +55,10 @@ namespace NumSharp
             {
                 if (i == ax)
                 {
-                    srcBody[i] = new Slice(null, -offset);  // :-offset
-                    dstBody[i] = new Slice(offset, null);    // offset:
-                    srcTail[i] = new Slice(-offset, null);   // -offset:
-                    dstTail[i] = new Slice(null, offset);    // :offset
+                    srcBody[i] = new Slice(null, (int)-offset);  // :-offset
+                    dstBody[i] = new Slice((int)offset, null);    // offset:
+                    srcTail[i] = new Slice((int)-offset, null);   // -offset:
+                    dstTail[i] = new Slice(null, (int)offset);    // :offset
                 }
                 else
                 {

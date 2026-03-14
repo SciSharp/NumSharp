@@ -102,7 +102,7 @@ namespace NumSharp.Backends.Kernels
         private static Delegate GenerateCumulativeKernel(CumulativeKernelKey key)
         {
             // CumulativeKernel signature:
-            // void(void* input, void* output, int* strides, int* shape, int ndim, int totalSize)
+            // void(void* input, void* output, long* strides, long* shape, int ndim, long totalSize)
             var dm = new DynamicMethod(
                 name: $"Scan_{key}",
                 returnType: typeof(void),
@@ -110,10 +110,10 @@ namespace NumSharp.Backends.Kernels
                 {
                     typeof(void*),  // input
                     typeof(void*),  // output
-                    typeof(int*),   // strides
-                    typeof(int*),   // shape
+                    typeof(long*),  // strides
+                    typeof(long*), // shape
                     typeof(int),    // ndim
-                    typeof(int)     // totalSize
+                    typeof(long)    // totalSize
                 },
                 owner: typeof(ILKernelGenerator),
                 skipVisibility: true
@@ -176,7 +176,7 @@ namespace NumSharp.Backends.Kernels
         /// SIMD-optimized cumulative sum helper for same-type contiguous arrays.
         /// While scan is inherently sequential, we optimize memory access patterns.
         /// </summary>
-        internal static unsafe void CumSumHelperSameType<T>(void* input, void* output, int totalSize)
+        internal static unsafe void CumSumHelperSameType<T>(void* input, void* output, long totalSize)
             where T : unmanaged, IAdditionOperators<T, T, T>
         {
             if (totalSize == 0)
@@ -188,7 +188,7 @@ namespace NumSharp.Backends.Kernels
             // Scan is inherently sequential - each output depends on previous sum
             // We use direct pointer access for optimal performance
             T sum = default;
-            for (int i = 0; i < totalSize; i++)
+            for (long i = 0; i < totalSize; i++)
             {
                 sum += src[i];
                 dst[i] = sum;
@@ -200,9 +200,9 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         private static void EmitScanContiguousWithConversion(ILGenerator il, CumulativeKernelKey key, int inputSize, int outputSize)
         {
-            // Args: void* input (0), void* output (1), int* strides (2), int* shape (3), int ndim (4), int totalSize (5)
+            // Args: void* input (0), void* output (1), long* strides (2), long* shape (3), int ndim (4), long totalSize (5)
 
-            var locI = il.DeclareLocal(typeof(int)); // loop counter
+            var locI = il.DeclareLocal(typeof(long)); // loop counter
             var locAccum = il.DeclareLocal(GetClrType(key.OutputType)); // accumulator
 
             var lblLoop = il.DefineLabel();
@@ -263,13 +263,13 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         private static void EmitScanStridedLoop(ILGenerator il, CumulativeKernelKey key, int inputSize, int outputSize)
         {
-            // Args: void* input (0), void* output (1), int* strides (2), int* shape (3), int ndim (4), int totalSize (5)
+            // Args: void* input (0), void* output (1), long* strides (2), long* shape (3), int ndim (4), long totalSize (5)
 
-            var locI = il.DeclareLocal(typeof(int)); // linear index
+            var locI = il.DeclareLocal(typeof(long)); // linear index
             var locD = il.DeclareLocal(typeof(int)); // dimension counter
-            var locOffset = il.DeclareLocal(typeof(int)); // input offset
-            var locCoord = il.DeclareLocal(typeof(int)); // current coordinate
-            var locIdx = il.DeclareLocal(typeof(int)); // temp for coordinate calculation
+            var locOffset = il.DeclareLocal(typeof(long)); // input offset
+            var locCoord = il.DeclareLocal(typeof(long)); // current coordinate (long for int64 shapes)
+            var locIdx = il.DeclareLocal(typeof(long)); // temp for coordinate calculation
             var locAccum = il.DeclareLocal(GetClrType(key.OutputType)); // accumulator
 
             var lblLoop = il.DefineLabel();
@@ -283,6 +283,7 @@ namespace NumSharp.Backends.Kernels
 
             // i = 0
             il.Emit(OpCodes.Ldc_I4_0);
+            il.Emit(OpCodes.Conv_I8);
             il.Emit(OpCodes.Stloc, locI);
 
             // Main loop
@@ -295,6 +296,7 @@ namespace NumSharp.Backends.Kernels
 
             // Calculate offset from linear index
             il.Emit(OpCodes.Ldc_I4_0);
+            il.Emit(OpCodes.Conv_I8);
             il.Emit(OpCodes.Stloc, locOffset);
             il.Emit(OpCodes.Ldloc, locI);
             il.Emit(OpCodes.Stloc, locIdx);
@@ -317,10 +319,10 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Ldarg_3); // shape
             il.Emit(OpCodes.Ldloc, locD);
             il.Emit(OpCodes.Conv_I);
-            il.Emit(OpCodes.Ldc_I4_4);
+            il.Emit(OpCodes.Ldc_I4_8); // sizeof(long)
             il.Emit(OpCodes.Mul);
             il.Emit(OpCodes.Add);
-            il.Emit(OpCodes.Ldind_I4);
+            il.Emit(OpCodes.Ldind_I8);
             il.Emit(OpCodes.Rem);
             il.Emit(OpCodes.Stloc, locCoord);
 
@@ -329,10 +331,10 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Ldarg_3); // shape
             il.Emit(OpCodes.Ldloc, locD);
             il.Emit(OpCodes.Conv_I);
-            il.Emit(OpCodes.Ldc_I4_4);
+            il.Emit(OpCodes.Ldc_I4_8);
             il.Emit(OpCodes.Mul);
             il.Emit(OpCodes.Add);
-            il.Emit(OpCodes.Ldind_I4);
+            il.Emit(OpCodes.Ldind_I8);
             il.Emit(OpCodes.Div);
             il.Emit(OpCodes.Stloc, locIdx);
 
@@ -342,10 +344,10 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Ldarg_2); // strides
             il.Emit(OpCodes.Ldloc, locD);
             il.Emit(OpCodes.Conv_I);
-            il.Emit(OpCodes.Ldc_I4_4);
+            il.Emit(OpCodes.Ldc_I4_8);
             il.Emit(OpCodes.Mul);
             il.Emit(OpCodes.Add);
-            il.Emit(OpCodes.Ldind_I4);
+            il.Emit(OpCodes.Ldind_I8);
             il.Emit(OpCodes.Mul);
             il.Emit(OpCodes.Add);
             il.Emit(OpCodes.Stloc, locOffset);
@@ -503,7 +505,7 @@ namespace NumSharp.Backends.Kernels
         private static Delegate GenerateCumulativeAxisKernel(CumulativeAxisKernelKey key)
         {
             // CumulativeAxisKernel signature:
-            // void(void* input, void* output, int* inputStrides, int* shape, int axis, int ndim, int totalSize)
+            // void(void* input, void* output, long* inputStrides, long* shape, int axis, int ndim, long totalSize)
             var dm = new DynamicMethod(
                 name: $"AxisScan_{key}",
                 returnType: typeof(void),
@@ -511,11 +513,11 @@ namespace NumSharp.Backends.Kernels
                 {
                     typeof(void*),  // input
                     typeof(void*),  // output
-                    typeof(int*),   // inputStrides
-                    typeof(int*),   // shape
+                    typeof(long*),  // inputStrides
+                    typeof(long*), // shape
                     typeof(int),    // axis
                     typeof(int),    // ndim
-                    typeof(int)     // totalSize
+                    typeof(long)    // totalSize
                 },
                 owner: typeof(ILKernelGenerator),
                 skipVisibility: true
@@ -568,8 +570,8 @@ namespace NumSharp.Backends.Kernels
         /// Uses optimized iteration pattern based on axis position.
         /// </summary>
         internal static unsafe void AxisCumSumHelper<TIn, TOut>(
-            void* input, void* output, int* inputStrides, int* shape,
-            int axis, int ndim, int totalSize)
+            void* input, void* output, long* inputStrides, long* shape,
+            int axis, int ndim, long totalSize)
             where TIn : unmanaged
             where TOut : unmanaged
         {
@@ -579,21 +581,21 @@ namespace NumSharp.Backends.Kernels
             TIn* src = (TIn*)input;
             TOut* dst = (TOut*)output;
 
-            int axisSize = shape[axis];
-            int axisStride = inputStrides[axis];
+            long axisSize = shape[axis];
+            long axisStride = inputStrides[axis];
 
             // Calculate outer size (product of dimensions before axis)
             // and inner size (product of dimensions after axis)
-            int outerSize = 1;
-            int innerSize = 1;
+            long outerSize = 1;
+            long innerSize = 1;
             for (int d = 0; d < axis; d++)
                 outerSize *= shape[d];
             for (int d = axis + 1; d < ndim; d++)
                 innerSize *= shape[d];
 
             // Calculate output strides (output is always contiguous)
-            int outputAxisStride = innerSize;
-            int outputOuterStride = axisSize * innerSize;
+            long outputAxisStride = innerSize;
+            long outputOuterStride = axisSize * innerSize;
 
             // Dispatch to specialized helper based on types
             if (typeof(TIn) == typeof(TOut))
@@ -614,8 +616,8 @@ namespace NumSharp.Backends.Kernels
         /// Uses optimized iteration pattern based on axis position.
         /// </summary>
         internal static unsafe void AxisCumProdHelper<TIn, TOut>(
-            void* input, void* output, int* inputStrides, int* shape,
-            int axis, int ndim, int totalSize)
+            void* input, void* output, long* inputStrides, long* shape,
+            int axis, int ndim, long totalSize)
             where TIn : unmanaged
             where TOut : unmanaged
         {
@@ -625,21 +627,21 @@ namespace NumSharp.Backends.Kernels
             TIn* src = (TIn*)input;
             TOut* dst = (TOut*)output;
 
-            int axisSize = shape[axis];
-            int axisStride = inputStrides[axis];
+            long axisSize = shape[axis];
+            long axisStride = inputStrides[axis];
 
             // Calculate outer size (product of dimensions before axis)
             // and inner size (product of dimensions after axis)
-            int outerSize = 1;
-            int innerSize = 1;
+            long outerSize = 1;
+            long innerSize = 1;
             for (int d = 0; d < axis; d++)
                 outerSize *= shape[d];
             for (int d = axis + 1; d < ndim; d++)
                 innerSize *= shape[d];
 
             // Calculate output strides (output is always contiguous)
-            int outputAxisStride = innerSize;
-            int outputOuterStride = axisSize * innerSize;
+            long outputAxisStride = innerSize;
+            long outputOuterStride = axisSize * innerSize;
 
             // Dispatch to specialized helper based on types
             if (typeof(TIn) == typeof(TOut))
@@ -659,9 +661,9 @@ namespace NumSharp.Backends.Kernels
         /// Same-type axis cumprod implementation.
         /// </summary>
         private static unsafe void AxisCumProdSameType<T>(
-            T* src, T* dst, int* inputStrides, int* shape, int axis, int ndim,
-            int axisSize, int axisStride, int outerSize, int innerSize,
-            int outputAxisStride, int outputOuterStride)
+            T* src, T* dst, long* inputStrides, long* shape, int axis, int ndim,
+            long axisSize, long axisStride, long outerSize, long innerSize,
+            long outputAxisStride, long outputOuterStride)
             where T : unmanaged
         {
             // General case: iterate using coordinate-based access with multiplication
@@ -673,9 +675,9 @@ namespace NumSharp.Backends.Kernels
         /// General axis cumprod using coordinate-based iteration.
         /// </summary>
         private static unsafe void AxisCumProdGeneral<T>(
-            T* src, T* dst, int* inputStrides, int* shape, int axis, int ndim,
-            int axisSize, int axisStride, int outerSize, int innerSize,
-            int outputAxisStride, int outputOuterStride)
+            T* src, T* dst, long* inputStrides, long* shape, int axis, int ndim,
+            long axisSize, long axisStride, long outerSize, long innerSize,
+            long outputAxisStride, long outputOuterStride)
             where T : unmanaged
         {
             // Type-specific dispatch for common types
@@ -739,38 +741,38 @@ namespace NumSharp.Backends.Kernels
         /// General axis cumprod for double type.
         /// </summary>
         private static unsafe void AxisCumProdGeneralDouble(
-            double* src, double* dst, int* inputStrides, int* shape, int axis, int ndim,
-            int axisSize, int axisStride, int outerSize, int innerSize,
-            int outputAxisStride, int outputOuterStride)
+            double* src, double* dst, long* inputStrides, long* shape, int axis, int ndim,
+            long axisSize, long axisStride, long outerSize, long innerSize,
+            long outputAxisStride, long outputOuterStride)
         {
-            for (int outer = 0; outer < outerSize; outer++)
+            for (long outer = 0; outer < outerSize; outer++)
             {
-                for (int inner = 0; inner < innerSize; inner++)
+                for (long inner = 0; inner < innerSize; inner++)
                 {
                     // Calculate input base offset for this (outer, inner) combination
-                    int inputOffset = 0;
-                    int outerIdx = outer;
+                    long inputOffset = 0;
+                    long outerIdx = outer;
                     for (int d = axis - 1; d >= 0; d--)
                     {
-                        int coord = outerIdx % shape[d];
+                        long coord = outerIdx % shape[d];
                         outerIdx /= shape[d];
                         inputOffset += coord * inputStrides[d];
                     }
 
-                    int innerIdx = inner;
+                    long innerIdx = inner;
                     for (int d = ndim - 1; d > axis; d--)
                     {
-                        int coord = innerIdx % shape[d];
+                        long coord = innerIdx % shape[d];
                         innerIdx /= shape[d];
                         inputOffset += coord * inputStrides[d];
                     }
 
                     // Calculate output base offset
-                    int outputOffset = outer * outputOuterStride + inner;
+                    long outputOffset = outer * outputOuterStride + inner;
 
                     // Cumprod along axis
                     double product = 1.0;
-                    for (int i = 0; i < axisSize; i++)
+                    for (long i = 0; i < axisSize; i++)
                     {
                         product *= src[inputOffset + i * axisStride];
                         dst[outputOffset + i * outputAxisStride] = product;
@@ -783,35 +785,35 @@ namespace NumSharp.Backends.Kernels
         /// General axis cumprod for float type.
         /// </summary>
         private static unsafe void AxisCumProdGeneralFloat(
-            float* src, float* dst, int* inputStrides, int* shape, int axis, int ndim,
-            int axisSize, int axisStride, int outerSize, int innerSize,
-            int outputAxisStride, int outputOuterStride)
+            float* src, float* dst, long* inputStrides, long* shape, int axis, int ndim,
+            long axisSize, long axisStride, long outerSize, long innerSize,
+            long outputAxisStride, long outputOuterStride)
         {
-            for (int outer = 0; outer < outerSize; outer++)
+            for (long outer = 0; outer < outerSize; outer++)
             {
-                for (int inner = 0; inner < innerSize; inner++)
+                for (long inner = 0; inner < innerSize; inner++)
                 {
-                    int inputOffset = 0;
-                    int outerIdx = outer;
+                    long inputOffset = 0;
+                    long outerIdx = outer;
                     for (int d = axis - 1; d >= 0; d--)
                     {
-                        int coord = outerIdx % shape[d];
+                        long coord = outerIdx % shape[d];
                         outerIdx /= shape[d];
                         inputOffset += coord * inputStrides[d];
                     }
 
-                    int innerIdx = inner;
+                    long innerIdx = inner;
                     for (int d = ndim - 1; d > axis; d--)
                     {
-                        int coord = innerIdx % shape[d];
+                        long coord = innerIdx % shape[d];
                         innerIdx /= shape[d];
                         inputOffset += coord * inputStrides[d];
                     }
 
-                    int outputOffset = outer * outputOuterStride + inner;
+                    long outputOffset = outer * outputOuterStride + inner;
 
                     float product = 1f;
-                    for (int i = 0; i < axisSize; i++)
+                    for (long i = 0; i < axisSize; i++)
                     {
                         product *= src[inputOffset + i * axisStride];
                         dst[outputOffset + i * outputAxisStride] = product;
@@ -824,35 +826,35 @@ namespace NumSharp.Backends.Kernels
         /// General axis cumprod for long type.
         /// </summary>
         private static unsafe void AxisCumProdGeneralInt64(
-            long* src, long* dst, int* inputStrides, int* shape, int axis, int ndim,
-            int axisSize, int axisStride, int outerSize, int innerSize,
-            int outputAxisStride, int outputOuterStride)
+            long* src, long* dst, long* inputStrides, long* shape, int axis, int ndim,
+            long axisSize, long axisStride, long outerSize, long innerSize,
+            long outputAxisStride, long outputOuterStride)
         {
-            for (int outer = 0; outer < outerSize; outer++)
+            for (long outer = 0; outer < outerSize; outer++)
             {
-                for (int inner = 0; inner < innerSize; inner++)
+                for (long inner = 0; inner < innerSize; inner++)
                 {
-                    int inputOffset = 0;
-                    int outerIdx = outer;
+                    long inputOffset = 0;
+                    long outerIdx = outer;
                     for (int d = axis - 1; d >= 0; d--)
                     {
-                        int coord = outerIdx % shape[d];
+                        long coord = outerIdx % shape[d];
                         outerIdx /= shape[d];
                         inputOffset += coord * inputStrides[d];
                     }
 
-                    int innerIdx = inner;
+                    long innerIdx = inner;
                     for (int d = ndim - 1; d > axis; d--)
                     {
-                        int coord = innerIdx % shape[d];
+                        long coord = innerIdx % shape[d];
                         innerIdx /= shape[d];
                         inputOffset += coord * inputStrides[d];
                     }
 
-                    int outputOffset = outer * outputOuterStride + inner;
+                    long outputOffset = outer * outputOuterStride + inner;
 
                     long product = 1L;
-                    for (int i = 0; i < axisSize; i++)
+                    for (long i = 0; i < axisSize; i++)
                     {
                         product *= src[inputOffset + i * axisStride];
                         dst[outputOffset + i * outputAxisStride] = product;
@@ -865,35 +867,35 @@ namespace NumSharp.Backends.Kernels
         /// General axis cumprod for int type.
         /// </summary>
         private static unsafe void AxisCumProdGeneralInt32(
-            int* src, int* dst, int* inputStrides, int* shape, int axis, int ndim,
-            int axisSize, int axisStride, int outerSize, int innerSize,
-            int outputAxisStride, int outputOuterStride)
+            int* src, int* dst, long* inputStrides, long* shape, int axis, int ndim,
+            long axisSize, long axisStride, long outerSize, long innerSize,
+            long outputAxisStride, long outputOuterStride)
         {
-            for (int outer = 0; outer < outerSize; outer++)
+            for (long outer = 0; outer < outerSize; outer++)
             {
-                for (int inner = 0; inner < innerSize; inner++)
+                for (long inner = 0; inner < innerSize; inner++)
                 {
-                    int inputOffset = 0;
-                    int outerIdx = outer;
+                    long inputOffset = 0;
+                    long outerIdx = outer;
                     for (int d = axis - 1; d >= 0; d--)
                     {
-                        int coord = outerIdx % shape[d];
+                        long coord = outerIdx % shape[d];
                         outerIdx /= shape[d];
                         inputOffset += coord * inputStrides[d];
                     }
 
-                    int innerIdx = inner;
+                    long innerIdx = inner;
                     for (int d = ndim - 1; d > axis; d--)
                     {
-                        int coord = innerIdx % shape[d];
+                        long coord = innerIdx % shape[d];
                         innerIdx /= shape[d];
                         inputOffset += coord * inputStrides[d];
                     }
 
-                    int outputOffset = outer * outputOuterStride + inner;
+                    long outputOffset = outer * outputOuterStride + inner;
 
                     int product = 1;
-                    for (int i = 0; i < axisSize; i++)
+                    for (long i = 0; i < axisSize; i++)
                     {
                         product *= src[inputOffset + i * axisStride];
                         dst[outputOffset + i * outputAxisStride] = product;
@@ -906,19 +908,19 @@ namespace NumSharp.Backends.Kernels
         /// General axis cumprod for byte type.
         /// </summary>
         private static unsafe void AxisCumProdGeneralByte(
-            byte* src, byte* dst, int* inputStrides, int* shape, int axis, int ndim,
-            int axisSize, int axisStride, int outerSize, int innerSize,
-            int outputAxisStride, int outputOuterStride)
+            byte* src, byte* dst, long* inputStrides, long* shape, int axis, int ndim,
+            long axisSize, long axisStride, long outerSize, long innerSize,
+            long outputAxisStride, long outputOuterStride)
         {
-            for (int outer = 0; outer < outerSize; outer++)
+            for (long outer = 0; outer < outerSize; outer++)
             {
-                for (int inner = 0; inner < innerSize; inner++)
+                for (long inner = 0; inner < innerSize; inner++)
                 {
-                    int inputOffset = CalculateInputOffset(inputStrides, shape, axis, ndim, outer, inner);
-                    int outputOffset = outer * outputOuterStride + inner;
+                    long inputOffset = CalculateInputOffset(inputStrides, shape, axis, ndim, outer, inner);
+                    long outputOffset = outer * outputOuterStride + inner;
 
                     byte product = 1;
-                    for (int i = 0; i < axisSize; i++)
+                    for (long i = 0; i < axisSize; i++)
                     {
                         product *= src[inputOffset + i * axisStride];
                         dst[outputOffset + i * outputAxisStride] = product;
@@ -931,19 +933,19 @@ namespace NumSharp.Backends.Kernels
         /// General axis cumprod for short type.
         /// </summary>
         private static unsafe void AxisCumProdGeneralInt16(
-            short* src, short* dst, int* inputStrides, int* shape, int axis, int ndim,
-            int axisSize, int axisStride, int outerSize, int innerSize,
-            int outputAxisStride, int outputOuterStride)
+            short* src, short* dst, long* inputStrides, long* shape, int axis, int ndim,
+            long axisSize, long axisStride, long outerSize, long innerSize,
+            long outputAxisStride, long outputOuterStride)
         {
-            for (int outer = 0; outer < outerSize; outer++)
+            for (long outer = 0; outer < outerSize; outer++)
             {
-                for (int inner = 0; inner < innerSize; inner++)
+                for (long inner = 0; inner < innerSize; inner++)
                 {
-                    int inputOffset = CalculateInputOffset(inputStrides, shape, axis, ndim, outer, inner);
-                    int outputOffset = outer * outputOuterStride + inner;
+                    long inputOffset = CalculateInputOffset(inputStrides, shape, axis, ndim, outer, inner);
+                    long outputOffset = outer * outputOuterStride + inner;
 
                     short product = 1;
-                    for (int i = 0; i < axisSize; i++)
+                    for (long i = 0; i < axisSize; i++)
                     {
                         product *= src[inputOffset + i * axisStride];
                         dst[outputOffset + i * outputAxisStride] = product;
@@ -956,19 +958,19 @@ namespace NumSharp.Backends.Kernels
         /// General axis cumprod for ushort type.
         /// </summary>
         private static unsafe void AxisCumProdGeneralUInt16(
-            ushort* src, ushort* dst, int* inputStrides, int* shape, int axis, int ndim,
-            int axisSize, int axisStride, int outerSize, int innerSize,
-            int outputAxisStride, int outputOuterStride)
+            ushort* src, ushort* dst, long* inputStrides, long* shape, int axis, int ndim,
+            long axisSize, long axisStride, long outerSize, long innerSize,
+            long outputAxisStride, long outputOuterStride)
         {
-            for (int outer = 0; outer < outerSize; outer++)
+            for (long outer = 0; outer < outerSize; outer++)
             {
-                for (int inner = 0; inner < innerSize; inner++)
+                for (long inner = 0; inner < innerSize; inner++)
                 {
-                    int inputOffset = CalculateInputOffset(inputStrides, shape, axis, ndim, outer, inner);
-                    int outputOffset = outer * outputOuterStride + inner;
+                    long inputOffset = CalculateInputOffset(inputStrides, shape, axis, ndim, outer, inner);
+                    long outputOffset = outer * outputOuterStride + inner;
 
                     ushort product = 1;
-                    for (int i = 0; i < axisSize; i++)
+                    for (long i = 0; i < axisSize; i++)
                     {
                         product *= src[inputOffset + i * axisStride];
                         dst[outputOffset + i * outputAxisStride] = product;
@@ -981,19 +983,19 @@ namespace NumSharp.Backends.Kernels
         /// General axis cumprod for uint type.
         /// </summary>
         private static unsafe void AxisCumProdGeneralUInt32(
-            uint* src, uint* dst, int* inputStrides, int* shape, int axis, int ndim,
-            int axisSize, int axisStride, int outerSize, int innerSize,
-            int outputAxisStride, int outputOuterStride)
+            uint* src, uint* dst, long* inputStrides, long* shape, int axis, int ndim,
+            long axisSize, long axisStride, long outerSize, long innerSize,
+            long outputAxisStride, long outputOuterStride)
         {
-            for (int outer = 0; outer < outerSize; outer++)
+            for (long outer = 0; outer < outerSize; outer++)
             {
-                for (int inner = 0; inner < innerSize; inner++)
+                for (long inner = 0; inner < innerSize; inner++)
                 {
-                    int inputOffset = CalculateInputOffset(inputStrides, shape, axis, ndim, outer, inner);
-                    int outputOffset = outer * outputOuterStride + inner;
+                    long inputOffset = CalculateInputOffset(inputStrides, shape, axis, ndim, outer, inner);
+                    long outputOffset = outer * outputOuterStride + inner;
 
                     uint product = 1;
-                    for (int i = 0; i < axisSize; i++)
+                    for (long i = 0; i < axisSize; i++)
                     {
                         product *= src[inputOffset + i * axisStride];
                         dst[outputOffset + i * outputAxisStride] = product;
@@ -1006,19 +1008,19 @@ namespace NumSharp.Backends.Kernels
         /// General axis cumprod for ulong type.
         /// </summary>
         private static unsafe void AxisCumProdGeneralUInt64(
-            ulong* src, ulong* dst, int* inputStrides, int* shape, int axis, int ndim,
-            int axisSize, int axisStride, int outerSize, int innerSize,
-            int outputAxisStride, int outputOuterStride)
+            ulong* src, ulong* dst, long* inputStrides, long* shape, int axis, int ndim,
+            long axisSize, long axisStride, long outerSize, long innerSize,
+            long outputAxisStride, long outputOuterStride)
         {
-            for (int outer = 0; outer < outerSize; outer++)
+            for (long outer = 0; outer < outerSize; outer++)
             {
-                for (int inner = 0; inner < innerSize; inner++)
+                for (long inner = 0; inner < innerSize; inner++)
                 {
-                    int inputOffset = CalculateInputOffset(inputStrides, shape, axis, ndim, outer, inner);
-                    int outputOffset = outer * outputOuterStride + inner;
+                    long inputOffset = CalculateInputOffset(inputStrides, shape, axis, ndim, outer, inner);
+                    long outputOffset = outer * outputOuterStride + inner;
 
                     ulong product = 1;
-                    for (int i = 0; i < axisSize; i++)
+                    for (long i = 0; i < axisSize; i++)
                     {
                         product *= src[inputOffset + i * axisStride];
                         dst[outputOffset + i * outputAxisStride] = product;
@@ -1031,19 +1033,19 @@ namespace NumSharp.Backends.Kernels
         /// General axis cumprod for decimal type.
         /// </summary>
         private static unsafe void AxisCumProdGeneralDecimal(
-            decimal* src, decimal* dst, int* inputStrides, int* shape, int axis, int ndim,
-            int axisSize, int axisStride, int outerSize, int innerSize,
-            int outputAxisStride, int outputOuterStride)
+            decimal* src, decimal* dst, long* inputStrides, long* shape, int axis, int ndim,
+            long axisSize, long axisStride, long outerSize, long innerSize,
+            long outputAxisStride, long outputOuterStride)
         {
-            for (int outer = 0; outer < outerSize; outer++)
+            for (long outer = 0; outer < outerSize; outer++)
             {
-                for (int inner = 0; inner < innerSize; inner++)
+                for (long inner = 0; inner < innerSize; inner++)
                 {
-                    int inputOffset = CalculateInputOffset(inputStrides, shape, axis, ndim, outer, inner);
-                    int outputOffset = outer * outputOuterStride + inner;
+                    long inputOffset = CalculateInputOffset(inputStrides, shape, axis, ndim, outer, inner);
+                    long outputOffset = outer * outputOuterStride + inner;
 
                     decimal product = 1m;
-                    for (int i = 0; i < axisSize; i++)
+                    for (long i = 0; i < axisSize; i++)
                     {
                         product *= src[inputOffset + i * axisStride];
                         dst[outputOffset + i * outputAxisStride] = product;
@@ -1055,21 +1057,21 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Helper to calculate input offset for general axis operations.
         /// </summary>
-        private static unsafe int CalculateInputOffset(int* inputStrides, int* shape, int axis, int ndim, int outer, int inner)
+        private static unsafe long CalculateInputOffset(long* inputStrides, long* shape, int axis, int ndim, long outer, long inner)
         {
-            int inputOffset = 0;
-            int outerIdx = outer;
+            long inputOffset = 0;
+            long outerIdx = outer;
             for (int d = axis - 1; d >= 0; d--)
             {
-                int coord = outerIdx % shape[d];
+                long coord = outerIdx % shape[d];
                 outerIdx /= shape[d];
                 inputOffset += coord * inputStrides[d];
             }
 
-            int innerIdx = inner;
+            long innerIdx = inner;
             for (int d = ndim - 1; d > axis; d--)
             {
-                int coord = innerIdx % shape[d];
+                long coord = innerIdx % shape[d];
                 innerIdx /= shape[d];
                 inputOffset += coord * inputStrides[d];
             }
@@ -1080,9 +1082,9 @@ namespace NumSharp.Backends.Kernels
         /// Axis cumprod with type conversion (e.g., int32 input -> int64 output).
         /// </summary>
         private static unsafe void AxisCumProdWithConversion<TIn, TOut>(
-            TIn* src, TOut* dst, int* inputStrides, int* shape, int axis, int ndim,
-            int axisSize, int axisStride, int outerSize, int innerSize,
-            int outputAxisStride, int outputOuterStride)
+            TIn* src, TOut* dst, long* inputStrides, long* shape, int axis, int ndim,
+            long axisSize, long axisStride, long outerSize, long innerSize,
+            long outputAxisStride, long outputOuterStride)
             where TIn : unmanaged
             where TOut : unmanaged
         {
@@ -1095,35 +1097,35 @@ namespace NumSharp.Backends.Kernels
             }
 
             // General fallback using Convert
-            for (int outer = 0; outer < outerSize; outer++)
+            for (long outer = 0; outer < outerSize; outer++)
             {
-                for (int inner = 0; inner < innerSize; inner++)
+                for (long inner = 0; inner < innerSize; inner++)
                 {
-                    int inputOffset = 0;
-                    int outerIdx = outer;
+                    long inputOffset = 0;
+                    long outerIdx = outer;
                     for (int d = axis - 1; d >= 0; d--)
                     {
-                        int coord = outerIdx % shape[d];
+                        long coord = outerIdx % shape[d];
                         outerIdx /= shape[d];
                         inputOffset += coord * inputStrides[d];
                     }
 
-                    int innerIdx = inner;
+                    long innerIdx = inner;
                     for (int d = ndim - 1; d > axis; d--)
                     {
-                        int coord = innerIdx % shape[d];
+                        long coord = innerIdx % shape[d];
                         innerIdx /= shape[d];
                         inputOffset += coord * inputStrides[d];
                     }
 
-                    int outputOffset = outer * outputOuterStride + inner;
+                    long outputOffset = outer * outputOuterStride + inner;
 
                     // Use appropriate accumulator type
                     if (typeof(TOut) == typeof(long))
                     {
                         long product = 1L;
                         long* dstTyped = (long*)dst;
-                        for (int i = 0; i < axisSize; i++)
+                        for (long i = 0; i < axisSize; i++)
                         {
                             product *= Convert.ToInt64(src[inputOffset + i * axisStride]);
                             dstTyped[outputOffset + i * outputAxisStride] = product;
@@ -1133,7 +1135,7 @@ namespace NumSharp.Backends.Kernels
                     {
                         double product = 1.0;
                         double* dstTyped = (double*)dst;
-                        for (int i = 0; i < axisSize; i++)
+                        for (long i = 0; i < axisSize; i++)
                         {
                             product *= Convert.ToDouble(src[inputOffset + i * axisStride]);
                             dstTyped[outputOffset + i * outputAxisStride] = product;
@@ -1143,7 +1145,7 @@ namespace NumSharp.Backends.Kernels
                     {
                         decimal product = 1m;
                         decimal* dstTyped = (decimal*)dst;
-                        for (int i = 0; i < axisSize; i++)
+                        for (long i = 0; i < axisSize; i++)
                         {
                             product *= Convert.ToDecimal(src[inputOffset + i * axisStride]);
                             dstTyped[outputOffset + i * outputAxisStride] = product;
@@ -1161,35 +1163,35 @@ namespace NumSharp.Backends.Kernels
         /// Specialized int32 -> int64 axis cumprod.
         /// </summary>
         private static unsafe void AxisCumProdInt32ToInt64(
-            int* src, long* dst, int* inputStrides, int* shape, int axis, int ndim,
-            int axisSize, int axisStride, int outerSize, int innerSize,
-            int outputAxisStride, int outputOuterStride)
+            int* src, long* dst, long* inputStrides, long* shape, int axis, int ndim,
+            long axisSize, long axisStride, long outerSize, long innerSize,
+            long outputAxisStride, long outputOuterStride)
         {
-            for (int outer = 0; outer < outerSize; outer++)
+            for (long outer = 0; outer < outerSize; outer++)
             {
-                for (int inner = 0; inner < innerSize; inner++)
+                for (long inner = 0; inner < innerSize; inner++)
                 {
-                    int inputOffset = 0;
-                    int outerIdx = outer;
+                    long inputOffset = 0;
+                    long outerIdx = outer;
                     for (int d = axis - 1; d >= 0; d--)
                     {
-                        int coord = outerIdx % shape[d];
+                        long coord = outerIdx % shape[d];
                         outerIdx /= shape[d];
                         inputOffset += coord * inputStrides[d];
                     }
 
-                    int innerIdx = inner;
+                    long innerIdx = inner;
                     for (int d = ndim - 1; d > axis; d--)
                     {
-                        int coord = innerIdx % shape[d];
+                        long coord = innerIdx % shape[d];
                         innerIdx /= shape[d];
                         inputOffset += coord * inputStrides[d];
                     }
 
-                    int outputOffset = outer * outputOuterStride + inner;
+                    long outputOffset = outer * outputOuterStride + inner;
 
                     long product = 1L;
-                    for (int i = 0; i < axisSize; i++)
+                    for (long i = 0; i < axisSize; i++)
                     {
                         product *= src[inputOffset + i * axisStride];
                         dst[outputOffset + i * outputAxisStride] = product;
@@ -1202,9 +1204,9 @@ namespace NumSharp.Backends.Kernels
         /// Same-type axis cumsum implementation.
         /// </summary>
         private static unsafe void AxisCumSumSameType<T>(
-            T* src, T* dst, int* inputStrides, int* shape, int axis, int ndim,
-            int axisSize, int axisStride, int outerSize, int innerSize,
-            int outputAxisStride, int outputOuterStride)
+            T* src, T* dst, long* inputStrides, long* shape, int axis, int ndim,
+            long axisSize, long axisStride, long outerSize, long innerSize,
+            long outputAxisStride, long outputOuterStride)
             where T : unmanaged
         {
             // Special case: innermost axis (axis = ndim - 1)
@@ -1226,13 +1228,13 @@ namespace NumSharp.Backends.Kernels
         /// Each "row" is a contiguous block that we can scan directly.
         /// </summary>
         private static unsafe void AxisCumSumInnerContiguous<T>(
-            T* src, T* dst, int* inputStrides, int* shape, int ndim,
-            int axisSize, int outerSize, int outputOuterStride)
+            T* src, T* dst, long* inputStrides, long* shape, int ndim,
+            long axisSize, long outerSize, long outputOuterStride)
             where T : unmanaged
         {
             // For innermost axis with stride=1, we can process each row directly
             // Calculate input row stride (total stride for incrementing outer dimensions)
-            int inputRowStride = inputStrides[ndim - 2 >= 0 ? ndim - 2 : 0];
+            long inputRowStride = inputStrides[ndim - 2 >= 0 ? ndim - 2 : 0];
             if (ndim == 1) inputRowStride = axisSize;
 
             // Dispatch to type-specific implementation for best performance
@@ -1286,15 +1288,15 @@ namespace NumSharp.Backends.Kernels
         /// Type-specific inner contiguous cumsum for double.
         /// </summary>
         private static unsafe void AxisCumSumInnerContiguousDouble(
-            double* src, double* dst, int inputRowStride, int axisSize, int outerSize, int outputOuterStride)
+            double* src, double* dst, long inputRowStride, long axisSize, long outerSize, long outputOuterStride)
         {
-            for (int outer = 0; outer < outerSize; outer++)
+            for (long outer = 0; outer < outerSize; outer++)
             {
                 double* srcRow = src + outer * inputRowStride;
                 double* dstRow = dst + outer * outputOuterStride;
 
                 double sum = 0.0;
-                for (int i = 0; i < axisSize; i++)
+                for (long i = 0; i < axisSize; i++)
                 {
                     sum += srcRow[i];
                     dstRow[i] = sum;
@@ -1306,15 +1308,15 @@ namespace NumSharp.Backends.Kernels
         /// Type-specific inner contiguous cumsum for float.
         /// </summary>
         private static unsafe void AxisCumSumInnerContiguousFloat(
-            float* src, float* dst, int inputRowStride, int axisSize, int outerSize, int outputOuterStride)
+            float* src, float* dst, long inputRowStride, long axisSize, long outerSize, long outputOuterStride)
         {
-            for (int outer = 0; outer < outerSize; outer++)
+            for (long outer = 0; outer < outerSize; outer++)
             {
                 float* srcRow = src + outer * inputRowStride;
                 float* dstRow = dst + outer * outputOuterStride;
 
                 float sum = 0f;
-                for (int i = 0; i < axisSize; i++)
+                for (long i = 0; i < axisSize; i++)
                 {
                     sum += srcRow[i];
                     dstRow[i] = sum;
@@ -1326,15 +1328,15 @@ namespace NumSharp.Backends.Kernels
         /// Type-specific inner contiguous cumsum for long.
         /// </summary>
         private static unsafe void AxisCumSumInnerContiguousInt64(
-            long* src, long* dst, int inputRowStride, int axisSize, int outerSize, int outputOuterStride)
+            long* src, long* dst, long inputRowStride, long axisSize, long outerSize, long outputOuterStride)
         {
-            for (int outer = 0; outer < outerSize; outer++)
+            for (long outer = 0; outer < outerSize; outer++)
             {
                 long* srcRow = src + outer * inputRowStride;
                 long* dstRow = dst + outer * outputOuterStride;
 
                 long sum = 0L;
-                for (int i = 0; i < axisSize; i++)
+                for (long i = 0; i < axisSize; i++)
                 {
                     sum += srcRow[i];
                     dstRow[i] = sum;
@@ -1346,15 +1348,15 @@ namespace NumSharp.Backends.Kernels
         /// Type-specific inner contiguous cumsum for int.
         /// </summary>
         private static unsafe void AxisCumSumInnerContiguousInt32(
-            int* src, int* dst, int inputRowStride, int axisSize, int outerSize, int outputOuterStride)
+            int* src, int* dst, long inputRowStride, long axisSize, long outerSize, long outputOuterStride)
         {
-            for (int outer = 0; outer < outerSize; outer++)
+            for (long outer = 0; outer < outerSize; outer++)
             {
                 int* srcRow = src + outer * inputRowStride;
                 int* dstRow = dst + outer * outputOuterStride;
 
                 int sum = 0;
-                for (int i = 0; i < axisSize; i++)
+                for (long i = 0; i < axisSize; i++)
                 {
                     sum += srcRow[i];
                     dstRow[i] = sum;
@@ -1366,7 +1368,7 @@ namespace NumSharp.Backends.Kernels
         /// Type-specific inner contiguous cumsum for byte.
         /// </summary>
         private static unsafe void AxisCumSumInnerContiguousByte(
-            byte* src, byte* dst, int inputRowStride, int axisSize, int outerSize, int outputOuterStride)
+            byte* src, byte* dst, long inputRowStride, long axisSize, long outerSize, long outputOuterStride)
         {
             for (int outer = 0; outer < outerSize; outer++)
             {
@@ -1386,7 +1388,7 @@ namespace NumSharp.Backends.Kernels
         /// Type-specific inner contiguous cumsum for short.
         /// </summary>
         private static unsafe void AxisCumSumInnerContiguousInt16(
-            short* src, short* dst, int inputRowStride, int axisSize, int outerSize, int outputOuterStride)
+            short* src, short* dst, long inputRowStride, long axisSize, long outerSize, long outputOuterStride)
         {
             for (int outer = 0; outer < outerSize; outer++)
             {
@@ -1406,7 +1408,7 @@ namespace NumSharp.Backends.Kernels
         /// Type-specific inner contiguous cumsum for ushort.
         /// </summary>
         private static unsafe void AxisCumSumInnerContiguousUInt16(
-            ushort* src, ushort* dst, int inputRowStride, int axisSize, int outerSize, int outputOuterStride)
+            ushort* src, ushort* dst, long inputRowStride, long axisSize, long outerSize, long outputOuterStride)
         {
             for (int outer = 0; outer < outerSize; outer++)
             {
@@ -1426,7 +1428,7 @@ namespace NumSharp.Backends.Kernels
         /// Type-specific inner contiguous cumsum for uint.
         /// </summary>
         private static unsafe void AxisCumSumInnerContiguousUInt32(
-            uint* src, uint* dst, int inputRowStride, int axisSize, int outerSize, int outputOuterStride)
+            uint* src, uint* dst, long inputRowStride, long axisSize, long outerSize, long outputOuterStride)
         {
             for (int outer = 0; outer < outerSize; outer++)
             {
@@ -1446,7 +1448,7 @@ namespace NumSharp.Backends.Kernels
         /// Type-specific inner contiguous cumsum for ulong.
         /// </summary>
         private static unsafe void AxisCumSumInnerContiguousUInt64(
-            ulong* src, ulong* dst, int inputRowStride, int axisSize, int outerSize, int outputOuterStride)
+            ulong* src, ulong* dst, long inputRowStride, long axisSize, long outerSize, long outputOuterStride)
         {
             for (int outer = 0; outer < outerSize; outer++)
             {
@@ -1466,7 +1468,7 @@ namespace NumSharp.Backends.Kernels
         /// Type-specific inner contiguous cumsum for decimal.
         /// </summary>
         private static unsafe void AxisCumSumInnerContiguousDecimal(
-            decimal* src, decimal* dst, int inputRowStride, int axisSize, int outerSize, int outputOuterStride)
+            decimal* src, decimal* dst, long inputRowStride, long axisSize, long outerSize, long outputOuterStride)
         {
             for (int outer = 0; outer < outerSize; outer++)
             {
@@ -1487,20 +1489,20 @@ namespace NumSharp.Backends.Kernels
         /// Handles non-contiguous axes and complex stride patterns.
         /// </summary>
         private static unsafe void AxisCumSumGeneral<T>(
-            T* src, T* dst, int* inputStrides, int* shape, int axis, int ndim,
-            int axisSize, int axisStride, int outerSize, int innerSize,
-            int outputAxisStride, int outputOuterStride)
+            T* src, T* dst, long* inputStrides, long* shape, int axis, int ndim,
+            long axisSize, long axisStride, long outerSize, long innerSize,
+            long outputAxisStride, long outputOuterStride)
             where T : unmanaged
         {
             // For each combination of outer and inner indices, compute cumsum along axis
             // Output is always contiguous, input may be strided
 
             // Precompute inner and outer strides for input
-            int* outerStrides = stackalloc int[ndim];
-            int* innerStrides = stackalloc int[ndim];
+            long* outerStrides = stackalloc long[ndim];
+            long* innerStrides = stackalloc long[ndim];
 
-            int outerStride = 1;
-            int innerStride = 1;
+            long outerStride = 1;
+            long innerStride = 1;
 
             // Outer dimensions: 0 to axis-1
             for (int d = axis - 1; d >= 0; d--)
@@ -1587,34 +1589,34 @@ namespace NumSharp.Backends.Kernels
         /// General axis cumsum for double type.
         /// </summary>
         private static unsafe void AxisCumSumGeneralDouble(
-            double* src, double* dst, int* inputStrides, int* shape, int axis, int ndim,
-            int axisSize, int axisStride, int outerSize, int innerSize,
-            int outputAxisStride, int outputOuterStride, int* outerStrides, int* innerStrides)
+            double* src, double* dst, long* inputStrides, long* shape, int axis, int ndim,
+            long axisSize, long axisStride, long outerSize, long innerSize,
+            long outputAxisStride, long outputOuterStride, long* outerStrides, long* innerStrides)
         {
             for (int outer = 0; outer < outerSize; outer++)
             {
                 for (int inner = 0; inner < innerSize; inner++)
                 {
                     // Calculate input base offset for this (outer, inner) combination
-                    int inputOffset = 0;
-                    int outerIdx = outer;
+                    long inputOffset = 0;
+                    long outerIdx = outer;
                     for (int d = axis - 1; d >= 0; d--)
                     {
-                        int coord = outerIdx % shape[d];
+                        long coord = outerIdx % shape[d];
                         outerIdx /= shape[d];
                         inputOffset += coord * inputStrides[d];
                     }
 
-                    int innerIdx = inner;
+                    long innerIdx = inner;
                     for (int d = ndim - 1; d > axis; d--)
                     {
-                        int coord = innerIdx % shape[d];
+                        long coord = innerIdx % shape[d];
                         innerIdx /= shape[d];
                         inputOffset += coord * inputStrides[d];
                     }
 
                     // Calculate output base offset
-                    int outputOffset = outer * outputOuterStride + inner;
+                    long outputOffset = outer * outputOuterStride + inner;
 
                     // Cumsum along axis
                     double sum = 0.0;
@@ -1631,32 +1633,32 @@ namespace NumSharp.Backends.Kernels
         /// General axis cumsum for float type.
         /// </summary>
         private static unsafe void AxisCumSumGeneralFloat(
-            float* src, float* dst, int* inputStrides, int* shape, int axis, int ndim,
-            int axisSize, int axisStride, int outerSize, int innerSize,
-            int outputAxisStride, int outputOuterStride, int* outerStrides, int* innerStrides)
+            float* src, float* dst, long* inputStrides, long* shape, int axis, int ndim,
+            long axisSize, long axisStride, long outerSize, long innerSize,
+            long outputAxisStride, long outputOuterStride, long* outerStrides, long* innerStrides)
         {
             for (int outer = 0; outer < outerSize; outer++)
             {
                 for (int inner = 0; inner < innerSize; inner++)
                 {
-                    int inputOffset = 0;
-                    int outerIdx = outer;
+                    long inputOffset = 0;
+                    long outerIdx = outer;
                     for (int d = axis - 1; d >= 0; d--)
                     {
-                        int coord = outerIdx % shape[d];
+                        long coord = outerIdx % shape[d];
                         outerIdx /= shape[d];
                         inputOffset += coord * inputStrides[d];
                     }
 
-                    int innerIdx = inner;
+                    long innerIdx = inner;
                     for (int d = ndim - 1; d > axis; d--)
                     {
-                        int coord = innerIdx % shape[d];
+                        long coord = innerIdx % shape[d];
                         innerIdx /= shape[d];
                         inputOffset += coord * inputStrides[d];
                     }
 
-                    int outputOffset = outer * outputOuterStride + inner;
+                    long outputOffset = outer * outputOuterStride + inner;
 
                     float sum = 0f;
                     for (int i = 0; i < axisSize; i++)
@@ -1672,32 +1674,32 @@ namespace NumSharp.Backends.Kernels
         /// General axis cumsum for long type.
         /// </summary>
         private static unsafe void AxisCumSumGeneralInt64(
-            long* src, long* dst, int* inputStrides, int* shape, int axis, int ndim,
-            int axisSize, int axisStride, int outerSize, int innerSize,
-            int outputAxisStride, int outputOuterStride, int* outerStrides, int* innerStrides)
+            long* src, long* dst, long* inputStrides, long* shape, int axis, int ndim,
+            long axisSize, long axisStride, long outerSize, long innerSize,
+            long outputAxisStride, long outputOuterStride, long* outerStrides, long* innerStrides)
         {
             for (int outer = 0; outer < outerSize; outer++)
             {
                 for (int inner = 0; inner < innerSize; inner++)
                 {
-                    int inputOffset = 0;
-                    int outerIdx = outer;
+                    long inputOffset = 0;
+                    long outerIdx = outer;
                     for (int d = axis - 1; d >= 0; d--)
                     {
-                        int coord = outerIdx % shape[d];
+                        long coord = outerIdx % shape[d];
                         outerIdx /= shape[d];
                         inputOffset += coord * inputStrides[d];
                     }
 
-                    int innerIdx = inner;
+                    long innerIdx = inner;
                     for (int d = ndim - 1; d > axis; d--)
                     {
-                        int coord = innerIdx % shape[d];
+                        long coord = innerIdx % shape[d];
                         innerIdx /= shape[d];
                         inputOffset += coord * inputStrides[d];
                     }
 
-                    int outputOffset = outer * outputOuterStride + inner;
+                    long outputOffset = outer * outputOuterStride + inner;
 
                     long sum = 0L;
                     for (int i = 0; i < axisSize; i++)
@@ -1713,32 +1715,32 @@ namespace NumSharp.Backends.Kernels
         /// General axis cumsum for int type.
         /// </summary>
         private static unsafe void AxisCumSumGeneralInt32(
-            int* src, int* dst, int* inputStrides, int* shape, int axis, int ndim,
-            int axisSize, int axisStride, int outerSize, int innerSize,
-            int outputAxisStride, int outputOuterStride, int* outerStrides, int* innerStrides)
+            int* src, int* dst, long* inputStrides, long* shape, int axis, int ndim,
+            long axisSize, long axisStride, long outerSize, long innerSize,
+            long outputAxisStride, long outputOuterStride, long* outerStrides, long* innerStrides)
         {
             for (int outer = 0; outer < outerSize; outer++)
             {
                 for (int inner = 0; inner < innerSize; inner++)
                 {
-                    int inputOffset = 0;
-                    int outerIdx = outer;
+                    long inputOffset = 0;
+                    long outerIdx = outer;
                     for (int d = axis - 1; d >= 0; d--)
                     {
-                        int coord = outerIdx % shape[d];
+                        long coord = outerIdx % shape[d];
                         outerIdx /= shape[d];
                         inputOffset += coord * inputStrides[d];
                     }
 
-                    int innerIdx = inner;
+                    long innerIdx = inner;
                     for (int d = ndim - 1; d > axis; d--)
                     {
-                        int coord = innerIdx % shape[d];
+                        long coord = innerIdx % shape[d];
                         innerIdx /= shape[d];
                         inputOffset += coord * inputStrides[d];
                     }
 
-                    int outputOffset = outer * outputOuterStride + inner;
+                    long outputOffset = outer * outputOuterStride + inner;
 
                     int sum = 0;
                     for (int i = 0; i < axisSize; i++)
@@ -1753,16 +1755,16 @@ namespace NumSharp.Backends.Kernels
         // Type-specific AxisCumSumGeneral methods for remaining types
 
         private static unsafe void AxisCumSumGeneralByte(
-            byte* src, byte* dst, int* inputStrides, int* shape, int axis, int ndim,
-            int axisSize, int axisStride, int outerSize, int innerSize,
-            int outputAxisStride, int outputOuterStride, int* outerStrides, int* innerStrides)
+            byte* src, byte* dst, long* inputStrides, long* shape, int axis, int ndim,
+            long axisSize, long axisStride, long outerSize, long innerSize,
+            long outputAxisStride, long outputOuterStride, long* outerStrides, long* innerStrides)
         {
             for (int outer = 0; outer < outerSize; outer++)
             {
                 for (int inner = 0; inner < innerSize; inner++)
                 {
-                    int inputOffset = CalculateInputOffset(inputStrides, shape, axis, ndim, outer, inner);
-                    int outputOffset = outer * outputOuterStride + inner;
+                    long inputOffset = CalculateInputOffset(inputStrides, shape, axis, ndim, outer, inner);
+                    long outputOffset = outer * outputOuterStride + inner;
                     byte sum = 0;
                     for (int i = 0; i < axisSize; i++)
                     {
@@ -1774,16 +1776,16 @@ namespace NumSharp.Backends.Kernels
         }
 
         private static unsafe void AxisCumSumGeneralInt16(
-            short* src, short* dst, int* inputStrides, int* shape, int axis, int ndim,
-            int axisSize, int axisStride, int outerSize, int innerSize,
-            int outputAxisStride, int outputOuterStride, int* outerStrides, int* innerStrides)
+            short* src, short* dst, long* inputStrides, long* shape, int axis, int ndim,
+            long axisSize, long axisStride, long outerSize, long innerSize,
+            long outputAxisStride, long outputOuterStride, long* outerStrides, long* innerStrides)
         {
             for (int outer = 0; outer < outerSize; outer++)
             {
                 for (int inner = 0; inner < innerSize; inner++)
                 {
-                    int inputOffset = CalculateInputOffset(inputStrides, shape, axis, ndim, outer, inner);
-                    int outputOffset = outer * outputOuterStride + inner;
+                    long inputOffset = CalculateInputOffset(inputStrides, shape, axis, ndim, outer, inner);
+                    long outputOffset = outer * outputOuterStride + inner;
                     short sum = 0;
                     for (int i = 0; i < axisSize; i++)
                     {
@@ -1795,16 +1797,16 @@ namespace NumSharp.Backends.Kernels
         }
 
         private static unsafe void AxisCumSumGeneralUInt16(
-            ushort* src, ushort* dst, int* inputStrides, int* shape, int axis, int ndim,
-            int axisSize, int axisStride, int outerSize, int innerSize,
-            int outputAxisStride, int outputOuterStride, int* outerStrides, int* innerStrides)
+            ushort* src, ushort* dst, long* inputStrides, long* shape, int axis, int ndim,
+            long axisSize, long axisStride, long outerSize, long innerSize,
+            long outputAxisStride, long outputOuterStride, long* outerStrides, long* innerStrides)
         {
             for (int outer = 0; outer < outerSize; outer++)
             {
                 for (int inner = 0; inner < innerSize; inner++)
                 {
-                    int inputOffset = CalculateInputOffset(inputStrides, shape, axis, ndim, outer, inner);
-                    int outputOffset = outer * outputOuterStride + inner;
+                    long inputOffset = CalculateInputOffset(inputStrides, shape, axis, ndim, outer, inner);
+                    long outputOffset = outer * outputOuterStride + inner;
                     ushort sum = 0;
                     for (int i = 0; i < axisSize; i++)
                     {
@@ -1816,16 +1818,16 @@ namespace NumSharp.Backends.Kernels
         }
 
         private static unsafe void AxisCumSumGeneralUInt32(
-            uint* src, uint* dst, int* inputStrides, int* shape, int axis, int ndim,
-            int axisSize, int axisStride, int outerSize, int innerSize,
-            int outputAxisStride, int outputOuterStride, int* outerStrides, int* innerStrides)
+            uint* src, uint* dst, long* inputStrides, long* shape, int axis, int ndim,
+            long axisSize, long axisStride, long outerSize, long innerSize,
+            long outputAxisStride, long outputOuterStride, long* outerStrides, long* innerStrides)
         {
             for (int outer = 0; outer < outerSize; outer++)
             {
                 for (int inner = 0; inner < innerSize; inner++)
                 {
-                    int inputOffset = CalculateInputOffset(inputStrides, shape, axis, ndim, outer, inner);
-                    int outputOffset = outer * outputOuterStride + inner;
+                    long inputOffset = CalculateInputOffset(inputStrides, shape, axis, ndim, outer, inner);
+                    long outputOffset = outer * outputOuterStride + inner;
                     uint sum = 0;
                     for (int i = 0; i < axisSize; i++)
                     {
@@ -1837,16 +1839,16 @@ namespace NumSharp.Backends.Kernels
         }
 
         private static unsafe void AxisCumSumGeneralUInt64(
-            ulong* src, ulong* dst, int* inputStrides, int* shape, int axis, int ndim,
-            int axisSize, int axisStride, int outerSize, int innerSize,
-            int outputAxisStride, int outputOuterStride, int* outerStrides, int* innerStrides)
+            ulong* src, ulong* dst, long* inputStrides, long* shape, int axis, int ndim,
+            long axisSize, long axisStride, long outerSize, long innerSize,
+            long outputAxisStride, long outputOuterStride, long* outerStrides, long* innerStrides)
         {
             for (int outer = 0; outer < outerSize; outer++)
             {
                 for (int inner = 0; inner < innerSize; inner++)
                 {
-                    int inputOffset = CalculateInputOffset(inputStrides, shape, axis, ndim, outer, inner);
-                    int outputOffset = outer * outputOuterStride + inner;
+                    long inputOffset = CalculateInputOffset(inputStrides, shape, axis, ndim, outer, inner);
+                    long outputOffset = outer * outputOuterStride + inner;
                     ulong sum = 0;
                     for (int i = 0; i < axisSize; i++)
                     {
@@ -1858,16 +1860,16 @@ namespace NumSharp.Backends.Kernels
         }
 
         private static unsafe void AxisCumSumGeneralDecimal(
-            decimal* src, decimal* dst, int* inputStrides, int* shape, int axis, int ndim,
-            int axisSize, int axisStride, int outerSize, int innerSize,
-            int outputAxisStride, int outputOuterStride, int* outerStrides, int* innerStrides)
+            decimal* src, decimal* dst, long* inputStrides, long* shape, int axis, int ndim,
+            long axisSize, long axisStride, long outerSize, long innerSize,
+            long outputAxisStride, long outputOuterStride, long* outerStrides, long* innerStrides)
         {
             for (int outer = 0; outer < outerSize; outer++)
             {
                 for (int inner = 0; inner < innerSize; inner++)
                 {
-                    int inputOffset = CalculateInputOffset(inputStrides, shape, axis, ndim, outer, inner);
-                    int outputOffset = outer * outputOuterStride + inner;
+                    long inputOffset = CalculateInputOffset(inputStrides, shape, axis, ndim, outer, inner);
+                    long outputOffset = outer * outputOuterStride + inner;
                     decimal sum = 0m;
                     for (int i = 0; i < axisSize; i++)
                     {
@@ -1899,9 +1901,9 @@ namespace NumSharp.Backends.Kernels
         /// based on the concrete types, eliminating all branching.
         /// </remarks>
         private static unsafe void AxisCumSumWithConversion<TIn, TOut>(
-            TIn* src, TOut* dst, int* inputStrides, int* shape, int axis, int ndim,
-            int axisSize, int axisStride, int outerSize, int innerSize,
-            int outputAxisStride, int outputOuterStride)
+            TIn* src, TOut* dst, long* inputStrides, long* shape, int axis, int ndim,
+            long axisSize, long axisStride, long outerSize, long innerSize,
+            long outputAxisStride, long outputOuterStride)
             where TIn : unmanaged
             where TOut : unmanaged
         {
@@ -1914,35 +1916,35 @@ namespace NumSharp.Backends.Kernels
             }
 
             // General fallback using Convert
-            for (int outer = 0; outer < outerSize; outer++)
+            for (long outer = 0; outer < outerSize; outer++)
             {
-                for (int inner = 0; inner < innerSize; inner++)
+                for (long inner = 0; inner < innerSize; inner++)
                 {
-                    int inputOffset = 0;
-                    int outerIdx = outer;
+                    long inputOffset = 0;
+                    long outerIdx = outer;
                     for (int d = axis - 1; d >= 0; d--)
                     {
-                        int coord = outerIdx % shape[d];
+                        long coord = outerIdx % shape[d];
                         outerIdx /= shape[d];
                         inputOffset += coord * inputStrides[d];
                     }
 
-                    int innerIdx = inner;
+                    long innerIdx = inner;
                     for (int d = ndim - 1; d > axis; d--)
                     {
-                        int coord = innerIdx % shape[d];
+                        long coord = innerIdx % shape[d];
                         innerIdx /= shape[d];
                         inputOffset += coord * inputStrides[d];
                     }
 
-                    int outputOffset = outer * outputOuterStride + inner;
+                    long outputOffset = outer * outputOuterStride + inner;
 
                     // Use appropriate accumulator type
                     if (typeof(TOut) == typeof(long))
                     {
                         long sum = 0L;
                         long* dstTyped = (long*)dst;
-                        for (int i = 0; i < axisSize; i++)
+                        for (long i = 0; i < axisSize; i++)
                         {
                             sum += Convert.ToInt64(src[inputOffset + i * axisStride]);
                             dstTyped[outputOffset + i * outputAxisStride] = sum;
@@ -1952,7 +1954,7 @@ namespace NumSharp.Backends.Kernels
                     {
                         double sum = 0.0;
                         double* dstTyped = (double*)dst;
-                        for (int i = 0; i < axisSize; i++)
+                        for (long i = 0; i < axisSize; i++)
                         {
                             sum += Convert.ToDouble(src[inputOffset + i * axisStride]);
                             dstTyped[outputOffset + i * outputAxisStride] = sum;
@@ -1962,7 +1964,7 @@ namespace NumSharp.Backends.Kernels
                     {
                         float sum = 0f;
                         float* dstTyped = (float*)dst;
-                        for (int i = 0; i < axisSize; i++)
+                        for (long i = 0; i < axisSize; i++)
                         {
                             sum += Convert.ToSingle(src[inputOffset + i * axisStride]);
                             dstTyped[outputOffset + i * outputAxisStride] = sum;
@@ -1972,7 +1974,7 @@ namespace NumSharp.Backends.Kernels
                     {
                         ulong sum = 0UL;
                         ulong* dstTyped = (ulong*)dst;
-                        for (int i = 0; i < axisSize; i++)
+                        for (long i = 0; i < axisSize; i++)
                         {
                             sum += Convert.ToUInt64(src[inputOffset + i * axisStride]);
                             dstTyped[outputOffset + i * outputAxisStride] = sum;
@@ -1982,7 +1984,7 @@ namespace NumSharp.Backends.Kernels
                     {
                         decimal sum = 0m;
                         decimal* dstTyped = (decimal*)dst;
-                        for (int i = 0; i < axisSize; i++)
+                        for (long i = 0; i < axisSize; i++)
                         {
                             sum += Convert.ToDecimal(src[inputOffset + i * axisStride]);
                             dstTyped[outputOffset + i * outputAxisStride] = sum;
@@ -2000,35 +2002,35 @@ namespace NumSharp.Backends.Kernels
         /// Specialized int32 -> int64 axis cumsum.
         /// </summary>
         private static unsafe void AxisCumSumInt32ToInt64(
-            int* src, long* dst, int* inputStrides, int* shape, int axis, int ndim,
-            int axisSize, int axisStride, int outerSize, int innerSize,
-            int outputAxisStride, int outputOuterStride)
+            int* src, long* dst, long* inputStrides, long* shape, int axis, int ndim,
+            long axisSize, long axisStride, long outerSize, long innerSize,
+            long outputAxisStride, long outputOuterStride)
         {
-            for (int outer = 0; outer < outerSize; outer++)
+            for (long outer = 0; outer < outerSize; outer++)
             {
-                for (int inner = 0; inner < innerSize; inner++)
+                for (long inner = 0; inner < innerSize; inner++)
                 {
-                    int inputOffset = 0;
-                    int outerIdx = outer;
+                    long inputOffset = 0;
+                    long outerIdx = outer;
                     for (int d = axis - 1; d >= 0; d--)
                     {
-                        int coord = outerIdx % shape[d];
+                        long coord = outerIdx % shape[d];
                         outerIdx /= shape[d];
                         inputOffset += coord * inputStrides[d];
                     }
 
-                    int innerIdx = inner;
+                    long innerIdx = inner;
                     for (int d = ndim - 1; d > axis; d--)
                     {
-                        int coord = innerIdx % shape[d];
+                        long coord = innerIdx % shape[d];
                         innerIdx /= shape[d];
                         inputOffset += coord * inputStrides[d];
                     }
 
-                    int outputOffset = outer * outputOuterStride + inner;
+                    long outputOffset = outer * outputOuterStride + inner;
 
                     long sum = 0L;
-                    for (int i = 0; i < axisSize; i++)
+                    for (long i = 0; i < axisSize; i++)
                     {
                         sum += src[inputOffset + i * axisStride];
                         dst[outputOffset + i * outputAxisStride] = sum;
@@ -2050,7 +2052,7 @@ namespace NumSharp.Backends.Kernels
         /// <param name="input">Pointer to input data</param>
         /// <param name="output">Pointer to output data</param>
         /// <param name="totalSize">Number of elements</param>
-        public static unsafe void CumSumHelper<TIn, TOut>(void* input, void* output, int totalSize)
+        public static unsafe void CumSumHelper<TIn, TOut>(void* input, void* output, long totalSize)
             where TIn : unmanaged
             where TOut : unmanaged
         {
@@ -2074,7 +2076,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Dispatch same-type cumsum to appropriate implementation.
         /// </summary>
-        private static unsafe void CumSumSameTypeDispatch<T>(void* input, void* output, int totalSize)
+        private static unsafe void CumSumSameTypeDispatch<T>(void* input, void* output, long totalSize)
             where T : unmanaged
         {
             if (typeof(T) == typeof(float))
@@ -2131,10 +2133,10 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Optimized cumsum for char arrays (arithmetic as ushort).
         /// </summary>
-        private static unsafe void CumSumChar(char* src, char* dst, int size)
+        private static unsafe void CumSumChar(char* src, char* dst, long size)
         {
             int sum = 0; // Use int to avoid overflow
-            for (int i = 0; i < size; i++)
+            for (long i = 0; i < size; i++)
             {
                 sum += src[i];
                 dst[i] = (char)sum;
@@ -2144,10 +2146,10 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Optimized cumsum for float arrays.
         /// </summary>
-        private static unsafe void CumSumFloat(float* src, float* dst, int size)
+        private static unsafe void CumSumFloat(float* src, float* dst, long size)
         {
             float sum = 0f;
-            for (int i = 0; i < size; i++)
+            for (long i = 0; i < size; i++)
             {
                 sum += src[i];
                 dst[i] = sum;
@@ -2157,10 +2159,10 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Optimized cumsum for double arrays.
         /// </summary>
-        private static unsafe void CumSumDouble(double* src, double* dst, int size)
+        private static unsafe void CumSumDouble(double* src, double* dst, long size)
         {
             double sum = 0.0;
-            for (int i = 0; i < size; i++)
+            for (long i = 0; i < size; i++)
             {
                 sum += src[i];
                 dst[i] = sum;
@@ -2170,10 +2172,10 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Optimized cumsum for int arrays.
         /// </summary>
-        private static unsafe void CumSumInt32(int* src, int* dst, int size)
+        private static unsafe void CumSumInt32(int* src, int* dst, long size)
         {
             int sum = 0;
-            for (int i = 0; i < size; i++)
+            for (long i = 0; i < size; i++)
             {
                 sum += src[i];
                 dst[i] = sum;
@@ -2183,10 +2185,10 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Optimized cumsum for long arrays.
         /// </summary>
-        private static unsafe void CumSumInt64(long* src, long* dst, int size)
+        private static unsafe void CumSumInt64(long* src, long* dst, long size)
         {
             long sum = 0L;
-            for (int i = 0; i < size; i++)
+            for (long i = 0; i < size; i++)
             {
                 sum += src[i];
                 dst[i] = sum;
@@ -2196,10 +2198,10 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Optimized cumsum for byte arrays.
         /// </summary>
-        private static unsafe void CumSumByte(byte* src, byte* dst, int size)
+        private static unsafe void CumSumByte(byte* src, byte* dst, long size)
         {
             byte sum = 0;
-            for (int i = 0; i < size; i++)
+            for (long i = 0; i < size; i++)
             {
                 sum += src[i];
                 dst[i] = sum;
@@ -2209,10 +2211,10 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Optimized cumsum for short arrays.
         /// </summary>
-        private static unsafe void CumSumInt16(short* src, short* dst, int size)
+        private static unsafe void CumSumInt16(short* src, short* dst, long size)
         {
             short sum = 0;
-            for (int i = 0; i < size; i++)
+            for (long i = 0; i < size; i++)
             {
                 sum += src[i];
                 dst[i] = sum;
@@ -2222,10 +2224,10 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Optimized cumsum for uint arrays.
         /// </summary>
-        private static unsafe void CumSumUInt32(uint* src, uint* dst, int size)
+        private static unsafe void CumSumUInt32(uint* src, uint* dst, long size)
         {
             uint sum = 0;
-            for (int i = 0; i < size; i++)
+            for (long i = 0; i < size; i++)
             {
                 sum += src[i];
                 dst[i] = sum;
@@ -2235,10 +2237,10 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Optimized cumsum for ulong arrays.
         /// </summary>
-        private static unsafe void CumSumUInt64(ulong* src, ulong* dst, int size)
+        private static unsafe void CumSumUInt64(ulong* src, ulong* dst, long size)
         {
             ulong sum = 0;
-            for (int i = 0; i < size; i++)
+            for (long i = 0; i < size; i++)
             {
                 sum += src[i];
                 dst[i] = sum;
@@ -2248,10 +2250,10 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Optimized cumsum for ushort arrays.
         /// </summary>
-        private static unsafe void CumSumUInt16(ushort* src, ushort* dst, int size)
+        private static unsafe void CumSumUInt16(ushort* src, ushort* dst, long size)
         {
             ushort sum = 0;
-            for (int i = 0; i < size; i++)
+            for (long i = 0; i < size; i++)
             {
                 sum += src[i];
                 dst[i] = sum;
@@ -2261,10 +2263,10 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Optimized cumsum for decimal arrays.
         /// </summary>
-        private static unsafe void CumSumDecimal(decimal* src, decimal* dst, int size)
+        private static unsafe void CumSumDecimal(decimal* src, decimal* dst, long size)
         {
             decimal sum = 0m;
-            for (int i = 0; i < size; i++)
+            for (long i = 0; i < size; i++)
             {
                 sum += src[i];
                 dst[i] = sum;
@@ -2274,7 +2276,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Cumsum with type conversion from TIn to TOut.
         /// </summary>
-        private static unsafe void CumSumWithConversion<TIn, TOut>(void* input, void* output, int totalSize)
+        private static unsafe void CumSumWithConversion<TIn, TOut>(void* input, void* output, long totalSize)
             where TIn : unmanaged
             where TOut : unmanaged
         {
@@ -2287,7 +2289,7 @@ namespace NumSharp.Backends.Kernels
                 int* src = (int*)input;
                 long* dst = (long*)output;
                 long sum = 0L;
-                for (int i = 0; i < totalSize; i++)
+                for (long i = 0; i < totalSize; i++)
                 {
                     sum += src[i];
                     dst[i] = sum;
@@ -2301,7 +2303,7 @@ namespace NumSharp.Backends.Kernels
                 float* src = (float*)input;
                 double* dst = (double*)output;
                 double sum = 0.0;
-                for (int i = 0; i < totalSize; i++)
+                for (long i = 0; i < totalSize; i++)
                 {
                     sum += src[i];
                     dst[i] = sum;
@@ -2315,7 +2317,7 @@ namespace NumSharp.Backends.Kernels
                 byte* src = (byte*)input;
                 long* dst = (long*)output;
                 long sum = 0L;
-                for (int i = 0; i < totalSize; i++)
+                for (long i = 0; i < totalSize; i++)
                 {
                     sum += src[i];
                     dst[i] = sum;
@@ -2329,7 +2331,7 @@ namespace NumSharp.Backends.Kernels
                 short* src = (short*)input;
                 long* dst = (long*)output;
                 long sum = 0L;
-                for (int i = 0; i < totalSize; i++)
+                for (long i = 0; i < totalSize; i++)
                 {
                     sum += src[i];
                     dst[i] = sum;
@@ -2343,7 +2345,7 @@ namespace NumSharp.Backends.Kernels
                 uint* src = (uint*)input;
                 ulong* dst = (ulong*)output;
                 ulong sum = 0UL;
-                for (int i = 0; i < totalSize; i++)
+                for (long i = 0; i < totalSize; i++)
                 {
                     sum += src[i];
                     dst[i] = sum;
@@ -2375,7 +2377,7 @@ namespace NumSharp.Backends.Kernels
         /// The IL kernel would directly emit the correct Convert.ToXxx call and accumulator type
         /// based on the concrete types, eliminating all branching.
         /// </remarks>
-        private static unsafe void CumSumWithConversionGeneral<TIn, TOut>(void* input, void* output, int totalSize)
+        private static unsafe void CumSumWithConversionGeneral<TIn, TOut>(void* input, void* output, long totalSize)
             where TIn : unmanaged
             where TOut : unmanaged
         {
@@ -2387,7 +2389,7 @@ namespace NumSharp.Backends.Kernels
             {
                 double sum = 0.0;
                 double* dstDouble = (double*)dst;
-                for (int i = 0; i < totalSize; i++)
+                for (long i = 0; i < totalSize; i++)
                 {
                     sum += Convert.ToDouble(src[i]);
                     dstDouble[i] = sum;
@@ -2397,7 +2399,7 @@ namespace NumSharp.Backends.Kernels
             {
                 long sum = 0L;
                 long* dstLong = (long*)dst;
-                for (int i = 0; i < totalSize; i++)
+                for (long i = 0; i < totalSize; i++)
                 {
                     sum += Convert.ToInt64(src[i]);
                     dstLong[i] = sum;
@@ -2407,7 +2409,7 @@ namespace NumSharp.Backends.Kernels
             {
                 decimal sum = 0m;
                 decimal* dstDecimal = (decimal*)dst;
-                for (int i = 0; i < totalSize; i++)
+                for (long i = 0; i < totalSize; i++)
                 {
                     sum += Convert.ToDecimal(src[i]);
                     dstDecimal[i] = sum;
@@ -2417,7 +2419,7 @@ namespace NumSharp.Backends.Kernels
             {
                 float sum = 0f;
                 float* dstFloat = (float*)dst;
-                for (int i = 0; i < totalSize; i++)
+                for (long i = 0; i < totalSize; i++)
                 {
                     sum += Convert.ToSingle(src[i]);
                     dstFloat[i] = sum;
@@ -2427,7 +2429,7 @@ namespace NumSharp.Backends.Kernels
             {
                 ulong sum = 0UL;
                 ulong* dstUlong = (ulong*)dst;
-                for (int i = 0; i < totalSize; i++)
+                for (long i = 0; i < totalSize; i++)
                 {
                     sum += Convert.ToUInt64(src[i]);
                     dstUlong[i] = sum;

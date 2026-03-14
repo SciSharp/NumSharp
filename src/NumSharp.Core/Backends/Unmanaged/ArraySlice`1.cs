@@ -53,7 +53,7 @@ namespace NumSharp.Backends.Unmanaged
             MemoryBlock = memoryBlock;
             IsSlice = false;
             VoidAddress = Address = MemoryBlock.Address;
-            Count = (int)MemoryBlock.Count; //TODO! when long index, remove cast int
+            Count = MemoryBlock.Count;
         }
 
         public ArraySlice(UnmanagedMemoryBlock<T> memoryBlock, Span<T> slice)
@@ -68,28 +68,13 @@ namespace NumSharp.Backends.Unmanaged
         ///     Creates a sliced <see cref="ArraySlice{T}"/>.
         /// </summary>
         /// <param name="memoryBlock"></param>
-        /// <param name="start">The offset in <typeparamref name="T"/> and not bytes - relative to the <paramref name="memoryBlock"/>.</param>
-        /// <param name="count">The number of <typeparamref name="T"/> this slice should contain - relative to the <paramref name="memoryBlock"/></param>
-        public ArraySlice(UnmanagedMemoryBlock<T> memoryBlock, T* address, int count)
-        {
-            MemoryBlock = memoryBlock;
-            IsSlice = true;
-            Count = count;
-            VoidAddress = Address = (T*)address;
-            //TODO! we should check that is does not exceed bounds.
-        }
-
-        /// <summary>
-        ///     Creates a sliced <see cref="ArraySlice{T}"/>.
-        /// </summary>
-        /// <param name="memoryBlock"></param>
-        /// <param name="start">The offset in <typeparamref name="T"/> and not bytes - relative to the <paramref name="memoryBlock"/>.</param>
-        /// <param name="count">The number of <typeparamref name="T"/> this slice should contain - relative to the <paramref name="memoryBlock"/></param>
+        /// <param name="address">The address of the first element</param>
+        /// <param name="count">The number of <typeparamref name="T"/> this slice should contain</param>
         public ArraySlice(UnmanagedMemoryBlock<T> memoryBlock, T* address, long count)
         {
             MemoryBlock = memoryBlock;
             IsSlice = true;
-            Count = (int)count; //TODO! When index long, this should not cast.
+            Count = count;
             VoidAddress = Address = address;
 #if DEBUG
             if (address + count > memoryBlock.Address + memoryBlock.Count)
@@ -152,7 +137,7 @@ namespace NumSharp.Backends.Unmanaged
         }
 
         [MethodImpl(OptimizeAndInline)]
-        public void SetIndex(long index, T value)
+        public void SetIndex(int index, T value)
         {
             Debug.Assert(index < Count, "index < Count, Memory corruption expected.");
             *(Address + index) = value;
@@ -184,50 +169,55 @@ namespace NumSharp.Backends.Unmanaged
         {
             if (Unsafe.SizeOf<T>() == 1)
             {
-                uint length = (uint)Count;
-                if (length == 0)
-                    return;
+                // For single-byte types, we can use InitBlockUnaligned but need to handle large counts
+                if (Count > uint.MaxValue)
+                {
+                    // Fall through to the loop below for very large arrays
+                }
+                else
+                {
+                    uint byteLen = (uint)Count;
+                    if (byteLen == 0)
+                        return;
 
-                T tmp = value; // Avoid taking address of the "value" argument. It would regress performance of the loop below.
-                Unsafe.InitBlockUnaligned(Address, Unsafe.As<T, byte>(ref tmp), length);
+                    T tmp = value; // Avoid taking address of the "value" argument. It would regress performance of the loop below.
+                    Unsafe.InitBlockUnaligned(Address, Unsafe.As<T, byte>(ref tmp), byteLen);
+                    return;
+                }
             }
-            else
+
+            // Use long for loop variable to handle large arrays
+            long length = Count;
+            if (length == 0)
+                return;
+
+            T* addr = Address;
+
+            long i = 0;
+            for (; i < (length & ~7L); i += 8)
             {
-                // Do all math as nuint to avoid unnecessary 64->32->64 bit integer truncations
-                nuint length = (uint)Count;
-                if (length == 0)
-                    return;
+                *(addr + i) = value;
+                *(addr + (i + 1)) = value;
+                *(addr + (i + 2)) = value;
+                *(addr + (i + 3)) = value;
+                *(addr + (i + 4)) = value;
+                *(addr + (i + 5)) = value;
+                *(addr + (i + 6)) = value;
+                *(addr + (i + 7)) = value;
+            }
 
-                T* addr = Address;
+            if (i < (length & ~3L))
+            {
+                *(addr + i) = value;
+                *(addr + (i + 1)) = value;
+                *(addr + (i + 2)) = value;
+                *(addr + (i + 3)) = value;
+                i += 4;
+            }
 
-                // TODO: Create block fill for value types of power of two sizes e.g. 2,4,8,16
-
-                nuint i = 0;
-                for (; i < (length & ~(nuint)7); i += 8)
-                {
-                    *(addr + (i)) = value;
-                    *(addr + (i + 1)) = value;
-                    *(addr + (i + 2)) = value;
-                    *(addr + (i + 3)) = value;
-                    *(addr + (i + 4)) = value;
-                    *(addr + (i + 5)) = value;
-                    *(addr + (i + 6)) = value;
-                    *(addr + (i + 7)) = value;
-                }
-
-                if (i < (length & ~(nuint)3))
-                {
-                    *(addr + (i)) = value;
-                    *(addr + (i + 1)) = value;
-                    *(addr + (i + 2)) = value;
-                    *(addr + (i + 3)) = value;
-                    i += 4;
-                }
-
-                for (; i < length; i++)
-                {
-                    addr[i] = value;
-                }
+            for (; i < length; i++)
+            {
+                addr[i] = value;
             }
         }
 
@@ -248,9 +238,8 @@ namespace NumSharp.Backends.Unmanaged
         [MethodImpl(OptimizeAndInline)]
         public ArraySlice<T> Slice(long start, long length)
         {
-            if ((ulong)start + (ulong)length > (ulong)Count)
+            if ((ulong)start > (ulong)Count || (ulong)length > (ulong)(Count - start))
                 throw new ArgumentOutOfRangeException(nameof(length));
-
             return new ArraySlice<T>(MemoryBlock, Address + start, length);
         }
 
@@ -299,7 +288,7 @@ namespace NumSharp.Backends.Unmanaged
         /// <param name="dst">The address to copy to</param>
         /// <remarks>The destiniton has to be atleast the size of this array, otherwise memory corruption is likely to occur.</remarks>
         [MethodImpl(OptimizeAndInline)]
-        public void CopyTo(IntPtr dst, long sourceOffset, long sourceCount)
+        public void CopyTo(IntPtr dst, int sourceOffset, int sourceCount)
         {
             // Using "if (!TryCopyTo(...))" results in two branches: one for the length
             // check, and one for the result of TryCopyTo. Since these checks are equivalent,
@@ -341,7 +330,7 @@ namespace NumSharp.Backends.Unmanaged
         Span<T1> IArraySlice.AsSpan<T1>()
         {
             if (Count > int.MaxValue)
-                throw new InvalidOperationException("ArraySlice size exceeds Span<T> maximum length. Use pointer access instead.");
+                throw new OverflowException($"Cannot create Span for ArraySlice with {Count} elements (exceeds int.MaxValue)");
             return new Span<T1>(VoidAddress, (int)Count);
         }
 
@@ -484,10 +473,7 @@ namespace NumSharp.Backends.Unmanaged
             if (Count == 0)
                 return Array.Empty<T>();
 
-            if (Count > int.MaxValue)
-                throw new InvalidOperationException("ArraySlice size exceeds maximum .NET array length.");
-
-            var destination = new T[(int)Count];
+            var destination = new T[Count];
             var len = Count * ItemLength;
             fixed (T* dst = destination)
                 Buffer.MemoryCopy(Address, dst, len, len);

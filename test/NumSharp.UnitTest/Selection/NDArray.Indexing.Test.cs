@@ -491,12 +491,12 @@ namespace NumSharp.UnitTest.Selection
 
             var x = np.arange(12).reshape(3, 2, 2);
             var y1 = x["1:"];
-            Assert.IsTrue(Enumerable.SequenceEqual(y1.shape, new int[] { 2, 2, 2 }));
+            Assert.IsTrue(y1.shape.SequenceEqual(new long[] { 2, 2, 2 }));
             Assert.IsTrue(Enumerable.SequenceEqual(y1.ToArray<int>(), new int[] { 4, 5, 6, 7, 8, 9, 10, 11 }));
             Assert.IsTrue(Enumerable.SequenceEqual(y1[0, 1].ToArray<int>(), new int[] { 6, 7 }));
 
             var y1_0 = y1[0];
-            Assert.IsTrue(Enumerable.SequenceEqual(y1_0.shape, new int[] { 2, 2 }));
+            Assert.IsTrue(y1_0.shape.SequenceEqual(new long[] { 2, 2 }));
             Assert.IsTrue(Enumerable.SequenceEqual(y1_0.ToArray<int>(), new int[] { 4, 5, 6, 7 }));
 
             // change view
@@ -505,7 +505,7 @@ namespace NumSharp.UnitTest.Selection
             Assert.IsTrue(Enumerable.SequenceEqual(y1.ToArray<int>(), new int[] { 4, 5, 100, 101, 8, 9, 10, 11 }));
 
             var y2 = x["2:"];
-            Assert.IsTrue(Enumerable.SequenceEqual(y2.shape, new int[] { 1, 2, 2 }));
+            Assert.IsTrue(y2.shape.SequenceEqual(new long[] { 1, 2, 2 }));
             Assert.IsTrue(Enumerable.SequenceEqual(y2.ToArray<int>(), new int[] { 8, 9, 10, 11 }));
         }
 

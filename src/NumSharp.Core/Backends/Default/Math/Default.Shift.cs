@@ -125,7 +125,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// Execute element-wise shift using IL kernel.
         /// </summary>
-        private static unsafe void ExecuteShiftArray<T>(NDArray input, int* shifts, NDArray output, int count, bool isLeftShift) where T : unmanaged
+        private static unsafe void ExecuteShiftArray<T>(NDArray input, int* shifts, NDArray output, long count, bool isLeftShift) where T : unmanaged
         {
             var kernel = ILKernelGenerator.GetShiftArrayKernel<T>(isLeftShift);
             if (kernel != null)
@@ -137,7 +137,7 @@ namespace NumSharp.Backends
                 // Fallback: scalar loop (should not happen if IL generation is enabled)
                 var inPtr = (T*)input.Address;
                 var outPtr = (T*)output.Address;
-                for (int i = 0; i < count; i++)
+                for (long i = 0; i < count; i++)
                 {
                     outPtr[i] = ShiftScalar(inPtr[i], shifts[i], isLeftShift);
                 }
@@ -203,7 +203,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// Execute scalar shift using IL kernel (SIMD optimized).
         /// </summary>
-        private static unsafe void ExecuteShiftScalar<T>(NDArray input, NDArray output, int shiftAmount, int count, bool isLeftShift) where T : unmanaged
+        private static unsafe void ExecuteShiftScalar<T>(NDArray input, NDArray output, int shiftAmount, long count, bool isLeftShift) where T : unmanaged
         {
             var kernel = ILKernelGenerator.GetShiftScalarKernel<T>(isLeftShift);
             if (kernel != null)
@@ -215,7 +215,7 @@ namespace NumSharp.Backends
                 // Fallback: scalar loop (should not happen if IL generation is enabled)
                 var inPtr = (T*)input.Address;
                 var outPtr = (T*)output.Address;
-                for (int i = 0; i < count; i++)
+                for (long i = 0; i < count; i++)
                 {
                     outPtr[i] = ShiftScalar(inPtr[i], shiftAmount, isLeftShift);
                 }

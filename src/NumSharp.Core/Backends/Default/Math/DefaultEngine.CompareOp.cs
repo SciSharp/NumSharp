@@ -41,9 +41,9 @@ namespace NumSharp.Backends
 
             // Classify execution path using strides
             ExecutionPath path;
-            fixed (int* lhsStrides = leftShape.strides)
-            fixed (int* rhsStrides = rightShape.strides)
-            fixed (int* shape = resultShape.dimensions)
+            fixed (long* lhsStrides = leftShape.strides)
+            fixed (long* rhsStrides = rightShape.strides)
+            fixed (long* shape = resultShape.dimensions)
             {
                 path = ClassifyPath(lhsStrides, rhsStrides, shape, resultShape.NDim, NPTypeCode.Boolean);
             }
@@ -142,9 +142,9 @@ namespace NumSharp.Backends
             byte* lhsAddr = (byte*)lhs.Address + lhsShape.offset * lhsElemSize;
             byte* rhsAddr = (byte*)rhs.Address + rhsShape.offset * rhsElemSize;
 
-            fixed (int* lhsStrides = lhsShape.strides)
-            fixed (int* rhsStrides = rhsShape.strides)
-            fixed (int* shape = result.shape)
+            fixed (long* lhsStrides = lhsShape.strides)
+            fixed (long* rhsStrides = rhsShape.strides)
+            fixed (long* shape = result.shape)
             {
                 kernel(
                     (void*)lhsAddr,

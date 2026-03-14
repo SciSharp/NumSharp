@@ -54,11 +54,11 @@ namespace NumSharp.Backends.Kernels
         T* lhs,
         T* rhs,
         T* result,
-        int* lhsStrides,
-        int* rhsStrides,
-        int* shape,
+        long* lhsStrides,
+        long* rhsStrides,
+        long* shape,
         int ndim,
-        int totalSize
+        long totalSize
     ) where T : unmanaged;
 
     /// <summary>
@@ -78,11 +78,11 @@ namespace NumSharp.Backends.Kernels
         void* lhs,
         void* rhs,
         void* result,
-        int* lhsStrides,
-        int* rhsStrides,
-        int* shape,
+        long* lhsStrides,
+        long* rhsStrides,
+        long* shape,
         int ndim,
-        int totalSize
+        long totalSize
     );
 
     #region Unary Operations
@@ -120,10 +120,10 @@ namespace NumSharp.Backends.Kernels
     public unsafe delegate void UnaryKernel(
         void* input,
         void* output,
-        int* strides,
-        int* shape,
+        long* strides,
+        long* shape,
         int ndim,
-        int totalSize
+        long totalSize
     );
 
     #endregion
@@ -194,11 +194,11 @@ namespace NumSharp.Backends.Kernels
         void* lhs,
         void* rhs,
         bool* result,
-        int* lhsStrides,
-        int* rhsStrides,
-        int* shape,
+        long* lhsStrides,
+        long* rhsStrides,
+        long* shape,
         int ndim,
-        int totalSize
+        long totalSize
     );
 
     #endregion

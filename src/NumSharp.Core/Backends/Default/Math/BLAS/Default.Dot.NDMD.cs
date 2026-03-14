@@ -109,26 +109,26 @@ namespace NumSharp.Backends
                 totalRhs *= rshape[i];
 
             // Compute lhs strides (for multi-index iteration)
-            long[] lhsIterStrides = ComputeIterStrides(lshape);
-            long[] rhsIterStrides = ComputeIterStrides(rshape);
+            long[] lhsIterStrides = ComputeIterStrides64(lshape);
+            long[] rhsIterStrides = ComputeIterStrides64(rshape);
 
             // For each position in lhs (excluding contract dim)
             for (long li = 0; li < totalLhs; li++)
             {
                 // Compute lhs base offset: position in lhs without last dim
-                long lhsBase = ComputeBaseOffset(li, lhsIterStrides, lhs.strides, lshape.Length);
+                long lhsBase = ComputeBaseOffset64(li, lhsIterStrides, lhs.strides, lshape.Length);
 
                 // For each position in rhs (excluding contract dim)
                 for (long ri = 0; ri < totalRhs; ri++)
                 {
                     // Compute rhs base offset: we need to skip the contract dimension
-                    long rhsBase = ComputeRhsBaseOffset(ri, rhsIterStrides, rhs.strides, rshape, rhsNdim);
+                    long rhsBase = ComputeRhsBaseOffset64(ri, rhsIterStrides, rhs.strides, rshape, rhsNdim);
 
                     // Compute dot product along contracting dimension
                     float sum = DotProductFloat(
-                        lhsPtr + lhsBase, lhsInnerStride,
-                        rhsPtr + rhsBase, rhsContractStride,
-                        K);
+                        lhsPtr + lhsBase, (int)lhsInnerStride,
+                        rhsPtr + rhsBase, (int)rhsContractStride,
+                        (int)K);
 
                     // Store result
                     resPtr[li * totalRhs + ri] = sum;
@@ -162,21 +162,21 @@ namespace NumSharp.Backends
             for (int i = 0; i < rshape.Length; i++)
                 totalRhs *= rshape[i];
 
-            long[] lhsIterStrides = ComputeIterStrides(lshape);
-            long[] rhsIterStrides = ComputeIterStrides(rshape);
+            long[] lhsIterStrides = ComputeIterStrides64(lshape);
+            long[] rhsIterStrides = ComputeIterStrides64(rshape);
 
             for (long li = 0; li < totalLhs; li++)
             {
-                long lhsBase = ComputeBaseOffset(li, lhsIterStrides, lhs.strides, lshape.Length);
+                long lhsBase = ComputeBaseOffset64(li, lhsIterStrides, lhs.strides, lshape.Length);
 
                 for (long ri = 0; ri < totalRhs; ri++)
                 {
-                    long rhsBase = ComputeRhsBaseOffset(ri, rhsIterStrides, rhs.strides, rshape, rhsNdim);
+                    long rhsBase = ComputeRhsBaseOffset64(ri, rhsIterStrides, rhs.strides, rshape, rhsNdim);
 
                     double sum = DotProductDouble(
-                        lhsPtr + lhsBase, lhsInnerStride,
-                        rhsPtr + rhsBase, rhsContractStride,
-                        K);
+                        lhsPtr + lhsBase, (int)lhsInnerStride,
+                        rhsPtr + rhsBase, (int)rhsContractStride,
+                        (int)K);
 
                     resPtr[li * totalRhs + ri] = sum;
                 }
@@ -184,10 +184,10 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        /// Compute iteration strides for multi-index decomposition.
+        /// Compute iteration strides for multi-index decomposition (64-bit).
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static long[] ComputeIterStrides(long[] shape)
+        private static long[] ComputeIterStrides64(long[] shape)
         {
             var strides = new long[shape.Length];
             long stride = 1;
@@ -200,11 +200,11 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        /// Compute base offset for lhs array from linear index.
+        /// Compute base offset for lhs array from linear index (64-bit).
         /// Maps linear index over lshape to offset in lhs storage (using lhs strides, not contract dim).
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static long ComputeBaseOffset(long linearIdx, long[] iterStrides, long[] arrayStrides, int ndim)
+        private static long ComputeBaseOffset64(long linearIdx, long[] iterStrides, long[] arrayStrides, int ndim)
         {
             long offset = 0;
             for (int d = 0; d < ndim; d++)
@@ -217,12 +217,12 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        /// Compute base offset for rhs array from linear index.
+        /// Compute base offset for rhs array from linear index (64-bit).
         /// rshape excludes the contracting dimension (second-to-last in original rhs).
         /// We need to map indices back, skipping the contract dim.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static long ComputeRhsBaseOffset(long linearIdx, long[] iterStrides, long[] arrayStrides, long[] rshape, int rhsNdim)
+        private static long ComputeRhsBaseOffset64(long linearIdx, long[] iterStrides, long[] arrayStrides, long[] rshape, int rhsNdim)
         {
             long offset = 0;
             int contractDimIdx = rhsNdim - 2;  // The dimension we're contracting over
@@ -245,14 +245,14 @@ namespace NumSharp.Backends
         /// SIMD dot product for float with arbitrary strides.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        private static unsafe float DotProductFloat(float* a, long strideA, float* b, long strideB, long n)
+        private static unsafe float DotProductFloat(float* a, int strideA, float* b, int strideB, int n)
         {
             float sum = 0;
 
             // Fast path: both contiguous (stride=1)
             if (strideA == 1 && strideB == 1)
             {
-                long i = 0;
+                int i = 0;
 
                 // SIMD loop
                 if (Vector256.IsHardwareAccelerated && n >= 8)
@@ -274,7 +274,7 @@ namespace NumSharp.Backends
             else
             {
                 // Strided access
-                for (long i = 0; i < n; i++)
+                for (int i = 0; i < n; i++)
                     sum += a[i * strideA] * b[i * strideB];
             }
 
@@ -285,13 +285,13 @@ namespace NumSharp.Backends
         /// SIMD dot product for double with arbitrary strides.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        private static unsafe double DotProductDouble(double* a, long strideA, double* b, long strideB, long n)
+        private static unsafe double DotProductDouble(double* a, int strideA, double* b, int strideB, int n)
         {
             double sum = 0;
 
             if (strideA == 1 && strideB == 1)
             {
-                long i = 0;
+                int i = 0;
 
                 if (Vector256.IsHardwareAccelerated && n >= 4)
                 {
@@ -310,7 +310,7 @@ namespace NumSharp.Backends
             }
             else
             {
-                for (long i = 0; i < n; i++)
+                for (int i = 0; i < n; i++)
                     sum += a[i * strideA] * b[i * strideB];
             }
 
@@ -338,8 +338,8 @@ namespace NumSharp.Backends
                 totalRhs *= rshape[i];
 
             // Pre-compute strides for iteration
-            long[] lhsIterStrides = ComputeIterStrides(lshape);
-            long[] rhsIterStrides = ComputeIterStrides(rshape);
+            long[] lhsIterStrides = ComputeIterStrides64(lshape);
+            long[] rhsIterStrides = ComputeIterStrides64(rshape);
 
             // Temporary arrays for coordinate computation
             long[] lhsCoords = new long[lhsNdim];
@@ -351,13 +351,13 @@ namespace NumSharp.Backends
             for (long li = 0; li < totalLhs; li++)
             {
                 // Decompose li into lhs coordinates (first ndim-1 dims)
-                DecomposeIndex(li, lhsIterStrides, lhsCoords, lshape.Length);
+                DecomposeIndex64(li, lhsIterStrides, lhsCoords, lshape.Length);
 
                 // Iterate over all rhs positions (excluding contract dim)
                 for (long ri = 0; ri < totalRhs; ri++)
                 {
                     // Decompose ri into rhs coordinates (skip contract dim)
-                    DecomposeRhsIndex(ri, rhsIterStrides, rhsCoords, rshape, rhsNdim);
+                    DecomposeRhsIndex64(ri, rhsIterStrides, rhsCoords, rshape, rhsNdim);
 
                     // Compute dot product along contracting dimension
                     double sum = 0;
@@ -384,10 +384,10 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        /// Decompose linear index into coordinates for lhs (first ndim dims).
+        /// Decompose linear index into coordinates for lhs (first ndim dims, 64-bit).
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static void DecomposeIndex(long linearIdx, long[] iterStrides, long[] coords, int ndim)
+        private static void DecomposeIndex64(long linearIdx, long[] iterStrides, long[] coords, int ndim)
         {
             for (int d = 0; d < ndim; d++)
             {
@@ -397,10 +397,10 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        /// Decompose linear index into coordinates for rhs, skipping the contract dimension.
+        /// Decompose linear index into coordinates for rhs, skipping the contract dimension (64-bit).
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static void DecomposeRhsIndex(long linearIdx, long[] iterStrides, long[] coords, long[] rshape, int rhsNdim)
+        private static void DecomposeRhsIndex64(long linearIdx, long[] iterStrides, long[] coords, long[] rshape, int rhsNdim)
         {
             int contractDimIdx = rhsNdim - 2;
             int rshapeIdx = 0;

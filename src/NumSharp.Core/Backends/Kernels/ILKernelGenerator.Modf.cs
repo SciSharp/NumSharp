@@ -100,11 +100,11 @@ namespace NumSharp.Backends.Kernels
         /// <param name="integral">Output array for integral parts</param>
         /// <param name="size">Number of elements</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static unsafe void ModfHelper(float* data, float* integral, int size)
+        public static unsafe void ModfHelper(float* data, float* integral, long size)
         {
             if (size == 0) return;
 
-            int i = 0;
+            long i = 0;
 
 #if NET9_0_OR_GREATER
             // Vector512 path (.NET 9+ has Vector.Truncate)
@@ -112,7 +112,7 @@ namespace NumSharp.Backends.Kernels
             if (VectorBits >= 512 && size >= Vector512<float>.Count)
             {
                 int vectorCount = Vector512<float>.Count;
-                int vectorEnd = size - vectorCount;
+                long vectorEnd = size - vectorCount;
                 var signBitMask = Vector512.Create(-0f); // Sign bit mask: 0x80000000
                 var zero = Vector512<float>.Zero;
                 var posInf = Vector512.Create(float.PositiveInfinity);
@@ -142,7 +142,7 @@ namespace NumSharp.Backends.Kernels
             else if (VectorBits >= 256 && size >= Vector256<float>.Count)
             {
                 int vectorCount = Vector256<float>.Count;
-                int vectorEnd = size - vectorCount;
+                long vectorEnd = size - vectorCount;
                 var signBitMask = Vector256.Create(-0f); // Sign bit mask: 0x80000000
                 var zero = Vector256<float>.Zero;
                 var posInf = Vector256.Create(float.PositiveInfinity);
@@ -172,7 +172,7 @@ namespace NumSharp.Backends.Kernels
             else if (VectorBits >= 128 && size >= Vector128<float>.Count)
             {
                 int vectorCount = Vector128<float>.Count;
-                int vectorEnd = size - vectorCount;
+                long vectorEnd = size - vectorCount;
                 var signBitMask = Vector128.Create(-0f); // Sign bit mask: 0x80000000
                 var zero = Vector128<float>.Zero;
                 var posInf = Vector128.Create(float.PositiveInfinity);
@@ -216,11 +216,11 @@ namespace NumSharp.Backends.Kernels
         /// <param name="integral">Output array for integral parts</param>
         /// <param name="size">Number of elements</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static unsafe void ModfHelper(double* data, double* integral, int size)
+        public static unsafe void ModfHelper(double* data, double* integral, long size)
         {
             if (size == 0) return;
 
-            int i = 0;
+            long i = 0;
 
 #if NET9_0_OR_GREATER
             // Vector512 path (.NET 9+ has Vector.Truncate)
@@ -228,7 +228,7 @@ namespace NumSharp.Backends.Kernels
             if (VectorBits >= 512 && size >= Vector512<double>.Count)
             {
                 int vectorCount = Vector512<double>.Count;
-                int vectorEnd = size - vectorCount;
+                long vectorEnd = size - vectorCount;
                 var signBitMask = Vector512.Create(-0d); // Sign bit mask: 0x8000000000000000
                 var zero = Vector512<double>.Zero;
                 var posInf = Vector512.Create(double.PositiveInfinity);
@@ -258,7 +258,7 @@ namespace NumSharp.Backends.Kernels
             else if (VectorBits >= 256 && size >= Vector256<double>.Count)
             {
                 int vectorCount = Vector256<double>.Count;
-                int vectorEnd = size - vectorCount;
+                long vectorEnd = size - vectorCount;
                 var signBitMask = Vector256.Create(-0d); // Sign bit mask: 0x8000000000000000
                 var zero = Vector256<double>.Zero;
                 var posInf = Vector256.Create(double.PositiveInfinity);
@@ -288,7 +288,7 @@ namespace NumSharp.Backends.Kernels
             else if (VectorBits >= 128 && size >= Vector128<double>.Count)
             {
                 int vectorCount = Vector128<double>.Count;
-                int vectorEnd = size - vectorCount;
+                long vectorEnd = size - vectorCount;
                 var signBitMask = Vector128.Create(-0d); // Sign bit mask: 0x8000000000000000
                 var zero = Vector128<double>.Zero;
                 var posInf = Vector128.Create(double.PositiveInfinity);

@@ -80,8 +80,8 @@ namespace NumSharp.Backends.Kernels
         private static unsafe AxisReductionKernel CreateNanAxisReductionKernelTyped<T>(AxisReductionKernelKey key)
             where T : unmanaged, IFloatingPoint<T>
         {
-            return (void* input, void* output, int* inputStrides, int* inputShape,
-                    int* outputStrides, int axis, int axisSize, int ndim, int outputSize) =>
+            return (void* input, void* output, long* inputStrides, long* inputShape,
+                    long* outputStrides, int axis, long axisSize, int ndim, long outputSize) =>
             {
                 NanAxisReductionSimdHelper<T>(
                     (T*)input, (T*)output,
@@ -97,19 +97,19 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         internal static unsafe void NanAxisReductionSimdHelper<T>(
             T* input, T* output,
-            int* inputStrides, int* inputShape, int* outputStrides,
-            int axis, int axisSize, int ndim, int outputSize,
+            long* inputStrides, long* inputShape, long* outputStrides,
+            int axis, long axisSize, int ndim, long outputSize,
             ReductionOp op)
             where T : unmanaged, IFloatingPoint<T>
         {
-            int axisStride = inputStrides[axis];
+            long axisStride = inputStrides[axis];
 
             // Check if the reduction axis is contiguous (stride == 1)
             bool axisContiguous = axisStride == 1;
 
             // Compute output shape strides for coordinate calculation
             int outputNdim = ndim - 1;
-            Span<int> outputDimStrides = stackalloc int[outputNdim > 0 ? outputNdim : 1];
+            Span<long> outputDimStrides = stackalloc long[outputNdim > 0 ? outputNdim : 1];
             if (outputNdim > 0)
             {
                 outputDimStrides[outputNdim - 1] = 1;
@@ -122,17 +122,17 @@ namespace NumSharp.Backends.Kernels
             }
 
             // Iterate over all output elements
-            for (int outIdx = 0; outIdx < outputSize; outIdx++)
+            for (long outIdx = 0; outIdx < outputSize; outIdx++)
             {
                 // Convert linear output index to coordinates and compute input base offset
-                int remaining = outIdx;
-                int inputBaseOffset = 0;
-                int outputOffset = 0;
+                long remaining = outIdx;
+                long inputBaseOffset = 0;
+                long outputOffset = 0;
 
                 for (int d = 0; d < outputNdim; d++)
                 {
                     int inputDim = d >= axis ? d + 1 : d;
-                    int coord = remaining / outputDimStrides[d];
+                    long coord = remaining / outputDimStrides[d];
                     remaining = remaining % outputDimStrides[d];
                     inputBaseOffset += coord * inputStrides[inputDim];
                     outputOffset += coord * outputStrides[d];
@@ -159,7 +159,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Reduce a contiguous axis with NaN handling using SIMD.
         /// </summary>
-        private static unsafe T NanReduceContiguousAxis<T>(T* data, int size, ReductionOp op)
+        private static unsafe T NanReduceContiguousAxis<T>(T* data, long size, ReductionOp op)
             where T : unmanaged, IFloatingPoint<T>
         {
             if (size == 0)
@@ -200,7 +200,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// SIMD implementation for float NaN reduction.
         /// </summary>
-        private static unsafe float NanReduceContiguousAxisFloat(float* data, int size, ReductionOp op)
+        private static unsafe float NanReduceContiguousAxisFloat(float* data, long size, ReductionOp op)
         {
             if (Vector256.IsHardwareAccelerated && Vector256<float>.IsSupported && size >= Vector256<float>.Count)
             {
@@ -216,7 +216,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// SIMD implementation for double NaN reduction.
         /// </summary>
-        private static unsafe double NanReduceContiguousAxisDouble(double* data, int size, ReductionOp op)
+        private static unsafe double NanReduceContiguousAxisDouble(double* data, long size, ReductionOp op)
         {
             if (Vector256.IsHardwareAccelerated && Vector256<double>.IsSupported && size >= Vector256<double>.Count)
             {
@@ -231,11 +231,11 @@ namespace NumSharp.Backends.Kernels
 
         #region Float SIMD Implementations
 
-        private static unsafe float NanReduceContiguousAxisFloat256(float* data, int size, ReductionOp op)
+        private static unsafe float NanReduceContiguousAxisFloat256(float* data, long size, ReductionOp op)
         {
             int vectorCount = Vector256<float>.Count;
-            int vectorEnd = size - vectorCount;
-            int i = 0;
+            long vectorEnd = size - vectorCount;
+            long i = 0;
 
             switch (op)
             {
@@ -329,11 +329,11 @@ namespace NumSharp.Backends.Kernels
             }
         }
 
-        private static unsafe float NanReduceContiguousAxisFloat128(float* data, int size, ReductionOp op)
+        private static unsafe float NanReduceContiguousAxisFloat128(float* data, long size, ReductionOp op)
         {
             int vectorCount = Vector128<float>.Count;
-            int vectorEnd = size - vectorCount;
-            int i = 0;
+            long vectorEnd = size - vectorCount;
+            long i = 0;
 
             switch (op)
             {
@@ -427,14 +427,14 @@ namespace NumSharp.Backends.Kernels
             }
         }
 
-        private static unsafe float NanReduceContiguousAxisScalarFloat(float* data, int size, ReductionOp op)
+        private static unsafe float NanReduceContiguousAxisScalarFloat(float* data, long size, ReductionOp op)
         {
             switch (op)
             {
                 case ReductionOp.NanSum:
                 {
                     float sum = 0f;
-                    for (int i = 0; i < size; i++)
+                    for (long i = 0; i < size; i++)
                     {
                         if (!float.IsNaN(data[i]))
                             sum += data[i];
@@ -444,7 +444,7 @@ namespace NumSharp.Backends.Kernels
                 case ReductionOp.NanProd:
                 {
                     float prod = 1f;
-                    for (int i = 0; i < size; i++)
+                    for (long i = 0; i < size; i++)
                     {
                         if (!float.IsNaN(data[i]))
                             prod *= data[i];
@@ -455,7 +455,7 @@ namespace NumSharp.Backends.Kernels
                 {
                     float minVal = float.PositiveInfinity;
                     bool foundNonNaN = false;
-                    for (int i = 0; i < size; i++)
+                    for (long i = 0; i < size; i++)
                     {
                         if (!float.IsNaN(data[i]))
                         {
@@ -470,7 +470,7 @@ namespace NumSharp.Backends.Kernels
                 {
                     float maxVal = float.NegativeInfinity;
                     bool foundNonNaN = false;
-                    for (int i = 0; i < size; i++)
+                    for (long i = 0; i < size; i++)
                     {
                         if (!float.IsNaN(data[i]))
                         {
@@ -490,11 +490,11 @@ namespace NumSharp.Backends.Kernels
 
         #region Double SIMD Implementations
 
-        private static unsafe double NanReduceContiguousAxisDouble256(double* data, int size, ReductionOp op)
+        private static unsafe double NanReduceContiguousAxisDouble256(double* data, long size, ReductionOp op)
         {
             int vectorCount = Vector256<double>.Count;
-            int vectorEnd = size - vectorCount;
-            int i = 0;
+            long vectorEnd = size - vectorCount;
+            long i = 0;
 
             switch (op)
             {
@@ -588,11 +588,11 @@ namespace NumSharp.Backends.Kernels
             }
         }
 
-        private static unsafe double NanReduceContiguousAxisDouble128(double* data, int size, ReductionOp op)
+        private static unsafe double NanReduceContiguousAxisDouble128(double* data, long size, ReductionOp op)
         {
             int vectorCount = Vector128<double>.Count;
-            int vectorEnd = size - vectorCount;
-            int i = 0;
+            long vectorEnd = size - vectorCount;
+            long i = 0;
 
             switch (op)
             {
@@ -686,14 +686,14 @@ namespace NumSharp.Backends.Kernels
             }
         }
 
-        private static unsafe double NanReduceContiguousAxisScalarDouble(double* data, int size, ReductionOp op)
+        private static unsafe double NanReduceContiguousAxisScalarDouble(double* data, long size, ReductionOp op)
         {
             switch (op)
             {
                 case ReductionOp.NanSum:
                 {
                     double sum = 0.0;
-                    for (int i = 0; i < size; i++)
+                    for (long i = 0; i < size; i++)
                     {
                         if (!double.IsNaN(data[i]))
                             sum += data[i];
@@ -703,7 +703,7 @@ namespace NumSharp.Backends.Kernels
                 case ReductionOp.NanProd:
                 {
                     double prod = 1.0;
-                    for (int i = 0; i < size; i++)
+                    for (long i = 0; i < size; i++)
                     {
                         if (!double.IsNaN(data[i]))
                             prod *= data[i];
@@ -714,7 +714,7 @@ namespace NumSharp.Backends.Kernels
                 {
                     double minVal = double.PositiveInfinity;
                     bool foundNonNaN = false;
-                    for (int i = 0; i < size; i++)
+                    for (long i = 0; i < size; i++)
                     {
                         if (!double.IsNaN(data[i]))
                         {
@@ -729,7 +729,7 @@ namespace NumSharp.Backends.Kernels
                 {
                     double maxVal = double.NegativeInfinity;
                     bool foundNonNaN = false;
-                    for (int i = 0; i < size; i++)
+                    for (long i = 0; i < size; i++)
                     {
                         if (!double.IsNaN(data[i]))
                         {
@@ -751,7 +751,7 @@ namespace NumSharp.Backends.Kernels
         /// Reduce a contiguous axis with NaN handling using scalar loop.
         /// Generic fallback for types without specialized SIMD.
         /// </summary>
-        private static unsafe T NanReduceContiguousAxisScalar<T>(T* data, int size, ReductionOp op)
+        private static unsafe T NanReduceContiguousAxisScalar<T>(T* data, long size, ReductionOp op)
             where T : unmanaged, IFloatingPoint<T>
         {
             switch (op)
@@ -759,7 +759,7 @@ namespace NumSharp.Backends.Kernels
                 case ReductionOp.NanSum:
                 {
                     T sum = T.Zero;
-                    for (int i = 0; i < size; i++)
+                    for (long i = 0; i < size; i++)
                     {
                         if (!T.IsNaN(data[i]))
                             sum += data[i];
@@ -769,7 +769,7 @@ namespace NumSharp.Backends.Kernels
                 case ReductionOp.NanProd:
                 {
                     T prod = T.One;
-                    for (int i = 0; i < size; i++)
+                    for (long i = 0; i < size; i++)
                     {
                         if (!T.IsNaN(data[i]))
                             prod *= data[i];
@@ -780,7 +780,7 @@ namespace NumSharp.Backends.Kernels
                 {
                     T minVal = T.CreateTruncating(double.PositiveInfinity);
                     bool foundNonNaN = false;
-                    for (int i = 0; i < size; i++)
+                    for (long i = 0; i < size; i++)
                     {
                         if (!T.IsNaN(data[i]))
                         {
@@ -795,7 +795,7 @@ namespace NumSharp.Backends.Kernels
                 {
                     T maxVal = T.CreateTruncating(double.NegativeInfinity);
                     bool foundNonNaN = false;
-                    for (int i = 0; i < size; i++)
+                    for (long i = 0; i < size; i++)
                     {
                         if (!T.IsNaN(data[i]))
                         {
@@ -814,7 +814,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Reduce a strided axis with NaN handling.
         /// </summary>
-        private static unsafe T NanReduceStridedAxis<T>(T* data, int size, int stride, ReductionOp op)
+        private static unsafe T NanReduceStridedAxis<T>(T* data, long size, long stride, ReductionOp op)
             where T : unmanaged, IFloatingPoint<T>
         {
             switch (op)
@@ -822,7 +822,7 @@ namespace NumSharp.Backends.Kernels
                 case ReductionOp.NanSum:
                 {
                     T sum = T.Zero;
-                    for (int i = 0; i < size; i++)
+                    for (long i = 0; i < size; i++)
                     {
                         T val = data[i * stride];
                         if (!T.IsNaN(val))
@@ -833,7 +833,7 @@ namespace NumSharp.Backends.Kernels
                 case ReductionOp.NanProd:
                 {
                     T prod = T.One;
-                    for (int i = 0; i < size; i++)
+                    for (long i = 0; i < size; i++)
                     {
                         T val = data[i * stride];
                         if (!T.IsNaN(val))
@@ -845,7 +845,7 @@ namespace NumSharp.Backends.Kernels
                 {
                     T minVal = T.CreateTruncating(double.PositiveInfinity);
                     bool foundNonNaN = false;
-                    for (int i = 0; i < size; i++)
+                    for (long i = 0; i < size; i++)
                     {
                         T val = data[i * stride];
                         if (!T.IsNaN(val))
@@ -861,7 +861,7 @@ namespace NumSharp.Backends.Kernels
                 {
                     T maxVal = T.CreateTruncating(double.NegativeInfinity);
                     bool foundNonNaN = false;
-                    for (int i = 0; i < size; i++)
+                    for (long i = 0; i < size; i++)
                     {
                         T val = data[i * stride];
                         if (!T.IsNaN(val))

@@ -19,7 +19,7 @@ namespace NumSharp.UnitTest
         {
             var shape0 = new Shape(4, 3);
 
-            int idx0 = shape0.GetOffset(2, 1);
+            long idx0 = shape0.GetOffset(2, 1);
 
             Assert.IsTrue(idx0 == 3 * 2 + 1 * 1);
         }
@@ -29,32 +29,32 @@ namespace NumSharp.UnitTest
         {
             var shape0 = new Shape(4, 3, 2);
 
-            int[] strgDimSize = shape0.Strides;
+            long[] strgDimSize = shape0.Strides;
 
-            int index = shape0.GetOffset(1, 2, 1);
+            long index = shape0.GetOffset(1, 2, 1);
 
-            Assert.IsTrue(shape0.GetCoordinates(index).SequenceEqual(new int[] { 1, 2, 1 }));
+            Assert.IsTrue(shape0.GetCoordinates(index).SequenceEqual(new long[] { 1, 2, 1 }));
 
             var rnd = new Randomizer();
-            var randomIndex = new int[] { rnd.Next(0, 3), rnd.Next(0, 2), rnd.Next(0, 1) };
+            var randomIndex = new long[] { rnd.Next(0, 3), rnd.Next(0, 2), rnd.Next(0, 1) };
 
-            int index1 = shape0.GetOffset(randomIndex);
+            long index1 = shape0.GetOffset(randomIndex);
             Assert.IsTrue(shape0.GetCoordinates(index1).SequenceEqual(randomIndex));
 
             var shape1 = new Shape(2, 3, 4);
 
             index = shape1.GetOffset(1, 2, 1);
-            Assert.IsTrue(shape1.GetCoordinates(index).SequenceEqual(new int[] { 1, 2, 1 }));
+            Assert.IsTrue(shape1.GetCoordinates(index).SequenceEqual(new long[] { 1, 2, 1 }));
 
-            randomIndex = new int[] { rnd.Next(0, 1), rnd.Next(0, 2), rnd.Next(0, 3) };
+            randomIndex = new long[] { rnd.Next(0, 1), rnd.Next(0, 2), rnd.Next(0, 3) };
             index = shape1.GetOffset(randomIndex);
             Assert.IsTrue(shape1.GetCoordinates(index).SequenceEqual(randomIndex));
 
-            randomIndex = new int[] { rnd.Next(1, 10), rnd.Next(1, 10), rnd.Next(1, 10) };
+            randomIndex = new long[] { rnd.Next(1, 10), rnd.Next(1, 10), rnd.Next(1, 10) };
 
             var shape2 = new Shape(randomIndex);
 
-            randomIndex = new int[] { rnd.Next(0, shape2.Dimensions[0]), rnd.Next(0, shape2.Dimensions[1]), rnd.Next(0, shape2.Dimensions[2]) };
+            randomIndex = new long[] { rnd.Next(0, (int)shape2.Dimensions[0]), rnd.Next(0, (int)shape2.Dimensions[1]), rnd.Next(0, (int)shape2.Dimensions[2]) };
 
             index = shape2.GetOffset(randomIndex);
             Assert.IsTrue(shape2.GetCoordinates(index).SequenceEqual(randomIndex));
@@ -70,12 +70,12 @@ namespace NumSharp.UnitTest
         [Test]
         public void EqualityComparer()
         {
-            Shape a = null;
-            Shape b = null;
+            // Shape is now a readonly struct - cannot be null
+            // Test default (empty) shape equality
+            Shape a = default;
+            Shape b = default;
 
             (a == b).Should().BeTrue();
-            (a == null).Should().BeTrue();
-            (null == b).Should().BeTrue();
 
             a = (Shape)5;
             b = (Shape)4;
@@ -184,7 +184,7 @@ namespace NumSharp.UnitTest
         public void GetSubshape()
         {
             //initialize
-            (Shape Shape, int Offset) ret;
+            (Shape Shape, long Offset) retTuple;
             var nd = new NDArray(new ArraySlice<int>(new UnmanagedMemoryBlock<int>(25, 0)), new Shape(5, 5));
             var arr = new int[5, 5];
             var arr2 = new int[5, 1, 5];
@@ -217,81 +217,81 @@ namespace NumSharp.UnitTest
             //test case 1
             nd.Shape = new Shape(5, 5);
 
-            ret = nd.Shape.GetSubshape(0, 0);
-            ret.Shape.Size.Should().Be(1);
-            ret.Offset.Should().Be(0);
-            arr[0, 0].Should().Be(ret.Offset);
+            retTuple = nd.Shape.GetSubshape(0, 0);
+            retTuple.Shape.Size.Should().Be(1);
+            retTuple.Offset.Should().Be(0);
+            arr[0, 0].Should().Be((int)retTuple.Offset);
 
-            ret = nd.Shape.GetSubshape(1, 0);
-            ret.Shape.Size.Should().Be(1);
-            ret.Offset.Should().Be(5);
-            arr[1, 0].Should().Be(ret.Offset);
+            retTuple = nd.Shape.GetSubshape(1, 0);
+            retTuple.Shape.Size.Should().Be(1);
+            retTuple.Offset.Should().Be(5);
+            arr[1, 0].Should().Be((int)retTuple.Offset);
 
-            ret = nd.Shape.GetSubshape(1, 4);
-            ret.Shape.Size.Should().Be(1);
-            ret.Offset.Should().Be(5 + 4);
-            arr[1, 4].Should().Be(ret.Offset);
+            retTuple = nd.Shape.GetSubshape(1, 4);
+            retTuple.Shape.Size.Should().Be(1);
+            retTuple.Offset.Should().Be(5 + 4);
+            arr[1, 4].Should().Be((int)retTuple.Offset);
 
 
             //test case 2
             nd.Shape = new Shape(5, 1, 5);
-            ret = nd.Shape.GetSubshape(0, 0);
-            ret.Shape.Size.Should().Be(5);
-            ret.Offset.Should().Be(0);
-            arr2[0, 0, 0].Should().Be(ret.Offset);
+            retTuple = nd.Shape.GetSubshape(0, 0);
+            retTuple.Shape.Size.Should().Be(5);
+            retTuple.Offset.Should().Be(0);
+            arr2[0, 0, 0].Should().Be((int)retTuple.Offset);
 
-            ret = nd.Shape.GetSubshape(1, 0);
-            ret.Shape.Size.Should().Be(5);
-            ret.Offset.Should().Be(5);
-            arr2[1, 0, 0].Should().Be(ret.Offset);
+            retTuple = nd.Shape.GetSubshape(1, 0);
+            retTuple.Shape.Size.Should().Be(5);
+            retTuple.Offset.Should().Be(5);
+            arr2[1, 0, 0].Should().Be((int)retTuple.Offset);
 
-            ret = nd.Shape.GetSubshape(1, 0, 1);
-            ret.Shape.Size.Should().Be(1);
-            ret.Offset.Should().Be(5 + 1);
-            arr2[1, 0, 1].Should().Be(ret.Offset);
+            retTuple = nd.Shape.GetSubshape(1, 0, 1);
+            retTuple.Shape.Size.Should().Be(1);
+            retTuple.Offset.Should().Be(5 + 1);
+            arr2[1, 0, 1].Should().Be((int)retTuple.Offset);
 
-            ret = nd.Shape.GetSubshape(2, 0, 1);
-            ret.Shape.Size.Should().Be(1);
-            ret.Offset.Should().Be(5 * 2 + 1);
-            arr2[2, 0, 1].Should().Be(ret.Offset);
+            retTuple = nd.Shape.GetSubshape(2, 0, 1);
+            retTuple.Shape.Size.Should().Be(1);
+            retTuple.Offset.Should().Be(5 * 2 + 1);
+            arr2[2, 0, 1].Should().Be((int)retTuple.Offset);
 
-            ret = nd.Shape.GetSubshape(0, 0);
-            ret.Shape.Size.Should().Be(5);
-            ret.Offset.Should().Be(0);
+            retTuple = nd.Shape.GetSubshape(0, 0);
+            retTuple.Shape.Size.Should().Be(5);
+            retTuple.Offset.Should().Be(0);
 
-            ret = nd.Shape.GetSubshape(1, 0);
-            ret.Shape.Size.Should().Be(5);
-            ret.Offset.Should().Be(5);
+            retTuple = nd.Shape.GetSubshape(1, 0);
+            retTuple.Shape.Size.Should().Be(5);
+            retTuple.Offset.Should().Be(5);
 
-            ret = nd.Shape.GetSubshape(1, 0, 3);
-            ret.Shape.Size.Should().Be(1);
-            ret.Offset.Should().Be(5 + 3);
-            arr2[1, 0, 3].Should().Be(ret.Offset);
+            retTuple = nd.Shape.GetSubshape(1, 0, 3);
+            retTuple.Shape.Size.Should().Be(1);
+            retTuple.Offset.Should().Be(5 + 3);
+            arr2[1, 0, 3].Should().Be((int)retTuple.Offset);
 
 
             //test case 3
             nd.Shape = new Shape(1, 1, 5, 5);
-            ret = nd.Shape.GetSubshape(0, 0, 3, 3);
-            ret.Shape.Size.Should().Be(1);
-            ret.Offset.Should().Be(18);
+            retTuple = nd.Shape.GetSubshape(0, 0, 3, 3);
+            retTuple.Shape.Size.Should().Be(1);
+            retTuple.Offset.Should().Be(18);
 
-            ret = nd.Shape.GetSubshape(0, 0, 3);
-            ret.Shape.Size.Should().Be(5);
-            ret.Offset.Should().Be(15);
+            retTuple = nd.Shape.GetSubshape(0, 0, 3);
+            retTuple.Shape.Size.Should().Be(5);
+            retTuple.Offset.Should().Be(15);
 
-            ret = ret.Shape.GetSubshape(2);
-            ret.Shape.Size.Should().Be(1);
-            ret.Shape.NDim.Should().Be(0);
-            ret.Shape.IsScalar.Should().BeTrue();
+            retTuple = retTuple.Shape.GetSubshape(2);
+            retTuple.Shape.Size.Should().Be(1);
+            retTuple.Shape.NDim.Should().Be(0);
+            retTuple.Shape.IsScalar.Should().BeTrue();
 
 
             //test case 4
             nd.Shape = new Shape(1, 5, 5, 1);
-            ret = nd.Shape.GetSubshape(0, 1);
-            ret.Offset.Should().Be(5);
-            ret.Shape.NDim.Should().Be(2);
-            ret.Shape.Dimensions[0].Should().Be(5);
-            ret.Shape.Dimensions[1].Should().Be(1);
+            retTuple = nd.Shape.GetSubshape(0, 1);
+            retTuple.Offset.Should().Be(5);
+            retTuple.Shape.NDim.Should().Be(2);
+            retTuple.Shape.Dimensions[0].Should().Be(5);
+            retTuple.Shape.Dimensions[1].Should().Be(1);
         }
 
         [Test]
@@ -459,7 +459,7 @@ namespace NumSharp.UnitTest
             Shape.NewScalar().GetHashCode().Should().Be(int.MinValue);
             // NumPy-pure: scalars with offset still have scalar hashcode
             // Use constructor to create scalar with offset (readonly struct)
-            var scalarWithOffset = new Shape(Array.Empty<int>(), Array.Empty<int>(), 5, 10);
+            var scalarWithOffset = new Shape(Array.Empty<long>(), Array.Empty<long>(), 5, 10);
             scalarWithOffset.GetHashCode().Should().Be(int.MinValue);
         }
 

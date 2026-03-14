@@ -18,7 +18,7 @@ namespace NumSharp.Backends
                 if (axis_ == null)
                 {
                     var r = NDArray.Scalar(double.NaN);
-                    if (keepdims) { var ks = new int[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(new Shape(ks)); }
+                    if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(new Shape(ks)); }
                     return r;
                 }
                 var axis = NormalizeAxis(axis_.Value, arr.ndim);
@@ -33,7 +33,7 @@ namespace NumSharp.Backends
                 else result = np.empty(new Shape(resultShape), outputType);
                 if (keepdims)
                 {
-                    var ks = new int[arr.ndim];
+                    var ks = new long[arr.ndim];
                     for (int d = 0, sd = 0; d < arr.ndim; d++) ks[d] = (d == axis) ? 1 : resultShape[sd++];
                     result.Storage.Reshape(new Shape(ks));
                 }
@@ -45,7 +45,7 @@ namespace NumSharp.Backends
                 var val = arr.GetAtIndex(0);
                 var outputType = typeCode ?? NPTypeCode.Double;
                 var r = NDArray.Scalar(Converts.ChangeType(val, outputType));
-                if (keepdims) { var ks = new int[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(new Shape(ks)); }
+                if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(new Shape(ks)); }
                 return r;
             }
 
@@ -53,7 +53,7 @@ namespace NumSharp.Backends
             {
                 var result = mean_elementwise_il(arr, typeCode);
                 var r = NDArray.Scalar(result);
-                if (keepdims) { var ks = new int[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(new Shape(ks)); }
+                if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(new Shape(ks)); }
                 else if (!r.Shape.IsScalar && r.Shape.size == 1 && r.ndim == 1) r.Storage.Reshape(Shape.Scalar);
                 return r;
             }

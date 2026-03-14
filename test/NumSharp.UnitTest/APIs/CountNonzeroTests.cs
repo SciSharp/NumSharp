@@ -115,7 +115,7 @@ public class CountNonzeroTests
         var a = np.array(new int[,] { { 0, 1, 2 }, { 3, 0, 0 } });
         var result = np.count_nonzero(a, axis: 0);
 
-        await Assert.That(result.shape).IsEquivalentTo(new int[] { 3 });
+        await Assert.That(result.shape).IsEquivalentTo(new long[] { 3 });
         await Assert.That(result.GetInt64(0)).IsEqualTo(1L);
         await Assert.That(result.GetInt64(1)).IsEqualTo(1L);
         await Assert.That(result.GetInt64(2)).IsEqualTo(1L);
@@ -128,7 +128,7 @@ public class CountNonzeroTests
         var a = np.array(new int[,] { { 0, 1, 2 }, { 3, 0, 0 } });
         var result = np.count_nonzero(a, axis: 1);
 
-        await Assert.That(result.shape).IsEquivalentTo(new int[] { 2 });
+        await Assert.That(result.shape).IsEquivalentTo(new long[] { 2 });
         await Assert.That(result.GetInt64(0)).IsEqualTo(2L);
         await Assert.That(result.GetInt64(1)).IsEqualTo(1L);
     }
@@ -140,7 +140,7 @@ public class CountNonzeroTests
         var a = np.array(new int[,] { { 0, 1, 2 }, { 3, 0, 0 } });
         var result = np.count_nonzero(a, axis: 0, keepdims: true);
 
-        await Assert.That(result.shape).IsEquivalentTo(new int[] { 1, 3 });
+        await Assert.That(result.shape).IsEquivalentTo(new long[] { 1, 3 });
         // Access via 2D indexing since keepdims preserves dimensions
         await Assert.That(result.GetAtIndex<long>(0)).IsEqualTo(1L);
         await Assert.That(result.GetAtIndex<long>(1)).IsEqualTo(1L);
@@ -154,7 +154,7 @@ public class CountNonzeroTests
         var a = np.array(new int[,] { { 0, 1, 2 }, { 3, 0, 0 } });
         var result = np.count_nonzero(a, axis: -1);
 
-        await Assert.That(result.shape).IsEquivalentTo(new int[] { 2 });
+        await Assert.That(result.shape).IsEquivalentTo(new long[] { 2 });
         await Assert.That(result.GetInt64(0)).IsEqualTo(2L);
         await Assert.That(result.GetInt64(1)).IsEqualTo(1L);
     }
@@ -171,7 +171,7 @@ public class CountNonzeroTests
 
         var result = np.count_nonzero(a, axis: 1);
 
-        await Assert.That(result.shape).IsEquivalentTo(new int[] { 2, 3 });
+        await Assert.That(result.shape).IsEquivalentTo(new long[] { 2, 3 });
         // [0,0]: sum axis 1 of [0,:,0] = [1,0] -> 1 nonzero
         // [0,1]: sum axis 1 of [0,:,1] = [0,1] -> 1 nonzero
         // [0,2]: sum axis 1 of [0,:,2] = [0,0] -> 0 nonzero
@@ -191,7 +191,7 @@ public class CountNonzeroTests
         var a = np.zeros(new Shape(0, 3), NPTypeCode.Int32);
         var result = np.count_nonzero(a, axis: 0);
 
-        await Assert.That(result.shape).IsEquivalentTo(new int[] { 3 });
+        await Assert.That(result.shape).IsEquivalentTo(new long[] { 3 });
         await Assert.That(result.GetInt64(0)).IsEqualTo(0L);
         await Assert.That(result.GetInt64(1)).IsEqualTo(0L);
         await Assert.That(result.GetInt64(2)).IsEqualTo(0L);
@@ -204,7 +204,7 @@ public class CountNonzeroTests
         var a = np.zeros(new Shape(0, 3), NPTypeCode.Int32);
         var result = np.count_nonzero(a, axis: 1);
 
-        await Assert.That(result.shape).IsEquivalentTo(new int[] { 0 });
+        await Assert.That(result.shape).IsEquivalentTo(new long[] { 0 });
         await Assert.That(result.size).IsEqualTo(0);
     }
 

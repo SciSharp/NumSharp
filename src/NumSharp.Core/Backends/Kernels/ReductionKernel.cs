@@ -139,10 +139,10 @@ namespace NumSharp.Backends.Kernels
     /// </remarks>
     public unsafe delegate object ElementReductionKernel(
         void* input,
-        int* strides,
-        int* shape,
+        long* strides,
+        long* shape,
         int ndim,
-        int totalSize
+        long totalSize
     );
 
     /// <summary>
@@ -152,10 +152,10 @@ namespace NumSharp.Backends.Kernels
     /// <typeparam name="TResult">Accumulator/result type</typeparam>
     public unsafe delegate TResult TypedElementReductionKernel<TResult>(
         void* input,
-        int* strides,
-        int* shape,
+        long* strides,
+        long* shape,
         int ndim,
-        int totalSize
+        long totalSize
     ) where TResult : unmanaged;
 
     /// <summary>
@@ -174,13 +174,13 @@ namespace NumSharp.Backends.Kernels
     public unsafe delegate void AxisReductionKernel(
         void* input,
         void* output,
-        int* inputStrides,
-        int* inputShape,
-        int* outputStrides,
+        long* inputStrides,
+        long* inputShape,
+        long* outputStrides,
         int axis,
-        int axisSize,
+        long axisSize,
         int ndim,
-        int outputSize
+        long outputSize
     );
 
     /// <summary>
@@ -196,10 +196,10 @@ namespace NumSharp.Backends.Kernels
     public unsafe delegate void CumulativeKernel(
         void* input,
         void* output,
-        int* strides,
-        int* shape,
+        long* strides,
+        long* shape,
         int ndim,
-        int totalSize
+        long totalSize
     );
 
     /// <summary>
@@ -216,11 +216,11 @@ namespace NumSharp.Backends.Kernels
     public unsafe delegate void CumulativeAxisKernel(
         void* input,
         void* output,
-        int* inputStrides,
-        int* shape,
+        long* inputStrides,
+        long* shape,
         int axis,
         int ndim,
-        int totalSize
+        long totalSize
     );
 
     /// <summary>

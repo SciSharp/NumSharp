@@ -49,13 +49,10 @@ namespace NumSharp
                         if (boolean == false)
                             return; //do nothing
 
-                        SetData(values);
+                        SetData(values, new int[0]);
                         return; // np.expand_dims(this, 0); //equivalent to [np.newaxis]
 
                     case int[] coords:
-                        SetData(values, coords);
-                        return;
-                    case long[] coords:
                         SetData(values, coords);
                         return;
                     case NDArray[] nds:
@@ -65,7 +62,7 @@ namespace NumSharp
                         this[objs] = values;
                         return;
                     case string slicesStr:
-                        new NDArray(Storage.GetView(Slice.ParseSlices(slicesStr))).SetData(values);
+                        new NDArray(Storage.GetView(Slice.ParseSlices(slicesStr))).SetData(values, new int[0]);
                         return;
                     case null:
                         throw new ArgumentNullException($"The 1th dimension in given indices is null.");
@@ -133,7 +130,7 @@ namespace NumSharp
                 return;
             }
 
-            new NDArray(Storage.GetView(slices)).SetData(values);
+            new NDArray(Storage.GetView(slices)).SetData(values, new int[0]);
 
 //handle complex ndarrays indexing
             _NDArrayFound:
@@ -340,14 +337,14 @@ namespace NumSharp
             if (source.Shape.IsScalar)
                 source = source.reshape(1);
 
-            int[] retShape = null, subShape = null;
+            long[] retShape = null, subShape = null;
 
-            int indicesSize = indices[0].size;
+            long indicesSize = indices[0].size;
             var srcShape = source.Shape;
             var ndsCount = indices.Length;
             bool isSubshaped = ndsCount != source.ndim;
             NDArray idxs;
-            int[] indicesImpliedShape = null;
+            long[] indicesImpliedShape = null;
             //preprocess indices -----------------------------------------------------------------------------------------------
             //handle non-flat indices and detect if broadcasting required
             if (indices.Length == 1)
@@ -420,12 +417,12 @@ namespace NumSharp
             {
                 if (indicesImpliedShape == null)
                 {
-                    retShape = new int[idxs.ndim + srcShape.NDim - ndsCount];
+                    retShape = new long[idxs.ndim + srcShape.NDim - ndsCount];
                     for (int i = 0; i < idxs.ndim; i++)
                         retShape[i] = idxs.shape[i];
 
 
-                    subShape = new int[srcShape.NDim - ndsCount];
+                    subShape = new long[srcShape.NDim - ndsCount];
                     for (int dst_i = idxs.ndim, src_i = ndsCount, i = 0; src_i < srcShape.NDim; dst_i++, src_i++, i++)
                     {
                         retShape[dst_i] = srcShape[src_i];
@@ -436,7 +433,7 @@ namespace NumSharp
                 {
                     retShape = indicesImpliedShape;
 
-                    subShape = new int[srcShape.NDim - ndsCount];
+                    subShape = new long[srcShape.NDim - ndsCount];
                     for (int src_i = ndsCount, i = 0; src_i < srcShape.NDim; src_i++, i++)
                     {
                         subShape[i] = srcShape[src_i];
@@ -461,7 +458,7 @@ namespace NumSharp
             var indexGetters = PrepareIndexGetters(srcShape, indices);
 
             //figure out the largest possible abosulte offset
-            int largestOffset;
+            long largestOffset;
             if (srcShape.IsContiguous)
                 largestOffset = source.size - 1;
             else
@@ -476,23 +473,23 @@ namespace NumSharp
             //compute coordinates
             if (indices.Length > 1)
             {
-                var index = stackalloc int[ndsCount];
+                var index = stackalloc long[ndsCount];
 
-                for (int i = 0; i < indicesSize; i++)
+                for (long i = 0; i < indicesSize; i++)
                 {
                     for (int ndIdx = 0; ndIdx < ndsCount; ndIdx++) //todo optimize this loop with unmanaged address.
                         index[ndIdx] = indexGetters[ndIdx](i); //replace with memory access or iterators
 
-                    if ((computedAddr[i] = srcShape.GetOffset(index, ndsCount)) > largestOffset)
-                        throw new IndexOutOfRangeException($"Index [{string.Join(", ", new Span<int>(index, ndsCount).ToArray())}] exceeds given NDArray's bounds. NDArray is shaped {srcShape}.");
+                    if ((computedAddr[i] = (int)srcShape.GetOffset(index, ndsCount)) > largestOffset)
+                        throw new IndexOutOfRangeException($"Index [{string.Join(", ", new Span<long>(index, ndsCount).ToArray())}] exceeds given NDArray's bounds. NDArray is shaped {srcShape}.");
                 }
             }
             else
             {
                 var getter = indexGetters[0];
-                for (int i = 0; i < indicesSize; i++)
+                for (long i = 0; i < indicesSize; i++)
                 {
-                    if ((computedAddr[i] = srcShape.GetOffset_1D(getter(i))) > largestOffset)
+                    if ((computedAddr[i] = (int)srcShape.GetOffset_1D(getter(i))) > largestOffset)
                         throw new IndexOutOfRangeException($"Index [{getter(i)}] exceeds given NDArray's bounds. NDArray is shaped {srcShape}.");
                 }
             }
@@ -506,7 +503,7 @@ namespace NumSharp
                 var valuesTyped = values.AsOrMakeGeneric<T>();
                 T* valAddr = valuesTyped.Address;
                 var valuesShape = valuesTyped.Shape;
-                int len = computedOffsets.size;
+                long len = computedOffsets.size;
 
                 // Handle broadcasting: if values.size == 1, broadcast scalar
                 if (valuesTyped.size == 1)
@@ -546,36 +543,36 @@ namespace NumSharp
         /// <param name="retShape"></param>
         /// <param name="absolute">Is the given <paramref name="dstOffsets"/> already point to the offset of <paramref name="dst"/>.</param>
         /// <returns></returns>
-        protected static unsafe void SetIndicesND<T>(NDArray<T> dst, NDArray<int> dstOffsets, NDArray[] dstIndices, int ndsCount, int[] retShape, int[] subShape, NDArray<T> values) where T : unmanaged
+        protected static unsafe void SetIndicesND<T>(NDArray<T> dst, NDArray<int> dstOffsets, NDArray[] dstIndices, int ndsCount, long[] retShape, long[] subShape, NDArray<T> values) where T : unmanaged
         {
             Debug.Assert(dstOffsets.size == values.size);
 
             //facts:
-            //indices are always offsetted to 
+            //indices are always offsetted to
             Debug.Assert(dstOffsets.ndim == 1);
             Debug.Assert(retShape != null);
 
             //handle pointers pointing to subshape
-            var subShapeSize = 1;
+            long subShapeSize = 1;
             for (int i = 0; i < subShape.Length; i++)
                 subShapeSize *= subShape[i];
 
             int* offsetAddr = dstOffsets.Address;
-            var offsetsSize = dstOffsets.size;
+            long offsetsSize = dstOffsets.size;
             T* valuesAddr = values.Address;
             T* dstAddr = dst.Address;
-            int copySize = subShapeSize * InfoOf<T>.Size;
+            long copySize = subShapeSize * InfoOf<T>.Size;
             if (values.Shape.IsContiguous)
             {
                 //linear
-                for (int i = 0; i < offsetsSize; i++)
+                for (long i = 0; i < offsetsSize; i++)
                     Buffer.MemoryCopy(valuesAddr + i * subShapeSize, dstAddr + *(offsetAddr + i), copySize, copySize);
             }
             else
             {
                 //non-linear
                 ref Shape shape = ref values.Storage.ShapeReference;
-                for (int i = 0; i < offsetsSize; i++) 
+                for (long i = 0; i < offsetsSize; i++)
                     Buffer.MemoryCopy(valuesAddr + shape.TransformOffset(i), dstAddr + *(offsetAddr + i), copySize, copySize);
 
                 //Parallel.For(0, offsetsSize, i =>
@@ -593,7 +590,7 @@ namespace NumSharp
         /// <param name="absolute">Is the given <paramref name="offsets"/> already point to the offset of <paramref name="source"/>.</param>
         /// <returns></returns>
         [SuppressMessage("ReSharper", "SuggestVarOrType_Elsewhere")]
-        protected static unsafe void SetIndicesNDNonLinear<T>(NDArray<T> source, NDArray[] indices, int ndsCount, int[] retShape, int[] subShape, NDArray<T> values) where T : unmanaged
+        protected static unsafe void SetIndicesNDNonLinear<T>(NDArray<T> source, NDArray[] indices, int ndsCount, long[] retShape, long[] subShape, NDArray<T> values) where T : unmanaged
         {
             throw new NotImplementedException("SetIndicesNDNonLinear is yet to be implemented.");
 //            //facts:

@@ -490,7 +490,6 @@ namespace NumSharp.Backends.Unmanaged
         [MethodImpl(OptimizeAndInline)]
         public static UnmanagedMemoryBlock<T> Copy(void* address, long count)
         {
-            var len = count * InfoOf<T>.Size;
             var ret = new UnmanagedMemoryBlock<T>(count);
             new UnmanagedMemoryBlock<T>((T*)address, count).CopyTo(ret);
             //source.AsSpan().CopyTo(ret.AsSpan()); //TODO! Benchmark at netcore 3.0, it should be faster than buffer.memorycopy.

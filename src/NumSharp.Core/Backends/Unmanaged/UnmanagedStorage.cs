@@ -67,7 +67,7 @@ namespace NumSharp.Backends
         /// <para>
         /// <b>Set by:</b> All three <see cref="Alias()"/> overloads,
         /// <see cref="CreateBroadcastedUnsafe(UnmanagedStorage, Shape)"/>,
-        /// and both <see cref="GetData(long[])"/> overloads when creating views.
+        /// and both <see cref="GetData(int[])"/> overloads when creating views.
         /// </para>
         /// </remarks>
         /// <seealso cref="BaseStorage"/>
@@ -181,11 +181,10 @@ namespace NumSharp.Backends
             if (!_shape.IsContiguous)
                 throw new InvalidOperationException("Unable to span a non-contiguous storage.");
 
-            if (Count > int.MaxValue)
-                throw new InvalidOperationException("Storage size exceeds Span<T> maximum length. Use pointer access instead.");
-
             unsafe
             {
+                if (Count > int.MaxValue)
+                    throw new InvalidOperationException("Storage size exceeds Span<T> maximum capacity.");
                 return new Span<T>(Address, (int)Count);
             }
         }
@@ -1011,7 +1010,7 @@ namespace NumSharp.Backends
             if (shape.IsEmpty)
                 throw new ArgumentNullException(nameof(shape));
 
-            _Allocate(shape, ArraySlice.Allocate(dtype ?? DType, shape.size, true));
+            _Allocate(shape, ArraySlice.Allocate(dtype ?? DType, (int)shape.size, true));
         }
 
         /// <summary>
@@ -1024,7 +1023,7 @@ namespace NumSharp.Backends
             if (shape.IsEmpty)
                 throw new ArgumentNullException(nameof(shape));
 
-            _Allocate(shape, ArraySlice.Allocate(dtype ?? DType, shape.size, fillZeros));
+            _Allocate(shape, ArraySlice.Allocate(dtype ?? DType, (int)shape.size, fillZeros));
         }
 
         /// <summary>
@@ -1482,7 +1481,7 @@ namespace NumSharp.Backends
             else
             {
                 var incr = new ValueCoordinatesIncrementor(Shape.dimensions);
-                int[] current = incr.Index;
+                long[] current = incr.Index;
                 int i = 0;
                 ref Shape shape = ref ShapeReference;
                 do ret[i++] = src[shape.GetOffset(current)];

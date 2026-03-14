@@ -164,14 +164,6 @@ namespace NumSharp.Generic
         public new TDType this[params int[] indices]
         {
             [MethodImpl(Inline)]
-            get => this[Shape.ComputeLongShape(indices)];
-            [MethodImpl(Inline)]
-            set => this[Shape.ComputeLongShape(indices)] = value;
-        }
-
-        public new TDType this[params long[] indices]
-        {
-            [MethodImpl(Inline)]
             get
             {
                 if (Shape.IsScalar && indices.Length != 1 || !Shape.IsScalar && indices.Length != ndim)
@@ -221,7 +213,7 @@ namespace NumSharp.Generic
             set => base[slices] = value;
         }
 
-        public new TDType GetAtIndex(int index)
+        public new TDType GetAtIndex(long index)
         {
             unsafe
             {

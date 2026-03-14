@@ -30,7 +30,7 @@ namespace NumSharp.Backends.Kernels
         /// <param name="src">Pointer to contiguous float data</param>
         /// <param name="size">Number of elements</param>
         /// <returns>Sum of non-NaN elements</returns>
-        internal static unsafe float NanSumSimdHelperFloat(float* src, int size)
+        internal static unsafe float NanSumSimdHelperFloat(float* src, long size)
         {
             if (size == 0)
                 return 0f;
@@ -40,9 +40,9 @@ namespace NumSharp.Backends.Kernels
             if (Vector256.IsHardwareAccelerated && Vector256<float>.IsSupported && size >= Vector256<float>.Count)
             {
                 int vectorCount = Vector256<float>.Count;
-                int vectorEnd = size - vectorCount;
+                long vectorEnd = size - vectorCount;
                 var sumVec = Vector256<float>.Zero;
-                int i = 0;
+                long i = 0;
 
                 for (; i <= vectorEnd; i += vectorCount)
                 {
@@ -66,9 +66,9 @@ namespace NumSharp.Backends.Kernels
             else if (Vector128.IsHardwareAccelerated && Vector128<float>.IsSupported && size >= Vector128<float>.Count)
             {
                 int vectorCount = Vector128<float>.Count;
-                int vectorEnd = size - vectorCount;
+                long vectorEnd = size - vectorCount;
                 var sumVec = Vector128<float>.Zero;
-                int i = 0;
+                long i = 0;
 
                 for (; i <= vectorEnd; i += vectorCount)
                 {
@@ -88,7 +88,7 @@ namespace NumSharp.Backends.Kernels
             }
             else
             {
-                for (int i = 0; i < size; i++)
+                for (long i = 0; i < size; i++)
                 {
                     if (!float.IsNaN(src[i]))
                         sum += src[i];
@@ -102,7 +102,7 @@ namespace NumSharp.Backends.Kernels
         /// SIMD helper for NaN-aware sum of a contiguous double array.
         /// NaN values are treated as 0 (ignored in the sum).
         /// </summary>
-        internal static unsafe double NanSumSimdHelperDouble(double* src, int size)
+        internal static unsafe double NanSumSimdHelperDouble(double* src, long size)
         {
             if (size == 0)
                 return 0.0;
@@ -112,9 +112,9 @@ namespace NumSharp.Backends.Kernels
             if (Vector256.IsHardwareAccelerated && Vector256<double>.IsSupported && size >= Vector256<double>.Count)
             {
                 int vectorCount = Vector256<double>.Count;
-                int vectorEnd = size - vectorCount;
+                long vectorEnd = size - vectorCount;
                 var sumVec = Vector256<double>.Zero;
-                int i = 0;
+                long i = 0;
 
                 for (; i <= vectorEnd; i += vectorCount)
                 {
@@ -135,9 +135,9 @@ namespace NumSharp.Backends.Kernels
             else if (Vector128.IsHardwareAccelerated && Vector128<double>.IsSupported && size >= Vector128<double>.Count)
             {
                 int vectorCount = Vector128<double>.Count;
-                int vectorEnd = size - vectorCount;
+                long vectorEnd = size - vectorCount;
                 var sumVec = Vector128<double>.Zero;
-                int i = 0;
+                long i = 0;
 
                 for (; i <= vectorEnd; i += vectorCount)
                 {
@@ -157,7 +157,7 @@ namespace NumSharp.Backends.Kernels
             }
             else
             {
-                for (int i = 0; i < size; i++)
+                for (long i = 0; i < size; i++)
                 {
                     if (!double.IsNaN(src[i]))
                         sum += src[i];
@@ -171,7 +171,7 @@ namespace NumSharp.Backends.Kernels
         /// SIMD helper for NaN-aware product of a contiguous float array.
         /// NaN values are treated as 1 (ignored in the product).
         /// </summary>
-        internal static unsafe float NanProdSimdHelperFloat(float* src, int size)
+        internal static unsafe float NanProdSimdHelperFloat(float* src, long size)
         {
             if (size == 0)
                 return 1f;
@@ -181,10 +181,10 @@ namespace NumSharp.Backends.Kernels
             if (Vector256.IsHardwareAccelerated && Vector256<float>.IsSupported && size >= Vector256<float>.Count)
             {
                 int vectorCount = Vector256<float>.Count;
-                int vectorEnd = size - vectorCount;
+                long vectorEnd = size - vectorCount;
                 var prodVec = Vector256.Create(1f);
                 var oneVec = Vector256.Create(1f);
-                int i = 0;
+                long i = 0;
 
                 for (; i <= vectorEnd; i += vectorCount)
                 {
@@ -210,10 +210,10 @@ namespace NumSharp.Backends.Kernels
             else if (Vector128.IsHardwareAccelerated && Vector128<float>.IsSupported && size >= Vector128<float>.Count)
             {
                 int vectorCount = Vector128<float>.Count;
-                int vectorEnd = size - vectorCount;
+                long vectorEnd = size - vectorCount;
                 var prodVec = Vector128.Create(1f);
                 var oneVec = Vector128.Create(1f);
-                int i = 0;
+                long i = 0;
 
                 for (; i <= vectorEnd; i += vectorCount)
                 {
@@ -235,7 +235,7 @@ namespace NumSharp.Backends.Kernels
             }
             else
             {
-                for (int i = 0; i < size; i++)
+                for (long i = 0; i < size; i++)
                 {
                     if (!float.IsNaN(src[i]))
                         prod *= src[i];
@@ -249,7 +249,7 @@ namespace NumSharp.Backends.Kernels
         /// SIMD helper for NaN-aware product of a contiguous double array.
         /// NaN values are treated as 1 (ignored in the product).
         /// </summary>
-        internal static unsafe double NanProdSimdHelperDouble(double* src, int size)
+        internal static unsafe double NanProdSimdHelperDouble(double* src, long size)
         {
             if (size == 0)
                 return 1.0;
@@ -259,10 +259,10 @@ namespace NumSharp.Backends.Kernels
             if (Vector256.IsHardwareAccelerated && Vector256<double>.IsSupported && size >= Vector256<double>.Count)
             {
                 int vectorCount = Vector256<double>.Count;
-                int vectorEnd = size - vectorCount;
+                long vectorEnd = size - vectorCount;
                 var prodVec = Vector256.Create(1.0);
                 var oneVec = Vector256.Create(1.0);
-                int i = 0;
+                long i = 0;
 
                 for (; i <= vectorEnd; i += vectorCount)
                 {
@@ -285,10 +285,10 @@ namespace NumSharp.Backends.Kernels
             else if (Vector128.IsHardwareAccelerated && Vector128<double>.IsSupported && size >= Vector128<double>.Count)
             {
                 int vectorCount = Vector128<double>.Count;
-                int vectorEnd = size - vectorCount;
+                long vectorEnd = size - vectorCount;
                 var prodVec = Vector128.Create(1.0);
                 var oneVec = Vector128.Create(1.0);
-                int i = 0;
+                long i = 0;
 
                 for (; i <= vectorEnd; i += vectorCount)
                 {
@@ -310,7 +310,7 @@ namespace NumSharp.Backends.Kernels
             }
             else
             {
-                for (int i = 0; i < size; i++)
+                for (long i = 0; i < size; i++)
                 {
                     if (!double.IsNaN(src[i]))
                         prod *= src[i];
@@ -324,7 +324,7 @@ namespace NumSharp.Backends.Kernels
         /// SIMD helper for NaN-aware minimum of a contiguous float array.
         /// NaN values are ignored; returns NaN if all values are NaN.
         /// </summary>
-        internal static unsafe float NanMinSimdHelperFloat(float* src, int size)
+        internal static unsafe float NanMinSimdHelperFloat(float* src, long size)
         {
             if (size == 0)
                 return float.NaN;
@@ -335,9 +335,9 @@ namespace NumSharp.Backends.Kernels
             if (Vector256.IsHardwareAccelerated && Vector256<float>.IsSupported && size >= Vector256<float>.Count)
             {
                 int vectorCount = Vector256<float>.Count;
-                int vectorEnd = size - vectorCount;
+                long vectorEnd = size - vectorCount;
                 var minVec = Vector256.Create(float.PositiveInfinity);
-                int i = 0;
+                long i = 0;
 
                 for (; i <= vectorEnd; i += vectorCount)
                 {
@@ -369,9 +369,9 @@ namespace NumSharp.Backends.Kernels
             else if (Vector128.IsHardwareAccelerated && Vector128<float>.IsSupported && size >= Vector128<float>.Count)
             {
                 int vectorCount = Vector128<float>.Count;
-                int vectorEnd = size - vectorCount;
+                long vectorEnd = size - vectorCount;
                 var minVec = Vector128.Create(float.PositiveInfinity);
-                int i = 0;
+                long i = 0;
 
                 for (; i <= vectorEnd; i += vectorCount)
                 {
@@ -399,7 +399,7 @@ namespace NumSharp.Backends.Kernels
             }
             else
             {
-                for (int i = 0; i < size; i++)
+                for (long i = 0; i < size; i++)
                 {
                     if (!float.IsNaN(src[i]))
                     {
@@ -417,7 +417,7 @@ namespace NumSharp.Backends.Kernels
         /// SIMD helper for NaN-aware minimum of a contiguous double array.
         /// NaN values are ignored; returns NaN if all values are NaN.
         /// </summary>
-        internal static unsafe double NanMinSimdHelperDouble(double* src, int size)
+        internal static unsafe double NanMinSimdHelperDouble(double* src, long size)
         {
             if (size == 0)
                 return double.NaN;
@@ -428,9 +428,9 @@ namespace NumSharp.Backends.Kernels
             if (Vector256.IsHardwareAccelerated && Vector256<double>.IsSupported && size >= Vector256<double>.Count)
             {
                 int vectorCount = Vector256<double>.Count;
-                int vectorEnd = size - vectorCount;
+                long vectorEnd = size - vectorCount;
                 var minVec = Vector256.Create(double.PositiveInfinity);
-                int i = 0;
+                long i = 0;
 
                 for (; i <= vectorEnd; i += vectorCount)
                 {
@@ -459,9 +459,9 @@ namespace NumSharp.Backends.Kernels
             else if (Vector128.IsHardwareAccelerated && Vector128<double>.IsSupported && size >= Vector128<double>.Count)
             {
                 int vectorCount = Vector128<double>.Count;
-                int vectorEnd = size - vectorCount;
+                long vectorEnd = size - vectorCount;
                 var minVec = Vector128.Create(double.PositiveInfinity);
-                int i = 0;
+                long i = 0;
 
                 for (; i <= vectorEnd; i += vectorCount)
                 {
@@ -489,7 +489,7 @@ namespace NumSharp.Backends.Kernels
             }
             else
             {
-                for (int i = 0; i < size; i++)
+                for (long i = 0; i < size; i++)
                 {
                     if (!double.IsNaN(src[i]))
                     {
@@ -507,7 +507,7 @@ namespace NumSharp.Backends.Kernels
         /// SIMD helper for NaN-aware maximum of a contiguous float array.
         /// NaN values are ignored; returns NaN if all values are NaN.
         /// </summary>
-        internal static unsafe float NanMaxSimdHelperFloat(float* src, int size)
+        internal static unsafe float NanMaxSimdHelperFloat(float* src, long size)
         {
             if (size == 0)
                 return float.NaN;
@@ -518,9 +518,9 @@ namespace NumSharp.Backends.Kernels
             if (Vector256.IsHardwareAccelerated && Vector256<float>.IsSupported && size >= Vector256<float>.Count)
             {
                 int vectorCount = Vector256<float>.Count;
-                int vectorEnd = size - vectorCount;
+                long vectorEnd = size - vectorCount;
                 var maxVec = Vector256.Create(float.NegativeInfinity);
-                int i = 0;
+                long i = 0;
 
                 for (; i <= vectorEnd; i += vectorCount)
                 {
@@ -552,9 +552,9 @@ namespace NumSharp.Backends.Kernels
             else if (Vector128.IsHardwareAccelerated && Vector128<float>.IsSupported && size >= Vector128<float>.Count)
             {
                 int vectorCount = Vector128<float>.Count;
-                int vectorEnd = size - vectorCount;
+                long vectorEnd = size - vectorCount;
                 var maxVec = Vector128.Create(float.NegativeInfinity);
-                int i = 0;
+                long i = 0;
 
                 for (; i <= vectorEnd; i += vectorCount)
                 {
@@ -582,7 +582,7 @@ namespace NumSharp.Backends.Kernels
             }
             else
             {
-                for (int i = 0; i < size; i++)
+                for (long i = 0; i < size; i++)
                 {
                     if (!float.IsNaN(src[i]))
                     {
@@ -600,7 +600,7 @@ namespace NumSharp.Backends.Kernels
         /// SIMD helper for NaN-aware maximum of a contiguous double array.
         /// NaN values are ignored; returns NaN if all values are NaN.
         /// </summary>
-        internal static unsafe double NanMaxSimdHelperDouble(double* src, int size)
+        internal static unsafe double NanMaxSimdHelperDouble(double* src, long size)
         {
             if (size == 0)
                 return double.NaN;
@@ -611,9 +611,9 @@ namespace NumSharp.Backends.Kernels
             if (Vector256.IsHardwareAccelerated && Vector256<double>.IsSupported && size >= Vector256<double>.Count)
             {
                 int vectorCount = Vector256<double>.Count;
-                int vectorEnd = size - vectorCount;
+                long vectorEnd = size - vectorCount;
                 var maxVec = Vector256.Create(double.NegativeInfinity);
-                int i = 0;
+                long i = 0;
 
                 for (; i <= vectorEnd; i += vectorCount)
                 {
@@ -642,9 +642,9 @@ namespace NumSharp.Backends.Kernels
             else if (Vector128.IsHardwareAccelerated && Vector128<double>.IsSupported && size >= Vector128<double>.Count)
             {
                 int vectorCount = Vector128<double>.Count;
-                int vectorEnd = size - vectorCount;
+                long vectorEnd = size - vectorCount;
                 var maxVec = Vector128.Create(double.NegativeInfinity);
-                int i = 0;
+                long i = 0;
 
                 for (; i <= vectorEnd; i += vectorCount)
                 {
@@ -672,7 +672,7 @@ namespace NumSharp.Backends.Kernels
             }
             else
             {
-                for (int i = 0; i < size; i++)
+                for (long i = 0; i < size; i++)
                 {
                     if (!double.IsNaN(src[i]))
                     {
