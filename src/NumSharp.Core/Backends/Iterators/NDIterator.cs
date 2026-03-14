@@ -34,7 +34,7 @@ namespace NumSharp
         /// <summary>
         ///     The size of this iterator.
         /// </summary>
-        public int size;
+        public long size;
 
         /// <summary>
         ///     Returns a function that when called, moves to next iteration and return the next value.

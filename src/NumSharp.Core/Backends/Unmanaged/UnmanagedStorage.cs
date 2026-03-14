@@ -181,9 +181,12 @@ namespace NumSharp.Backends
             if (!_shape.IsContiguous)
                 throw new InvalidOperationException("Unable to span a non-contiguous storage.");
 
+            if (Count > int.MaxValue)
+                throw new InvalidOperationException("Storage size exceeds Span<T> maximum length. Use pointer access instead.");
+
             unsafe
             {
-                return new Span<T>(Address, Count);
+                return new Span<T>(Address, (int)Count);
             }
         }
 

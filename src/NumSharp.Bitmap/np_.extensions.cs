@@ -284,7 +284,7 @@ namespace NumSharp
                             break;
                     }
 
-                    return bbp;
+                    return (int)bbp;
                 }
 
                 return format.ToBytesPerPixel();

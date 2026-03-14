@@ -232,8 +232,10 @@ namespace NumSharp.Backends
                 return ArraySlice.Scalar(GetValue(0), _typecode);
 
             //Linear copy of all the sliced items (non-contiguous: broadcast, stepped, transposed).
+            if (_shape.size > int.MaxValue)
+                throw new InvalidOperationException("Cannot clone array with size exceeding int.MaxValue. ArraySlice allocation limit.");
 
-            var ret = ArraySlice.Allocate(InternalArray.TypeCode, _shape.size, false);
+            var ret = ArraySlice.Allocate(InternalArray.TypeCode, (int)_shape.size, false);
             MultiIterator.Assign(new UnmanagedStorage(ret, _shape.Clean()), this);
 
             return ret;
