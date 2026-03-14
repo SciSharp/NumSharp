@@ -221,6 +221,10 @@ namespace NumSharp
         // Boolean masking
         public abstract NDArray BooleanMask(NDArray arr, NDArray mask);
 
+        public abstract int CountNonZero(in NDArray a);
+
+        public abstract NDArray CountNonZero(in NDArray a, int axis, bool keepdims = false);
+
         #endregion
     }
 }
