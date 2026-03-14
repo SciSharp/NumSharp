@@ -37,14 +37,6 @@ namespace NumSharp.Backends.Kernels
         public static int NanAxisReductionCachedCount => _nanAxisReductionCache.Count;
 
         /// <summary>
-        /// Clear NaN axis reduction cache.
-        /// </summary>
-        public static void ClearNanAxisReduction()
-        {
-            _nanAxisReductionCache.Clear();
-        }
-
-        /// <summary>
         /// Try to get a NaN-aware axis reduction kernel.
         /// Only supports float and double types (NaN is only defined for floating-point).
         /// </summary>

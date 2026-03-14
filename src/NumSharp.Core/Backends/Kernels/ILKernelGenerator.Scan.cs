@@ -64,15 +64,6 @@ namespace NumSharp.Backends.Kernels
         public static int ScanCachedCount => _scanCache.Count;
 
         /// <summary>
-        /// Clear all scan kernel caches (element-wise and axis).
-        /// </summary>
-        public static void ClearScan()
-        {
-            _scanCache.Clear();
-            _axisScanCache.Clear();
-        }
-
-        /// <summary>
         /// Get or generate a cumulative (scan) kernel.
         /// Returns a delegate that computes running accumulation over all elements.
         /// </summary>
@@ -471,14 +462,6 @@ namespace NumSharp.Backends.Kernels
         /// Number of axis scan kernels in cache.
         /// </summary>
         public static int AxisScanCachedCount => _axisScanCache.Count;
-
-        /// <summary>
-        /// Clear the axis scan kernel caches.
-        /// </summary>
-        public static void ClearAxisScan()
-        {
-            _axisScanCache.Clear();
-        }
 
         /// <summary>
         /// Get or generate a cumulative axis (scan along axis) kernel.

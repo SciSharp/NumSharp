@@ -11,7 +11,7 @@ using System.Runtime.Intrinsics;
 // =============================================================================
 //
 // RESPONSIBILITY:
-//   - Axis reduction cache and API (TryGetAxisReductionKernel, ClearAxisReduction)
+//   - Axis reduction cache and API (TryGetAxisReductionKernel)
 //   - Main dispatcher (CreateAxisReductionKernel)
 //   - General axis reduction kernels (scalar loop with type conversion)
 //
@@ -37,14 +37,6 @@ namespace NumSharp.Backends.Kernels
         /// Number of axis reduction kernels in cache.
         /// </summary>
         public static int AxisReductionCachedCount => _axisReductionCache.Count;
-
-        /// <summary>
-        /// Clear axis reduction cache.
-        /// </summary>
-        public static void ClearAxisReduction()
-        {
-            _axisReductionCache.Clear();
-        }
 
         /// <summary>
         /// Try to get an axis reduction kernel.

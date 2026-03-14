@@ -48,15 +48,6 @@ namespace NumSharp.Backends.Kernels
         public static int BinaryScalarCachedCount => _binaryScalarCache.Count;
 
         /// <summary>
-        /// Clear the scalar kernel caches.
-        /// </summary>
-        public static void ClearScalar()
-        {
-            _unaryScalarCache.Clear();
-            _binaryScalarCache.Clear();
-        }
-
-        /// <summary>
         /// Get or generate an IL-based unary scalar delegate.
         /// Returns a Func&lt;TInput, TOutput&gt; delegate.
         /// </summary>

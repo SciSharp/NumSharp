@@ -11,7 +11,7 @@ using System.Runtime.Intrinsics;
 // =============================================================================
 //
 // RESPONSIBILITY:
-//   - Unary kernel cache and API (GetUnaryKernel, TryGetUnaryKernel, ClearUnary)
+//   - Unary kernel cache and API (GetUnaryKernel, TryGetUnaryKernel)
 //   - SIMD loop emission with 4x unrolling
 //   - Scalar and strided fallback loops
 //   - Capability detection (CanUseUnarySimd, IsPredicateOp)
@@ -70,11 +70,6 @@ namespace NumSharp.Backends.Kernels
                 return null;
             }
         }
-
-        /// <summary>
-        /// Clear the unary kernel cache.
-        /// </summary>
-        public static void ClearUnary() => _unaryCache.Clear();
 
         /// <summary>
         /// Generate a unary kernel for the specified key.

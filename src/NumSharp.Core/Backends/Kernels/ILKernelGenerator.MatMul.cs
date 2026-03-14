@@ -86,11 +86,6 @@ namespace NumSharp.Backends.Kernels
             return (MatMul2DKernel<T>)_matmulKernelCache[key];
         }
 
-        /// <summary>
-        /// Clear the MatMul kernel cache.
-        /// </summary>
-        public static void ClearMatMulCache() => _matmulKernelCache.Clear();
-
         #endregion
 
         #region IL Generation
@@ -146,8 +141,8 @@ namespace NumSharp.Backends.Kernels
             var locBRow = il.DeclareLocal(typeof(float*));  // 7: pointer to B[k,:]
             var locCAddr = il.DeclareLocal(typeof(float*)); // 8: temp C address for SIMD store
 
-            const int vectorCount = 8; // Vector256<float>.Count
-            const int elementSize = 4; // sizeof(float)
+            int vectorCount = Vector256<float>.Count;
+            int elementSize = sizeof(float);
 
             // Labels
             var lblZeroLoop = il.DefineLabel();
@@ -162,6 +157,8 @@ namespace NumSharp.Backends.Kernels
             var lblInnerScalarEnd = il.DefineLabel();
 
             // ========== ZERO OUT C ==========
+            // TODO: Use SIMD zeroing (Vector256.Store with Vector256<T>.Zero) or
+            // allocate with NativeMemory.AllocZeroed / fillZeros:true for faster initialization
             // for (int idx = 0; idx < M * N; idx++) c[idx] = 0;
             var locIdx = il.DeclareLocal(typeof(int));      // 8: zero loop index
             var locSize = il.DeclareLocal(typeof(int));     // 9: M * N
@@ -363,7 +360,7 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         private static void EmitSimdBodyFloat(ILGenerator il, LocalBuilder locCRow, LocalBuilder locBRow, LocalBuilder locJ, LocalBuilder locAik, LocalBuilder locCAddr)
         {
-            const int elementSize = 4;
+            int elementSize = sizeof(float);
 
             // Get method references
             var vector256Type = typeof(Vector256<float>);
@@ -452,8 +449,8 @@ namespace NumSharp.Backends.Kernels
             var locBRow = il.DeclareLocal(typeof(double*));
             var locCAddr = il.DeclareLocal(typeof(double*)); // temp C address for SIMD store
 
-            const int vectorCount = 4; // Vector256<double>.Count
-            const int elementSize = 8; // sizeof(double)
+            int vectorCount = Vector256<double>.Count;
+            int elementSize = sizeof(double);
 
             var lblZeroLoop = il.DefineLabel();
             var lblZeroEnd = il.DefineLabel();
@@ -646,7 +643,7 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         private static void EmitSimdBodyDouble(ILGenerator il, LocalBuilder locCRow, LocalBuilder locBRow, LocalBuilder locJ, LocalBuilder locAik, LocalBuilder locCAddr)
         {
-            const int elementSize = 8;
+            int elementSize = sizeof(double);
 
             var vector256Type = typeof(Vector256<double>);
             var vector256StaticType = typeof(Vector256);
