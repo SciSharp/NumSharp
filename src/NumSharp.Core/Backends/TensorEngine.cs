@@ -156,6 +156,7 @@ namespace NumSharp
         public abstract NDArray<bool> IsClose(NDArray a, NDArray b, double rtol = 1.0E-5, double atol = 1.0E-8, bool equal_nan = false);
         public abstract NDArray<bool> IsFinite(NDArray a);
         public abstract NDArray<bool> IsNan(NDArray a);
+        public abstract NDArray<bool> IsInf(NDArray a);
 
         #endregion
 
@@ -204,6 +205,10 @@ namespace NumSharp
         #region Indexing
 
         public abstract NDArray<int>[] NonZero(in NDArray a);
+
+        public abstract int CountNonZero(in NDArray a);
+
+        public abstract NDArray CountNonZero(in NDArray a, int axis, bool keepdims = false);
 
         #endregion
     }

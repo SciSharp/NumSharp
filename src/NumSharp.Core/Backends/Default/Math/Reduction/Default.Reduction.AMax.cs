@@ -10,11 +10,11 @@ namespace NumSharp.Backends
         {
             var shape = arr.Shape;
 
-            if (shape.IsEmpty)
-                throw new InvalidOperationException("Cannot compute max of empty array");
-
-            if (shape.size == 0)
-                throw new InvalidOperationException("zero-size array to reduction operation maximum which has no identity");
+            // Handle empty arrays - need to check axis-specific behavior
+            if (shape.IsEmpty || shape.size == 0)
+            {
+                return HandleEmptyArrayMinMaxReduction(arr, axis_, keepdims, typeCode, "maximum");
+            }
 
             if (shape.IsScalar || (shape.size == 1 && shape.NDim == 1))
                 return HandleScalarReduction(arr, keepdims, typeCode, null);

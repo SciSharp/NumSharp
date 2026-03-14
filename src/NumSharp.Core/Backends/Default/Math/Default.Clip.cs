@@ -10,7 +10,9 @@ namespace NumSharp.Backends
 
         /// <summary>
         /// Clips array values to a specified range [min, max].
-        /// NumPy behavior: NaN in data propagates through (result is NaN).
+        /// NumPy behavior:
+        /// - NaN in data propagates through (result is NaN)
+        /// - NaN in scalar min/max: entire array becomes NaN (for floating-point)
         /// </summary>
         /// <remarks>
         /// Implementation uses IL kernels with:
@@ -25,7 +27,26 @@ namespace NumSharp.Backends
             if (lhs.size == 0)
                 return lhs.Clone();
 
-            var @out = Cast(lhs, typeCode ?? lhs.typecode, copy: true);
+            var outTypeCode = typeCode ?? lhs.typecode;
+
+            // NumPy behavior: NaN in scalar min/max causes entire result to be NaN
+            // This must be handled before the kernel, as scalar fallback doesn't propagate NaN correctly
+            if (outTypeCode == NPTypeCode.Double || outTypeCode == NPTypeCode.Single)
+            {
+                bool minIsNaN = min != null && (min is double dMin && double.IsNaN(dMin) || min is float fMin && float.IsNaN(fMin));
+                bool maxIsNaN = max != null && (max is double dMax && double.IsNaN(dMax) || max is float fMax && float.IsNaN(fMax));
+
+                if (minIsNaN || maxIsNaN)
+                {
+                    // Return array filled with NaN
+                    if (outTypeCode == NPTypeCode.Double)
+                        return np.full(lhs.Shape, double.NaN);
+                    else
+                        return np.full(lhs.Shape, float.NaN);
+                }
+            }
+
+            var @out = Cast(lhs, outTypeCode, copy: true);
             var len = @out.size;
 
             // Unified dispatch through ClipCore - handles all dtype combinations
