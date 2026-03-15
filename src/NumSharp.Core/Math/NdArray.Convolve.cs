@@ -86,41 +86,37 @@ namespace NumSharp
 
             var result = new NDArray(retType, Shape.Vector(outLen), true);
 
-            // Convolution: result[k] = sum over j of a[j] * v[k-j]
-            // where j ranges over valid indices
-            // Note: ConvolveFullTyped uses int internally for loop counters, which is fine
-            // since typical convolutions don't exceed 2B elements. The outer sizes are long for consistency.
             switch (retType)
             {
                 case NPTypeCode.Double:
-                    ConvolveFullTyped<double>(a, v, result, (int)na, (int)nv, (int)outLen);
+                    ConvolveFullTyped<double>(a, v, result, na, nv, outLen);
                     break;
                 case NPTypeCode.Single:
-                    ConvolveFullTyped<float>(a, v, result, (int)na, (int)nv, (int)outLen);
+                    ConvolveFullTyped<float>(a, v, result, na, nv, outLen);
                     break;
                 case NPTypeCode.Int32:
-                    ConvolveFullTyped<int>(a, v, result, (int)na, (int)nv, (int)outLen);
+                    ConvolveFullTyped<int>(a, v, result, na, nv, outLen);
                     break;
                 case NPTypeCode.Int64:
-                    ConvolveFullTyped<long>(a, v, result, (int)na, (int)nv, (int)outLen);
+                    ConvolveFullTyped<long>(a, v, result, na, nv, outLen);
                     break;
                 case NPTypeCode.Int16:
-                    ConvolveFullTyped<short>(a, v, result, (int)na, (int)nv, (int)outLen);
+                    ConvolveFullTyped<short>(a, v, result, na, nv, outLen);
                     break;
                 case NPTypeCode.Byte:
-                    ConvolveFullTyped<byte>(a, v, result, (int)na, (int)nv, (int)outLen);
+                    ConvolveFullTyped<byte>(a, v, result, na, nv, outLen);
                     break;
                 case NPTypeCode.UInt16:
-                    ConvolveFullTyped<ushort>(a, v, result, (int)na, (int)nv, (int)outLen);
+                    ConvolveFullTyped<ushort>(a, v, result, na, nv, outLen);
                     break;
                 case NPTypeCode.UInt32:
-                    ConvolveFullTyped<uint>(a, v, result, (int)na, (int)nv, (int)outLen);
+                    ConvolveFullTyped<uint>(a, v, result, na, nv, outLen);
                     break;
                 case NPTypeCode.UInt64:
-                    ConvolveFullTyped<ulong>(a, v, result, (int)na, (int)nv, (int)outLen);
+                    ConvolveFullTyped<ulong>(a, v, result, na, nv, outLen);
                     break;
                 case NPTypeCode.Decimal:
-                    ConvolveFullTyped<decimal>(a, v, result, (int)na, (int)nv, (int)outLen);
+                    ConvolveFullTyped<decimal>(a, v, result, na, nv, outLen);
                     break;
                 default:
                     throw new NotSupportedException($"Type {retType} is not supported for convolution.");
@@ -129,21 +125,21 @@ namespace NumSharp
             return result;
         }
 
-        private static unsafe void ConvolveFullTyped<T>(NDArray a, NDArray v, NDArray result, int na, int nv, int outLen)
+        private static unsafe void ConvolveFullTyped<T>(NDArray a, NDArray v, NDArray result, long na, long nv, long outLen)
             where T : unmanaged
         {
             T* aPtr = (T*)a.Address;
             T* vPtr = (T*)v.Address;
             T* rPtr = (T*)result.Address;
 
-            for (int k = 0; k < outLen; k++)
+            for (long k = 0; k < outLen; k++)
             {
                 // j ranges from max(0, k-nv+1) to min(na-1, k)
-                int jMin = Math.Max(0, k - nv + 1);
-                int jMax = Math.Min(na - 1, k);
+                long jMin = Math.Max(0, k - nv + 1);
+                long jMax = Math.Min(na - 1, k);
 
                 double sum = 0;
-                for (int j = jMin; j <= jMax; j++)
+                for (long j = jMin; j <= jMax; j++)
                 {
                     // v index is k - j, which is in range [0, nv-1] when j is in [jMin, jMax]
                     double aVal = Convert.ToDouble(aPtr[j]);

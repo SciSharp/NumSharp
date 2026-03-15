@@ -90,7 +90,7 @@ namespace NumSharp
             var r = NDArray.Scalar(result);
             if (keepdims)
             {
-                var keepdimsShape = new int[arr.ndim];
+                var keepdimsShape = new long[arr.ndim];
                 for (int i = 0; i < arr.ndim; i++)
                     keepdimsShape[i] = 1;
                 r.Storage.Reshape(new Shape(keepdimsShape));
@@ -147,7 +147,7 @@ namespace NumSharp
                     int count = 0;
 
                     // Convert flat index to coordinates in output shape
-                    var outCoords = new int[outputShape.Length];
+                    var outCoords = new long[outputShape.Length];
                     int temp = outIdx;
                     for (int i = outputShape.Length - 1; i >= 0; i--)
                     {
@@ -159,7 +159,7 @@ namespace NumSharp
                     for (int k = 0; k < axisLen; k++)
                     {
                         // Build input coordinates
-                        var inCoords = new int[inputShape.Length];
+                        var inCoords = new long[inputShape.Length];
                         int outCoordIdx = 0;
                         for (int i = 0; i < inputShape.Length; i++)
                         {
@@ -191,7 +191,7 @@ namespace NumSharp
                     double sum = 0.0;
                     int count = 0;
 
-                    var outCoords = new int[outputShape.Length];
+                    var outCoords = new long[outputShape.Length];
                     int temp = outIdx;
                     for (int i = outputShape.Length - 1; i >= 0; i--)
                     {
@@ -201,7 +201,7 @@ namespace NumSharp
 
                     for (int k = 0; k < axisLen; k++)
                     {
-                        var inCoords = new int[inputShape.Length];
+                        var inCoords = new long[inputShape.Length];
                         int outCoordIdx = 0;
                         for (int i = 0; i < inputShape.Length; i++)
                         {
@@ -228,7 +228,7 @@ namespace NumSharp
             // Handle keepdims
             if (keepdims)
             {
-                var keepdimsShapeDims = new int[arr.ndim];
+                var keepdimsShapeDims = new long[arr.ndim];
                 int srcIdx = 0;
                 for (int i = 0; i < arr.ndim; i++)
                 {
