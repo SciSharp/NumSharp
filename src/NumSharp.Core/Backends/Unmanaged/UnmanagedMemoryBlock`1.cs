@@ -522,10 +522,19 @@ namespace NumSharp.Backends.Unmanaged
 
         #endregion
 
-        public T this[int index]
+        public T this[long index]
         {
             [MethodImpl(OptimizeAndInline)] get => *(Address + index);
             [MethodImpl(OptimizeAndInline)] set => *(Address + index) = value;
+        }
+
+        /// <summary>
+        /// Backwards-compatible indexer accepting int index.
+        /// </summary>
+        public T this[int index]
+        {
+            [MethodImpl(OptimizeAndInline)] get => this[(long)index];
+            [MethodImpl(OptimizeAndInline)] set => this[(long)index] = value;
         }
 
         [MethodImpl(Optimize)]
@@ -685,29 +694,29 @@ namespace NumSharp.Backends.Unmanaged
             }
         }
 
+        /// <summary>
+        /// Backwards-compatible overload accepting int index.
+        /// </summary>
         [MethodImpl(OptimizeAndInline)]
-        public T GetIndex(int index)
-        {
-            return *(Address + index);
-        }
+        public T GetIndex(int index) => GetIndex((long)index);
 
+        /// <summary>
+        /// Backwards-compatible overload accepting int index.
+        /// </summary>
         [MethodImpl(OptimizeAndInline)]
-        public ref T GetRefTo(int index)
-        {
-            return ref *(Address + index);
-        }
+        public ref T GetRefTo(int index) => ref GetRefTo((long)index);
 
+        /// <summary>
+        /// Backwards-compatible overload accepting int index.
+        /// </summary>
         [MethodImpl(OptimizeAndInline)]
-        public void SetIndex(int index, ref T value)
-        {
-            *(Address + index) = value;
-        }
+        public void SetIndex(int index, ref T value) => SetIndex((long)index, ref value);
 
+        /// <summary>
+        /// Backwards-compatible overload accepting int index.
+        /// </summary>
         [MethodImpl(OptimizeAndInline)]
-        public void SetIndex(int index, T value)
-        {
-            *(Address + index) = value;
-        }
+        public void SetIndex(int index, T value) => SetIndex((long)index, value);
 
 
         [MethodImpl(OptimizeAndInline)]
