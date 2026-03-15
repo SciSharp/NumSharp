@@ -49,9 +49,8 @@ namespace NumSharp.Backends
 
             // ========== SIMD FAST PATH ==========
             // For contiguous same-type float/double matrices, use blocked SIMD kernel
-            // Note: SIMD kernels work with int dimensions (practical size limit for matrix operations)
-            if (M <= int.MaxValue && K <= int.MaxValue && N <= int.MaxValue &&
-                TryMatMulSimd(left, right, result, (int)M, (int)K, (int)N))
+            // SIMD kernels now support long dimensions with long outer loops
+            if (TryMatMulSimd(left, right, result, M, K, N))
                 return result;
 
             // ========== GENERIC FALLBACK ==========
@@ -64,9 +63,10 @@ namespace NumSharp.Backends
         /// <summary>
         /// SIMD-optimized matrix multiplication for contiguous float/double arrays.
         /// Uses cache-blocked algorithm with Vector256 FMA operations.
+        /// Supports long dimensions - SIMD kernels use long outer loops with int inner block loops.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe bool TryMatMulSimd(NDArray left, NDArray right, NDArray result, int M, int K, int N)
+        private static unsafe bool TryMatMulSimd(NDArray left, NDArray right, NDArray result, long M, long K, long N)
         {
             if (!ILKernelGenerator.Enabled)
                 return false;

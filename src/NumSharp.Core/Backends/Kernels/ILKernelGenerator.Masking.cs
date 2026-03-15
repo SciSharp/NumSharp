@@ -186,7 +186,12 @@ namespace NumSharp.Backends.Kernels
 
             // Collect coordinates of non-zero elements
             // Pre-allocate with estimated capacity (assume ~25% non-zero for efficiency)
-            var nonzeroCoords = new System.Collections.Generic.List<long[]>(Math.Max(16, (int)Math.Min(size / 4, int.MaxValue)));
+            // List<T> capacity is int-limited by .NET design.
+            // For very large arrays, start with a reasonable capacity and let it grow.
+            int initialCapacity = size <= int.MaxValue
+                ? Math.Max(16, (int)(size / 4))
+                : 1 << 20; // 1M for very large arrays
+            var nonzeroCoords = new System.Collections.Generic.List<long[]>(initialCapacity);
 
             // Initialize coordinate array
             var coords = new long[ndim];
