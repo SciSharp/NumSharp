@@ -14,7 +14,7 @@ namespace NumSharp
             for (int idx = 2; idx <= power; idx++)
                 product = TensorEngine.Dot(product, this);
 
-            product = (power == 0) ? np.eye((int)product.shape[0]) : product;
+            product = (power == 0) ? np.eye(product.shape[0]) : product;
 
             return product;
         }

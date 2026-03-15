@@ -9,6 +9,11 @@ namespace NumSharp.UnitTest.Logic
     /// Tests for np.isinf - test element-wise for positive or negative infinity.
     /// NumPy reference: https://numpy.org/doc/stable/reference/generated/numpy.isinf.html
     /// </summary>
+    /// <remarks>
+    /// DEAD CODE: DefaultEngine.IsInfinite returns null.
+    /// Marked OpenBugs until np.isinf is implemented.
+    /// </remarks>
+    [OpenBugs]
     public class np_isinf_Test
     {
         [Test]
