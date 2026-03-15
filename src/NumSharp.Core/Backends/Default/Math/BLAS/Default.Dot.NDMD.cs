@@ -126,9 +126,9 @@ namespace NumSharp.Backends
 
                     // Compute dot product along contracting dimension
                     float sum = DotProductFloat(
-                        lhsPtr + lhsBase, (int)lhsInnerStride,
-                        rhsPtr + rhsBase, (int)rhsContractStride,
-                        (int)K);
+                        lhsPtr + lhsBase, lhsInnerStride,
+                        rhsPtr + rhsBase, rhsContractStride,
+                        K);
 
                     // Store result
                     resPtr[li * totalRhs + ri] = sum;
@@ -174,9 +174,9 @@ namespace NumSharp.Backends
                     long rhsBase = ComputeRhsBaseOffset64(ri, rhsIterStrides, rhs.strides, rshape, rhsNdim);
 
                     double sum = DotProductDouble(
-                        lhsPtr + lhsBase, (int)lhsInnerStride,
-                        rhsPtr + rhsBase, (int)rhsContractStride,
-                        (int)K);
+                        lhsPtr + lhsBase, lhsInnerStride,
+                        rhsPtr + rhsBase, rhsContractStride,
+                        K);
 
                     resPtr[li * totalRhs + ri] = sum;
                 }
@@ -245,14 +245,14 @@ namespace NumSharp.Backends
         /// SIMD dot product for float with arbitrary strides.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        private static unsafe float DotProductFloat(float* a, int strideA, float* b, int strideB, int n)
+        private static unsafe float DotProductFloat(float* a, long strideA, float* b, long strideB, long n)
         {
             float sum = 0;
 
             // Fast path: both contiguous (stride=1)
             if (strideA == 1 && strideB == 1)
             {
-                int i = 0;
+                long i = 0;
 
                 // SIMD loop
                 if (Vector256.IsHardwareAccelerated && n >= 8)
@@ -274,7 +274,7 @@ namespace NumSharp.Backends
             else
             {
                 // Strided access
-                for (int i = 0; i < n; i++)
+                for (long i = 0; i < n; i++)
                     sum += a[i * strideA] * b[i * strideB];
             }
 
@@ -285,13 +285,13 @@ namespace NumSharp.Backends
         /// SIMD dot product for double with arbitrary strides.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        private static unsafe double DotProductDouble(double* a, int strideA, double* b, int strideB, int n)
+        private static unsafe double DotProductDouble(double* a, long strideA, double* b, long strideB, long n)
         {
             double sum = 0;
 
             if (strideA == 1 && strideB == 1)
             {
-                int i = 0;
+                long i = 0;
 
                 if (Vector256.IsHardwareAccelerated && n >= 4)
                 {
@@ -310,7 +310,7 @@ namespace NumSharp.Backends
             }
             else
             {
-                for (int i = 0; i < n; i++)
+                for (long i = 0; i < n; i++)
                     sum += a[i * strideA] * b[i * strideB];
             }
 
