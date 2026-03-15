@@ -52,7 +52,7 @@ namespace NumSharp
                 {
                     var iter = arr.AsIterator<float>();
                     double sum = 0.0;
-                    int count = 0;
+                    long count = 0;
                     while (iter.HasNext())
                     {
                         float val = iter.MoveNext();
@@ -69,7 +69,7 @@ namespace NumSharp
                 {
                     var iter = arr.AsIterator<double>();
                     double sum = 0.0;
-                    int count = 0;
+                    long count = 0;
                     while (iter.HasNext())
                     {
                         double val = iter.MoveNext();
@@ -144,7 +144,7 @@ namespace NumSharp
                 for (int outIdx = 0; outIdx < outputSize; outIdx++)
                 {
                     double sum = 0.0;
-                    int count = 0;
+                    long count = 0;
 
                     // Convert flat index to coordinates in output shape
                     var outCoords = new long[outputShape.Length];
@@ -189,7 +189,7 @@ namespace NumSharp
                 for (int outIdx = 0; outIdx < outputSize; outIdx++)
                 {
                     double sum = 0.0;
-                    int count = 0;
+                    long count = 0;
 
                     var outCoords = new long[outputShape.Length];
                     int temp = outIdx;

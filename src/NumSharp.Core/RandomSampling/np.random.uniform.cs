@@ -54,7 +54,7 @@ namespace NumSharp
             ArraySlice<double> resultArray = result.Data<double>();
 
             double diff = high - low;
-            for (int i = 0; i < result.size; ++i)
+            for (long i = 0; i < result.size; ++i)
                 resultArray[i] = low + randomizer.NextDouble() * diff;
 
             result.ReplaceData(resultArray);

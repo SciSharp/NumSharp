@@ -59,8 +59,8 @@ namespace NumSharp.Backends.Kernels
             // For proper ddof support, we'd need an extended kernel signature
             // The DefaultEngine handles ddof at a higher level
 
-            return (void* input, void* output, int* inputStrides, int* inputShape,
-                    int* outputStrides, int axis, int axisSize, int ndim, int outputSize) =>
+            return (void* input, void* output, long* inputStrides, long* inputShape,
+                    long* outputStrides, int axis, long axisSize, int ndim, long outputSize) =>
             {
                 AxisVarStdSimdHelper<TInput>(
                     (TInput*)input, (double*)output,
@@ -77,8 +77,8 @@ namespace NumSharp.Backends.Kernels
         {
             bool isStd = key.Op == ReductionOp.Std;
 
-            return (void* input, void* output, int* inputStrides, int* inputShape,
-                    int* outputStrides, int axis, int axisSize, int ndim, int outputSize) =>
+            return (void* input, void* output, long* inputStrides, long* inputShape,
+                    long* outputStrides, int axis, long axisSize, int ndim, long outputSize) =>
             {
                 AxisVarStdDecimalHelper(
                     (decimal*)input, (double*)output,
@@ -95,8 +95,8 @@ namespace NumSharp.Backends.Kernels
         {
             bool isStd = key.Op == ReductionOp.Std;
 
-            return (void* input, void* output, int* inputStrides, int* inputShape,
-                    int* outputStrides, int axis, int axisSize, int ndim, int outputSize) =>
+            return (void* input, void* output, long* inputStrides, long* inputShape,
+                    long* outputStrides, int axis, long axisSize, int ndim, long outputSize) =>
             {
                 AxisVarStdGeneralHelper(
                     input, (double*)output,
@@ -112,19 +112,19 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         internal static unsafe void AxisVarStdSimdHelper<TInput>(
             TInput* input, double* output,
-            int* inputStrides, int* inputShape, int* outputStrides,
-            int axis, int axisSize, int ndim, int outputSize,
+            long* inputStrides, long* inputShape, long* outputStrides,
+            int axis, long axisSize, int ndim, long outputSize,
             bool computeStd, int ddof)
             where TInput : unmanaged
         {
-            int axisStride = inputStrides[axis];
+            long axisStride = inputStrides[axis];
             bool axisContiguous = axisStride == 1;
 
             // Compute output dimension strides for coordinate calculation
             int outputNdim = ndim - 1;
 
             // Store output dimension strides in a fixed array for parallel access
-            int[] outputDimStridesArray = new int[outputNdim > 0 ? outputNdim : 1];
+            long[] outputDimStridesArray = new long[outputNdim > 0 ? outputNdim : 1];
             if (outputNdim > 0)
             {
                 outputDimStridesArray[outputNdim - 1] = 1;
@@ -141,62 +141,62 @@ namespace NumSharp.Backends.Kernels
                 divisor = 1; // Prevent division by zero; will produce NaN behavior
 
             // Sequential loop over output elements
-            for (int outIdx = 0; outIdx < outputSize; outIdx++)
-            {
-                // Convert linear output index to coordinates and compute offsets
-                int remaining = outIdx;
-                int inputBaseOffset = 0;
-                int outputOffset = 0;
+            for (long outIdx = 0; outIdx < outputSize; outIdx++)
+                {
+                    // Convert linear output index to coordinates and compute offsets
+                    long remaining = outIdx;
+                    long inputBaseOffset = 0;
+                    long outputOffset = 0;
 
-                for (int d = 0; d < outputNdim; d++)
-                {
-                    int inputDim = d >= axis ? d + 1 : d;
-                    int coord = remaining / outputDimStridesArray[d];
-                    remaining = remaining % outputDimStridesArray[d];
-                    inputBaseOffset += coord * inputStrides[inputDim];
-                    outputOffset += coord * outputStrides[d];
-                }
-
-                TInput* axisStart = input + inputBaseOffset;
-
-                // Pass 1: Compute mean along axis
-                double sum = 0;
-                if (axisContiguous)
-                {
-                    sum = SumContiguousAxisDouble(axisStart, axisSize);
-                }
-                else
-                {
-                    for (int i = 0; i < axisSize; i++)
-                        sum += ConvertToDouble(axisStart[i * axisStride]);
-                }
-                double mean = sum / axisSize;
-
-                // Pass 2: Compute sum of squared differences
-                double sqDiffSum = 0;
-                if (axisContiguous)
-                {
-                    sqDiffSum = SumSquaredDiffContiguous(axisStart, axisSize, mean);
-                }
-                else
-                {
-                    for (int i = 0; i < axisSize; i++)
+                    for (int d = 0; d < outputNdim; d++)
                     {
-                        double val = ConvertToDouble(axisStart[i * axisStride]);
-                        double diff = val - mean;
-                        sqDiffSum += diff * diff;
+                        int inputDim = d >= axis ? d + 1 : d;
+                        long coord = remaining / outputDimStridesArray[d];
+                        remaining = remaining % outputDimStridesArray[d];
+                        inputBaseOffset += coord * inputStrides[inputDim];
+                        outputOffset += coord * outputStrides[d];
                     }
-                }
 
-                double variance = sqDiffSum / divisor;
-                output[outputOffset] = computeStd ? Math.Sqrt(variance) : variance;
-            }
+                    TInput* axisStart = input + inputBaseOffset;
+
+                    // Pass 1: Compute mean along axis
+                    double sum = 0;
+                    if (axisContiguous)
+                    {
+                        sum = SumContiguousAxisDouble(axisStart, axisSize);
+                    }
+                    else
+                    {
+                        for (long i = 0; i < axisSize; i++)
+                            sum += ConvertToDouble(axisStart[i * axisStride]);
+                    }
+                    double mean = sum / axisSize;
+
+                    // Pass 2: Compute sum of squared differences
+                    double sqDiffSum = 0;
+                    if (axisContiguous)
+                    {
+                        sqDiffSum = SumSquaredDiffContiguous(axisStart, axisSize, mean);
+                    }
+                    else
+                    {
+                        for (long i = 0; i < axisSize; i++)
+                        {
+                            double val = ConvertToDouble(axisStart[i * axisStride]);
+                            double diff = val - mean;
+                            sqDiffSum += diff * diff;
+                        }
+                    }
+
+                    double variance = sqDiffSum / divisor;
+                    output[outputOffset] = computeStd ? Math.Sqrt(variance) : variance;
+                }
         }
 
         /// <summary>
         /// Sum contiguous axis as double (for mean computation in Var/Std).
         /// </summary>
-        private static unsafe double SumContiguousAxisDouble<T>(T* data, int size)
+        private static unsafe double SumContiguousAxisDouble<T>(T* data, long size)
             where T : unmanaged
         {
             double sum = 0;
@@ -207,9 +207,9 @@ namespace NumSharp.Backends.Kernels
                 if (Vector256.IsHardwareAccelerated && Vector256<double>.IsSupported && size >= Vector256<double>.Count)
                 {
                     int vectorCount = Vector256<double>.Count;
-                    int vectorEnd = size - vectorCount;
+                    long vectorEnd = size - vectorCount;
                     var sumVec = Vector256<double>.Zero;
-                    int i = 0;
+                    long i = 0;
                     for (; i <= vectorEnd; i += vectorCount)
                         sumVec = Vector256.Add(sumVec, Vector256.Load(p + i));
                     sum = Vector256.Sum(sumVec);
@@ -218,7 +218,7 @@ namespace NumSharp.Backends.Kernels
                 }
                 else
                 {
-                    for (int i = 0; i < size; i++)
+                    for (long i = 0; i < size; i++)
                         sum += p[i];
                 }
             }
@@ -228,9 +228,9 @@ namespace NumSharp.Backends.Kernels
                 if (Vector256.IsHardwareAccelerated && Vector256<float>.IsSupported && size >= Vector256<float>.Count)
                 {
                     int vectorCount = Vector256<float>.Count;
-                    int vectorEnd = size - vectorCount;
+                    long vectorEnd = size - vectorCount;
                     var sumVec = Vector256<float>.Zero;
-                    int i = 0;
+                    long i = 0;
                     for (; i <= vectorEnd; i += vectorCount)
                         sumVec = Vector256.Add(sumVec, Vector256.Load(p + i));
                     sum = Vector256.Sum(sumVec);
@@ -239,7 +239,7 @@ namespace NumSharp.Backends.Kernels
                 }
                 else
                 {
-                    for (int i = 0; i < size; i++)
+                    for (long i = 0; i < size; i++)
                         sum += p[i];
                 }
             }
@@ -250,9 +250,9 @@ namespace NumSharp.Backends.Kernels
                 {
                     // Process int vectors, widening to long for accumulation to avoid overflow
                     int vectorCount = Vector256<int>.Count;  // 8 ints per vector
-                    int vectorEnd = size - vectorCount;
+                    long vectorEnd = size - vectorCount;
                     long totalSum = 0;
-                    int i = 0;
+                    long i = 0;
                     for (; i <= vectorEnd; i += vectorCount)
                     {
                         var intVec = Vector256.Load(p + i);
@@ -266,7 +266,7 @@ namespace NumSharp.Backends.Kernels
                 else
                 {
                     long totalSum = 0;
-                    for (int i = 0; i < size; i++)
+                    for (long i = 0; i < size; i++)
                         totalSum += p[i];
                     sum = totalSum;
                 }
@@ -277,9 +277,9 @@ namespace NumSharp.Backends.Kernels
                 if (Vector256.IsHardwareAccelerated && Vector256<long>.IsSupported && size >= Vector256<long>.Count)
                 {
                     int vectorCount = Vector256<long>.Count;  // 4 longs per vector
-                    int vectorEnd = size - vectorCount;
+                    long vectorEnd = size - vectorCount;
                     var sumVec = Vector256<long>.Zero;
-                    int i = 0;
+                    long i = 0;
                     for (; i <= vectorEnd; i += vectorCount)
                         sumVec = Vector256.Add(sumVec, Vector256.Load(p + i));
                     sum = Vector256.Sum(sumVec);
@@ -288,7 +288,7 @@ namespace NumSharp.Backends.Kernels
                 }
                 else
                 {
-                    for (int i = 0; i < size; i++)
+                    for (long i = 0; i < size; i++)
                         sum += p[i];
                 }
             }
@@ -299,9 +299,9 @@ namespace NumSharp.Backends.Kernels
                 {
                     // Process short vectors - 16 shorts per vector
                     int vectorCount = Vector256<short>.Count;
-                    int vectorEnd = size - vectorCount;
+                    long vectorEnd = size - vectorCount;
                     long totalSum = 0;
-                    int i = 0;
+                    long i = 0;
                     for (; i <= vectorEnd; i += vectorCount)
                     {
                         var shortVec = Vector256.Load(p + i);
@@ -316,7 +316,7 @@ namespace NumSharp.Backends.Kernels
                 else
                 {
                     long totalSum = 0;
-                    for (int i = 0; i < size; i++)
+                    for (long i = 0; i < size; i++)
                         totalSum += p[i];
                     sum = totalSum;
                 }
@@ -328,9 +328,9 @@ namespace NumSharp.Backends.Kernels
                 {
                     // Process byte vectors - 32 bytes per vector
                     int vectorCount = Vector256<byte>.Count;
-                    int vectorEnd = size - vectorCount;
+                    long vectorEnd = size - vectorCount;
                     long totalSum = 0;
-                    int i = 0;
+                    long i = 0;
                     for (; i <= vectorEnd; i += vectorCount)
                     {
                         var byteVec = Vector256.Load(p + i);
@@ -348,7 +348,7 @@ namespace NumSharp.Backends.Kernels
                 else
                 {
                     long totalSum = 0;
-                    for (int i = 0; i < size; i++)
+                    for (long i = 0; i < size; i++)
                         totalSum += p[i];
                     sum = totalSum;
                 }
@@ -356,7 +356,7 @@ namespace NumSharp.Backends.Kernels
             else
             {
                 // For other types (ushort, uint, ulong, char), use scalar loop
-                for (int i = 0; i < size; i++)
+                for (long i = 0; i < size; i++)
                     sum += ConvertToDouble(data[i]);
             }
 
@@ -366,7 +366,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Sum squared differences from mean for contiguous axis.
         /// </summary>
-        private static unsafe double SumSquaredDiffContiguous<T>(T* data, int size, double mean)
+        private static unsafe double SumSquaredDiffContiguous<T>(T* data, long size, double mean)
             where T : unmanaged
         {
             double sqDiffSum = 0;
@@ -377,10 +377,10 @@ namespace NumSharp.Backends.Kernels
                 if (Vector256.IsHardwareAccelerated && Vector256<double>.IsSupported && size >= Vector256<double>.Count)
                 {
                     int vectorCount = Vector256<double>.Count;
-                    int vectorEnd = size - vectorCount;
+                    long vectorEnd = size - vectorCount;
                     var meanVec = Vector256.Create(mean);
                     var sqDiffVec = Vector256<double>.Zero;
-                    int i = 0;
+                    long i = 0;
                     for (; i <= vectorEnd; i += vectorCount)
                     {
                         var vec = Vector256.Load(p + i);
@@ -396,7 +396,7 @@ namespace NumSharp.Backends.Kernels
                 }
                 else
                 {
-                    for (int i = 0; i < size; i++)
+                    for (long i = 0; i < size; i++)
                     {
                         double diff = p[i] - mean;
                         sqDiffSum += diff * diff;
@@ -410,10 +410,10 @@ namespace NumSharp.Backends.Kernels
                 if (Vector256.IsHardwareAccelerated && Vector256<float>.IsSupported && size >= Vector256<float>.Count)
                 {
                     int vectorCount = Vector256<float>.Count;
-                    int vectorEnd = size - vectorCount;
+                    long vectorEnd = size - vectorCount;
                     var meanVec = Vector256.Create(fMean);
                     var sqDiffVec = Vector256<float>.Zero;
-                    int i = 0;
+                    long i = 0;
                     for (; i <= vectorEnd; i += vectorCount)
                     {
                         var vec = Vector256.Load(p + i);
@@ -429,7 +429,7 @@ namespace NumSharp.Backends.Kernels
                 }
                 else
                 {
-                    for (int i = 0; i < size; i++)
+                    for (long i = 0; i < size; i++)
                     {
                         double diff = p[i] - mean;
                         sqDiffSum += diff * diff;
@@ -440,8 +440,8 @@ namespace NumSharp.Backends.Kernels
             {
                 int* p = (int*)(void*)data;
                 // 4x loop unrolling for better performance
-                int unrollEnd = size - 4;
-                int i = 0;
+                long unrollEnd = size - 4;
+                long i = 0;
                 for (; i <= unrollEnd; i += 4)
                 {
                     double d0 = p[i] - mean;
@@ -459,8 +459,8 @@ namespace NumSharp.Backends.Kernels
             else if (typeof(T) == typeof(long))
             {
                 long* p = (long*)(void*)data;
-                int unrollEnd = size - 4;
-                int i = 0;
+                long unrollEnd = size - 4;
+                long i = 0;
                 for (; i <= unrollEnd; i += 4)
                 {
                     double d0 = p[i] - mean;
@@ -478,8 +478,8 @@ namespace NumSharp.Backends.Kernels
             else if (typeof(T) == typeof(short))
             {
                 short* p = (short*)(void*)data;
-                int unrollEnd = size - 4;
-                int i = 0;
+                long unrollEnd = size - 4;
+                long i = 0;
                 for (; i <= unrollEnd; i += 4)
                 {
                     double d0 = p[i] - mean;
@@ -497,8 +497,8 @@ namespace NumSharp.Backends.Kernels
             else if (typeof(T) == typeof(byte))
             {
                 byte* p = (byte*)(void*)data;
-                int unrollEnd = size - 4;
-                int i = 0;
+                long unrollEnd = size - 4;
+                long i = 0;
                 for (; i <= unrollEnd; i += 4)
                 {
                     double d0 = p[i] - mean;
@@ -516,7 +516,7 @@ namespace NumSharp.Backends.Kernels
             else
             {
                 // For other types (ushort, uint, ulong, char)
-                for (int i = 0; i < size; i++)
+                for (long i = 0; i < size; i++)
                 {
                     double diff = ConvertToDouble(data[i]) - mean;
                     sqDiffSum += diff * diff;
@@ -531,14 +531,14 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         internal static unsafe void AxisVarStdDecimalHelper(
             decimal* input, double* output,
-            int* inputStrides, int* inputShape, int* outputStrides,
-            int axis, int axisSize, int ndim, int outputSize,
+            long* inputStrides, long* inputShape, long* outputStrides,
+            int axis, long axisSize, int ndim, long outputSize,
             bool computeStd, int ddof)
         {
-            int axisStride = inputStrides[axis];
+            long axisStride = inputStrides[axis];
 
             int outputNdim = ndim - 1;
-            Span<int> outputDimStrides = stackalloc int[outputNdim > 0 ? outputNdim : 1];
+            Span<long> outputDimStrides = stackalloc long[outputNdim > 0 ? outputNdim : 1];
             if (outputNdim > 0)
             {
                 outputDimStrides[outputNdim - 1] = 1;
@@ -553,16 +553,16 @@ namespace NumSharp.Backends.Kernels
             double divisor = axisSize - ddof;
             if (divisor <= 0) divisor = 1;
 
-            for (int outIdx = 0; outIdx < outputSize; outIdx++)
+            for (long outIdx = 0; outIdx < outputSize; outIdx++)
             {
-                int remaining = outIdx;
-                int inputBaseOffset = 0;
-                int outputOffset = 0;
+                long remaining = outIdx;
+                long inputBaseOffset = 0;
+                long outputOffset = 0;
 
                 for (int d = 0; d < outputNdim; d++)
                 {
                     int inputDim = d >= axis ? d + 1 : d;
-                    int coord = remaining / outputDimStrides[d];
+                    long coord = remaining / outputDimStrides[d];
                     remaining = remaining % outputDimStrides[d];
                     inputBaseOffset += coord * inputStrides[inputDim];
                     outputOffset += coord * outputStrides[d];
@@ -572,13 +572,13 @@ namespace NumSharp.Backends.Kernels
 
                 // Pass 1: Compute mean
                 decimal sum = 0;
-                for (int i = 0; i < axisSize; i++)
+                for (long i = 0; i < axisSize; i++)
                     sum += axisStart[i * axisStride];
                 decimal mean = sum / axisSize;
 
                 // Pass 2: Sum of squared differences
                 decimal sqDiffSum = 0;
-                for (int i = 0; i < axisSize; i++)
+                for (long i = 0; i < axisSize; i++)
                 {
                     decimal diff = axisStart[i * axisStride] - mean;
                     sqDiffSum += diff * diff;
@@ -594,15 +594,15 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         internal static unsafe void AxisVarStdGeneralHelper(
             void* input, double* output,
-            int* inputStrides, int* inputShape, int* outputStrides,
-            int axis, int axisSize, int ndim, int outputSize,
+            long* inputStrides, long* inputShape, long* outputStrides,
+            int axis, long axisSize, int ndim, long outputSize,
             NPTypeCode inputType, bool computeStd, int ddof)
         {
-            int axisStride = inputStrides[axis];
+            long axisStride = inputStrides[axis];
             int inputElemSize = inputType.SizeOf();
 
             int outputNdim = ndim - 1;
-            Span<int> outputDimStrides = stackalloc int[outputNdim > 0 ? outputNdim : 1];
+            Span<long> outputDimStrides = stackalloc long[outputNdim > 0 ? outputNdim : 1];
             if (outputNdim > 0)
             {
                 outputDimStrides[outputNdim - 1] = 1;
@@ -618,16 +618,16 @@ namespace NumSharp.Backends.Kernels
             double divisor = axisSize - ddof;
             if (divisor <= 0) divisor = 1;
 
-            for (int outIdx = 0; outIdx < outputSize; outIdx++)
+            for (long outIdx = 0; outIdx < outputSize; outIdx++)
             {
-                int remaining = outIdx;
-                int inputBaseOffset = 0;
-                int outputOffset = 0;
+                long remaining = outIdx;
+                long inputBaseOffset = 0;
+                long outputOffset = 0;
 
                 for (int d = 0; d < outputNdim; d++)
                 {
                     int inputDim = d >= axis ? d + 1 : d;
-                    int coord = remaining / outputDimStrides[d];
+                    long coord = remaining / outputDimStrides[d];
                     remaining = remaining % outputDimStrides[d];
                     inputBaseOffset += coord * inputStrides[inputDim];
                     outputOffset += coord * outputStrides[d];
@@ -635,18 +635,18 @@ namespace NumSharp.Backends.Kernels
 
                 // Pass 1: Compute mean
                 double sum = 0;
-                for (int i = 0; i < axisSize; i++)
+                for (long i = 0; i < axisSize; i++)
                 {
-                    int inputOffset = inputBaseOffset + i * axisStride;
+                    long inputOffset = inputBaseOffset + i * axisStride;
                     sum += ReadAsDouble(inputBytes + inputOffset * inputElemSize, inputType);
                 }
                 double mean = sum / axisSize;
 
                 // Pass 2: Sum of squared differences
                 double sqDiffSum = 0;
-                for (int i = 0; i < axisSize; i++)
+                for (long i = 0; i < axisSize; i++)
                 {
-                    int inputOffset = inputBaseOffset + i * axisStride;
+                    long inputOffset = inputBaseOffset + i * axisStride;
                     double val = ReadAsDouble(inputBytes + inputOffset * inputElemSize, inputType);
                     double diff = val - mean;
                     sqDiffSum += diff * diff;

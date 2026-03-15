@@ -46,7 +46,7 @@ namespace NumSharp.Backends
                 {
                     // Reducing along a zero-size axis - return NaN filled array
                     result = np.empty(new Shape(resultShape), emptyOutputType);
-                    for (int i = 0; i < result.size; i++)
+                    for (long i = 0; i < result.size; i++)
                         result.SetAtIndex(double.NaN, i);
                 }
                 else

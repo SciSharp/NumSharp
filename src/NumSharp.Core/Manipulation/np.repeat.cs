@@ -59,8 +59,8 @@ namespace NumSharp
                 throw new ArgumentException($"repeats array size ({repeatsFlat.size}) must match input array size ({a.size})");
 
             // Calculate total output size and validate repeat counts
-            int totalSize = 0;
-            for (int i = 0; i < repeatsFlat.size; i++)
+            long totalSize = 0;
+            for (long i = 0; i < repeatsFlat.size; i++)
             {
                 int count = repeatsFlat.GetInt32(i);
                 if (count < 0)

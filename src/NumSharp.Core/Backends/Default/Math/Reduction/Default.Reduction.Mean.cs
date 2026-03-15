@@ -28,7 +28,7 @@ namespace NumSharp.Backends
                 if (shape[axis] == 0)
                 {
                     result = np.empty(new Shape(resultShape), outputType);
-                    for (int i = 0; i < result.size; i++) result.SetAtIndex(double.NaN, i);
+                    for (long i = 0; i < result.size; i++) result.SetAtIndex(double.NaN, i);
                 }
                 else result = np.empty(new Shape(resultShape), outputType);
                 if (keepdims)

@@ -32,11 +32,11 @@ namespace NumSharp
             IArraySlice res1Arr = res1.Storage.GetData();
             IArraySlice res2Arr = res2.Storage.GetData();
 
-            int counter = 0;
+            long counter = 0;
 
-            for (int row = 0; row < nd1Data.Count; row++)
+            for (long row = 0; row < nd1Data.Count; row++)
             {
-                for (int col = 0; col < nd2Data.Count; col++)
+                for (long col = 0; col < nd2Data.Count; col++)
                 {
                     res1Arr[counter] = nd1Data[row];
                     res2Arr[counter] = nd2Data[col];

@@ -168,16 +168,16 @@ namespace NumSharp.Backends.Kernels
         /// <typeparam name="T">Element type (must be unmanaged).</typeparam>
         /// <param name="data">Pointer to contiguous array data.</param>
         /// <param name="size">Number of elements.</param>
-        /// <param name="indices">Output list to populate with non-zero indices.</param>
-        unsafe void FindNonZero<T>(T* data, long size, System.Collections.Generic.List<long> indices) where T : unmanaged;
+        /// <param name="indices">Output buffer to populate with non-zero indices.</param>
+        unsafe void FindNonZero<T>(T* data, long size, ref LongIndexBuffer indices) where T : unmanaged;
 
         /// <summary>
         /// Convert flat (linear) indices to per-dimension coordinate arrays.
         /// </summary>
-        /// <param name="flatIndices">List of flat indices.</param>
+        /// <param name="flatIndices">Buffer of flat indices.</param>
         /// <param name="shape">Shape of the array.</param>
-        /// <returns>Array of NDArray&lt;int&gt;, one per dimension.</returns>
-        NumSharp.Generic.NDArray<long>[] ConvertFlatToCoordinates(System.Collections.Generic.List<long> flatIndices, int[] shape);
+        /// <returns>Array of NDArray&lt;long&gt;, one per dimension.</returns>
+        unsafe NumSharp.Generic.NDArray<long>[] ConvertFlatToCoordinates(ref LongIndexBuffer flatIndices, long[] shape);
 
         /// <summary>
         /// Find indices of all non-zero elements in a strided (non-contiguous) array.
@@ -188,8 +188,8 @@ namespace NumSharp.Backends.Kernels
         /// <param name="shape">Array dimensions.</param>
         /// <param name="strides">Array strides (in elements, not bytes).</param>
         /// <param name="offset">Base offset into storage.</param>
-        /// <returns>Array of NDArray&lt;int&gt;, one per dimension containing indices of non-zero elements.</returns>
-        unsafe NumSharp.Generic.NDArray<long>[] FindNonZeroStrided<T>(T* data, int[] shape, long[] strides, long offset) where T : unmanaged;
+        /// <returns>Array of NDArray&lt;long&gt;, one per dimension containing indices of non-zero elements.</returns>
+        unsafe NumSharp.Generic.NDArray<long>[] FindNonZeroStrided<T>(T* data, long[] shape, long[] strides, long offset) where T : unmanaged;
 
         /// <summary>
         /// Count the number of true values in a boolean array.

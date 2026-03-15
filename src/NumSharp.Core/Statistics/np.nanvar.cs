@@ -65,7 +65,7 @@ namespace NumSharp
                     // Two-pass algorithm: first compute mean, then variance
                     var iter = arr.AsIterator<float>();
                     double sum = 0.0;
-                    int count = 0;
+                    long count = 0;
                     while (iter.HasNext())
                     {
                         float val = iter.MoveNext();
@@ -102,7 +102,7 @@ namespace NumSharp
                 {
                     var iter = arr.AsIterator<double>();
                     double sum = 0.0;
-                    int count = 0;
+                    long count = 0;
                     while (iter.HasNext())
                     {
                         double val = iter.MoveNext();
@@ -206,7 +206,7 @@ namespace NumSharp
 
                     // First pass: compute mean
                     double sum = 0.0;
-                    int count = 0;
+                    long count = 0;
                     for (int k = 0; k < axisLen; k++)
                     {
                         var inCoords = new long[inputShape.Length];
@@ -279,7 +279,7 @@ namespace NumSharp
 
                     // First pass: compute mean
                     double sum = 0.0;
-                    int count = 0;
+                    long count = 0;
                     for (int k = 0; k < axisLen; k++)
                     {
                         var inCoords = new long[inputShape.Length];
