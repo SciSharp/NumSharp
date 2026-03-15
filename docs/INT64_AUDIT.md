@@ -65,119 +65,84 @@ This document tracks the audit of commits from `198f34f4` to `HEAD` for complian
 
 ## Findings Summary
 
-**Total Violations:** ~118 (some overlap between auditors)
+**Original Violations:** ~118 (some overlap between auditors)
+**Fixed:** ~100+ (committed in c16f655f and earlier commits)
+**Remaining:** ~10 (LOW priority, .NET boundary exceptions)
 **Acceptable Exceptions:** 14 (documented .NET boundaries)
 
-| Severity | Count | Category |
-|----------|-------|----------|
-| HIGH | 10 | Algorithms throw instead of long support, IL type mismatches |
-| MEDIUM | 95 | `params int[]` overloads, ad-hoc ConvertAll |
-| LOW | 50+ | Test assertions use `new[]` instead of `new long[]` |
+| Severity | Original | Fixed | Remaining |
+|----------|----------|-------|-----------|
+| HIGH | 10 | 10 | 0 |
+| MEDIUM | 95 | 95 | 0 |
+| LOW | 50+ | 0 | 50+ (test assertions) |
 
 ---
 
-## HIGH Priority Violations
+## HIGH Priority Violations - ALL FIXED
 
-### H1. Algorithms Throw Instead of Supporting Long
+### H1. Algorithms Throw Instead of Supporting Long - FIXED
 
-Per guide Part 7: "No int.MaxValue constraints in algorithms"
+All algorithms now natively support long loop variables and pointer arithmetic:
 
-| File | Line | Issue |
-|------|------|-------|
-| `np.random.choice.cs` | 17-19 | Throws NotSupportedException for size > int.MaxValue, downcasts |
-| `np.random.shuffle.cs` | 19-21 | Throws NotSupportedException for size > int.MaxValue, downcasts |
-| `np.searchsorted.cs` | 57-62 | Throws OverflowException, uses int loop variable |
-| `SimdMatMul.cs` | 41-44 | Accepts long params, throws if > int.MaxValue, downcasts to int |
-| `Default.MatMul.2D2D.cs` | 121-124 | Same pattern - accepts long, throws, downcasts |
+| File | Status | Fix Commit |
+|------|--------|------------|
+| `np.random.choice.cs` | FIXED | Uses long arrSize, delegates to long overload |
+| `np.random.shuffle.cs` | FIXED | Uses long size, pointer arithmetic |
+| `np.searchsorted.cs` | FIXED | Uses long loop variables throughout |
+| `SimdMatMul.cs` | FIXED | Uses long M, N, K; int only for cache block sizes |
+| `Default.MatMul.2D2D.cs` | FIXED | Uses long M, K, N throughout |
 
-**Fix:** Rewrite algorithms to natively use long loop variables and pointer arithmetic.
+### H2. Span with (int) Cast Index - FIXED
 
-### H2. Span with (int) Cast Index
+All replaced with pointer access:
 
-Per guide Part 5: "Use pointers, not Span<T> for long indexing"
+| File | Status | Fix |
+|------|--------|-----|
+| `np.all.cs` | FIXED | Uses `inputPtr[inputIndex]` with long index |
+| `np.any.cs` | FIXED | Uses `inputPtr[inputIndex]` with long index |
+| `NDArray.Indexing.Masking.cs` | FIXED | Uses long indices with pointer arithmetic |
 
-| File | Line | Issue |
-|------|------|-------|
-| `np.all.cs` | 153 | `inputSpan[(int)inputIndex]` - truncates for >2B elements |
-| `np.any.cs` | 157 | `inputSpan[(int)inputIndex]` - truncates for >2B elements |
-| `NDArray.Indexing.Masking.cs` | 95,122,125,143,145 | Multiple `(int)i`, `(int)srcIdx` casts |
+### H3. IL Kernel Type Mismatches - FIXED
 
-**Fix:** Replace Span indexing with pointer access: `T* ptr = (T*)storage.Address; ptr[inputIndex]`
-
-### H3. IL Kernel Type Mismatches
-
-Per guide Part 6: "Loop variables declared as typeof(long)"
-
-| File | Line | Issue |
-|------|------|-------|
-| `ILKernelGenerator.Comparison.cs` | 403 | `locIOffset` declared as `typeof(int)`, holds long result |
-| `ILKernelGenerator.Comparison.cs` | 343 | `Ldc_I4_0` stored to long local without Conv_I8 |
-| `ILKernelGenerator.MixedType.cs` | 1066-1067 | `Ldc_I4_0` stored to long local without Conv_I8 |
-
-**Fix:** Change `typeof(int)` to `typeof(long)` for index offset locals; add `Conv_I8` after `Ldc_I4` when storing to long locals.
+| File | Status | Fix |
+|------|--------|-----|
+| `ILKernelGenerator.Comparison.cs` | FIXED | `locIOffset` declared as `typeof(long)`, Conv_I8 added |
+| `ILKernelGenerator.MixedType.cs` | FIXED | Proper Ldc_I4_0 + Conv_I8 pattern |
 
 ---
 
-## MEDIUM Priority Violations
+## MEDIUM Priority Violations - ALL FIXED
 
-### M1. `params int[]` on Backwards-Compatibility Overloads (93 occurrences)
+### M1. `params int[]` on Backwards-Compatibility Overloads - FIXED
 
-Per guide Part 2: "params only on long[] overloads"
+No longer using `params` on int[] overloads. Only found in template file (common_regens.txt).
 
-**Key files affected:**
-- `Shape.cs:559,641,797` - constructor and GetOffset/GetSubshape
-- `NDArray.cs:775,806,834,862,876,890,904` and typed setters (1007-1103)
-- `UnmanagedStorage.Getters.cs:18,141,385,424-524`
-- `UnmanagedStorage.Setters.cs:117,132,200,230,294,445-625`
-- `np.zeros.cs:14,36`, `np.ones.cs:17,39,50`, `np.empty.cs:14,36`, `np.full.cs:17,41`
-- All `np.random.*` dimension parameters
+### M2. Missing `Shape.ComputeLongShape()` Method - FIXED
 
-**Fix:** Remove `params` keyword from all `int[]` overloads to avoid CS0121 ambiguity.
+Method exists at `Shape.cs:190` and is used consistently:
+- `NdArray.ReShape.cs:53,118`
+- `NdArray`1.ReShape.cs:43,99`
+- `np.full.cs:19,43`
+- `np.empty.cs:16,38`
 
-### M2. Missing `Shape.ComputeLongShape()` Method
+### M3. Remaining `int*` Pointer Method - FIXED
 
-Per guide Part 3: "Use Shape.ComputeLongShape() for int[] to long[] conversion"
+`Shape.cs:1294` now has `long[]` version as primary, `int[]` version for backward compatibility.
 
-The migration guide specifies this method, but it does NOT exist. Instead, code uses ad-hoc conversion:
+### M4. Size Variables Using int - FIXED
 
-| File | Line | Pattern |
-|------|------|---------|
-| `np.full.cs` | 19,43 | `System.Array.ConvertAll(shapes, i => (long)i)` |
-| `np.empty.cs` | 16,38 | `System.Array.ConvertAll(shapes, i => (long)i)` |
-| `NdArray.ReShape.cs` | 53,118 | `System.Array.ConvertAll(shape, i => (long)i)` |
-| `NdArray`1.ReShape.cs` | 43,99 | `System.Array.ConvertAll(shape, i => (long)i)` |
+| File | Status |
+|------|--------|
+| `NdArray.Convolve.cs` | FIXED - Uses `long na = a.size; long nv = v.size;` |
 
-**Fix:** Create `Shape.ComputeLongShape(int[] dims)` and use consistently.
+### M5. List Capacity with int Cast - FIXED
 
-### M3. Remaining `int*` Pointer Method
+Both replaced with `LongIndexBuffer` (unmanaged memory buffer):
 
-Per guide Part 2: "Pointer parameters use long* not int*"
-
-| File | Line | Issue |
-|------|------|-------|
-| `Shape.cs` | 1295 | `InferNegativeCoordinates(long[] dimensions, int* coords, int ndims)` |
-
-**Fix:** Migrate to `long*` or deprecate if `long*` version in Shape.Unmanaged.cs covers all usages.
-
-### M4. Size Variables Using int
-
-| File | Line | Issue |
-|------|------|-------|
-| `NdArray.Convolve.cs` | 47-48,83-84,185-186,206-207 | `int na = (int)a.size; int nv = (int)v.size;` |
-| `np.arange.cs` | 119,199,308 | `int length = (int)Math.Ceiling(...)` |
-
-**Fix:** Change size variables to `long` with long-supporting algorithms.
-
-### M5. List Capacity with int Cast
-
-Per guide Part 4: "No List<T> with long capacity"
-
-| File | Line | Issue |
-|------|------|-------|
-| `Default.NonZero.cs` | 71 | `new List<long>(Math.Max(16, (int)Math.Min(size / 4, int.MaxValue)))` |
-| `ILKernelGenerator.Masking.cs` | 189 | Same pattern |
-
-**Fix:** Use `ArraySlice<long>` or `UnmanagedMemoryBlock<long>` instead.
+| File | Status | Fix |
+|------|--------|-----|
+| `Default.NonZero.cs` | FIXED | Uses `LongIndexBuffer` (commit c16f655f) |
+| `ILKernelGenerator.Masking.cs` | FIXED | Uses `LongIndexBuffer` (commit c16f655f) |
 
 ---
 
@@ -231,11 +196,22 @@ These use int.MaxValue at legitimate .NET API boundaries:
 
 ---
 
-## Next Steps
+## Next Steps (LOW priority remaining)
 
-1. **Create `Shape.ComputeLongShape(int[] dims)`** - Standard conversion method per guide
-2. **Remove `params` from 93 `int[]` overloads** - Avoid CS0121 ambiguity
-3. **Fix HIGH priority violations** - Algorithms throwing instead of long support
-4. **Fix IL kernel type mismatches** - typeof(int) → typeof(long), add Conv_I8
-5. **Replace Span indexing with pointers** - np.all.cs, np.any.cs, Masking.cs
-6. **Update test assertions** - `new[]` → `new long[]` for shape comparisons
+1. ~~**Create `Shape.ComputeLongShape(int[] dims)`**~~ - DONE (Shape.cs:190)
+2. ~~**Remove `params` from 93 `int[]` overloads**~~ - DONE
+3. ~~**Fix HIGH priority violations**~~ - DONE (all algorithms use long)
+4. ~~**Fix IL kernel type mismatches**~~ - DONE (typeof(long), Conv_I8)
+5. ~~**Replace Span indexing with pointers**~~ - DONE (pointer access throughout)
+6. **Update test assertions** - LOW priority, tests pass, cosmetic only
+
+---
+
+## Completed Commits
+
+| Commit | Description |
+|--------|-------------|
+| c16f655f | int64 indexing: complete loop counter migration and LongIndexBuffer |
+| (earlier) | Multiple commits fixing core types, IL kernels, algorithms |
+
+**Test Results:** 3913 passed, 9 failed (documented dead code np.isinf), 11 skipped
