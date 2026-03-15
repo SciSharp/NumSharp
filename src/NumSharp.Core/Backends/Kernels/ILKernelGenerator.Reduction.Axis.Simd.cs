@@ -6,7 +6,6 @@ using System.Reflection;
 using System.Reflection.Emit;
 using System.Runtime.Intrinsics;
 using System.Runtime.Intrinsics.X86;
-using System.Threading.Tasks;
 
 // =============================================================================
 // ILKernelGenerator.Reduction.Axis.Simd.cs - SIMD Axis Reduction Kernels
@@ -17,7 +16,6 @@ using System.Threading.Tasks;
 //   - AxisReductionSimdHelper<T> - main SIMD helper
 //   - ReduceContiguousAxis variants (SIMD256, SIMD128, scalar)
 //   - ReduceStridedAxis with AVX2 gather for float/double
-//   - Parallel outer loop for large output sizes
 //   - Vector identity/combine/horizontal helpers
 //   - IKernelProvider interface implementation
 //
@@ -43,15 +41,8 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
-        /// Threshold for parallelizing the outer loop in axis reductions.
-        /// Only parallelize when output size exceeds this threshold.
-        /// </summary>
-        private const int AxisReductionParallelThreshold = 1000;
-
-        /// <summary>
         /// SIMD helper for axis reduction operations.
         /// Reduces along a specific axis, writing results to output array.
-        /// Uses parallel outer loop for large output sizes.
         /// </summary>
         /// <typeparam name="T">Element type</typeparam>
         /// <param name="input">Input data pointer</param>
@@ -97,125 +88,47 @@ namespace NumSharp.Backends.Kernels
             ReductionOp actualOp = op == ReductionOp.Mean ? ReductionOp.Sum : op;
             bool isMean = op == ReductionOp.Mean;
 
-            // Use parallel loop for large output sizes
-            if (outputSize > AxisReductionParallelThreshold)
+            // Sequential loop over output elements
+            for (int outIdx = 0; outIdx < outputSize; outIdx++)
             {
-                // Copy strides to managed arrays for safe parallel access
-                int[] inputStridesArray = new int[ndim];
-                for (int i = 0; i < ndim; i++)
-                    inputStridesArray[i] = inputStrides[i];
+                // Convert linear output index to coordinates and compute input base offset
+                int remaining = outIdx;
+                int inputBaseOffset = 0;
+                int outputOffset = 0;
 
-                int[] outputStridesArray = new int[outputNdim > 0 ? outputNdim : 1];
-                for (int i = 0; i < outputStridesArray.Length && i < outputNdim; i++)
-                    outputStridesArray[i] = outputStrides[i];
-
-                // Capture pointers for lambda
-                T* inputPtr = input;
-                T* outputPtr = output;
-
-                Parallel.For(0, outputSize, outIdx =>
+                for (int d = 0; d < outputNdim; d++)
                 {
-                    ReduceAxisElement(
-                        inputPtr, outputPtr,
-                        inputStridesArray, outputStridesArray, outputDimStridesArray,
-                        axis, axisSize, axisStride, outputNdim,
-                        axisContiguous, actualOp, isMean, outIdx);
-                });
-            }
-            else
-            {
-                // Sequential loop for small output sizes
-                for (int outIdx = 0; outIdx < outputSize; outIdx++)
-                {
-                    // Convert linear output index to coordinates and compute input base offset
-                    int remaining = outIdx;
-                    int inputBaseOffset = 0;
-                    int outputOffset = 0;
+                    // Map output dimension d to input dimension
+                    int inputDim = d >= axis ? d + 1 : d;
 
-                    for (int d = 0; d < outputNdim; d++)
-                    {
-                        // Map output dimension d to input dimension
-                        int inputDim = d >= axis ? d + 1 : d;
+                    int coord = remaining / outputDimStridesArray[d];
+                    remaining = remaining % outputDimStridesArray[d];
 
-                        int coord = remaining / outputDimStridesArray[d];
-                        remaining = remaining % outputDimStridesArray[d];
-
-                        inputBaseOffset += coord * inputStrides[inputDim];
-                        outputOffset += coord * outputStrides[d];
-                    }
-
-                    // Now reduce along the axis
-                    T* axisStart = input + inputBaseOffset;
-
-                    T result;
-                    if (axisContiguous)
-                    {
-                        // Fast path: axis is contiguous, use SIMD
-                        result = ReduceContiguousAxis(axisStart, axisSize, actualOp);
-                    }
-                    else
-                    {
-                        // Strided path: axis is not contiguous, use SIMD gather if beneficial
-                        result = ReduceStridedAxis(axisStart, axisSize, axisStride, actualOp);
-                    }
-
-                    // For Mean, divide by count
-                    if (isMean)
-                        result = DivideByCountTyped(result, axisSize);
-
-                    output[outputOffset] = result;
+                    inputBaseOffset += coord * inputStrides[inputDim];
+                    outputOffset += coord * outputStrides[d];
                 }
+
+                // Now reduce along the axis
+                T* axisStart = input + inputBaseOffset;
+
+                T result;
+                if (axisContiguous)
+                {
+                    // Fast path: axis is contiguous, use SIMD
+                    result = ReduceContiguousAxis(axisStart, axisSize, actualOp);
+                }
+                else
+                {
+                    // Strided path: axis is not contiguous, use SIMD gather if beneficial
+                    result = ReduceStridedAxis(axisStart, axisSize, axisStride, actualOp);
+                }
+
+                // For Mean, divide by count
+                if (isMean)
+                    result = DivideByCountTyped(result, axisSize);
+
+                output[outputOffset] = result;
             }
-        }
-
-        /// <summary>
-        /// Process a single output element for axis reduction.
-        /// Used by parallel loop to process each output position independently.
-        /// </summary>
-        private static unsafe void ReduceAxisElement<T>(
-            T* input, T* output,
-            int[] inputStrides, int[] outputStrides, int[] outputDimStrides,
-            int axis, int axisSize, int axisStride, int outputNdim,
-            bool axisContiguous, ReductionOp op, bool isMean, int outIdx)
-            where T : unmanaged
-        {
-            // Convert linear output index to coordinates and compute input base offset
-            int remaining = outIdx;
-            int inputBaseOffset = 0;
-            int outputOffset = 0;
-
-            for (int d = 0; d < outputNdim; d++)
-            {
-                // Map output dimension d to input dimension
-                int inputDim = d >= axis ? d + 1 : d;
-
-                int coord = remaining / outputDimStrides[d];
-                remaining = remaining % outputDimStrides[d];
-
-                inputBaseOffset += coord * inputStrides[inputDim];
-                outputOffset += coord * outputStrides[d];
-            }
-
-            // Now reduce along the axis
-            T* axisStart = input + inputBaseOffset;
-
-            T result;
-            if (axisContiguous)
-            {
-                // Fast path: axis is contiguous, use SIMD
-                result = ReduceContiguousAxis(axisStart, axisSize, op);
-            }
-            else
-            {
-                // Strided path: axis is not contiguous, use SIMD gather if beneficial
-                result = ReduceStridedAxis(axisStart, axisSize, axisStride, op);
-            }
-
-            // For Mean, divide by count
-            if (isMean)
-                result = DivideByCountTyped(result, axisSize);
-
-            output[outputOffset] = result;
         }
 
         /// <summary>

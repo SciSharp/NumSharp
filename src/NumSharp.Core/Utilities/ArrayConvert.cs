@@ -3850,7 +3850,8 @@ namespace NumSharp.Utilities
             var length = sourceArray.Length;
             var output = new Complex[length];
 
-            Parallel.For(0, length, i => new Complex(Converts.ToDouble(sourceArray[i]), 0d));
+            for (int i = 0; i < length; i++)
+                output[i] = new Complex(Converts.ToDouble(sourceArray[i]), 0d);
             return output;
         }
         %
@@ -3872,10 +3873,11 @@ namespace NumSharp.Utilities
             var length = sourceArray.Length;
             var output = new Complex[length];
 
-            Parallel.For(0, length, i => new Complex(Converts.ToDouble(sourceArray[i]), 0d));
+            for (int i = 0; i < length; i++)
+                output[i] = new Complex(Converts.ToDouble(sourceArray[i]), 0d);
             return output;
         }
-        
+
         /// <summary>
         ///     Converts <see cref="Byte"/> array to a <see cref="Complex"/> array.
         /// </summary>
@@ -3886,14 +3888,15 @@ namespace NumSharp.Utilities
         {
             if (sourceArray == null)
                 throw new ArgumentNullException(nameof(sourceArray));
-            
+
             var length = sourceArray.Length;
             var output = new Complex[length];
 
-            Parallel.For(0, length, i => new Complex(Converts.ToDouble(sourceArray[i]), 0d));
+            for (int i = 0; i < length; i++)
+                output[i] = new Complex(Converts.ToDouble(sourceArray[i]), 0d);
             return output;
         }
-        
+
         /// <summary>
         ///     Converts <see cref="Int16"/> array to a <see cref="Complex"/> array.
         /// </summary>
@@ -3904,14 +3907,15 @@ namespace NumSharp.Utilities
         {
             if (sourceArray == null)
                 throw new ArgumentNullException(nameof(sourceArray));
-            
+
             var length = sourceArray.Length;
             var output = new Complex[length];
 
-            Parallel.For(0, length, i => new Complex(Converts.ToDouble(sourceArray[i]), 0d));
+            for (int i = 0; i < length; i++)
+                output[i] = new Complex(Converts.ToDouble(sourceArray[i]), 0d);
             return output;
         }
-        
+
         /// <summary>
         ///     Converts <see cref="UInt16"/> array to a <see cref="Complex"/> array.
         /// </summary>
@@ -3922,14 +3926,15 @@ namespace NumSharp.Utilities
         {
             if (sourceArray == null)
                 throw new ArgumentNullException(nameof(sourceArray));
-            
+
             var length = sourceArray.Length;
             var output = new Complex[length];
 
-            Parallel.For(0, length, i => new Complex(Converts.ToDouble(sourceArray[i]), 0d));
+            for (int i = 0; i < length; i++)
+                output[i] = new Complex(Converts.ToDouble(sourceArray[i]), 0d);
             return output;
         }
-        
+
         /// <summary>
         ///     Converts <see cref="Int32"/> array to a <see cref="Complex"/> array.
         /// </summary>
@@ -3940,14 +3945,15 @@ namespace NumSharp.Utilities
         {
             if (sourceArray == null)
                 throw new ArgumentNullException(nameof(sourceArray));
-            
+
             var length = sourceArray.Length;
             var output = new Complex[length];
 
-            Parallel.For(0, length, i => new Complex(Converts.ToDouble(sourceArray[i]), 0d));
+            for (int i = 0; i < length; i++)
+                output[i] = new Complex(Converts.ToDouble(sourceArray[i]), 0d);
             return output;
         }
-        
+
         /// <summary>
         ///     Converts <see cref="UInt32"/> array to a <see cref="Complex"/> array.
         /// </summary>
@@ -3958,14 +3964,15 @@ namespace NumSharp.Utilities
         {
             if (sourceArray == null)
                 throw new ArgumentNullException(nameof(sourceArray));
-            
+
             var length = sourceArray.Length;
             var output = new Complex[length];
 
-            Parallel.For(0, length, i => new Complex(Converts.ToDouble(sourceArray[i]), 0d));
+            for (int i = 0; i < length; i++)
+                output[i] = new Complex(Converts.ToDouble(sourceArray[i]), 0d);
             return output;
         }
-        
+
         /// <summary>
         ///     Converts <see cref="Int64"/> array to a <see cref="Complex"/> array.
         /// </summary>
@@ -3976,14 +3983,15 @@ namespace NumSharp.Utilities
         {
             if (sourceArray == null)
                 throw new ArgumentNullException(nameof(sourceArray));
-            
+
             var length = sourceArray.Length;
             var output = new Complex[length];
 
-            Parallel.For(0, length, i => new Complex(Converts.ToDouble(sourceArray[i]), 0d));
+            for (int i = 0; i < length; i++)
+                output[i] = new Complex(Converts.ToDouble(sourceArray[i]), 0d);
             return output;
         }
-        
+
         /// <summary>
         ///     Converts <see cref="UInt64"/> array to a <see cref="Complex"/> array.
         /// </summary>
@@ -3994,14 +4002,15 @@ namespace NumSharp.Utilities
         {
             if (sourceArray == null)
                 throw new ArgumentNullException(nameof(sourceArray));
-            
+
             var length = sourceArray.Length;
             var output = new Complex[length];
 
-            Parallel.For(0, length, i => new Complex(Converts.ToDouble(sourceArray[i]), 0d));
+            for (int i = 0; i < length; i++)
+                output[i] = new Complex(Converts.ToDouble(sourceArray[i]), 0d);
             return output;
         }
-        
+
         /// <summary>
         ///     Converts <see cref="Char"/> array to a <see cref="Complex"/> array.
         /// </summary>
@@ -4012,14 +4021,15 @@ namespace NumSharp.Utilities
         {
             if (sourceArray == null)
                 throw new ArgumentNullException(nameof(sourceArray));
-            
+
             var length = sourceArray.Length;
             var output = new Complex[length];
 
-            Parallel.For(0, length, i => new Complex(Converts.ToDouble(sourceArray[i]), 0d));
+            for (int i = 0; i < length; i++)
+                output[i] = new Complex(Converts.ToDouble(sourceArray[i]), 0d);
             return output;
         }
-        
+
         /// <summary>
         ///     Converts <see cref="Double"/> array to a <see cref="Complex"/> array.
         /// </summary>
@@ -4030,14 +4040,15 @@ namespace NumSharp.Utilities
         {
             if (sourceArray == null)
                 throw new ArgumentNullException(nameof(sourceArray));
-            
+
             var length = sourceArray.Length;
             var output = new Complex[length];
 
-            Parallel.For(0, length, i => new Complex(Converts.ToDouble(sourceArray[i]), 0d));
+            for (int i = 0; i < length; i++)
+                output[i] = new Complex(Converts.ToDouble(sourceArray[i]), 0d);
             return output;
         }
-        
+
         /// <summary>
         ///     Converts <see cref="Single"/> array to a <see cref="Complex"/> array.
         /// </summary>
@@ -4048,14 +4059,15 @@ namespace NumSharp.Utilities
         {
             if (sourceArray == null)
                 throw new ArgumentNullException(nameof(sourceArray));
-            
+
             var length = sourceArray.Length;
             var output = new Complex[length];
 
-            Parallel.For(0, length, i => new Complex(Converts.ToDouble(sourceArray[i]), 0d));
+            for (int i = 0; i < length; i++)
+                output[i] = new Complex(Converts.ToDouble(sourceArray[i]), 0d);
             return output;
         }
-        
+
         /// <summary>
         ///     Converts <see cref="Decimal"/> array to a <see cref="Complex"/> array.
         /// </summary>
@@ -4066,11 +4078,12 @@ namespace NumSharp.Utilities
         {
             if (sourceArray == null)
                 throw new ArgumentNullException(nameof(sourceArray));
-            
+
             var length = sourceArray.Length;
             var output = new Complex[length];
 
-            Parallel.For(0, length, i => new Complex(Converts.ToDouble(sourceArray[i]), 0d));
+            for (int i = 0; i < length; i++)
+                output[i] = new Complex(Converts.ToDouble(sourceArray[i]), 0d);
             return output;
         }
 
@@ -4089,16 +4102,16 @@ namespace NumSharp.Utilities
             var length = sourceArray.Length;
             var output = new Complex[length];
 
-            Parallel.For(0, length, i =>
+            for (int i = 0; i < length; i++)
             {
                 string input = sourceArray[i]?.Trim() ?? string.Empty;
                 if (string.IsNullOrEmpty(input))
                 {
                     output[i] = Complex.Zero; // NullString save as zero.
-                    return;
+                    continue;
                 }
-                var match = py.complex(sourceArray[i]);
-            });
+                output[i] = py.complex(sourceArray[i]);
+            }
             return output;
         }
 #endif
