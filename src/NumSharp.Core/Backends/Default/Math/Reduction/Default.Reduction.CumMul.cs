@@ -98,7 +98,7 @@ namespace NumSharp.Backends
 
                 // Write to output with proper type handling
                 double product = 1.0;
-                int idx = 0;
+                long idx = 0;
                 while (hasNext())
                 {
                     product *= moveNext();
