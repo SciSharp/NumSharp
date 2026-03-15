@@ -30,6 +30,10 @@ namespace NumSharp
             {
                 // NumPy argsort always returns int64 (long) indices
                 // Use NumPy-compatible comparison that puts NaN at the end
+                // Enumerable.Range is limited to int.MaxValue, throw clear error for larger arrays
+                if (size > int.MaxValue)
+                    throw new NotSupportedException($"argsort does not support arrays with more than {int.MaxValue} elements. Array size: {size}");
+
                 var sorted = Enumerable.Range(0, (int)size)
                     .Select(i => new {Data = GetAtIndex<T>(i), Index = (long)i})
                     .OrderBy(item => item.Data, NumPyComparer<T>.Instance)
@@ -44,6 +48,9 @@ namespace NumSharp
             var accessingIndices = AccessorCreator(requiredSize, Enumerable.Empty<int>(), 0);
 
             // Append the previous indices the sorting accessors
+            // Enumerable.Range is limited to int.MaxValue, throw clear error for larger axis sizes
+            if (shape[axis] > int.MaxValue)
+                throw new NotSupportedException($"argsort does not support axis with more than {int.MaxValue} elements. Axis {axis} size: {shape[axis]}");
             var append = Enumerable.Range(0, (int)shape[axis]);
             var argSort = accessingIndices.Aggregate(Enumerable.Empty<SortedData>(), (allSortedData, seq) =>
             {

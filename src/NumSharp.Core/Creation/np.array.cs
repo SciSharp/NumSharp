@@ -112,7 +112,7 @@ namespace NumSharp
                     Func<bool> next = enumerator.MoveNext;
 
                     var addr = slice.Address;
-                    for (int i = 0; i < size && next(); i++)
+                    for (long i = 0; i < size && next(); i++)
                     {
                         addr[i] = enumerator.Current;
                     }

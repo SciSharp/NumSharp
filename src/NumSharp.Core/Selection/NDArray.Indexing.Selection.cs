@@ -41,7 +41,7 @@ namespace NumSharp
         /// <param name="axis"></param>
         /// <returns></returns>
         [MethodImpl(Inline)]
-        protected internal static NDArray<int> GetIndicesFromSlice(Shape shape, Slice slice, int axis)
+        protected internal static NDArray<long> GetIndicesFromSlice(Shape shape, Slice slice, int axis)
         {
             return GetIndicesFromSlice(shape.dimensions, slice, axis);
         }
@@ -54,12 +54,12 @@ namespace NumSharp
         /// <param name="axis"></param>
         /// <returns></returns>
         [MethodImpl(Inline)]
-        protected internal static NDArray<int> GetIndicesFromSlice(long[] shape, Slice slice, int axis)
+        protected internal static NDArray<long> GetIndicesFromSlice(long[] shape, Slice slice, int axis)
         {
-            var dim = (int)shape[axis];
+            var dim = shape[axis];
             var slice_def = slice.ToSliceDef(dim); // this resolves negative slice indices
-            // Cast to int to use int32 dtype (slice_def fields are now long after int64 migration)
-            return np.arange((int)slice_def.Start, (int)(slice_def.Start + slice_def.Step * slice_def.Count), (int)slice.Step).MakeGeneric<int>();
+            // Use long overload of np.arange for int64 indexing support
+            return np.arange(slice_def.Start, slice_def.Start + slice_def.Step * slice_def.Count, slice.Step).MakeGeneric<long>();
         }
 
         /// <summary>
@@ -74,7 +74,6 @@ namespace NumSharp
             {
                 var idxs = indices[i];
                 var dimensionSize = srcShape[i];
-                var idxAddr = (int*)idxs.Address;
 
                 if (idxs is null)
                 {
@@ -94,27 +93,59 @@ namespace NumSharp
                 }
                 else
                 {
-                    if (idxs.Shape.IsContiguous)
+                    // Handle both int32 and int64 index arrays
+                    if (idxs.typecode == NPTypeCode.Int64)
                     {
-                        indexGetters[i] = idx =>
+                        var idxAddr = (long*)idxs.Address;
+                        if (idxs.Shape.IsContiguous)
                         {
-                            var val = idxAddr[idx];
-                            if (val < 0)
-                                return dimensionSize + val;
-                            return val;
-                        };
+                            indexGetters[i] = idx =>
+                            {
+                                var val = idxAddr[idx];
+                                if (val < 0)
+                                    return dimensionSize + val;
+                                return val;
+                            };
+                        }
+                        else
+                        {
+                            idxs = idxs.flat;
+                            var idxShape = idxs.Shape;
+                            indexGetters[i] = idx =>
+                            {
+                                var val = idxAddr[idxShape.GetOffset_1D(idx)];
+                                if (val < 0)
+                                    return dimensionSize + val;
+                                return val;
+                            };
+                        }
                     }
                     else
                     {
-                        idxs = idxs.flat;
-                        var idxShape = idxs.Shape;
-                        indexGetters[i] = idx =>
+                        // Assume int32 for backward compatibility
+                        var idxAddr = (int*)idxs.Address;
+                        if (idxs.Shape.IsContiguous)
                         {
-                            var val = idxAddr[idxShape.GetOffset_1D(idx)];
-                            if (val < 0)
-                                return dimensionSize + val;
-                            return val;
-                        };
+                            indexGetters[i] = idx =>
+                            {
+                                var val = idxAddr[idx];
+                                if (val < 0)
+                                    return dimensionSize + val;
+                                return val;
+                            };
+                        }
+                        else
+                        {
+                            idxs = idxs.flat;
+                            var idxShape = idxs.Shape;
+                            indexGetters[i] = idx =>
+                            {
+                                var val = idxAddr[idxShape.GetOffset_1D(idx)];
+                                if (val < 0)
+                                    return dimensionSize + val;
+                                return val;
+                            };
+                        }
                     }
                 }
             }

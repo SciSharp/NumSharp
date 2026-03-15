@@ -427,7 +427,7 @@ namespace NumSharp
 
             //by now all indices are flat, relative indices, might be subshaped, might be non-linear ---------------
             //we flatten to linear absolute points -----------------------------------------------------------------
-            var computedOffsets = new NDArray<int>(Shape.Vector(indicesSize), false);
+            var computedOffsets = new NDArray<long>(Shape.Vector(indicesSize), false);
             var computedAddr = computedOffsets.Address;
 
             //prepare indices getters
@@ -455,7 +455,7 @@ namespace NumSharp
                     for (int ndIdx = 0; ndIdx < ndsCount; ndIdx++)
                         index[ndIdx] = indexGetters[ndIdx](i); //replace with memory access or iterators
 
-                    if ((computedAddr[i] = (int)srcShape.GetOffset(index, ndsCount)) > largestOffset)
+                    if ((computedAddr[i] = srcShape.GetOffset(index, ndsCount)) > largestOffset)
                         throw new IndexOutOfRangeException($"Index [{string.Join(", ", new Span<long>(index, ndsCount).ToArray())}] exceeds given NDArray's bounds. NDArray is shaped {srcShape}.");
                 }
             }
@@ -464,7 +464,7 @@ namespace NumSharp
                 var getter = indexGetters[0];
                 for (long i = 0; i < indicesSize; i++)
                 {
-                    if ((computedAddr[i] = (int)srcShape.GetOffset_1D(getter(i))) > largestOffset)
+                    if ((computedAddr[i] = srcShape.GetOffset_1D(getter(i))) > largestOffset)
                         throw new IndexOutOfRangeException($"Index [{getter(i)}] exceeds given NDArray's bounds. NDArray is shaped {srcShape}.");
                 }
             }
@@ -505,7 +505,7 @@ namespace NumSharp
         /// <param name="retShape"></param>
         /// <param name="absolute">Is the given <paramref name="offsets"/> already point to the offset of <paramref name="src"/>.</param>
         /// <returns></returns>
-        protected static unsafe NDArray<T> FetchIndicesND<T>(NDArray<T> src, NDArray<int> offsets, NDArray[] indices, int ndsCount, long[] retShape, long[] subShape, NDArray @out) where T : unmanaged
+        protected static unsafe NDArray<T> FetchIndicesND<T>(NDArray<T> src, NDArray<long> offsets, NDArray[] indices, int ndsCount, long[] retShape, long[] subShape, NDArray @out) where T : unmanaged
         {
             //facts:
             //indices are always offsetted to
@@ -517,7 +517,7 @@ namespace NumSharp
             for (int i = 0; i < subShape.Length; i++)
                 subShapeSize *= subShape[i];
 
-            int* offsetAddr = offsets.Address;
+            long* offsetAddr = offsets.Address;
             var offsetsSize = offsets.size;
             T* srcAddr = src.Address;
 

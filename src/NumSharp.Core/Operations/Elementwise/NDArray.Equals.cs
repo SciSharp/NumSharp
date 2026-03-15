@@ -27,7 +27,7 @@ namespace NumSharp
                 var len = results.size;
                 var addr = results.Address;
 
-                for (int i = 0; i < len; i++)
+                for (long i = 0; i < len; i++)
                     if (!addr[i])
                         return false;
 
@@ -126,7 +126,7 @@ namespace NumSharp
                 var cmp = (this == rhs);
                 var len = cmp.size;
                 var ptr = cmp.Address; //this never a slice so we can use unmanaged memory.
-                for (int i = 0; i < len; i++)
+                for (long i = 0; i < len; i++)
                     if (!*(ptr + i))
                         return false;
 

@@ -1178,10 +1178,10 @@ namespace NumSharp.UnitTest.Selection
         }
 
         // use this as a proxy for the private static method GetIndicesFromSlice of NDArray
-        private NDArray<int> GetIndicesFromSlice(Shape shape, Slice slice, int axis)
+        private NDArray<long> GetIndicesFromSlice(Shape shape, Slice slice, int axis)
         {
             var methods = typeof(NDArray).GetMethods(BindingFlags.NonPublic | BindingFlags.Static);
-            return (NDArray<int>)methods.FirstOrDefault(m => m.GetParameters()[0].ParameterType == typeof(Shape)).Invoke(null, new object[] { shape, slice, axis });
+            return (NDArray<long>)methods.FirstOrDefault(m => m.GetParameters()[0].ParameterType == typeof(Shape)).Invoke(null, new object[] { shape, slice, axis });
         }
 
 
