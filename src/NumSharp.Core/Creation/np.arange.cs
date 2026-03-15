@@ -116,7 +116,7 @@ namespace NumSharp
             if (start >= stop)
                 return new NDArray(typeof(float), Shape.Vector(0), false);
 
-            int length = (int)Math.Ceiling((stop - start + 0.0d) / step);
+            long length = (long)Math.Ceiling((stop - start + 0.0d) / step);
             var nd = new NDArray(typeof(float), Shape.Vector(length), false); //do not fill, we are about to
 
             if (negativeStep)
@@ -125,7 +125,7 @@ namespace NumSharp
                 unsafe
                 {
                     var addr = (float*)nd.Array.Address;
-                    for (int add = length - 1, i = 0; add >= 0; add--, i++)
+                    for (long add = length - 1, i = 0; add >= 0; add--, i++)
                         addr[i] = 1 + start + add * step;
                 }
             }
@@ -134,7 +134,7 @@ namespace NumSharp
                 unsafe
                 {
                     var addr = (float*)nd.Array.Address;
-                    for (int i = 0; i < length; i++)
+                    for (long i = 0; i < length; i++)
                         addr[i] = start + i * step;
                 }
             }
@@ -144,12 +144,12 @@ namespace NumSharp
 
         /// <summary>
         /// Return evenly spaced values within a given interval.
-        /// 
+        ///
         /// Values are generated within the half-open interval [start, stop)
         /// (in other words, the interval including start but excluding stop).
         /// For integer arguments the function is equivalent to the Python built-in
         /// range function, but returns an ndarray rather than a list.
-        /// 
+        ///
         /// When using a non-integer step, such as 0.1, the results will often not
         /// be consistent.  It is better to use numpy.linspace for these cases.
         /// </summary>
@@ -170,7 +170,7 @@ namespace NumSharp
         /// </param>
         /// <returns>
         /// Array of evenly spaced values.
-        /// 
+        ///
         /// For floating point arguments, the length of the result is
         /// ceil((stop - start)/step).  Because of floating point overflow,
         /// this rule may result in the last element of out being greater
@@ -196,7 +196,7 @@ namespace NumSharp
             if (start >= stop)
                 return new NDArray(typeof(double), Shape.Vector(0), false);
 
-            int length = (int)Math.Ceiling((stop - start + 0.0d) / step);
+            long length = (long)Math.Ceiling((stop - start + 0.0d) / step);
             var nd = new NDArray(typeof(double), Shape.Vector(length), false); //do not fill, we are about to
 
             if (negativeStep)
@@ -205,7 +205,7 @@ namespace NumSharp
                 unsafe
                 {
                     var addr = (double*)nd.Array.Address;
-                    for (int add = length - 1, i = 0; add >= 0; add--, i++)
+                    for (long add = length - 1, i = 0; add >= 0; add--, i++)
                         addr[i] = 1 + start + add * step;
                 }
             }
@@ -214,7 +214,7 @@ namespace NumSharp
                 unsafe
                 {
                     var addr = (double*)nd.Array.Address;
-                    for (int i = 0; i < length; i++)
+                    for (long i = 0; i < length; i++)
                         addr[i] = start + i * step;
                 }
             }
@@ -305,7 +305,7 @@ namespace NumSharp
             if (start >= stop)
                 return new NDArray(typeof(int), Shape.Vector(0), false);
 
-            int length = (int)Math.Ceiling((stop - start + 0.0d) / step);
+            long length = (long)Math.Ceiling((stop - start + 0.0d) / step);
             // TODO: NumPy 2.x returns int64 for integer arange (BUG-21/Task #109)
             // Keeping int32 for now to avoid breaking existing tests
             var nd = new NDArray(typeof(int), Shape.Vector(length), false); //do not fill, we are about to
@@ -316,8 +316,8 @@ namespace NumSharp
                 unsafe
                 {
                     var addr = (int*)nd.Array.Address;
-                    for (int add = length - 1, i = 0; add >= 0; add--, i++)
-                        addr[i] = 1 + start + add * step;
+                    for (long add = length - 1, i = 0; add >= 0; add--, i++)
+                        addr[i] = 1 + start + (int)(add * step);
                 }
             }
             else
@@ -325,7 +325,100 @@ namespace NumSharp
                 unsafe
                 {
                     var addr = (int*)nd.Array.Address;
-                    for (int i = 0; i < length; i++)
+                    for (long i = 0; i < length; i++)
+                        addr[i] = start + (int)(i * step);
+                }
+            }
+
+            return nd;
+        }
+
+        /// <summary>
+        /// Return evenly spaced values within a given interval.
+        ///
+        /// Values are generated within the half-open interval [start, stop)
+        /// (in other words, the interval including start but excluding stop).
+        /// For integer arguments the function is equivalent to the Python built-in
+        /// range function, but returns an ndarray rather than a list.
+        /// </summary>
+        /// <param name="stop">
+        /// End of interval.  The interval does not include this value.
+        /// </param>
+        /// <returns>
+        /// Array of evenly spaced int64 values.
+        /// </returns>
+        /// <remarks>
+        /// NumPy 2.x returns int64 for integer arange. This overload provides
+        /// int64 support when called with a long parameter.
+        /// </remarks>
+        public static NDArray arange(long stop)
+        {
+            return arange(0L, stop, 1L);
+        }
+
+        /// <summary>
+        /// Return evenly spaced values within a given interval.
+        ///
+        /// Values are generated within the half-open interval [start, stop)
+        /// (in other words, the interval including start but excluding stop).
+        /// For integer arguments the function is equivalent to the Python built-in
+        /// range function, but returns an ndarray rather than a list.
+        /// </summary>
+        /// <param name="start">
+        /// Start of interval.  The interval includes this value.
+        /// </param>
+        /// <param name="stop">
+        /// End of interval.  The interval does not include this value.
+        /// </param>
+        /// <param name="step">
+        /// Spacing between values.  The default step size is 1.
+        /// </param>
+        /// <returns>
+        /// Array of evenly spaced int64 values.
+        /// </returns>
+        /// <remarks>
+        /// NumPy 2.x returns int64 for integer arange. This overload provides
+        /// int64 support when called with long parameters.
+        /// </remarks>
+        public static NDArray arange(long start, long stop, long step = 1)
+        {
+            if (step == 0)
+                throw new ArgumentException("step can't be 0", nameof(step));
+
+            bool negativeStep = false;
+            if (step < 0)
+            {
+                negativeStep = true;
+                step = Math.Abs(step);
+                //swap
+                var tmp = start;
+                start = stop;
+                stop = tmp;
+            }
+
+            // NumPy returns empty array when start >= stop (with positive step)
+            if (start >= stop)
+                return new NDArray(typeof(long), Shape.Vector(0), false);
+
+            long length = (long)Math.Ceiling((stop - start + 0.0d) / step);
+            var nd = new NDArray(typeof(long), Shape.Vector(length), false); //do not fill, we are about to
+
+            if (negativeStep)
+            {
+                step = Math.Abs(step);
+                unsafe
+                {
+                    var addr = (long*)nd.Array.Address;
+                    for (long add = length - 1, i = 0; add >= 0; add--, i++)
+                        addr[i] = 1 + start + add * step;
+                }
+            }
+            else
+            {
+                unsafe
+                {
+                    var addr = (long*)nd.Array.Address;
+                    for (long i = 0; i < length; i++)
                         addr[i] = start + i * step;
                 }
             }

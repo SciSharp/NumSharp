@@ -32,7 +32,7 @@ namespace NumSharp.UnitTest.Creation
             // NumPy: np.empty_like(np.arange(5, dtype='int32')) → shape=(5,), dtype=int32
             var a = np.arange(5).astype(np.int32);
             var r = np.empty_like(a);
-            r.shape.Should().BeEquivalentTo(new[] { 5 });
+            r.shape.Should().BeEquivalentTo(new long[] { 5 });
             r.dtype.Should().Be(typeof(int));
             r.ndim.Should().Be(1);
         }
@@ -43,7 +43,7 @@ namespace NumSharp.UnitTest.Creation
             // NumPy: np.empty_like(np.arange(6, dtype='float64').reshape(2,3)) → shape=(2,3), dtype=float64
             var a = np.arange(6).astype(np.float64).reshape(2, 3);
             var r = np.empty_like(a);
-            r.shape.Should().BeEquivalentTo(new[] { 2, 3 });
+            r.shape.Should().BeEquivalentTo(new long[] { 2, 3 });
             r.dtype.Should().Be(typeof(double));
             r.ndim.Should().Be(2);
         }
@@ -54,7 +54,7 @@ namespace NumSharp.UnitTest.Creation
             // NumPy: np.empty_like(np.arange(24).reshape(2,3,4)) → shape=(2,3,4)
             var a = np.arange(24).reshape(2, 3, 4);
             var r = np.empty_like(a);
-            r.shape.Should().BeEquivalentTo(new[] { 2, 3, 4 });
+            r.shape.Should().BeEquivalentTo(new long[] { 2, 3, 4 });
             r.ndim.Should().Be(3);
         }
 
@@ -64,7 +64,7 @@ namespace NumSharp.UnitTest.Creation
             // NumPy: np.empty_like(np.arange(120).reshape(2,3,4,5)) → shape=(2,3,4,5)
             var a = np.arange(120).reshape(2, 3, 4, 5);
             var r = np.empty_like(a);
-            r.shape.Should().BeEquivalentTo(new[] { 2, 3, 4, 5 });
+            r.shape.Should().BeEquivalentTo(new long[] { 2, 3, 4, 5 });
             r.ndim.Should().Be(4);
         }
 
@@ -86,7 +86,7 @@ namespace NumSharp.UnitTest.Creation
             // NumPy: np.empty_like(np.array([42], dtype='int32')) → shape=(1,), dtype=int32
             var a = np.array(new int[] { 42 });
             var r = np.empty_like(a);
-            r.shape.Should().BeEquivalentTo(new[] { 1 });
+            r.shape.Should().BeEquivalentTo(new long[] { 1 });
             r.dtype.Should().Be(typeof(int));
         }
 
@@ -99,7 +99,7 @@ namespace NumSharp.UnitTest.Creation
         {
             var a = np.arange(6).astype(np.int32).reshape(2, 3);
             var r = np.empty_like(a, typeof(float));
-            r.shape.Should().BeEquivalentTo(new[] { 2, 3 }, "shape preserved");
+            r.shape.Should().BeEquivalentTo(new long[] { 2, 3 }, "shape preserved");
             r.dtype.Should().Be(typeof(float), "dtype overridden");
         }
 
@@ -108,7 +108,7 @@ namespace NumSharp.UnitTest.Creation
         {
             var a = np.arange(6).astype(np.int32).reshape(2, 3);
             var r = np.empty_like(a, typeof(double));
-            r.shape.Should().BeEquivalentTo(new[] { 2, 3 });
+            r.shape.Should().BeEquivalentTo(new long[] { 2, 3 });
             r.dtype.Should().Be(typeof(double));
         }
 
@@ -117,7 +117,7 @@ namespace NumSharp.UnitTest.Creation
         {
             var a = np.arange(6).astype(np.int32).reshape(2, 3);
             var r = np.empty_like(a, typeof(long));
-            r.shape.Should().BeEquivalentTo(new[] { 2, 3 });
+            r.shape.Should().BeEquivalentTo(new long[] { 2, 3 });
             r.dtype.Should().Be(typeof(long));
         }
 
@@ -126,7 +126,7 @@ namespace NumSharp.UnitTest.Creation
         {
             var a = np.arange(6).astype(np.int32).reshape(2, 3);
             var r = np.empty_like(a, typeof(short));
-            r.shape.Should().BeEquivalentTo(new[] { 2, 3 });
+            r.shape.Should().BeEquivalentTo(new long[] { 2, 3 });
             r.dtype.Should().Be(typeof(short));
         }
 
@@ -135,7 +135,7 @@ namespace NumSharp.UnitTest.Creation
         {
             var a = np.arange(6).astype(np.int32).reshape(2, 3);
             var r = np.empty_like(a, typeof(byte));
-            r.shape.Should().BeEquivalentTo(new[] { 2, 3 });
+            r.shape.Should().BeEquivalentTo(new long[] { 2, 3 });
             r.dtype.Should().Be(typeof(byte));
         }
 
@@ -144,7 +144,7 @@ namespace NumSharp.UnitTest.Creation
         {
             var a = np.arange(6).astype(np.int32).reshape(2, 3);
             var r = np.empty_like(a, typeof(bool));
-            r.shape.Should().BeEquivalentTo(new[] { 2, 3 });
+            r.shape.Should().BeEquivalentTo(new long[] { 2, 3 });
             r.dtype.Should().Be(typeof(bool));
         }
 
@@ -153,7 +153,7 @@ namespace NumSharp.UnitTest.Creation
         {
             var a = np.arange(4).astype(np.float64).reshape(2, 2);
             var r = np.empty_like(a, typeof(decimal));
-            r.shape.Should().BeEquivalentTo(new[] { 2, 2 });
+            r.shape.Should().BeEquivalentTo(new long[] { 2, 2 });
             r.dtype.Should().Be(typeof(decimal));
         }
 
@@ -174,7 +174,7 @@ namespace NumSharp.UnitTest.Creation
         {
             var a = np.arange(6).astype(np.int32).reshape(2, 3);
             var r = np.empty_like(a, NPTypeCode.Single);
-            r.shape.Should().BeEquivalentTo(new[] { 2, 3 });
+            r.shape.Should().BeEquivalentTo(new long[] { 2, 3 });
             r.dtype.Should().Be(typeof(float));
         }
 
@@ -183,7 +183,7 @@ namespace NumSharp.UnitTest.Creation
         {
             var a = np.arange(6).astype(np.int32).reshape(2, 3);
             var r = np.empty_like(a, NPTypeCode.Double);
-            r.shape.Should().BeEquivalentTo(new[] { 2, 3 });
+            r.shape.Should().BeEquivalentTo(new long[] { 2, 3 });
             r.dtype.Should().Be(typeof(double));
         }
 
@@ -192,7 +192,7 @@ namespace NumSharp.UnitTest.Creation
         {
             var a = np.arange(6).astype(np.int32).reshape(2, 3);
             var r = np.empty_like(a, NPTypeCode.Boolean);
-            r.shape.Should().BeEquivalentTo(new[] { 2, 3 });
+            r.shape.Should().BeEquivalentTo(new long[] { 2, 3 });
             r.dtype.Should().Be(typeof(bool));
         }
 
@@ -201,7 +201,7 @@ namespace NumSharp.UnitTest.Creation
         {
             var a = np.arange(6).astype(np.int32).reshape(2, 3);
             var r = np.empty_like(a, NPTypeCode.Int64);
-            r.shape.Should().BeEquivalentTo(new[] { 2, 3 });
+            r.shape.Should().BeEquivalentTo(new long[] { 2, 3 });
             r.dtype.Should().Be(typeof(long));
         }
 
@@ -210,7 +210,7 @@ namespace NumSharp.UnitTest.Creation
         {
             var a = np.arange(6).astype(np.int32).reshape(2, 3);
             var r = np.empty_like(a, NPTypeCode.Byte);
-            r.shape.Should().BeEquivalentTo(new[] { 2, 3 });
+            r.shape.Should().BeEquivalentTo(new long[] { 2, 3 });
             r.dtype.Should().Be(typeof(byte));
         }
 
@@ -232,7 +232,7 @@ namespace NumSharp.UnitTest.Creation
             var a = np.arange(4).reshape(2, 2);
             var r = np.empty_like(a, typeCode);
             r.dtype.Should().Be(expectedType);
-            r.shape.Should().BeEquivalentTo(new[] { 2, 2 });
+            r.shape.Should().BeEquivalentTo(new long[] { 2, 2 });
         }
 
         [Test]
@@ -240,7 +240,7 @@ namespace NumSharp.UnitTest.Creation
         {
             var a = np.arange(6).astype(np.int32).reshape(2, 3);
             var r = np.empty_like(a, NPTypeCode.Double, new Shape(4, 5));
-            r.shape.Should().BeEquivalentTo(new[] { 4, 5 });
+            r.shape.Should().BeEquivalentTo(new long[] { 4, 5 });
             r.dtype.Should().Be(typeof(double));
         }
 
@@ -266,7 +266,7 @@ namespace NumSharp.UnitTest.Creation
             var a = np.ones(new Shape(3), dtype);
             var r = np.empty_like(a);
             r.dtype.Should().Be(dtype, $"dtype {dtype.Name} should be preserved");
-            r.shape.Should().BeEquivalentTo(new[] { 3 });
+            r.shape.Should().BeEquivalentTo(new long[] { 3 });
         }
 
         [Test]
@@ -287,7 +287,7 @@ namespace NumSharp.UnitTest.Creation
             var a = np.ones(new Shape(2, 3), dtype);
             var r = np.empty_like(a);
             r.dtype.Should().Be(dtype);
-            r.shape.Should().BeEquivalentTo(new[] { 2, 3 });
+            r.shape.Should().BeEquivalentTo(new long[] { 2, 3 });
         }
 
         // ==========================================================
@@ -300,7 +300,7 @@ namespace NumSharp.UnitTest.Creation
             // NumPy: np.empty_like(np.array([], dtype='float64')) → shape=(0,), size=0
             var a = np.empty(new Shape(0), typeof(double));
             var r = np.empty_like(a);
-            r.shape.Should().BeEquivalentTo(new[] { 0 });
+            r.shape.Should().BeEquivalentTo(new long[] { 0 });
             r.dtype.Should().Be(typeof(double));
             r.size.Should().Be(0);
         }
@@ -311,7 +311,7 @@ namespace NumSharp.UnitTest.Creation
             // NumPy: np.empty_like(np.empty((0,3), dtype='int32')) → shape=(0,3), size=0
             var a = np.empty(new Shape(0, 3), typeof(int));
             var r = np.empty_like(a);
-            r.shape.Should().BeEquivalentTo(new[] { 0, 3 });
+            r.shape.Should().BeEquivalentTo(new long[] { 0, 3 });
             r.dtype.Should().Be(typeof(int));
             r.size.Should().Be(0);
         }
@@ -322,7 +322,7 @@ namespace NumSharp.UnitTest.Creation
             // NumPy: np.empty_like(np.empty((3,0), dtype='int32')) → shape=(3,0), size=0
             var a = np.empty(new Shape(3, 0), typeof(int));
             var r = np.empty_like(a);
-            r.shape.Should().BeEquivalentTo(new[] { 3, 0 });
+            r.shape.Should().BeEquivalentTo(new long[] { 3, 0 });
             r.dtype.Should().Be(typeof(int));
             r.size.Should().Be(0);
         }
@@ -333,7 +333,7 @@ namespace NumSharp.UnitTest.Creation
             // NumPy: np.empty_like(np.empty((2,0,4), dtype='float32')) → shape=(2,0,4), size=0
             var a = np.empty(new Shape(2, 0, 4), typeof(float));
             var r = np.empty_like(a);
-            r.shape.Should().BeEquivalentTo(new[] { 2, 0, 4 });
+            r.shape.Should().BeEquivalentTo(new long[] { 2, 0, 4 });
             r.dtype.Should().Be(typeof(float));
             r.size.Should().Be(0);
         }
@@ -348,10 +348,10 @@ namespace NumSharp.UnitTest.Creation
             // NumPy: np.empty_like(np.arange(10)[2:7]) → shape=(5,), C-contiguous
             var a = np.arange(10);
             var s = a["2:7"];
-            s.shape.Should().BeEquivalentTo(new[] { 5 }, "sanity: slice shape");
+            s.shape.Should().BeEquivalentTo(new long[] { 5 }, "sanity: slice shape");
 
             var r = np.empty_like(s);
-            r.shape.Should().BeEquivalentTo(new[] { 5 });
+            r.shape.Should().BeEquivalentTo(new long[] { 5 });
             r.dtype.Should().Be(a.dtype);
             r.ndim.Should().Be(1);
         }
@@ -362,10 +362,10 @@ namespace NumSharp.UnitTest.Creation
             // NumPy: np.empty_like(np.arange(10)[::2]) → shape=(5,), C-contiguous
             var a = np.arange(10);
             var s = a["::2"];
-            s.shape.Should().BeEquivalentTo(new[] { 5 }, "sanity: stepped slice shape");
+            s.shape.Should().BeEquivalentTo(new long[] { 5 }, "sanity: stepped slice shape");
 
             var r = np.empty_like(s);
-            r.shape.Should().BeEquivalentTo(new[] { 5 });
+            r.shape.Should().BeEquivalentTo(new long[] { 5 });
             r.dtype.Should().Be(a.dtype);
         }
 
@@ -375,10 +375,10 @@ namespace NumSharp.UnitTest.Creation
             // NumPy: np.empty_like(np.arange(12).reshape(3,4)[1:3]) → shape=(2,4)
             var a = np.arange(12).reshape(3, 4);
             var s = a["1:3"];
-            s.shape.Should().BeEquivalentTo(new[] { 2, 4 }, "sanity: row slice shape");
+            s.shape.Should().BeEquivalentTo(new long[] { 2, 4 }, "sanity: row slice shape");
 
             var r = np.empty_like(s);
-            r.shape.Should().BeEquivalentTo(new[] { 2, 4 });
+            r.shape.Should().BeEquivalentTo(new long[] { 2, 4 });
             r.dtype.Should().Be(a.dtype);
         }
 
@@ -388,10 +388,10 @@ namespace NumSharp.UnitTest.Creation
             // NumPy: np.empty_like(np.arange(12).reshape(3,4)[:,1:3]) → shape=(3,2), C-contiguous
             var a = np.arange(12).reshape(3, 4);
             var s = a[":, 1:3"];
-            s.shape.Should().BeEquivalentTo(new[] { 3, 2 }, "sanity: column slice shape");
+            s.shape.Should().BeEquivalentTo(new long[] { 3, 2 }, "sanity: column slice shape");
 
             var r = np.empty_like(s);
-            r.shape.Should().BeEquivalentTo(new[] { 3, 2 });
+            r.shape.Should().BeEquivalentTo(new long[] { 3, 2 });
             r.dtype.Should().Be(a.dtype);
         }
 
@@ -401,10 +401,10 @@ namespace NumSharp.UnitTest.Creation
             // NumPy: np.empty_like(np.arange(5)[::-1]) → shape=(5,)
             var a = np.arange(5);
             var s = a["::-1"];
-            s.shape.Should().BeEquivalentTo(new[] { 5 }, "sanity: reversed slice shape");
+            s.shape.Should().BeEquivalentTo(new long[] { 5 }, "sanity: reversed slice shape");
 
             var r = np.empty_like(s);
-            r.shape.Should().BeEquivalentTo(new[] { 5 });
+            r.shape.Should().BeEquivalentTo(new long[] { 5 });
         }
 
         // ==========================================================
@@ -417,10 +417,10 @@ namespace NumSharp.UnitTest.Creation
             // NumPy: np.empty_like(np.broadcast_to([1,2,3], (4,3))) → shape=(4,3), writeable
             var a = np.array(new int[] { 1, 2, 3 });
             var b = np.broadcast_to(a, new Shape(4, 3));
-            b.shape.Should().BeEquivalentTo(new[] { 4, 3 }, "sanity: broadcast shape");
+            b.shape.Should().BeEquivalentTo(new long[] { 4, 3 }, "sanity: broadcast shape");
 
             var r = np.empty_like(b);
-            r.shape.Should().BeEquivalentTo(new[] { 4, 3 });
+            r.shape.Should().BeEquivalentTo(new long[] { 4, 3 });
             r.dtype.Should().Be(typeof(int));
             r.size.Should().Be(12);
         }
@@ -431,10 +431,10 @@ namespace NumSharp.UnitTest.Creation
             // NumPy: np.empty_like(np.broadcast_to(5, (3,4))) → shape=(3,4)
             var a = np.array(5);
             var b = np.broadcast_to(a, new Shape(3, 4));
-            b.shape.Should().BeEquivalentTo(new[] { 3, 4 }, "sanity: broadcast shape");
+            b.shape.Should().BeEquivalentTo(new long[] { 3, 4 }, "sanity: broadcast shape");
 
             var r = np.empty_like(b);
-            r.shape.Should().BeEquivalentTo(new[] { 3, 4 });
+            r.shape.Should().BeEquivalentTo(new long[] { 3, 4 });
             r.dtype.Should().Be(typeof(int));
         }
 
@@ -444,10 +444,10 @@ namespace NumSharp.UnitTest.Creation
             // np.broadcast_to(np.array([[10],[20],[30]]), (3,3))
             var a = np.array(new int[] { 10, 20, 30 }).reshape(3, 1);
             var b = np.broadcast_to(a, new Shape(3, 3));
-            b.shape.Should().BeEquivalentTo(new[] { 3, 3 }, "sanity: broadcast shape");
+            b.shape.Should().BeEquivalentTo(new long[] { 3, 3 }, "sanity: broadcast shape");
 
             var r = np.empty_like(b);
-            r.shape.Should().BeEquivalentTo(new[] { 3, 3 });
+            r.shape.Should().BeEquivalentTo(new long[] { 3, 3 });
             r.dtype.Should().Be(typeof(int));
         }
 
@@ -458,7 +458,7 @@ namespace NumSharp.UnitTest.Creation
             var b = np.broadcast_to(a, new Shape(4, 3));
 
             var r = np.empty_like(b, typeof(double));
-            r.shape.Should().BeEquivalentTo(new[] { 4, 3 });
+            r.shape.Should().BeEquivalentTo(new long[] { 4, 3 });
             r.dtype.Should().Be(typeof(double));
         }
 
@@ -472,10 +472,10 @@ namespace NumSharp.UnitTest.Creation
             // NumPy: np.empty_like(np.arange(6).reshape(2,3).T) → shape=(3,2)
             var a = np.arange(6).reshape(2, 3);
             var t = a.T;
-            t.shape.Should().BeEquivalentTo(new[] { 3, 2 }, "sanity: transposed shape");
+            t.shape.Should().BeEquivalentTo(new long[] { 3, 2 }, "sanity: transposed shape");
 
             var r = np.empty_like(t);
-            r.shape.Should().BeEquivalentTo(new[] { 3, 2 });
+            r.shape.Should().BeEquivalentTo(new long[] { 3, 2 });
             r.dtype.Should().Be(a.dtype);
         }
 
@@ -602,7 +602,7 @@ namespace NumSharp.UnitTest.Creation
         {
             var a = np.empty(new Shape(1000, 1000), typeof(double));
             var r = np.empty_like(a);
-            r.shape.Should().BeEquivalentTo(new[] { 1000, 1000 });
+            r.shape.Should().BeEquivalentTo(new long[] { 1000, 1000 });
             r.dtype.Should().Be(typeof(double));
             r.size.Should().Be(1_000_000);
         }
@@ -673,7 +673,7 @@ namespace NumSharp.UnitTest.Creation
             var r1 = np.empty_like(a);
             var r2 = np.empty_like(r1);
 
-            r2.shape.Should().BeEquivalentTo(new[] { 2, 3 });
+            r2.shape.Should().BeEquivalentTo(new long[] { 2, 3 });
             r2.dtype.Should().Be(typeof(double));
         }
 
@@ -699,7 +699,7 @@ namespace NumSharp.UnitTest.Creation
             var a = np.arange(6).astype(np.int32).reshape(2, 3);
             var result = np.empty_like(a);
 
-            result.shape.Should().BeEquivalentTo(new[] { 2, 3 });
+            result.shape.Should().BeEquivalentTo(new long[] { 2, 3 });
             result.dtype.Should().Be(typeof(int));
             result.size.Should().Be(6);
         }
@@ -714,7 +714,7 @@ namespace NumSharp.UnitTest.Creation
             // NumPy: np.empty_like(a, shape=(4,5)) → shape=(4,5), dtype preserved from a
             var a = np.arange(6).astype(np.int32).reshape(2, 3);
             var r = np.empty_like(a, shape: new Shape(4, 5));
-            r.shape.Should().BeEquivalentTo(new[] { 4, 5 });
+            r.shape.Should().BeEquivalentTo(new long[] { 4, 5 });
             r.dtype.Should().Be(typeof(int), "dtype preserved from prototype");
         }
 
@@ -724,7 +724,7 @@ namespace NumSharp.UnitTest.Creation
             // NumPy: np.empty_like(a, shape=(10,)) → shape=(10,), dtype preserved
             var a = np.arange(6).astype(np.int32).reshape(2, 3);
             var r = np.empty_like(a, shape: new Shape(10));
-            r.shape.Should().BeEquivalentTo(new[] { 10 });
+            r.shape.Should().BeEquivalentTo(new long[] { 10 });
             r.dtype.Should().Be(typeof(int));
         }
 
@@ -733,7 +733,7 @@ namespace NumSharp.UnitTest.Creation
         {
             var a = np.arange(6).astype(np.float64).reshape(2, 3);
             var r = np.empty_like(a, shape: new Shape(2, 3, 4));
-            r.shape.Should().BeEquivalentTo(new[] { 2, 3, 4 });
+            r.shape.Should().BeEquivalentTo(new long[] { 2, 3, 4 });
             r.dtype.Should().Be(typeof(double));
         }
 
@@ -743,7 +743,7 @@ namespace NumSharp.UnitTest.Creation
             // NumPy: np.empty_like(a, dtype='float64', shape=(3,3,3)) → shape=(3,3,3), dtype=float64
             var a = np.arange(6).astype(np.int32).reshape(2, 3);
             var r = np.empty_like(a, typeof(double), new Shape(3, 3, 3));
-            r.shape.Should().BeEquivalentTo(new[] { 3, 3, 3 });
+            r.shape.Should().BeEquivalentTo(new long[] { 3, 3, 3 });
             r.dtype.Should().Be(typeof(double));
         }
 
@@ -753,7 +753,7 @@ namespace NumSharp.UnitTest.Creation
             // Override with same total element count but different shape
             var a = np.arange(12).astype(np.int32).reshape(3, 4);
             var r = np.empty_like(a, shape: new Shape(4, 3));
-            r.shape.Should().BeEquivalentTo(new[] { 4, 3 });
+            r.shape.Should().BeEquivalentTo(new long[] { 4, 3 });
             r.dtype.Should().Be(typeof(int));
             r.size.Should().Be(12);
         }
@@ -764,7 +764,7 @@ namespace NumSharp.UnitTest.Creation
             // Override with different total element count
             var a = np.arange(6).astype(np.int32).reshape(2, 3);
             var r = np.empty_like(a, shape: new Shape(10, 10));
-            r.shape.Should().BeEquivalentTo(new[] { 10, 10 });
+            r.shape.Should().BeEquivalentTo(new long[] { 10, 10 });
             r.dtype.Should().Be(typeof(int));
             r.size.Should().Be(100);
         }
@@ -786,7 +786,7 @@ namespace NumSharp.UnitTest.Creation
             // When shape is default (empty), prototype shape is used
             var a = np.arange(6).astype(np.int32).reshape(2, 3);
             var r = np.empty_like(a, shape: default);
-            r.shape.Should().BeEquivalentTo(new[] { 2, 3 });
+            r.shape.Should().BeEquivalentTo(new long[] { 2, 3 });
         }
 
         [Test]
@@ -796,7 +796,7 @@ namespace NumSharp.UnitTest.Creation
             var a = np.array(new int[] { 1, 2, 3 });
             var b = np.broadcast_to(a, new Shape(4, 3));
             var r = np.empty_like(b, shape: new Shape(5, 5));
-            r.shape.Should().BeEquivalentTo(new[] { 5, 5 });
+            r.shape.Should().BeEquivalentTo(new long[] { 5, 5 });
             r.dtype.Should().Be(typeof(int));
         }
 
@@ -807,7 +807,7 @@ namespace NumSharp.UnitTest.Creation
             var a = np.arange(10);
             var s = a["2:7"];
             var r = np.empty_like(s, shape: new Shape(3, 3));
-            r.shape.Should().BeEquivalentTo(new[] { 3, 3 });
+            r.shape.Should().BeEquivalentTo(new long[] { 3, 3 });
             r.dtype.Should().Be(a.dtype);
         }
 
@@ -840,7 +840,7 @@ namespace NumSharp.UnitTest.Creation
             a = a.reshape(3, 2);
 
             // Result should still have original shape
-            r.shape.Should().BeEquivalentTo(new[] { 2, 3 },
+            r.shape.Should().BeEquivalentTo(new long[] { 2, 3 },
                 "result shape must be independent of prototype after creation");
         }
     }

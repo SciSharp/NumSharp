@@ -182,7 +182,7 @@ public class AxisReductionMemoryTests
         var result = np.var(original, axis: 0);
 
         // Variance of a single element is 0
-        await Assert.That(result.shape).IsEquivalentTo(new[] { 3 });
+        await Assert.That(result.shape).IsEquivalentTo(new long[] { 3 });
         await Assert.That((double)result[0]).IsEqualTo(0.0);
         await Assert.That((double)result[1]).IsEqualTo(0.0);
         await Assert.That((double)result[2]).IsEqualTo(0.0);
@@ -195,7 +195,7 @@ public class AxisReductionMemoryTests
 
         var result = np.var(original, axis: 0, keepdims: true);
 
-        await Assert.That(result.shape).IsEquivalentTo(new[] { 1, 3 });
+        await Assert.That(result.shape).IsEquivalentTo(new long[] { 1, 3 });
         await Assert.That((double)result[0, 0]).IsEqualTo(0.0);
     }
 
@@ -208,7 +208,7 @@ public class AxisReductionMemoryTests
 
         var result = np.std(original, axis: 0);
 
-        await Assert.That(result.shape).IsEquivalentTo(new[] { 3 });
+        await Assert.That(result.shape).IsEquivalentTo(new long[] { 3 });
         await Assert.That((double)result[0]).IsEqualTo(0.0);
     }
 
@@ -219,7 +219,7 @@ public class AxisReductionMemoryTests
 
         var result = np.std(original, axis: 0, keepdims: true);
 
-        await Assert.That(result.shape).IsEquivalentTo(new[] { 1, 3 });
+        await Assert.That(result.shape).IsEquivalentTo(new long[] { 1, 3 });
         await Assert.That((double)result[0, 0]).IsEqualTo(0.0);
     }
 
@@ -233,7 +233,7 @@ public class AxisReductionMemoryTests
         var result = np.argmax(original, axis: 0);
 
         // ArgMax on axis with size 1 always returns 0
-        await Assert.That(result.shape).IsEquivalentTo(new[] { 3 });
+        await Assert.That(result.shape).IsEquivalentTo(new long[] { 3 });
         await Assert.That((long)result[0]).IsEqualTo(0L);
         await Assert.That((long)result[1]).IsEqualTo(0L);
         await Assert.That((long)result[2]).IsEqualTo(0L);
@@ -246,7 +246,7 @@ public class AxisReductionMemoryTests
 
         var result = np.argmin(original, axis: 0);
 
-        await Assert.That(result.shape).IsEquivalentTo(new[] { 3 });
+        await Assert.That(result.shape).IsEquivalentTo(new long[] { 3 });
         await Assert.That((long)result[0]).IsEqualTo(0L);
     }
 

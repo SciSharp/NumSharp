@@ -117,50 +117,44 @@ namespace NumSharp.Backends
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private static unsafe void MatMulGeneric(NDArray left, NDArray right, NDArray result, long M, long K, long N)
         {
-            // Check size limits for BLAS operations - matrix dimensions must fit in int32
-            if (M > int.MaxValue || K > int.MaxValue || N > int.MaxValue)
-                throw new ArgumentException("Matrix dimensions exceed maximum supported size for BLAS operations.");
-
-            int m = (int)M, k = (int)K, n = (int)N;
-
             // Dispatch based on result type for optimal inner loop
             switch (result.typecode)
             {
                 case NPTypeCode.Boolean:
-                    MatMulCore<bool>(left, right, result, m, k, n);
+                    MatMulCore<bool>(left, right, result, M, K, N);
                     break;
                 case NPTypeCode.Byte:
-                    MatMulCore<byte>(left, right, result, m, k, n);
+                    MatMulCore<byte>(left, right, result, M, K, N);
                     break;
                 case NPTypeCode.Int16:
-                    MatMulCore<short>(left, right, result, m, k, n);
+                    MatMulCore<short>(left, right, result, M, K, N);
                     break;
                 case NPTypeCode.UInt16:
-                    MatMulCore<ushort>(left, right, result, m, k, n);
+                    MatMulCore<ushort>(left, right, result, M, K, N);
                     break;
                 case NPTypeCode.Int32:
-                    MatMulCore<int>(left, right, result, m, k, n);
+                    MatMulCore<int>(left, right, result, M, K, N);
                     break;
                 case NPTypeCode.UInt32:
-                    MatMulCore<uint>(left, right, result, m, k, n);
+                    MatMulCore<uint>(left, right, result, M, K, N);
                     break;
                 case NPTypeCode.Int64:
-                    MatMulCore<long>(left, right, result, m, k, n);
+                    MatMulCore<long>(left, right, result, M, K, N);
                     break;
                 case NPTypeCode.UInt64:
-                    MatMulCore<ulong>(left, right, result, m, k, n);
+                    MatMulCore<ulong>(left, right, result, M, K, N);
                     break;
                 case NPTypeCode.Char:
-                    MatMulCore<char>(left, right, result, m, k, n);
+                    MatMulCore<char>(left, right, result, M, K, N);
                     break;
                 case NPTypeCode.Single:
-                    MatMulCore<float>(left, right, result, m, k, n);
+                    MatMulCore<float>(left, right, result, M, K, N);
                     break;
                 case NPTypeCode.Double:
-                    MatMulCore<double>(left, right, result, m, k, n);
+                    MatMulCore<double>(left, right, result, M, K, N);
                     break;
                 case NPTypeCode.Decimal:
-                    MatMulCore<decimal>(left, right, result, m, k, n);
+                    MatMulCore<decimal>(left, right, result, M, K, N);
                     break;
                 default:
                     throw new NotSupportedException($"MatMul not supported for type {result.typecode}");
@@ -172,15 +166,15 @@ namespace NumSharp.Backends
         /// Handles mixed input types by converting to double for computation.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        private static unsafe void MatMulCore<TResult>(NDArray left, NDArray right, NDArray result, int M, int K, int N)
+        private static unsafe void MatMulCore<TResult>(NDArray left, NDArray right, NDArray result, long M, long K, long N)
             where TResult : unmanaged
         {
             // Get typed result pointer
             var resultPtr = (TResult*)result.Address;
 
             // Zero out result
-            int resultSize = M * N;
-            for (int i = 0; i < resultSize; i++)
+            long resultSize = M * N;
+            for (long i = 0; i < resultSize; i++)
                 resultPtr[i] = default;
 
             // Check if we can use fast contiguous path (same types, contiguous)
@@ -204,7 +198,7 @@ namespace NumSharp.Backends
         /// Dispatches to type-specific implementation.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        private static unsafe void MatMulSameType<T>(NDArray left, NDArray right, T* result, int M, int K, int N)
+        private static unsafe void MatMulSameType<T>(NDArray left, NDArray right, T* result, long M, long K, long N)
             where T : unmanaged
         {
             // For same-type contiguous, dispatch to specific implementations
@@ -223,68 +217,68 @@ namespace NumSharp.Backends
         }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        private static unsafe void MatMulContiguous(float* a, float* b, float* result, int M, int K, int N)
+        private static unsafe void MatMulContiguous(float* a, float* b, float* result, long M, long K, long N)
         {
-            for (int i = 0; i < M; i++)
+            for (long i = 0; i < M; i++)
             {
                 float* resultRow = result + i * N;
                 float* aRow = a + i * K;
-                for (int k = 0; k < K; k++)
+                for (long k = 0; k < K; k++)
                 {
                     float aik = aRow[k];
                     float* bRow = b + k * N;
-                    for (int j = 0; j < N; j++)
+                    for (long j = 0; j < N; j++)
                         resultRow[j] += aik * bRow[j];
                 }
             }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        private static unsafe void MatMulContiguous(double* a, double* b, double* result, int M, int K, int N)
+        private static unsafe void MatMulContiguous(double* a, double* b, double* result, long M, long K, long N)
         {
-            for (int i = 0; i < M; i++)
+            for (long i = 0; i < M; i++)
             {
                 double* resultRow = result + i * N;
                 double* aRow = a + i * K;
-                for (int k = 0; k < K; k++)
+                for (long k = 0; k < K; k++)
                 {
                     double aik = aRow[k];
                     double* bRow = b + k * N;
-                    for (int j = 0; j < N; j++)
+                    for (long j = 0; j < N; j++)
                         resultRow[j] += aik * bRow[j];
                 }
             }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        private static unsafe void MatMulContiguous(int* a, int* b, int* result, int M, int K, int N)
+        private static unsafe void MatMulContiguous(int* a, int* b, int* result, long M, long K, long N)
         {
-            for (int i = 0; i < M; i++)
+            for (long i = 0; i < M; i++)
             {
                 int* resultRow = result + i * N;
                 int* aRow = a + i * K;
-                for (int k = 0; k < K; k++)
+                for (long k = 0; k < K; k++)
                 {
                     int aik = aRow[k];
                     int* bRow = b + k * N;
-                    for (int j = 0; j < N; j++)
+                    for (long j = 0; j < N; j++)
                         resultRow[j] += aik * bRow[j];
                 }
             }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        private static unsafe void MatMulContiguous(long* a, long* b, long* result, int M, int K, int N)
+        private static unsafe void MatMulContiguous(long* a, long* b, long* result, long M, long K, long N)
         {
-            for (int i = 0; i < M; i++)
+            for (long i = 0; i < M; i++)
             {
                 long* resultRow = result + i * N;
                 long* aRow = a + i * K;
-                for (int k = 0; k < K; k++)
+                for (long k = 0; k < K; k++)
                 {
                     long aik = aRow[k];
                     long* bRow = b + k * N;
-                    for (int j = 0; j < N; j++)
+                    for (long j = 0; j < N; j++)
                         resultRow[j] += aik * bRow[j];
                 }
             }
@@ -295,23 +289,23 @@ namespace NumSharp.Backends
         /// Converts to double for computation, then back to result type.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        private static unsafe void MatMulMixedType<TResult>(NDArray left, NDArray right, TResult* result, int M, int K, int N)
+        private static unsafe void MatMulMixedType<TResult>(NDArray left, NDArray right, TResult* result, long M, long K, long N)
             where TResult : unmanaged
         {
             // Use double accumulator for precision
             var accumulator = new double[N];
 
             // Temporary arrays for coordinates to avoid allocation in inner loop
-            var leftCoords = new int[2];
-            var rightCoords = new int[2];
+            var leftCoords = new long[2];
+            var rightCoords = new long[2];
 
-            for (int i = 0; i < M; i++)
+            for (long i = 0; i < M; i++)
             {
                 // Clear accumulator for this row
-                Array.Clear(accumulator, 0, N);
+                Array.Clear(accumulator);
 
                 leftCoords[0] = i;
-                for (int k = 0; k < K; k++)
+                for (long k = 0; k < K; k++)
                 {
                     leftCoords[1] = k;
                     // Use GetValue which correctly handles strided/non-contiguous arrays
@@ -320,7 +314,7 @@ namespace NumSharp.Backends
                     double aik = Convert.ToDouble(left.GetValue(leftCoords));
 
                     rightCoords[0] = k;
-                    for (int j = 0; j < N; j++)
+                    for (long j = 0; j < N; j++)
                     {
                         rightCoords[1] = j;
                         double bkj = Convert.ToDouble(right.GetValue(rightCoords));
@@ -330,7 +324,7 @@ namespace NumSharp.Backends
 
                 // Write row to result with type conversion
                 TResult* resultRow = result + i * N;
-                for (int j = 0; j < N; j++)
+                for (long j = 0; j < N; j++)
                 {
                     resultRow[j] = Converts.ChangeType<TResult>(accumulator[j]);
                 }

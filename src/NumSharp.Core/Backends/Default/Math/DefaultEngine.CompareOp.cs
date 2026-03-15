@@ -83,18 +83,18 @@ namespace NumSharp.Backends
             // Dispatch based on lhs type first
             return lhsType switch
             {
-                NPTypeCode.Boolean => InvokeComparisonScalarLhs(func, lhs.GetBoolean(), rhs, rhsType),
-                NPTypeCode.Byte => InvokeComparisonScalarLhs(func, lhs.GetByte(), rhs, rhsType),
-                NPTypeCode.Int16 => InvokeComparisonScalarLhs(func, lhs.GetInt16(), rhs, rhsType),
-                NPTypeCode.UInt16 => InvokeComparisonScalarLhs(func, lhs.GetUInt16(), rhs, rhsType),
-                NPTypeCode.Int32 => InvokeComparisonScalarLhs(func, lhs.GetInt32(), rhs, rhsType),
-                NPTypeCode.UInt32 => InvokeComparisonScalarLhs(func, lhs.GetUInt32(), rhs, rhsType),
-                NPTypeCode.Int64 => InvokeComparisonScalarLhs(func, lhs.GetInt64(), rhs, rhsType),
-                NPTypeCode.UInt64 => InvokeComparisonScalarLhs(func, lhs.GetUInt64(), rhs, rhsType),
-                NPTypeCode.Char => InvokeComparisonScalarLhs(func, lhs.GetChar(), rhs, rhsType),
-                NPTypeCode.Single => InvokeComparisonScalarLhs(func, lhs.GetSingle(), rhs, rhsType),
-                NPTypeCode.Double => InvokeComparisonScalarLhs(func, lhs.GetDouble(), rhs, rhsType),
-                NPTypeCode.Decimal => InvokeComparisonScalarLhs(func, lhs.GetDecimal(), rhs, rhsType),
+                NPTypeCode.Boolean => InvokeComparisonScalarLhs(func, lhs.GetBoolean(Array.Empty<long>()), rhs, rhsType),
+                NPTypeCode.Byte => InvokeComparisonScalarLhs(func, lhs.GetByte(Array.Empty<long>()), rhs, rhsType),
+                NPTypeCode.Int16 => InvokeComparisonScalarLhs(func, lhs.GetInt16(Array.Empty<long>()), rhs, rhsType),
+                NPTypeCode.UInt16 => InvokeComparisonScalarLhs(func, lhs.GetUInt16(Array.Empty<long>()), rhs, rhsType),
+                NPTypeCode.Int32 => InvokeComparisonScalarLhs(func, lhs.GetInt32(Array.Empty<long>()), rhs, rhsType),
+                NPTypeCode.UInt32 => InvokeComparisonScalarLhs(func, lhs.GetUInt32(Array.Empty<long>()), rhs, rhsType),
+                NPTypeCode.Int64 => InvokeComparisonScalarLhs(func, lhs.GetInt64(Array.Empty<long>()), rhs, rhsType),
+                NPTypeCode.UInt64 => InvokeComparisonScalarLhs(func, lhs.GetUInt64(Array.Empty<long>()), rhs, rhsType),
+                NPTypeCode.Char => InvokeComparisonScalarLhs(func, lhs.GetChar(Array.Empty<long>()), rhs, rhsType),
+                NPTypeCode.Single => InvokeComparisonScalarLhs(func, lhs.GetSingle(Array.Empty<long>()), rhs, rhsType),
+                NPTypeCode.Double => InvokeComparisonScalarLhs(func, lhs.GetDouble(Array.Empty<long>()), rhs, rhsType),
+                NPTypeCode.Decimal => InvokeComparisonScalarLhs(func, lhs.GetDecimal(Array.Empty<long>()), rhs, rhsType),
                 _ => throw new NotSupportedException($"LHS type {lhsType} not supported")
             };
         }
@@ -109,18 +109,18 @@ namespace NumSharp.Backends
             // Dispatch based on rhs type
             return rhsType switch
             {
-                NPTypeCode.Boolean => NDArray.Scalar(((Func<TLhs, bool, bool>)func)(lhsVal, rhs.GetBoolean())).MakeGeneric<bool>(),
-                NPTypeCode.Byte => NDArray.Scalar(((Func<TLhs, byte, bool>)func)(lhsVal, rhs.GetByte())).MakeGeneric<bool>(),
-                NPTypeCode.Int16 => NDArray.Scalar(((Func<TLhs, short, bool>)func)(lhsVal, rhs.GetInt16())).MakeGeneric<bool>(),
-                NPTypeCode.UInt16 => NDArray.Scalar(((Func<TLhs, ushort, bool>)func)(lhsVal, rhs.GetUInt16())).MakeGeneric<bool>(),
-                NPTypeCode.Int32 => NDArray.Scalar(((Func<TLhs, int, bool>)func)(lhsVal, rhs.GetInt32())).MakeGeneric<bool>(),
-                NPTypeCode.UInt32 => NDArray.Scalar(((Func<TLhs, uint, bool>)func)(lhsVal, rhs.GetUInt32())).MakeGeneric<bool>(),
-                NPTypeCode.Int64 => NDArray.Scalar(((Func<TLhs, long, bool>)func)(lhsVal, rhs.GetInt64())).MakeGeneric<bool>(),
-                NPTypeCode.UInt64 => NDArray.Scalar(((Func<TLhs, ulong, bool>)func)(lhsVal, rhs.GetUInt64())).MakeGeneric<bool>(),
-                NPTypeCode.Char => NDArray.Scalar(((Func<TLhs, char, bool>)func)(lhsVal, rhs.GetChar())).MakeGeneric<bool>(),
-                NPTypeCode.Single => NDArray.Scalar(((Func<TLhs, float, bool>)func)(lhsVal, rhs.GetSingle())).MakeGeneric<bool>(),
-                NPTypeCode.Double => NDArray.Scalar(((Func<TLhs, double, bool>)func)(lhsVal, rhs.GetDouble())).MakeGeneric<bool>(),
-                NPTypeCode.Decimal => NDArray.Scalar(((Func<TLhs, decimal, bool>)func)(lhsVal, rhs.GetDecimal())).MakeGeneric<bool>(),
+                NPTypeCode.Boolean => NDArray.Scalar(((Func<TLhs, bool, bool>)func)(lhsVal, rhs.GetBoolean(Array.Empty<long>()))).MakeGeneric<bool>(),
+                NPTypeCode.Byte => NDArray.Scalar(((Func<TLhs, byte, bool>)func)(lhsVal, rhs.GetByte(Array.Empty<long>()))).MakeGeneric<bool>(),
+                NPTypeCode.Int16 => NDArray.Scalar(((Func<TLhs, short, bool>)func)(lhsVal, rhs.GetInt16(Array.Empty<long>()))).MakeGeneric<bool>(),
+                NPTypeCode.UInt16 => NDArray.Scalar(((Func<TLhs, ushort, bool>)func)(lhsVal, rhs.GetUInt16(Array.Empty<long>()))).MakeGeneric<bool>(),
+                NPTypeCode.Int32 => NDArray.Scalar(((Func<TLhs, int, bool>)func)(lhsVal, rhs.GetInt32(Array.Empty<long>()))).MakeGeneric<bool>(),
+                NPTypeCode.UInt32 => NDArray.Scalar(((Func<TLhs, uint, bool>)func)(lhsVal, rhs.GetUInt32(Array.Empty<long>()))).MakeGeneric<bool>(),
+                NPTypeCode.Int64 => NDArray.Scalar(((Func<TLhs, long, bool>)func)(lhsVal, rhs.GetInt64(Array.Empty<long>()))).MakeGeneric<bool>(),
+                NPTypeCode.UInt64 => NDArray.Scalar(((Func<TLhs, ulong, bool>)func)(lhsVal, rhs.GetUInt64(Array.Empty<long>()))).MakeGeneric<bool>(),
+                NPTypeCode.Char => NDArray.Scalar(((Func<TLhs, char, bool>)func)(lhsVal, rhs.GetChar(Array.Empty<long>()))).MakeGeneric<bool>(),
+                NPTypeCode.Single => NDArray.Scalar(((Func<TLhs, float, bool>)func)(lhsVal, rhs.GetSingle(Array.Empty<long>()))).MakeGeneric<bool>(),
+                NPTypeCode.Double => NDArray.Scalar(((Func<TLhs, double, bool>)func)(lhsVal, rhs.GetDouble(Array.Empty<long>()))).MakeGeneric<bool>(),
+                NPTypeCode.Decimal => NDArray.Scalar(((Func<TLhs, decimal, bool>)func)(lhsVal, rhs.GetDecimal(Array.Empty<long>()))).MakeGeneric<bool>(),
                 _ => throw new NotSupportedException($"RHS type {rhsType} not supported")
             };
         }

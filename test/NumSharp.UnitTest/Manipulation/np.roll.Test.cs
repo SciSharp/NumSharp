@@ -441,7 +441,7 @@ namespace NumSharp.UnitTest.Manipulation
         {
             var x = np.empty(new Shape(0, 3));
             var result = np.roll(x, 1);
-            result.Shape.dimensions.Should().BeEquivalentTo(new[] { 0, 3 });
+            result.Shape.dimensions.Should().BeEquivalentTo(new long[] { 0, 3 });
         }
 
         [Test]
@@ -449,7 +449,7 @@ namespace NumSharp.UnitTest.Manipulation
         {
             var x = np.empty(new Shape(0, 3));
             var result = np.roll(x, 1, 0);
-            result.Shape.dimensions.Should().BeEquivalentTo(new[] { 0, 3 });
+            result.Shape.dimensions.Should().BeEquivalentTo(new long[] { 0, 3 });
         }
 
         [Test]
@@ -463,7 +463,7 @@ namespace NumSharp.UnitTest.Manipulation
             // NumPy returns an empty array of shape (0, 3) with no error.
             var x = np.empty(new Shape(0, 3));
             var result = np.roll(x, 1, 1);
-            result.Shape.dimensions.Should().BeEquivalentTo(new[] { 0, 3 });
+            result.Shape.dimensions.Should().BeEquivalentTo(new long[] { 0, 3 });
         }
 
         // ================================================================

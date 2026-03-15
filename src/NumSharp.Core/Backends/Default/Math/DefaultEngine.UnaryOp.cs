@@ -98,18 +98,18 @@ namespace NumSharp.Backends
             // Dispatch based on input type to avoid boxing
             return inputType switch
             {
-                NPTypeCode.Boolean => InvokeUnaryScalar(func, nd.GetBoolean(), outputType),
-                NPTypeCode.Byte => InvokeUnaryScalar(func, nd.GetByte(), outputType),
-                NPTypeCode.Int16 => InvokeUnaryScalar(func, nd.GetInt16(), outputType),
-                NPTypeCode.UInt16 => InvokeUnaryScalar(func, nd.GetUInt16(), outputType),
-                NPTypeCode.Int32 => InvokeUnaryScalar(func, nd.GetInt32(), outputType),
-                NPTypeCode.UInt32 => InvokeUnaryScalar(func, nd.GetUInt32(), outputType),
-                NPTypeCode.Int64 => InvokeUnaryScalar(func, nd.GetInt64(), outputType),
-                NPTypeCode.UInt64 => InvokeUnaryScalar(func, nd.GetUInt64(), outputType),
-                NPTypeCode.Char => InvokeUnaryScalar(func, nd.GetChar(), outputType),
-                NPTypeCode.Single => InvokeUnaryScalar(func, nd.GetSingle(), outputType),
-                NPTypeCode.Double => InvokeUnaryScalar(func, nd.GetDouble(), outputType),
-                NPTypeCode.Decimal => InvokeUnaryScalar(func, nd.GetDecimal(), outputType),
+                NPTypeCode.Boolean => InvokeUnaryScalar(func, nd.GetBoolean(Array.Empty<long>()), outputType),
+                NPTypeCode.Byte => InvokeUnaryScalar(func, nd.GetByte(Array.Empty<long>()), outputType),
+                NPTypeCode.Int16 => InvokeUnaryScalar(func, nd.GetInt16(Array.Empty<long>()), outputType),
+                NPTypeCode.UInt16 => InvokeUnaryScalar(func, nd.GetUInt16(Array.Empty<long>()), outputType),
+                NPTypeCode.Int32 => InvokeUnaryScalar(func, nd.GetInt32(Array.Empty<long>()), outputType),
+                NPTypeCode.UInt32 => InvokeUnaryScalar(func, nd.GetUInt32(Array.Empty<long>()), outputType),
+                NPTypeCode.Int64 => InvokeUnaryScalar(func, nd.GetInt64(Array.Empty<long>()), outputType),
+                NPTypeCode.UInt64 => InvokeUnaryScalar(func, nd.GetUInt64(Array.Empty<long>()), outputType),
+                NPTypeCode.Char => InvokeUnaryScalar(func, nd.GetChar(Array.Empty<long>()), outputType),
+                NPTypeCode.Single => InvokeUnaryScalar(func, nd.GetSingle(Array.Empty<long>()), outputType),
+                NPTypeCode.Double => InvokeUnaryScalar(func, nd.GetDouble(Array.Empty<long>()), outputType),
+                NPTypeCode.Decimal => InvokeUnaryScalar(func, nd.GetDecimal(Array.Empty<long>()), outputType),
                 _ => throw new NotSupportedException($"Input type {inputType} not supported")
             };
         }

@@ -276,7 +276,7 @@ namespace NumSharp.UnitTest
             var full = np.arange(0, 4 * 4 * 4).reshape(1, 4, 4, 4).astype(NPTypeCode.Byte);
             var sliced = full[":, :2, :2, :"];
 
-            sliced.shape.Should().BeEquivalentTo(new[] { 1, 2, 2, 4 });
+            sliced.shape.Should().BeEquivalentTo(new long[] { 1, 2, 2, 4 });
             sliced.Shape.IsContiguous.Should().BeFalse("slicing makes it non-contiguous");
 
             // Expected: ToBitmap should handle non-contiguous arrays

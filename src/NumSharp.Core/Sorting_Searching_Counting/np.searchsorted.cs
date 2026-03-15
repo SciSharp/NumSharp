@@ -54,17 +54,13 @@ namespace NumSharp
             }
 
             // Handle 1D array input
-            // For now, limit to int.MaxValue elements since SetInt64 uses int indices
-            if (v.size > int.MaxValue)
-                throw new OverflowException("searchsorted not supported for arrays larger than int.MaxValue elements");
-
-            NDArray output = new long[v.size];
-            for (int i = 0; i < (int)v.size; i++)
+            NDArray output = new NDArray(NPTypeCode.Int64, Shape.Vector(v.size));
+            for (long i = 0; i < v.size; i++)
             {
                 // Use Convert.ToDouble for type-agnostic value extraction
                 double target = Convert.ToDouble(v.Storage.GetValue(i));
                 long idx = binarySearchRightmost(a, target);
-                output.SetInt64(idx, i);
+                output.SetInt64(idx, new long[] { i });
             }
 
             return output;

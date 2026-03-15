@@ -50,7 +50,7 @@ namespace NumSharp
         [SuppressMessage("ReSharper", "ParameterHidesMember")]
         public NDArray reshape(int[] shape)
         {
-            return reshape(System.Array.ConvertAll(shape, i => (long)i));
+            return reshape(Shape.ComputeLongShape(shape));
         }
 
         /// <summary>
@@ -115,7 +115,7 @@ namespace NumSharp
         [SuppressMessage("ReSharper", "ParameterHidesMember")]
         public NDArray reshape_unsafe(int[] shape)
         {
-            return reshape_unsafe(System.Array.ConvertAll(shape, i => (long)i));
+            return reshape_unsafe(Shape.ComputeLongShape(shape));
         }
 
         /// <summary>

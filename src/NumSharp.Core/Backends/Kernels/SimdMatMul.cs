@@ -33,13 +33,20 @@ namespace NumSharp.Backends.Kernels
         /// A is [M x K], B is [K x N], C is [M x N]
         /// All matrices must be row-major contiguous.
         /// </summary>
+        /// <remarks>
+        /// This SIMD kernel requires int dimensions because:
+        /// 1. Span&lt;T&gt; constructors only accept int length
+        /// 2. NativeMemory.AlignedAlloc uses nuint which is checked-cast from int
+        /// 3. Cache blocking parameters (MC, KC, MR, NR) are int constants
+        /// For matrices exceeding int.MaxValue, the generic fallback in DefaultEngine handles them.
+        /// </remarks>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public static unsafe void MatMulFloat(float* A, float* B, float* C, long M, long N, long K)
         {
-            // Validate dimensions fit in int for internal operations
-            // (Span and blocking require int, and matrices > 2B elements are impractical)
+            // SIMD operations require int dimensions - Span<T> and blocking only support int
+            // For larger matrices, use the generic fallback path in DefaultEngine
             if (M > int.MaxValue || N > int.MaxValue || K > int.MaxValue)
-                throw new ArgumentException("Matrix dimensions exceed int.MaxValue, which is not supported for SIMD matmul.");
+                throw new ArgumentException("Matrix dimensions exceed int.MaxValue, which is not supported for SIMD matmul. Use generic fallback.");
 
             int m = (int)M, n = (int)N, k = (int)K;
 

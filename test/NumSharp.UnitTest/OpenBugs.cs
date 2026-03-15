@@ -446,7 +446,7 @@ namespace NumSharp.UnitTest
                     "an inconsistency where broadcast_arrays succeeds but broadcast_to throws.");
 
             result.Should().NotBeNull();
-            result.shape.Should().BeEquivalentTo(new[] { 2, 3, 3 });
+            result.shape.Should().BeEquivalentTo(new long[] { 2, 3, 3 });
         }
 
         // ================================================================
@@ -511,7 +511,7 @@ namespace NumSharp.UnitTest
                     "to element-wise broadcast comparison.");
 
             result.Should().NotBeNull();
-            result.shape.Should().BeEquivalentTo(new[] { 3, 3 });
+            result.shape.Should().BeEquivalentTo(new long[] { 3, 3 });
 
             // Diagonal = False (equal), off-diagonal = True (not equal)
             result.GetBoolean(0, 0).Should().BeFalse("1 == 1");
@@ -717,7 +717,7 @@ namespace NumSharp.UnitTest
                     "[[F,T,T],[F,T,F]]. NumSharp throws IncorrectShapeException.");
 
             result.Should().NotBeNull();
-            result.shape.Should().BeEquivalentTo(new[] { 2, 3 });
+            result.shape.Should().BeEquivalentTo(new long[] { 2, 3 });
             result.GetBoolean(0, 0).Should().BeFalse("1 > 2 is False");
             result.GetBoolean(0, 1).Should().BeTrue("5 > 2 is True");
             result.GetBoolean(0, 2).Should().BeTrue("3 > 2 is True");
@@ -909,7 +909,7 @@ namespace NumSharp.UnitTest
             var a = np.broadcast_to(np.array(new int[] { 1, 2, 3 }), new Shape(3, 3));
             var result = np.cumsum(a, 0);
 
-            result.shape.Should().BeEquivalentTo(new[] { 3, 3 });
+            result.shape.Should().BeEquivalentTo(new long[] { 3, 3 });
             // cumsum promotes Int32 to Int64 per NumPy 2.x (GetAccumulatingType)
             result.dtype.Should().Be(typeof(long), "cumsum promotes int32 to int64");
 
@@ -949,7 +949,7 @@ namespace NumSharp.UnitTest
             var a = np.broadcast_to(col, new Shape(3, 3));
             var result = np.cumsum(a, 0);
 
-            result.shape.Should().BeEquivalentTo(new[] { 3, 3 });
+            result.shape.Should().BeEquivalentTo(new long[] { 3, 3 });
             // cumsum promotes Int32 to Int64 per NumPy 2.x (GetAccumulatingType)
             result.dtype.Should().Be(typeof(long), "cumsum promotes int32 to int64");
 
@@ -991,7 +991,7 @@ namespace NumSharp.UnitTest
             var a = np.broadcast_to(col, new Shape(3, 3));
             var result = np.cumsum(a, 1);
 
-            result.shape.Should().BeEquivalentTo(new[] { 3, 3 });
+            result.shape.Should().BeEquivalentTo(new long[] { 3, 3 });
             // cumsum promotes Int32 to Int64 per NumPy 2.x (GetAccumulatingType)
             result.dtype.Should().Be(typeof(long), "cumsum promotes int32 to int64");
 
@@ -1062,7 +1062,7 @@ namespace NumSharp.UnitTest
             var a = np.broadcast_to(np.array(new int[] { 1, 2, 3 }), new Shape(2, 3));
             var result = a.roll(1, 1);
 
-            result.shape.Should().BeEquivalentTo(new[] { 2, 3 });
+            result.shape.Should().BeEquivalentTo(new long[] { 2, 3 });
 
             // Row 0 happens to be correct
             result.GetInt32(0, 0).Should().Be(3, "roll shift=1: last element wraps to front");
@@ -1095,7 +1095,7 @@ namespace NumSharp.UnitTest
             var a = np.broadcast_to(col, new Shape(3, 3));
             var result = a.roll(1, 0);
 
-            result.shape.Should().BeEquivalentTo(new[] { 3, 3 });
+            result.shape.Should().BeEquivalentTo(new long[] { 3, 3 });
 
             // Row 0 = last original row (30) shifted to front
             result.GetInt32(0, 0).Should().Be(30, "roll shift=1 axis=0: last row wraps to front");
@@ -1183,7 +1183,7 @@ namespace NumSharp.UnitTest
             var a = np.broadcast_to(col, new Shape(3, 3));
             var result = np.sum(a, 0);
 
-            result.shape.Should().BeEquivalentTo(new[] { 3 });
+            result.shape.Should().BeEquivalentTo(new long[] { 3 });
 
             // np.sum promotes int32 to int64 for accumulation (NEP50)
             result.GetInt64(0).Should().Be(600L,
@@ -1209,7 +1209,7 @@ namespace NumSharp.UnitTest
             var a = np.broadcast_to(col, new Shape(3, 3));
             var result = np.mean(a, 0);
 
-            result.shape.Should().BeEquivalentTo(new[] { 3 });
+            result.shape.Should().BeEquivalentTo(new long[] { 3 });
 
             result.GetDouble(0).Should().BeApproximately(2.0, 1e-10,
                 "NumPy: mean(broadcast_to([[1],[2],[3]],(3,3)), axis=0) = [2,2,2]. " +
@@ -1232,7 +1232,7 @@ namespace NumSharp.UnitTest
             var a = np.broadcast_to(col, new Shape(3, 3));
             var result = np.var(a, 0);
 
-            result.shape.Should().BeEquivalentTo(new[] { 3 });
+            result.shape.Should().BeEquivalentTo(new long[] { 3 });
 
             result.GetDouble(0).Should().BeApproximately(2.0 / 3.0, 1e-10,
                 "NumPy: var(broadcast_to([[1],[2],[3]],(3,3)), axis=0) = [0.667,0.667,0.667]. " +
@@ -1255,7 +1255,7 @@ namespace NumSharp.UnitTest
             var a = np.broadcast_to(col, new Shape(3, 3));
             var result = np.std(a, 0);
 
-            result.shape.Should().BeEquivalentTo(new[] { 3 });
+            result.shape.Should().BeEquivalentTo(new long[] { 3 });
 
             var expected_std = Math.Sqrt(2.0 / 3.0);
             result.GetDouble(0).Should().BeApproximately(expected_std, 1e-10,
@@ -1280,7 +1280,7 @@ namespace NumSharp.UnitTest
             var a = np.broadcast_to(col, new Shape(5, 3));
             var result = np.sum(a, 0);
 
-            result.shape.Should().BeEquivalentTo(new[] { 3 });
+            result.shape.Should().BeEquivalentTo(new long[] { 3 });
 
             // np.sum promotes int32 to int64 for accumulation (NEP50)
             result.GetInt64(0).Should().Be(15L,
@@ -1336,7 +1336,7 @@ namespace NumSharp.UnitTest
                     "used in the internal sort doesn't handle multi-dimensional indexing.");
 
             result.Should().NotBeNull();
-            result.shape.Should().BeEquivalentTo(new[] { 2, 3 });
+            result.shape.Should().BeEquivalentTo(new long[] { 2, 3 });
             result.dtype.Should().Be(typeof(long), "NumPy argsort always returns int64 indices");
 
             // Row 0: argsort of [3,1,2] = [1,2,0]
@@ -1413,7 +1413,7 @@ namespace NumSharp.UnitTest
                     "broadcasts the input to apply min/max, hitting the guard.");
 
             result.Should().NotBeNull();
-            result.shape.Should().BeEquivalentTo(new[] { 2, 3 });
+            result.shape.Should().BeEquivalentTo(new long[] { 2, 3 });
             result.GetDouble(0, 0).Should().Be(2.0);
             result.GetDouble(0, 1).Should().Be(5.0);
             result.GetDouble(0, 2).Should().Be(7.0);
@@ -1531,7 +1531,7 @@ namespace NumSharp.UnitTest
 
             // Slice a[:, 0] — should extract column 0: [100, 200, 300]
             var sliced = a[":, 0"];
-            sliced.shape.Should().BeEquivalentTo(new[] { 3 });
+            sliced.shape.Should().BeEquivalentTo(new long[] { 3 });
 
             // These assertions reproduce the bug:
             // NumPy returns [100, 200, 300]. NumSharp returns [100, 100, 100].
@@ -1566,7 +1566,7 @@ namespace NumSharp.UnitTest
 
             // np.copy materializes with clean contiguous shape [3, 1]
             var copy = np.copy(a);
-            copy.strides.Should().BeEquivalentTo(new[] { 3, 1 },
+            copy.strides.Should().BeEquivalentTo(new long[] { 3, 1 },
                 "np.copy produces contiguous strides [3,1]");
             copy.Shape.IsBroadcasted.Should().BeFalse(
                 "np.copy clears broadcast flag");
@@ -1772,7 +1772,7 @@ namespace NumSharp.UnitTest
             var a = np.broadcast_to(np.array(new int[] { 1, 2, 3 }), new Shape(3, 3));
             var result = np.cumsum(a, 0);
 
-            result.shape.Should().BeEquivalentTo(new[] { 3, 3 });
+            result.shape.Should().BeEquivalentTo(new long[] { 3, 3 });
             // cumsum promotes Int32 to Int64 per NumPy 2.x (GetAccumulatingType)
             result.dtype.Should().Be(typeof(long), "cumsum promotes int32 to int64");
 
@@ -1808,7 +1808,7 @@ namespace NumSharp.UnitTest
             var a = np.broadcast_to(col, new Shape(3, 3));
             var result = np.cumsum(a, 1);
 
-            result.shape.Should().BeEquivalentTo(new[] { 3, 3 });
+            result.shape.Should().BeEquivalentTo(new long[] { 3, 3 });
             // cumsum promotes Int32 to Int64 per NumPy 2.x (GetAccumulatingType)
             result.dtype.Should().Be(typeof(long), "cumsum promotes int32 to int64");
 
@@ -1879,7 +1879,7 @@ namespace NumSharp.UnitTest
             var a = np.broadcast_to(np.array(new int[] { 1, 2, 3 }), new Shape(2, 3));
             var result = a.roll(1, 1);
 
-            result.shape.Should().BeEquivalentTo(new[] { 2, 3 });
+            result.shape.Should().BeEquivalentTo(new long[] { 2, 3 });
 
             result.GetInt32(0, 0).Should().Be(3,
                 "roll(axis=1, shift=1) should rotate [1,2,3] → [3,1,2]. " +
@@ -1906,7 +1906,7 @@ namespace NumSharp.UnitTest
             var a = np.broadcast_to(col, new Shape(3, 3));
             var result = a.roll(1, 0);
 
-            result.shape.Should().BeEquivalentTo(new[] { 3, 3 });
+            result.shape.Should().BeEquivalentTo(new long[] { 3, 3 });
 
             // After rolling axis=0 by 1: row 2 → row 0, row 0 → row 1, row 1 → row 2
             result.GetInt32(0, 0).Should().Be(3,
@@ -1982,7 +1982,7 @@ namespace NumSharp.UnitTest
 
             // Flat index 0 → should be [0, 0]
             var coords0 = shape.GetCoordinates(0);
-            coords0.Should().BeEquivalentTo(new[] { 0, 0 },
+            coords0.Should().BeEquivalentTo(new long[] { 0, 0 },
                 "Flat index 0 in (3,3) should map to [0,0]");
 
             // Flat index 1 → should be [0, 1] for row-major order
@@ -2127,7 +2127,7 @@ namespace NumSharp.UnitTest
                     "NDArray to NDArray<Boolean> in the axis reduction path.");
 
             result.Should().NotBeNull();
-            result.shape.Should().BeEquivalentTo(new[] { 2 });
+            result.shape.Should().BeEquivalentTo(new long[] { 2 });
             result.GetBoolean(0).Should().BeTrue("any along axis 0: [T,F] → T");
             result.GetBoolean(1).Should().BeTrue("any along axis 0: [F,T] → T");
         }
@@ -2146,7 +2146,7 @@ namespace NumSharp.UnitTest
                     "NumPy: np.any([[T,F],[F,F]], axis=1) = [True, False].");
 
             result.Should().NotBeNull();
-            result.shape.Should().BeEquivalentTo(new[] { 2 });
+            result.shape.Should().BeEquivalentTo(new long[] { 2 });
             result.GetBoolean(0).Should().BeTrue("any of [T,F] is True");
             result.GetBoolean(1).Should().BeFalse("any of [F,F] is False");
         }
@@ -2233,7 +2233,7 @@ namespace NumSharp.UnitTest
                     "storage size doesn't match the broadcast shape size.");
 
             result.Should().NotBeNull();
-            result.shape.Should().BeEquivalentTo(new[] { 2, 3 });
+            result.shape.Should().BeEquivalentTo(new long[] { 2, 3 });
             result.GetInt32(0, 0).Should().Be(1);
             result.GetInt32(0, 1).Should().Be(2);
             result.GetInt32(1, 2).Should().Be(3);
@@ -2298,7 +2298,7 @@ namespace NumSharp.UnitTest
             a.GetInt32(2, 0).Should().Be(30);
 
             var t = a.T;
-            t.shape.Should().BeEquivalentTo(new[] { 3, 3 });
+            t.shape.Should().BeEquivalentTo(new long[] { 3, 3 });
 
             // After transpose, each ROW should be [10,20,30]
             // (the column dimension, which varied, becomes the row dimension)
@@ -2357,7 +2357,7 @@ namespace NumSharp.UnitTest
             var a = np.arange(6).reshape(2, 3);
             var t = np.transpose(a);
 
-            t.shape.Should().BeEquivalentTo(new[] { 3, 2 });
+            t.shape.Should().BeEquivalentTo(new long[] { 3, 2 });
 
             // Verify values are correct
             t.GetInt32(0, 0).Should().Be(0);
@@ -2391,7 +2391,7 @@ namespace NumSharp.UnitTest
             var a = np.arange(24).reshape(2, 3, 4);
             var s = np.swapaxes(a, 0, 2);
 
-            s.shape.Should().BeEquivalentTo(new[] { 4, 3, 2 });
+            s.shape.Should().BeEquivalentTo(new long[] { 4, 3, 2 });
 
             // Verify values are correct
             s.GetInt32(0, 0, 0).Should().Be(0);
@@ -2519,13 +2519,13 @@ namespace NumSharp.UnitTest
         public void Bug_SwapAxes_Strides_WrongForAxis02()
         {
             var a = np.arange(24).reshape(2, 3, 4);
-            a.strides.Should().BeEquivalentTo(new[] { 12, 4, 1 });
+            a.strides.Should().BeEquivalentTo(new long[] { 12, 4, 1 });
 
             var b = np.swapaxes(a, 0, 2);
-            b.shape.Should().BeEquivalentTo(new[] { 4, 3, 2 });
+            b.shape.Should().BeEquivalentTo(new long[] { 4, 3, 2 });
 
             // NumPy: strides are permuted, not recomputed
-            b.strides.Should().BeEquivalentTo(new[] { 1, 4, 12 },
+            b.strides.Should().BeEquivalentTo(new long[] { 1, 4, 12 },
                 "NumPy: swapaxes(0,2) swaps strides[0] and strides[2]: [12,4,1] → [1,4,12]. " +
                 "The result is non-contiguous (strides not in descending order). " +
                 "NumSharp returns [6,2,1] — standard C-contiguous strides for shape (4,3,2) — " +
@@ -2545,9 +2545,9 @@ namespace NumSharp.UnitTest
         {
             var a = np.arange(24).reshape(2, 3, 4);
             var b = np.swapaxes(a, 0, 1);
-            b.shape.Should().BeEquivalentTo(new[] { 3, 2, 4 });
+            b.shape.Should().BeEquivalentTo(new long[] { 3, 2, 4 });
 
-            b.strides.Should().BeEquivalentTo(new[] { 4, 12, 1 },
+            b.strides.Should().BeEquivalentTo(new long[] { 4, 12, 1 },
                 "NumPy: swapaxes(0,1) swaps strides[0] and strides[1]: [12,4,1] → [4,12,1]. " +
                 "NumSharp returns [8,4,1] — C-contiguous strides for shape (3,2,4).");
         }
@@ -2565,9 +2565,9 @@ namespace NumSharp.UnitTest
         {
             var a = np.arange(24).reshape(2, 3, 4);
             var b = np.swapaxes(a, 1, 2);
-            b.shape.Should().BeEquivalentTo(new[] { 2, 4, 3 });
+            b.shape.Should().BeEquivalentTo(new long[] { 2, 4, 3 });
 
-            b.strides.Should().BeEquivalentTo(new[] { 12, 1, 4 },
+            b.strides.Should().BeEquivalentTo(new long[] { 12, 1, 4 },
                 "NumPy: swapaxes(1,2) swaps strides[1] and strides[2]: [12,4,1] → [12,1,4]. " +
                 "NumSharp returns [12,3,1] — C-contiguous strides for shape (2,4,3).");
         }
@@ -2663,7 +2663,7 @@ namespace NumSharp.UnitTest
                     "via MultiIterator.Assign (Default.Transpose.cs line 173).");
 
             result.Should().NotBeNull();
-            result.shape.Should().BeEquivalentTo(new[] { 4, 3, 0 });
+            result.shape.Should().BeEquivalentTo(new long[] { 4, 3, 0 });
         }
 
         /// <summary>
@@ -2684,7 +2684,7 @@ namespace NumSharp.UnitTest
                     "NumSharp throws InvalidOperationException — same NDIterator limitation.");
 
             result.Should().NotBeNull();
-            result.shape.Should().BeEquivalentTo(new[] { 4, 0, 2 });
+            result.shape.Should().BeEquivalentTo(new long[] { 4, 0, 2 });
         }
 
         // ================================================================

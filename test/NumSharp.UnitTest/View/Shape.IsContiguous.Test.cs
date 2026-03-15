@@ -32,7 +32,7 @@ namespace NumSharp.UnitTest.View
             // np.arange(10)[2:7] = [2, 3, 4, 5, 6]
             var a = np.arange(10);
             var s = a["2:7"];
-            s.shape.Should().BeEquivalentTo(new[] { 5 });
+            s.shape.Should().BeEquivalentTo(new long[] { 5 });
             s.GetInt32(0).Should().Be(2);
             s.GetInt32(1).Should().Be(3);
             s.GetInt32(2).Should().Be(4);
@@ -46,7 +46,7 @@ namespace NumSharp.UnitTest.View
             // np.arange(10)[::2] = [0, 2, 4, 6, 8]
             var a = np.arange(10);
             var s = a["::2"];
-            s.shape.Should().BeEquivalentTo(new[] { 5 });
+            s.shape.Should().BeEquivalentTo(new long[] { 5 });
             s.GetInt32(0).Should().Be(0);
             s.GetInt32(1).Should().Be(2);
             s.GetInt32(2).Should().Be(4);
@@ -60,7 +60,7 @@ namespace NumSharp.UnitTest.View
             // np.arange(5)[::-1] = [4, 3, 2, 1, 0]
             var a = np.arange(5);
             var s = a["::-1"];
-            s.shape.Should().BeEquivalentTo(new[] { 5 });
+            s.shape.Should().BeEquivalentTo(new long[] { 5 });
             s.GetInt32(0).Should().Be(4);
             s.GetInt32(1).Should().Be(3);
             s.GetInt32(2).Should().Be(2);
@@ -74,7 +74,7 @@ namespace NumSharp.UnitTest.View
             // np.arange(10)[3:4] = [3]
             var a = np.arange(10);
             var s = a["3:4"];
-            s.shape.Should().BeEquivalentTo(new[] { 1 });
+            s.shape.Should().BeEquivalentTo(new long[] { 1 });
             s.GetInt32(0).Should().Be(3);
         }
 
@@ -88,7 +88,7 @@ namespace NumSharp.UnitTest.View
             // np.arange(12).reshape(3,4)[1:3] = [[4,5,6,7],[8,9,10,11]]
             var a = np.arange(12).reshape(3, 4);
             var s = a["1:3"];
-            s.shape.Should().BeEquivalentTo(new[] { 2, 4 });
+            s.shape.Should().BeEquivalentTo(new long[] { 2, 4 });
             s.GetInt32(0, 0).Should().Be(4);
             s.GetInt32(0, 1).Should().Be(5);
             s.GetInt32(0, 2).Should().Be(6);
@@ -105,7 +105,7 @@ namespace NumSharp.UnitTest.View
             // np.arange(12).reshape(3,4)[:,1:3] = [[1,2],[5,6],[9,10]]
             var a = np.arange(12).reshape(3, 4);
             var s = a[":,1:3"];
-            s.shape.Should().BeEquivalentTo(new[] { 3, 2 });
+            s.shape.Should().BeEquivalentTo(new long[] { 3, 2 });
             s.GetInt32(0, 0).Should().Be(1);
             s.GetInt32(0, 1).Should().Be(2);
             s.GetInt32(1, 0).Should().Be(5);
@@ -120,7 +120,7 @@ namespace NumSharp.UnitTest.View
             // np.arange(12).reshape(3,4)[1:2] = [[4,5,6,7]]
             var a = np.arange(12).reshape(3, 4);
             var s = a["1:2"];
-            s.shape.Should().BeEquivalentTo(new[] { 1, 4 });
+            s.shape.Should().BeEquivalentTo(new long[] { 1, 4 });
             s.GetInt32(0, 0).Should().Be(4);
             s.GetInt32(0, 1).Should().Be(5);
             s.GetInt32(0, 2).Should().Be(6);
@@ -133,7 +133,7 @@ namespace NumSharp.UnitTest.View
             // np.arange(12).reshape(3,4)[1:2,1:3] = [[5,6]]
             var a = np.arange(12).reshape(3, 4);
             var s = a["1:2,1:3"];
-            s.shape.Should().BeEquivalentTo(new[] { 1, 2 });
+            s.shape.Should().BeEquivalentTo(new long[] { 1, 2 });
             s.GetInt32(0, 0).Should().Be(5);
             s.GetInt32(0, 1).Should().Be(6);
         }
@@ -148,7 +148,7 @@ namespace NumSharp.UnitTest.View
             // np.arange(24).reshape(2,3,4)[0:1] — shape (1,3,4), values 0..11
             var a = np.arange(24).reshape(2, 3, 4);
             var s = a["0:1"];
-            s.shape.Should().BeEquivalentTo(new[] { 1, 3, 4 });
+            s.shape.Should().BeEquivalentTo(new long[] { 1, 3, 4 });
             for (int i = 0; i < 12; i++)
                 s.GetAtIndex(i).Should().Be(i);
         }
@@ -159,7 +159,7 @@ namespace NumSharp.UnitTest.View
             // np.arange(24).reshape(2,3,4)[0:1,1:3,:] = [[4..11]]
             var a = np.arange(24).reshape(2, 3, 4);
             var s = a["0:1,1:3,:"];
-            s.shape.Should().BeEquivalentTo(new[] { 1, 2, 4 });
+            s.shape.Should().BeEquivalentTo(new long[] { 1, 2, 4 });
             s.GetInt32(0, 0, 0).Should().Be(4);
             s.GetInt32(0, 0, 1).Should().Be(5);
             s.GetInt32(0, 0, 2).Should().Be(6);
@@ -177,7 +177,7 @@ namespace NumSharp.UnitTest.View
             // Row 0: [4,5,6,7], Row 1: [16,17,18,19]
             var a = np.arange(24).reshape(2, 3, 4);
             var s = a[":,1:2,:"];
-            s.shape.Should().BeEquivalentTo(new[] { 2, 1, 4 });
+            s.shape.Should().BeEquivalentTo(new long[] { 2, 1, 4 });
             s.GetInt32(0, 0, 0).Should().Be(4);
             s.GetInt32(0, 0, 3).Should().Be(7);
             s.GetInt32(1, 0, 0).Should().Be(16);
@@ -195,7 +195,7 @@ namespace NumSharp.UnitTest.View
             var a = np.arange(10);
             var s1 = a["2:8"]; // [2,3,4,5,6,7]
             var s2 = s1["1:4"]; // [3,4,5]
-            s2.shape.Should().BeEquivalentTo(new[] { 3 });
+            s2.shape.Should().BeEquivalentTo(new long[] { 3 });
             s2.GetInt32(0).Should().Be(3);
             s2.GetInt32(1).Should().Be(4);
             s2.GetInt32(2).Should().Be(5);
@@ -208,7 +208,7 @@ namespace NumSharp.UnitTest.View
             var a = np.arange(10);
             var stepped = a["::2"]; // [0,2,4,6,8]
             var s = stepped["0:1"];
-            s.shape.Should().BeEquivalentTo(new[] { 1 });
+            s.shape.Should().BeEquivalentTo(new long[] { 1 });
             s.GetInt32(0).Should().Be(0);
         }
 
@@ -219,7 +219,7 @@ namespace NumSharp.UnitTest.View
             var a = np.arange(10);
             var stepped = a["::2"]; // [0,2,4,6,8]
             var s = stepped["1:3"];
-            s.shape.Should().BeEquivalentTo(new[] { 2 });
+            s.shape.Should().BeEquivalentTo(new long[] { 2 });
             s.GetInt32(0).Should().Be(2);
             s.GetInt32(1).Should().Be(4);
         }
@@ -235,7 +235,7 @@ namespace NumSharp.UnitTest.View
             var a = np.arange(10);
             var s = a["2:7"];
             var r = np.ravel(s);
-            r.shape.Should().BeEquivalentTo(new[] { 5 });
+            r.shape.Should().BeEquivalentTo(new long[] { 5 });
             r.GetInt32(0).Should().Be(2);
             r.GetInt32(1).Should().Be(3);
             r.GetInt32(2).Should().Be(4);
@@ -250,7 +250,7 @@ namespace NumSharp.UnitTest.View
             var a = np.arange(12).reshape(3, 4);
             var s = a["1:3"];
             var r = np.ravel(s);
-            r.shape.Should().BeEquivalentTo(new[] { 8 });
+            r.shape.Should().BeEquivalentTo(new long[] { 8 });
             for (int i = 0; i < 8; i++)
                 r.GetInt32(i).Should().Be(4 + i);
         }
@@ -262,7 +262,7 @@ namespace NumSharp.UnitTest.View
             var a = np.arange(12).reshape(3, 4);
             var s = a[":,1:3"];
             var r = np.ravel(s);
-            r.shape.Should().BeEquivalentTo(new[] { 6 });
+            r.shape.Should().BeEquivalentTo(new long[] { 6 });
             r.GetInt32(0).Should().Be(1);
             r.GetInt32(1).Should().Be(2);
             r.GetInt32(2).Should().Be(5);
@@ -278,7 +278,7 @@ namespace NumSharp.UnitTest.View
             var a = np.arange(10);
             var s = a["::2"];
             var r = np.ravel(s);
-            r.shape.Should().BeEquivalentTo(new[] { 5 });
+            r.shape.Should().BeEquivalentTo(new long[] { 5 });
             r.GetInt32(0).Should().Be(0);
             r.GetInt32(1).Should().Be(2);
             r.GetInt32(2).Should().Be(4);
@@ -306,7 +306,7 @@ namespace NumSharp.UnitTest.View
         {
             var a = np.arange(20).reshape(4, 5);
             var s = a["1:3"]; // rows 1-2
-            s.shape.Should().BeEquivalentTo(new[] { 2, 5 });
+            s.shape.Should().BeEquivalentTo(new long[] { 2, 5 });
             for (int i = 0; i < 10; i++)
                 s.GetAtIndex(i).Should().Be(5 + i, $"index {i}");
         }
@@ -343,7 +343,7 @@ namespace NumSharp.UnitTest.View
             var a = np.arange(10);
             var s = a["2:7"]; // [2,3,4,5,6]
             var r = np.roll(s, 2);
-            r.shape.Should().BeEquivalentTo(new[] { 5 });
+            r.shape.Should().BeEquivalentTo(new long[] { 5 });
             r.GetInt32(0).Should().Be(5);
             r.GetInt32(1).Should().Be(6);
             r.GetInt32(2).Should().Be(2);
@@ -735,7 +735,7 @@ namespace NumSharp.UnitTest.View
             var a = np.arange(12);
             var s = a["2:10"]; // [2,3,4,5,6,7,8,9]
             var r = s.reshape(2, 4);
-            r.shape.Should().BeEquivalentTo(new[] { 2, 4 });
+            r.shape.Should().BeEquivalentTo(new long[] { 2, 4 });
             r.GetInt32(0, 0).Should().Be(2);
             r.GetInt32(0, 3).Should().Be(5);
             r.GetInt32(1, 0).Should().Be(6);

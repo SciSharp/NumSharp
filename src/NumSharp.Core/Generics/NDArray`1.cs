@@ -161,7 +161,27 @@ namespace NumSharp.Generic
             get => (TDType*)Storage.Address;
         }
 
-        public new TDType this[params int[] indices]
+        public new TDType this[int[] indices]
+        {
+            [MethodImpl(Inline)]
+            get
+            {
+                if (Shape.IsScalar && indices.Length != 1 || !Shape.IsScalar && indices.Length != ndim)
+                    throw new ArgumentException($"Unable to set an NDArray<{typeof(TDType).Name}> to a non-scalar indices", nameof(indices));
+
+                return Storage.GetValue<TDType>(indices);
+            }
+            [MethodImpl(Inline)]
+            set
+            {
+                if (Shape.IsScalar && indices.Length != 1 || !Shape.IsScalar && indices.Length != ndim)
+                    throw new ArgumentException($"Unable to set an NDArray<{typeof(TDType).Name}> to a non-scalar indices", nameof(indices));
+
+                Storage.SetValue<TDType>(value, indices);
+            }
+        }
+
+        public new TDType this[params long[] indices]
         {
             [MethodImpl(Inline)]
             get

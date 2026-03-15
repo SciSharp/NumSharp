@@ -238,13 +238,15 @@ namespace NumSharp.UnitTest.Creation
 
         NDArray _create_arange(Shape shape)
         {
-            return np.arange(shape.size).reshape(ref shape);
+            // Cast to int to use int32 dtype (shape.size is now long after int64 migration)
+            return np.arange((int)shape.size).reshape(ref shape);
         }
 
         NDArray _create_arange(params int[] dims)
         {
             var rshape = new Shape(dims);
-            return np.arange(rshape.size).reshape(rshape);
+            // Cast to int to use int32 dtype (rshape.size is now long after int64 migration)
+            return np.arange((int)rshape.size).reshape(rshape);
         }
 
         IEnumerable<int> indexes(int len)

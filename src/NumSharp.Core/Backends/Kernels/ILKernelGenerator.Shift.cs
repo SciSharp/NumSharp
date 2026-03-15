@@ -453,7 +453,7 @@ namespace NumSharp.Backends.Kernels
         {
             // Simple loop: for (i = 0; i < count; i++)
             //   output[i] = input[i] < 0 ? -1 : 0
-            var locI = il.DeclareLocal(typeof(int));
+            var locI = il.DeclareLocal(typeof(long));
             var lblLoop = il.DefineLabel();
             var lblLoopEnd = il.DefineLabel();
             var lblNegative = il.DefineLabel();
@@ -461,6 +461,7 @@ namespace NumSharp.Backends.Kernels
 
             // i = 0
             il.Emit(OpCodes.Ldc_I4_0);
+            il.Emit(OpCodes.Conv_I8);       // Convert to long
             il.Emit(OpCodes.Stloc, locI);
 
             il.MarkLabel(lblLoop);
@@ -530,7 +531,7 @@ namespace NumSharp.Backends.Kernels
 
             // i++
             il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Ldc_I4_1);
+            il.Emit(OpCodes.Ldc_I8, 1L);
             il.Emit(OpCodes.Add);
             il.Emit(OpCodes.Stloc, locI);
 

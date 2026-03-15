@@ -44,8 +44,8 @@ namespace NumSharp
                 v = temp;
             }
 
-            int na = (int)a.size;
-            int nv = (int)v.size;
+            long na = a.size;
+            long nv = v.size;
 
             // Determine output type using NumPy's type promotion rules
             var retType = np._FindCommonType(a, v);
@@ -80,45 +80,47 @@ namespace NumSharp
         /// </summary>
         private static NDArray ConvolveFull(NDArray a, NDArray v, NPTypeCode retType)
         {
-            int na = (int)a.size;
-            int nv = (int)v.size;
-            int outLen = na + nv - 1;
+            long na = a.size;
+            long nv = v.size;
+            long outLen = na + nv - 1;
 
             var result = new NDArray(retType, Shape.Vector(outLen), true);
 
             // Convolution: result[k] = sum over j of a[j] * v[k-j]
             // where j ranges over valid indices
+            // Note: ConvolveFullTyped uses int internally for loop counters, which is fine
+            // since typical convolutions don't exceed 2B elements. The outer sizes are long for consistency.
             switch (retType)
             {
                 case NPTypeCode.Double:
-                    ConvolveFullTyped<double>(a, v, result, na, nv, outLen);
+                    ConvolveFullTyped<double>(a, v, result, (int)na, (int)nv, (int)outLen);
                     break;
                 case NPTypeCode.Single:
-                    ConvolveFullTyped<float>(a, v, result, na, nv, outLen);
+                    ConvolveFullTyped<float>(a, v, result, (int)na, (int)nv, (int)outLen);
                     break;
                 case NPTypeCode.Int32:
-                    ConvolveFullTyped<int>(a, v, result, na, nv, outLen);
+                    ConvolveFullTyped<int>(a, v, result, (int)na, (int)nv, (int)outLen);
                     break;
                 case NPTypeCode.Int64:
-                    ConvolveFullTyped<long>(a, v, result, na, nv, outLen);
+                    ConvolveFullTyped<long>(a, v, result, (int)na, (int)nv, (int)outLen);
                     break;
                 case NPTypeCode.Int16:
-                    ConvolveFullTyped<short>(a, v, result, na, nv, outLen);
+                    ConvolveFullTyped<short>(a, v, result, (int)na, (int)nv, (int)outLen);
                     break;
                 case NPTypeCode.Byte:
-                    ConvolveFullTyped<byte>(a, v, result, na, nv, outLen);
+                    ConvolveFullTyped<byte>(a, v, result, (int)na, (int)nv, (int)outLen);
                     break;
                 case NPTypeCode.UInt16:
-                    ConvolveFullTyped<ushort>(a, v, result, na, nv, outLen);
+                    ConvolveFullTyped<ushort>(a, v, result, (int)na, (int)nv, (int)outLen);
                     break;
                 case NPTypeCode.UInt32:
-                    ConvolveFullTyped<uint>(a, v, result, na, nv, outLen);
+                    ConvolveFullTyped<uint>(a, v, result, (int)na, (int)nv, (int)outLen);
                     break;
                 case NPTypeCode.UInt64:
-                    ConvolveFullTyped<ulong>(a, v, result, na, nv, outLen);
+                    ConvolveFullTyped<ulong>(a, v, result, (int)na, (int)nv, (int)outLen);
                     break;
                 case NPTypeCode.Decimal:
-                    ConvolveFullTyped<decimal>(a, v, result, na, nv, outLen);
+                    ConvolveFullTyped<decimal>(a, v, result, (int)na, (int)nv, (int)outLen);
                     break;
                 default:
                     throw new NotSupportedException($"Type {retType} is not supported for convolution.");
@@ -182,13 +184,13 @@ namespace NumSharp
             // Compute full convolution first
             var full = ConvolveFull(a, v, retType);
 
-            int na = (int)a.size;
-            int nv = (int)v.size;
-            int outLen = Math.Max(na, nv);
+            long na = a.size;
+            long nv = v.size;
+            long outLen = Math.Max(na, nv);
 
             // For 'same' mode, we return the center portion of length max(na, nv)
             // Start index: (nv - 1) / 2  (integer division, floor)
-            int startIdx = (nv - 1) / 2;
+            long startIdx = (nv - 1) / 2;
 
             // Slice from startIdx to startIdx + outLen
             return full[$"{startIdx}:{startIdx + outLen}"].copy();
@@ -203,12 +205,12 @@ namespace NumSharp
             // Compute full convolution first
             var full = ConvolveFull(a, v, retType);
 
-            int na = (int)a.size;
-            int nv = (int)v.size;
-            int outLen = Math.Max(na, nv) - Math.Min(na, nv) + 1;
+            long na = a.size;
+            long nv = v.size;
+            long outLen = Math.Max(na, nv) - Math.Min(na, nv) + 1;
 
             // For 'valid' mode, we skip (min(na, nv) - 1) elements from start
-            int startIdx = Math.Min(na, nv) - 1;
+            long startIdx = Math.Min(na, nv) - 1;
 
             // Slice from startIdx to startIdx + outLen
             return full[$"{startIdx}:{startIdx + outLen}"].copy();

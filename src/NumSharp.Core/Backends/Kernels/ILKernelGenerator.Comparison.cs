@@ -341,6 +341,7 @@ namespace NumSharp.Backends.Kernels
 
             // i = 0
             il.Emit(OpCodes.Ldc_I4_0);
+            il.Emit(OpCodes.Conv_I8);
             il.Emit(OpCodes.Stloc, locI);
 
             var lblUnrollLoop = il.DefineLabel();
@@ -400,11 +401,12 @@ namespace NumSharp.Backends.Kernels
                 int offset = n * vectorCount;
 
                 // Create a temporary local to hold (i + offset) for extraction
-                var locIOffset = il.DeclareLocal(typeof(int));
+                var locIOffset = il.DeclareLocal(typeof(long));
                 il.Emit(OpCodes.Ldloc, locI);
                 if (offset > 0)
                 {
                     il.Emit(OpCodes.Ldc_I4, offset);
+                    il.Emit(OpCodes.Conv_I8);
                     il.Emit(OpCodes.Add);
                 }
                 il.Emit(OpCodes.Stloc, locIOffset);
@@ -609,16 +611,17 @@ namespace NumSharp.Backends.Kernels
             int lhsSize, int rhsSize, NPTypeCode comparisonType)
         {
             // Args: void* lhs (0), void* rhs (1), bool* result (2),
-            //       int* lhsStrides (3), int* rhsStrides (4), int* shape (5),
-            //       int ndim (6), int totalSize (7)
+            //       long* lhsStrides (3), long* rhsStrides (4), long* shape (5),
+            //       int ndim (6), long totalSize (7)
 
-            var locI = il.DeclareLocal(typeof(int)); // loop counter
+            var locI = il.DeclareLocal(typeof(long)); // loop counter
 
             var lblLoop = il.DefineLabel();
             var lblLoopEnd = il.DefineLabel();
 
             // i = 0
             il.Emit(OpCodes.Ldc_I4_0);
+            il.Emit(OpCodes.Conv_I8);       // Convert to long
             il.Emit(OpCodes.Stloc, locI);
 
             il.MarkLabel(lblLoop);
@@ -632,6 +635,7 @@ namespace NumSharp.Backends.Kernels
             // Load result address
             il.Emit(OpCodes.Ldarg_2); // result (bool*)
             il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Conv_I);
             il.Emit(OpCodes.Add); // bool is 1 byte, so just add i
 
             // Load lhs[i] and convert to comparison type
@@ -662,7 +666,7 @@ namespace NumSharp.Backends.Kernels
 
             // i++
             il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Ldc_I4_1);
+            il.Emit(OpCodes.Ldc_I8, 1L);
             il.Emit(OpCodes.Add);
             il.Emit(OpCodes.Stloc, locI);
 
@@ -676,7 +680,7 @@ namespace NumSharp.Backends.Kernels
         private static void EmitComparisonScalarRightLoop(ILGenerator il, ComparisonKernelKey key,
             int lhsSize, int rhsSize, NPTypeCode comparisonType)
         {
-            var locI = il.DeclareLocal(typeof(int)); // loop counter
+            var locI = il.DeclareLocal(typeof(long)); // loop counter
             var locRhsVal = il.DeclareLocal(GetClrType(comparisonType)); // scalar value
 
             var lblLoop = il.DefineLabel();
@@ -690,6 +694,7 @@ namespace NumSharp.Backends.Kernels
 
             // i = 0
             il.Emit(OpCodes.Ldc_I4_0);
+            il.Emit(OpCodes.Conv_I8);       // Convert to long
             il.Emit(OpCodes.Stloc, locI);
 
             il.MarkLabel(lblLoop);
@@ -702,6 +707,7 @@ namespace NumSharp.Backends.Kernels
             // result[i] = (lhs[i] op rhsVal)
             il.Emit(OpCodes.Ldarg_2); // result
             il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Conv_I);
             il.Emit(OpCodes.Add);
 
             // Load lhs[i] and convert
@@ -722,7 +728,7 @@ namespace NumSharp.Backends.Kernels
 
             // i++
             il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Ldc_I4_1);
+            il.Emit(OpCodes.Ldc_I8, 1L);
             il.Emit(OpCodes.Add);
             il.Emit(OpCodes.Stloc, locI);
 
@@ -736,7 +742,7 @@ namespace NumSharp.Backends.Kernels
         private static void EmitComparisonScalarLeftLoop(ILGenerator il, ComparisonKernelKey key,
             int lhsSize, int rhsSize, NPTypeCode comparisonType)
         {
-            var locI = il.DeclareLocal(typeof(int)); // loop counter
+            var locI = il.DeclareLocal(typeof(long)); // loop counter
             var locLhsVal = il.DeclareLocal(GetClrType(comparisonType)); // scalar value
 
             var lblLoop = il.DefineLabel();
@@ -750,6 +756,7 @@ namespace NumSharp.Backends.Kernels
 
             // i = 0
             il.Emit(OpCodes.Ldc_I4_0);
+            il.Emit(OpCodes.Conv_I8);       // Convert to long
             il.Emit(OpCodes.Stloc, locI);
 
             il.MarkLabel(lblLoop);
@@ -762,6 +769,7 @@ namespace NumSharp.Backends.Kernels
             // result[i] = (lhsVal op rhs[i])
             il.Emit(OpCodes.Ldarg_2); // result
             il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Conv_I);
             il.Emit(OpCodes.Add);
 
             // Load cached lhs scalar
@@ -782,7 +790,7 @@ namespace NumSharp.Backends.Kernels
 
             // i++
             il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Ldc_I4_1);
+            il.Emit(OpCodes.Ldc_I8, 1L);
             il.Emit(OpCodes.Add);
             il.Emit(OpCodes.Stloc, locI);
 

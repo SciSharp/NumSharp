@@ -580,7 +580,7 @@ public class NEP50_TypePromotion
         var result = arr + 100;
 
         result.dtype.Should().Be(np.uint8);
-        result.shape.Should().BeEquivalentTo(new[] { 10 });
+        result.shape.Should().BeEquivalentTo(new long[] { 10 });
     }
 
     /// <summary>
@@ -593,7 +593,7 @@ public class NEP50_TypePromotion
         var result = arr + 5;
 
         result.dtype.Should().Be(np.uint8);
-        result.shape.Should().BeEquivalentTo(new[] { 3, 4 });
+        result.shape.Should().BeEquivalentTo(new long[] { 3, 4 });
     }
 
     /// <summary>

@@ -46,6 +46,8 @@ namespace NumSharp
 
                     case int[] coords:
                         return GetData(coords);
+                    case long[] coords:
+                        return GetData(coords);
                     case NDArray[] nds:
                         return this[nds];
                     case object[] objs:
@@ -68,6 +70,7 @@ namespace NumSharp
                 {
                     case NDArray _:
                     case int[] _:
+                    case long[] _:
                         goto _NDArrayFound;
                     case int _:
                         ints++;
@@ -170,6 +173,9 @@ namespace NumSharp
                         indices.Add(NDArray.Scalar<int>(o.ToInt32(CultureInfo.InvariantCulture)));
                         continue;
                     case int[] o:
+                        indices.Add(np.array(o, copy: false)); //we dont copy, pinning will be freed automatically after we done indexing.
+                        continue;
+                    case long[] o:
                         indices.Add(np.array(o, copy: false)); //we dont copy, pinning will be freed automatically after we done indexing.
                         continue;
                     case NDArray nd:

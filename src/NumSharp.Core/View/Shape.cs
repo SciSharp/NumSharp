@@ -183,6 +183,19 @@ namespace NumSharp
             return strides;
         }
 
+        /// <summary>
+        ///     Converts int[] dimensions to long[] for backwards compatibility.
+        /// </summary>
+        [MethodImpl(Inline)]
+        public static long[] ComputeLongShape(int[] dimensions)
+        {
+            if (dimensions == null) return null;
+            var result = new long[dimensions.Length];
+            for (int i = 0; i < dimensions.Length; i++)
+                result[i] = dimensions[i];
+            return result;
+        }
+
         #endregion
 
         /// <summary>
@@ -556,7 +569,7 @@ namespace NumSharp
         ///     Backward-compatible constructor with int dimensions.
         /// </summary>
         [MethodImpl(Optimize)]
-        public Shape(params int[] dims)
+        public Shape(int[] dims)
         {
             if (dims == null)
             {
@@ -638,7 +651,7 @@ namespace NumSharp
         ///     Backward-compatible GetOffset with int indices.
         /// </summary>
         [MethodImpl(OptimizeAndInline)]
-        public readonly long GetOffset(params int[] indices)
+        public readonly long GetOffset(int[] indices)
         {
             // Scalar with single index: direct offset access
             if (dimensions.Length == 0)
@@ -794,7 +807,7 @@ namespace NumSharp
         ///     Backward-compatible GetSubshape with int indices.
         /// </summary>
         [MethodImpl(OptimizeAndInline)]
-        public readonly (Shape Shape, long Offset) GetSubshape(params int[] indicies)
+        public readonly (Shape Shape, long Offset) GetSubshape(int[] indicies)
         {
             if (indicies.Length == 0)
                 return (this, 0);
@@ -896,6 +909,24 @@ namespace NumSharp
             }
 
             return size;
+        }
+
+        /// <summary>
+        ///     Converts a long[] dimensions array to int[] for backward compatibility.
+        ///     Throws OverflowException if any dimension exceeds int.MaxValue.
+        /// </summary>
+        [MethodImpl(OptimizeAndInline)]
+        public static int[] ToIntArray(long[] dims)
+        {
+            if (dims == null)
+                return null;
+
+            var result = new int[dims.Length];
+            for (int i = 0; i < dims.Length; i++)
+            {
+                result[i] = checked((int)dims[i]);
+            }
+            return result;
         }
 
         public static long[] GetAxis(ref Shape shape, int axis)

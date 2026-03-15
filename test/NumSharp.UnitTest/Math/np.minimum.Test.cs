@@ -17,7 +17,7 @@ public class NpMinimumTests : TestClass
         var b = np.array(new int[,] { { 2 }, { 4 } });
         var r = np.minimum(a, b);
 
-        r.shape.Should().BeEquivalentTo(new[] { 2, 3 });
+        r.shape.Should().BeEquivalentTo(new long[] { 2, 3 });
 
         var expected = np.array(new int[,] { { 1, 2, 2 }, { 1, 4, 3 } });
         np.array_equal(r, expected).Should().BeTrue(
@@ -32,7 +32,7 @@ public class NpMinimumTests : TestClass
         var b = np.array(new double[,] { { 2 }, { 4 } });
         var r = np.minimum(a, b);
 
-        r.shape.Should().BeEquivalentTo(new[] { 2, 3 });
+        r.shape.Should().BeEquivalentTo(new long[] { 2, 3 });
 
         var expected = np.array(new double[,] { { 1, 2, 2 }, { 1, 4, 3 } });
         np.array_equal(r, expected).Should().BeTrue(
@@ -47,7 +47,7 @@ public class NpMinimumTests : TestClass
         var b = np.array(new float[,] { { 2f }, { 4f } });
         var r = np.minimum(a, b);
 
-        r.shape.Should().BeEquivalentTo(new[] { 2, 3 });
+        r.shape.Should().BeEquivalentTo(new long[] { 2, 3 });
 
         var expected = np.array(new float[,] { { 1f, 2f, 2f }, { 1f, 4f, 3f } });
         np.array_equal(r, expected).Should().BeTrue(
@@ -84,7 +84,7 @@ public class NpMinimumTests : TestClass
         var b = np.array(new int[,] { { 2 }, { 4 } });
         var r = np.maximum(a, b);
 
-        r.shape.Should().BeEquivalentTo(new[] { 2, 3 });
+        r.shape.Should().BeEquivalentTo(new long[] { 2, 3 });
 
         var expected = np.array(new int[,] { { 2, 5, 3 }, { 4, 5, 4 } });
         np.array_equal(r, expected).Should().BeTrue(

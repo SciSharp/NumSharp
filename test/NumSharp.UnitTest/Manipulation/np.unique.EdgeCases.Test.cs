@@ -24,7 +24,7 @@ public class np_unique_EdgeCases_Test
             var result = np.unique(arr);
 
             result.size.Should().Be(0);
-            result.shape.Should().BeEquivalentTo(new[] { 0 });
+            result.shape.Should().BeEquivalentTo(new long[] { 0 });
             result.dtype.Should().Be(typeof(int));
         }
 

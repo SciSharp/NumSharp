@@ -380,7 +380,7 @@ namespace NumSharp.UnitTest.Backends
             GC.Collect();
 
             // Verify transposed data
-            transposed.Shape.dimensions.Should().BeEquivalentTo(new[] { 3, 2 });
+            transposed.Shape.dimensions.Should().BeEquivalentTo(new long[] { 3, 2 });
             transposed.GetInt32(0, 0).Should().Be(0);
             transposed.GetInt32(0, 1).Should().Be(3);
             transposed.GetInt32(1, 0).Should().Be(1);

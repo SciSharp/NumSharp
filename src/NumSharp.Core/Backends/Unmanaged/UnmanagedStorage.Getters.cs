@@ -15,7 +15,7 @@ namespace NumSharp.Backends
         /// <param name="indices">The shape's indices to get.</param>
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="IStorage.DType"/> is not <see cref="object"/></exception>
-        public unsafe ValueType GetValue(params int[] indices)
+        public unsafe ValueType GetValue(int[] indices)
         {
             switch (TypeCode)
             {
@@ -138,7 +138,7 @@ namespace NumSharp.Backends
         /// <seealso cref="GetView(Slice[])"/>
         /// <seealso cref="Alias()"/>
         [MethodImpl(OptimizeAndInline)]
-        public UnmanagedStorage GetData(params int[] indices)
+        public UnmanagedStorage GetData(int[] indices)
         {
             var this_shape = Shape;
 
@@ -210,7 +210,7 @@ namespace NumSharp.Backends
             {
                 // Non-contiguous shapes (stepped slices, transposed, etc.) cannot use
                 // memory slicing. Create a view with indexed slices instead.
-                return GetView(indices.Select(i => Slice.Index((int)i)).ToArray());
+                return GetView(indices.Select(i => Slice.Index(i)).ToArray());
             }
             else
             {
@@ -337,7 +337,7 @@ namespace NumSharp.Backends
                 var slices = new Slice[ndims];
                 for (int i = 0; i < ndims; i++)
                 {
-                    slices[i] = Slice.Index((int)*(dims + i));
+                    slices[i] = Slice.Index(*(dims + i));
                 }
 
                 return GetView(slices);
@@ -382,7 +382,23 @@ namespace NumSharp.Backends
         /// <returns>element from internal storage</returns>
         /// <exception cref="NullReferenceException">When <typeparamref name="T"/> does not equal to <see cref="DType"/></exception>
         /// <remarks>If you provide less indices than there are dimensions, the rest are filled with 0.</remarks> //TODO! doc this in other similar methods
-        public T GetValue<T>(params int[] indices) where T : unmanaged
+        public T GetValue<T>(int[] indices) where T : unmanaged
+        {
+            unsafe
+            {
+                return *((T*)Address + _shape.GetOffset(indices));
+            }
+        }
+
+        /// <summary>
+        ///     Get element from internal storage as T
+        /// </summary>
+        /// <param name="indices">indices</param>
+        /// <typeparam name="T">new storage data type</typeparam>
+        /// <returns>element from internal storage</returns>
+        /// <exception cref="NullReferenceException">When <typeparamref name="T"/> does not equal to <see cref="DType"/></exception>
+        /// <remarks>If you provide less indices than there are dimensions, the rest are filled with 0.</remarks>
+        public T GetValue<T>(params long[] indices) where T : unmanaged
         {
             unsafe
             {
@@ -406,7 +422,7 @@ namespace NumSharp.Backends
         /// <param name="indices">The shape's indices to get.</param>
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="#2"/></exception>
-        public #2 Get#1(params int[] indices)
+        public #2 Get#1(int[] indices)
             => _array#1[_shape.GetOffset(indices)];
 
         %
@@ -421,7 +437,7 @@ namespace NumSharp.Backends
         /// <param name="indices">The shape's indices to get.</param>
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="bool"/></exception>
-        public bool GetBoolean(params int[] indices)
+        public bool GetBoolean(int[] indices)
             => _arrayBoolean[_shape.GetOffset(indices)];
 
         /// <summary>
@@ -430,7 +446,7 @@ namespace NumSharp.Backends
         /// <param name="indices">The shape's indices to get.</param>
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="byte"/></exception>
-        public byte GetByte(params int[] indices)
+        public byte GetByte(int[] indices)
             => _arrayByte[_shape.GetOffset(indices)];
 
         /// <summary>
@@ -439,7 +455,7 @@ namespace NumSharp.Backends
         /// <param name="indices">The shape's indices to get.</param>
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="short"/></exception>
-        public short GetInt16(params int[] indices)
+        public short GetInt16(int[] indices)
             => _arrayInt16[_shape.GetOffset(indices)];
 
         /// <summary>
@@ -448,7 +464,7 @@ namespace NumSharp.Backends
         /// <param name="indices">The shape's indices to get.</param>
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="ushort"/></exception>
-        public ushort GetUInt16(params int[] indices)
+        public ushort GetUInt16(int[] indices)
             => _arrayUInt16[_shape.GetOffset(indices)];
 
         /// <summary>
@@ -457,7 +473,7 @@ namespace NumSharp.Backends
         /// <param name="indices">The shape's indices to get.</param>
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="int"/></exception>
-        public int GetInt32(params int[] indices)
+        public int GetInt32(int[] indices)
             => _arrayInt32[_shape.GetOffset(indices)];
 
         /// <summary>
@@ -466,7 +482,7 @@ namespace NumSharp.Backends
         /// <param name="indices">The shape's indices to get.</param>
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="uint"/></exception>
-        public uint GetUInt32(params int[] indices)
+        public uint GetUInt32(int[] indices)
             => _arrayUInt32[_shape.GetOffset(indices)];
 
         /// <summary>
@@ -475,7 +491,7 @@ namespace NumSharp.Backends
         /// <param name="indices">The shape's indices to get.</param>
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="long"/></exception>
-        public long GetInt64(params int[] indices)
+        public long GetInt64(int[] indices)
             => _arrayInt64[_shape.GetOffset(indices)];
 
         /// <summary>
@@ -484,7 +500,7 @@ namespace NumSharp.Backends
         /// <param name="indices">The shape's indices to get.</param>
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="ulong"/></exception>
-        public ulong GetUInt64(params int[] indices)
+        public ulong GetUInt64(int[] indices)
             => _arrayUInt64[_shape.GetOffset(indices)];
 
         /// <summary>
@@ -493,7 +509,7 @@ namespace NumSharp.Backends
         /// <param name="indices">The shape's indices to get.</param>
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="char"/></exception>
-        public char GetChar(params int[] indices)
+        public char GetChar(int[] indices)
             => _arrayChar[_shape.GetOffset(indices)];
 
         /// <summary>
@@ -502,7 +518,7 @@ namespace NumSharp.Backends
         /// <param name="indices">The shape's indices to get.</param>
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="double"/></exception>
-        public double GetDouble(params int[] indices)
+        public double GetDouble(int[] indices)
             => _arrayDouble[_shape.GetOffset(indices)];
 
         /// <summary>
@@ -511,7 +527,7 @@ namespace NumSharp.Backends
         /// <param name="indices">The shape's indices to get.</param>
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="float"/></exception>
-        public float GetSingle(params int[] indices)
+        public float GetSingle(int[] indices)
             => _arraySingle[_shape.GetOffset(indices)];
 
         /// <summary>
@@ -520,7 +536,7 @@ namespace NumSharp.Backends
         /// <param name="indices">The shape's indices to get.</param>
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="decimal"/></exception>
-        public decimal GetDecimal(params int[] indices)
+        public decimal GetDecimal(int[] indices)
             => _arrayDecimal[_shape.GetOffset(indices)];
 
         #endregion

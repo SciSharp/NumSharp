@@ -343,7 +343,7 @@ namespace NumSharp.UnitTest
             // Expected from NumPy:
             // [[22, 49],
             //  [28, 64]]
-            result.shape.Should().BeEquivalentTo(new[] { 2, 2 }, "Shape should be (2, 2)");
+            result.shape.Should().BeEquivalentTo(new long[] { 2, 2 }, "Shape should be (2, 2)");
 
             result.GetDouble(0, 0).Should().BeApproximately(22.0, 1e-10,
                 "NumPy: dot(t1, t2)[0,0] = 22");

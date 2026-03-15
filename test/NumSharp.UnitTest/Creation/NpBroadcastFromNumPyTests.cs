@@ -1018,23 +1018,23 @@ namespace NumSharp.UnitTest.Creation
         {
             // (256,256,3) + (3,) -> (256,256,3)
             var s1 = DefaultEngine.ResolveReturnShape(new Shape(256, 256, 3), new Shape(3));
-            s1.dimensions.Should().BeEquivalentTo(new[] { 256, 256, 3 });
+            s1.dimensions.Should().BeEquivalentTo(new long[] { 256, 256, 3 });
 
             // (5,4) + (1,) -> (5,4)
             var s2 = DefaultEngine.ResolveReturnShape(new Shape(5, 4), new Shape(1));
-            s2.dimensions.Should().BeEquivalentTo(new[] { 5, 4 });
+            s2.dimensions.Should().BeEquivalentTo(new long[] { 5, 4 });
 
             // (5,4) + (4,) -> (5,4)
             var s3 = DefaultEngine.ResolveReturnShape(new Shape(5, 4), new Shape(4));
-            s3.dimensions.Should().BeEquivalentTo(new[] { 5, 4 });
+            s3.dimensions.Should().BeEquivalentTo(new long[] { 5, 4 });
 
             // (15,3,5) + (15,1,5) -> (15,3,5)
             var s4 = DefaultEngine.ResolveReturnShape(new Shape(15, 3, 5), new Shape(15, 1, 5));
-            s4.dimensions.Should().BeEquivalentTo(new[] { 15, 3, 5 });
+            s4.dimensions.Should().BeEquivalentTo(new long[] { 15, 3, 5 });
 
             // (15,3,5) + (3,1) -> (15,3,5)
             var s5 = DefaultEngine.ResolveReturnShape(new Shape(15, 3, 5), new Shape(3, 1));
-            s5.dimensions.Should().BeEquivalentTo(new[] { 15, 3, 5 });
+            s5.dimensions.Should().BeEquivalentTo(new long[] { 15, 3, 5 });
         }
 
         /// <summary>
@@ -1446,7 +1446,7 @@ namespace NumSharp.UnitTest.Creation
             var bx = np.broadcast_to(x, new Shape(4, 3));
 
             var result = np.broadcast_to(bx, new Shape(2, 4, 3));
-            result.shape.Should().BeEquivalentTo(new[] { 2, 4, 3 });
+            result.shape.Should().BeEquivalentTo(new long[] { 2, 4, 3 });
             result.GetDouble(0, 0, 0).Should().Be(1.0);
             result.GetDouble(1, 3, 2).Should().Be(1.0);
         }

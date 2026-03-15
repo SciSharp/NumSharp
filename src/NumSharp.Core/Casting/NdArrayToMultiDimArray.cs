@@ -30,17 +30,23 @@ namespace NumSharp
 
         public Array ToMuliDimArray<T>() where T : unmanaged
         {
-            var ret = Arrays.Create(typeof(T), shape);
+            // Arrays.Create requires int[] - .NET limitation
+            var intShape = System.Array.ConvertAll(shape, d => (int)d);
+            var ret = Arrays.Create(typeof(T), intShape);
 
             var iter = this.AsIterator<T>();
             var hasNext = iter.HasNext;
             var next = iter.MoveNext;
             var coorditer = new ValueCoordinatesIncrementor(shape);
             var indices = coorditer.Index;
+            // .NET's Array.SetValue only accepts int[] indices, convert from long[]
+            var intIndices = new int[indices.Length];
 
             while (hasNext())
             {
-                ret.SetValue(next(), indices);
+                for (int i = 0; i < indices.Length; i++)
+                    intIndices[i] = (int)indices[i];
+                ret.SetValue(next(), intIndices);
                 if (coorditer.Next() == null)
                     break;
             }

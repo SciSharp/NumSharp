@@ -92,11 +92,15 @@ namespace NumSharp.Backends
         /// <summary>
         ///     Set the shape of this storage without checking if sizes match.
         /// </summary>
-        /// <remarks>Used during broadcasting</remarks>
+        /// <remarks>Used during broadcasting. Uses bufferSize (not size) because
+        /// broadcast shapes have logical size != physical buffer size.</remarks>
         protected internal void SetShapeUnsafe(ref Shape shape)
         {
             _shape = shape;
-            Count = _shape.size;
+            // Use bufferSize for Count because broadcast shapes have stride=0 dimensions
+            // where logical size (e.g., 5x5=25) exceeds physical buffer (e.g., 5 elements).
+            // This ensures ArraySlice bounds checks use the actual buffer capacity.
+            Count = _shape.bufferSize;
         }
 
         protected internal void ExpandDimension(int axis)

@@ -58,7 +58,8 @@ namespace NumSharp
         {
             var dim = (int)shape[axis];
             var slice_def = slice.ToSliceDef(dim); // this resolves negative slice indices
-            return np.arange(slice_def.Start, slice_def.Start + slice_def.Step * slice_def.Count, slice.Step).MakeGeneric<int>();
+            // Cast to int to use int32 dtype (slice_def fields are now long after int64 migration)
+            return np.arange((int)slice_def.Start, (int)(slice_def.Start + slice_def.Step * slice_def.Count), (int)slice.Step).MakeGeneric<int>();
         }
 
         /// <summary>

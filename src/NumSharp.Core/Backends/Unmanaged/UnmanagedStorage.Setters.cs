@@ -114,7 +114,22 @@ namespace NumSharp.Backends
         ///     Does not change internal storage data type.<br></br>
         ///     If <paramref name="value"/> does not match <see cref="DType"/>, <paramref name="value"/> will be converted.
         /// </remarks>
-        public unsafe void SetValue<T>(T value, params int[] indices) where T : unmanaged
+        public unsafe void SetValue<T>(T value, int[] indices) where T : unmanaged
+        {
+            ThrowIfNotWriteable();
+            *((T*)Address + _shape.GetOffset(indices)) = value;
+        }
+
+        /// <summary>
+        ///     Set a single value at given <see cref="indices"/>.
+        /// </summary>
+        /// <param name="value">The value to set</param>
+        /// <param name="indices">The coordinates (long version).</param>
+        /// <remarks>
+        ///     Does not change internal storage data type.<br></br>
+        ///     If <paramref name="value"/> does not match <see cref="DType"/>, <paramref name="value"/> will be converted.
+        /// </remarks>
+        public unsafe void SetValue<T>(T value, params long[] indices) where T : unmanaged
         {
             ThrowIfNotWriteable();
             *((T*)Address + _shape.GetOffset(indices)) = value;
@@ -129,7 +144,7 @@ namespace NumSharp.Backends
         ///     Does not change internal storage data type.<br></br>
         ///     If <paramref name="value"/> does not match <see cref="DType"/>, <paramref name="value"/> will be converted.
         /// </remarks>
-        public unsafe void SetValue(object value, params int[] indices)
+        public unsafe void SetValue(object value, int[] indices)
         {
             ThrowIfNotWriteable();
             switch (_typecode)
@@ -192,12 +207,67 @@ namespace NumSharp.Backends
         ///     Set a single value at given <see cref="indices"/>.
         /// </summary>
         /// <param name="value">The value to set</param>
+        /// <param name="indices">The coordinates (long version).</param>
+        /// <remarks>
+        ///     Does not change internal storage data type.<br></br>
+        ///     If <paramref name="value"/> does not match <see cref="DType"/>, <paramref name="value"/> will be converted.
+        /// </remarks>
+        public unsafe void SetValue(object value, params long[] indices)
+        {
+            ThrowIfNotWriteable();
+            switch (_typecode)
+            {
+                case NPTypeCode.Boolean:
+                    *((bool*)Address + _shape.GetOffset(indices)) = (bool)value;
+                    return;
+                case NPTypeCode.Byte:
+                    *((byte*)Address + _shape.GetOffset(indices)) = (byte)value;
+                    return;
+                case NPTypeCode.Int16:
+                    *((short*)Address + _shape.GetOffset(indices)) = (short)value;
+                    return;
+                case NPTypeCode.UInt16:
+                    *((ushort*)Address + _shape.GetOffset(indices)) = (ushort)value;
+                    return;
+                case NPTypeCode.Int32:
+                    *((int*)Address + _shape.GetOffset(indices)) = (int)value;
+                    return;
+                case NPTypeCode.UInt32:
+                    *((uint*)Address + _shape.GetOffset(indices)) = (uint)value;
+                    return;
+                case NPTypeCode.Int64:
+                    *((long*)Address + _shape.GetOffset(indices)) = (long)value;
+                    return;
+                case NPTypeCode.UInt64:
+                    *((ulong*)Address + _shape.GetOffset(indices)) = (ulong)value;
+                    return;
+                case NPTypeCode.Char:
+                    *((char*)Address + _shape.GetOffset(indices)) = (char)value;
+                    return;
+                case NPTypeCode.Double:
+                    *((double*)Address + _shape.GetOffset(indices)) = (double)value;
+                    return;
+                case NPTypeCode.Single:
+                    *((float*)Address + _shape.GetOffset(indices)) = (float)value;
+                    return;
+                case NPTypeCode.Decimal:
+                    *((decimal*)Address + _shape.GetOffset(indices)) = (decimal)value;
+                    return;
+                default:
+                    throw new NotSupportedException();
+            }
+        }
+
+        /// <summary>
+        ///     Set a single value at given <see cref="indices"/>.
+        /// </summary>
+        /// <param name="value">The value to set</param>
         /// <param name="indices">The </param>
         /// <remarks>
         ///     Does not change internal storage data type.<br></br>
         ///     If <paramref name="value"/> does not match <see cref="DType"/>, <paramref name="value"/> will be converted.
         /// </remarks>
-        public void SetData(object value, params int[] indices)
+        public void SetData(object value, int[] indices)
         {
             ThrowIfNotWriteable();
             switch (value)
@@ -227,7 +297,7 @@ namespace NumSharp.Backends
         ///     Does not change internal storage data type.<br></br>
         ///     If <paramref name="value"/> does not match <see cref="DType"/>, <paramref name="value"/> will be converted.
         /// </remarks>
-        public void SetData(NDArray value, params int[] indices)
+        public void SetData(NDArray value, int[] indices)
         {
             ThrowIfNotWriteable();
             if (ReferenceEquals(value, null))
@@ -291,7 +361,7 @@ namespace NumSharp.Backends
         ///     Does not change internal storage data type.<br></br>
         ///     If <paramref name="value"/> does not match <see cref="DType"/>, <paramref name="value"/> will be converted.
         /// </remarks>
-        public void SetData(IArraySlice value, params int[] indices)
+        public void SetData(IArraySlice value, int[] indices)
         {
             ThrowIfNotWriteable();
             if (value == null)
@@ -427,7 +497,7 @@ namespace NumSharp.Backends
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
         [MethodImpl(Inline)]
-        public void Set#1(#2 value, params int[] indices)         
+        public void Set#1(#2 value, int[] indices)         
         {
             unsafe {
                 *((#2*)Address + _shape.GetOffset(indices)) = value;
@@ -442,7 +512,7 @@ namespace NumSharp.Backends
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
         [MethodImpl(Inline)]
-        public void SetBoolean(bool value, params int[] indices)
+        public void SetBoolean(bool value, int[] indices)
         {
             ThrowIfNotWriteable();
             unsafe
@@ -457,7 +527,7 @@ namespace NumSharp.Backends
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
         [MethodImpl(Inline)]
-        public void SetByte(byte value, params int[] indices)
+        public void SetByte(byte value, int[] indices)
         {
             ThrowIfNotWriteable();
             unsafe
@@ -472,7 +542,7 @@ namespace NumSharp.Backends
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
         [MethodImpl(Inline)]
-        public void SetInt16(short value, params int[] indices)
+        public void SetInt16(short value, int[] indices)
         {
             ThrowIfNotWriteable();
             unsafe
@@ -487,7 +557,7 @@ namespace NumSharp.Backends
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
         [MethodImpl(Inline)]
-        public void SetUInt16(ushort value, params int[] indices)
+        public void SetUInt16(ushort value, int[] indices)
         {
             ThrowIfNotWriteable();
             unsafe
@@ -502,7 +572,7 @@ namespace NumSharp.Backends
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
         [MethodImpl(Inline)]
-        public void SetInt32(int value, params int[] indices)
+        public void SetInt32(int value, int[] indices)
         {
             ThrowIfNotWriteable();
             unsafe
@@ -517,7 +587,7 @@ namespace NumSharp.Backends
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
         [MethodImpl(Inline)]
-        public void SetUInt32(uint value, params int[] indices)
+        public void SetUInt32(uint value, int[] indices)
         {
             ThrowIfNotWriteable();
             unsafe
@@ -532,7 +602,7 @@ namespace NumSharp.Backends
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
         [MethodImpl(Inline)]
-        public void SetInt64(long value, params int[] indices)
+        public void SetInt64(long value, int[] indices)
         {
             ThrowIfNotWriteable();
             unsafe
@@ -547,7 +617,7 @@ namespace NumSharp.Backends
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
         [MethodImpl(Inline)]
-        public void SetUInt64(ulong value, params int[] indices)
+        public void SetUInt64(ulong value, int[] indices)
         {
             ThrowIfNotWriteable();
             unsafe
@@ -562,7 +632,7 @@ namespace NumSharp.Backends
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
         [MethodImpl(Inline)]
-        public void SetChar(char value, params int[] indices)
+        public void SetChar(char value, int[] indices)
         {
             ThrowIfNotWriteable();
             unsafe
@@ -577,7 +647,7 @@ namespace NumSharp.Backends
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
         [MethodImpl(Inline)]
-        public void SetDouble(double value, params int[] indices)
+        public void SetDouble(double value, int[] indices)
         {
             ThrowIfNotWriteable();
             unsafe
@@ -607,7 +677,7 @@ namespace NumSharp.Backends
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
         [MethodImpl(Inline)]
-        public void SetSingle(float value, params int[] indices)
+        public void SetSingle(float value, int[] indices)
         {
             ThrowIfNotWriteable();
             unsafe
@@ -622,7 +692,7 @@ namespace NumSharp.Backends
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
         [MethodImpl(Inline)]
-        public void SetDecimal(decimal value, params int[] indices)
+        public void SetDecimal(decimal value, int[] indices)
         {
             ThrowIfNotWriteable();
             unsafe

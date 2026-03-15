@@ -1064,6 +1064,7 @@ namespace NumSharp.Backends.Kernels
 
             // i = 0
             il.Emit(OpCodes.Ldc_I4_0);
+            il.Emit(OpCodes.Conv_I8);
             il.Emit(OpCodes.Stloc, locI);
 
             // Main loop

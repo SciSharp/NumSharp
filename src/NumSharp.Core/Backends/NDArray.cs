@@ -610,6 +610,13 @@ namespace NumSharp
         public NDArray GetData(int[] indices) => new NDArray(Storage.GetData(indices)) {tensorEngine = this.tensorEngine};
 
         /// <summary>
+        ///     Gets a NDArray at given <paramref name="indices"/>.
+        /// </summary>
+        /// <param name="indices">The coordinates to the wanted value</param>
+        /// <remarks>Does not copy, returns a memory slice - this is similar to this[long[]]</remarks>
+        public NDArray GetData(long[] indices) => new NDArray(Storage.GetData(indices)) {tensorEngine = this.tensorEngine};
+
+        /// <summary>
         ///     Retrieves value of type <see cref="bool"/>.
         /// </summary>
         /// <param name="indices">The shape's indices to get.</param>
@@ -782,7 +789,16 @@ namespace NumSharp
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="object"/></exception>
         [MethodImpl(Inline)]
-        public T GetValue<T>(params int[] indices) where T : unmanaged => Storage.GetValue<T>(indices);
+        public T GetValue<T>(int[] indices) where T : unmanaged => Storage.GetValue<T>(indices);
+
+        /// <summary>
+        ///     Get a single value from NDArray as type T.
+        /// </summary>
+        /// <param name="indices">The shape's indices to get.</param>
+        /// <returns></returns>
+        /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="object"/></exception>
+        [MethodImpl(Inline)]
+        public T GetValue<T>(params long[] indices) where T : unmanaged => Storage.GetValue<T>(indices);
 
         /// <summary>
         ///     Retrieves value of
@@ -813,7 +829,7 @@ namespace NumSharp
         ///     Does not change internal storage data type.<br></br>
         ///     If <paramref name="value"/> does not match <see cref="DType"/>, <paramref name="value"/> will be converted.
         /// </remarks>
-        public void SetData(IArraySlice value, params int[] indices)
+        public void SetData(IArraySlice value, int[] indices)
         {
             Storage.SetData(value, indices);
         }
@@ -841,7 +857,7 @@ namespace NumSharp
         ///     Does not change internal storage data type.<br></br>
         ///     If <paramref name="value"/> does not match <see cref="DType"/>, <paramref name="value"/> will be converted.
         /// </remarks>
-        public void SetData(NDArray value, params int[] indices)
+        public void SetData(NDArray value, int[] indices)
         {
             Storage.SetData(value, indices);
         }
@@ -869,7 +885,7 @@ namespace NumSharp
         ///     Does not change internal storage data type.<br></br>
         ///     If <paramref name="value"/> does not match <see cref="DType"/>, <paramref name="value"/> will be converted.
         /// </remarks>
-        public void SetData(object value, params int[] indices)
+        public void SetData(object value, int[] indices)
         {
             Storage.SetData(value, indices);
         }
@@ -883,7 +899,7 @@ namespace NumSharp
         ///     Does not change internal storage data type.<br></br>
         ///     If <paramref name="value"/> does not match <see cref="DType"/>, <paramref name="value"/> will be converted.
         /// </remarks>
-        public void SetValue(ValueType value, params int[] indices)
+        public void SetValue(ValueType value, int[] indices)
         {
             Storage.SetValue(value, indices);
         }
@@ -897,7 +913,7 @@ namespace NumSharp
         ///     Does not change internal storage data type.<br></br>
         ///     If <paramref name="value"/> does not match <see cref="DType"/>, <paramref name="value"/> will be converted.
         /// </remarks>
-        public void SetValue(object value, params int[] indices)
+        public void SetValue(object value, int[] indices)
         {
             Storage.SetValue(value, indices);
         }
@@ -911,9 +927,37 @@ namespace NumSharp
         ///     Does not change internal storage data type.<br></br>
         ///     If <paramref name="value"/> does not match <see cref="DType"/>, <paramref name="value"/> will be converted.
         /// </remarks>
-        public void SetValue<T>(T value, params int[] indices) where T : unmanaged
+        public void SetValue<T>(T value, int[] indices) where T : unmanaged
         {
             Storage.SetValue<T>(value, indices);
+        }
+
+        /// <summary>
+        ///     Set a single value at given <see cref="indices"/>.
+        /// </summary>
+        /// <param name="value">The value to set</param>
+        /// <param name="indices">The coordinates (long version).</param>
+        /// <remarks>
+        ///     Does not change internal storage data type.<br></br>
+        ///     If <paramref name="value"/> does not match <see cref="DType"/>, <paramref name="value"/> will be converted.
+        /// </remarks>
+        public void SetValue<T>(T value, params long[] indices) where T : unmanaged
+        {
+            Storage.SetValue<T>(value, indices);
+        }
+
+        /// <summary>
+        ///     Set a single value at given <see cref="indices"/>.
+        /// </summary>
+        /// <param name="value">The value to set</param>
+        /// <param name="indices">The coordinates (long version).</param>
+        /// <remarks>
+        ///     Does not change internal storage data type.<br></br>
+        ///     If <paramref name="value"/> does not match <see cref="DType"/>, <paramref name="value"/> will be converted.
+        /// </remarks>
+        public void SetValue(object value, params long[] indices)
+        {
+            Storage.SetValue(value, indices);
         }
 
         /// <summary>
@@ -1004,7 +1048,7 @@ namespace NumSharp
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
         [MethodImpl(Inline)]
-        public void Set#1(#2 value, params int[] indices) => Storage.Set#1(value, indices);
+        public void Set#1(#2 value, int[] indices) => Storage.Set#1(value, indices);
 
     %
 #else
@@ -1014,7 +1058,7 @@ namespace NumSharp
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
         [MethodImpl(Inline)]
-        public void SetBoolean(bool value, params int[] indices) => Storage.SetBoolean(value, indices);
+        public void SetBoolean(bool value, int[] indices) => Storage.SetBoolean(value, indices);
 
         /// <summary>
         ///     Sets a byte at specific coordinates.
@@ -1022,7 +1066,7 @@ namespace NumSharp
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
         [MethodImpl(Inline)]
-        public void SetByte(byte value, params int[] indices) => Storage.SetByte(value, indices);
+        public void SetByte(byte value, int[] indices) => Storage.SetByte(value, indices);
 
         /// <summary>
         ///     Sets a short at specific coordinates.
@@ -1030,7 +1074,7 @@ namespace NumSharp
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
         [MethodImpl(Inline)]
-        public void SetInt16(short value, params int[] indices) => Storage.SetInt16(value, indices);
+        public void SetInt16(short value, int[] indices) => Storage.SetInt16(value, indices);
 
         /// <summary>
         ///     Sets a ushort at specific coordinates.
@@ -1038,7 +1082,7 @@ namespace NumSharp
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
         [MethodImpl(Inline)]
-        public void SetUInt16(ushort value, params int[] indices) => Storage.SetUInt16(value, indices);
+        public void SetUInt16(ushort value, int[] indices) => Storage.SetUInt16(value, indices);
 
         /// <summary>
         ///     Sets a int at specific coordinates.
@@ -1046,7 +1090,15 @@ namespace NumSharp
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
         [MethodImpl(Inline)]
-        public void SetInt32(int value, params int[] indices) => Storage.SetInt32(value, indices);
+        public void SetInt32(int value, int[] indices) => Storage.SetInt32(value, indices);
+
+        /// <summary>
+        ///     Sets a int at specific coordinates.
+        /// </summary>
+        /// <param name="value">The values to assign</param>
+        /// <param name="indices">The coordinates to set <paramref name="value"/> at (long version).</param>
+        [MethodImpl(Inline)]
+        public void SetInt32(int value, params long[] indices) => Storage.SetInt32(value, indices);
 
         /// <summary>
         ///     Sets a uint at specific coordinates.
@@ -1054,7 +1106,7 @@ namespace NumSharp
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
         [MethodImpl(Inline)]
-        public void SetUInt32(uint value, params int[] indices) => Storage.SetUInt32(value, indices);
+        public void SetUInt32(uint value, int[] indices) => Storage.SetUInt32(value, indices);
 
         /// <summary>
         ///     Sets a long at specific coordinates.
@@ -1062,7 +1114,15 @@ namespace NumSharp
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
         [MethodImpl(Inline)]
-        public void SetInt64(long value, params int[] indices) => Storage.SetInt64(value, indices);
+        public void SetInt64(long value, int[] indices) => Storage.SetInt64(value, indices);
+
+        /// <summary>
+        ///     Sets a long at specific coordinates.
+        /// </summary>
+        /// <param name="value">The values to assign</param>
+        /// <param name="indices">The coordinates to set <paramref name="value"/> at (long version).</param>
+        [MethodImpl(Inline)]
+        public void SetInt64(long value, params long[] indices) => Storage.SetInt64(value, indices);
 
         /// <summary>
         ///     Sets a ulong at specific coordinates.
@@ -1070,7 +1130,7 @@ namespace NumSharp
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
         [MethodImpl(Inline)]
-        public void SetUInt64(ulong value, params int[] indices) => Storage.SetUInt64(value, indices);
+        public void SetUInt64(ulong value, int[] indices) => Storage.SetUInt64(value, indices);
 
         /// <summary>
         ///     Sets a char at specific coordinates.
@@ -1078,7 +1138,7 @@ namespace NumSharp
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
         [MethodImpl(Inline)]
-        public void SetChar(char value, params int[] indices) => Storage.SetChar(value, indices);
+        public void SetChar(char value, int[] indices) => Storage.SetChar(value, indices);
 
         /// <summary>
         ///     Sets a double at specific coordinates.
@@ -1086,7 +1146,7 @@ namespace NumSharp
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
         [MethodImpl(Inline)]
-        public void SetDouble(double value, params int[] indices) => Storage.SetDouble(value, indices);
+        public void SetDouble(double value, int[] indices) => Storage.SetDouble(value, indices);
 
         /// <summary>
         ///     Sets a double at specific coordinates.
@@ -1102,7 +1162,7 @@ namespace NumSharp
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
         [MethodImpl(Inline)]
-        public void SetSingle(float value, params int[] indices) => Storage.SetSingle(value, indices);
+        public void SetSingle(float value, int[] indices) => Storage.SetSingle(value, indices);
 
         /// <summary>
         ///     Sets a decimal at specific coordinates.
@@ -1110,7 +1170,7 @@ namespace NumSharp
         /// <param name="value">The values to assign</param>
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
         [MethodImpl(Inline)]
-        public void SetDecimal(decimal value, params int[] indices) => Storage.SetDecimal(value, indices);
+        public void SetDecimal(decimal value, int[] indices) => Storage.SetDecimal(value, indices);
 #endif
 
         #endregion

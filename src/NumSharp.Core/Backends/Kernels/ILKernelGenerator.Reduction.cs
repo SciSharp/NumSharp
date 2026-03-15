@@ -433,11 +433,11 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         private static void EmitReductionScalarLoop(ILGenerator il, ElementReductionKernelKey key, int inputSize)
         {
-            // Args: void* input (0), int* strides (1), int* shape (2), int ndim (3), int totalSize (4)
+            // Args: void* input (0), long* strides (1), long* shape (2), int ndim (3), long totalSize (4)
 
-            var locI = il.DeclareLocal(typeof(int)); // loop counter
+            var locI = il.DeclareLocal(typeof(long)); // loop counter
             var locAccum = il.DeclareLocal(GetClrType(key.AccumulatorType)); // accumulator
-            var locIdx = il.DeclareLocal(typeof(int)); // index for ArgMax/ArgMin
+            var locIdx = il.DeclareLocal(typeof(long)); // index for ArgMax/ArgMin
 
             var lblLoop = il.DefineLabel();
             var lblLoopEnd = il.DefineLabel();
@@ -450,11 +450,13 @@ namespace NumSharp.Backends.Kernels
             if (key.Op == ReductionOp.ArgMax || key.Op == ReductionOp.ArgMin)
             {
                 il.Emit(OpCodes.Ldc_I4_0);
+                il.Emit(OpCodes.Conv_I8);       // Convert to long
                 il.Emit(OpCodes.Stloc, locIdx);
             }
 
             // i = 0
             il.Emit(OpCodes.Ldc_I4_0);
+            il.Emit(OpCodes.Conv_I8);       // Convert to long
             il.Emit(OpCodes.Stloc, locI);
 
             il.MarkLabel(lblLoop);
@@ -488,8 +490,7 @@ namespace NumSharp.Backends.Kernels
 
             // i++
             il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Ldc_I4_1);
-            il.Emit(OpCodes.Conv_I8);
+            il.Emit(OpCodes.Ldc_I8, 1L);
             il.Emit(OpCodes.Add);
             il.Emit(OpCodes.Stloc, locI);
 
