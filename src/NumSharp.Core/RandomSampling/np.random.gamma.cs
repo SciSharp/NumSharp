@@ -64,7 +64,7 @@ namespace NumSharp
                 var dst = result.Address;
                 var len = result.size;
                 Func<double> nextDouble = randomizer.NextDouble;
-                for (int i = 0; i < len; i++)
+                for (long i = 0; i < len; i++)
                 {
                     while (true)
                     {

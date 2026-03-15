@@ -516,18 +516,18 @@ namespace NumSharp
                 if (valuesTyped.size == 1)
                 {
                     T val = *valAddr;
-                    for (int i = 0; i < len; i++)
+                    for (long i = 0; i < len; i++)
                         dstAddr[idxAddr[i]] = val;
                 }
                 else if (valuesShape.IsContiguous)
                 {
-                    for (int i = 0; i < len; i++)
+                    for (long i = 0; i < len; i++)
                         dstAddr[idxAddr[i]] = valAddr[i];
                 }
                 else
                 {
                     // Non-contiguous values array
-                    for (int i = 0; i < len; i++)
+                    for (long i = 0; i < len; i++)
                         dstAddr[idxAddr[i]] = valAddr[valuesShape.TransformOffset(i)];
                 }
                 return;

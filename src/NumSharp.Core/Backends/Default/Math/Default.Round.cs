@@ -37,19 +37,19 @@ namespace NumSharp.Backends
                     case NPTypeCode.Double:
                     {
                         var out_addr = (double*)@out.Address;
-                        for (int i = 0; i < len; i++) out_addr[i] = Math.Round(out_addr[i], decimals);
+                        for (long i = 0; i < len; i++) out_addr[i] = Math.Round(out_addr[i], decimals);
                         return @out;
                     }
                     case NPTypeCode.Single:
                     {
                         var out_addr = (float*)@out.Address;
-                        for (int i = 0; i < len; i++) out_addr[i] = (float)Math.Round(out_addr[i], decimals);
+                        for (long i = 0; i < len; i++) out_addr[i] = (float)Math.Round(out_addr[i], decimals);
                         return @out;
                     }
                     case NPTypeCode.Decimal:
                     {
                         var out_addr = (decimal*)@out.Address;
-                        for (int i = 0; i < len; i++) out_addr[i] = decimal.Round(out_addr[i], decimals);
+                        for (long i = 0; i < len; i++) out_addr[i] = decimal.Round(out_addr[i], decimals);
                         return @out;
                     }
                     default:

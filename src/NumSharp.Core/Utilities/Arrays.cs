@@ -45,7 +45,7 @@ namespace NumSharp.Utilities
             // Return new array.
             var res = new T[len];
             if (len > 700_000)
-                for (int i = 0; i < len; i++) res[i] = source[i + start];
+                for (long i = 0; i < len; i++) res[i] = source[i + start];
             else
                 for (long i = 0; i < len; i++)
                     res[i] = source[i + start];

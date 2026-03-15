@@ -479,7 +479,7 @@ namespace NumSharp
                 T* dstAddr = dst.Address;
                 //indices point to a scalar
                 var len = dst.size;
-                for (int i = 0; i < len; i++) 
+                for (long i = 0; i < len; i++)
                     dstAddr[i] = srcAddr[idxAddr[i]];
 
                 if (retShape != null)

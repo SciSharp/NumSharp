@@ -123,8 +123,8 @@ namespace NumSharp
             var dst = (T*)ret.Address;
             long srcSize = a.size;
 
-            int outIdx = 0;
-            for (int i = 0; i < srcSize; i++)
+            long outIdx = 0;
+            for (long i = 0; i < srcSize; i++)
             {
                 T val = src[i];
                 for (int j = 0; j < repeats; j++)
@@ -145,8 +145,8 @@ namespace NumSharp
             var dst = (T*)ret.Address;
             long srcSize = a.size;
 
-            int outIdx = 0;
-            for (int i = 0; i < srcSize; i++)
+            long outIdx = 0;
+            for (long i = 0; i < srcSize; i++)
             {
                 int count = repeatsFlat.GetInt32(i);
                 T val = src[i];

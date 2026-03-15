@@ -118,37 +118,41 @@ namespace NumSharp
 
             // Build output shape
             var inputShape = arr.shape;
-            var outputShapeList = new System.Collections.Generic.List<int>();
+            var outputShapeList = new System.Collections.Generic.List<long>();
             for (int i = 0; i < inputShape.Length; i++)
             {
                 if (i != axis)
-                    outputShapeList.Add((int)inputShape[i]);
+                    outputShapeList.Add(inputShape[i]);
             }
             if (outputShapeList.Count == 0)
                 outputShapeList.Add(1);
 
             var outputShape = outputShapeList.ToArray();
-            var outputSize = 1;
+            long outputSize = 1;
             foreach (var dim in outputShape)
                 outputSize *= dim;
 
-            var axisLen = inputShape[axis];
+            // .NET arrays are int-indexed
+            if (outputSize > int.MaxValue)
+                throw new InvalidOperationException("Output size exceeds maximum supported array size");
+
+            long axisLen = inputShape[axis];
 
             // Create output array
             NDArray result;
             if (arr.GetTypeCode == NPTypeCode.Single)
             {
-                var outputData = new float[outputSize];
+                var outputData = new float[(int)outputSize];
 
                 // Iterate over output positions
-                for (int outIdx = 0; outIdx < outputSize; outIdx++)
+                for (long outIdx = 0; outIdx < outputSize; outIdx++)
                 {
                     double sum = 0.0;
                     long count = 0;
 
                     // Convert flat index to coordinates in output shape
                     var outCoords = new long[outputShape.Length];
-                    int temp = outIdx;
+                    long temp = outIdx;
                     for (int i = outputShape.Length - 1; i >= 0; i--)
                     {
                         outCoords[i] = temp % outputShape[i];
@@ -156,7 +160,7 @@ namespace NumSharp
                     }
 
                     // Iterate along the axis
-                    for (int k = 0; k < axisLen; k++)
+                    for (long k = 0; k < axisLen; k++)
                     {
                         // Build input coordinates
                         var inCoords = new long[inputShape.Length];
@@ -184,22 +188,22 @@ namespace NumSharp
             }
             else // Double
             {
-                var outputData = new double[outputSize];
+                var outputData = new double[(int)outputSize];
 
-                for (int outIdx = 0; outIdx < outputSize; outIdx++)
+                for (long outIdx = 0; outIdx < outputSize; outIdx++)
                 {
                     double sum = 0.0;
                     long count = 0;
 
                     var outCoords = new long[outputShape.Length];
-                    int temp = outIdx;
+                    long temp = outIdx;
                     for (int i = outputShape.Length - 1; i >= 0; i--)
                     {
                         outCoords[i] = temp % outputShape[i];
                         temp /= outputShape[i];
                     }
 
-                    for (int k = 0; k < axisLen; k++)
+                    for (long k = 0; k < axisLen; k++)
                     {
                         var inCoords = new long[inputShape.Length];
                         int outCoordIdx = 0;
