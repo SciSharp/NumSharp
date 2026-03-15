@@ -211,7 +211,16 @@ These use int.MaxValue at legitimate .NET API boundaries:
 
 | Commit | Description |
 |--------|-------------|
+| 42532246 | int64 indexing: fix loop counters and size variables (11 files) |
 | c16f655f | int64 indexing: complete loop counter migration and LongIndexBuffer |
 | (earlier) | Multiple commits fixing core types, IL kernels, algorithms |
+
+**Files Fixed (42532246):**
+- Default.MatMul.cs, Default.Round.cs - loop counters
+- np.repeat.cs - outIdx/srcSize iteration
+- NDArray.negative.cs, np.random.gamma.cs - element loops
+- NDArray.Indexing.Selection.Getter/Setter.cs - dst.size loops
+- np.nanmean/std/var.cs - comprehensive migration (List<long>, axisLen, loops)
+- Arrays.cs - long[] Slice method
 
 **Test Results:** 3913 passed, 9 failed (documented dead code np.isinf), 11 skipped
