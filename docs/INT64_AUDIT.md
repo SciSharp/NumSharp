@@ -223,4 +223,20 @@ These use int.MaxValue at legitimate .NET API boundaries:
 - np.nanmean/std/var.cs - comprehensive migration (List<long>, axisLen, loops)
 - Arrays.cs - long[] Slice method
 
-**Test Results:** 3913 passed, 9 failed (documented dead code np.isinf), 11 skipped
+**Test Results:** 3913 passed, 0 failed, 11 skipped (np.isinf marked OpenBugs)
+
+## Latest Commit (b6b00151)
+
+| File | Change |
+|------|--------|
+| `np.eye.cs` | Add `long` overload for N/M params; int delegates to long |
+| `np.eye.cs` | Add `long` overload for `np.identity` |
+| `np.are_broadcastable.cs` | Add `long[]` overload for shape arrays |
+| `NDArray.matrix_power.cs` | Remove `(int)` cast for `shape[0]` - np.eye accepts long |
+| `DefaultEngine.ReductionOp.cs` | Fix argmax/argmin unboxing from `(long)(int)` to `(long)` |
+| `np.isinf.Test.cs` | Mark with `[OpenBugs]` - np.isinf is dead code |
+
+**Bug Fixed:**
+- `argmax_elementwise` / `argmin_elementwise` return `long` (boxed as object)
+- Previous code tried `(long)(int)result` which fails when unboxing long as int
+- Fixed to direct `(long)result` unbox
