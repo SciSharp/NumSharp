@@ -77,11 +77,19 @@ namespace NumSharp.Generic
         /// <summary>
         ///     Constructor which initialize elements with length of <paramref name="size"/>
         /// </summary>
-        /// <param name="dtype">Internal data type</param>
         /// <param name="size">The size as a single dimension shape</param>
         /// <param name="fillZeros">Should set the values of the new allocation to default(dtype)? otherwise - old memory noise</param>
         /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
         public NDArray(int size, bool fillZeros) : base(InfoOf<TDType>.NPTypeCode, size, fillZeros)
+        { }
+
+        /// <summary>
+        ///     Constructor which initialize elements with length of <paramref name="size"/>
+        /// </summary>
+        /// <param name="size">The size as a single dimension shape</param>
+        /// <param name="fillZeros">Should set the values of the new allocation to default(dtype)? otherwise - old memory noise</param>
+        /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
+        public NDArray(long size, bool fillZeros) : base(InfoOf<TDType>.NPTypeCode, size, fillZeros)
         { }
 
         /// <summary>
@@ -129,6 +137,13 @@ namespace NumSharp.Generic
         /// <param name="size">The size as a single dimension shape</param>
         /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
         public NDArray(int size) : base(InfoOf<TDType>.NPTypeCode, size) { }
+
+        /// <summary>
+        ///     Constructor which initialize elements with length of <paramref name="size"/>
+        /// </summary>
+        /// <param name="size">The size as a single dimension shape</param>
+        /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
+        public NDArray(long size) : base(InfoOf<TDType>.NPTypeCode, size) { }
 
         /// <summary>
         /// Constructor which initialize elements with 0

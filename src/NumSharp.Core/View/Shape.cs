@@ -911,24 +911,6 @@ namespace NumSharp
             return size;
         }
 
-        /// <summary>
-        ///     Converts a long[] dimensions array to int[] for backward compatibility.
-        ///     Throws OverflowException if any dimension exceeds int.MaxValue.
-        /// </summary>
-        [MethodImpl(OptimizeAndInline)]
-        public static int[] ToIntArray(long[] dims)
-        {
-            if (dims == null)
-                return null;
-
-            var result = new int[dims.Length];
-            for (int i = 0; i < dims.Length; i++)
-            {
-                result[i] = checked((int)dims[i]);
-            }
-            return result;
-        }
-
         public static long[] GetAxis(ref Shape shape, int axis)
         {
             return GetAxis(shape.dimensions, axis);
