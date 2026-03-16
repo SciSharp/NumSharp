@@ -108,5 +108,27 @@ namespace NumSharp
         {
             return random_sample(size);
         }
+
+        /// <summary>
+        ///     Return random floats in the half-open interval [0.0, 1.0).
+        ///     Alias for random_sample (NumPy compatibility).
+        /// </summary>
+        /// <param name=”size”>Output shape</param>
+        /// <returns>Array of random floats</returns>
+        public NDArray random(params int[] size)
+        {
+            return random_sample(size);
+        }
+
+        /// <summary>
+        ///     Return random floats in the half-open interval [0.0, 1.0).
+        ///     Alias for random_sample (NumPy compatibility).
+        /// </summary>
+        /// <param name=”shape”>Output shape</param>
+        /// <returns>Array of random floats</returns>
+        public NDArray random(Shape shape)
+        {
+            return random_sample(shape);
+        }
     }
 }
