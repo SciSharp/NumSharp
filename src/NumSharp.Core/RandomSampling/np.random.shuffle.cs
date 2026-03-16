@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Runtime.CompilerServices;
 using NumSharp.Backends;
 using NumSharp.Backends.Unmanaged;
@@ -10,59 +10,52 @@ namespace NumSharp
         /// <summary>
         ///     Modify a sequence in-place by shuffling its contents.
         /// </summary>
-        /// <param name="x">The array to be shuffled.</param>
-        /// <param name="axis">The axis along which to shuffle. Default is 0.</param>
+        /// <param name="x">The array or list to be shuffled.</param>
         /// <remarks>
-        ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.Generator.shuffle.html
+        ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.shuffle.html
         ///     <br/>
-        ///     This function shuffles the array along the specified axis.
+        ///     This function only shuffles the array along the first axis of a multi-dimensional array.
         ///     The order of sub-arrays is changed but their contents remain the same.
         ///     <br/>
-        ///     For a 2D array with axis=0, rows are shuffled.
-        ///     For a 2D array with axis=1, columns are shuffled (elements within each row are reordered).
+        ///     Note: NumPy's Generator API (rng.shuffle) supports an axis parameter, but the legacy
+        ///     np.random.shuffle does not. This implementation matches the legacy API.
         /// </remarks>
         /// <example>
         ///     <code>
-        ///     // Shuffle rows of a 2D array
-        ///     var arr = np.arange(9).reshape(3, 3);
-        ///     np.random.shuffle(arr);  // axis=0 by default
+        ///     // 1D array - elements are shuffled
+        ///     var arr = np.arange(10);
+        ///     np.random.shuffle(arr);
         ///
-        ///     // Shuffle columns (within each row)
-        ///     np.random.shuffle(arr, axis: 1);
+        ///     // 2D array - rows are shuffled, contents within rows unchanged
+        ///     var arr2d = np.arange(9).reshape(3, 3);
+        ///     np.random.shuffle(arr2d);
+        ///     // e.g. [[6,7,8], [0,1,2], [3,4,5]] - rows reordered
         ///     </code>
         /// </example>
-        public void shuffle(NDArray x, int axis = 0)
+        public void shuffle(NDArray x)
         {
             if (x.ndim == 0)
                 throw new ArgumentException("cannot shuffle a 0-dimensional array", nameof(x));
 
-            // Normalize negative axis
-            if (axis < 0)
-                axis += x.ndim;
-
-            if (axis < 0 || axis >= x.ndim)
-                throw new ArgumentOutOfRangeException(nameof(axis),
-                    $"axis {axis} is out of bounds for array of dimension {x.ndim}");
-
-            var n = x.shape[axis];
+            var n = x.shape[0];  // Always shuffle along first axis
             if (n <= 1)
                 return; // Nothing to shuffle
 
-            // For 1D arrays, use optimized path
+            // For 1D contiguous arrays, use optimized path
             if (x.ndim == 1 && x.Shape.IsContiguous)
             {
                 Shuffle1DContiguous(x, n);
                 return;
             }
 
-            // For multi-dimensional arrays, use slice-based swapping
-            // Fisher-Yates shuffle along the specified axis
+            // For multi-dimensional arrays, shuffle along axis 0
+            // Fisher-Yates shuffle
             for (int i = n - 1; i > 0; i--)
             {
                 int j = randomizer.Next(i + 1);
                 if (i != j)
                 {
-                    SwapSlices(x, axis, i, j);
+                    SwapSlicesAxis0(x, i, j);
                 }
             }
         }
@@ -96,13 +89,13 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Swap two slices along a specified axis.
+        ///     Swap two slices along axis 0.
         /// </summary>
-        private static void SwapSlices(NDArray x, int axis, int i, int j)
+        private static void SwapSlicesAxis0(NDArray x, int i, int j)
         {
-            // Get slices at indices i and j along the specified axis
-            var sliceI = GetSliceAtIndex(x, axis, i);
-            var sliceJ = GetSliceAtIndex(x, axis, j);
+            // Get slices at indices i and j along axis 0
+            var sliceI = x[i];
+            var sliceJ = x[j];
 
             // Create a temporary copy of slice i
             var temp = sliceI.copy();
@@ -112,21 +105,6 @@ namespace NumSharp
 
             // Copy temp (original i) to j
             np.copyto(sliceJ, temp);
-        }
-
-        /// <summary>
-        ///     Get a slice of the array at the specified index along the given axis.
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static NDArray GetSliceAtIndex(NDArray x, int axis, int index)
-        {
-            // Build slice specification: all colons except for the specified axis
-            var slices = new Slice[x.ndim];
-            for (int d = 0; d < x.ndim; d++)
-            {
-                slices[d] = d == axis ? Slice.Index(index) : Slice.All;
-            }
-            return x[slices];
         }
     }
 }
