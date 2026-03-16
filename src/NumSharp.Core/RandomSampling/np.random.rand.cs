@@ -49,11 +49,33 @@ namespace NumSharp
         ///     Return random floats in the half-open interval [0.0, 1.0).
         ///     Results are from the “continuous uniform” distribution over the stated interval. To sample Unif[a, b), b > a multiply the output of random_sample by (b-a) and add a:
         /// </summary>
-        /// <param name="shape">The shape to randomize</param>
+        /// <param name=”shape”>The shape to randomize</param>
         /// <returns></returns>
         public NDArray random_sample(Shape shape)
         {
             return rand(shape);
+        }
+
+        /// <summary>
+        ///     Return random floats in the half-open interval [0.0, 1.0).
+        ///     Alias for random_sample (NumPy compatibility).
+        /// </summary>
+        /// <param name=”size”>Output shape</param>
+        /// <returns>Array of random floats</returns>
+        public NDArray random(params int[] size)
+        {
+            return random_sample(size);
+        }
+
+        /// <summary>
+        ///     Return random floats in the half-open interval [0.0, 1.0).
+        ///     Alias for random_sample (NumPy compatibility).
+        /// </summary>
+        /// <param name=”shape”>Output shape</param>
+        /// <returns>Array of random floats</returns>
+        public NDArray random(Shape shape)
+        {
+            return random_sample(shape);
         }
     }
 }

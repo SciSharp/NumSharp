@@ -15,7 +15,7 @@ namespace NumSharp
         /// <returns></returns>
         public NDArray randn(params int[] size)
         {
-            return stardard_normal(size);
+            return standard_normal(size);
         }
 
         /// <summary>
@@ -56,9 +56,15 @@ namespace NumSharp
         /// </summary>
         /// <param name="size"></param>
         /// <returns></returns>
-        public NDArray stardard_normal(params int[] size)
+        public NDArray standard_normal(params int[] size)
         {
             return normal(0, 1.0, size);
         }
+
+        /// <summary>
+        /// Backwards compatibility alias for standard_normal (typo in older versions).
+        /// </summary>
+        [Obsolete("Use standard_normal instead (typo fixed)")]
+        public NDArray stardard_normal(params int[] size) => standard_normal(size);
     }
 }
