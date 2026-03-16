@@ -321,26 +321,7 @@ public class NumpyAlignmentBugTests
 
     #endregion
 
-    #region BUG-8: np.dot(vector, matrix) Not Supported (LOW)
-
-    [Test]
-    public void Bug8_Dot_VectorMatrix()
-    {
-        // NUMPY 2.4.2:
-        // >>> np.dot([5, 6], [[1, 2], [3, 4]])
-        // array([23, 34])
-        var v = np.array(new[] { 5, 6 });
-        var M = np.array(new[,] { { 1, 2 }, { 3, 4 } });
-
-        var result = np.dot(v, M);
-
-        Assert.AreEqual(1, result.ndim);
-        Assert.AreEqual(2, result.size);
-        Assert.AreEqual(23, result.GetInt32(0));
-        Assert.AreEqual(34, result.GetInt32(1));
-    }
-
-    #endregion
+    // BUG-8: np.dot(vector, matrix) — FIXED in Default.Dot.cs
 
     #region BUG-9: np.unique Returns Unsorted (MEDIUM)
 

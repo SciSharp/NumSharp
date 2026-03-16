@@ -38,40 +38,9 @@ namespace NumSharp.UnitTest
         // ================================================================
 
         // ================================================================
-        //
-        //  BUG 83: 1D x 2D dot throws exception instead of computing
-        //
-        //  SEVERITY: Medium — missing API functionality.
-        //
-        //  NumPy: dot(1D, 2D) computes inner product along last axis.
-        //  NumSharp: Throws NotSupportedException.
-        //
-        //  PYTHON VERIFICATION (NumPy 2.4.2):
-        //    >>> np.dot(np.array([1, 2]), np.array([[3, 4, 5], [6, 7, 8]]))
-        //    array([15, 18, 21])
-        //
+        //  BUG 83: FIXED — 1D x 2D dot now works (Default.Dot.cs)
+        //  Test moved to LinearAlgebraTests.Dot_1D_2D
         // ================================================================
-
-        /// <summary>
-        ///     BUG 83: dot(1D, 2D) should compute, not throw.
-        /// </summary>
-        [Test]
-        public void Bug83_Dot_1Dx2D_ShouldWork()
-        {
-            var a = np.array(new double[] { 1, 2 });
-            var b = np.array(new double[,] { { 3, 4, 5 }, { 6, 7, 8 } });
-
-            // NumPy returns [15, 18, 21]
-            // Calculation: [1*3 + 2*6, 1*4 + 2*7, 1*5 + 2*8] = [15, 18, 21]
-
-            // This test expects the correct behavior (should compute result).
-            // Currently throws NotSupportedException, so this test fails.
-            var result = np.dot(a, b);
-
-            result.GetDouble(0).Should().Be(15.0, "NumPy: dot([1,2], [[3,4,5],[6,7,8]])[0] = 15");
-            result.GetDouble(1).Should().Be(18.0, "NumPy: dot([1,2], [[3,4,5],[6,7,8]])[1] = 18");
-            result.GetDouble(2).Should().Be(21.0, "NumPy: dot([1,2], [[3,4,5],[6,7,8]])[2] = 21");
-        }
 
         // ================================================================
         //

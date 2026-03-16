@@ -43,7 +43,6 @@ public class LinearAlgebraTests
     }
 
     [Test]
-    [OpenBugs]  // 1D @ 2D dot product fails
     public void Dot_1D_2D()
     {
         // NumPy: np.dot([1,2,3], [[1,2],[3,4],[5,6]]) = [22, 28]

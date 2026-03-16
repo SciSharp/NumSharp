@@ -57,11 +57,17 @@ namespace NumSharp.Backends
                 //var right_broadcasted = new NDArray(right.Storage.Alias(np.broadcast_to(rightshape, leftshape)));
                 return np.sum(left * right, axis: 1);
             }
-            //todo!  ValueError: shapes (4,) and (2,4) not aligned: 4 (dim 0) != 2 (dim 0)
-
-            if (leftshape.NDim == 1)
+            // If a is 1-D and b is 2-D, treat a as row vector and do matrix multiply, then squeeze
+            // (n,) dot (n, m) -> (m,)
+            if (leftshape.NDim == 1 && rightshape.NDim == 2)
             {
-                throw new NotSupportedException("lhs cannot be 1-D, use `np.multiply` or `*` for this case.");
+                if (leftshape[0] != rightshape[0])
+                    throw new ArgumentException($"shapes ({leftshape[0]},) and ({rightshape[0]},{rightshape[1]}) not aligned: {leftshape[0]} (dim 0) != {rightshape[0]} (dim 0)");
+
+                // Reshape 1D to row vector (1, n), multiply, squeeze back to 1D
+                var leftReshaped = left.reshape(1, leftshape[0]);
+                var result = MultiplyMatrix(leftReshaped, right);
+                return result.reshape(rightshape[1]);
             }
 
             //left cant be 0 or 1 by this point
