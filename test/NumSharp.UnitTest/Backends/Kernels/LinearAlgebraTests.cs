@@ -58,6 +58,134 @@ public class LinearAlgebraTests
     }
 
     [Test]
+    public void Dot_1D_2D_Float64()
+    {
+        // NumPy: np.dot([1.5, 2.5], [[1,2,3],[4,5,6]]) = [11.5, 15.5, 19.5]
+        var a = np.array(new[] { 1.5, 2.5 });
+        var b = np.array(new[,] { { 1.0, 2.0, 3.0 }, { 4.0, 5.0, 6.0 } });
+
+        var result = np.dot(a, b);
+
+        Assert.AreEqual(1, result.ndim);
+        Assert.AreEqual(3, result.size);
+        Assert.AreEqual(typeof(double), result.dtype);
+        Assert.AreEqual(11.5, result.GetDouble(0), 1e-10);
+        Assert.AreEqual(15.5, result.GetDouble(1), 1e-10);
+        Assert.AreEqual(19.5, result.GetDouble(2), 1e-10);
+    }
+
+    [Test]
+    public void Dot_1D_2D_SingleColumn()
+    {
+        // NumPy: np.dot([1,2,3], [[10],[20],[30]]) = [140]
+        var a = np.array(new[] { 1, 2, 3 });
+        var b = np.array(new[,] { { 10 }, { 20 }, { 30 } });
+
+        var result = np.dot(a, b);
+
+        Assert.AreEqual(1, result.ndim);
+        Assert.AreEqual(1, result.size);
+        Assert.AreEqual(140, result.GetInt32(0));
+    }
+
+    [Test]
+    public void Dot_1D_2D_ShapeMismatch_Throws()
+    {
+        // NumPy: ValueError: shapes (3,) and (1,3) not aligned
+        var a = np.array(new[] { 1, 2, 3 });
+        var b = np.array(new[,] { { 1, 2, 3 } });  // (1, 3) - won't align
+
+        var ex = Assert.ThrowsException<ArgumentException>(() => np.dot(a, b));
+        Assert.IsTrue(ex.Message.Contains("not aligned"));
+    }
+
+    [Test]
+    public void Dot_1D_2D_NegativeValues()
+    {
+        // NumPy: np.dot([-1,2,-3], [[1,-2],[-3,4],[5,-6]]) = [-22, 28]
+        var a = np.array(new[] { -1, 2, -3 });
+        var b = np.array(new[,] { { 1, -2 }, { -3, 4 }, { 5, -6 } });
+
+        var result = np.dot(a, b);
+
+        Assert.AreEqual(-22, result.GetInt32(0));
+        Assert.AreEqual(28, result.GetInt32(1));
+    }
+
+    [Test]
+    public void Dot_1D_2D_Larger()
+    {
+        // NumPy: np.dot([1,2,3,4,5], arange(15).reshape(5,3)) = [120, 135, 150]
+        var a = np.array(new[] { 1, 2, 3, 4, 5 });
+        var b = np.arange(15).reshape(5, 3);
+
+        var result = np.dot(a, b);
+
+        Assert.AreEqual(1, result.ndim);
+        Assert.AreEqual(3, result.size);
+        Assert.AreEqual(120, result.GetInt32(0));
+        Assert.AreEqual(135, result.GetInt32(1));
+        Assert.AreEqual(150, result.GetInt32(2));
+    }
+
+    [Test]
+    public void Dot_1D_2D_SingleElement()
+    {
+        // NumPy: np.dot([5], [[1,2,3]]) = [5, 10, 15]
+        var a = np.array(new[] { 5 });
+        var b = np.array(new[,] { { 1, 2, 3 } });
+
+        var result = np.dot(a, b);
+
+        Assert.AreEqual(1, result.ndim);
+        Assert.AreEqual(3, result.size);
+        Assert.AreEqual(5, result.GetInt32(0));
+        Assert.AreEqual(10, result.GetInt32(1));
+        Assert.AreEqual(15, result.GetInt32(2));
+    }
+
+    [Test]
+    public void Dot_1D_2D_WithZeros()
+    {
+        // NumPy: np.dot([0,1,0], [[1,2],[3,4],[5,6]]) = [3, 4]
+        var a = np.array(new[] { 0, 1, 0 });
+        var b = np.array(new[,] { { 1, 2 }, { 3, 4 }, { 5, 6 } });
+
+        var result = np.dot(a, b);
+
+        Assert.AreEqual(3, result.GetInt32(0));
+        Assert.AreEqual(4, result.GetInt32(1));
+    }
+
+    [Test]
+    public void Dot_1D_2D_MixedDtypes_IntFloat()
+    {
+        // NumPy: int32 x float64 -> float64
+        var a = np.array(new int[] { 1, 2 });
+        var b = np.array(new double[,] { { 3.0, 4.0 }, { 5.0, 6.0 } });
+
+        var result = np.dot(a, b);
+
+        Assert.AreEqual(typeof(double), result.dtype);
+        Assert.AreEqual(13.0, result.GetDouble(0), 1e-10);
+        Assert.AreEqual(16.0, result.GetDouble(1), 1e-10);
+    }
+
+    [Test]
+    public void Dot_1D_2D_Int64()
+    {
+        // NumPy: int64 x int64 -> int64
+        var a = np.array(new long[] { 1, 2 });
+        var b = np.array(new long[,] { { 3, 4 }, { 5, 6 } });
+
+        var result = np.dot(a, b);
+
+        Assert.AreEqual(typeof(long), result.dtype);
+        Assert.AreEqual(13L, result.GetInt64(0));
+        Assert.AreEqual(16L, result.GetInt64(1));
+    }
+
+    [Test]
     public void Dot_2D_2D()
     {
         // NumPy: [[1,2],[3,4],[5,6]] @ [[1,2,3],[4,5,6]] = [[9,12,15],[19,26,33],[29,40,51]]
