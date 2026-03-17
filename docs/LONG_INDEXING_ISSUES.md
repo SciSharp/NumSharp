@@ -4,6 +4,7 @@ Issues discovered by auditing the codebase against the int64 migration spirit.
 
 **Audit Date**: Based on commit `111b4076` (longindexing branch)
 **Updated**: 2026-03-17 - Added H12-H22, M9-M11 from comprehensive code search
+**Updated**: 2026-03-17 - Added H23, L11-L12 from post-rebase diff scan
 
 ---
 
@@ -11,9 +12,9 @@ Issues discovered by auditing the codebase against the int64 migration spirit.
 
 | Priority | Count | Category |
 |----------|-------|----------|
-| HIGH | 22 | Missing long overloads, int parameters/variables |
+| HIGH | 23 | Missing long overloads, int parameters/variables |
 | MEDIUM | 11 | IL kernel comments, internal int usage |
-| LOW | 11 | Acceptable .NET boundary exceptions |
+| LOW | 13 | Acceptable .NET boundary exceptions |
 
 ---
 
@@ -465,6 +466,31 @@ long[] dim = new long[values.Rank];
 
 ---
 
+### H23. NumSharp.Bitmap Shape Casts Without Overflow Check
+
+**File:** `NumSharp.Bitmap/np_.extensions.cs:10,20,21`
+
+```csharp
+var bbp = (int)nd.shape[3]; //bytes per pixel
+var height = (int)nd.shape[1];
+var width = (int)nd.shape[2];
+```
+
+**Issue:** Casts shape dimensions directly to `int` without checking for overflow. If any dimension exceeds `int.MaxValue`, this silently truncates.
+
+**Fix:** Add overflow checks:
+```csharp
+if (nd.shape[3] > int.MaxValue || nd.shape[1] > int.MaxValue || nd.shape[2] > int.MaxValue)
+    throw new OverflowException("Bitmap dimensions exceed int.MaxValue");
+var bbp = (int)nd.shape[3];
+var height = (int)nd.shape[1];
+var width = (int)nd.shape[2];
+```
+
+**Note:** Bitmap APIs inherently use `int` dimensions, so the cast is necessary, but the overflow check prevents silent corruption.
+
+---
+
 ## MEDIUM Priority Issues
 
 ### M1. IL Kernel Comments Reference `int*` (Documentation Drift)
@@ -774,6 +800,35 @@ int ItemLength { get; }
 
 ---
 
+### L11. SetData Calls Use `new int[0]` Instead of `long[]`
+
+**Files:**
+- `Selection/NDArray.Indexing.cs` (multiple locations)
+- `Selection/NDArray.Indexing.Slicing.cs`
+
+```csharp
+SetData(values, new int[0]);
+```
+
+**Issue:** Uses `int[]` overload instead of `long[]` for empty index array.
+
+**Acceptable:** The `int[]` overload correctly delegates to `long[]` internally. This is a minor inefficiency, not a correctness issue. Could use `Array.Empty<long>()` for slight optimization.
+
+---
+
+### L12. NdArrayToMultiDimArray Uses `int[]` for .NET Array.SetValue
+
+**File:** `Casting/NdArrayToMultiDimArray.cs`
+
+```csharp
+var intIndices = new int[indices.Length];
+// ... used with Array.SetValue which requires int[]
+```
+
+**Acceptable:** .NET's `Array.SetValue` API requires `int[]` indices. This is a .NET boundary limitation, documented in code comments.
+
+---
+
 ## Checklist for Fixing
 
 ### HIGH Priority (Blocking)
@@ -799,6 +854,7 @@ int ItemLength { get; }
 - [ ] H20: Fix `np.asarray` to use `long[]` or `Array.Empty<long>()` for scalar shape
 - [ ] H21: Fix `ArrayConvert` to use `long[]` for dimensions
 - [ ] H22: Fix `UnmanagedStorage.FromMultiDimArray` to use `long[]` dim
+- [ ] H23: Add overflow checks to `NumSharp.Bitmap` shape dimension casts
 
 ### MEDIUM Priority (Quality)
 
