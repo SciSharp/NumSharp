@@ -10,9 +10,9 @@ Issues discovered by auditing the codebase against the int64 migration spirit.
 
 | Priority | Count | Category |
 |----------|-------|----------|
-| HIGH | 7 | Missing long[] overloads, int variables |
-| MEDIUM | 6 | IL kernel comments, internal int usage |
-| LOW | 10 | Acceptable .NET boundary exceptions |
+| HIGH | 11 | Missing long overloads, int parameters/variables |
+| MEDIUM | 8 | IL kernel comments, internal int usage |
+| LOW | 11 | Acceptable .NET boundary exceptions |
 
 ---
 
@@ -192,6 +192,68 @@ var outputData = new double[(int)outputSize];
 
 ---
 
+### H8. np.linspace Uses `int num` Parameter
+
+**File:** `Creation/np.linspace.cs:21,37,54,71`
+
+```csharp
+public static NDArray linspace(double start, double stop, int num, ...)
+```
+
+**Issue:** All `linspace` overloads take `int num` parameter. No `long` overloads exist.
+
+Also the internal loops use `int i`:
+```csharp
+for (int i = 0; i < num; i++) addr[i] = ...
+```
+
+**Fix:** Add `long num` overloads with `long` loop counters.
+
+---
+
+### H9. np.roll Uses `int shift` Parameter
+
+**File:** `Manipulation/np.roll.cs:21`, `Manipulation/NDArray.roll.cs:16,28`
+
+```csharp
+public static NDArray roll(NDArray a, int shift, int? axis = null)
+```
+
+**Issue:** Shift amount is `int`, limiting roll distance for very large arrays.
+
+**Fix:** Add `long shift` primary overload.
+
+---
+
+### H10. UnmanagedHelper.CopyTo Uses `int countOffsetDestination`
+
+**File:** `Backends/Unmanaged/UnmanagedHelper.cs:42,58`
+
+```csharp
+public static unsafe void CopyTo(this IMemoryBlock src, IMemoryBlock dst, int countOffsetDesitinion)
+public static unsafe void CopyTo(this IMemoryBlock src, void* dstAddress, int countOffsetDesitinion)
+```
+
+**Issue:** Offset parameter is `int`, limiting copy destination offset.
+
+**Fix:** Change to `long countOffsetDestination`.
+
+---
+
+### H11. np.array<T>(IEnumerable, int size) Uses `int size`
+
+**File:** `Creation/np.array.cs:105`
+
+```csharp
+public static NDArray array<T>(IEnumerable<T> data, int size) where T : unmanaged
+```
+
+**Issue:** Size hint parameter is `int`, limiting pre-allocated size.
+
+**Fix:** Add `long size` overload.
+
+---
+
 ## MEDIUM Priority Issues
 
 ### M1. IL Kernel Comments Reference `int*` (Documentation Drift)
@@ -294,6 +356,35 @@ for (int i = 0; i < shape.Length; i++)
 **Issue:** Uses `int total` to accumulate product of shape dimensions. Can overflow for large arrays.
 
 **Note:** Partially acceptable since .npy format uses int32 shapes, but internal processing should use long.
+
+---
+
+### M7. np.save Internal `int total` Accumulator
+
+**File:** `APIs/np.save.cs:76`
+
+```csharp
+int total = 1;
+for (int i = 0; i < shape.Length; i++)
+    total *= shape[i];
+```
+
+**Issue:** Same as M6 - uses `int total` which can overflow.
+
+---
+
+### M8. NdArrayToJaggedArray Loops Use `int` for Large Arrays
+
+**File:** `Casting/NdArrayToJaggedArray.cs:40-155`
+
+```csharp
+for (int i = 0; i < ret.Length; i++)
+    for (int j = 0; j < ret[0].Length; j++)
+```
+
+**Issue:** Nested loops use `int` counters. For jagged arrays with many elements per dimension, this could overflow.
+
+**Note:** Partially acceptable - jagged arrays in .NET use `int` indexing. But the iteration should use `long` internally.
 
 ---
 
@@ -425,18 +516,23 @@ int ItemLength { get; }
 
 ### HIGH Priority (Blocking)
 
-- [ ] Add `long[]` primary overloads to all `Get*` methods in NDArray
-- [ ] Add `long[]` primary overloads to all `Get*` methods in UnmanagedStorage.Getters
-- [ ] Add missing `long[]` overloads to typed setters (9 methods)
-- [ ] Fix `np.vstack` to use `long[]` shape
-- [ ] Fix `np.repeat` to use `GetInt64` and `long count` for per-element repeats
-- [ ] Fix `np.searchsorted` empty array return type to `typeof(long)`
+- [ ] H1: Add `long[]` primary overloads to all `Get*` methods in NDArray
+- [ ] H1: Add `long[]` primary overloads to all `Get*` methods in UnmanagedStorage.Getters
+- [ ] H2: Add missing `long[]` overloads to typed setters (9 methods)
+- [ ] H3: Fix `np.vstack` to use `long[]` shape
+- [ ] H4: Fix `np.repeat` to use `GetInt64` and `long count` for per-element repeats
+- [ ] H6: Fix `np.searchsorted` empty array return type to `typeof(long)`
+- [ ] H8: Add `long num` overloads to `np.linspace`
+- [ ] H9: Add `long shift` overloads to `np.roll`
+- [ ] H10: Fix `UnmanagedHelper.CopyTo` offset parameter to `long`
+- [ ] H11: Add `long size` overload to `np.array<T>(IEnumerable, size)`
 
 ### MEDIUM Priority (Quality)
 
-- [ ] Update IL kernel comments to reflect `long*` parameters
-- [ ] Review Shape.InferNegativeCoordinates delegation pattern
-- [ ] Fix `np.load` internal `int total` accumulator to `long`
+- [ ] M1: Update IL kernel comments to reflect `long*` parameters
+- [ ] M4: Review Shape.InferNegativeCoordinates delegation pattern
+- [ ] M6: Fix `np.load` internal `int total` accumulator to `long`
+- [ ] M7: Fix `np.save` internal `int total` accumulator to `long`
 
 ### LOW Priority (Cosmetic/Acceptable)
 
