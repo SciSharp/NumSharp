@@ -19,9 +19,6 @@ namespace NumSharp
         ///     <br/>
         ///     For random samples from the normal distribution with mean mu and standard
         ///     deviation sigma, use: sigma * np.random.randn(...) + mu
-        ///     <br/>
-        ///     This is a convenience function for users porting code from Matlab.
-        ///     For new code, use np.random.standard_normal instead.
         /// </remarks>
         public NDArray randn(params int[] d0)
         {
@@ -80,11 +77,5 @@ namespace NumSharp
         {
             return normal(0, 1.0, size);
         }
-
-        /// <summary>
-        ///     Backwards compatibility alias for standard_normal (typo in older versions).
-        /// </summary>
-        [Obsolete("Use standard_normal instead (typo fixed)")]
-        public NDArray stardard_normal(params int[] size) => standard_normal(size);
     }
 }
