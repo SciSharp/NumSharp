@@ -10,9 +10,9 @@ Issues discovered by auditing the codebase against the int64 migration spirit.
 
 | Priority | Count | Category |
 |----------|-------|----------|
-| HIGH | 3 | Missing long[] primary overloads |
-| MEDIUM | 5 | IL kernel comments still reference int |
-| LOW | 8 | Acceptable .NET boundary exceptions |
+| HIGH | 7 | Missing long[] overloads, int variables |
+| MEDIUM | 6 | IL kernel comments, internal int usage |
+| LOW | 10 | Acceptable .NET boundary exceptions |
 
 ---
 
@@ -112,6 +112,86 @@ np.Storage.Reshape(new long[] { nps.Length, nps[0].shape[0] });
 
 ---
 
+### H4. np.repeat Uses `int count` for Per-Element Repeat
+
+**File:** `Manipulation/np.repeat.cs:69,159,161`
+
+```csharp
+// Line 69 - calculates total size with int count
+int count = repeatsFlat.GetInt32(i);  // Should be GetInt64
+
+// Line 159 - same issue
+int count = repeatsFlat.GetInt32(i);
+
+// Line 161 - inner loop uses int
+for (int j = 0; j < count; j++)  // Should be long j
+```
+
+**Issue:** If repeat count exceeds int.MaxValue for any element, this will fail or overflow.
+
+**Fix:**
+```csharp
+long count = repeatsFlat.GetInt64(i);
+for (long j = 0; j < count; j++)
+```
+
+---
+
+### H5. NDArray.unique SortUniqueSpan Uses `int count`
+
+**File:** `Manipulation/NDArray.unique.cs:140,115,130`
+
+```csharp
+// Line 140 - method signature
+private static unsafe void SortUniqueSpan<T>(T* ptr, int count)
+
+// Lines 115, 130 - calls
+SortUniqueSpan<T>((T*)dst.Address, hashset.Count);
+```
+
+**Issue:** `hashset.Count` is int, and `SortUniqueSpan` takes int. If unique element count exceeds int.MaxValue, this fails. Also uses `Span<T>` which has int limitation.
+
+**Acceptable for now:** Hashset<T>.Count is inherently int-limited by .NET. Would need custom hash implementation for >2B unique elements.
+
+---
+
+### H6. np.searchsorted Empty Array Returns Wrong Type
+
+**File:** `Sorting_Searching_Counting/np.searchsorted.cs:48`
+
+```csharp
+if (v.size == 0)
+    return new NDArray(typeof(int), Shape.Vector(0), false);
+//                     ^^^^^^^^^^^ Should be typeof(long)
+```
+
+**Issue:** Returns int32 type for empty input, but int64 for non-empty input. Inconsistent.
+
+**Fix:**
+```csharp
+return new NDArray(typeof(long), Shape.Vector(0), false);
+```
+
+---
+
+### H7. nanmean/nanstd/nanvar Array Allocation with (int) Cast
+
+**Files:**
+- `Statistics/np.nanmean.cs:145,191`
+- `Statistics/np.nanstd.cs:198,272`
+- `Statistics/np.nanvar.cs:198,272`
+
+```csharp
+var outputData = new float[(int)outputSize];
+var outputData = new double[(int)outputSize];
+```
+
+**Issue:** Allocates managed arrays with `(int)` cast. If outputSize > int.MaxValue, this throws or corrupts.
+
+**Note:** These are protected by the int.MaxValue check earlier (M5), but the cast pattern is still problematic.
+
+---
+
 ## MEDIUM Priority Issues
 
 ### M1. IL Kernel Comments Reference `int*` (Documentation Drift)
@@ -198,6 +278,22 @@ if (outputSize > int.MaxValue)
 **Issue:** Throws instead of supporting long output. However, this is for axis reduction where output goes into a new array - the limitation is in the downstream allocation, not the algorithm.
 
 **Acceptable:** Until downstream allocations support >2B elements, this check prevents silent failure.
+
+---
+
+### M6. np.load Internal `int total` Accumulator
+
+**File:** `APIs/np.load.cs:179`
+
+```csharp
+int total = 1;
+for (int i = 0; i < shape.Length; i++)
+    total *= shape[i];
+```
+
+**Issue:** Uses `int total` to accumulate product of shape dimensions. Can overflow for large arrays.
+
+**Note:** Partially acceptable since .npy format uses int32 shapes, but internal processing should use long.
 
 ---
 
@@ -303,6 +399,28 @@ Enumerable.Range(0, nd.ndim)    // ndim is always small
 
 ---
 
+### L9. Hashset<T>.Count is int
+
+**File:** `Utilities/Hashset<T>.cs`
+
+**Issue:** Custom `Hashset<T>` class has `int` count/capacity like .NET's HashSet.
+
+**Acceptable:** Would need significant rewrite for >2B element support. Not typical use case.
+
+---
+
+### L10. IMemoryBlock.ItemLength is int
+
+**File:** `Backends/Unmanaged/Interfaces/IMemoryBlock.cs:9`
+
+```csharp
+int ItemLength { get; }
+```
+
+**Acceptable:** ItemLength is sizeof(T) which is always small (max 16 for decimal).
+
+---
+
 ## Checklist for Fixing
 
 ### HIGH Priority (Blocking)
@@ -311,16 +429,20 @@ Enumerable.Range(0, nd.ndim)    // ndim is always small
 - [ ] Add `long[]` primary overloads to all `Get*` methods in UnmanagedStorage.Getters
 - [ ] Add missing `long[]` overloads to typed setters (9 methods)
 - [ ] Fix `np.vstack` to use `long[]` shape
+- [ ] Fix `np.repeat` to use `GetInt64` and `long count` for per-element repeats
+- [ ] Fix `np.searchsorted` empty array return type to `typeof(long)`
 
 ### MEDIUM Priority (Quality)
 
 - [ ] Update IL kernel comments to reflect `long*` parameters
 - [ ] Review Shape.InferNegativeCoordinates delegation pattern
+- [ ] Fix `np.load` internal `int total` accumulator to `long`
 
 ### LOW Priority (Cosmetic/Acceptable)
 
 - [ ] Document all acceptable exceptions in code comments
 - [ ] Add `// Acceptable: .NET boundary` comments where appropriate
+- [ ] Consider `LongHashset<T>` for unique() with >2B elements (future)
 
 ---
 
