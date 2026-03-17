@@ -686,6 +686,562 @@ namespace NumSharp.Backends.Kernels
             return foundNonNaN ? maxVal : double.NaN;
         }
 
+        /// <summary>
+        /// IL-generated SIMD helper for NaN-aware mean of a contiguous float array.
+        /// Returns NaN if all values are NaN.
+        /// Uses SIMD with NaN mask: Equals(vec, vec) is true for non-NaN.
+        /// </summary>
+        internal static unsafe float NanMeanSimdHelperFloat(float* src, long size)
+        {
+            if (size == 0)
+                return float.NaN;
+
+            float sum = 0f;
+            float count = 0f;
+
+            if (Vector256.IsHardwareAccelerated && Vector256<float>.IsSupported && size >= Vector256<float>.Count)
+            {
+                int vectorCount = Vector256<float>.Count;  // 8 for float
+                long vectorEnd = size - vectorCount;
+                var sumVec = Vector256<float>.Zero;
+                var countVec = Vector256<float>.Zero;
+                var oneVec = Vector256.Create(1f);
+                long i = 0;
+
+                for (; i <= vectorEnd; i += vectorCount)
+                {
+                    var vec = Vector256.Load(src + i);
+                    var nanMask = Vector256.Equals(vec, vec);  // True for non-NaN
+
+                    // Sum: zero out NaN values (NaN & 0 = 0)
+                    var cleaned = Vector256.BitwiseAnd(vec, nanMask.AsSingle());
+                    sumVec = Vector256.Add(sumVec, cleaned);
+
+                    // Count: add 1.0 for each non-NaN
+                    var countMask = Vector256.BitwiseAnd(oneVec, nanMask.AsSingle());
+                    countVec = Vector256.Add(countVec, countMask);
+                }
+
+                // Horizontal reduction
+                sum = Vector256.Sum(sumVec);
+                count = Vector256.Sum(countVec);
+
+                // Scalar tail
+                for (; i < size; i++)
+                {
+                    if (!float.IsNaN(src[i]))
+                    {
+                        sum += src[i];
+                        count += 1f;
+                    }
+                }
+            }
+            else if (Vector128.IsHardwareAccelerated && Vector128<float>.IsSupported && size >= Vector128<float>.Count)
+            {
+                int vectorCount = Vector128<float>.Count;  // 4 for float
+                long vectorEnd = size - vectorCount;
+                var sumVec = Vector128<float>.Zero;
+                var countVec = Vector128<float>.Zero;
+                var oneVec = Vector128.Create(1f);
+                long i = 0;
+
+                for (; i <= vectorEnd; i += vectorCount)
+                {
+                    var vec = Vector128.Load(src + i);
+                    var nanMask = Vector128.Equals(vec, vec);
+
+                    var cleaned = Vector128.BitwiseAnd(vec, nanMask.AsSingle());
+                    sumVec = Vector128.Add(sumVec, cleaned);
+
+                    var countMask = Vector128.BitwiseAnd(oneVec, nanMask.AsSingle());
+                    countVec = Vector128.Add(countVec, countMask);
+                }
+
+                sum = Vector128.Sum(sumVec);
+                count = Vector128.Sum(countVec);
+
+                for (; i < size; i++)
+                {
+                    if (!float.IsNaN(src[i]))
+                    {
+                        sum += src[i];
+                        count += 1f;
+                    }
+                }
+            }
+            else
+            {
+                // Scalar fallback
+                for (long i = 0; i < size; i++)
+                {
+                    if (!float.IsNaN(src[i]))
+                    {
+                        sum += src[i];
+                        count += 1f;
+                    }
+                }
+            }
+
+            return count > 0 ? sum / count : float.NaN;
+        }
+
+        /// <summary>
+        /// IL-generated SIMD helper for NaN-aware mean of a contiguous double array.
+        /// Returns NaN if all values are NaN.
+        /// Uses SIMD with NaN mask: Equals(vec, vec) is true for non-NaN.
+        /// </summary>
+        internal static unsafe double NanMeanSimdHelperDouble(double* src, long size)
+        {
+            if (size == 0)
+                return double.NaN;
+
+            double sum = 0.0;
+            double count = 0.0;
+
+            if (Vector256.IsHardwareAccelerated && Vector256<double>.IsSupported && size >= Vector256<double>.Count)
+            {
+                int vectorCount = Vector256<double>.Count;  // 4 for double
+                long vectorEnd = size - vectorCount;
+                var sumVec = Vector256<double>.Zero;
+                var countVec = Vector256<double>.Zero;
+                var oneVec = Vector256.Create(1.0);
+                long i = 0;
+
+                for (; i <= vectorEnd; i += vectorCount)
+                {
+                    var vec = Vector256.Load(src + i);
+                    var nanMask = Vector256.Equals(vec, vec);  // True for non-NaN
+
+                    // Sum: zero out NaN values
+                    var cleaned = Vector256.BitwiseAnd(vec, nanMask.AsDouble());
+                    sumVec = Vector256.Add(sumVec, cleaned);
+
+                    // Count: add 1.0 for each non-NaN
+                    var countMask = Vector256.BitwiseAnd(oneVec, nanMask.AsDouble());
+                    countVec = Vector256.Add(countVec, countMask);
+                }
+
+                // Horizontal reduction
+                sum = Vector256.Sum(sumVec);
+                count = Vector256.Sum(countVec);
+
+                // Scalar tail
+                for (; i < size; i++)
+                {
+                    if (!double.IsNaN(src[i]))
+                    {
+                        sum += src[i];
+                        count += 1.0;
+                    }
+                }
+            }
+            else if (Vector128.IsHardwareAccelerated && Vector128<double>.IsSupported && size >= Vector128<double>.Count)
+            {
+                int vectorCount = Vector128<double>.Count;  // 2 for double
+                long vectorEnd = size - vectorCount;
+                var sumVec = Vector128<double>.Zero;
+                var countVec = Vector128<double>.Zero;
+                var oneVec = Vector128.Create(1.0);
+                long i = 0;
+
+                for (; i <= vectorEnd; i += vectorCount)
+                {
+                    var vec = Vector128.Load(src + i);
+                    var nanMask = Vector128.Equals(vec, vec);
+
+                    var cleaned = Vector128.BitwiseAnd(vec, nanMask.AsDouble());
+                    sumVec = Vector128.Add(sumVec, cleaned);
+
+                    var countMask = Vector128.BitwiseAnd(oneVec, nanMask.AsDouble());
+                    countVec = Vector128.Add(countVec, countMask);
+                }
+
+                sum = Vector128.Sum(sumVec);
+                count = Vector128.Sum(countVec);
+
+                for (; i < size; i++)
+                {
+                    if (!double.IsNaN(src[i]))
+                    {
+                        sum += src[i];
+                        count += 1.0;
+                    }
+                }
+            }
+            else
+            {
+                // Scalar fallback
+                for (long i = 0; i < size; i++)
+                {
+                    if (!double.IsNaN(src[i]))
+                    {
+                        sum += src[i];
+                        count += 1.0;
+                    }
+                }
+            }
+
+            return count > 0 ? sum / count : double.NaN;
+        }
+
+        /// <summary>
+        /// IL-generated SIMD helper for NaN-aware variance of a contiguous float array.
+        /// Returns NaN if all values are NaN or count <= ddof.
+        /// Two-pass algorithm: (1) compute mean with count, (2) compute squared differences.
+        /// </summary>
+        internal static unsafe float NanVarSimdHelperFloat(float* src, long size, int ddof = 0)
+        {
+            if (size == 0)
+                return float.NaN;
+
+            // Pass 1: Compute sum and count
+            float sum = 0f;
+            float count = 0f;
+
+            if (Vector256.IsHardwareAccelerated && Vector256<float>.IsSupported && size >= Vector256<float>.Count)
+            {
+                int vectorCount = Vector256<float>.Count;
+                long vectorEnd = size - vectorCount;
+                var sumVec = Vector256<float>.Zero;
+                var countVec = Vector256<float>.Zero;
+                var oneVec = Vector256.Create(1f);
+                long i = 0;
+
+                for (; i <= vectorEnd; i += vectorCount)
+                {
+                    var vec = Vector256.Load(src + i);
+                    var nanMask = Vector256.Equals(vec, vec);
+                    var cleaned = Vector256.BitwiseAnd(vec, nanMask.AsSingle());
+                    sumVec = Vector256.Add(sumVec, cleaned);
+                    var countMask = Vector256.BitwiseAnd(oneVec, nanMask.AsSingle());
+                    countVec = Vector256.Add(countVec, countMask);
+                }
+
+                sum = Vector256.Sum(sumVec);
+                count = Vector256.Sum(countVec);
+
+                for (; i < size; i++)
+                {
+                    if (!float.IsNaN(src[i]))
+                    {
+                        sum += src[i];
+                        count += 1f;
+                    }
+                }
+            }
+            else if (Vector128.IsHardwareAccelerated && Vector128<float>.IsSupported && size >= Vector128<float>.Count)
+            {
+                int vectorCount = Vector128<float>.Count;
+                long vectorEnd = size - vectorCount;
+                var sumVec = Vector128<float>.Zero;
+                var countVec = Vector128<float>.Zero;
+                var oneVec = Vector128.Create(1f);
+                long i = 0;
+
+                for (; i <= vectorEnd; i += vectorCount)
+                {
+                    var vec = Vector128.Load(src + i);
+                    var nanMask = Vector128.Equals(vec, vec);
+                    var cleaned = Vector128.BitwiseAnd(vec, nanMask.AsSingle());
+                    sumVec = Vector128.Add(sumVec, cleaned);
+                    var countMask = Vector128.BitwiseAnd(oneVec, nanMask.AsSingle());
+                    countVec = Vector128.Add(countVec, countMask);
+                }
+
+                sum = Vector128.Sum(sumVec);
+                count = Vector128.Sum(countVec);
+
+                for (; i < size; i++)
+                {
+                    if (!float.IsNaN(src[i]))
+                    {
+                        sum += src[i];
+                        count += 1f;
+                    }
+                }
+            }
+            else
+            {
+                for (long i = 0; i < size; i++)
+                {
+                    if (!float.IsNaN(src[i]))
+                    {
+                        sum += src[i];
+                        count += 1f;
+                    }
+                }
+            }
+
+            if (count <= ddof)
+                return float.NaN;
+
+            float mean = sum / count;
+
+            // Pass 2: Compute sum of squared differences
+            float sqDiffSum = 0f;
+
+            if (Vector256.IsHardwareAccelerated && Vector256<float>.IsSupported && size >= Vector256<float>.Count)
+            {
+                int vectorCount = Vector256<float>.Count;
+                long vectorEnd = size - vectorCount;
+                var sqDiffVec = Vector256<float>.Zero;
+                var meanVec = Vector256.Create(mean);
+                long i = 0;
+
+                for (; i <= vectorEnd; i += vectorCount)
+                {
+                    var vec = Vector256.Load(src + i);
+                    var nanMask = Vector256.Equals(vec, vec);
+                    var diff = Vector256.Subtract(vec, meanVec);
+                    var sqDiff = Vector256.Multiply(diff, diff);
+                    var cleaned = Vector256.BitwiseAnd(sqDiff, nanMask.AsSingle());
+                    sqDiffVec = Vector256.Add(sqDiffVec, cleaned);
+                }
+
+                sqDiffSum = Vector256.Sum(sqDiffVec);
+
+                for (; i < size; i++)
+                {
+                    if (!float.IsNaN(src[i]))
+                    {
+                        float diff = src[i] - mean;
+                        sqDiffSum += diff * diff;
+                    }
+                }
+            }
+            else if (Vector128.IsHardwareAccelerated && Vector128<float>.IsSupported && size >= Vector128<float>.Count)
+            {
+                int vectorCount = Vector128<float>.Count;
+                long vectorEnd = size - vectorCount;
+                var sqDiffVec = Vector128<float>.Zero;
+                var meanVec = Vector128.Create(mean);
+                long i = 0;
+
+                for (; i <= vectorEnd; i += vectorCount)
+                {
+                    var vec = Vector128.Load(src + i);
+                    var nanMask = Vector128.Equals(vec, vec);
+                    var diff = Vector128.Subtract(vec, meanVec);
+                    var sqDiff = Vector128.Multiply(diff, diff);
+                    var cleaned = Vector128.BitwiseAnd(sqDiff, nanMask.AsSingle());
+                    sqDiffVec = Vector128.Add(sqDiffVec, cleaned);
+                }
+
+                sqDiffSum = Vector128.Sum(sqDiffVec);
+
+                for (; i < size; i++)
+                {
+                    if (!float.IsNaN(src[i]))
+                    {
+                        float diff = src[i] - mean;
+                        sqDiffSum += diff * diff;
+                    }
+                }
+            }
+            else
+            {
+                for (long i = 0; i < size; i++)
+                {
+                    if (!float.IsNaN(src[i]))
+                    {
+                        float diff = src[i] - mean;
+                        sqDiffSum += diff * diff;
+                    }
+                }
+            }
+
+            return sqDiffSum / (count - ddof);
+        }
+
+        /// <summary>
+        /// IL-generated SIMD helper for NaN-aware variance of a contiguous double array.
+        /// Returns NaN if all values are NaN or count <= ddof.
+        /// Two-pass algorithm: (1) compute mean with count, (2) compute squared differences.
+        /// </summary>
+        internal static unsafe double NanVarSimdHelperDouble(double* src, long size, int ddof = 0)
+        {
+            if (size == 0)
+                return double.NaN;
+
+            // Pass 1: Compute sum and count
+            double sum = 0.0;
+            double count = 0.0;
+
+            if (Vector256.IsHardwareAccelerated && Vector256<double>.IsSupported && size >= Vector256<double>.Count)
+            {
+                int vectorCount = Vector256<double>.Count;
+                long vectorEnd = size - vectorCount;
+                var sumVec = Vector256<double>.Zero;
+                var countVec = Vector256<double>.Zero;
+                var oneVec = Vector256.Create(1.0);
+                long i = 0;
+
+                for (; i <= vectorEnd; i += vectorCount)
+                {
+                    var vec = Vector256.Load(src + i);
+                    var nanMask = Vector256.Equals(vec, vec);
+                    var cleaned = Vector256.BitwiseAnd(vec, nanMask.AsDouble());
+                    sumVec = Vector256.Add(sumVec, cleaned);
+                    var countMask = Vector256.BitwiseAnd(oneVec, nanMask.AsDouble());
+                    countVec = Vector256.Add(countVec, countMask);
+                }
+
+                sum = Vector256.Sum(sumVec);
+                count = Vector256.Sum(countVec);
+
+                for (; i < size; i++)
+                {
+                    if (!double.IsNaN(src[i]))
+                    {
+                        sum += src[i];
+                        count += 1.0;
+                    }
+                }
+            }
+            else if (Vector128.IsHardwareAccelerated && Vector128<double>.IsSupported && size >= Vector128<double>.Count)
+            {
+                int vectorCount = Vector128<double>.Count;
+                long vectorEnd = size - vectorCount;
+                var sumVec = Vector128<double>.Zero;
+                var countVec = Vector128<double>.Zero;
+                var oneVec = Vector128.Create(1.0);
+                long i = 0;
+
+                for (; i <= vectorEnd; i += vectorCount)
+                {
+                    var vec = Vector128.Load(src + i);
+                    var nanMask = Vector128.Equals(vec, vec);
+                    var cleaned = Vector128.BitwiseAnd(vec, nanMask.AsDouble());
+                    sumVec = Vector128.Add(sumVec, cleaned);
+                    var countMask = Vector128.BitwiseAnd(oneVec, nanMask.AsDouble());
+                    countVec = Vector128.Add(countVec, countMask);
+                }
+
+                sum = Vector128.Sum(sumVec);
+                count = Vector128.Sum(countVec);
+
+                for (; i < size; i++)
+                {
+                    if (!double.IsNaN(src[i]))
+                    {
+                        sum += src[i];
+                        count += 1.0;
+                    }
+                }
+            }
+            else
+            {
+                for (long i = 0; i < size; i++)
+                {
+                    if (!double.IsNaN(src[i]))
+                    {
+                        sum += src[i];
+                        count += 1.0;
+                    }
+                }
+            }
+
+            if (count <= ddof)
+                return double.NaN;
+
+            double mean = sum / count;
+
+            // Pass 2: Compute sum of squared differences
+            double sqDiffSum = 0.0;
+
+            if (Vector256.IsHardwareAccelerated && Vector256<double>.IsSupported && size >= Vector256<double>.Count)
+            {
+                int vectorCount = Vector256<double>.Count;
+                long vectorEnd = size - vectorCount;
+                var sqDiffVec = Vector256<double>.Zero;
+                var meanVec = Vector256.Create(mean);
+                long i = 0;
+
+                for (; i <= vectorEnd; i += vectorCount)
+                {
+                    var vec = Vector256.Load(src + i);
+                    var nanMask = Vector256.Equals(vec, vec);
+                    var diff = Vector256.Subtract(vec, meanVec);
+                    var sqDiff = Vector256.Multiply(diff, diff);
+                    var cleaned = Vector256.BitwiseAnd(sqDiff, nanMask.AsDouble());
+                    sqDiffVec = Vector256.Add(sqDiffVec, cleaned);
+                }
+
+                sqDiffSum = Vector256.Sum(sqDiffVec);
+
+                for (; i < size; i++)
+                {
+                    if (!double.IsNaN(src[i]))
+                    {
+                        double diff = src[i] - mean;
+                        sqDiffSum += diff * diff;
+                    }
+                }
+            }
+            else if (Vector128.IsHardwareAccelerated && Vector128<double>.IsSupported && size >= Vector128<double>.Count)
+            {
+                int vectorCount = Vector128<double>.Count;
+                long vectorEnd = size - vectorCount;
+                var sqDiffVec = Vector128<double>.Zero;
+                var meanVec = Vector128.Create(mean);
+                long i = 0;
+
+                for (; i <= vectorEnd; i += vectorCount)
+                {
+                    var vec = Vector128.Load(src + i);
+                    var nanMask = Vector128.Equals(vec, vec);
+                    var diff = Vector128.Subtract(vec, meanVec);
+                    var sqDiff = Vector128.Multiply(diff, diff);
+                    var cleaned = Vector128.BitwiseAnd(sqDiff, nanMask.AsDouble());
+                    sqDiffVec = Vector128.Add(sqDiffVec, cleaned);
+                }
+
+                sqDiffSum = Vector128.Sum(sqDiffVec);
+
+                for (; i < size; i++)
+                {
+                    if (!double.IsNaN(src[i]))
+                    {
+                        double diff = src[i] - mean;
+                        sqDiffSum += diff * diff;
+                    }
+                }
+            }
+            else
+            {
+                for (long i = 0; i < size; i++)
+                {
+                    if (!double.IsNaN(src[i]))
+                    {
+                        double diff = src[i] - mean;
+                        sqDiffSum += diff * diff;
+                    }
+                }
+            }
+
+            return sqDiffSum / (count - ddof);
+        }
+
+        /// <summary>
+        /// Helper for NaN-aware standard deviation of a contiguous float array.
+        /// Returns NaN if all values are NaN or count <= ddof.
+        /// </summary>
+        internal static unsafe float NanStdSimdHelperFloat(float* src, long size, int ddof = 0)
+        {
+            float variance = NanVarSimdHelperFloat(src, size, ddof);
+            return float.IsNaN(variance) ? float.NaN : (float)Math.Sqrt(variance);
+        }
+
+        /// <summary>
+        /// Helper for NaN-aware standard deviation of a contiguous double array.
+        /// Returns NaN if all values are NaN or count <= ddof.
+        /// </summary>
+        internal static unsafe double NanStdSimdHelperDouble(double* src, long size, int ddof = 0)
+        {
+            double variance = NanVarSimdHelperDouble(src, size, ddof);
+            return double.IsNaN(variance) ? double.NaN : Math.Sqrt(variance);
+        }
+
         #endregion
     }
 }
