@@ -6,6 +6,7 @@ Issues discovered by auditing the codebase against the int64 migration spirit.
 **Updated**: 2026-03-17 - Added H12-H22, M9-M11 from comprehensive code search
 **Updated**: 2026-03-17 - Added H23, L11-L12 from post-rebase diff scan
 **Updated**: 2026-03-17 - Fixed H4, H6, H10, H12, H14, H15, H16, H20; reclassified H3, H17-H19, H21-H22 as LOW
+**Updated**: 2026-03-17 - Fixed H8, H9, H11, H23 (batch 2)
 
 ---
 
@@ -13,11 +14,13 @@ Issues discovered by auditing the codebase against the int64 migration spirit.
 
 | Priority | Count | Category |
 |----------|-------|----------|
-| HIGH | 15 | Missing long overloads, int parameters/variables |
+| HIGH | 11 | Missing long overloads, int parameters/variables |
 | MEDIUM | 11 | IL kernel comments, internal int usage |
 | LOW | 19 | Acceptable .NET boundary exceptions |
 
 ### Recently Fixed (this session)
+
+**Batch 1:**
 - H4: `np.repeat` - changed `GetInt32` to `GetInt64`, `int count/j` to `long`
 - H6: `np.searchsorted` - empty array returns `typeof(long)` for consistency
 - H10: `UnmanagedHelper.CopyTo` - offset parameter changed to `long`
@@ -26,6 +29,12 @@ Issues discovered by auditing the codebase against the int64 migration spirit.
 - H15: `NDArray.Normalize` - loop counters changed to `long`
 - H16: `Slice.Index` in Selection - uses `ToInt64` instead of `ToInt32`
 - H20: `np.asarray` - uses `Array.Empty<long>()` for scalar shapes
+
+**Batch 2:**
+- H8: `np.linspace` - added `long num` overloads, changed loop counters to `long`
+- H9: `np.roll`/`NDArray.roll` - added `long shift` primary overloads
+- H11: `np.array<T>(IEnumerable, size)` - added `long size` overload
+- H23: `NumSharp.Bitmap` - added overflow checks before casting shape to int
 
 ### Reclassified as LOW (.NET Array boundary)
 - H3: `np.vstack` - entire implementation is commented out (dead code)
@@ -176,36 +185,19 @@ var outputData = new double[(int)outputSize];
 
 ---
 
-### H8. np.linspace Uses `int num` Parameter
+### H8. ✅ FIXED - np.linspace Uses `int num` Parameter
 
-**File:** `Creation/np.linspace.cs:21,37,54,71`
+**File:** `Creation/np.linspace.cs`
 
-```csharp
-public static NDArray linspace(double start, double stop, int num, ...)
-```
-
-**Issue:** All `linspace` overloads take `int num` parameter. No `long` overloads exist.
-
-Also the internal loops use `int i`:
-```csharp
-for (int i = 0; i < num; i++) addr[i] = ...
-```
-
-**Fix:** Add `long num` overloads with `long` loop counters.
+**Status:** Fixed - added `long num` primary overloads for all signatures, changed all loop counters from `int i` to `long i`. `int num` overloads delegate to `long num`.
 
 ---
 
-### H9. np.roll Uses `int shift` Parameter
+### H9. ✅ FIXED - np.roll Uses `int shift` Parameter
 
-**File:** `Manipulation/np.roll.cs:21`, `Manipulation/NDArray.roll.cs:16,28`
+**File:** `Manipulation/np.roll.cs`, `Manipulation/NDArray.roll.cs`
 
-```csharp
-public static NDArray roll(NDArray a, int shift, int? axis = null)
-```
-
-**Issue:** Shift amount is `int`, limiting roll distance for very large arrays.
-
-**Fix:** Add `long shift` primary overload.
+**Status:** Fixed - added `long shift` primary overloads for `np.roll` and `NDArray.roll`. `int shift` overloads delegate to `long shift`.
 
 ---
 
@@ -217,17 +209,11 @@ public static NDArray roll(NDArray a, int shift, int? axis = null)
 
 ---
 
-### H11. np.array<T>(IEnumerable, int size) Uses `int size`
+### H11. ✅ FIXED - np.array<T>(IEnumerable, int size) Uses `int size`
 
-**File:** `Creation/np.array.cs:105`
+**File:** `Creation/np.array.cs`
 
-```csharp
-public static NDArray array<T>(IEnumerable<T> data, int size) where T : unmanaged
-```
-
-**Issue:** Size hint parameter is `int`, limiting pre-allocated size.
-
-**Fix:** Add `long size` overload.
+**Status:** Fixed - added `long size` primary overload. `int size` overload delegates to `long size`.
 
 ---
 
@@ -344,28 +330,11 @@ internal static unsafe long ArgMinSimdHelper<T>(void* input, long totalSize)
 
 ---
 
-### H23. NumSharp.Bitmap Shape Casts Without Overflow Check
+### H23. ✅ FIXED - NumSharp.Bitmap Shape Casts Without Overflow Check
 
-**File:** `NumSharp.Bitmap/np_.extensions.cs:10,20,21`
+**File:** `NumSharp.Bitmap/np_.extensions.cs`
 
-```csharp
-var bbp = (int)nd.shape[3]; //bytes per pixel
-var height = (int)nd.shape[1];
-var width = (int)nd.shape[2];
-```
-
-**Issue:** Casts shape dimensions directly to `int` without checking for overflow. If any dimension exceeds `int.MaxValue`, this silently truncates.
-
-**Fix:** Add overflow checks:
-```csharp
-if (nd.shape[3] > int.MaxValue || nd.shape[1] > int.MaxValue || nd.shape[2] > int.MaxValue)
-    throw new OverflowException("Bitmap dimensions exceed int.MaxValue");
-var bbp = (int)nd.shape[3];
-var height = (int)nd.shape[1];
-var width = (int)nd.shape[2];
-```
-
-**Note:** Bitmap APIs inherently use `int` dimensions, so the cast is necessary, but the overflow check prevents silent corruption.
+**Status:** Fixed - added overflow checks before casting shape dimensions to int. Throws `OverflowException` if any dimension exceeds `int.MaxValue`. Bitmap APIs inherently require `int` dimensions, so the cast is necessary but now safe.
 
 ---
 
@@ -717,10 +686,10 @@ var intIndices = new int[indices.Length];
 - [x] ~~H3: Fix `np.vstack` to use `long[]` shape~~ → Reclassified LOW (dead code)
 - [x] H4: Fix `np.repeat` to use `GetInt64` and `long count` for per-element repeats ✅
 - [x] H6: Fix `np.searchsorted` empty array return type to `typeof(long)` ✅
-- [ ] H8: Add `long num` overloads to `np.linspace`
-- [ ] H9: Add `long shift` overloads to `np.roll`
+- [x] H8: Add `long num` overloads to `np.linspace` ✅
+- [x] H9: Add `long shift` overloads to `np.roll` ✅
 - [x] H10: Fix `UnmanagedHelper.CopyTo` offset parameter to `long` ✅
-- [ ] H11: Add `long size` overload to `np.array<T>(IEnumerable, size)`
+- [x] H11: Add `long size` overload to `np.array<T>(IEnumerable, size)` ✅
 - [x] H12: Fix `SimdMatMul.MatMulFloatSimple` to use `long M, N, K` and `long` loop counters ✅
 - [ ] H13: Fix `ArgMaxSimdHelper`/`ArgMinSimdHelper` to return `long` (complex - IL emission)
 - [x] H14: Fix `Default.Dot.ExpandStartDim`/`ExpandEndDim` to return `long[]` ✅
@@ -732,7 +701,7 @@ var intIndices = new int[indices.Length];
 - [x] H20: Fix `np.asarray` to use `long[]` or `Array.Empty<long>()` for scalar shape ✅
 - [x] ~~H21: Fix `ArrayConvert` to use `long[]`~~ → Reclassified LOW (.NET boundary)
 - [x] ~~H22: Fix `UnmanagedStorage.FromMultiDimArray` to use `long[]`~~ → Reclassified LOW (.NET boundary)
-- [ ] H23: Add overflow checks to `NumSharp.Bitmap` shape dimension casts
+- [x] H23: Add overflow checks to `NumSharp.Bitmap` shape dimension casts ✅
 
 ### MEDIUM Priority (Quality)
 
