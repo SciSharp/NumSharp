@@ -1320,7 +1320,8 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     InferNegativeCoordinates via pointer (for internal use).
+        ///     InferNegativeCoordinates via int pointer (backward-compatible, for internal use).
+        ///     See Shape.Unmanaged.cs for the long* version.
         /// </summary>
         [SuppressMessage("ReSharper", "ParameterHidesMember"), MethodImpl(Optimize)]
         public static unsafe void InferNegativeCoordinates(long[] dimensions, int* coords, int ndims)

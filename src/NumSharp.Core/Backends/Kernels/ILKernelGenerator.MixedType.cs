@@ -159,7 +159,7 @@ namespace NumSharp.Backends.Kernels
         private static MixedTypeKernel GenerateSimdFullKernel(MixedTypeKernelKey key)
         {
             // MixedTypeKernel signature:
-            // void(void* lhs, void* rhs, void* result, long* lhsStrides, long* rhsStrides, int* shape, int ndim, long totalSize)
+            // void(void* lhs, void* rhs, void* result, long* lhsStrides, long* rhsStrides, long* shape, int ndim, long totalSize)
             var dm = new DynamicMethod(
                 name: $"MixedType_SimdFull_{key}",
                 returnType: typeof(void),

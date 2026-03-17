@@ -428,7 +428,7 @@ namespace NumSharp.Backends.Kernels
             int inputSize, int outputSize)
         {
             // Args: void* input (0), void* output (1),
-            //       int* strides (2), int* shape (3),
+            //       long* strides (2), long* shape (3),
             //       int ndim (4), long totalSize (5)
 
             var locI = il.DeclareLocal(typeof(long)); // loop counter

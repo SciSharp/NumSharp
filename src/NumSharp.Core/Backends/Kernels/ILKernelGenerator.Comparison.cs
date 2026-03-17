@@ -175,7 +175,7 @@ namespace NumSharp.Backends.Kernels
         private static ComparisonKernel GenerateComparisonSimdFullKernel(ComparisonKernelKey key)
         {
             // ComparisonKernel signature:
-            // void(void* lhs, void* rhs, bool* result, long* lhsStrides, long* rhsStrides, int* shape, int ndim, long totalSize)
+            // void(void* lhs, void* rhs, bool* result, long* lhsStrides, long* rhsStrides, long* shape, int ndim, long totalSize)
             var dm = new DynamicMethod(
                 name: $"Comparison_SimdFull_{key}",
                 returnType: typeof(void),
@@ -313,8 +313,8 @@ namespace NumSharp.Backends.Kernels
             var vectorType = GetVectorType(clrType);
 
             // Args: void* lhs (0), void* rhs (1), bool* result (2),
-            //       int* lhsStrides (3), int* rhsStrides (4), int* shape (5),
-            //       int ndim (6), int totalSize (7)
+            //       long* lhsStrides (3), long* rhsStrides (4), long* shape (5),
+            //       int ndim (6), long totalSize (7)
 
             var locI = il.DeclareLocal(typeof(long));
             var locUnrollEnd = il.DeclareLocal(typeof(long));

@@ -9,6 +9,7 @@ Issues discovered by auditing the codebase against the int64 migration spirit.
 **Updated**: 2026-03-17 - Fixed H8, H9, H11, H23 (batch 2)
 **Updated**: 2026-03-17 - Found H1 already fixed; fixed H2 (batch 3)
 **Updated**: 2026-03-17 - Fixed H13 ArgMax/ArgMin returns Int64 (batch 3 continued)
+**Updated**: 2026-03-17 - Fixed M1, M6, M7, M9; found np.random.randn/ILKernelGenerator.Scan.cs int loop issues (batch 4)
 
 ---
 
@@ -17,7 +18,7 @@ Issues discovered by auditing the codebase against the int64 migration spirit.
 | Priority | Count | Category |
 |----------|-------|----------|
 | HIGH | 2 | H5 (acceptable), H7 (acceptable) |
-| MEDIUM | 11 | IL kernel comments, internal int usage |
+| MEDIUM | 5 | M2, M3, M5, M8, M10-M11 remaining |
 | LOW | 19 | Acceptable .NET boundary exceptions |
 
 ### Recently Fixed (this session)
@@ -42,6 +43,14 @@ Issues discovered by auditing the codebase against the int64 migration spirit.
 - H1: Already fixed (confirmed - all typed getters have `long[]` overloads)
 - H2: Added missing `long[]` overloads for 9 typed setters in NDArray
 - H13: ArgMax/ArgMin now return `Int64`, SIMD helpers use `long` throughout
+
+**Batch 4:**
+- M1: IL kernel comments updated from `int*` to `long*` (5 files)
+- M6: `np.load` internal `int total` accumulator changed to `long`
+- M7: `np.save` internal `int total` accumulator changed to `long`
+- M9: Already fixed (confirmed - `NDArray<T>` already has `long size` overloads)
+- NEW: `np.random.randn` loop counter changed from `int i` to `long i`
+- NEW: `ILKernelGenerator.Scan.cs` loop counters changed to `long` (outer, inner, i)
 
 ### Reclassified as LOW (.NET Array boundary)
 - H3: `np.vstack` - entire implementation is commented out (dead code)
@@ -282,7 +291,7 @@ var outputData = new double[(int)outputSize];
 
 ## MEDIUM Priority Issues
 
-### M1. IL Kernel Comments Reference `int*` (Documentation Drift)
+### M1. ✅ FIXED - IL Kernel Comments Reference `int*` (Documentation Drift)
 
 **Files:**
 - `ILKernelGenerator.Comparison.cs:178,316`
@@ -290,15 +299,7 @@ var outputData = new double[(int)outputSize];
 - `ILKernelGenerator.Reduction.cs:516`
 - `ILKernelGenerator.Unary.cs:346`
 
-**Issue:** Comments describe parameter types as `int*` but code uses `long*`:
-
-```csharp
-// Comment says int* but code uses long*
-// void(void* lhs, void* rhs, bool* result, long* lhsStrides, long* rhsStrides, int* shape, int ndim, long totalSize)
-//                                                                               ^^^ should be long*
-```
-
-**Fix:** Update comments to reflect actual `long*` parameter types.
+**Status:** Fixed - all comments updated from `int*` to `long*` for shape/strides/totalSize parameters.
 
 ---
 
@@ -339,15 +340,15 @@ var reverse_permutation = new int[nd.ndim];
 
 ---
 
-### M4. Shape.InferNegativeCoordinates Has `int[]` Version
+### M4. ✅ ALREADY COMPLETE - Shape.InferNegativeCoordinates Has All Overloads
 
-**File:** `View/Shape.cs:1292`
+**Files:**
+- `View/Shape.cs:1276` - `long[]` primary version
+- `View/Shape.cs:1292` - `int[]` backward-compatible version
+- `View/Shape.cs:1308` - `int*` backward-compatible unsafe version
+- `View/Shape.Unmanaged.cs:114` - `long*` primary unsafe version
 
-```csharp
-public static int[] InferNegativeCoordinates(long[] dimensions, int[] coords)
-```
-
-**Issue:** Has `int[] coords` parameter but also has `long*` unsafe version. The `int[]` version should delegate to `long[]`.
+**Status:** All four overloads exist. The `int[]` version duplicates the loop logic (acceptable - more efficient than allocating/converting). Added cross-reference comment to `int*` version pointing to `long*` in Shape.Unmanaged.cs.
 
 ---
 
@@ -369,33 +370,19 @@ if (outputSize > int.MaxValue)
 
 ---
 
-### M6. np.load Internal `int total` Accumulator
+### M6. ✅ FIXED - np.load Internal `int total` Accumulator
 
 **File:** `APIs/np.load.cs:179`
 
-```csharp
-int total = 1;
-for (int i = 0; i < shape.Length; i++)
-    total *= shape[i];
-```
-
-**Issue:** Uses `int total` to accumulate product of shape dimensions. Can overflow for large arrays.
-
-**Note:** Partially acceptable since .npy format uses int32 shapes, but internal processing should use long.
+**Status:** Fixed - changed `int total` to `long total` to prevent overflow during multiplication.
 
 ---
 
-### M7. np.save Internal `int total` Accumulator
+### M7. ✅ FIXED - np.save Internal `int total` Accumulator
 
 **File:** `APIs/np.save.cs:76`
 
-```csharp
-int total = 1;
-for (int i = 0; i < shape.Length; i++)
-    total *= shape[i];
-```
-
-**Issue:** Same as M6 - uses `int total` which can overflow.
+**Status:** Fixed - changed `int total` to `long total` to prevent overflow during multiplication.
 
 ---
 
@@ -414,24 +401,13 @@ for (int i = 0; i < ret.Length; i++)
 
 ---
 
-### M9. NDArray<T> Generic Has Only `int size` Constructors
+### M9. ✅ ALREADY FIXED - NDArray<T> Generic Has `long size` Constructors
 
-**File:** `Generics/NDArray`1.cs:83,139`
+**File:** `Generics/NDArray`1.cs:83-93,139-146`
 
-```csharp
-public NDArray(int size, bool fillZeros) : base(InfoOf<TDType>.NPTypeCode, size, fillZeros)
-public NDArray(int size) : base(InfoOf<TDType>.NPTypeCode, size) { }
-```
-
-**Issue:** These constructors accept `int size` only. Should add `long size` overloads as primary.
-
-**Fix:** Add `long size` primary overloads:
-```csharp
-public NDArray(long size, bool fillZeros) : base(InfoOf<TDType>.NPTypeCode, size, fillZeros) { }
-public NDArray(long size) : base(InfoOf<TDType>.NPTypeCode, size) { }
-public NDArray(int size, bool fillZeros) : this((long)size, fillZeros) { }
-public NDArray(int size) : this((long)size) { }
-```
+**Status:** Already has `long size` overloads for both constructors:
+- `NDArray(long size, bool fillZeros)` at line 92
+- `NDArray(long size)` at line 146
 
 ---
 
@@ -462,6 +438,22 @@ var reverse_permutation = new int[nd.ndim];
 **Issue:** While ndim is bounded (max ~32), using `int[]` for permutation when dimensions are `long[]` creates a type mismatch. Technically safe but inconsistent.
 
 **Note:** Low impact since ndim never exceeds ~32 in practice.
+
+---
+
+### M12. ✅ FIXED - np.random.randn Uses `int` Loop Counter
+
+**File:** `RandomSampling/np.random.randn.cs:92`
+
+**Status:** Fixed - changed `for (int i = 0; ...)` to `for (long i = 0; ...)` for iteration over `array.size`.
+
+---
+
+### M13. ✅ FIXED - ILKernelGenerator.Scan.cs Uses `int` Loop Counters
+
+**File:** `Backends/Kernels/ILKernelGenerator.Scan.cs`
+
+**Status:** Fixed - changed all loop counters (outer, inner, i) from `int` to `long` for iterations over `outerSize`, `innerSize`, and `axisSize` (which are `long` parameters).
 
 ---
 
@@ -647,13 +639,15 @@ var intIndices = new int[indices.Length];
 
 ### MEDIUM Priority (Quality)
 
-- [ ] M1: Update IL kernel comments to reflect `long*` parameters
-- [ ] M4: Review Shape.InferNegativeCoordinates delegation pattern
-- [ ] M6: Fix `np.load` internal `int total` accumulator to `long`
-- [ ] M7: Fix `np.save` internal `int total` accumulator to `long`
-- [ ] M9: Add `long size` primary overloads to `NDArray<T>` generic constructors
+- [x] M1: Update IL kernel comments to reflect `long*` parameters ✅
+- [x] M4: Shape.InferNegativeCoordinates - all overloads exist (`long*` in Shape.Unmanaged.cs) ✅
+- [x] M6: Fix `np.load` internal `int total` accumulator to `long` ✅
+- [x] M7: Fix `np.save` internal `int total` accumulator to `long` ✅
+- [x] M9: Add `long size` primary overloads to `NDArray<T>` ✅ (already done)
 - [ ] M10: Consider migrating `np.arange(int)` to return int64 (BUG-21/Task #109)
-- [ ] M11: Consider using `long[]` for transpose permutation arrays (consistency)
+- [ ] M11: Consider using `long[]` for transpose permutation arrays (low impact)
+- [x] M12: Fix `np.random.randn` loop counter to `long` ✅
+- [x] M13: Fix `ILKernelGenerator.Scan.cs` loop counters to `long` ✅
 
 ### LOW Priority (Cosmetic/Acceptable)
 

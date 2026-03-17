@@ -1370,13 +1370,13 @@ namespace NumSharp.Backends.Kernels
         private static unsafe void AxisCumSumInnerContiguousByte(
             byte* src, byte* dst, long inputRowStride, long axisSize, long outerSize, long outputOuterStride)
         {
-            for (int outer = 0; outer < outerSize; outer++)
+            for (long outer = 0; outer < outerSize; outer++)
             {
                 byte* srcRow = src + outer * inputRowStride;
                 byte* dstRow = dst + outer * outputOuterStride;
 
                 byte sum = 0;
-                for (int i = 0; i < axisSize; i++)
+                for (long i = 0; i < axisSize; i++)
                 {
                     sum += srcRow[i];
                     dstRow[i] = sum;
@@ -1390,13 +1390,13 @@ namespace NumSharp.Backends.Kernels
         private static unsafe void AxisCumSumInnerContiguousInt16(
             short* src, short* dst, long inputRowStride, long axisSize, long outerSize, long outputOuterStride)
         {
-            for (int outer = 0; outer < outerSize; outer++)
+            for (long outer = 0; outer < outerSize; outer++)
             {
                 short* srcRow = src + outer * inputRowStride;
                 short* dstRow = dst + outer * outputOuterStride;
 
                 short sum = 0;
-                for (int i = 0; i < axisSize; i++)
+                for (long i = 0; i < axisSize; i++)
                 {
                     sum += srcRow[i];
                     dstRow[i] = sum;
@@ -1410,13 +1410,13 @@ namespace NumSharp.Backends.Kernels
         private static unsafe void AxisCumSumInnerContiguousUInt16(
             ushort* src, ushort* dst, long inputRowStride, long axisSize, long outerSize, long outputOuterStride)
         {
-            for (int outer = 0; outer < outerSize; outer++)
+            for (long outer = 0; outer < outerSize; outer++)
             {
                 ushort* srcRow = src + outer * inputRowStride;
                 ushort* dstRow = dst + outer * outputOuterStride;
 
                 ushort sum = 0;
-                for (int i = 0; i < axisSize; i++)
+                for (long i = 0; i < axisSize; i++)
                 {
                     sum += srcRow[i];
                     dstRow[i] = sum;
@@ -1430,13 +1430,13 @@ namespace NumSharp.Backends.Kernels
         private static unsafe void AxisCumSumInnerContiguousUInt32(
             uint* src, uint* dst, long inputRowStride, long axisSize, long outerSize, long outputOuterStride)
         {
-            for (int outer = 0; outer < outerSize; outer++)
+            for (long outer = 0; outer < outerSize; outer++)
             {
                 uint* srcRow = src + outer * inputRowStride;
                 uint* dstRow = dst + outer * outputOuterStride;
 
                 uint sum = 0;
-                for (int i = 0; i < axisSize; i++)
+                for (long i = 0; i < axisSize; i++)
                 {
                     sum += srcRow[i];
                     dstRow[i] = sum;
@@ -1450,13 +1450,13 @@ namespace NumSharp.Backends.Kernels
         private static unsafe void AxisCumSumInnerContiguousUInt64(
             ulong* src, ulong* dst, long inputRowStride, long axisSize, long outerSize, long outputOuterStride)
         {
-            for (int outer = 0; outer < outerSize; outer++)
+            for (long outer = 0; outer < outerSize; outer++)
             {
                 ulong* srcRow = src + outer * inputRowStride;
                 ulong* dstRow = dst + outer * outputOuterStride;
 
                 ulong sum = 0;
-                for (int i = 0; i < axisSize; i++)
+                for (long i = 0; i < axisSize; i++)
                 {
                     sum += srcRow[i];
                     dstRow[i] = sum;
@@ -1470,13 +1470,13 @@ namespace NumSharp.Backends.Kernels
         private static unsafe void AxisCumSumInnerContiguousDecimal(
             decimal* src, decimal* dst, long inputRowStride, long axisSize, long outerSize, long outputOuterStride)
         {
-            for (int outer = 0; outer < outerSize; outer++)
+            for (long outer = 0; outer < outerSize; outer++)
             {
                 decimal* srcRow = src + outer * inputRowStride;
                 decimal* dstRow = dst + outer * outputOuterStride;
 
                 decimal sum = 0m;
-                for (int i = 0; i < axisSize; i++)
+                for (long i = 0; i < axisSize; i++)
                 {
                     sum += srcRow[i];
                     dstRow[i] = sum;
@@ -1593,9 +1593,9 @@ namespace NumSharp.Backends.Kernels
             long axisSize, long axisStride, long outerSize, long innerSize,
             long outputAxisStride, long outputOuterStride, long* outerStrides, long* innerStrides)
         {
-            for (int outer = 0; outer < outerSize; outer++)
+            for (long outer = 0; outer < outerSize; outer++)
             {
-                for (int inner = 0; inner < innerSize; inner++)
+                for (long inner = 0; inner < innerSize; inner++)
                 {
                     // Calculate input base offset for this (outer, inner) combination
                     long inputOffset = 0;
@@ -1620,7 +1620,7 @@ namespace NumSharp.Backends.Kernels
 
                     // Cumsum along axis
                     double sum = 0.0;
-                    for (int i = 0; i < axisSize; i++)
+                    for (long i = 0; i < axisSize; i++)
                     {
                         sum += src[inputOffset + i * axisStride];
                         dst[outputOffset + i * outputAxisStride] = sum;
@@ -1637,9 +1637,9 @@ namespace NumSharp.Backends.Kernels
             long axisSize, long axisStride, long outerSize, long innerSize,
             long outputAxisStride, long outputOuterStride, long* outerStrides, long* innerStrides)
         {
-            for (int outer = 0; outer < outerSize; outer++)
+            for (long outer = 0; outer < outerSize; outer++)
             {
-                for (int inner = 0; inner < innerSize; inner++)
+                for (long inner = 0; inner < innerSize; inner++)
                 {
                     long inputOffset = 0;
                     long outerIdx = outer;
@@ -1661,7 +1661,7 @@ namespace NumSharp.Backends.Kernels
                     long outputOffset = outer * outputOuterStride + inner;
 
                     float sum = 0f;
-                    for (int i = 0; i < axisSize; i++)
+                    for (long i = 0; i < axisSize; i++)
                     {
                         sum += src[inputOffset + i * axisStride];
                         dst[outputOffset + i * outputAxisStride] = sum;
@@ -1678,9 +1678,9 @@ namespace NumSharp.Backends.Kernels
             long axisSize, long axisStride, long outerSize, long innerSize,
             long outputAxisStride, long outputOuterStride, long* outerStrides, long* innerStrides)
         {
-            for (int outer = 0; outer < outerSize; outer++)
+            for (long outer = 0; outer < outerSize; outer++)
             {
-                for (int inner = 0; inner < innerSize; inner++)
+                for (long inner = 0; inner < innerSize; inner++)
                 {
                     long inputOffset = 0;
                     long outerIdx = outer;
@@ -1702,7 +1702,7 @@ namespace NumSharp.Backends.Kernels
                     long outputOffset = outer * outputOuterStride + inner;
 
                     long sum = 0L;
-                    for (int i = 0; i < axisSize; i++)
+                    for (long i = 0; i < axisSize; i++)
                     {
                         sum += src[inputOffset + i * axisStride];
                         dst[outputOffset + i * outputAxisStride] = sum;
@@ -1719,9 +1719,9 @@ namespace NumSharp.Backends.Kernels
             long axisSize, long axisStride, long outerSize, long innerSize,
             long outputAxisStride, long outputOuterStride, long* outerStrides, long* innerStrides)
         {
-            for (int outer = 0; outer < outerSize; outer++)
+            for (long outer = 0; outer < outerSize; outer++)
             {
-                for (int inner = 0; inner < innerSize; inner++)
+                for (long inner = 0; inner < innerSize; inner++)
                 {
                     long inputOffset = 0;
                     long outerIdx = outer;
@@ -1743,7 +1743,7 @@ namespace NumSharp.Backends.Kernels
                     long outputOffset = outer * outputOuterStride + inner;
 
                     int sum = 0;
-                    for (int i = 0; i < axisSize; i++)
+                    for (long i = 0; i < axisSize; i++)
                     {
                         sum += src[inputOffset + i * axisStride];
                         dst[outputOffset + i * outputAxisStride] = sum;
@@ -1759,14 +1759,14 @@ namespace NumSharp.Backends.Kernels
             long axisSize, long axisStride, long outerSize, long innerSize,
             long outputAxisStride, long outputOuterStride, long* outerStrides, long* innerStrides)
         {
-            for (int outer = 0; outer < outerSize; outer++)
+            for (long outer = 0; outer < outerSize; outer++)
             {
-                for (int inner = 0; inner < innerSize; inner++)
+                for (long inner = 0; inner < innerSize; inner++)
                 {
                     long inputOffset = CalculateInputOffset(inputStrides, shape, axis, ndim, outer, inner);
                     long outputOffset = outer * outputOuterStride + inner;
                     byte sum = 0;
-                    for (int i = 0; i < axisSize; i++)
+                    for (long i = 0; i < axisSize; i++)
                     {
                         sum += src[inputOffset + i * axisStride];
                         dst[outputOffset + i * outputAxisStride] = sum;
@@ -1780,14 +1780,14 @@ namespace NumSharp.Backends.Kernels
             long axisSize, long axisStride, long outerSize, long innerSize,
             long outputAxisStride, long outputOuterStride, long* outerStrides, long* innerStrides)
         {
-            for (int outer = 0; outer < outerSize; outer++)
+            for (long outer = 0; outer < outerSize; outer++)
             {
-                for (int inner = 0; inner < innerSize; inner++)
+                for (long inner = 0; inner < innerSize; inner++)
                 {
                     long inputOffset = CalculateInputOffset(inputStrides, shape, axis, ndim, outer, inner);
                     long outputOffset = outer * outputOuterStride + inner;
                     short sum = 0;
-                    for (int i = 0; i < axisSize; i++)
+                    for (long i = 0; i < axisSize; i++)
                     {
                         sum += src[inputOffset + i * axisStride];
                         dst[outputOffset + i * outputAxisStride] = sum;
@@ -1801,14 +1801,14 @@ namespace NumSharp.Backends.Kernels
             long axisSize, long axisStride, long outerSize, long innerSize,
             long outputAxisStride, long outputOuterStride, long* outerStrides, long* innerStrides)
         {
-            for (int outer = 0; outer < outerSize; outer++)
+            for (long outer = 0; outer < outerSize; outer++)
             {
-                for (int inner = 0; inner < innerSize; inner++)
+                for (long inner = 0; inner < innerSize; inner++)
                 {
                     long inputOffset = CalculateInputOffset(inputStrides, shape, axis, ndim, outer, inner);
                     long outputOffset = outer * outputOuterStride + inner;
                     ushort sum = 0;
-                    for (int i = 0; i < axisSize; i++)
+                    for (long i = 0; i < axisSize; i++)
                     {
                         sum += src[inputOffset + i * axisStride];
                         dst[outputOffset + i * outputAxisStride] = sum;
@@ -1822,14 +1822,14 @@ namespace NumSharp.Backends.Kernels
             long axisSize, long axisStride, long outerSize, long innerSize,
             long outputAxisStride, long outputOuterStride, long* outerStrides, long* innerStrides)
         {
-            for (int outer = 0; outer < outerSize; outer++)
+            for (long outer = 0; outer < outerSize; outer++)
             {
-                for (int inner = 0; inner < innerSize; inner++)
+                for (long inner = 0; inner < innerSize; inner++)
                 {
                     long inputOffset = CalculateInputOffset(inputStrides, shape, axis, ndim, outer, inner);
                     long outputOffset = outer * outputOuterStride + inner;
                     uint sum = 0;
-                    for (int i = 0; i < axisSize; i++)
+                    for (long i = 0; i < axisSize; i++)
                     {
                         sum += src[inputOffset + i * axisStride];
                         dst[outputOffset + i * outputAxisStride] = sum;
@@ -1843,14 +1843,14 @@ namespace NumSharp.Backends.Kernels
             long axisSize, long axisStride, long outerSize, long innerSize,
             long outputAxisStride, long outputOuterStride, long* outerStrides, long* innerStrides)
         {
-            for (int outer = 0; outer < outerSize; outer++)
+            for (long outer = 0; outer < outerSize; outer++)
             {
-                for (int inner = 0; inner < innerSize; inner++)
+                for (long inner = 0; inner < innerSize; inner++)
                 {
                     long inputOffset = CalculateInputOffset(inputStrides, shape, axis, ndim, outer, inner);
                     long outputOffset = outer * outputOuterStride + inner;
                     ulong sum = 0;
-                    for (int i = 0; i < axisSize; i++)
+                    for (long i = 0; i < axisSize; i++)
                     {
                         sum += src[inputOffset + i * axisStride];
                         dst[outputOffset + i * outputAxisStride] = sum;
@@ -1864,14 +1864,14 @@ namespace NumSharp.Backends.Kernels
             long axisSize, long axisStride, long outerSize, long innerSize,
             long outputAxisStride, long outputOuterStride, long* outerStrides, long* innerStrides)
         {
-            for (int outer = 0; outer < outerSize; outer++)
+            for (long outer = 0; outer < outerSize; outer++)
             {
-                for (int inner = 0; inner < innerSize; inner++)
+                for (long inner = 0; inner < innerSize; inner++)
                 {
                     long inputOffset = CalculateInputOffset(inputStrides, shape, axis, ndim, outer, inner);
                     long outputOffset = outer * outputOuterStride + inner;
                     decimal sum = 0m;
-                    for (int i = 0; i < axisSize; i++)
+                    for (long i = 0; i < axisSize; i++)
                     {
                         sum += src[inputOffset + i * axisStride];
                         dst[outputOffset + i * outputAxisStride] = sum;

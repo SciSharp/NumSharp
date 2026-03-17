@@ -513,7 +513,7 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         private static void EmitReductionStridedLoop(ILGenerator il, ElementReductionKernelKey key, int inputSize)
         {
-            // Args: void* input (0), int* strides (1), int* shape (2), int ndim (3), int totalSize (4)
+            // Args: void* input (0), long* strides (1), long* shape (2), int ndim (3), long totalSize (4)
 
             var locI = il.DeclareLocal(typeof(long)); // linear index
             var locD = il.DeclareLocal(typeof(int)); // dimension counter

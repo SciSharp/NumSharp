@@ -73,7 +73,7 @@ namespace NumSharp
 
         private static ulong writeValueMatrix(BinaryWriter reader, Array matrix, int bytes, int[] shape)
         {
-            int total = 1;
+            long total = 1;
             for (int i = 0; i < shape.Length; i++)
                 total *= shape[i];
             var buffer = new byte[bytes * total];
