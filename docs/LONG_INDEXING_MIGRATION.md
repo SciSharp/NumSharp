@@ -411,6 +411,167 @@ int64 indexing: SimdMatMul matrix dimensions to long
 
 ---
 
+## Algorithm Migration Patterns
+
+### Pattern 8: LongRange Helper (Replace Enumerable.Range)
+
+`Enumerable.Range(0, count)` is limited to `int.MaxValue`. Use `LongRange`:
+
+```csharp
+// BEFORE - limited to int.MaxValue
+var indices = Enumerable.Range(0, (int)size).Select(i => ...);
+
+// AFTER - supports long
+private static IEnumerable<long> LongRange(long count)
+{
+    for (long i = 0; i < count; i++)
+        yield return i;
+}
+
+var indices = LongRange(size).Select(i => ...);
+```
+
+**Used in**: `ndarray.argsort.cs`
+
+### Pattern 9: SIMD Block Loops (Mixed int/long)
+
+For cache-blocked algorithms, outer loops use `long`, inner block loops use `int`:
+
+```csharp
+// Outer loops iterate over full matrix - use long
+for (long k0 = 0; k0 < K; k0 += KC)
+    for (long i0 = 0; i0 < M; i0 += MC)
+        for (long jp = 0; jp < N; jp += NR)
+        {
+            // Inner block loops bounded by small constants (MC, KC, MR, NR) - int is OK
+            for (int ip = 0; ip < Math.Min(MC, M - i0); ip += MR)
+                for (int k = 0; k < kc; k++)
+                    // ...
+        }
+```
+
+**Used in**: `SimdMatMul.cs`, `Default.MatMul.2D2D.cs`
+
+### Pattern 10: Random Sampling (NextLong)
+
+Random sampling methods use `long` bounds and delegate from `int` overloads:
+
+```csharp
+// Primary implementation
+public NDArray choice(long a, Shape shape = default, ...)
+{
+    NDArray idx = randint(0, a, shape);  // randint accepts long
+    return idx;
+}
+
+// Backward compatible - delegates
+public NDArray choice(int a, Shape shape = default, ...)
+{
+    return choice((long)a, shape, ...);
+}
+
+// Shuffle uses long size and NextLong
+var size = x.size;  // long
+addr_swap = addr + transformOffset(randomizer.NextLong(size));
+```
+
+---
+
+## Return Type Changes
+
+Functions that return indices now return `long` (NumPy uses `int64` for indices):
+
+| Function | Old Return | New Return |
+|----------|-----------|------------|
+| `np.nonzero()` | `NDArray[]` of int32 | `NDArray[]` of **int64** |
+| `nd.argsort()` | `NDArray` of int32 | `NDArray` of **int64** |
+| `np.argmax()` | `int` | `long` |
+| `np.argmin()` | `int` | `long` |
+
+```csharp
+// np.nonzero returns int64 indices
+var result = np.nonzero(array);
+Assert.That(result[0].typecode).IsEqualTo(NPTypeCode.Int64);
+
+// argsort returns int64 indices
+var sorted = array.argsort<float>();
+Assert.That(sorted.typecode).IsEqualTo(NPTypeCode.Int64);
+```
+
+---
+
+## NDArray Accessor Methods
+
+All element access methods use `long` indices:
+
+```csharp
+// Get single element by flat index
+public ValueType GetAtIndex(long index);
+public T GetAtIndex<T>(long index) where T : unmanaged;
+
+// Set single element by flat index
+public void SetAtIndex(object obj, long index);
+public void SetAtIndex<T>(T value, long index) where T : unmanaged;
+
+// Typed getters/setters (all have long index)
+public int GetInt32(long index);
+public void SetInt32(int value, long index);
+// ... same for all 12 dtypes
+```
+
+---
+
+## Parallel.For Removal
+
+Axis reduction operations removed `Parallel.For` in favor of single-threaded execution with `long` indices:
+
+**Affected files:**
+- `ILKernelGenerator.Reduction.Axis.Simd.cs`
+- `ILKernelGenerator.Reduction.Axis.VarStd.cs`
+
+**Rationale**: `Parallel.For` uses `int` indices. Rather than add complex chunking logic for >2B elements, axis reductions now run single-threaded with proper `long` iteration. Performance impact is minimal since SIMD vectorization provides the main speedup.
+
+---
+
+## Files Changed Summary (38 commits)
+
+### Core Types (Phase 1)
+- `Shape.cs` - `long[] dimensions/strides`, `long size/offset/bufferSize`
+- `Slice.cs` - `long? Start/Stop`, `long Step`
+- `IArraySlice.cs` - All `long` index parameters
+- `ArraySlice.cs`, `ArraySlice<T>.cs` - `long Count`, `long` methods
+- `UnmanagedStorage.*.cs` - `long Count`, `long` getters/setters
+
+### Incrementors
+- `NDCoordinatesIncrementor.cs` - `long[] Index`, `long[] dimensions`
+- `NDCoordinatesAxisIncrementor.cs` - `long[]` coords
+- `NDOffsetIncrementor.cs` - `long offset`
+- `ValueOffsetIncrementor.cs` - `long offset`
+
+### IL Kernels
+- `ILKernelGenerator.*.cs` (13 files) - `typeof(long)`, `Conv_I8`, `Ldc_I8`
+- `KernelSignatures.cs` - `long count` delegates
+- `SimdMatMul.cs` - `long M, K, N`
+- `LongIndexBuffer.cs` - New helper for dynamic index collection
+
+### DefaultEngine Operations
+- `Default.Dot.NDMD.cs` - `long` loop counters
+- `Default.MatMul.2D2D.cs` - `long M, K, N`, removed int.MaxValue check
+- `Default.NonZero.cs` - `LongIndexBuffer`, returns `int64`
+- `Default.Reduction.*.cs` - `long` index tracking
+
+### API Functions
+- `np.random.*.cs` - `NextLong`, `long` overloads
+- `ndarray.argsort.cs` - `LongRange`, `long[]` throughout
+- `np.nanmean/std/var.cs` - `long` count tracking
+
+### Tests Added
+- `NonzeroInt64Tests.cs` - Verifies int64 return type
+- `MatMulInt64Tests.cs` - Large matrix support
+- `ArgsortInt64Tests.cs` - Verifies int64 indices
+
+---
+
 ## References
 
 - NumPy `npy_intp`: `numpy/_core/include/numpy/npy_common.h:217`
