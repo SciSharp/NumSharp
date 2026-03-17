@@ -45,7 +45,7 @@ namespace NumSharp
             if (v.Shape.IsScalar || v.size == 0)
             {
                 if (v.size == 0)
-                    return new NDArray(typeof(int), Shape.Vector(0), false);
+                    return new NDArray(typeof(long), Shape.Vector(0), false);
 
                 // Use Convert.ToDouble for type-agnostic value extraction
                 double target = Convert.ToDouble(v.Storage.GetValue(new long[0]));

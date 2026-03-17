@@ -1,17 +1,19 @@
-﻿namespace NumSharp
+﻿using System;
+
+namespace NumSharp
 {
     public static partial class np
     {
         public static NDArray asarray(string data)
         {
-            var nd = new NDArray(typeof(string), new int[0]);
+            var nd = new NDArray(typeof(string), Array.Empty<long>());
             nd.ReplaceData(new string[] {data});
             return nd;
         }
 
         public static NDArray asarray<T>(T data) where T : struct
         {
-            var nd = new NDArray(typeof(T), new int[0]);
+            var nd = new NDArray(typeof(T), Array.Empty<long>());
             nd.ReplaceData(new T[] {data});
             return nd;
         }

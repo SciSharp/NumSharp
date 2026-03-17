@@ -5,6 +5,7 @@ Issues discovered by auditing the codebase against the int64 migration spirit.
 **Audit Date**: Based on commit `111b4076` (longindexing branch)
 **Updated**: 2026-03-17 - Added H12-H22, M9-M11 from comprehensive code search
 **Updated**: 2026-03-17 - Added H23, L11-L12 from post-rebase diff scan
+**Updated**: 2026-03-17 - Fixed H4, H6, H10, H12, H14, H15, H16, H20; reclassified H3, H17-H19, H21-H22 as LOW
 
 ---
 
@@ -12,9 +13,23 @@ Issues discovered by auditing the codebase against the int64 migration spirit.
 
 | Priority | Count | Category |
 |----------|-------|----------|
-| HIGH | 23 | Missing long overloads, int parameters/variables |
+| HIGH | 15 | Missing long overloads, int parameters/variables |
 | MEDIUM | 11 | IL kernel comments, internal int usage |
-| LOW | 13 | Acceptable .NET boundary exceptions |
+| LOW | 19 | Acceptable .NET boundary exceptions |
+
+### Recently Fixed (this session)
+- H4: `np.repeat` - changed `GetInt32` to `GetInt64`, `int count/j` to `long`
+- H6: `np.searchsorted` - empty array returns `typeof(long)` for consistency
+- H10: `UnmanagedHelper.CopyTo` - offset parameter changed to `long`
+- H12: `SimdMatMul.MatMulFloatSimple` - changed `int M,N,K` to `long`
+- H14: `Default.Dot.ExpandStartDim/ExpandEndDim` - returns `long[]` now
+- H15: `NDArray.Normalize` - loop counters changed to `long`
+- H16: `Slice.Index` in Selection - uses `ToInt64` instead of `ToInt32`
+- H20: `np.asarray` - uses `Array.Empty<long>()` for scalar shapes
+
+### Reclassified as LOW (.NET Array boundary)
+- H3: `np.vstack` - entire implementation is commented out (dead code)
+- H17-H19, H21-H22: Use .NET `Array.Length`/`GetLength()` which return `int`
 
 ---
 
@@ -95,44 +110,22 @@ public void SetInt16(short value, int[] indices);   // only int[]
 
 ---
 
-### H3. np.vstack Uses `int[]` for Shape
+### H3. ⚠️ RECLASSIFIED AS LOW - np.vstack Implementation Is Dead Code
 
 **File:** `Manipulation/np.vstack.cs:26,30`
 
-```csharp
-// Line 26 - uses int[] literal
-np.Storage.Reshape(new int[] { nps.Length, nps[0].shape[0] });
-
-// Line 30 - uses int[] variable
-int[] shapes = nps[0].shape;  // shape property returns int[] for backward compat
-```
-
-**Fix:** Use `long[]` literal:
-```csharp
-np.Storage.Reshape(new long[] { nps.Length, nps[0].shape[0] });
-```
+**Status:** Entire implementation is commented out (inside `/* ... */`). No fix needed as this is dead code. If the implementation is restored, it should use `long[]` shapes.
 
 ---
 
-### H4. np.repeat Uses `int count` for Per-Element Repeat
+### H4. ✅ FIXED - np.repeat Uses `int count` for Per-Element Repeat
 
 **File:** `Manipulation/np.repeat.cs:69,159,161`
 
+**Status:** Fixed - changed `GetInt32` to `GetInt64`, `int count/j` to `long count/j`
+
 ```csharp
-// Line 69 - calculates total size with int count
-int count = repeatsFlat.GetInt32(i);  // Should be GetInt64
-
-// Line 159 - same issue
-int count = repeatsFlat.GetInt32(i);
-
-// Line 161 - inner loop uses int
-for (int j = 0; j < count; j++)  // Should be long j
-```
-
-**Issue:** If repeat count exceeds int.MaxValue for any element, this will fail or overflow.
-
-**Fix:**
-```csharp
+// NOW USES:
 long count = repeatsFlat.GetInt64(i);
 for (long j = 0; j < count; j++)
 ```
@@ -157,22 +150,11 @@ SortUniqueSpan<T>((T*)dst.Address, hashset.Count);
 
 ---
 
-### H6. np.searchsorted Empty Array Returns Wrong Type
+### H6. ✅ FIXED - np.searchsorted Empty Array Returns Wrong Type
 
 **File:** `Sorting_Searching_Counting/np.searchsorted.cs:48`
 
-```csharp
-if (v.size == 0)
-    return new NDArray(typeof(int), Shape.Vector(0), false);
-//                     ^^^^^^^^^^^ Should be typeof(long)
-```
-
-**Issue:** Returns int32 type for empty input, but int64 for non-empty input. Inconsistent.
-
-**Fix:**
-```csharp
-return new NDArray(typeof(long), Shape.Vector(0), false);
-```
+**Status:** Fixed - empty array now returns `typeof(long)` for consistency with non-empty case.
 
 ---
 
@@ -227,18 +209,11 @@ public static NDArray roll(NDArray a, int shift, int? axis = null)
 
 ---
 
-### H10. UnmanagedHelper.CopyTo Uses `int countOffsetDestination`
+### H10. ✅ FIXED - UnmanagedHelper.CopyTo Uses `int countOffsetDestination`
 
 **File:** `Backends/Unmanaged/UnmanagedHelper.cs:42,58`
 
-```csharp
-public static unsafe void CopyTo(this IMemoryBlock src, IMemoryBlock dst, int countOffsetDesitinion)
-public static unsafe void CopyTo(this IMemoryBlock src, void* dstAddress, int countOffsetDesitinion)
-```
-
-**Issue:** Offset parameter is `int`, limiting copy destination offset.
-
-**Fix:** Change to `long countOffsetDestination`.
+**Status:** Fixed - changed parameter to `long countOffsetDestination` (also fixed typo in parameter name).
 
 ---
 
@@ -256,24 +231,11 @@ public static NDArray array<T>(IEnumerable<T> data, int size) where T : unmanage
 
 ---
 
-### H12. SimdMatMul.MatMulFloatSimple Uses `int M, N, K`
+### H12. ✅ FIXED - SimdMatMul.MatMulFloatSimple Uses `int M, N, K`
 
 **File:** `Backends/Kernels/SimdMatMul.cs:71-100`
 
-```csharp
-private static unsafe void MatMulFloatSimple(float* A, float* B, float* C, int M, int N, int K)
-{
-    for (int i = 0; i < M; i++)    // Should be long
-    for (int k = 0; k < K; k++)    // Should be long
-    for (int j = 0; j < N; j++)    // Should be long
-```
-
-**Issue:** While the main `MatMulFloat` method uses `long M, N, K`, the "simple" path for small matrices casts to `int` and uses `int` loop counters. This caps the simple path at matrices with int.MaxValue dimensions even though the outer API promises long support.
-
-**Fix:** Change signature and loop counters to `long`:
-```csharp
-private static unsafe void MatMulFloatSimple(float* A, float* B, float* C, long M, long N, long K)
-```
+**Status:** Fixed - changed signature to `long M, N, K` and all loop counters to `long`. Removed `(int)` casts at call site.
 
 ---
 
@@ -298,171 +260,87 @@ internal static unsafe long ArgMinSimdHelper<T>(void* input, long totalSize)
 
 ---
 
-### H14. Default.Dot Uses `int[]` for Dimension Expansion
+### H14. ✅ FIXED - Default.Dot Uses `int[]` for Dimension Expansion
 
 **File:** `Backends/Default/Math/BLAS/Default.Dot.cs:78-92`
 
-```csharp
-private static int[] ExpandStartDim(Shape shape)
-{
-    var ret = new int[shape.NDim + 1];  // Should be long[]
-    ret[0] = 1;
-    Array.Copy(shape.dimensions, 0, ret, 1, shape.NDim);  // dimensions is long[]
-    return ret;
-}
-```
-
-**Issue:** Returns `int[]` but copies from `shape.dimensions` which is `long[]`. Truncates dimensions >int.MaxValue.
-
-**Fix:** Change return type to `long[]`:
-```csharp
-private static long[] ExpandStartDim(Shape shape)
-{
-    var ret = new long[shape.NDim + 1];
-    // ...
-}
-```
+**Status:** Fixed - `ExpandStartDim` and `ExpandEndDim` now return `long[]` and allocate `new long[]`.
 
 ---
 
-### H15. NDArray.Normalize Uses `int` Loop Counters
+### H15. ✅ FIXED - NDArray.Normalize Uses `int` Loop Counters
 
 **File:** `Extensions/NdArray.Normalize.cs:19,22`
 
-```csharp
-for (int col = 0; col < shape[1]; col++)  // shape[1] is long
-    for (int row = 0; row < shape[0]; row++)  // shape[0] is long
-```
-
-**Issue:** Loop counters are `int` but iterate up to `shape[i]` which is `long`. Fails for arrays with >2B elements per dimension.
-
-**Fix:** Change to `long` loop counters:
-```csharp
-for (long col = 0; col < shape[1]; col++)
-    for (long row = 0; row < shape[0]; row++)
-```
+**Status:** Fixed - loop counters changed to `long col`, `long row`.
 
 ---
 
-### H16. Slice.Index Uses `int` Cast in Indexing Selection
+### H16. ✅ FIXED - Slice.Index Uses `int` Cast in Indexing Selection
 
 **Files:**
 - `Selection/NDArray.Indexing.Selection.Getter.cs:109`
 - `Selection/NDArray.Indexing.Selection.Setter.cs:126`
 
-```csharp
-case IConvertible o: return Slice.Index((int)o.ToInt32(CultureInfo.InvariantCulture));
-```
-
-**Issue:** Casts to `int` when `Slice.Index` now accepts `long`. This truncates large indices.
-
-**Fix:** Use `ToInt64`:
-```csharp
-case IConvertible o: return Slice.Index(o.ToInt64(CultureInfo.InvariantCulture));
-```
+**Status:** Fixed - changed both files to use `ToInt64` instead of `ToInt32`.
 
 ---
 
-### H17. Shape Dimension Parsing Uses `List<int>`
+### H17. ⚠️ RECLASSIFIED AS LOW - Shape.ExtractShape Uses `List<int>`
 
 **File:** `View/Shape.cs:956`
 
-```csharp
-var l = new List<int>(16);
-```
+**Status:** This method processes .NET `Array` objects where `Array.Length` and `Array.GetLength()` return `int`. The `int[]` result is required for compatibility with .NET's `Array.CreateInstance()`.
 
-**Issue:** Uses `List<int>` when accumulating dimension values that should be `long`.
-
-**Fix:** Change to `List<long>`:
-```csharp
-var l = new List<long>(16);
-```
+**Acceptable:** .NET boundary limitation - multi-dimensional arrays in .NET are inherently limited to int dimensions.
 
 ---
 
-### H18. NdArrayFromJaggedArr Uses `List<int>` for Dimensions
+### H18. ⚠️ RECLASSIFIED AS LOW - NdArrayFromJaggedArr Uses `List<int>` for Dimensions
 
 **File:** `Casting/NdArrayFromJaggedArr.cs:35`
 
-```csharp
-var dimList = new List<int>();
-```
+**Status:** Processes .NET jagged arrays where `Array.Length` returns `int`.
 
-**Issue:** Collects dimension sizes in `List<int>` - truncates dimensions >int.MaxValue.
-
-**Fix:** Change to `List<long>`:
-```csharp
-var dimList = new List<long>();
-```
+**Acceptable:** .NET boundary limitation - jagged array dimensions are inherently limited to int.
 
 ---
 
-### H19. Arrays.GetDimensions Uses `List<int>`
+### H19. ⚠️ RECLASSIFIED AS LOW - Arrays.GetDimensions Uses `List<int>`
 
 **File:** `Utilities/Arrays.cs:300,339`
 
-```csharp
-var dimList = new List<int>(16);
-```
+**Status:** Processes .NET `Array` objects where `Array.Length` returns `int`.
 
-**Issue:** Same as H18 - should be `List<long>`.
-
-**Fix:** Change to `List<long>`:
-```csharp
-var dimList = new List<long>(16);
-```
+**Acceptable:** .NET boundary limitation - same as H17/H18.
 
 ---
 
-### H20. np.asarray Uses `new int[0]` for Scalar Shape
+### H20. ✅ FIXED - np.asarray Uses `new int[0]` for Scalar Shape
 
 **File:** `Creation/np.asarray.cs:7,14`
 
-```csharp
-var nd = new NDArray(typeof(string), new int[0]);
-var nd = new NDArray(typeof(T), new int[0]);
-```
-
-**Issue:** Uses `int[]` for empty shape when should use `long[]`.
-
-**Fix:** Use `Array.Empty<long>()` or `new long[0]`:
-```csharp
-var nd = new NDArray(typeof(string), Array.Empty<long>());
-```
+**Status:** Fixed - now uses `Array.Empty<long>()` for scalar shapes.
 
 ---
 
-### H21. ArrayConvert Uses `int[]` for Dimensions
+### H21. ⚠️ RECLASSIFIED AS LOW - ArrayConvert Uses `int[]` for Dimensions
 
 **File:** `Utilities/ArrayConvert.cs:43`
 
-```csharp
-int[] dimensions = new int[dims];
-```
+**Status:** Uses `Array.GetLength()` which returns `int`, and creates output via `Arrays.Create()` which uses .NET `Array.CreateInstance()`.
 
-**Issue:** Allocates `int[]` for dimensions when should be `long[]`.
-
-**Fix:** Change to `long[]`:
-```csharp
-long[] dimensions = new long[dims];
-```
+**Acceptable:** .NET boundary limitation - multi-dimensional arrays are int-indexed.
 
 ---
 
-### H22. UnmanagedStorage Uses `int[]` dim in FromMultiDimArray
+### H22. ⚠️ RECLASSIFIED AS LOW - UnmanagedStorage Uses `int[]` dim in FromMultiDimArray
 
 **File:** `Backends/Unmanaged/UnmanagedStorage.cs:1139`
 
-```csharp
-int[] dim = new int[values.Rank];
-```
+**Status:** Uses `Array.GetLength()` which returns `int`. The source is a .NET multi-dimensional array.
 
-**Issue:** Copies dimensions from multi-dim array into `int[]`.
-
-**Fix:** Change to `long[]`:
-```csharp
-long[] dim = new long[values.Rank];
-```
+**Acceptable:** .NET boundary limitation - same as H17/H21.
 
 ---
 
@@ -836,24 +714,24 @@ var intIndices = new int[indices.Length];
 - [ ] H1: Add `long[]` primary overloads to all `Get*` methods in NDArray
 - [ ] H1: Add `long[]` primary overloads to all `Get*` methods in UnmanagedStorage.Getters
 - [ ] H2: Add missing `long[]` overloads to typed setters (9 methods)
-- [ ] H3: Fix `np.vstack` to use `long[]` shape
-- [ ] H4: Fix `np.repeat` to use `GetInt64` and `long count` for per-element repeats
-- [ ] H6: Fix `np.searchsorted` empty array return type to `typeof(long)`
+- [x] ~~H3: Fix `np.vstack` to use `long[]` shape~~ → Reclassified LOW (dead code)
+- [x] H4: Fix `np.repeat` to use `GetInt64` and `long count` for per-element repeats ✅
+- [x] H6: Fix `np.searchsorted` empty array return type to `typeof(long)` ✅
 - [ ] H8: Add `long num` overloads to `np.linspace`
 - [ ] H9: Add `long shift` overloads to `np.roll`
-- [ ] H10: Fix `UnmanagedHelper.CopyTo` offset parameter to `long`
+- [x] H10: Fix `UnmanagedHelper.CopyTo` offset parameter to `long` ✅
 - [ ] H11: Add `long size` overload to `np.array<T>(IEnumerable, size)`
-- [ ] H12: Fix `SimdMatMul.MatMulFloatSimple` to use `long M, N, K` and `long` loop counters
-- [ ] H13: Fix `ArgMaxSimdHelper`/`ArgMinSimdHelper` to return `long` and accept `long totalSize`
-- [ ] H14: Fix `Default.Dot.ExpandStartDim`/`ExpandEndDim` to return `long[]`
-- [ ] H15: Fix `NDArray.Normalize` to use `long col`, `long row` loop counters
-- [ ] H16: Fix `Slice.Index` calls in Selection to use `ToInt64` instead of `ToInt32`
-- [ ] H17: Fix `Shape.cs:956` to use `List<long>` for dimension parsing
-- [ ] H18: Fix `NdArrayFromJaggedArr` to use `List<long>` for dimensions
-- [ ] H19: Fix `Arrays.GetDimensions` to use `List<long>`
-- [ ] H20: Fix `np.asarray` to use `long[]` or `Array.Empty<long>()` for scalar shape
-- [ ] H21: Fix `ArrayConvert` to use `long[]` for dimensions
-- [ ] H22: Fix `UnmanagedStorage.FromMultiDimArray` to use `long[]` dim
+- [x] H12: Fix `SimdMatMul.MatMulFloatSimple` to use `long M, N, K` and `long` loop counters ✅
+- [ ] H13: Fix `ArgMaxSimdHelper`/`ArgMinSimdHelper` to return `long` (complex - IL emission)
+- [x] H14: Fix `Default.Dot.ExpandStartDim`/`ExpandEndDim` to return `long[]` ✅
+- [x] H15: Fix `NDArray.Normalize` to use `long col`, `long row` loop counters ✅
+- [x] H16: Fix `Slice.Index` calls in Selection to use `ToInt64` instead of `ToInt32` ✅
+- [x] ~~H17: Fix `Shape.cs:956` to use `List<long>`~~ → Reclassified LOW (.NET boundary)
+- [x] ~~H18: Fix `NdArrayFromJaggedArr` to use `List<long>`~~ → Reclassified LOW (.NET boundary)
+- [x] ~~H19: Fix `Arrays.GetDimensions` to use `List<long>`~~ → Reclassified LOW (.NET boundary)
+- [x] H20: Fix `np.asarray` to use `long[]` or `Array.Empty<long>()` for scalar shape ✅
+- [x] ~~H21: Fix `ArrayConvert` to use `long[]`~~ → Reclassified LOW (.NET boundary)
+- [x] ~~H22: Fix `UnmanagedStorage.FromMultiDimArray` to use `long[]`~~ → Reclassified LOW (.NET boundary)
 - [ ] H23: Add overflow checks to `NumSharp.Bitmap` shape dimension casts
 
 ### MEDIUM Priority (Quality)

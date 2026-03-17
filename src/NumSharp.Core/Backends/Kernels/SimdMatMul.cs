@@ -56,7 +56,7 @@ namespace NumSharp.Backends.Kernels
             // Small matrices: use simple IKJ loop (blocking overhead not worth it)
             if (M <= BLOCKING_THRESHOLD && N <= BLOCKING_THRESHOLD && K <= BLOCKING_THRESHOLD)
             {
-                MatMulFloatSimple(A, B, C, (int)M, (int)N, (int)K);
+                MatMulFloatSimple(A, B, C, M, N, K);
                 return;
             }
 
@@ -66,22 +66,24 @@ namespace NumSharp.Backends.Kernels
 
         /// <summary>
         /// Simple IKJ loop for small matrices.
+        /// Outer loops use long to support dimensions > int.MaxValue.
+        /// Inner SIMD loop uses long for j to support large N dimension.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        private static unsafe void MatMulFloatSimple(float* A, float* B, float* C, int M, int N, int K)
+        private static unsafe void MatMulFloatSimple(float* A, float* B, float* C, long M, long N, long K)
         {
-            for (int i = 0; i < M; i++)
+            for (long i = 0; i < M; i++)
             {
                 float* cRow = C + i * N;
                 float* aRow = A + i * K;
 
-                for (int k = 0; k < K; k++)
+                for (long k = 0; k < K; k++)
                 {
                     float aik = aRow[k];
                     var aikVec = Vector256.Create(aik);
                     float* bRow = B + k * N;
 
-                    int j = 0;
+                    long j = 0;
                     // SIMD loop
                     for (; j <= N - 8; j += 8)
                     {

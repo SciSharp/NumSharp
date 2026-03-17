@@ -106,7 +106,7 @@ namespace NumSharp
                         case int o:          return Slice.Index(o);
                         case string o:       return new Slice(o);
                         case bool o:         return o ? Slice.NewAxis : throw new NumSharpException("false bool detected"); //TODO: verify this
-                        case IConvertible o: return Slice.Index((int)o.ToInt32(CultureInfo.InvariantCulture));
+                        case IConvertible o: return Slice.Index(o.ToInt64(CultureInfo.InvariantCulture));
                         default:             throw new ArgumentException($"Unsupported slice type: '{(x?.GetType()?.Name ?? "null")}'");
                     }
                 }).ToArray();

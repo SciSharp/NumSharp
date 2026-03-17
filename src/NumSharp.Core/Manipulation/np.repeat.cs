@@ -62,7 +62,7 @@ namespace NumSharp
             long totalSize = 0;
             for (long i = 0; i < repeatsFlat.size; i++)
             {
-                int count = repeatsFlat.GetInt32(i);
+                long count = repeatsFlat.GetInt64(i);
                 if (count < 0)
                     throw new ArgumentException("repeats may not contain negative values");
                 totalSize += count;
@@ -148,9 +148,9 @@ namespace NumSharp
             long outIdx = 0;
             for (long i = 0; i < srcSize; i++)
             {
-                int count = repeatsFlat.GetInt32(i);
+                long count = repeatsFlat.GetInt64(i);
                 T val = src[i];
-                for (int j = 0; j < count; j++)
+                for (long j = 0; j < count; j++)
                     dst[outIdx++] = val;
             }
 
