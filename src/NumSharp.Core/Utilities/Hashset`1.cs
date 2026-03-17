@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -9,44 +9,42 @@ using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp.Utilities
 {
-    using System;
-    using System.Collections;
-    using System.Collections.Generic;
-
     /// <summary>
     /// Implementation notes:
-    /// This uses an array-based implementation similar to Dictionary<T>, using a buckets array
+    /// This uses an array-based implementation similar to Dictionary&lt;T&gt;, using a buckets array
     /// to map hash values to the Slots array. Items in the Slots array that hash to the same value
-    /// are chained together through the "next" indices. 
-    /// 
+    /// are chained together through the "next" indices.
+    ///
+    /// This implementation supports long indexing for collections exceeding int.MaxValue elements.
+    ///
     /// The capacity is always prime; so during resizing, the capacity is chosen as the next prime
-    /// greater than double the last capacity. 
-    /// 
-    /// The underlying data structures are lazily initialized. Because of the observation that, 
+    /// greater than double the last capacity (or 33% growth for very large sets above 1 billion elements).
+    ///
+    /// The underlying data structures are lazily initialized. Because of the observation that,
     /// in practice, hashtables tend to contain only a few elements, the initial capacity is
     /// set very small (3 elements) unless the ctor with a collection is used.
-    /// 
-    /// The +/- 1 modifications in methods that add, check for containment, etc allow us to 
-    /// distinguish a hash code of 0 from an uninitialized bucket. This saves us from having to 
+    ///
+    /// The +/- 1 modifications in methods that add, check for containment, etc allow us to
+    /// distinguish a hash code of 0 from an uninitialized bucket. This saves us from having to
     /// reset each bucket to -1 when resizing. See Contains, for example.
-    /// 
+    ///
     /// Set methods such as UnionWith, IntersectWith, ExceptWith, and SymmetricExceptWith modify
     /// this set.
-    /// 
+    ///
     /// Some operations can perform faster if we can assume "other" contains unique elements
     /// according to this equality comparer. The only times this is efficient to check is if
     /// other is a hashset. Note that checking that it's a hashset alone doesn't suffice; we
-    /// also have to check that the hashset is using the same equality comparer. If other 
+    /// also have to check that the hashset is using the same equality comparer. If other
     /// has a different equality comparer, it will have unique elements according to its own
-    /// equality comparer, but not necessarily according to ours. Therefore, to go these 
+    /// equality comparer, but not necessarily according to ours. Therefore, to go these
     /// optimized routes we check that other is a hashset using the same equality comparer.
-    /// 
-    /// A HashSet with no elements has the properties of the empty set. (See IsSubset, etc. for 
+    ///
+    /// A HashSet with no elements has the properties of the empty set. (See IsSubset, etc. for
     /// special empty set checks.)
-    /// 
-    /// A couple of methods have a special case if other is this (e.g. SymmetricExceptWith). 
+    ///
+    /// A couple of methods have a special case if other is this (e.g. SymmetricExceptWith).
     /// If we didn't have these checks, we could be iterating over the set and modifying at
-    /// the same time. 
+    /// the same time.
     /// </summary>
     /// <typeparam name="T"></typeparam>
     [DebuggerDisplay("Count = {" + nameof(Count) + "}")]
@@ -59,18 +57,18 @@ namespace NumSharp.Utilities
         // cutoff point, above which we won't do stackallocs. This corresponds to 100 integers.
         private const int StackAllocThreshold = 100;
 
-        // when constructing a hashset from an existing collection, it may contain duplicates, 
+        // when constructing a hashset from an existing collection, it may contain duplicates,
         // so this is used as the max acceptable excess ratio of capacity to count. Note that
         // this is only used on the ctor and not to automatically shrink if the hashset has, e.g,
         // a lot of adds followed by removes. Users must explicitly shrink by calling TrimExcess.
         // This is set to 3 because capacity is acceptable as 2x rounded up to nearest prime.
         private const int ShrinkThreshold = 3;
 
-        private int[] m_buckets;
+        private long[] m_buckets;
         private Slot[] m_slots;
-        private int m_count;
-        private int m_lastIndex;
-        private int m_freeList;
+        private long m_count;
+        private long m_lastIndex;
+        private long m_freeList;
         private IEqualityComparer<T> m_comparer;
         private int m_version;
 
@@ -80,8 +78,12 @@ namespace NumSharp.Utilities
             : this(EqualityComparer<T>.Default)
         { }
 
-        public Hashset(int capacity)
+        public Hashset(long capacity)
             : this(capacity, EqualityComparer<T>.Default)
+        { }
+
+        public Hashset(int capacity)
+            : this((long)capacity, EqualityComparer<T>.Default)
         { }
 
         public Hashset(IEqualityComparer<T> comparer)
@@ -104,8 +106,8 @@ namespace NumSharp.Utilities
 
         /// <summary>
         /// Implementation Notes:
-        /// Since resizes are relatively expensive (require rehashing), this attempts to minimize 
-        /// the need to resize by setting the initial capacity based on size of collection. 
+        /// Since resizes are relatively expensive (require rehashing), this attempts to minimize
+        /// the need to resize by setting the initial capacity based on size of collection.
         /// </summary>
         /// <param name="collection"></param>
         /// <param name="comparer"></param>
@@ -128,12 +130,12 @@ namespace NumSharp.Utilities
                 // to avoid excess resizes, first set size based on collection's count. Collection
                 // may contain duplicates, so call TrimExcess if resulting hashset is larger than
                 // threshold
-                int suggestedCapacity = !(collection is ICollection<T> coll) ? 0 : coll.Count;
+                long suggestedCapacity = !(collection is ICollection<T> coll) ? 0 : coll.Count;
                 Initialize(suggestedCapacity);
 
                 this.UnionWith(collection);
 
-                if (m_count > 0 && m_slots.Length / m_count > ShrinkThreshold)
+                if (m_count > 0 && m_slots.LongLength / m_count > ShrinkThreshold)
                 {
                     TrimExcess();
                 }
@@ -144,7 +146,7 @@ namespace NumSharp.Utilities
         // equality comparer.
         private void CopyFrom(Hashset<T> source)
         {
-            int count = source.m_count;
+            long count = source.m_count;
             if (count == 0)
             {
                 // As well as short-circuiting on the rest of the work done,
@@ -153,12 +155,12 @@ namespace NumSharp.Utilities
                 return;
             }
 
-            int capacity = source.m_buckets.Length;
-            int threshold = HashHelpers.ExpandPrime(count + 1);
+            long capacity = source.m_buckets.LongLength;
+            long threshold = HashHelpersLong.ExpandPrime(count + 1);
 
             if (threshold >= capacity)
             {
-                m_buckets = (int[])source.m_buckets.Clone();
+                m_buckets = (long[])source.m_buckets.Clone();
                 m_slots = (Slot[])source.m_slots.Clone();
 
                 m_lastIndex = source.m_lastIndex;
@@ -166,11 +168,11 @@ namespace NumSharp.Utilities
             }
             else
             {
-                int lastIndex = source.m_lastIndex;
+                long lastIndex = source.m_lastIndex;
                 Slot[] slots = source.m_slots;
                 Initialize(count);
-                int index = 0;
-                for (int i = 0; i < lastIndex; ++i)
+                long index = 0;
+                for (long i = 0; i < lastIndex; ++i)
                 {
                     int hashCode = slots[i].hashCode;
                     if (hashCode >= 0)
@@ -187,7 +189,7 @@ namespace NumSharp.Utilities
             m_count = count;
         }
 
-        public Hashset(int capacity, IEqualityComparer<T> comparer)
+        public Hashset(long capacity, IEqualityComparer<T> comparer)
             : this(comparer)
         {
             if (capacity < 0)
@@ -203,12 +205,16 @@ namespace NumSharp.Utilities
             }
         }
 
+        public Hashset(int capacity, IEqualityComparer<T> comparer)
+            : this((long)capacity, comparer)
+        { }
+
         #endregion
 
         #region ICollection<T> methods
 
         /// <summary>
-        /// Add item to this hashset. This is the explicit implementation of the ICollection<T>
+        /// Add item to this hashset. This is the explicit implementation of the ICollection&lt;T&gt;
         /// interface. The other Add method returns bool indicating whether item was added.
         /// </summary>
         /// <param name="item">item to add</param>
@@ -218,7 +224,7 @@ namespace NumSharp.Utilities
         }
 
         /// <summary>
-        /// Remove all items from this set. This clears the elements but not the underlying 
+        /// Remove all items from this set. This clears the elements but not the underlying
         /// buckets and slots array. Follow this call by TrimExcess to release these.
         /// </summary>
         public void Clear()
@@ -228,9 +234,24 @@ namespace NumSharp.Utilities
                 Debug.Assert(m_buckets != null, "m_buckets was null but m_lastIndex > 0");
 
                 // clear the elements so that the gc can reclaim the references.
-                // clear only up to m_lastIndex for m_slots 
-                Array.Clear(m_slots, 0, m_lastIndex);
-                Array.Clear(m_buckets, 0, m_buckets.Length);
+                // clear only up to m_lastIndex for m_slots
+                Array.Clear(m_slots, 0, (int)Math.Min(m_lastIndex, int.MaxValue));
+                if (m_lastIndex > int.MaxValue)
+                {
+                    // For very large arrays, clear in chunks
+                    for (long i = int.MaxValue; i < m_lastIndex; i += int.MaxValue)
+                    {
+                        Array.Clear(m_slots, (int)(i % int.MaxValue), (int)Math.Min(m_lastIndex - i, int.MaxValue));
+                    }
+                }
+                Array.Clear(m_buckets, 0, (int)Math.Min(m_buckets.LongLength, int.MaxValue));
+                if (m_buckets.LongLength > int.MaxValue)
+                {
+                    for (long i = int.MaxValue; i < m_buckets.LongLength; i += int.MaxValue)
+                    {
+                        Array.Clear(m_buckets, (int)(i % int.MaxValue), (int)Math.Min(m_buckets.LongLength - i, int.MaxValue));
+                    }
+                }
                 m_lastIndex = 0;
                 m_count = 0;
                 m_freeList = -1;
@@ -249,8 +270,9 @@ namespace NumSharp.Utilities
             if (m_buckets != null)
             {
                 int hashCode = InternalGetHashCode(item);
+                long bucketIndex = (long)(((uint)hashCode) % (ulong)m_buckets.LongLength);
                 // see note at "HashSet" level describing why "- 1" appears in for loop
-                for (int i = m_buckets[hashCode % m_buckets.Length] - 1; i >= 0; i = m_slots[i].next)
+                for (long i = m_buckets[bucketIndex] - 1; i >= 0; i = m_slots[i].next)
                 {
                     if (m_slots[i].hashCode == hashCode && m_comparer.Equals(m_slots[i].value, item))
                     {
@@ -283,16 +305,16 @@ namespace NumSharp.Utilities
             if (m_buckets != null)
             {
                 int hashCode = InternalGetHashCode(item);
-                int bucket = hashCode % m_buckets.Length;
-                int last = -1;
-                for (int i = m_buckets[bucket] - 1; i >= 0; last = i, i = m_slots[i].next)
+                long bucketIndex = (long)(((uint)hashCode) % (ulong)m_buckets.LongLength);
+                long last = -1;
+                for (long i = m_buckets[bucketIndex] - 1; i >= 0; last = i, i = m_slots[i].next)
                 {
                     if (m_slots[i].hashCode == hashCode && m_comparer.Equals(m_slots[i].value, item))
                     {
                         if (last < 0)
                         {
                             // first iteration; update buckets
-                            m_buckets[bucket] = m_slots[i].next + 1;
+                            m_buckets[bucketIndex] = m_slots[i].next + 1;
                         }
                         else
                         {
@@ -326,11 +348,24 @@ namespace NumSharp.Utilities
         }
 
         /// <summary>
+        /// Number of elements in this hashset (long version for large sets)
+        /// </summary>
+        public long LongCount
+        {
+            get { return m_count; }
+        }
+
+        /// <summary>
         /// Number of elements in this hashset
         /// </summary>
         public int Count
         {
-            get { return m_count; }
+            get
+            {
+                if (m_count > int.MaxValue)
+                    throw new OverflowException($"Count ({m_count}) exceeds int.MaxValue. Use LongCount instead.");
+                return (int)m_count;
+            }
         }
 
         /// <summary>
@@ -365,7 +400,7 @@ namespace NumSharp.Utilities
         #region HashSet methods
 
         /// <summary>
-        /// Add item to this HashSet. Returns bool indicating whether item was added (won't be 
+        /// Add item to this HashSet. Returns bool indicating whether item was added (won't be
         /// added if already present)
         /// </summary>
         /// <param name="item"></param>
@@ -382,7 +417,7 @@ namespace NumSharp.Utilities
         /// <param name="actualValue">The value from the set that the search found, or the default value of <typeparamref name="T"/> when the search yielded no match.</param>
         /// <returns>A value indicating whether the search was successful.</returns>
         /// <remarks>
-        /// This can be useful when you want to reuse a previously stored reference instead of 
+        /// This can be useful when you want to reuse a previously stored reference instead of
         /// a newly constructed one (so that more sharing of references can occur) or to look up
         /// a value that has more complete data than the value you currently have, although their
         /// comparer functions indicate they are equal.
@@ -391,7 +426,7 @@ namespace NumSharp.Utilities
         {
             if (m_buckets != null)
             {
-                int i = InternalIndexOf(equalValue);
+                long i = InternalIndexOf(equalValue);
                 if (i >= 0)
                 {
                     actualValue = m_slots[i].value;
@@ -405,9 +440,9 @@ namespace NumSharp.Utilities
 
         /// <summary>
         /// Take the union of this HashSet with other. Modifies this set.
-        /// 
-        /// Implementation note: GetSuggestedCapacity (to increase capacity in advance avoiding 
-        /// multiple resizes ended up not being useful in practice; quickly gets to the 
+        ///
+        /// Implementation note: GetSuggestedCapacity (to increase capacity in advance avoiding
+        /// multiple resizes ended up not being useful in practice; quickly gets to the
         /// point where it's a wasteful check.
         /// </summary>
         /// <param name="other">enumerable with items to add</param>
@@ -428,15 +463,15 @@ namespace NumSharp.Utilities
 
         /// <summary>
         /// Takes the intersection of this set with other. Modifies this set.
-        /// 
-        /// Implementation Notes: 
-        /// We get better perf if other is a hashset using same equality comparer, because we 
+        ///
+        /// Implementation Notes:
+        /// We get better perf if other is a hashset using same equality comparer, because we
         /// get constant contains check in other. Resulting cost is O(n1) to iterate over this.
-        /// 
+        ///
         /// If we can't go above route, iterate over the other and mark intersection by checking
-        /// contains in this. Then loop over and delete any unmarked elements. Total cost is n2+n1. 
-        /// 
-        /// Attempts to return early based on counts alone, using the property that the 
+        /// contains in this. Then loop over and delete any unmarked elements. Total cost is n2+n1.
+        ///
+        /// Attempts to return early based on counts alone, using the property that the
         /// intersection of anything with the empty set is the empty set.
         /// </summary>
         /// <param name="other">enumerable with items to add </param>
@@ -465,7 +500,7 @@ namespace NumSharp.Utilities
                     return;
                 }
 
-                // faster if other is a hashset using same equality comparer; so check 
+                // faster if other is a hashset using same equality comparer; so check
                 // that other is a hashset using the same equality comparer.
                 if (other is Hashset<T> otherAsSet && AreEqualityComparersEqual(this, otherAsSet))
                 {
@@ -554,14 +589,14 @@ namespace NumSharp.Utilities
 
         /// <summary>
         /// Checks if this is a subset of other.
-        /// 
+        ///
         /// Implementation Notes:
         /// The following properties are used up-front to avoid element-wise checks:
         /// 1. If this is the empty set, then it's a subset of anything, including the empty set
         /// 2. If other has unique elements according to this equality comparer, and this has more
         /// elements than other, then it can't be a subset.
-        /// 
-        /// Furthermore, if other is a hashset using the same equality comparer, we can use a 
+        ///
+        /// Furthermore, if other is a hashset using the same equality comparer, we can use a
         /// faster element-wise check.
         /// </summary>
         /// <param name="other"></param>
@@ -581,17 +616,17 @@ namespace NumSharp.Utilities
                 return true;
             }
 
-            // faster if other has unique elements according to this equality comparer; so check 
+            // faster if other has unique elements according to this equality comparer; so check
             // that other is a hashset using the same equality comparer.
             if (other is Hashset<T> otherAsSet && AreEqualityComparersEqual(this, otherAsSet))
             {
                 // if this has more elements then it can't be a subset
-                if (m_count > otherAsSet.Count)
+                if (m_count > otherAsSet.m_count)
                 {
                     return false;
                 }
 
-                // already checked that we're using same equality comparer. simply check that 
+                // already checked that we're using same equality comparer. simply check that
                 // each element in this is contained in other.
                 return IsSubsetOfHashSetWithSameEC(otherAsSet);
             }
@@ -604,15 +639,15 @@ namespace NumSharp.Utilities
 
         /// <summary>
         /// Checks if this is a proper subset of other (i.e. strictly contained in)
-        /// 
+        ///
         /// Implementation Notes:
         /// The following properties are used up-front to avoid element-wise checks:
         /// 1. If this is the empty set, then it's a proper subset of a set that contains at least
         /// one element, but it's not a proper subset of the empty set.
         /// 2. If other has unique elements according to this equality comparer, and this has >=
         /// the number of elements in other, then this can't be a proper subset.
-        /// 
-        /// Furthermore, if other is a hashset using the same equality comparer, we can use a 
+        ///
+        /// Furthermore, if other is a hashset using the same equality comparer, we can use a
         /// faster element-wise check.
         /// </summary>
         /// <param name="other"></param>
@@ -637,7 +672,7 @@ namespace NumSharp.Utilities
                 // faster if other is a hashset (and we're using same equality comparer)
                 if (other is Hashset<T> otherAsSet && AreEqualityComparersEqual(this, otherAsSet))
                 {
-                    if (m_count >= otherAsSet.Count)
+                    if (m_count >= otherAsSet.m_count)
                     {
                         return false;
                     }
@@ -654,14 +689,14 @@ namespace NumSharp.Utilities
 
         /// <summary>
         /// Checks if this is a superset of other
-        /// 
+        ///
         /// Implementation Notes:
         /// The following properties are used up-front to avoid element-wise checks:
         /// 1. If other has no elements (it's the empty set), then this is a superset, even if this
         /// is also the empty set.
-        /// 2. If other has unique elements according to this equality comparer, and this has less 
+        /// 2. If other has unique elements according to this equality comparer, and this has less
         /// than the number of elements in other, then this can't be a superset
-        /// 
+        ///
         /// </summary>
         /// <param name="other"></param>
         /// <returns>true if this is a superset of other; false if not</returns>
@@ -687,7 +722,7 @@ namespace NumSharp.Utilities
                 // same equality comparer
                 if (other is Hashset<T> otherAsSet && AreEqualityComparersEqual(this, otherAsSet))
                 {
-                    if (otherAsSet.Count > m_count)
+                    if (otherAsSet.m_count > m_count)
                     {
                         return false;
                     }
@@ -699,19 +734,19 @@ namespace NumSharp.Utilities
 
         /// <summary>
         /// Checks if this is a proper superset of other (i.e. other strictly contained in this)
-        /// 
-        /// Implementation Notes: 
+        ///
+        /// Implementation Notes:
         /// This is slightly more complicated than above because we have to keep track if there
         /// was at least one element not contained in other.
-        /// 
+        ///
         /// The following properties are used up-front to avoid element-wise checks:
-        /// 1. If this is the empty set, then it can't be a proper superset of any set, even if 
+        /// 1. If this is the empty set, then it can't be a proper superset of any set, even if
         /// other is the empty set.
         /// 2. If other is an empty set and this contains at least 1 element, then this is a proper
         /// superset.
         /// 3. If other has unique elements according to this equality comparer, and other's count
         /// is greater than or equal to this count, then this can't be a proper superset
-        /// 
+        ///
         /// Furthermore, if other has unique elements according to this equality comparer, we can
         /// use a faster element-wise check.
         /// </summary>
@@ -744,7 +779,7 @@ namespace NumSharp.Utilities
                 // faster if other is a hashset with the same equality comparer
                 if (other is Hashset<T> otherAsSet && AreEqualityComparersEqual(this, otherAsSet))
                 {
-                    if (otherAsSet.Count >= m_count)
+                    if (otherAsSet.m_count >= m_count)
                     {
                         return false;
                     }
@@ -790,7 +825,7 @@ namespace NumSharp.Utilities
         }
 
         /// <summary>
-        /// Checks if this and other contain the same elements. This is set equality: 
+        /// Checks if this and other contain the same elements. This is set equality:
         /// duplicates and order are ignored
         /// </summary>
         /// <param name="other"></param>
@@ -807,9 +842,9 @@ namespace NumSharp.Utilities
             // faster if other is a hashset and we're using same equality comparer
             if (other is Hashset<T> otherAsSet && AreEqualityComparersEqual(this, otherAsSet))
             {
-                // attempt to return early: since both contain unique elements, if they have 
+                // attempt to return early: since both contain unique elements, if they have
                 // different counts, then they can't be equal
-                if (m_count != otherAsSet.Count)
+                if (m_count != otherAsSet.m_count)
                 {
                     return false;
                 }
@@ -836,7 +871,7 @@ namespace NumSharp.Utilities
 
         public void CopyTo(T[] array) { CopyTo(array, 0, m_count); }
 
-        public void CopyTo(T[] array, int arrayIndex, int count)
+        public void CopyTo(T[] array, long arrayIndex, long count)
         {
             if (array == null)
             {
@@ -860,13 +895,13 @@ namespace NumSharp.Utilities
             // will array, starting at arrayIndex, be able to hold elements? Note: not
             // checking arrayIndex >= array.Length (consistency with list of allowing
             // count of 0; subsequent check takes care of the rest)
-            if (arrayIndex > array.Length || count > array.Length - arrayIndex)
+            if (arrayIndex > array.LongLength || count > array.LongLength - arrayIndex)
             {
                 throw new ArgumentException("SR.GetString(SR.Arg_ArrayPlusOffTooSmall)");
             }
 
-            int numCopied = 0;
-            for (int i = 0; i < m_lastIndex && numCopied < count; i++)
+            long numCopied = 0;
+            for (long i = 0; i < m_lastIndex && numCopied < count; i++)
             {
                 if (m_slots[i].hashCode >= 0)
                 {
@@ -878,10 +913,10 @@ namespace NumSharp.Utilities
 
         public static void CopyTo<T>(Hashset<T> src, ArraySlice<T> array) where T : unmanaged
         {
-            CopyTo<T>(src, array, 0, src.Count);
+            CopyTo<T>(src, array, 0, src.m_count);
         }
 
-        public static void CopyTo<T>(Hashset<T> src, ArraySlice<T> array, int arrayIndex, int count) where T : unmanaged
+        public static void CopyTo<T>(Hashset<T> src, ArraySlice<T> array, long arrayIndex, long count) where T : unmanaged
         {
             unsafe
             {
@@ -908,9 +943,9 @@ namespace NumSharp.Utilities
 
                 var m_slots = src.m_slots;
                 var m_lastIndex = src.m_lastIndex;
-                int numCopied = 0;
+                long numCopied = 0;
                 T* dst = array.Address;
-                for (int i = 0; i < m_lastIndex && numCopied < count; i++)
+                for (long i = 0; i < m_lastIndex && numCopied < count; i++)
                 {
                     if (m_slots[i].hashCode >= 0)
                     {
@@ -926,7 +961,7 @@ namespace NumSharp.Utilities
         /// </summary>
         /// <param name="match"></param>
         /// <returns></returns>
-        public int RemoveWhere(Predicate<T> match)
+        public long RemoveWhere(Predicate<T> match)
         {
             if (match == null)
             {
@@ -935,8 +970,8 @@ namespace NumSharp.Utilities
 
             Contract.EndContractBlock();
 
-            int numRemoved = 0;
-            for (int i = 0; i < m_lastIndex; i++)
+            long numRemoved = 0;
+            for (long i = 0; i < m_lastIndex; i++)
             {
                 if (m_slots[i].hashCode >= 0)
                 {
@@ -957,7 +992,7 @@ namespace NumSharp.Utilities
         }
 
         /// <summary>
-        /// Gets the IEqualityComparer that is used to determine equality of keys for 
+        /// Gets the IEqualityComparer that is used to determine equality of keys for
         /// the HashSet.
         /// </summary>
         public IEqualityComparer<T> Comparer
@@ -971,13 +1006,13 @@ namespace NumSharp.Utilities
         /// <summary>
         /// Sets the capacity of this list to the size of the list (rounded up to nearest prime),
         /// unless count is 0, in which case we release references.
-        /// 
+        ///
         /// This method can be used to minimize a list's memory overhead once it is known that no
-        /// new elements will be added to the list. To completely clear a list and release all 
+        /// new elements will be added to the list. To completely clear a list and release all
         /// memory referenced by the list, execute the following statements:
-        /// 
+        ///
         /// list.Clear();
-        /// list.TrimExcess(); 
+        /// list.TrimExcess();
         /// </summary>
         public void TrimExcess()
         {
@@ -996,21 +1031,21 @@ namespace NumSharp.Utilities
 
                 // similar to IncreaseCapacity but moves down elements in case add/remove/etc
                 // caused fragmentation
-                int newSize = HashHelpers.GetPrime(m_count);
+                long newSize = HashHelpersLong.GetPrime(m_count);
                 Slot[] newSlots = new Slot[newSize];
-                int[] newBuckets = new int[newSize];
+                long[] newBuckets = new long[newSize];
 
-                // move down slots and rehash at the same time. newIndex keeps track of current 
+                // move down slots and rehash at the same time. newIndex keeps track of current
                 // position in newSlots array
-                int newIndex = 0;
-                for (int i = 0; i < m_lastIndex; i++)
+                long newIndex = 0;
+                for (long i = 0; i < m_lastIndex; i++)
                 {
                     if (m_slots[i].hashCode >= 0)
                     {
                         newSlots[newIndex] = m_slots[i];
 
                         // rehash
-                        int bucket = newSlots[newIndex].hashCode % newSize;
+                        long bucket = (long)(((uint)newSlots[newIndex].hashCode) % (ulong)newSize);
                         newSlots[newIndex].next = newBuckets[bucket] - 1;
                         newBuckets[bucket] = newIndex + 1;
 
@@ -1018,7 +1053,7 @@ namespace NumSharp.Utilities
                     }
                 }
 
-                Debug.Assert(newSlots.Length <= m_slots.Length, "capacity increased after TrimExcess");
+                Debug.Assert(newSlots.LongLength <= m_slots.LongLength, "capacity increased after TrimExcess");
 
                 m_lastIndex = newIndex;
                 m_slots = newSlots;
@@ -1081,7 +1116,7 @@ namespace NumSharp.Utilities
                 return hashCode;
             }
 
-            // Equals method for the comparer itself. 
+            // Equals method for the comparer itself.
             public override bool Equals(Object obj)
             {
                 if (!(obj is HashSetEqualityComparer<T> comparer))
@@ -1107,20 +1142,20 @@ namespace NumSharp.Utilities
         /// greater than or equal to capacity.
         /// </summary>
         /// <param name="capacity"></param>
-        private void Initialize(int capacity)
+        private void Initialize(long capacity)
         {
             Debug.Assert(m_buckets == null, "Initialize was called but m_buckets was non-null");
 
-            int size = HashHelpers.GetPrime(capacity);
+            long size = HashHelpersLong.GetPrime(capacity);
 
-            m_buckets = new int[size];
+            m_buckets = new long[size];
             m_slots = new Slot[size];
         }
 
         /// <summary>
-        /// Expand to new capacity. New capacity is next prime greater than or equal to suggested 
-        /// size. This is called when the underlying array is filled. This performs no 
-        /// defragmentation, allowing faster execution; note that this is reasonable since 
+        /// Expand to new capacity. New capacity is next prime greater than or equal to suggested
+        /// size. This is called when the underlying array is filled. This performs no
+        /// defragmentation, allowing faster execution; note that this is reasonable since
         /// AddIfNotPresent attempts to insert new elements in re-opened spots.
         /// </summary>
         /// <param name="sizeSuggestion"></param>
@@ -1128,7 +1163,7 @@ namespace NumSharp.Utilities
         {
             Debug.Assert(m_buckets != null, "IncreaseCapacity called on a set with no elements");
 
-            int newSize = HashHelpers.ExpandPrime(m_count);
+            long newSize = HashHelpersLong.ExpandPrime(m_count);
             if (newSize <= m_count)
             {
                 throw new ArgumentException("SR.GetString(SR.Arg_HSCapacityOverflow)");
@@ -1143,9 +1178,9 @@ namespace NumSharp.Utilities
         /// *must* be a prime.  It is very likely that you want to call IncreaseCapacity()
         /// instead of this method.
         /// </summary>
-        private void SetCapacity(int newSize, bool forceNewHashCodes)
+        private void SetCapacity(long newSize, bool forceNewHashCodes)
         {
-            Contract.Assert(HashHelpers.IsPrime(newSize), "New size is not prime!");
+            Contract.Assert(HashHelpersLong.IsPrime(newSize), "New size is not prime!");
 
             Contract.Assert(m_buckets != null, "SetCapacity called on a set with no elements");
 
@@ -1157,7 +1192,7 @@ namespace NumSharp.Utilities
 
             if (forceNewHashCodes)
             {
-                for (int i = 0; i < m_lastIndex; i++)
+                for (long i = 0; i < m_lastIndex; i++)
                 {
                     if (newSlots[i].hashCode != -1)
                     {
@@ -1166,10 +1201,10 @@ namespace NumSharp.Utilities
                 }
             }
 
-            int[] newBuckets = new int[newSize];
-            for (int i = 0; i < m_lastIndex; i++)
+            long[] newBuckets = new long[newSize];
+            for (long i = 0; i < m_lastIndex; i++)
             {
-                int bucket = newSlots[i].hashCode % newSize;
+                long bucket = (long)(((uint)newSlots[i].hashCode) % (ulong)newSize);
                 newSlots[i].next = newBuckets[bucket] - 1;
                 newBuckets[bucket] = i + 1;
             }
@@ -1192,8 +1227,8 @@ namespace NumSharp.Utilities
             }
 
             int hashCode = InternalGetHashCode(value);
-            int bucket = hashCode % m_buckets.Length;
-            for (int i = m_buckets[hashCode % m_buckets.Length] - 1; i >= 0; i = m_slots[i].next)
+            long bucketIndex = (long)(((uint)hashCode) % (ulong)m_buckets.LongLength);
+            for (long i = m_buckets[bucketIndex] - 1; i >= 0; i = m_slots[i].next)
             {
                 if (m_slots[i].hashCode == hashCode && m_comparer.Equals(m_slots[i].value, value))
                 {
@@ -1201,7 +1236,7 @@ namespace NumSharp.Utilities
                 }
             }
 
-            int index;
+            long index;
             if (m_freeList >= 0)
             {
                 index = m_freeList;
@@ -1209,11 +1244,11 @@ namespace NumSharp.Utilities
             }
             else
             {
-                if (m_lastIndex == m_slots.Length)
+                if (m_lastIndex == m_slots.LongLength)
                 {
                     IncreaseCapacity();
                     // this will change during resize
-                    bucket = hashCode % m_buckets.Length;
+                    bucketIndex = (long)(((uint)hashCode) % (ulong)m_buckets.LongLength);
                 }
 
                 index = m_lastIndex;
@@ -1222,8 +1257,8 @@ namespace NumSharp.Utilities
 
             m_slots[index].hashCode = hashCode;
             m_slots[index].value = value;
-            m_slots[index].next = m_buckets[bucket] - 1;
-            m_buckets[bucket] = index + 1;
+            m_slots[index].next = m_buckets[bucketIndex] - 1;
+            m_buckets[bucketIndex] = index + 1;
             m_count++;
             m_version++;
 
@@ -1232,13 +1267,13 @@ namespace NumSharp.Utilities
 
         // Add value at known index with known hash code. Used only
         // when constructing from another HashSet.
-        private void AddValue(int index, int hashCode, T value)
+        private void AddValue(long index, int hashCode, T value)
         {
-            int bucket = hashCode % m_buckets.Length;
+            long bucket = (long)(((uint)hashCode) % (ulong)m_buckets.LongLength);
 
 #if DEBUG
             Debug.Assert(InternalGetHashCode(value) == hashCode);
-            for (int i = m_buckets[bucket] - 1; i >= 0; i = m_slots[i].next)
+            for (long i = m_buckets[bucket] - 1; i >= 0; i = m_slots[i].next)
             {
                 Debug.Assert(!m_comparer.Equals(m_slots[i].value, value));
             }
@@ -1252,7 +1287,7 @@ namespace NumSharp.Utilities
         }
 
         /// <summary>
-        /// Checks if this contains of other's elements. Iterates over other's elements and 
+        /// Checks if this contains of other's elements. Iterates over other's elements and
         /// returns false as soon as it finds an element in other that's not in this.
         /// Used by SupersetOf, ProperSupersetOf, and SetEquals.
         /// </summary>
@@ -1273,12 +1308,12 @@ namespace NumSharp.Utilities
 
         /// <summary>
         /// Implementation Notes:
-        /// If other is a hashset and is using same equality comparer, then checking subset is 
+        /// If other is a hashset and is using same equality comparer, then checking subset is
         /// faster. Simply check that each element in this is in other.
-        /// 
+        ///
         /// Note: if other doesn't use same equality comparer, then Contains check is invalid,
         /// which is why callers must take are of this.
-        /// 
+        ///
         /// If callers are concerned about whether this is a proper subset, they take care of that.
         ///
         /// </summary>
@@ -1298,13 +1333,13 @@ namespace NumSharp.Utilities
         }
 
         /// <summary>
-        /// If other is a hashset that uses same equality comparer, intersect is much faster 
+        /// If other is a hashset that uses same equality comparer, intersect is much faster
         /// because we can use other's Contains
         /// </summary>
         /// <param name="other"></param>
         private void IntersectWithHashSetWithSameEC(Hashset<T> other)
         {
-            for (int i = 0; i < m_lastIndex; i++)
+            for (long i = 0; i < m_lastIndex; i++)
             {
                 if (m_slots[i].hashCode >= 0)
                 {
@@ -1320,7 +1355,7 @@ namespace NumSharp.Utilities
         /// <summary>
         /// Iterate over other. If contained in this, mark an element in bit array corresponding to
         /// its position in m_slots. If anything is unmarked (in bit array), remove it.
-        /// 
+        ///
         /// This attempts to allocate on the stack, if below StackAllocThreshold.
         /// </summary>
         /// <param name="other"></param>
@@ -1330,34 +1365,34 @@ namespace NumSharp.Utilities
 
             // keep track of current last index; don't want to move past the end of our bit array
             // (could happen if another thread is modifying the collection)
-            int originalLastIndex = m_lastIndex;
-            int intArrayLength = BitHelper.ToIntArrayLength(originalLastIndex);
+            long originalLastIndex = m_lastIndex;
+            long intArrayLength = BitHelperLong.ToLongArrayLength(originalLastIndex);
 
-            BitHelper bitHelper;
+            BitHelperLong bitHelper;
             if (intArrayLength <= StackAllocThreshold)
             {
-                int* bitArrayPtr = stackalloc int[intArrayLength];
-                bitHelper = new BitHelper(bitArrayPtr, intArrayLength);
+                long* bitArrayPtr = stackalloc long[(int)intArrayLength];
+                bitHelper = new BitHelperLong(bitArrayPtr, intArrayLength);
             }
             else
             {
-                int[] bitArray = new int[intArrayLength];
-                bitHelper = new BitHelper(bitArray, intArrayLength);
+                long[] bitArray = new long[intArrayLength];
+                bitHelper = new BitHelperLong(bitArray, intArrayLength);
             }
 
             // mark if contains: find index of in slots array and mark corresponding element in bit array
             foreach (T item in other)
             {
-                int index = InternalIndexOf(item);
+                long index = InternalIndexOf(item);
                 if (index >= 0)
                 {
                     bitHelper.MarkBit(index);
                 }
             }
 
-            // if anything unmarked, remove it. Perf can be optimized here if BitHelper had a 
+            // if anything unmarked, remove it. Perf can be optimized here if BitHelper had a
             // FindFirstUnmarked method.
-            for (int i = 0; i < originalLastIndex; i++)
+            for (long i = 0; i < originalLastIndex; i++)
             {
                 if (m_slots[i].hashCode >= 0 && !bitHelper.IsMarked(i))
                 {
@@ -1368,16 +1403,17 @@ namespace NumSharp.Utilities
 
         /// <summary>
         /// Used internally by set operations which have to rely on bit array marking. This is like
-        /// Contains but returns index in slots array. 
+        /// Contains but returns index in slots array.
         /// </summary>
         /// <param name="item"></param>
         /// <returns></returns>
-        private int InternalIndexOf(T item)
+        private long InternalIndexOf(T item)
         {
             Debug.Assert(m_buckets != null, "m_buckets was null; callers should check first");
 
             int hashCode = InternalGetHashCode(item);
-            for (int i = m_buckets[hashCode % m_buckets.Length] - 1; i >= 0; i = m_slots[i].next)
+            long bucketIndex = (long)(((uint)hashCode) % (ulong)m_buckets.LongLength);
+            for (long i = m_buckets[bucketIndex] - 1; i >= 0; i = m_slots[i].next)
             {
                 if ((m_slots[i].hashCode) == hashCode && m_comparer.Equals(m_slots[i].value, item))
                 {
@@ -1392,7 +1428,7 @@ namespace NumSharp.Utilities
         /// <summary>
         /// if other is a set, we can assume it doesn't have duplicate elements, so use this
         /// technique: if can't remove, then it wasn't present in this set, so add.
-        /// 
+        ///
         /// As with other methods, callers take care of ensuring that other is a hashset using the
         /// same equality comparer.
         /// </summary>
@@ -1410,15 +1446,15 @@ namespace NumSharp.Utilities
 
         /// <summary>
         /// Implementation notes:
-        /// 
-        /// Used for symmetric except when other isn't a HashSet. This is more tedious because 
+        ///
+        /// Used for symmetric except when other isn't a HashSet. This is more tedious because
         /// other may contain duplicates. HashSet technique could fail in these situations:
-        /// 1. Other has a duplicate that's not in this: HashSet technique would add then 
+        /// 1. Other has a duplicate that's not in this: HashSet technique would add then
         /// remove it.
         /// 2. Other has a duplicate that's in this: HashSet technique would remove then add it
         /// back.
-        /// In general, its presence would be toggled each time it appears in other. 
-        /// 
+        /// In general, its presence would be toggled each time it appears in other.
+        ///
         /// This technique uses bit marking to indicate whether to add/remove the item. If already
         /// present in collection, it will get marked for deletion. If added from other, it will
         /// get marked as something not to remove.
@@ -1427,45 +1463,45 @@ namespace NumSharp.Utilities
         /// <param name="other"></param>
         private unsafe void SymmetricExceptWithEnumerable(IEnumerable<T> other)
         {
-            int originalLastIndex = m_lastIndex;
-            int intArrayLength = BitHelper.ToIntArrayLength(originalLastIndex);
+            long originalLastIndex = m_lastIndex;
+            long intArrayLength = BitHelperLong.ToLongArrayLength(originalLastIndex);
 
-            BitHelper itemsToRemove;
-            BitHelper itemsAddedFromOther;
+            BitHelperLong itemsToRemove;
+            BitHelperLong itemsAddedFromOther;
             if (intArrayLength <= StackAllocThreshold / 2)
             {
-                int* itemsToRemovePtr = stackalloc int[intArrayLength];
-                itemsToRemove = new BitHelper(itemsToRemovePtr, intArrayLength);
+                long* itemsToRemovePtr = stackalloc long[(int)intArrayLength];
+                itemsToRemove = new BitHelperLong(itemsToRemovePtr, intArrayLength);
 
-                int* itemsAddedFromOtherPtr = stackalloc int[intArrayLength];
-                itemsAddedFromOther = new BitHelper(itemsAddedFromOtherPtr, intArrayLength);
+                long* itemsAddedFromOtherPtr = stackalloc long[(int)intArrayLength];
+                itemsAddedFromOther = new BitHelperLong(itemsAddedFromOtherPtr, intArrayLength);
             }
             else
             {
-                int[] itemsToRemoveArray = new int[intArrayLength];
-                itemsToRemove = new BitHelper(itemsToRemoveArray, intArrayLength);
+                long[] itemsToRemoveArray = new long[intArrayLength];
+                itemsToRemove = new BitHelperLong(itemsToRemoveArray, intArrayLength);
 
-                int[] itemsAddedFromOtherArray = new int[intArrayLength];
-                itemsAddedFromOther = new BitHelper(itemsAddedFromOtherArray, intArrayLength);
+                long[] itemsAddedFromOtherArray = new long[intArrayLength];
+                itemsAddedFromOther = new BitHelperLong(itemsAddedFromOtherArray, intArrayLength);
             }
 
             foreach (T item in other)
             {
-                int location = 0;
+                long location = 0;
                 bool added = AddOrGetLocation(item, out location);
                 if (added)
                 {
                     // wasn't already present in collection; flag it as something not to remove
                     // *NOTE* if location is out of range, we should ignore. BitHelper will
-                    // detect that it's out of bounds and not try to mark it. But it's 
+                    // detect that it's out of bounds and not try to mark it. But it's
                     // expected that location could be out of bounds because adding the item
                     // will increase m_lastIndex as soon as all the free spots are filled.
                     itemsAddedFromOther.MarkBit(location);
                 }
                 else
                 {
-                    // already there...if not added from other, mark for remove. 
-                    // *NOTE* Even though BitHelper will check that location is in range, we want 
+                    // already there...if not added from other, mark for remove.
+                    // *NOTE* Even though BitHelper will check that location is in range, we want
                     // to check here. There's no point in checking items beyond originalLastIndex
                     // because they could not have been in the original collection
                     if (location < originalLastIndex && !itemsAddedFromOther.IsMarked(location))
@@ -1476,7 +1512,7 @@ namespace NumSharp.Utilities
             }
 
             // if anything marked, remove it
-            for (int i = 0; i < originalLastIndex; i++)
+            for (long i = 0; i < originalLastIndex; i++)
             {
                 if (itemsToRemove.IsMarked(i))
                 {
@@ -1486,7 +1522,7 @@ namespace NumSharp.Utilities
         }
 
         /// <summary>
-        /// Add if not already in hashset. Returns an out param indicating index where added. This 
+        /// Add if not already in hashset. Returns an out param indicating index where added. This
         /// is used by SymmetricExcept because it needs to know the following things:
         /// - whether the item was already present in the collection or added from other
         /// - where it's located (if already present, it will get marked for removal, otherwise
@@ -1495,13 +1531,13 @@ namespace NumSharp.Utilities
         /// <param name="value"></param>
         /// <param name="location"></param>
         /// <returns></returns>
-        private bool AddOrGetLocation(T value, out int location)
+        private bool AddOrGetLocation(T value, out long location)
         {
             Debug.Assert(m_buckets != null, "m_buckets is null, callers should have checked");
 
             int hashCode = InternalGetHashCode(value);
-            int bucket = hashCode % m_buckets.Length;
-            for (int i = m_buckets[hashCode % m_buckets.Length] - 1; i >= 0; i = m_slots[i].next)
+            long bucketIndex = (long)(((uint)hashCode) % (ulong)m_buckets.LongLength);
+            for (long i = m_buckets[bucketIndex] - 1; i >= 0; i = m_slots[i].next)
             {
                 if (m_slots[i].hashCode == hashCode && m_comparer.Equals(m_slots[i].value, value))
                 {
@@ -1510,7 +1546,7 @@ namespace NumSharp.Utilities
                 }
             }
 
-            int index;
+            long index;
             if (m_freeList >= 0)
             {
                 index = m_freeList;
@@ -1518,11 +1554,11 @@ namespace NumSharp.Utilities
             }
             else
             {
-                if (m_lastIndex == m_slots.Length)
+                if (m_lastIndex == m_slots.LongLength)
                 {
                     IncreaseCapacity();
                     // this will change during resize
-                    bucket = hashCode % m_buckets.Length;
+                    bucketIndex = (long)(((uint)hashCode) % (ulong)m_buckets.LongLength);
                 }
 
                 index = m_lastIndex;
@@ -1531,8 +1567,8 @@ namespace NumSharp.Utilities
 
             m_slots[index].hashCode = hashCode;
             m_slots[index].value = value;
-            m_slots[index].next = m_buckets[bucket] - 1;
-            m_buckets[bucket] = index + 1;
+            m_slots[index].next = m_buckets[bucketIndex] - 1;
+            m_buckets[bucketIndex] = index + 1;
             m_count++;
             m_version++;
             location = index;
@@ -1542,11 +1578,11 @@ namespace NumSharp.Utilities
         /// <summary>
         /// Determines counts that can be used to determine equality, subset, and superset. This
         /// is only used when other is an IEnumerable and not a HashSet. If other is a HashSet
-        /// these properties can be checked faster without use of marking because we can assume 
+        /// these properties can be checked faster without use of marking because we can assume
         /// other has no duplicates.
-        /// 
+        ///
         /// The following count checks are performed by callers:
-        /// 1. Equals: checks if unfoundCount = 0 and uniqueFoundCount = m_count; i.e. everything 
+        /// 1. Equals: checks if unfoundCount = 0 and uniqueFoundCount = m_count; i.e. everything
         /// in other is in this and everything in this is in other
         /// 2. Subset: checks if unfoundCount >= 0 and uniqueFoundCount = m_count; i.e. other may
         /// have elements not in this and everything in this is in other
@@ -1555,7 +1591,7 @@ namespace NumSharp.Utilities
         /// 4. Proper superset: checks if unfound count = 0 and uniqueFoundCount strictly less
         /// than m_count; i.e. everything in other was in this and this had at least one element
         /// not contained in other.
-        /// 
+        ///
         /// An earlier implementation used delegates to perform these checks rather than returning
         /// an ElementCount struct; however this was changed due to the perf overhead of delegates.
         /// </summary>
@@ -1567,10 +1603,10 @@ namespace NumSharp.Utilities
         {
             ElementCount result;
 
-            // need special case in case this has no elements. 
+            // need special case in case this has no elements.
             if (m_count == 0)
             {
-                int numElementsInOther = 0;
+                long numElementsInOther = 0;
                 foreach (T item in other)
                 {
                     numElementsInOther++;
@@ -1586,29 +1622,29 @@ namespace NumSharp.Utilities
 
             Debug.Assert((m_buckets != null) && (m_count > 0), "m_buckets was null but count greater than 0");
 
-            int originalLastIndex = m_lastIndex;
-            int intArrayLength = BitHelper.ToIntArrayLength(originalLastIndex);
+            long originalLastIndex = m_lastIndex;
+            long intArrayLength = BitHelperLong.ToLongArrayLength(originalLastIndex);
 
-            BitHelper bitHelper;
+            BitHelperLong bitHelper;
             if (intArrayLength <= StackAllocThreshold)
             {
-                int* bitArrayPtr = stackalloc int[intArrayLength];
-                bitHelper = new BitHelper(bitArrayPtr, intArrayLength);
+                long* bitArrayPtr = stackalloc long[(int)intArrayLength];
+                bitHelper = new BitHelperLong(bitArrayPtr, intArrayLength);
             }
             else
             {
-                int[] bitArray = new int[intArrayLength];
-                bitHelper = new BitHelper(bitArray, intArrayLength);
+                long[] bitArray = new long[intArrayLength];
+                bitHelper = new BitHelperLong(bitArray, intArrayLength);
             }
 
             // count of items in other not found in this
-            int unfoundCount = 0;
+            long unfoundCount = 0;
             // count of unique items in other found in this
-            int uniqueFoundCount = 0;
+            long uniqueFoundCount = 0;
 
             foreach (T item in other)
             {
-                int index = InternalIndexOf(item);
+                long index = InternalIndexOf(item);
                 if (index >= 0)
                 {
                     if (!bitHelper.IsMarked(index))
@@ -1639,15 +1675,15 @@ namespace NumSharp.Utilities
         /// <returns></returns>
         internal T[] ToArray()
         {
-            T[] newArray = new T[Count];
+            T[] newArray = new T[m_count];
             CopyTo(newArray);
             return newArray;
         }
 
         /// <summary>
-        /// Internal method used for HashSetEqualityComparer. Compares set1 and set2 according 
+        /// Internal method used for HashSetEqualityComparer. Compares set1 and set2 according
         /// to specified comparer.
-        /// 
+        ///
         /// Because items are hashed according to a specific equality comparer, we have to resort
         /// to n^2 search if they're using different equality comparers.
         /// </summary>
@@ -1671,7 +1707,7 @@ namespace NumSharp.Utilities
             // all comparers are the same; this is faster
             if (AreEqualityComparersEqual(set1, set2))
             {
-                if (set1.Count != set2.Count)
+                if (set1.m_count != set2.m_count)
                 {
                     return false;
                 }
@@ -1714,7 +1750,7 @@ namespace NumSharp.Utilities
 
         /// <summary>
         /// Checks if equality comparers are equal. This is used for algorithms that can
-        /// speed up if it knows the other item has unique elements. I.e. if they're using 
+        /// speed up if it knows the other item has unique elements. I.e. if they're using
         /// different equality comparers, then uniqueness assumption between sets break.
         /// </summary>
         /// <param name="set1"></param>
@@ -1745,21 +1781,21 @@ namespace NumSharp.Utilities
         // used for set checking operations (using enumerables) that rely on counting
         internal struct ElementCount
         {
-            internal int uniqueCount;
-            internal int unfoundCount;
+            internal long uniqueCount;
+            internal long unfoundCount;
         }
 
         internal struct Slot
         {
-            internal int hashCode; // Lower 31 bits of hash code, -1 if unused
-            internal int next; // Index of next entry, -1 if last
+            internal int hashCode;      // Lower 31 bits of hash code, -1 if unused
+            internal long next;         // Index of next entry, -1 if last
             internal T value;
         }
 
         public struct Enumerator : IEnumerator<T>, IEnumerator
         {
             private Hashset<T> set;
-            private int index;
+            private long index;
             private int version;
             private T current;
 
@@ -1832,31 +1868,31 @@ namespace NumSharp.Utilities
     }
 
 
-    unsafe internal class BitHelper
+    /// <summary>
+    /// BitHelper for long-indexed collections supporting more than int.MaxValue elements.
+    /// Uses long[] internally for bit storage.
+    /// </summary>
+    unsafe internal class BitHelperLong
     {
-        // should not be serialized
-
         private const byte MarkedBitFlag = 1;
-        private const byte IntSize = 32;
+        private const int LongSize = 64;
 
-        // m_length of underlying int array (not logical bit array)
-        private int m_length;
+        // length of underlying long array (not logical bit array)
+        private long m_length;
 
-        // ptr to stack alloc'd array of ints
-        private int* m_arrayPtr;
+        // ptr to stack alloc'd array of longs
+        private long* m_arrayPtr;
 
-        // array of ints
-        private int[] m_array;
+        // array of longs
+        private long[] m_array;
 
-        // whether to operate on stack alloc'd or heap alloc'd array 
+        // whether to operate on stack alloc'd or heap alloc'd array
         private bool useStackAlloc;
 
         /// <summary>
-        /// Instantiates a BitHelper with a heap alloc'd array of ints
+        /// Instantiates a BitHelperLong with a stack alloc'd array of longs
         /// </summary>
-        /// <param name="bitArray">int array to hold bits</param>
-        /// <param name="length">length of int array</param>
-        internal BitHelper(int* bitArrayPtr, int length)
+        internal BitHelperLong(long* bitArrayPtr, long length)
         {
             this.m_arrayPtr = bitArrayPtr;
             this.m_length = length;
@@ -1864,11 +1900,9 @@ namespace NumSharp.Utilities
         }
 
         /// <summary>
-        /// Instantiates a BitHelper with a heap alloc'd array of ints
+        /// Instantiates a BitHelperLong with a heap alloc'd array of longs
         /// </summary>
-        /// <param name="bitArray">int array to hold bits</param>
-        /// <param name="length">length of int array</param>
-        internal BitHelper(int[] bitArray, int length)
+        internal BitHelperLong(long[] bitArray, long length)
         {
             this.m_array = bitArray;
             this.m_length = length;
@@ -1877,23 +1911,19 @@ namespace NumSharp.Utilities
         /// <summary>
         /// Mark bit at specified position
         /// </summary>
-        /// <param name="bitPosition"></param>
-        internal unsafe void MarkBit(int bitPosition)
+        internal unsafe void MarkBit(long bitPosition)
         {
-            if (useStackAlloc)
+            long bitArrayIndex = bitPosition / LongSize;
+            if (bitArrayIndex < m_length && bitArrayIndex >= 0)
             {
-                int bitArrayIndex = bitPosition / IntSize;
-                if (bitArrayIndex < m_length && bitArrayIndex >= 0)
+                long mask = 1L << (int)(bitPosition % LongSize);
+                if (useStackAlloc)
                 {
-                    m_arrayPtr[bitArrayIndex] |= (MarkedBitFlag << (bitPosition % IntSize));
+                    m_arrayPtr[bitArrayIndex] |= mask;
                 }
-            }
-            else
-            {
-                int bitArrayIndex = bitPosition / IntSize;
-                if (bitArrayIndex < m_length && bitArrayIndex >= 0)
+                else
                 {
-                    m_array[bitArrayIndex] |= (MarkedBitFlag << (bitPosition % IntSize));
+                    m_array[bitArrayIndex] |= mask;
                 }
             }
         }
@@ -1901,88 +1931,142 @@ namespace NumSharp.Utilities
         /// <summary>
         /// Is bit at specified position marked?
         /// </summary>
-        /// <param name="bitPosition"></param>
-        /// <returns></returns>
-        internal unsafe bool IsMarked(int bitPosition)
+        internal unsafe bool IsMarked(long bitPosition)
         {
-            if (useStackAlloc)
+            long bitArrayIndex = bitPosition / LongSize;
+            if (bitArrayIndex < m_length && bitArrayIndex >= 0)
             {
-                int bitArrayIndex = bitPosition / IntSize;
-                if (bitArrayIndex < m_length && bitArrayIndex >= 0)
+                long mask = 1L << (int)(bitPosition % LongSize);
+                if (useStackAlloc)
                 {
-                    return ((m_arrayPtr[bitArrayIndex] & (MarkedBitFlag << (bitPosition % IntSize))) != 0);
+                    return (m_arrayPtr[bitArrayIndex] & mask) != 0;
                 }
-
-                return false;
-            }
-            else
-            {
-                int bitArrayIndex = bitPosition / IntSize;
-                if (bitArrayIndex < m_length && bitArrayIndex >= 0)
+                else
                 {
-                    return ((m_array[bitArrayIndex] & (MarkedBitFlag << (bitPosition % IntSize))) != 0);
+                    return (m_array[bitArrayIndex] & mask) != 0;
                 }
-
-                return false;
             }
+
+            return false;
         }
 
         /// <summary>
-        /// How many ints must be allocated to represent n bits. Returns (n+31)/32, but 
+        /// How many longs must be allocated to represent n bits. Returns (n+63)/64, but
         /// avoids overflow
         /// </summary>
-        /// <param name="n"></param>
-        /// <returns></returns>
-        internal static int ToIntArrayLength(int n)
+        internal static long ToLongArrayLength(long n)
         {
-            return n > 0 ? ((n - 1) / IntSize + 1) : 0;
+            return n > 0 ? ((n - 1) / LongSize + 1) : 0;
         }
     }
 
-    internal static class HashHelpers
+    /// <summary>
+    /// Hash helpers for long-indexed collections.
+    /// Supports capacity beyond int.MaxValue and uses 33% growth for very large collections.
+    /// </summary>
+    internal static class HashHelpersLong
     {
-        public static readonly int[] primes = new int[72] {3, 7, 11, 17, 23, 29, 37, 47, 59, 71, 89, 107, 131, 163, 197, 239, 293, 353, 431, 521, 631, 761, 919, 1103, 1327, 1597, 1931, 2333, 2801, 3371, 4049, 4861, 5839, 7013, 8419, 10103, 12143, 14591, 17519, 21023, 25229, 30293, 36353, 43627, 52361, 62851, 75431, 90523, 108631, 130363, 156437, 187751, 225307, 270371, 324449, 389357, 467237, 560689, 672827, 807403, 968897, 1162687, 1395263, 1674319, 2009191, 2411033, 2893249, 3471899, 4166287, 4999559, 5999471, 7199369};
+        // Threshold above which we use 33% growth instead of doubling (1 billion elements)
+        public const long LargeGrowthThreshold = 1_000_000_000L;
 
-        public static bool IsPrime(int candidate)
+        // Maximum supported array size (limited by .NET array indexing with long)
+        // In practice, limited by available memory
+        public const long MaxPrimeArrayLength = 0x7FFFFFC7L; // Same as Array.MaxLength on 64-bit
+
+        // Precomputed primes for small sizes
+        public static readonly long[] primes = new long[] {
+            3, 7, 11, 17, 23, 29, 37, 47, 59, 71, 89, 107, 131, 163, 197, 239, 293, 353, 431, 521,
+            631, 761, 919, 1103, 1327, 1597, 1931, 2333, 2801, 3371, 4049, 4861, 5839, 7013, 8419,
+            10103, 12143, 14591, 17519, 21023, 25229, 30293, 36353, 43627, 52361, 62851, 75431,
+            90523, 108631, 130363, 156437, 187751, 225307, 270371, 324449, 389357, 467237, 560689,
+            672827, 807403, 968897, 1162687, 1395263, 1674319, 2009191, 2411033, 2893249, 3471899,
+            4166287, 4999559, 5999471, 7199369,
+            // Extended primes for large collections
+            8639243, 10367101, 12440537, 14928671, 17914409, 21497293, 25796759, 30956117,
+            37147349, 44576827, 53492203, 64190647, 77028793, 92434559, 110921473, 133105769,
+            159726947, 191672339, 230006821, 276008189, 331209833, 397451801, 476942167,
+            572330603, 686796727, 824156077, 988987301, 1186784761, 1424141717, 1708970063,
+            2050764077, 2460916897, 2953100281, 3543720337, 4252464407, 5102957291, 6123548753,
+            7348258507, 8817910211, 10581492263, 12697790717, 15237348869, 18284818643,
+            21941782381, 26330138861, 31596166633, 37915399963
+        };
+
+        public static bool IsPrime(long candidate)
         {
+            if (candidate < 2)
+                return false;
             if ((candidate & 1) == 0)
                 return candidate == 2;
-            int num = (int)Math.Sqrt((double)candidate);
-            for (int index = 3; index <= num; index += 2)
+
+            long limit = (long)Math.Sqrt((double)candidate);
+            for (long divisor = 3; divisor <= limit; divisor += 2)
             {
-                if (candidate % index == 0)
+                if (candidate % divisor == 0)
                     return false;
             }
 
             return true;
         }
 
-        public static int GetPrime(int min)
+        public static long GetPrime(long min)
         {
             if (min < 0)
-                throw new ArgumentException("SR.Arg_HTCapacityOverflow");
-            for (int index = 0; index < HashHelpers.primes.Length; ++index)
+                throw new ArgumentException("Capacity overflow");
+
+            // First check the precomputed primes table
+            for (int i = 0; i < primes.Length; i++)
             {
-                int prime = HashHelpers.primes[index];
+                long prime = primes[i];
                 if (prime >= min)
                     return prime;
             }
 
-            for (int candidate = min | 1; candidate < int.MaxValue; candidate += 2)
+            // Outside of our predefined table; compute the prime the hard way
+            for (long candidate = min | 1; candidate < long.MaxValue; candidate += 2)
             {
-                if (HashHelpers.IsPrime(candidate) && (candidate - 1) % 101 != 0)
+                if (IsPrime(candidate) && (candidate - 1) % 101 != 0)
                     return candidate;
             }
 
             return min;
         }
 
-        public static int ExpandPrime(int oldSize)
+        /// <summary>
+        /// Expands to a new capacity.
+        /// For collections below LargeGrowthThreshold (1 billion), doubles the size.
+        /// For larger collections, grows by 33% to avoid excessive memory allocation.
+        /// </summary>
+        public static long ExpandPrime(long oldSize)
         {
-            int min = 2 * oldSize;
-            if ((uint)min > 2146435069U && 2146435069 > oldSize)
-                return 2146435069;
-            return HashHelpers.GetPrime(min);
+            long newSize;
+
+            if (oldSize < LargeGrowthThreshold)
+            {
+                // Standard doubling for smaller collections
+                newSize = 2 * oldSize;
+            }
+            else
+            {
+                // 33% growth for very large collections to avoid OOM
+                newSize = oldSize + (oldSize / 3);
+            }
+
+            // Handle overflow
+            if (newSize < oldSize)
+            {
+                // Overflow occurred
+                if (MaxPrimeArrayLength > oldSize)
+                    return GetPrime(MaxPrimeArrayLength);
+                return oldSize; // Can't grow further
+            }
+
+            // Cap at max array length
+            if (newSize > MaxPrimeArrayLength && MaxPrimeArrayLength > oldSize)
+            {
+                return GetPrime(MaxPrimeArrayLength);
+            }
+
+            return GetPrime(newSize);
         }
     }
 }

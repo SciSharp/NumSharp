@@ -291,18 +291,34 @@ namespace NumSharp.Utilities
             }
         }
 
+        public long LongCount
+        {
+            get
+            {
+                _lock.EnterReadLock();
+                try
+                {
+                    return hashset.LongCount;
+                }
+                finally
+                {
+                    if (_lock.IsReadLockHeld) _lock.ExitReadLock();
+                }
+            }
+        }
+
         public int Count
         {
             get
             {
-                _lock.EnterWriteLock();
+                _lock.EnterReadLock();
                 try
                 {
                     return hashset.Count;
                 }
                 finally
                 {
-                    if (_lock.IsWriteLockHeld) _lock.ExitWriteLock();
+                    if (_lock.IsReadLockHeld) _lock.ExitReadLock();
                 }
             }
         }
@@ -315,10 +331,10 @@ namespace NumSharp.Utilities
 
         public void CopyTo(ArraySlice<T> array)
         {
-            CopyTo(array, 0, hashset.Count);
+            CopyTo(array, 0, hashset.LongCount);
         }
 
-        public void CopyTo(ArraySlice<T> array, int arrayIndex, int count)
+        public void CopyTo(ArraySlice<T> array, long arrayIndex, long count)
         {
             _lock.EnterWriteLock();
             _lock.EnterReadLock();
