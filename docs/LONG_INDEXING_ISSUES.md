@@ -7,6 +7,8 @@ Issues discovered by auditing the codebase against the int64 migration spirit.
 **Updated**: 2026-03-17 - Added H23, L11-L12 from post-rebase diff scan
 **Updated**: 2026-03-17 - Fixed H4, H6, H10, H12, H14, H15, H16, H20; reclassified H3, H17-H19, H21-H22 as LOW
 **Updated**: 2026-03-17 - Fixed H8, H9, H11, H23 (batch 2)
+**Updated**: 2026-03-17 - Found H1 already fixed; fixed H2 (batch 3)
+**Updated**: 2026-03-17 - Fixed H13 ArgMax/ArgMin returns Int64 (batch 3 continued)
 
 ---
 
@@ -14,7 +16,7 @@ Issues discovered by auditing the codebase against the int64 migration spirit.
 
 | Priority | Count | Category |
 |----------|-------|----------|
-| HIGH | 11 | Missing long overloads, int parameters/variables |
+| HIGH | 2 | H5 (acceptable), H7 (acceptable) |
 | MEDIUM | 11 | IL kernel comments, internal int usage |
 | LOW | 19 | Acceptable .NET boundary exceptions |
 
@@ -36,6 +38,11 @@ Issues discovered by auditing the codebase against the int64 migration spirit.
 - H11: `np.array<T>(IEnumerable, size)` - added `long size` overload
 - H23: `NumSharp.Bitmap` - added overflow checks before casting shape to int
 
+**Batch 3:**
+- H1: Already fixed (confirmed - all typed getters have `long[]` overloads)
+- H2: Added missing `long[]` overloads for 9 typed setters in NDArray
+- H13: ArgMax/ArgMin now return `Int64`, SIMD helpers use `long` throughout
+
 ### Reclassified as LOW (.NET Array boundary)
 - H3: `np.vstack` - entire implementation is commented out (dead code)
 - H17-H19, H21-H22: Use .NET `Array.Length`/`GetLength()` which return `int`
@@ -44,78 +51,21 @@ Issues discovered by auditing the codebase against the int64 migration spirit.
 
 ## HIGH Priority Issues
 
-### H1. NDArray/UnmanagedStorage.Getters Missing `long[]` Overloads
+### H1. ✅ ALREADY FIXED - NDArray/UnmanagedStorage.Getters `long[]` Overloads
 
 **Files:**
-- `Backends/NDArray.cs:612-794`
-- `Backends/Unmanaged/UnmanagedStorage.Getters.cs:18-530`
+- `Backends/NDArray.cs:729-767`
+- `Backends/Unmanaged/UnmanagedStorage.Getters.cs`
 
-**Issue:** All typed getter methods only have `int[]` overloads, no `long[]` primary:
-
-```csharp
-// CURRENT - only int[] exists
-public bool GetBoolean(int[] indices) => Storage.GetBoolean(indices);
-public byte GetByte(int[] indices) => Storage.GetByte(indices);
-public double GetDouble(int[] indices) => Storage.GetDouble(indices);
-// ... 12 more typed getters
-
-// MISSING - need long[] primary with params
-public bool GetBoolean(params long[] indices);
-public byte GetByte(params long[] indices);
-// etc.
-```
-
-**Affected methods (15 each in NDArray and UnmanagedStorage):**
-- `GetData(int[])` - has long[] ✅
-- `GetValue(int[])` - MISSING long[]
-- `GetValue<T>(int[])` - MISSING long[]
-- `GetBoolean(int[])` - MISSING long[]
-- `GetByte(int[])` - MISSING long[]
-- `GetInt16(int[])` - MISSING long[]
-- `GetUInt16(int[])` - MISSING long[]
-- `GetInt32(int[])` - MISSING long[]
-- `GetUInt32(int[])` - MISSING long[]
-- `GetInt64(int[])` - MISSING long[]
-- `GetUInt64(int[])` - MISSING long[]
-- `GetChar(int[])` - MISSING long[]
-- `GetDouble(int[])` - MISSING long[]
-- `GetSingle(int[])` - MISSING long[]
-- `GetDecimal(int[])` - MISSING long[]
-
-**Fix pattern:**
-```csharp
-// Add long[] primary overload with params
-public bool GetBoolean(params long[] indices) => Storage.GetBoolean(indices);
-
-// int[] delegates to long[] (backward compat, no params)
-public bool GetBoolean(int[] indices) => GetBoolean(Shape.ComputeLongShape(indices));
-```
+**Status:** Already has `long[]` overloads for all typed getters (GetBoolean, GetByte, GetInt16, GetUInt16, GetInt32, GetUInt32, GetInt64, GetUInt64, GetChar, GetDouble, GetSingle, GetDecimal) and GetValue/GetValue<T>.
 
 ---
 
-### H2. NDArray Typed Setters Missing Some `long[]` Overloads
+### H2. ✅ FIXED - NDArray Typed Setters Missing Some `long[]` Overloads
 
-**File:** `Backends/NDArray.cs:1053-1175`
+**File:** `Backends/NDArray.cs`
 
-**Issue:** Only 4 typed setters have `long[]` overloads (`SetInt32`, `SetInt64`, `SetDouble`, `SetString`). The other 9 are missing:
-
-```csharp
-// Have long[] ✅
-public void SetInt32(int value, params long[] indices);
-public void SetInt64(long value, params long[] indices);
-public void SetDouble(double value, params long[] indices);
-
-// MISSING long[] ❌
-public void SetBoolean(bool value, int[] indices);  // only int[]
-public void SetByte(byte value, int[] indices);     // only int[]
-public void SetChar(char value, int[] indices);     // only int[]
-public void SetSingle(float value, int[] indices);  // only int[]
-public void SetDecimal(decimal value, int[] indices); // only int[]
-public void SetUInt16(ushort value, int[] indices); // only int[]
-public void SetUInt32(uint value, int[] indices);   // only int[]
-public void SetUInt64(ulong value, int[] indices);  // only int[]
-public void SetInt16(short value, int[] indices);   // only int[]
-```
+**Status:** Fixed - added `long[]` overloads for all 9 missing typed setters (SetBoolean, SetByte, SetInt16, SetUInt16, SetUInt32, SetUInt64, SetChar, SetSingle, SetDecimal). UnmanagedStorage already had them.
 
 ---
 
@@ -225,24 +175,16 @@ var outputData = new double[(int)outputSize];
 
 ---
 
-### H13. ILKernelGenerator.Reduction.Arg Returns `int` Index
+### H13. ✅ FIXED - ILKernelGenerator.Reduction.Arg Returns `int` Index
 
-**File:** `Backends/Kernels/ILKernelGenerator.Reduction.Arg.cs:51,186`
+**Files:**
+- `Backends/Kernels/ILKernelGenerator.Reduction.Arg.cs`
+- `Backends/Kernels/ReductionKernel.cs`
 
-```csharp
-internal static unsafe int ArgMaxSimdHelper<T>(void* input, int totalSize)
-internal static unsafe int ArgMinSimdHelper<T>(void* input, int totalSize)
-```
-
-**Issue:** These SIMD helpers return `int` index and take `int totalSize`. For arrays >2B elements:
-- `argmax`/`argmin` would return wrong index (truncated)
-- Would fail/overflow before reaching large elements
-
-**Fix:** Change return type and parameter to `long`:
-```csharp
-internal static unsafe long ArgMaxSimdHelper<T>(void* input, long totalSize)
-internal static unsafe long ArgMinSimdHelper<T>(void* input, long totalSize)
-```
+**Status:** Fixed - changed ArgMax/ArgMin to:
+1. Return `NPTypeCode.Int64` in `ElementReductionKernelKey.ResultType` and `AxisReductionKernelKey.ResultType`
+2. `ArgMaxSimdHelper<T>` and `ArgMinSimdHelper<T>` now return `long` and take `long totalSize`
+3. All loop counters and index variables changed from `int` to `long`
 
 ---
 
@@ -680,9 +622,9 @@ var intIndices = new int[indices.Length];
 
 ### HIGH Priority (Blocking)
 
-- [ ] H1: Add `long[]` primary overloads to all `Get*` methods in NDArray
-- [ ] H1: Add `long[]` primary overloads to all `Get*` methods in UnmanagedStorage.Getters
-- [ ] H2: Add missing `long[]` overloads to typed setters (9 methods)
+- [x] H1: Add `long[]` primary overloads to all `Get*` methods in NDArray ✅ (already done)
+- [x] H1: Add `long[]` primary overloads to all `Get*` methods in UnmanagedStorage.Getters ✅ (already done)
+- [x] H2: Add missing `long[]` overloads to typed setters (9 methods) ✅
 - [x] ~~H3: Fix `np.vstack` to use `long[]` shape~~ → Reclassified LOW (dead code)
 - [x] H4: Fix `np.repeat` to use `GetInt64` and `long count` for per-element repeats ✅
 - [x] H6: Fix `np.searchsorted` empty array return type to `typeof(long)` ✅
@@ -691,7 +633,7 @@ var intIndices = new int[indices.Length];
 - [x] H10: Fix `UnmanagedHelper.CopyTo` offset parameter to `long` ✅
 - [x] H11: Add `long size` overload to `np.array<T>(IEnumerable, size)` ✅
 - [x] H12: Fix `SimdMatMul.MatMulFloatSimple` to use `long M, N, K` and `long` loop counters ✅
-- [ ] H13: Fix `ArgMaxSimdHelper`/`ArgMinSimdHelper` to return `long` (complex - IL emission)
+- [x] H13: Fix `ArgMaxSimdHelper`/`ArgMinSimdHelper` to return `long` ✅
 - [x] H14: Fix `Default.Dot.ExpandStartDim`/`ExpandEndDim` to return `long[]` ✅
 - [x] H15: Fix `NDArray.Normalize` to use `long col`, `long row` loop counters ✅
 - [x] H16: Fix `Slice.Index` calls in Selection to use `ToInt64` instead of `ToInt32` ✅

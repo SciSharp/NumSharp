@@ -1173,6 +1173,82 @@ namespace NumSharp
         public void SetDecimal(decimal value, int[] indices) => Storage.SetDecimal(value, indices);
 #endif
 
+        #region Typed Setters (long[] overloads for int64 indexing)
+
+        /// <summary>
+        ///     Sets a bool at specific coordinates.
+        /// </summary>
+        /// <param name="value">The value to assign</param>
+        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        [MethodImpl(Inline)]
+        public void SetBoolean(bool value, params long[] indices) => Storage.SetBoolean(value, indices);
+
+        /// <summary>
+        ///     Sets a byte at specific coordinates.
+        /// </summary>
+        /// <param name="value">The value to assign</param>
+        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        [MethodImpl(Inline)]
+        public void SetByte(byte value, params long[] indices) => Storage.SetByte(value, indices);
+
+        /// <summary>
+        ///     Sets a short at specific coordinates.
+        /// </summary>
+        /// <param name="value">The value to assign</param>
+        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        [MethodImpl(Inline)]
+        public void SetInt16(short value, params long[] indices) => Storage.SetInt16(value, indices);
+
+        /// <summary>
+        ///     Sets a ushort at specific coordinates.
+        /// </summary>
+        /// <param name="value">The value to assign</param>
+        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        [MethodImpl(Inline)]
+        public void SetUInt16(ushort value, params long[] indices) => Storage.SetUInt16(value, indices);
+
+        /// <summary>
+        ///     Sets a uint at specific coordinates.
+        /// </summary>
+        /// <param name="value">The value to assign</param>
+        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        [MethodImpl(Inline)]
+        public void SetUInt32(uint value, params long[] indices) => Storage.SetUInt32(value, indices);
+
+        /// <summary>
+        ///     Sets a ulong at specific coordinates.
+        /// </summary>
+        /// <param name="value">The value to assign</param>
+        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        [MethodImpl(Inline)]
+        public void SetUInt64(ulong value, params long[] indices) => Storage.SetUInt64(value, indices);
+
+        /// <summary>
+        ///     Sets a char at specific coordinates.
+        /// </summary>
+        /// <param name="value">The value to assign</param>
+        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        [MethodImpl(Inline)]
+        public void SetChar(char value, params long[] indices) => Storage.SetChar(value, indices);
+
+        /// <summary>
+        ///     Sets a float at specific coordinates.
+        /// </summary>
+        /// <param name="value">The value to assign</param>
+        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        [MethodImpl(Inline)]
+        public void SetSingle(float value, params long[] indices) => Storage.SetSingle(value, indices);
+
+        /// <summary>
+        ///     Sets a decimal at specific coordinates.
+        /// </summary>
+        /// <param name="value">The value to assign</param>
+        /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
+        [MethodImpl(Inline)]
+        public void SetDecimal(decimal value, params long[] indices) => Storage.SetDecimal(value, indices);
+
+        #endregion
+
         #endregion
 
         private class NDArrayDebuggerProxy

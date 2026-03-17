@@ -36,15 +36,15 @@ namespace NumSharp.Backends.Kernels
 
         /// <summary>
         /// Result type depends on operation:
-        /// - ArgMax/ArgMin: always Int32
+        /// - ArgMax/ArgMin: always Int64 (supports >2B element arrays)
         /// - All/Any: always Boolean
         /// - Mean: always Double (or accumulator type if specified)
         /// - Others: same as accumulator type
         /// </summary>
         public NPTypeCode ResultType => Op switch
         {
-            ReductionOp.ArgMax => NPTypeCode.Int32,
-            ReductionOp.ArgMin => NPTypeCode.Int32,
+            ReductionOp.ArgMax => NPTypeCode.Int64,
+            ReductionOp.ArgMin => NPTypeCode.Int64,
             ReductionOp.All => NPTypeCode.Boolean,
             ReductionOp.Any => NPTypeCode.Boolean,
             _ => AccumulatorType
@@ -76,11 +76,13 @@ namespace NumSharp.Backends.Kernels
 
         /// <summary>
         /// Result type depends on operation.
+        /// - ArgMax/ArgMin: always Int64 (supports >2B element arrays)
+        /// - Others: same as accumulator type
         /// </summary>
         public NPTypeCode ResultType => Op switch
         {
-            ReductionOp.ArgMax => NPTypeCode.Int32,
-            ReductionOp.ArgMin => NPTypeCode.Int32,
+            ReductionOp.ArgMax => NPTypeCode.Int64,
+            ReductionOp.ArgMin => NPTypeCode.Int64,
             _ => AccumulatorType
         };
 
