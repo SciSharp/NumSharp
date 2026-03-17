@@ -1,7 +1,4 @@
-﻿using System;
-using System.Threading.Tasks;
-using NumSharp.Backends;
-using NumSharp.Utilities;
+using System;
 
 namespace NumSharp
 {
@@ -9,30 +6,38 @@ namespace NumSharp
     {
         /// <summary>
         ///     Draw samples from a chi-square distribution.
-        ///     When df independent random variables, each with standard normal distributions(mean 0, variance 1), are squared and summed, 
-        ///     the resulting distribution is chi-square(see Notes). This distribution is often used in hypothesis testing.
         /// </summary>
-        /// <param name="df">Number of degrees of freedom, should be > 0.</param>
-        /// <param name="shape">Output Shape</param>
+        /// <param name="df">Number of degrees of freedom, must be > 0.</param>
+        /// <param name="size">Output shape.</param>
         /// <returns>Drawn samples from the parameterized chi-square distribution.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/random/generated/numpy.random.chisquare.html</remarks>
-        public NDArray chisquare(double df, Shape shape) => chisquare(df, shape.dimensions);
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.chisquare.html
+        ///     <br/>
+        ///     When df independent random variables, each with standard normal distributions
+        ///     (mean 0, variance 1), are squared and summed, the resulting distribution is
+        ///     chi-square. This distribution is often used in hypothesis testing.
+        /// </remarks>
+        public NDArray chisquare(double df, Shape size) => chisquare(df, size.dimensions);
 
         /// <summary>
         ///     Draw samples from a chi-square distribution.
-        ///     When df independent random variables, each with standard normal distributions(mean 0, variance 1), are squared and summed, 
-        ///     the resulting distribution is chi-square(see Notes). This distribution is often used in hypothesis testing.
         /// </summary>
-        /// <param name="df">Number of degrees of freedom, should be > 0.</param>
-        /// <param name="dims">Output Shape</param>
+        /// <param name="df">Number of degrees of freedom, must be > 0.</param>
+        /// <param name="size">Output shape.</param>
         /// <returns>Drawn samples from the parameterized chi-square distribution.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/random/generated/numpy.random.chisquare.html</remarks>
-        public NDArray chisquare(double df, params int[] dims)
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.chisquare.html
+        ///     <br/>
+        ///     When df independent random variables, each with standard normal distributions
+        ///     (mean 0, variance 1), are squared and summed, the resulting distribution is
+        ///     chi-square. This distribution is often used in hypothesis testing.
+        /// </remarks>
+        public NDArray chisquare(double df, params int[] size)
         {
             if (df <= 0)
-                throw new ArgumentException("df should be > 0");
+                throw new ArgumentException("df must be > 0", nameof(df));
 
-            return np.random.gamma(df / 2, 2, dims);
+            return gamma(df / 2, 2.0, size);
         }
     }
 }

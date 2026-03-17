@@ -60,7 +60,7 @@ namespace NumSharp.UnitTest.RandomSampling
             int nrSamples = 3;
             double[] probabilities = new double[] {0.1, 0, 0.3, 0.6, 0};
 
-            NDArray actual = np.random.choice(5, (Shape) nrSamples, probabilities: probabilities);
+            NDArray actual = np.random.choice(5, (Shape) nrSamples, p: probabilities);
 
             Assert.AreEqual(actual.size, nrSamples, "Unexpected number of elements");
 
@@ -87,7 +87,7 @@ namespace NumSharp.UnitTest.RandomSampling
         public void NonUniformSampleWithoutReplace()
         {
             double[] probabilities = new double[] {0.1, 0, 0.3, 0.6, 0};
-            NDArray actual = np.random.choice(5, (Shape)3, replace: false, probabilities: probabilities);
+            NDArray actual = np.random.choice(5, (Shape)3, replace: false, p: probabilities);
             Assert.Fail("Not implemented");
         }
 
@@ -100,7 +100,7 @@ namespace NumSharp.UnitTest.RandomSampling
             //NDArray aa_milne_arr = new string[] { "pooh", "rabbit", "piglet", "Christopher" };
             //double[] probabilities = new double[] { 0.5, 0.1, 0.0, 0.3 };
 
-            //NDArray actual = np.random.choice(aa_milne_arr, nrSamples, probabilities: probabilities);
+            //NDArray actual = np.random.choice(aa_milne_arr, nrSamples, p: probabilities);
 
             //Assert.AreEqual(actual.len, nrSamples, "Unexpected number of elements");
 
@@ -119,7 +119,7 @@ namespace NumSharp.UnitTest.RandomSampling
             NDArray int_arr = new int[] {42, 96, 3, 101};
             double[] probabilities = new double[] {0.5, 0.1, 0.0, 0.3};
 
-            NDArray actual = np.random.choice(int_arr, (Shape)nrSamples, probabilities: probabilities);
+            NDArray actual = np.random.choice(int_arr, (Shape)nrSamples, p: probabilities);
 
             Assert.AreEqual(actual.size, nrSamples, "Unexpected number of elements");
 

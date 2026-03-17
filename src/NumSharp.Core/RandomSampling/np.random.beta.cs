@@ -1,35 +1,41 @@
-﻿using System;
-using System.Threading.Tasks;
 using NumSharp.Backends;
-using NumSharp.Utilities;
 
 namespace NumSharp
 {
     public partial class NumPyRandom
     {
         /// <summary>
-        /// Draw samples from a Beta distribution.
-        /// The Beta distribution is a special case of the Dirichlet distribution, and is related to the Gamma distribution.It has the probability distribution function
+        ///     Draw samples from a Beta distribution.
         /// </summary>
-        /// <param name="alpha">Alpha value</param>
-        /// <param name="betaValue">Beta value</param>
-        /// <param name="shape">Output Shape</param>
-        /// <returns></returns>
-        public NDArray beta(double alpha, double betaValue, Shape shape) => beta(alpha, betaValue, shape.dimensions);
+        /// <param name="a">Alpha, positive (>0).</param>
+        /// <param name="b">Beta, positive (>0).</param>
+        /// <param name="size">Output shape.</param>
+        /// <returns>Drawn samples from the parameterized Beta distribution.</returns>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.beta.html
+        ///     <br/>
+        ///     The Beta distribution is a special case of the Dirichlet distribution,
+        ///     and is related to the Gamma distribution.
+        /// </remarks>
+        public NDArray beta(double a, double b, Shape size) => beta(a, b, size.dimensions);
 
         /// <summary>
-        /// Draw samples from a Beta distribution.
-        /// The Beta distribution is a special case of the Dirichlet distribution, and is related to the Gamma distribution.It has the probability distribution function
+        ///     Draw samples from a Beta distribution.
         /// </summary>
-        /// <param name="alpha">Alpha value</param>
-        /// <param name="betaValue">Beta value</param>
-        /// <param name="dims">Output Shape</param>
-        /// <returns></returns>
-        public NDArray beta(double alpha, double betaValue, params int[] dims)
+        /// <param name="a">Alpha, positive (>0).</param>
+        /// <param name="b">Beta, positive (>0).</param>
+        /// <param name="size">Output shape.</param>
+        /// <returns>Drawn samples from the parameterized Beta distribution.</returns>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.beta.html
+        ///     <br/>
+        ///     The Beta distribution is a special case of the Dirichlet distribution,
+        ///     and is related to the Gamma distribution.
+        /// </remarks>
+        public NDArray beta(double a, double b, params int[] size)
         {
-            var x = np.random.gamma(alpha, 1, dims);
-            var y = np.random.gamma(betaValue, 1, dims);
-
+            var x = gamma(a, 1.0, size);
+            var y = gamma(b, 1.0, size);
             return x / (x + y);
         }
     }

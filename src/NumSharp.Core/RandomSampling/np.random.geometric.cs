@@ -1,7 +1,4 @@
-﻿using System;
-using System.Threading.Tasks;
-using NumSharp.Backends;
-using NumSharp.Utilities;
+using System;
 
 namespace NumSharp
 {
@@ -9,27 +6,37 @@ namespace NumSharp
     {
         /// <summary>
         ///     Draw samples from the geometric distribution.
-        ///     Bernoulli trials are experiments with one of two outcomes: success or failure(an example of such an experiment is flipping a coin). 
-        ///     The geometric distribution models the number of trials that must be run in order to achieve success.It is therefore supported on the positive integers, k = 1, 2, ....
         /// </summary>
         /// <param name="p">The probability of success of an individual trial.</param>
-        /// <param name="shape">Output Shape</param>
+        /// <param name="size">Output shape.</param>
         /// <returns>Drawn samples from the parameterized geometric distribution.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/random/generated/numpy.random.geometric.html</remarks>
-        public NDArray geometric(double p, Shape shape) => geometric(p, shape.dimensions);
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.geometric.html
+        ///     <br/>
+        ///     Bernoulli trials are experiments with one of two outcomes: success or failure
+        ///     (an example of such an experiment is flipping a coin). The geometric distribution
+        ///     models the number of trials that must be run in order to achieve success.
+        ///     It is therefore supported on the positive integers, k = 1, 2, ...
+        /// </remarks>
+        public NDArray geometric(double p, Shape size) => geometric(p, size.dimensions);
 
         /// <summary>
         ///     Draw samples from the geometric distribution.
-        ///     Bernoulli trials are experiments with one of two outcomes: success or failure(an example of such an experiment is flipping a coin). 
-        ///     The geometric distribution models the number of trials that must be run in order to achieve success.It is therefore supported on the positive integers, k = 1, 2, ....
         /// </summary>
         /// <param name="p">The probability of success of an individual trial.</param>
-        /// <param name="dims">Output Shape</param>
+        /// <param name="size">Output shape.</param>
         /// <returns>Drawn samples from the parameterized geometric distribution.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/random/generated/numpy.random.geometric.html</remarks>
-        public NDArray geometric(double p, params int[] dims)
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.geometric.html
+        ///     <br/>
+        ///     Bernoulli trials are experiments with one of two outcomes: success or failure
+        ///     (an example of such an experiment is flipping a coin). The geometric distribution
+        ///     models the number of trials that must be run in order to achieve success.
+        ///     It is therefore supported on the positive integers, k = 1, 2, ...
+        /// </remarks>
+        public NDArray geometric(double p, params int[] size)
         {
-            var x = np.log(1 - np.random.uniform(0, 1, dims));
+            var x = np.log(1 - uniform(0, 1, size));
             return x / (Math.Log(p) + 1);
         }
     }
