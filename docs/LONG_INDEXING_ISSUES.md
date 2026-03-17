@@ -3,6 +3,7 @@
 Issues discovered by auditing the codebase against the int64 migration spirit.
 
 **Audit Date**: Based on commit `111b4076` (longindexing branch)
+**Updated**: 2026-03-17 - Added H12-H22, M9-M11 from comprehensive code search
 
 ---
 
@@ -10,8 +11,8 @@ Issues discovered by auditing the codebase against the int64 migration spirit.
 
 | Priority | Count | Category |
 |----------|-------|----------|
-| HIGH | 11 | Missing long overloads, int parameters/variables |
-| MEDIUM | 8 | IL kernel comments, internal int usage |
+| HIGH | 22 | Missing long overloads, int parameters/variables |
+| MEDIUM | 11 | IL kernel comments, internal int usage |
 | LOW | 11 | Acceptable .NET boundary exceptions |
 
 ---
@@ -254,6 +255,216 @@ public static NDArray array<T>(IEnumerable<T> data, int size) where T : unmanage
 
 ---
 
+### H12. SimdMatMul.MatMulFloatSimple Uses `int M, N, K`
+
+**File:** `Backends/Kernels/SimdMatMul.cs:71-100`
+
+```csharp
+private static unsafe void MatMulFloatSimple(float* A, float* B, float* C, int M, int N, int K)
+{
+    for (int i = 0; i < M; i++)    // Should be long
+    for (int k = 0; k < K; k++)    // Should be long
+    for (int j = 0; j < N; j++)    // Should be long
+```
+
+**Issue:** While the main `MatMulFloat` method uses `long M, N, K`, the "simple" path for small matrices casts to `int` and uses `int` loop counters. This caps the simple path at matrices with int.MaxValue dimensions even though the outer API promises long support.
+
+**Fix:** Change signature and loop counters to `long`:
+```csharp
+private static unsafe void MatMulFloatSimple(float* A, float* B, float* C, long M, long N, long K)
+```
+
+---
+
+### H13. ILKernelGenerator.Reduction.Arg Returns `int` Index
+
+**File:** `Backends/Kernels/ILKernelGenerator.Reduction.Arg.cs:51,186`
+
+```csharp
+internal static unsafe int ArgMaxSimdHelper<T>(void* input, int totalSize)
+internal static unsafe int ArgMinSimdHelper<T>(void* input, int totalSize)
+```
+
+**Issue:** These SIMD helpers return `int` index and take `int totalSize`. For arrays >2B elements:
+- `argmax`/`argmin` would return wrong index (truncated)
+- Would fail/overflow before reaching large elements
+
+**Fix:** Change return type and parameter to `long`:
+```csharp
+internal static unsafe long ArgMaxSimdHelper<T>(void* input, long totalSize)
+internal static unsafe long ArgMinSimdHelper<T>(void* input, long totalSize)
+```
+
+---
+
+### H14. Default.Dot Uses `int[]` for Dimension Expansion
+
+**File:** `Backends/Default/Math/BLAS/Default.Dot.cs:78-92`
+
+```csharp
+private static int[] ExpandStartDim(Shape shape)
+{
+    var ret = new int[shape.NDim + 1];  // Should be long[]
+    ret[0] = 1;
+    Array.Copy(shape.dimensions, 0, ret, 1, shape.NDim);  // dimensions is long[]
+    return ret;
+}
+```
+
+**Issue:** Returns `int[]` but copies from `shape.dimensions` which is `long[]`. Truncates dimensions >int.MaxValue.
+
+**Fix:** Change return type to `long[]`:
+```csharp
+private static long[] ExpandStartDim(Shape shape)
+{
+    var ret = new long[shape.NDim + 1];
+    // ...
+}
+```
+
+---
+
+### H15. NDArray.Normalize Uses `int` Loop Counters
+
+**File:** `Extensions/NdArray.Normalize.cs:19,22`
+
+```csharp
+for (int col = 0; col < shape[1]; col++)  // shape[1] is long
+    for (int row = 0; row < shape[0]; row++)  // shape[0] is long
+```
+
+**Issue:** Loop counters are `int` but iterate up to `shape[i]` which is `long`. Fails for arrays with >2B elements per dimension.
+
+**Fix:** Change to `long` loop counters:
+```csharp
+for (long col = 0; col < shape[1]; col++)
+    for (long row = 0; row < shape[0]; row++)
+```
+
+---
+
+### H16. Slice.Index Uses `int` Cast in Indexing Selection
+
+**Files:**
+- `Selection/NDArray.Indexing.Selection.Getter.cs:109`
+- `Selection/NDArray.Indexing.Selection.Setter.cs:126`
+
+```csharp
+case IConvertible o: return Slice.Index((int)o.ToInt32(CultureInfo.InvariantCulture));
+```
+
+**Issue:** Casts to `int` when `Slice.Index` now accepts `long`. This truncates large indices.
+
+**Fix:** Use `ToInt64`:
+```csharp
+case IConvertible o: return Slice.Index(o.ToInt64(CultureInfo.InvariantCulture));
+```
+
+---
+
+### H17. Shape Dimension Parsing Uses `List<int>`
+
+**File:** `View/Shape.cs:956`
+
+```csharp
+var l = new List<int>(16);
+```
+
+**Issue:** Uses `List<int>` when accumulating dimension values that should be `long`.
+
+**Fix:** Change to `List<long>`:
+```csharp
+var l = new List<long>(16);
+```
+
+---
+
+### H18. NdArrayFromJaggedArr Uses `List<int>` for Dimensions
+
+**File:** `Casting/NdArrayFromJaggedArr.cs:35`
+
+```csharp
+var dimList = new List<int>();
+```
+
+**Issue:** Collects dimension sizes in `List<int>` - truncates dimensions >int.MaxValue.
+
+**Fix:** Change to `List<long>`:
+```csharp
+var dimList = new List<long>();
+```
+
+---
+
+### H19. Arrays.GetDimensions Uses `List<int>`
+
+**File:** `Utilities/Arrays.cs:300,339`
+
+```csharp
+var dimList = new List<int>(16);
+```
+
+**Issue:** Same as H18 - should be `List<long>`.
+
+**Fix:** Change to `List<long>`:
+```csharp
+var dimList = new List<long>(16);
+```
+
+---
+
+### H20. np.asarray Uses `new int[0]` for Scalar Shape
+
+**File:** `Creation/np.asarray.cs:7,14`
+
+```csharp
+var nd = new NDArray(typeof(string), new int[0]);
+var nd = new NDArray(typeof(T), new int[0]);
+```
+
+**Issue:** Uses `int[]` for empty shape when should use `long[]`.
+
+**Fix:** Use `Array.Empty<long>()` or `new long[0]`:
+```csharp
+var nd = new NDArray(typeof(string), Array.Empty<long>());
+```
+
+---
+
+### H21. ArrayConvert Uses `int[]` for Dimensions
+
+**File:** `Utilities/ArrayConvert.cs:43`
+
+```csharp
+int[] dimensions = new int[dims];
+```
+
+**Issue:** Allocates `int[]` for dimensions when should be `long[]`.
+
+**Fix:** Change to `long[]`:
+```csharp
+long[] dimensions = new long[dims];
+```
+
+---
+
+### H22. UnmanagedStorage Uses `int[]` dim in FromMultiDimArray
+
+**File:** `Backends/Unmanaged/UnmanagedStorage.cs:1139`
+
+```csharp
+int[] dim = new int[values.Rank];
+```
+
+**Issue:** Copies dimensions from multi-dim array into `int[]`.
+
+**Fix:** Change to `long[]`:
+```csharp
+long[] dim = new long[values.Rank];
+```
+
+---
+
 ## MEDIUM Priority Issues
 
 ### M1. IL Kernel Comments Reference `int*` (Documentation Drift)
@@ -385,6 +596,57 @@ for (int i = 0; i < ret.Length; i++)
 **Issue:** Nested loops use `int` counters. For jagged arrays with many elements per dimension, this could overflow.
 
 **Note:** Partially acceptable - jagged arrays in .NET use `int` indexing. But the iteration should use `long` internally.
+
+---
+
+### M9. NDArray<T> Generic Has Only `int size` Constructors
+
+**File:** `Generics/NDArray`1.cs:83,139`
+
+```csharp
+public NDArray(int size, bool fillZeros) : base(InfoOf<TDType>.NPTypeCode, size, fillZeros)
+public NDArray(int size) : base(InfoOf<TDType>.NPTypeCode, size) { }
+```
+
+**Issue:** These constructors accept `int size` only. Should add `long size` overloads as primary.
+
+**Fix:** Add `long size` primary overloads:
+```csharp
+public NDArray(long size, bool fillZeros) : base(InfoOf<TDType>.NPTypeCode, size, fillZeros) { }
+public NDArray(long size) : base(InfoOf<TDType>.NPTypeCode, size) { }
+public NDArray(int size, bool fillZeros) : this((long)size, fillZeros) { }
+public NDArray(int size) : this((long)size) { }
+```
+
+---
+
+### M10. np.arange(int) Returns `typeof(int)` Arrays
+
+**File:** `Creation/np.arange.cs:306,311`
+
+```csharp
+return new NDArray(typeof(int), Shape.Vector(0), false);
+var nd = new NDArray(typeof(int), Shape.Vector(length), false);
+```
+
+**Issue:** The int32 overload of arange creates int32 arrays. While this matches the function signature, NumPy 2.x returns int64 for integer arange by default.
+
+**Note:** Documented as BUG-21/Task #109. Keeping int32 for backward compatibility until explicit migration.
+
+---
+
+### M11. Default.Transpose Uses `int[]` for Permutation Storage
+
+**File:** `Backends/Default/ArrayManipulation/Default.Transpose.cs:126-127`
+
+```csharp
+var permutation = new int[nd.ndim];
+var reverse_permutation = new int[nd.ndim];
+```
+
+**Issue:** While ndim is bounded (max ~32), using `int[]` for permutation when dimensions are `long[]` creates a type mismatch. Technically safe but inconsistent.
+
+**Note:** Low impact since ndim never exceeds ~32 in practice.
 
 ---
 
@@ -526,6 +788,17 @@ int ItemLength { get; }
 - [ ] H9: Add `long shift` overloads to `np.roll`
 - [ ] H10: Fix `UnmanagedHelper.CopyTo` offset parameter to `long`
 - [ ] H11: Add `long size` overload to `np.array<T>(IEnumerable, size)`
+- [ ] H12: Fix `SimdMatMul.MatMulFloatSimple` to use `long M, N, K` and `long` loop counters
+- [ ] H13: Fix `ArgMaxSimdHelper`/`ArgMinSimdHelper` to return `long` and accept `long totalSize`
+- [ ] H14: Fix `Default.Dot.ExpandStartDim`/`ExpandEndDim` to return `long[]`
+- [ ] H15: Fix `NDArray.Normalize` to use `long col`, `long row` loop counters
+- [ ] H16: Fix `Slice.Index` calls in Selection to use `ToInt64` instead of `ToInt32`
+- [ ] H17: Fix `Shape.cs:956` to use `List<long>` for dimension parsing
+- [ ] H18: Fix `NdArrayFromJaggedArr` to use `List<long>` for dimensions
+- [ ] H19: Fix `Arrays.GetDimensions` to use `List<long>`
+- [ ] H20: Fix `np.asarray` to use `long[]` or `Array.Empty<long>()` for scalar shape
+- [ ] H21: Fix `ArrayConvert` to use `long[]` for dimensions
+- [ ] H22: Fix `UnmanagedStorage.FromMultiDimArray` to use `long[]` dim
 
 ### MEDIUM Priority (Quality)
 
@@ -533,6 +806,9 @@ int ItemLength { get; }
 - [ ] M4: Review Shape.InferNegativeCoordinates delegation pattern
 - [ ] M6: Fix `np.load` internal `int total` accumulator to `long`
 - [ ] M7: Fix `np.save` internal `int total` accumulator to `long`
+- [ ] M9: Add `long size` primary overloads to `NDArray<T>` generic constructors
+- [ ] M10: Consider migrating `np.arange(int)` to return int64 (BUG-21/Task #109)
+- [ ] M11: Consider using `long[]` for transpose permutation arrays (consistency)
 
 ### LOW Priority (Cosmetic/Acceptable)
 
