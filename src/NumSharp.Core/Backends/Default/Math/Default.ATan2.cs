@@ -137,7 +137,7 @@ namespace NumSharp.Backends
             {
                 NPTypeCode.Single => NDArray.Scalar((float)result),
                 NPTypeCode.Double => NDArray.Scalar(result),
-                NPTypeCode.Decimal => NDArray.Scalar(DecimalMath.DecimalEx.ATan2(
+                NPTypeCode.Decimal => NDArray.Scalar(Utilities.DecimalMath.ATan2(
                     ConvertToDecimal(y, yType), ConvertToDecimal(x, xType))),
                 _ => NDArray.Scalar(result)
             };

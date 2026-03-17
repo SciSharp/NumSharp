@@ -1,5 +1,4 @@
 using System;
-using DecimalMath;
 using NumSharp.Backends.Kernels;
 using NumSharp.Utilities;
 
@@ -274,7 +273,7 @@ namespace NumSharp.Backends
                     sum += a * a;
                 }
 
-                var std = DecimalEx.Sqrt(sum / ((decimal)arr.size - _ddof));
+                var std = Utilities.DecimalMath.Sqrt(sum / ((decimal)arr.size - _ddof));
                 return Converts.ChangeType(std, retType);
             }
 

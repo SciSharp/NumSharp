@@ -272,15 +272,15 @@ namespace NumSharp.Backends.Kernels
                 BindingFlags.Public | BindingFlags.Static, null, new[] { typeof(decimal) }, null)
                 ?? throw new MissingMethodException(typeof(decimal).FullName, nameof(decimal.Floor));
 
-            // DecimalMath.DecimalEx methods
-            public static readonly MethodInfo DecimalExPow = typeof(DecimalMath.DecimalEx).GetMethod(
-                nameof(DecimalMath.DecimalEx.Pow), BindingFlags.Public | BindingFlags.Static, null,
+            // NumSharp.Utilities.DecimalMath methods
+            public static readonly MethodInfo DecimalMathPow = typeof(Utilities.DecimalMath).GetMethod(
+                nameof(Utilities.DecimalMath.Pow), BindingFlags.Public | BindingFlags.Static, null,
                 new[] { typeof(decimal), typeof(decimal) }, null)
-                ?? throw new MissingMethodException(typeof(DecimalMath.DecimalEx).FullName, nameof(DecimalMath.DecimalEx.Pow));
-            public static readonly MethodInfo DecimalExATan2 = typeof(DecimalMath.DecimalEx).GetMethod(
-                nameof(DecimalMath.DecimalEx.ATan2), BindingFlags.Public | BindingFlags.Static, null,
+                ?? throw new MissingMethodException(typeof(Utilities.DecimalMath).FullName, nameof(Utilities.DecimalMath.Pow));
+            public static readonly MethodInfo DecimalMathATan2 = typeof(Utilities.DecimalMath).GetMethod(
+                nameof(Utilities.DecimalMath.ATan2), BindingFlags.Public | BindingFlags.Static, null,
                 new[] { typeof(decimal), typeof(decimal) }, null)
-                ?? throw new MissingMethodException(typeof(DecimalMath.DecimalEx).FullName, nameof(DecimalMath.DecimalEx.ATan2));
+                ?? throw new MissingMethodException(typeof(Utilities.DecimalMath).FullName, nameof(Utilities.DecimalMath.ATan2));
 
             // Decimal fields
             public static readonly FieldInfo DecimalZero = typeof(decimal).GetField(nameof(decimal.Zero))
@@ -1060,7 +1060,7 @@ namespace NumSharp.Backends.Kernels
             // Power for decimal uses DecimalEx.Pow
             if (op == BinaryOp.Power)
             {
-                il.EmitCall(OpCodes.Call, CachedMethods.DecimalExPow, null);
+                il.EmitCall(OpCodes.Call, CachedMethods.DecimalMathPow, null);
                 return;
             }
 
@@ -1115,7 +1115,7 @@ namespace NumSharp.Backends.Kernels
             // ATan2 for decimal uses DecimalEx.ATan2
             if (op == BinaryOp.ATan2)
             {
-                il.EmitCall(OpCodes.Call, CachedMethods.DecimalExATan2, null);
+                il.EmitCall(OpCodes.Call, CachedMethods.DecimalMathATan2, null);
                 return;
             }
 
