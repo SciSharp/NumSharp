@@ -9,20 +9,36 @@ namespace NumSharp
         /// <summary>
         ///     Return a sample (or samples) from the "standard normal" distribution.
         /// </summary>
-        /// <param name="d0">Dimension(s) of the returned array.</param>
+        /// <param name="shape">Output shape.</param>
         /// <returns>
-        ///     A (d0, d1, ..., dn)-shaped array of floating-point samples from the standard
-        ///     normal distribution, or a single such float if no parameters are supplied.
+        ///     Array of floating-point samples from the standard normal distribution.
         /// </returns>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.randn.html
         ///     <br/>
-        ///     For random samples from the normal distribution with mean mu and standard
-        ///     deviation sigma, use: sigma * np.random.randn(...) + mu
+        ///     NumPy signature: randn(d0, d1, ..., dn) where d0..dn are dimension sizes.
+        ///     <br/>
+        ///     For random samples from N(μ, σ²), use: σ * np.random.randn(...) + μ
         /// </remarks>
-        public NDArray randn(params int[] d0)
+        public NDArray randn(Shape shape) => randn(shape.dimensions);
+
+        /// <summary>
+        ///     Return a sample (or samples) from the "standard normal" distribution.
+        /// </summary>
+        /// <param name="shape">Dimensions of the returned array (d0, d1, ..., dn).</param>
+        /// <returns>
+        ///     Array of floating-point samples from the standard normal distribution.
+        /// </returns>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.randn.html
+        ///     <br/>
+        ///     NumPy signature: randn(d0, d1, ..., dn) where d0..dn are dimension sizes.
+        ///     <br/>
+        ///     For random samples from N(μ, σ²), use: σ * np.random.randn(...) + μ
+        /// </remarks>
+        public NDArray randn(params int[] shape)
         {
-            return standard_normal(d0);
+            return standard_normal(shape);
         }
 
         /// <summary>
@@ -34,6 +50,22 @@ namespace NumSharp
         {
             return (T)Converts.ChangeType(randomizer.NextDouble(), InfoOf<T>.NPTypeCode);
         }
+
+        /// <summary>
+        ///     Draw random samples from a normal (Gaussian) distribution.
+        /// </summary>
+        /// <param name="loc">Mean ("centre") of the distribution. Default is 0.</param>
+        /// <param name="scale">Standard deviation (spread or "width") of the distribution. Must be non-negative. Default is 1.</param>
+        /// <param name="size">Output shape.</param>
+        /// <returns>Drawn samples from the parameterized normal distribution.</returns>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.normal.html
+        ///     <br/>
+        ///     The probability density function of the normal distribution, first derived
+        ///     by De Moivre and 200 years later by both Gauss and Laplace independently,
+        ///     is often called the bell curve because of its characteristic shape.
+        /// </remarks>
+        public NDArray normal(double loc, double scale, Shape size) => normal(loc, scale, size.dimensions);
 
         /// <summary>
         ///     Draw random samples from a normal (Gaussian) distribution.
@@ -64,6 +96,16 @@ namespace NumSharp
                 return array;
             }
         }
+
+        /// <summary>
+        ///     Draw samples from a standard Normal distribution (mean=0, stdev=1).
+        /// </summary>
+        /// <param name="size">Output shape.</param>
+        /// <returns>A floating-point array of shape size of drawn samples.</returns>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.standard_normal.html
+        /// </remarks>
+        public NDArray standard_normal(Shape size) => standard_normal(size.dimensions);
 
         /// <summary>
         ///     Draw samples from a standard Normal distribution (mean=0, stdev=1).

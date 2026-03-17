@@ -1,5 +1,3 @@
-using NumSharp.Backends;
-
 namespace NumSharp
 {
     public partial class NumPyRandom
@@ -7,8 +5,8 @@ namespace NumSharp
         /// <summary>
         ///     Draw samples from a Beta distribution.
         /// </summary>
-        /// <param name="a">Alpha, positive (>0).</param>
-        /// <param name="b">Beta, positive (>0).</param>
+        /// <param name="a">Alpha (α), positive (>0).</param>
+        /// <param name="b">Beta (β), positive (>0).</param>
         /// <param name="size">Output shape.</param>
         /// <returns>Drawn samples from the parameterized Beta distribution.</returns>
         /// <remarks>
@@ -22,8 +20,8 @@ namespace NumSharp
         /// <summary>
         ///     Draw samples from a Beta distribution.
         /// </summary>
-        /// <param name="a">Alpha, positive (>0).</param>
-        /// <param name="b">Beta, positive (>0).</param>
+        /// <param name="a">Alpha (α), positive (>0).</param>
+        /// <param name="b">Beta (β), positive (>0).</param>
         /// <param name="size">Output shape.</param>
         /// <returns>Drawn samples from the parameterized Beta distribution.</returns>
         /// <remarks>

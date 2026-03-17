@@ -7,20 +7,19 @@ namespace NumSharp
         /// <summary>
         ///     Random values in a given shape.
         /// </summary>
-        /// <param name="d0">Dimension(s) of the returned array.</param>
-        /// <returns>Random values in the shape (d0, d1, ..., dn).</returns>
+        /// <param name="shape">Dimensions of the returned array (d0, d1, ..., dn).</param>
+        /// <returns>Random values.</returns>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.rand.html
         ///     <br/>
         ///     Create an array of the given shape and populate it with random samples
         ///     from a uniform distribution over [0, 1).
         ///     <br/>
-        ///     This is a convenience function for users porting code from Matlab.
-        ///     For new code, use np.random.random_sample instead.
+        ///     NumPy signature: rand(d0, d1, ..., dn) where d0..dn are dimension sizes.
         /// </remarks>
-        public NDArray rand(params int[] d0)
+        public NDArray rand(params int[] shape)
         {
-            return rand(new Shape(d0));
+            return rand(new Shape(shape));
         }
 
         /// <summary>
@@ -88,7 +87,7 @@ namespace NumSharp
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.random.html
         ///     <br/>
-        ///     Alias for random_sample. This is the preferred function for new code.
+        ///     Alias for random_sample.
         /// </remarks>
         public NDArray random(params int[] size)
         {
@@ -103,7 +102,7 @@ namespace NumSharp
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.random.html
         ///     <br/>
-        ///     Alias for random_sample. This is the preferred function for new code.
+        ///     Alias for random_sample.
         /// </remarks>
         public NDArray random(Shape size)
         {
