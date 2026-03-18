@@ -38,7 +38,8 @@ namespace NumSharp
 
         public static readonly Type int_ = typeof(long);
         public static readonly Type int64 = int_;
-        public static readonly Type intp = int_; //TODO! IntPtr?
+        public static readonly Type intp = typeof(nint);
+        public static readonly Type uintp = typeof(nuint);
         public static readonly Type int0 = int_;
 
         public static readonly Type uint64 = typeof(ulong);
