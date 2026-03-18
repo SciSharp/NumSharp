@@ -31,6 +31,11 @@ namespace NumSharp
         public Array ToMuliDimArray<T>() where T : unmanaged
         {
             // Arrays.Create requires int[] - .NET limitation
+            foreach (var d in shape)
+            {
+                if (d > int.MaxValue)
+                    throw new InvalidOperationException($"Dimension {d} exceeds int.MaxValue. Cannot convert to .NET multi-dimensional array.");
+            }
             var intShape = System.Array.ConvertAll(shape, d => (int)d);
             var ret = Arrays.Create(typeof(T), intShape);
 

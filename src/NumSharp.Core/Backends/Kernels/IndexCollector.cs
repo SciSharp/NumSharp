@@ -22,6 +22,7 @@ namespace NumSharp.Backends.Kernels
     public unsafe struct IndexCollector
     {
         private const long LargeGrowthThreshold = 1_000_000_000L;
+        private const long MaxCapacity = 0x7FFFFFC7L; // Array.MaxLength
 
         private NDArray<long> _storage;
         private long _count;
@@ -81,6 +82,13 @@ namespace NumSharp.Backends.Kernels
             long newCapacity = _capacity < LargeGrowthThreshold
                 ? _capacity * 2
                 : _capacity + (_capacity / 3);
+
+            // Cap at .NET array limit
+            if (newCapacity > MaxCapacity)
+                newCapacity = MaxCapacity;
+
+            if (newCapacity <= _capacity)
+                throw new OutOfMemoryException("IndexCollector cannot grow beyond Array.MaxLength.");
 
             var newStorage = new NDArray<long>(new Shape(newCapacity));
 

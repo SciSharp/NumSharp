@@ -175,7 +175,7 @@ namespace NumSharp
             for (int i = 0; i < inputShape.Length; i++)
             {
                 if (i != axis)
-                    outputShapeList.Add((int)inputShape[i]);
+                    outputShapeList.Add(inputShape[i]);
             }
             if (outputShapeList.Count == 0)
                 outputShapeList.Add(1);

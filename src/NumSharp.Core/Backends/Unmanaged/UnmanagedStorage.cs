@@ -1010,7 +1010,7 @@ namespace NumSharp.Backends
             if (shape.IsEmpty)
                 throw new ArgumentNullException(nameof(shape));
 
-            _Allocate(shape, ArraySlice.Allocate(dtype ?? DType, (int)shape.size, true));
+            _Allocate(shape, ArraySlice.Allocate(dtype ?? DType, shape.size, true));
         }
 
         /// <summary>
@@ -1023,7 +1023,7 @@ namespace NumSharp.Backends
             if (shape.IsEmpty)
                 throw new ArgumentNullException(nameof(shape));
 
-            _Allocate(shape, ArraySlice.Allocate(dtype ?? DType, (int)shape.size, fillZeros));
+            _Allocate(shape, ArraySlice.Allocate(dtype ?? DType, shape.size, fillZeros));
         }
 
         /// <summary>
