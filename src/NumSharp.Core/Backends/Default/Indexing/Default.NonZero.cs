@@ -63,19 +63,17 @@ namespace NumSharp.Backends
                 return emptyResult;
             }
 
-            var kp = DefaultKernelProvider;
-
             // SIMD fast path for contiguous arrays
-            if (shape.IsContiguous && kp.Enabled && kp.VectorBits > 0)
+            if (shape.IsContiguous && ILKernelGenerator.Enabled && ILKernelGenerator.VectorBits > 0)
             {
                 var flatIndices = new List<int>(Math.Max(16, size / 4));
-                kp.FindNonZero((T*)x.Address, size, flatIndices);
-                return kp.ConvertFlatToCoordinates(flatIndices, x.shape);
+                ILKernelGenerator.NonZeroSimdHelper((T*)x.Address, size, flatIndices);
+                return ILKernelGenerator.ConvertFlatIndicesToCoordinates(flatIndices, x.shape);
             }
 
             // Strided path for non-contiguous arrays (transposed, sliced, etc.)
             // Uses coordinate-based iteration via ILKernelGenerator
-            return kp.FindNonZeroStrided((T*)x.Address, shape.dimensions, shape.strides, shape.offset);
+            return ILKernelGenerator.FindNonZeroStridedHelper((T*)x.Address, shape.dimensions, shape.strides, shape.offset);
         }
 
         /// <summary>

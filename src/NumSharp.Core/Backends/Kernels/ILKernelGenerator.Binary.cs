@@ -86,7 +86,7 @@ namespace NumSharp.Backends.Kernels
     /// <summary>
     /// Binary operations (same-type) - contiguous kernels and generic helpers.
     /// </summary>
-    public sealed partial class ILKernelGenerator
+    public static partial class ILKernelGenerator
     {
         /// <summary>
         /// Cache of IL-generated contiguous kernels.
@@ -133,8 +133,7 @@ namespace NumSharp.Backends.Kernels
 
         #region Contiguous Kernel Generation
 
-        // NOTE: ContiguousKernel<T> delegate is now defined in KernelSignatures.cs
-        // to support IKernelProvider interface.
+        // NOTE: ContiguousKernel<T> delegate is defined in KernelSignatures.cs
 
         /// <summary>
         /// Try to generate an IL-based contiguous kernel for the given operation and type.

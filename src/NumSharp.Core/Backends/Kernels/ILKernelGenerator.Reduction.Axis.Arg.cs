@@ -20,7 +20,7 @@ using System.Runtime.Intrinsics;
 
 namespace NumSharp.Backends.Kernels
 {
-    public sealed partial class ILKernelGenerator
+    public static partial class ILKernelGenerator
     {
         #region ArgMax/ArgMin Axis Reduction
         private static AxisReductionKernel CreateAxisArgReductionKernel(AxisReductionKernelKey key)

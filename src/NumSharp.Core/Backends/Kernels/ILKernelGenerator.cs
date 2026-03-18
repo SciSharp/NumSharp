@@ -21,9 +21,8 @@ using NumSharp.Utilities;
 //         -> ILKernelGenerator checks cache, generates IL if needed
 //         -> Returns delegate that caller invokes with array pointers
 //
-// DESIGN: Singleton pattern with IKernelProvider interface implementation.
-// Use ILKernelGenerator.Instance for instance methods, or static facades for
-// backward compatibility with existing code.
+// DESIGN: Static class - all kernel methods are static.
+// Call them directly from DefaultEngine.
 //
 // EXCEPTION HANDLING
 // ------------------
@@ -42,7 +41,7 @@ using NumSharp.Utilities;
 //   - Scan.cs: TryGetCumulativeKernel, TryGetCumulativeAxisKernel
 //   - Reduction.cs: TryGetTypedElementReductionKernel
 //   - Comparison.cs: TryGetComparisonKernel
-//   - ILKernelGenerator.cs: IKernelProvider interface implementations
+//   - ILKernelGenerator.cs: Core kernel infrastructure
 //
 // =============================================================================
 // PARTIAL CLASS FILES
@@ -51,13 +50,12 @@ using NumSharp.Utilities;
 // ILKernelGenerator.cs (THIS FILE)
 //   OWNERSHIP: Core infrastructure - foundation for all other partial files
 //   RESPONSIBILITY:
-//     - Singleton instance and IKernelProvider interface implementation
+//     - Static kernel generation methods used by DefaultEngine
 //     - Global state: Enabled flag, VectorBits/VectorBytes (detected at startup)
 //     - Type mapping: NPTypeCode <-> CLR Type <-> Vector type conversions
 //     - Shared IL emission primitives used by all other partials
 //   DEPENDENCIES: None (other partials depend on this)
 //   KEY MEMBERS:
-//     - Instance - singleton for IKernelProvider access
 //     - Enabled, VectorBits, VectorBytes - runtime SIMD capability
 //     - GetVectorContainerType(), GetVectorType() - V128/V256/V512 type selection
 //     - GetTypeSize(), GetClrType(), CanUseSimd(), IsUnsigned() - type utilities
@@ -145,40 +143,22 @@ namespace NumSharp.Backends.Kernels
     /// These kernels provide ~10-15% speedup over the C# reference implementations
     /// by allowing the JIT to inline Vector256 operations more aggressively.
     ///
-    /// Implements <see cref="IKernelProvider"/> for unified kernel access.
-    /// Use <see cref="Instance"/> for interface-based access, or static methods
-    /// for backward compatibility.
+    /// This class is internal to NumSharp.Backends - all kernel access should go
+    /// through TensorEngine/DefaultEngine, not directly from np.* or NDArray.
     /// </summary>
-    public sealed partial class ILKernelGenerator : IKernelProvider
+    public static partial class ILKernelGenerator
     {
-        #region Singleton and IKernelProvider Implementation
-
-        /// <summary>
-        /// Singleton instance for IKernelProvider interface access.
-        /// </summary>
-        public static readonly ILKernelGenerator Instance = new();
-
-        /// <summary>
-        /// Private constructor to enforce singleton pattern.
-        /// </summary>
-        private ILKernelGenerator() { }
+        #region Static Configuration
 
         /// <summary>
         /// Provider name for diagnostics.
         /// </summary>
-        public string Name => "IL";
+        public static string Name => "IL";
 
         /// <summary>
         /// Whether IL generation is enabled. Can be disabled for debugging.
         /// </summary>
         public static bool Enabled { get; set; } = true;
-
-        // IKernelProvider.Enabled - instance property delegates to static
-        bool IKernelProvider.Enabled
-        {
-            get => Enabled;
-            set => Enabled = value;
-        }
 
         /// <summary>
         /// Detected vector width at startup: 512, 256, 128, or 0 (no SIMD).
@@ -187,9 +167,6 @@ namespace NumSharp.Backends.Kernels
             Vector512.IsHardwareAccelerated ? 512 :
             Vector256.IsHardwareAccelerated ? 256 :
             Vector128.IsHardwareAccelerated ? 128 : 0;
-
-        // IKernelProvider.VectorBits - instance property delegates to static
-        int IKernelProvider.VectorBits => VectorBits;
 
         /// <summary>
         /// Number of bytes per vector register.
@@ -1235,135 +1212,5 @@ namespace NumSharp.Backends.Kernels
 
         #endregion
 
-        #region IKernelProvider Interface Implementation
-
-        /// <summary>
-        /// Check if type supports SIMD operations (IKernelProvider interface).
-        /// </summary>
-        bool IKernelProvider.CanUseSimd(NPTypeCode type) => CanUseSimd(type);
-
-        /// <summary>
-        /// Get contiguous same-type binary kernel (IKernelProvider interface).
-        /// Delegates to static GetContiguousKernel method in Binary partial.
-        /// </summary>
-        ContiguousKernel<T>? IKernelProvider.GetContiguousKernel<T>(BinaryOp op)
-            => GetContiguousKernel<T>(op);
-
-        /// <summary>
-        /// Get mixed-type binary kernel (IKernelProvider interface).
-        /// Delegates to static TryGetMixedTypeKernel method in MixedType partial.
-        /// </summary>
-        MixedTypeKernel? IKernelProvider.GetMixedTypeKernel(MixedTypeKernelKey key)
-            => TryGetMixedTypeKernel(key);
-
-        /// <summary>
-        /// Get unary kernel (IKernelProvider interface).
-        /// Delegates to static TryGetUnaryKernel method in Unary partial.
-        /// </summary>
-        UnaryKernel? IKernelProvider.GetUnaryKernel(UnaryKernelKey key)
-            => TryGetUnaryKernel(key);
-
-        /// <summary>
-        /// Get unary scalar function (IKernelProvider interface).
-        /// </summary>
-        UnaryScalar<TIn, TOut>? IKernelProvider.GetUnaryScalar<TIn, TOut>(UnaryOp op)
-        {
-            var key = new UnaryScalarKernelKey(
-                InfoOf<TIn>.NPTypeCode,
-                InfoOf<TOut>.NPTypeCode,
-                op
-            );
-            try
-            {
-                var del = GetUnaryScalarDelegate(key);
-                return del as UnaryScalar<TIn, TOut>;
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[ILKernel] GetUnaryScalar<{typeof(TIn).Name},{typeof(TOut).Name}>({op}): {ex.GetType().Name}: {ex.Message}");
-                return null;
-            }
-        }
-
-        /// <summary>
-        /// Get element reduction kernel (IKernelProvider interface).
-        /// </summary>
-        TypedElementReductionKernel<TResult>? IKernelProvider.GetElementReductionKernel<TResult>(ElementReductionKernelKey key)
-            => TryGetTypedElementReductionKernel<TResult>(key);
-
-        /// <summary>
-        /// Get axis reduction kernel (IKernelProvider interface).
-        /// </summary>
-        AxisReductionKernel? IKernelProvider.GetAxisReductionKernel(AxisReductionKernelKey key)
-            => TryGetAxisReductionKernel(key);
-
-        /// <summary>
-        /// Get comparison kernel (IKernelProvider interface).
-        /// </summary>
-        ComparisonKernel? IKernelProvider.GetComparisonKernel(ComparisonKernelKey key)
-            => TryGetComparisonKernel(key);
-
-        /// <summary>
-        /// Get comparison scalar function (IKernelProvider interface).
-        /// </summary>
-        ComparisonScalar<TLhs, TRhs>? IKernelProvider.GetComparisonScalar<TLhs, TRhs>(ComparisonOp op)
-        {
-            var key = new ComparisonScalarKernelKey(
-                InfoOf<TLhs>.NPTypeCode,
-                InfoOf<TRhs>.NPTypeCode,
-                op
-            );
-            try
-            {
-                var del = GetComparisonScalarDelegate(key);
-                return del as ComparisonScalar<TLhs, TRhs>;
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[ILKernel] GetComparisonScalar<{typeof(TLhs).Name},{typeof(TRhs).Name}>({op}): {ex.GetType().Name}: {ex.Message}");
-                return null;
-            }
-        }
-
-        /// <summary>
-        /// Get unary scalar delegate with runtime type dispatch (IKernelProvider interface).
-        /// </summary>
-        Delegate? IKernelProvider.GetUnaryScalarDelegate(UnaryScalarKernelKey key)
-        {
-            try { return GetUnaryScalarDelegate(key); }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[ILKernel] IKernelProvider.GetUnaryScalarDelegate({key}): {ex.GetType().Name}: {ex.Message}");
-                return null;
-            }
-        }
-
-        /// <summary>
-        /// Get binary scalar delegate with runtime type dispatch (IKernelProvider interface).
-        /// </summary>
-        Delegate? IKernelProvider.GetBinaryScalarDelegate(BinaryScalarKernelKey key)
-        {
-            try { return GetBinaryScalarDelegate(key); }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[ILKernel] IKernelProvider.GetBinaryScalarDelegate({key}): {ex.GetType().Name}: {ex.Message}");
-                return null;
-            }
-        }
-
-        /// <summary>
-        /// Get comparison scalar delegate with runtime type dispatch (IKernelProvider interface).
-        /// </summary>
-        Delegate? IKernelProvider.GetComparisonScalarDelegate(ComparisonScalarKernelKey key)
-        {
-            try { return GetComparisonScalarDelegate(key); }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[ILKernel] IKernelProvider.GetComparisonScalarDelegate({key}): {ex.GetType().Name}: {ex.Message}");
-                return null;
-            }
-        }
-
-        #endregion
     }
 }

@@ -87,7 +87,7 @@ namespace NumSharp.Backends.Kernels
     /// <summary>
     /// Mixed-type binary operations and IL loop emission.
     /// </summary>
-    public sealed partial class ILKernelGenerator
+    public static partial class ILKernelGenerator
     {
         #region Mixed-Type Kernel Generation
 

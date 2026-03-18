@@ -20,7 +20,7 @@ using System.Runtime.Intrinsics;
 
 namespace NumSharp.Backends.Kernels
 {
-    public sealed partial class ILKernelGenerator
+    public static partial class ILKernelGenerator
     {
         #region NaN-aware SIMD Helpers
         /// <summary>

@@ -35,7 +35,7 @@ namespace NumSharp.Backends.Kernels
     /// <summary>
     /// Shift operations - LeftShift and RightShift with SIMD optimization.
     /// </summary>
-    public sealed partial class ILKernelGenerator
+    public static partial class ILKernelGenerator
     {
         #region Shift Kernel Delegates
 

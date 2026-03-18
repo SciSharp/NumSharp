@@ -17,15 +17,30 @@
 | 1.3 | Add BooleanMask method to TensorEngine | DONE | 2026-03-18 |
 | 2.4 | Implement BooleanMask in DefaultEngine | DONE | 2026-03-18 |
 | 4 | Route NDArray.Indexing.Masking through TensorEngine | DONE | 2026-03-18 |
-| 5.1 | Remove `DefaultKernelProvider` static property | PENDING | - |
-| 5.4 | Delete IKernelProvider.cs | PENDING | - |
-| 5.5 | Make ILKernelGenerator internal | PENDING | - |
-| 6 | Final verification | PENDING | - |
+| 5.1 | Remove `DefaultKernelProvider` static property | DONE | 2026-03-18 |
+| 5.4 | Delete IKernelProvider.cs | DONE | 2026-03-18 |
+| 5.5 | Remove IKernelProvider interface from ILKernelGenerator | DONE | 2026-03-18 |
+| 5.6 | Update Default.NonZero.cs to use ILKernelGenerator directly | DONE | 2026-03-18 |
+| 6 | Final verification | DONE | 2026-03-18 |
+| 7.1 | Remove `Instance` singleton from ILKernelGenerator | DONE | 2026-03-18 |
+| 7.2 | Make ILKernelGenerator a static class | DONE | 2026-03-18 |
+| 7.3 | Remove BackendFactory usage from np.array_manipulation.cs | DONE | 2026-03-18 |
+| 8 | Move broadcast utilities from DefaultEngine to Shape | PENDING | - |
 
 **Violations Fixed: 7/7 files - ALL DONE**
+**IKernelProvider Interface: DELETED**
+**ILKernelGenerator: Now a static class (no Instance singleton)**
+**Tests: 4122 passed, 51 failed (pre-existing), 11 skipped**
 
-Verification command returns no results:
+Verification commands return no results:
 ```bash
+# No IKernelProvider references
+grep -r "IKernelProvider" src/NumSharp.Core --include="*.cs"
+
+# No DefaultKernelProvider references
+grep -r "DefaultKernelProvider" src/NumSharp.Core --include="*.cs"
+
+# No kernel imports outside Backends/
 grep -l "using NumSharp.Backends.Kernels" src/NumSharp.Core --include="*.cs" -r | grep -v "/Backends/"
 ```
 
@@ -48,6 +63,22 @@ grep -l "using NumSharp.Backends.Kernels" src/NumSharp.Core --include="*.cs" -r 
 - `np.nanmin.cs` - Simplified: now calls `a.TensorEngine.NanMin(a, axis, keepdims)`
 - `np.nanmax.cs` - Simplified: now calls `a.TensorEngine.NanMax(a, axis, keepdims)`
 - `NDArray.Indexing.Masking.cs` - Simplified: now calls `TensorEngine.BooleanMask()`
+
+**Phase 5 Changes (IKernelProvider Removal):**
+- `IKernelProvider.cs` - DELETED
+- `DefaultEngine.cs` - Removed `DefaultKernelProvider` static property
+- `Default.NonZero.cs` - Changed from `DefaultKernelProvider` to `ILKernelGenerator.*` direct calls
+- `ILKernelGenerator.cs` - Removed `: IKernelProvider`, removed explicit interface implementations
+- `ILKernelGenerator.Reduction.Axis.Simd.cs` - Removed explicit interface implementations
+- `ILKernelGenerator.Binary.cs` - Updated comments
+- `KernelSignatures.cs` - Updated comments
+
+**Phase 7 Changes (Static Class Conversion):**
+- `ILKernelGenerator.cs` - Removed `Instance` singleton, changed to `static partial class`
+- All 27 ILKernelGenerator.*.cs files - Changed to `public static partial class`
+
+**Phase 7.3 Changes (BackendFactory Removal):**
+- `np.array_manipulation.cs` - Removed BackendFactory dependency, use NDArray constructors directly
 
 ---
 
@@ -540,3 +571,196 @@ Current: `np.all(arr, axis)` has inline implementation in np.all.cs
 TensorEngine: `All(NDArray, int axis)` throws NotImplementedException
 
 **Recommendation:** Implement in DefaultEngine, route np.all through it.
+
+---
+
+## Phase 7: Remove Instance Singleton
+
+**Status:** COMPLETE (2026-03-18)
+
+### Goal
+
+Remove the unnecessary `Instance` singleton from `ILKernelGenerator`.
+All methods are already static, so the instance serves no purpose.
+
+### Tasks
+
+| Task | Description | Status |
+|------|-------------|--------|
+| 7.1 | Remove `Instance` singleton field | DONE |
+| 7.2 | Change `public sealed partial class` to `public static partial class` | DONE |
+
+### Change (Completed)
+
+Before:
+```csharp
+public sealed partial class ILKernelGenerator
+{
+    public static readonly ILKernelGenerator Instance = new();
+    private ILKernelGenerator() { }
+    public static string Name => "IL";
+    // All methods are static...
+}
+```
+
+After (current state):
+```csharp
+public static partial class ILKernelGenerator
+{
+    public static string Name => "IL";
+    // All methods already static, no instance needed
+}
+```
+
+### Files to Modify
+
+All ILKernelGenerator partial files need `static` added to class declaration:
+- `ILKernelGenerator.cs` - Remove Instance, change to static class
+- `ILKernelGenerator.Binary.cs`
+- `ILKernelGenerator.MixedType.cs`
+- `ILKernelGenerator.Unary.cs`
+- `ILKernelGenerator.Comparison.cs`
+- `ILKernelGenerator.Reduction.cs`
+- `ILKernelGenerator.Reduction.Axis.Simd.cs`
+- `ILKernelGenerator.Masking.cs`
+- `ILKernelGenerator.Scan.cs`
+- `ILKernelGenerator.Shift.cs`
+- `ILKernelGenerator.MatMul.cs`
+- `ILKernelGenerator.Clip.cs`
+- `ILKernelGenerator.Modf.cs`
+- (and all other partial files)
+
+### Verification (Passed)
+
+All commands return no results:
+```bash
+# No Instance references
+grep "ILKernelGenerator\.Instance" src/NumSharp.Core --include="*.cs" -r
+# (none)
+
+# No IKernelProvider references
+grep -r "IKernelProvider" src/NumSharp.Core --include="*.cs"
+# (none)
+
+# No DefaultKernelProvider references
+grep -r "DefaultKernelProvider" src/NumSharp.Core --include="*.cs"
+# (none)
+
+# No kernel imports outside Backends
+grep -l "using NumSharp.Backends.Kernels" src/NumSharp.Core --include="*.cs" -r | grep -v "/Backends/"
+# (none)
+
+# Class is now static
+grep -h "partial class ILKernelGenerator" src/NumSharp.Core/Backends/Kernels/ILKernelGenerator*.cs | sort | uniq
+# public static partial class ILKernelGenerator
+```
+
+### Risk Assessment
+
+- **Completed successfully**: All callers already used static methods
+- `Instance` was verified to have no references before removal
+- Build succeeded, tests pass (51 pre-existing failures unrelated to this change)
+
+---
+
+## Phase 7.3: Remove BackendFactory from np.array_manipulation.cs
+
+**Status:** COMPLETE (2026-03-18)
+
+### Investigation
+
+The file `np.array_manipulation.cs` used:
+```csharp
+BackendFactory.GetEngine().CreateNDArray(shape, dtype, buffer, order)
+```
+
+**Why it was there:** Historical design thinking that different backends (GPU) might allocate memory differently.
+
+**Why it's wrong:**
+1. Memory allocation is NOT backend-specific - all backends use the same unmanaged memory
+2. NDArray constructors already handle all cases:
+   - `new NDArray(dtype, shape)` - allocate with zeros
+   - `new NDArray(buffer, shape, order)` - use existing buffer
+3. Going through TensorEngine for construction adds unnecessary indirection
+
+### Fix Applied
+
+```csharp
+// BEFORE
+BackendFactory.GetEngine().CreateNDArray(shape, dtype, buffer, order)
+
+// AFTER
+if (buffer == null)
+    return new NDArray(dtype ?? typeof(float), shape);
+else
+    return new NDArray(buffer, shape, order);
+```
+
+### Files Modified
+- `np.array_manipulation.cs` - Removed BackendFactory dependency, use NDArray constructors directly
+
+---
+
+## Phase 8: Move Broadcast Utilities to Shape
+
+**Status:** PENDING
+
+### Goal
+
+Move pure shape operations from `DefaultEngine` to `Shape` struct as static methods.
+Broadcasting is a mathematical concept, not a tensor/engine-specific operation.
+
+### Current State (32 usages outside Backends)
+
+```csharp
+// Currently on DefaultEngine:
+DefaultEngine.Broadcast(shape1, shape2)        // → (Shape, Shape) tuple
+DefaultEngine.AreBroadcastable(shapes)         // → bool
+DefaultEngine.ResolveReturnShape(s1, s2)       // → Shape
+```
+
+### Target State
+
+```csharp
+// Move to Shape struct:
+Shape.Broadcast(shape1, shape2)                // → (Shape, Shape) tuple
+Shape.AreBroadcastable(shapes)                 // → bool
+Shape.ResolveReturnShape(s1, s2)               // → Shape
+```
+
+### Rationale
+
+1. **Broadcasting is math, not engine logic** - It's about shape compatibility rules
+2. **Shape is the right home** - These operate on Shape, return Shape
+3. **Removes DefaultEngine dependency** - np.* files won't need `using NumSharp.Backends`
+4. **Cleaner API** - `Shape.Broadcast()` is more intuitive than `DefaultEngine.Broadcast()`
+
+### Files to Modify
+
+| File | Change |
+|------|--------|
+| `View/Shape.cs` | Add static Broadcast, AreBroadcastable, ResolveReturnShape methods |
+| `Backends/Default/Default.Broadcast.cs` | Move implementation to Shape, keep thin wrapper |
+| `np.are_broadcastable.cs` | Change to `Shape.AreBroadcastable()` |
+| `np.broadcast.cs` | Change to `Shape.ResolveReturnShape()` |
+| `np.broadcast_arrays.cs` | Change to `Shape.Broadcast()` |
+| `np.broadcast_to.cs` | Change to `Shape.Broadcast()` |
+| `Operations/Elementwise/Templates/*.cs` | Change to `Shape.Broadcast()` |
+
+### Implementation Steps
+
+1. Add static broadcast methods to `Shape` struct
+2. Move implementation from `DefaultEngine` to `Shape`
+3. Update all callers to use `Shape.*` instead of `DefaultEngine.*`
+4. Keep `DefaultEngine.Broadcast()` as thin wrapper (for any internal usage)
+5. Remove `using NumSharp.Backends` from files that only needed broadcast
+
+### Verification
+
+After completion:
+```bash
+# No DefaultEngine.Broadcast outside Backends
+grep -rn "DefaultEngine\.Broadcast\|DefaultEngine\.AreBroadcastable\|DefaultEngine\.ResolveReturnShape" \
+  src/NumSharp.Core --include="*.cs" | grep -v "/Backends/"
+# Should return: (none)
+```

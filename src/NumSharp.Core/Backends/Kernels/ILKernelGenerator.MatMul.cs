@@ -49,7 +49,7 @@ namespace NumSharp.Backends.Kernels
     /// <summary>
     /// IL-generated matrix multiplication kernels with SIMD optimization.
     /// </summary>
-    public sealed partial class ILKernelGenerator
+    public static partial class ILKernelGenerator
     {
         /// <summary>
         /// Cache of IL-generated MatMul kernels by type.

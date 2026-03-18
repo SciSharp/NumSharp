@@ -4,7 +4,7 @@ namespace NumSharp.Backends.Kernels
     // KernelSignatures.cs - Centralized delegate type definitions for kernel system
     // =============================================================================
     //
-    // This file defines delegate types used by IKernelProvider implementations.
+    // This file defines delegate types used by ILKernelGenerator.
     // Some delegates have existing definitions in other files (noted below) and
     // will be consolidated in future refactoring phases.
     //

@@ -24,7 +24,7 @@ using System.Runtime.Intrinsics;
 
 namespace NumSharp.Backends.Kernels
 {
-    public sealed partial class ILKernelGenerator
+    public static partial class ILKernelGenerator
     {
         #region Axis Reduction SIMD Helpers
 

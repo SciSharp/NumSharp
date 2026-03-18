@@ -17,13 +17,13 @@ using System.Runtime.Intrinsics.X86;
 //   - ReduceContiguousAxis variants (SIMD256, SIMD128, scalar)
 //   - ReduceStridedAxis with AVX2 gather for float/double
 //   - Vector identity/combine/horizontal helpers
-//   - IKernelProvider interface implementation
+//   - SIMD helper methods for DefaultEngine
 //
 // =============================================================================
 
 namespace NumSharp.Backends.Kernels
 {
-    public sealed partial class ILKernelGenerator
+    public static partial class ILKernelGenerator
     {
         #region Typed SIMD Axis Reduction
         private static unsafe AxisReductionKernel CreateAxisReductionKernelTyped<T>(AxisReductionKernelKey key)
@@ -821,111 +821,6 @@ namespace NumSharp.Backends.Kernels
             }
 
             throw new NotSupportedException($"Type {typeof(T)} not supported");
-        }
-
-        #endregion
-        #region IKernelProvider SIMD Helper Interface Implementation
-
-        /// <inheritdoc />
-        unsafe bool IKernelProvider.All<T>(T* data, int size)
-        {
-            return AllSimdHelper<T>(data, size);
-        }
-
-        /// <inheritdoc />
-        unsafe bool IKernelProvider.Any<T>(T* data, int size)
-        {
-            return AnySimdHelper<T>(data, size);
-        }
-
-        /// <inheritdoc />
-        unsafe void IKernelProvider.FindNonZero<T>(T* data, int size, System.Collections.Generic.List<int> indices)
-        {
-            NonZeroSimdHelper(data, size, indices);
-        }
-
-        /// <inheritdoc />
-        NumSharp.Generic.NDArray<int>[] IKernelProvider.ConvertFlatToCoordinates(System.Collections.Generic.List<int> flatIndices, int[] shape)
-        {
-            return ConvertFlatIndicesToCoordinates(flatIndices, shape);
-        }
-
-        /// <inheritdoc />
-        unsafe NumSharp.Generic.NDArray<int>[] IKernelProvider.FindNonZeroStrided<T>(T* data, int[] shape, int[] strides, int offset)
-        {
-            return FindNonZeroStridedHelper(data, shape, strides, offset);
-        }
-
-        /// <inheritdoc />
-        unsafe int IKernelProvider.CountTrue(bool* data, int size)
-        {
-            return CountTrueSimdHelper(data, size);
-        }
-
-        /// <inheritdoc />
-        unsafe int IKernelProvider.CopyMasked<T>(T* src, bool* mask, T* dest, int size)
-        {
-            return CopyMaskedElementsHelper(src, mask, dest, size);
-        }
-
-        /// <inheritdoc />
-        unsafe double IKernelProvider.Variance<T>(T* data, int size, int ddof)
-        {
-            return VarSimdHelper(data, size, ddof);
-        }
-
-        /// <inheritdoc />
-        unsafe double IKernelProvider.StandardDeviation<T>(T* data, int size, int ddof)
-        {
-            return StdSimdHelper(data, size, ddof);
-        }
-
-        /// <inheritdoc />
-        unsafe float IKernelProvider.NanSumFloat(float* data, int size)
-        {
-            return NanSumSimdHelperFloat(data, size);
-        }
-
-        /// <inheritdoc />
-        unsafe double IKernelProvider.NanSumDouble(double* data, int size)
-        {
-            return NanSumSimdHelperDouble(data, size);
-        }
-
-        /// <inheritdoc />
-        unsafe float IKernelProvider.NanProdFloat(float* data, int size)
-        {
-            return NanProdSimdHelperFloat(data, size);
-        }
-
-        /// <inheritdoc />
-        unsafe double IKernelProvider.NanProdDouble(double* data, int size)
-        {
-            return NanProdSimdHelperDouble(data, size);
-        }
-
-        /// <inheritdoc />
-        unsafe float IKernelProvider.NanMinFloat(float* data, int size)
-        {
-            return NanMinSimdHelperFloat(data, size);
-        }
-
-        /// <inheritdoc />
-        unsafe double IKernelProvider.NanMinDouble(double* data, int size)
-        {
-            return NanMinSimdHelperDouble(data, size);
-        }
-
-        /// <inheritdoc />
-        unsafe float IKernelProvider.NanMaxFloat(float* data, int size)
-        {
-            return NanMaxSimdHelperFloat(data, size);
-        }
-
-        /// <inheritdoc />
-        unsafe double IKernelProvider.NanMaxDouble(double* data, int size)
-        {
-            return NanMaxSimdHelperDouble(data, size);
         }
 
         #endregion
