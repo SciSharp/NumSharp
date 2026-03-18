@@ -32,33 +32,11 @@ namespace NumSharp.Backends.Kernels
             return (void* input, void* output, int* inputStrides, int* inputShape,
                     int* outputStrides, int axis, int axisSize, int ndim, int outputSize) =>
             {
-                // TODO: Full long migration for AxisReductionSimdHelper
-                // For now, check bounds and use int version
-                if (axisSize > int.MaxValue || outputSize > int.MaxValue)
-                    throw new NotSupportedException("Axis reduction does not support arrays with more than int.MaxValue elements per axis");
-
-                // Convert long arrays to int arrays for helper (temporary until full migration)
-                Span<int> intInputStrides = stackalloc int[ndim];
-                Span<int> intInputShape = stackalloc int[ndim];
-                Span<int> intOutputStrides = stackalloc int[ndim > 1 ? ndim - 1 : 1];
-                for (int i = 0; i < ndim; i++)
-                {
-                    intInputStrides[i] = (int)inputStrides[i];
-                    intInputShape[i] = (int)inputShape[i];
-                }
-                for (int i = 0; i < ndim - 1; i++)
-                    intOutputStrides[i] = (int)outputStrides[i];
-
-                fixed (int* pInputStrides = intInputStrides)
-                fixed (int* pInputShape = intInputShape)
-                fixed (int* pOutputStrides = intOutputStrides)
-                {
-                    AxisReductionSimdHelper<T>(
-                        (T*)input, (T*)output,
-                        pInputStrides, pInputShape, pOutputStrides,
-                        axis, (int)axisSize, ndim, (int)outputSize,
-                        key.Op);
-                }
+                AxisReductionSimdHelper<T>(
+                    (T*)input, (T*)output,
+                    inputStrides, inputShape, outputStrides,
+                    axis, axisSize, ndim, outputSize,
+                    key.Op);
             };
         }
 

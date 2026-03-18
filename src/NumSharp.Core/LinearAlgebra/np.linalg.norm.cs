@@ -72,13 +72,15 @@ namespace NumSharp
 
                 // Normalize the `axis` argument to a tuple.
                 var dim = x.ndim;
-                int[] axis = null;
+                long[] axis = null;
                 if (axis_obj == null)
-                    axis = py.range(dim);
-                else if (axis_obj is int)
-                    axis = new int[] {(int)axis_obj};
-                else if (axis_obj is int[])
-                    axis = (long[])axis_obj;
+                    axis = Shape.ComputeLongShape(py.range(dim));
+                else if (axis_obj is int axisInt)
+                    axis = new long[] {axisInt};
+                else if (axis_obj is int[] axisIntArr)
+                    axis = Shape.ComputeLongShape(axisIntArr);
+                else if (axis_obj is long[] axisLongArr)
+                    axis = axisLongArr;
                 else
                     throw new ArgumentException($"Invalid axis type: {axis_obj}");
 //                if (axis.Length == 1)

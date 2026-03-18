@@ -136,13 +136,6 @@ namespace NumSharp.Backends.Unmanaged
             *(Address + index) = (T)value;
         }
 
-        [MethodImpl(OptimizeAndInline)]
-        public void SetIndex(int index, T value)
-        {
-            Debug.Assert(index < Count, "index < Count, Memory corruption expected.");
-            *(Address + index) = value;
-        }
-
         /// <summary>
         /// Backwards-compatible overload accepting int index.
         /// </summary>
