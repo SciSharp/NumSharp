@@ -140,7 +140,7 @@ public class NumpyAlignmentBugTests
 
         Assert.AreEqual(1, result.Length, "1D input should return tuple of 1 array");
         Assert.AreEqual(3, result[0].size, "3 nonzero elements");
-        CollectionAssert.AreEqual(new[] { 0, 2, 4 }, result[0].ToArray<int>());
+        CollectionAssert.AreEqual(new long[] { 0, 2, 4 }, result[0].ToArray<long>());
     }
 
     [Test]

@@ -10,6 +10,7 @@ Issues discovered by auditing the codebase against the int64 migration spirit.
 **Updated**: 2026-03-17 - Found H1 already fixed; fixed H2 (batch 3)
 **Updated**: 2026-03-17 - Fixed H13 ArgMax/ArgMin returns Int64 (batch 3 continued)
 **Updated**: 2026-03-17 - Fixed M1, M6, M7, M9; found np.random.randn/ILKernelGenerator.Scan.cs int loop issues (batch 4)
+**Updated**: 2026-03-18 - Fixed np.roll Slice cast issue from rebase review (batch 5)
 
 ---
 
@@ -51,6 +52,9 @@ Issues discovered by auditing the codebase against the int64 migration spirit.
 - M9: Already fixed (confirmed - `NDArray<T>` already has `long size` overloads)
 - NEW: `np.random.randn` loop counter changed from `int i` to `long i`
 - NEW: `ILKernelGenerator.Scan.cs` loop counters changed to `long` (outer, inner, i)
+
+**Batch 5 (post-rebase review):**
+- M16: `np.roll` Slice construction - removed unnecessary `(int)` casts, Slice accepts `long?` natively
 
 ### Reclassified as LOW (.NET Array boundary)
 - H3: `np.vstack` - entire implementation is commented out (dead code)
@@ -457,6 +461,22 @@ var reverse_permutation = new int[nd.ndim];
 
 ---
 
+### M16. ✅ FIXED - np.roll Uses `(int)` Casts for Slice Construction
+
+**File:** `Manipulation/np.roll.cs:58-61`
+
+**Status:** Fixed - removed unnecessary `(int)` casts when constructing Slice objects. The Slice class accepts `long?` for Start/Stop parameters natively. The casts were overflow-prone for large shift values.
+
+```csharp
+// BEFORE (overflow-prone):
+srcBody[i] = new Slice(null, (int)-offset);
+
+// AFTER (correct):
+srcBody[i] = new Slice(null, -offset);
+```
+
+---
+
 ## LOW Priority Issues (Acceptable Exceptions)
 
 ### L1. Slice.ToSliceDef Throws on Large Dimensions
@@ -648,6 +668,7 @@ var intIndices = new int[indices.Length];
 - [ ] M11: Consider using `long[]` for transpose permutation arrays (low impact)
 - [x] M12: Fix `np.random.randn` loop counter to `long` ✅
 - [x] M13: Fix `ILKernelGenerator.Scan.cs` loop counters to `long` ✅
+- [x] M16: Fix `np.roll` Slice construction to use `long` directly (no `(int)` cast) ✅
 
 ### LOW Priority (Cosmetic/Acceptable)
 

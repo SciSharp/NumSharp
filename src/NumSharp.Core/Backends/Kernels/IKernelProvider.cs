@@ -169,7 +169,7 @@ namespace NumSharp.Backends.Kernels
         /// <param name="data">Pointer to contiguous array data.</param>
         /// <param name="size">Number of elements.</param>
         /// <param name="indices">Output buffer to populate with non-zero indices.</param>
-        unsafe void FindNonZero<T>(T* data, long size, ref LongIndexBuffer indices) where T : unmanaged;
+        unsafe void FindNonZero<T>(T* data, long size, ref IndexCollector indices) where T : unmanaged;
 
         /// <summary>
         /// Convert flat (linear) indices to per-dimension coordinate arrays.
@@ -177,7 +177,7 @@ namespace NumSharp.Backends.Kernels
         /// <param name="flatIndices">Buffer of flat indices.</param>
         /// <param name="shape">Shape of the array.</param>
         /// <returns>Array of NDArray&lt;long&gt;, one per dimension.</returns>
-        unsafe NumSharp.Generic.NDArray<long>[] ConvertFlatToCoordinates(ref LongIndexBuffer flatIndices, long[] shape);
+        unsafe NumSharp.Generic.NDArray<long>[] ConvertFlatToCoordinates(ref IndexCollector flatIndices, long[] shape);
 
         /// <summary>
         /// Find indices of all non-zero elements in a strided (non-contiguous) array.
