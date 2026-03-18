@@ -84,8 +84,8 @@ namespace NumSharp.Backends
             // Get kernel key
             var key = new MixedTypeKernelKey(lhsType, rhsType, resultType, op, path);
 
-            // Get or generate kernel via provider interface
-            var kernel = KernelProvider.GetMixedTypeKernel(key);
+            // Get or generate kernel
+            var kernel = ILKernelGenerator.GetMixedTypeKernel(key);
 
             if (kernel != null)
             {
@@ -109,7 +109,7 @@ namespace NumSharp.Backends
             var lhsType = lhs.GetTypeCode;
             var rhsType = rhs.GetTypeCode;
             var key = new BinaryScalarKernelKey(lhsType, rhsType, resultType, op);
-            var func = KernelProvider.GetBinaryScalarDelegate(key);
+            var func = ILKernelGenerator.GetBinaryScalarDelegate(key);
 
             // Dispatch based on lhs type first
             return lhsType switch

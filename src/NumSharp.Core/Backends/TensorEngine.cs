@@ -30,6 +30,12 @@ namespace NumSharp
         public abstract NDArray ReduceCumMul(in NDArray arr, int? axis_, NPTypeCode? typeCode = null);
         public abstract NDArray ReduceMean(in NDArray arr, int? axis_, bool keepdims = false, NPTypeCode? typeCode = null);
 
+        // NaN-aware reductions
+        public abstract NDArray NanSum(in NDArray a, int? axis = null, bool keepdims = false);
+        public abstract NDArray NanProd(in NDArray a, int? axis = null, bool keepdims = false);
+        public abstract NDArray NanMin(in NDArray a, int? axis = null, bool keepdims = false);
+        public abstract NDArray NanMax(in NDArray a, int? axis = null, bool keepdims = false);
+
         #endregion
 
         public abstract NDArray Add(in NDArray lhs, in NDArray rhs);
@@ -152,6 +158,8 @@ namespace NumSharp
 
         public abstract bool All(NDArray nd);
         public abstract NDArray<bool> All(NDArray nd, int axis);
+        public abstract bool Any(NDArray nd);
+        public abstract NDArray<bool> Any(NDArray nd, int axis);
         public abstract bool AllClose(NDArray a, NDArray b, double rtol = 1.0E-5, double atol = 1.0E-8, bool equal_nan = false);
         public abstract NDArray<bool> IsClose(NDArray a, NDArray b, double rtol = 1.0E-5, double atol = 1.0E-8, bool equal_nan = false);
         public abstract NDArray<bool> IsFinite(NDArray a);
@@ -209,6 +217,9 @@ namespace NumSharp
         public abstract int CountNonZero(in NDArray a);
 
         public abstract NDArray CountNonZero(in NDArray a, int axis, bool keepdims = false);
+
+        // Boolean masking
+        public abstract NDArray BooleanMask(NDArray arr, NDArray mask);
 
         #endregion
     }

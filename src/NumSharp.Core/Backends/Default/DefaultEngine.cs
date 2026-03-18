@@ -7,15 +7,11 @@ namespace NumSharp.Backends
     /// </summary>
     public partial class DefaultEngine : TensorEngine
     {
-        /// <summary>
-        ///     The kernel provider for IL-generated kernels.
-        ///     Abstracts kernel generation to enable future backends (CUDA, Vulkan).
-        /// </summary>
-        protected readonly IKernelProvider KernelProvider = ILKernelGenerator.Instance;
+        // KernelProvider field removed - DefaultEngine calls ILKernelGenerator.Instance directly
 
         /// <summary>
         ///     Default kernel provider for static access (np.all, np.any, masking, etc.).
-        ///     Use this for code paths that don't have access to a DefaultEngine instance.
+        ///     TODO: Remove this once np.all/np.any/masking are routed through TensorEngine.
         /// </summary>
         public static IKernelProvider DefaultKernelProvider { get; } = ILKernelGenerator.Instance;
     }

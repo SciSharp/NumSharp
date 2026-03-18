@@ -44,8 +44,8 @@ namespace NumSharp.Backends
             // Get kernel key
             var key = new ElementReductionKernelKey(inputType, accumType, op, isContiguous);
 
-            // Get or generate kernel via provider interface
-            var kernel = KernelProvider.GetElementReductionKernel<TResult>(key);
+            // Get or generate kernel
+            var kernel = ILKernelGenerator.TryGetTypedElementReductionKernel<TResult>(key);
 
             if (kernel != null)
             {
@@ -359,7 +359,7 @@ namespace NumSharp.Backends
             );
 
             // Try to get SIMD kernel
-            var kernel = KernelProvider.GetAxisReductionKernel(key);
+            var kernel = ILKernelGenerator.TryGetAxisReductionKernel(key);
             if (kernel == null)
                 return null;
 

@@ -67,8 +67,8 @@ namespace NumSharp.Backends
             // Get kernel key
             var key = new UnaryKernelKey(inputType, outputType, op, isContiguous);
 
-            // Get or generate kernel via provider interface
-            var kernel = KernelProvider.GetUnaryKernel(key);
+            // Get or generate kernel
+            var kernel = ILKernelGenerator.GetUnaryKernel(key);
 
             if (kernel != null)
             {
@@ -93,7 +93,7 @@ namespace NumSharp.Backends
         {
             var inputType = nd.GetTypeCode;
             var key = new UnaryScalarKernelKey(inputType, outputType, op);
-            var func = KernelProvider.GetUnaryScalarDelegate(key);
+            var func = ILKernelGenerator.GetUnaryScalarDelegate(key);
 
             // Dispatch based on input type to avoid boxing
             return inputType switch

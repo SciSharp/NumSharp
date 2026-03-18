@@ -51,8 +51,8 @@ namespace NumSharp.Backends
             // Get kernel key
             var key = new ComparisonKernelKey(lhsType, rhsType, op, path);
 
-            // Get or generate kernel via provider interface
-            var kernel = KernelProvider.GetComparisonKernel(key);
+            // Get or generate kernel
+            var kernel = ILKernelGenerator.GetComparisonKernel(key);
 
             if (kernel != null)
             {
@@ -78,7 +78,7 @@ namespace NumSharp.Backends
             var lhsType = lhs.GetTypeCode;
             var rhsType = rhs.GetTypeCode;
             var key = new ComparisonScalarKernelKey(lhsType, rhsType, op);
-            var func = KernelProvider.GetComparisonScalarDelegate(key);
+            var func = ILKernelGenerator.GetComparisonScalarDelegate(key);
 
             // Dispatch based on lhs type first
             return lhsType switch
