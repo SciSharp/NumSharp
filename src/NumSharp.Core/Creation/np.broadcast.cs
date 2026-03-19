@@ -1,5 +1,4 @@
 ﻿using System;
-using NumSharp.Backends;
 
 namespace NumSharp
 {
@@ -12,7 +11,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.broadcast.html</remarks>
         public static Broadcast broadcast(NDArray nd1, NDArray nd2)
         {
-            return new Broadcast { shape = DefaultEngine.ResolveReturnShape(nd1.Shape, nd2.Shape), iters = new[] { nd1.AsIterator(), nd2.AsIterator() } };
+            return new Broadcast { shape = Shape.ResolveReturnShape(nd1.Shape, nd2.Shape), iters = new[] { nd1.AsIterator(), nd2.AsIterator() } };
         }
 
         public class Broadcast

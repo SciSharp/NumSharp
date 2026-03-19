@@ -294,6 +294,93 @@ New abstract methods added to `TensorEngine.cs`:
 - Migrated from Regen template to IL kernel
 - Significant code reduction
 
+### More Undocumented Fixes (Batch 3)
+
+**Boolean indexing** - Complete rewrite:
+- Before: Basic implementation
+- After: NumPy-aligned with 2 cases:
+  - Case 1: `mask.shape == arr.shape` → element-wise selection
+  - Case 2: 1D mask with `mask.shape[0] == arr.shape[0]` → axis-0 selection
+- Added SIMD fast path (`BooleanMaskFastPath`) for contiguous arrays
+- New kernel methods: `CountTrue`, `CopyMasked`
+
+**Converts.Native** - Float-to-int truncation:
+- Before: Used rounding (incorrect)
+- After: Uses truncation toward zero (NumPy behavior)
+- `np.array([1.7, -1.7]).astype(int)` → `[1, -1]` (was `[2, -2]`)
+
+**Trig functions** (sin, cos, tan, etc.) - IL kernel rewrite:
+- All migrated from manual type switch to `ExecuteUnaryOp`
+- Removed `DecimalMath` dependency for most functions
+- Cleaner, more maintainable code
+
+**IKernelProvider** - New helper methods:
+- `CountTrue(bool*, int)` - SIMD count of true values
+- `CopyMasked<T>(src, mask, dest, size)` - SIMD masked copy
+- `Variance<T>`, `StandardDeviation<T>` - SIMD two-pass algorithms
+- `NanSumFloat/Double`, `NanProdFloat/Double` - NaN-aware reductions
+- `NanMinFloat/Double`, `NanMaxFloat/Double` - NaN-aware min/max
+- `FindNonZeroStrided<T>` - Strided array nonzero detection
+
+### Massive Code Reduction in BLAS
+
+| File | Before | After | Reduction |
+|------|--------|-------|-----------|
+| `Default.MatMul.2D2D.cs` | ~20K lines | 325 lines | **98.4%** |
+| `Default.Dot.NDMD.cs` | ~16K lines | 422 lines | **97.4%** |
+
+Both used nested `switch` statements for every dtype combination.
+Now use dynamic iteration with optional SIMD for float/double.
+
+### Mean/All Reductions - Empty Array Handling
+
+All reduction functions now properly handle empty arrays:
+- `np.mean([])` → returns `NaN` (was throwing or returning 0)
+- `np.mean(np.zeros((0, 3)), axis=0)` → `[NaN, NaN, NaN]`
+- `np.mean(np.zeros((0, 3)), axis=1)` → empty array `[]`
+
+### More Undocumented Fixes (Batch 4)
+
+**Comparison operators** - Complete rewrite:
+- All operators (`==`, `!=`, `>`, `>=`, `<`, `<=`) now use `TensorEngine`
+- Proper null handling (returns `false` scalar for null comparisons)
+- Empty array handling (returns empty bool array, not scalar)
+- Added reverse operators (`object op NDArray`)
+- Consistent broadcasting support
+
+**Slicing** - NumPy alignment:
+- Broadcast arrays no longer materialize on slice (preserves stride=0)
+- Empty slices return proper empty arrays with correct dtype
+- Contiguous slices optimized (offset=0 for fresh shape)
+- Better handling of subshapes for broadcast views
+
+**np.repeat()** - New overload:
+- Before: Only `repeat(array, int)` for scalar repeat count
+- After: Added `repeat(array, NDArray)` for per-element repeat counts
+- Empty input/zero repeats handling
+
+**np.modf()** - Type validation:
+- Now validates input is floating-point (Single, Double, Decimal)
+- Throws clear error for integer types
+- Added SIMD optimization for contiguous arrays
+
+**np.minimum/maximum** - Parameter rename:
+- `outType` → `dtype` for consistency with NumPy API
+
+**StackedMemoryPool** - NativeMemory migration:
+- Pool allocation uses `NativeMemory.Alloc/Free`
+- Consistent with rest of memory management
+
+**DefaultEngine** - Architecture changes:
+- Removed `ParallelAbove = 84999` constant (no more Parallel.For)
+- Added `KernelProvider` instance field (abstraction for future backends)
+- Added static `DefaultKernelProvider` for code paths without engine access
+
+**All math functions** (Sin, Cos, Tan, Exp, Log, etc.):
+- Migrated from Regen templates to `ExecuteUnaryOp` with IL kernels
+- Removed `DecimalMath` dependency for most operations
+- Cleaner, maintainable code with same functionality
+
 ---
 
 ## Performance Improvements

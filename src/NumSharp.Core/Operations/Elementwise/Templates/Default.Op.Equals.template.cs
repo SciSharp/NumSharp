@@ -37,7 +37,7 @@ namespace NumSharp.Backends
                     if (lhs.Shape.IsScalar && rhs.Shape.IsScalar)
                         return NDArray.Scalar<bool>((*((__2__*)lhs.Address) %(op) (*((bool*)rhs.Address) ? (__2__) 1 : (__2__) 0))).MakeGeneric<bool>();;
 
-                    (Shape BroadcastedLeftShape, Shape BroadcastedRightShape) = DefaultEngine.Broadcast(lhs.Shape, rhs.Shape);
+                    (Shape BroadcastedLeftShape, Shape BroadcastedRightShape) = Shape.Broadcast(lhs.Shape, rhs.Shape);
                     var lhs_address = (__2__*)lhs.Address;
                     var rhs_address = (bool*)rhs.Address;
                     var ret = new NDArray<bool>(new Shape(BroadcastedLeftShape.dimensions), true);
@@ -61,7 +61,7 @@ namespace NumSharp.Backends
                     //if return type is scalar
                     if (lhs.Shape.IsScalar && rhs.Shape.IsScalar)
                         return NDArray.Scalar<bool>((*((__2__*)lhs.Address) #(op) *((#2*)rhs.Address))).MakeGeneric<bool>();
-                    (Shape BroadcastedLeftShape, Shape BroadcastedRightShape) = DefaultEngine.Broadcast(lhs.Shape, rhs.Shape);
+                    (Shape BroadcastedLeftShape, Shape BroadcastedRightShape) = Shape.Broadcast(lhs.Shape, rhs.Shape);
                     var lhs_address = (__2__*)lhs.Address;
                     var rhs_address = (#2*)rhs.Address;
                     var ret = new NDArray<bool>(new Shape(BroadcastedLeftShape.dimensions), true);

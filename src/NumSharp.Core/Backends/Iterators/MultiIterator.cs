@@ -151,7 +151,7 @@ namespace NumSharp
         {
             if (broadcast)
             {
-                var (leftShape, rightShape) = DefaultEngine.Broadcast(lhs.Shape, rhs.Shape);
+                var (leftShape, rightShape) = Shape.Broadcast(lhs.Shape, rhs.Shape);
 
 #if _REGEN
                 #region Compute
@@ -233,7 +233,7 @@ namespace NumSharp
         {
             if (broadcast)
             {
-                var (leftShape, rightShape) = lhs.Shape == rhs.Shape ? (lhs.Shape, rhs.Shape) : DefaultEngine.Broadcast(lhs.Shape, rhs.Shape);
+                var (leftShape, rightShape) = lhs.Shape == rhs.Shape ? (lhs.Shape, rhs.Shape) : Shape.Broadcast(lhs.Shape, rhs.Shape);
 
 #if _REGEN
                 #region Compute
