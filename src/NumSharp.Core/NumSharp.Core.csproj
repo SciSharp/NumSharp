@@ -41,22 +41,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Remove="Backends\Default\Math\Default.Op.Boolean.template.cs" />
-    <Compile Remove="Backends\Default\Math\Default.Op.template.cs" />
-    <Compile Remove="Backends\Default\Math\Templates\Default.Op.Dot.Boolean.template.cs" />
-    <Compile Remove="Backends\Default\Math\Templates\Default.Op.Dot.template.cs" />
-    <Compile Remove="Backends\Default\Math\Templates\Default.Op.Equals.template.cs" />
-    <Compile Remove="Backends\Default\Math\Templates\Default.Op.General.template.cs" />
-    <Compile Remove="Backends\Iterators\NDIterator.template.cs" />
-    <Compile Remove="Operations\Elementwise\Templates\Default.Op.Boolean.template.cs" />
-    <Compile Remove="Operations\Elementwise\Templates\Default.Op.Equals.template.cs" />
-    <Compile Remove="Operations\NdArray.ElementsWise.cs" />
-  </ItemGroup>
-
-  <ItemGroup>
     <None Remove="NumSharp.Core.csproj.DotSettings" />
     <None Remove="Open.snk" />
-    <None Remove="Operations\NdArray.ElementsWise.tt" />
     <None Include="..\..\LICENSE">
       <Pack>True</Pack>
       <PackagePath></PackagePath>
@@ -66,18 +52,6 @@
   <Target Name="LogDebugInfo">
     <Message Text="Building for $(TargetFramework) on $(OS)" Importance="High" />
   </Target>
-
-  <ItemGroup>
-    <None Include="Backends\Default\Math\Templates\Default.Op.General.template.cs" />
-    <None Include="Backends\Default\Math\Templates\Default.Op.Dot.Boolean.template.cs" />
-    <None Include="Backends\Default\Math\Templates\Default.Op.Dot.template.cs" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <None Include="Backends\Iterators\NDIterator.template.cs" />
-    <None Include="Operations\Elementwise\Templates\Default.Op.Boolean.template.cs" />
-    <None Include="Operations\Elementwise\Templates\Default.Op.Equals.template.cs" />
-  </ItemGroup>
 
   <!-- System.Memory and System.Runtime.CompilerServices.Unsafe are built into net8.0+ -->
 
