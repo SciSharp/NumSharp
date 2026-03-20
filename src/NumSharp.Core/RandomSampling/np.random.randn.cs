@@ -132,12 +132,17 @@ namespace NumSharp
         /// <summary>
         ///     Draw samples from a standard Normal distribution (mean=0, stdev=1).
         /// </summary>
-        /// <param name="size">Output shape.</param>
-        /// <returns>A floating-point array of shape size of drawn samples.</returns>
+        /// <param name="size">Output shape. If null, a single value is returned as a scalar.</param>
+        /// <returns>A floating-point array of shape size of drawn samples, or a scalar if size is null.</returns>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.standard_normal.html
         /// </remarks>
-        public NDArray standard_normal(Shape size) => standard_normal(size.dimensions);
+        public NDArray standard_normal(Shape? size = null)
+        {
+            if (size == null)
+                return NDArray.Scalar(NextGaussian());
+            return standard_normal(size.Value.dimensions);
+        }
 
         /// <summary>
         ///     Draw samples from a standard Normal distribution (mean=0, stdev=1).
