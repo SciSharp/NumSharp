@@ -1,20 +1,20 @@
 # NumSharp Project Instructions
 
-NumSharp is a .NET port of Python's NumPy library targeting **1-to-1 API and behavioral compatibility with NumPy 2.x (latest)**.
+NumSharp is a .NET port of Python's NumPy library targeting **1-to-1 API and behavioral compatibility with NumPy 2.x**.
 
 ## NumPy Reference Source
 
-A full clone of the NumPy repository is available at `src/numpy/`, checked out to **v2.4.2** (latest stable release). Use this as the authoritative reference for API behavior, edge cases, and implementation details when implementing or verifying NumSharp functions.
+A full clone of the NumPy repository is available at `src/numpy/`. Use this as the authoritative reference for API behavior, edge cases, and implementation details when implementing or verifying NumSharp functions.
 
 ## Core Principles
 
 1. **Match NumPy Exactly**: Run actual Python/NumPy code first, observe behavior, replicate in C#
 2. **Match NumPy Implementation Patterns**: Don't just match behavior - match NumPy's implementation structure. If NumPy has a clean approach and NumSharp has spaghetti code, refactor to match NumPy's design
 3. **Edge Cases Matter**: NaN handling, empty arrays, type promotion, broadcasting, negative axis
-4. **Breaking Changes OK**: Library was dormant; API stability is not a constraint
+4. **Breaking Changes OK**: Breaking changes are acceptable to match NumPy
 5. **Test From NumPy Output**: Tests should be based on running actual NumPy code
 
-**When fixing bugs:** Don't just patch symptoms. Check `src/numpy/` (v2.4.2) for how NumPy implements the same functionality, then refactor NumSharp to match NumPy's structure.
+**When fixing bugs:** Don't just patch symptoms. Check `src/numpy/` for how NumPy implements the same functionality, then refactor NumSharp to match NumPy's structure.
 
 ## Definition of Done (DOD) - Operations
 
@@ -73,30 +73,30 @@ np                Static API class (like `import numpy as np`)
 
 | Decision | Rationale |
 |----------|-----------|
-| Unmanaged memory | Benchmarked fastest ~5y ago; Span/Memory immature then |
+| Unmanaged memory | Benchmarked fastest; optimized for performance |
 | C-order only | Only row-major (C-order) memory layout. Uses `ArrayFlags.C_CONTIGUOUS` flag. No F-order/column-major support. The `order` parameter on `ravel`, `flatten`, `copy`, `reshape` is accepted but ignored. |
-| Regen templating | ~200K lines generated for type-specific code |
+| Regen templating | Type-specific code generation (legacy, mostly replaced by ILKernel) |
 | TensorEngine abstract | Future GPU/SIMD backends possible |
 | View semantics | Slicing returns views (shared memory), not copies |
 | Shape readonly struct | Immutable after construction (NumPy-aligned). Contains `ArrayFlags` for cached O(1) property access |
 | Broadcast write protection | Broadcast views are read-only (`IsWriteable = false`), matching NumPy behavior |
-| ILKernelGenerator | Runtime IL emission replacing ~500K lines of Regen templates; SIMD V128/V256/V512 |
+| ILKernelGenerator | Runtime IL emission (~18K lines) with SIMD V128/V256/V512; replaces Regen templates |
 
-## ILKernelGenerator (0.41.x)
+## ILKernelGenerator
 
 Runtime IL generation via `System.Reflection.Emit.DynamicMethod` for high-performance kernels.
 
-**Partial Class Structure:**
-| File | Responsibility |
-|------|----------------|
-| `ILKernelGenerator.cs` | Core: type mapping, SIMD detection (VectorBits), shared IL primitives |
-| `.Binary.cs` | Same-type binary ops (Add, Sub, Mul, Div, BitwiseAnd/Or/Xor) |
-| `.MixedType.cs` | Mixed-type binary ops with promotion; owns `ClearAll()` |
-| `.Unary.cs` | Math functions (Negate, Abs, Sqrt, Sin, Cos, Exp, Log, Sign, etc.) |
-| `.Comparison.cs` | Comparisons (==, !=, <, >, <=, >=) returning bool arrays |
-| `.Reduction.cs` | Reductions (Sum, Prod, Min, Max, Mean, ArgMax, ArgMin, All, Any) |
-| `.Scan.cs` | Cumulative ops (CumSum) with element-wise SIMD + axis support |
-| `.Shift.cs` | Bit shift ops (LeftShift, RightShift) with SIMD for scalar shifts |
+**Partial Class Structure (27 files):**
+| Category | Files |
+|----------|-------|
+| Core | `ILKernelGenerator.cs` (type mapping, SIMD detection), `.Scalar.cs` |
+| Binary | `.Binary.cs`, `.MixedType.cs`, `.Shift.cs` |
+| Unary | `.Unary.cs`, `.Unary.Math.cs`, `.Unary.Decimal.cs`, `.Unary.Vector.cs`, `.Unary.Predicate.cs` |
+| Comparison | `.Comparison.cs` |
+| Reduction | `.Reduction.cs`, `.Reduction.Arg.cs`, `.Reduction.Boolean.cs`, `.Reduction.Axis.cs`, `.Reduction.Axis.Arg.cs`, `.Reduction.Axis.Simd.cs`, `.Reduction.Axis.NaN.cs`, `.Reduction.Axis.VarStd.cs` |
+| Scan | `.Scan.cs` (CumSum, CumProd) |
+| Masking | `.Masking.cs`, `.Masking.Boolean.cs`, `.Masking.NaN.cs`, `.Masking.VarStd.cs` |
+| Other | `.Clip.cs`, `.Modf.cs`, `.MatMul.cs` |
 
 **Execution Paths:**
 1. **SimdFull** - Both operands contiguous, SIMD-capable dtype → Vector loop + scalar tail
@@ -113,24 +113,17 @@ Runtime IL generation via `System.Reflection.Emit.DynamicMethod` for high-perfor
 | `sign(int32)` | `int32` (preserves) |
 | `power(int32, float)` | `float64` |
 
-**ILKernel Status (0.41.x):**
-| Category | Implemented | Pending |
-|----------|-------------|---------|
-| Binary | Add, Sub, Mul, Div, Power, FloorDivide, BitwiseAnd/Or/Xor | — |
-| Shift | LeftShift, RightShift (SIMD for scalar, scalar loop for array) | — |
-| Unary | Negate, Abs, Sign, Sqrt, Cbrt, Square, Reciprocal, Floor, Ceil, Truncate, Trig, Exp, Log, BitwiseNot | Deg2Rad, Rad2Deg (use DefaultEngine) |
-| Reduction | Sum, Prod, Min, Max, Mean, ArgMax, ArgMin, All, Any, Std, Var | — |
-| Scan | CumSum (element-wise SIMD + axis support) | CumProd |
-| NaN Reduction | — | NanSum, NanProd, NanMin, NanMax (Task #88) |
-| Comparison | Equal, NotEqual, Less, Greater, LessEqual, GreaterEqual | — |
-| Clip/Modf | Clip, Modf (SIMD helpers) | — |
-| Axis reductions | Sum, Prod, Min, Max, Mean, Std, Var (iterator path) | SIMD axis kernels (Task #89) |
-
-**DefaultEngine ops needing IL migration:**
-- High impact: `MatMul` (complex - consider BLAS integration)
-
-**Recently migrated:**
-- `Dot.NDMD` — Migrated to cache-blocked SIMD (15,880 lines Regen → 419 lines IL)
+**ILKernel Coverage:**
+| Category | Operations |
+|----------|------------|
+| Binary | Add, Sub, Mul, Div, Power, FloorDivide, BitwiseAnd/Or/Xor |
+| Shift | LeftShift, RightShift (SIMD for scalar, scalar loop for array) |
+| Unary | Negate, Abs, Sign, Sqrt, Cbrt, Square, Reciprocal, Floor, Ceil, Truncate, Trig, Exp, Log, BitwiseNot |
+| Reduction | Sum, Prod, Min, Max, Mean, ArgMax, ArgMin, All, Any, Std, Var |
+| Scan | CumSum, CumProd (element-wise SIMD + axis support) |
+| Comparison | Equal, NotEqual, Less, Greater, LessEqual, GreaterEqual |
+| Clip/Modf | Clip, Modf (SIMD helpers) |
+| Axis reductions | Sum, Prod, Min, Max, Mean, Std, Var (iterator path) |
 
 ## Shape Architecture (NumPy-Aligned)
 
@@ -139,11 +132,13 @@ Shape is a `readonly struct` with cached `ArrayFlags` computed at construction:
 ```csharp
 public readonly partial struct Shape
 {
+    internal readonly int _flags;        // Cached ArrayFlags bitmask
+    internal readonly int _hashCode;     // Precomputed hash code
+    internal readonly int size;          // Total element count
     internal readonly int[] dimensions;  // Dimension sizes
     internal readonly int[] strides;     // Stride values (0 = broadcast dimension)
-    internal readonly int offset;        // Base offset into storage
     internal readonly int bufferSize;    // Size of underlying buffer
-    internal readonly int _flags;        // Cached ArrayFlags bitmask
+    internal readonly int offset;        // Base offset into storage
 }
 ```
 
@@ -187,54 +182,7 @@ nd["..., -1"]     // Ellipsis fills dimensions
 
 ---
 
-## Known Issues & Bugs
-
-### Critical Bugs (Fundamentally Wrong Output)
-
-| Bug | Function | Issue | Workaround |
-|-----|----------|-------|------------|
-| BUG-21 | `np.arange`/`np.sum` | int32 default dtype, no overflow protection | Specify `dtype: np.int64` |
-
-### Medium Severity Bugs
-
-*All medium severity bugs have been fixed.*
-
-### Low Severity (Behavioral Differences)
-
-*All low severity bugs have been fixed.*
-| BUG-7 | sbyte (int8) | Type not supported |
-
-### Fixed Bugs (0.41.x)
-
-These bugs were fixed in recent commits:
-
-| Bug | Function | Fix Commit |
-|-----|----------|------------|
-| BUG-12 | `np.searchsorted` | `40a5c831` — scalar input now works, returns int |
-| BUG-16 | `np.moveaxis` | Already fixed — was listed in error |
-| BUG-17 | `nd.astype()` | `40a5c831` — uses truncation (not rounding) for float->int |
-| BUG-19 | `np.negative` | `0857d109` — was applying abs() then negating |
-| BUG-20 | `np.positive` | `0857d109` — was applying abs() instead of identity |
-| BUG-18 | `np.convolve` | `0857d109` — NullReferenceException fixed |
-| BUG-15 | `np.abs` | `0857d109` — int dtype preserved (no longer converts to Double) |
-| BUG-13 | `np.linspace` | `0857d109` — returns float64 (was float32) |
-| BUG-22 | `np.var`/`np.std` | IL migration — single element with ddof returns NaN (NumPy-aligned) |
-
-### Dead Code (Returns null/default)
-
-These functions exist but are non-functional:
-
-| Function | Issue |
-|----------|-------|
-| `np.isnan`, `np.isfinite`, `np.isclose` | DefaultEngine returns null |
-| `np.allclose` | Depends on np.isclose |
-| `np.linalg.inv`, `qr`, `svd`, `lstsq` | LAPACK bindings removed |
-| `nd.delete()`, `nd.multi_dot()` | Return null |
-| `operator &`, `operator \|` | Fixed in 0.41.x via ILKernel |
-
----
-
-## Missing Functions (22)
+## Missing Functions (20)
 
 These NumPy functions are **not implemented**:
 
@@ -245,212 +193,63 @@ These NumPy functions are **not implemented**:
 | Manipulation | `np.flip`, `np.fliplr`, `np.flipud`, `np.rot90`, `np.tile`, `np.pad` |
 | Splitting | `np.split`, `np.array_split`, `np.hsplit`, `np.vsplit`, `np.dsplit` |
 | Diagonal | `np.diag`, `np.diagonal`, `np.trace` |
-| Cumulative | `np.cumprod`, `np.diff`, `np.gradient`, `np.ediff1d` |
-| Counting | `np.count_nonzero` |
-| Rounding | `np.round` (use `np.around` instead) |
+| Cumulative | `np.diff`, `np.gradient`, `np.ediff1d` |
+| Rounding | `np.round` (use `np.round_` or `np.around`) |
 
 ---
 
-## Verified Working Functions (75+)
+## Supported np.* APIs
 
-Tested against NumPy 2.4.2 (2703 tests, 97.5% pass rate):
+Tested against NumPy 2.x.
 
-**Array Creation:** `zeros`, `ones`, `empty`, `full`, `arange`, `linspace`, `eye`, `identity`, `meshgrid`, `copy`, `zeros_like`, `ones_like`, `empty_like`, `full_like`, `array`, `asarray`
+### Array Creation
+`arange`, `array`, `asanyarray`, `asarray`, `copy`, `empty`, `empty_like`, `eye`, `frombuffer`, `full`, `full_like`, `identity`, `linspace`, `meshgrid`, `mgrid`, `ones`, `ones_like`, `zeros`, `zeros_like`
 
-**Shape Manipulation:** `reshape`, `transpose`, `ravel`, `flatten`, `squeeze`, `expand_dims`, `swapaxes`, `rollaxis`, `atleast_1d/2d/3d`, `stack`, `vstack`, `hstack`, `dstack`, `concatenate`
+### Shape Manipulation
+`atleast_1d`, `atleast_2d`, `atleast_3d`, `concatenate`, `dstack`, `expand_dims`, `flatten`, `hstack`, `moveaxis`, `ravel`, `repeat`, `reshape`, `roll`, `rollaxis`, `squeeze`, `stack`, `swapaxes`, `transpose`, `unique`, `vstack`
 
-**Math Operations:** `add`, `subtract`, `multiply`, `divide`, `mod`, `power`, `sqrt`, `abs`, `sign`, `floor`, `ceil`, `sin`, `cos`, `tan`, `exp`, `log`, `log2`, `log10`, `log1p`, `expm1`, `exp2`, `around`
+### Broadcasting
+`are_broadcastable`, `broadcast`, `broadcast_arrays`, `broadcast_to`
 
-**Reductions:** `sum`, `prod`, `mean`, `std`, `var`, `max`, `min`, `argmax`, `argmin`, `all`, `any`, `cumsum`
+### Math — Arithmetic
+`abs`, `absolute`, `add`, `cbrt`, `ceil`, `clip`, `convolve`, `divide`, `exp`, `exp2`, `expm1`, `floor`, `floor_divide`, `log`, `log10`, `log1p`, `log2`, `mod`, `modf`, `multiply`, `negative`, `positive`, `power`, `reciprocal`, `sign`, `sin`, `cos`, `tan`, `sqrt`, `square`, `subtract`, `true_divide`, `trunc`
 
-**Comparisons:** `==`, `!=`, `<`, `>`, `<=`, `>=`, `array_equal`
+### Math — Reductions
+`all`, `amax`, `amin`, `any`, `argmax`, `argmin`, `count_nonzero`, `cumprod`, `cumsum`, `max`, `mean`, `min`, `prod`, `std`, `sum`, `var`
 
-**Linear Algebra:** `dot`, `matmul`, `outer`
+### Math — NaN-Aware
+`nanmax`, `nanmean`, `nanmin`, `nanprod`, `nanstd`, `nansum`, `nanvar`
 
-**Random:** `seed`, `rand`, `randn`, `randint`, `uniform`, `choice`, `shuffle`, `permutation`
+### Bitwise
+`bitwise_and`, `bitwise_or`, `bitwise_xor`, `invert`, `left_shift`, `right_shift`
 
-**File I/O:** `save`/`load` (.npy), `tofile`/`fromfile`
+### Comparison & Logic
+`all`, `allclose`, `any`, `array_equal`, `find_common_type`, `isclose`, `isfinite`, `isinf`, `isnan`, `isscalar`, `maximum`, `minimum`
 
-**Other:** `clip`, `roll`, `repeat`, `argsort`, `copyto`, `broadcast_to`, `modf`, `nonzero`, `unique`
+### Sorting & Searching
+`argmax`, `argmin`, `argsort`, `nonzero`, `searchsorted`
 
----
+### Linear Algebra
+`dot`, `matmul`, `outer`
 
-## Capabilities Reference
+### Random (`np.random.*`)
+`bernoulli`, `beta`, `binomial`, `chisquare`, `choice`, `exponential`, `gamma`, `geometric`, `lognormal`, `normal`, `permutation`, `poisson`, `rand`, `randint`, `randn`, `seed`, `shuffle`, `standard_normal`, `uniform`
 
-### Array Creation (`Creation/`)
-| Function | File |
-|----------|------|
-| `np.array` | `np.array.cs` |
-| `np.zeros`, `np.zeros_like` | `np.zeros.cs`, `np.zeros_like.cs` |
-| `np.ones`, `np.ones_like` | `np.ones.cs`, `np.ones_like.cs` |
-| `np.empty`, `np.empty_like` | `np.empty.cs`, `np.empty_like.cs` |
-| `np.full`, `np.full_like` | `np.full.cs`, `np.full_like.cs` |
-| `np.arange` | `np.arange.cs` |
-| `np.linspace` | `np.linspace.cs` |
-| `np.eye` | `np.eye.cs` |
-| `np.meshgrid`, `np.mgrid` | `np.meshgrid.cs`, `np.mgrid.cs` |
-| `np.copy` | `np.copy.cs` |
-| `np.asarray`, `np.asanyarray` | `np.asarray.cs`, `np.asanyarray.cs` |
-| `np.frombuffer` | `np.frombuffer.cs` |
+### File I/O
+`fromfile`, `load`, `save`, `tofile`
 
-### Stacking & Joining (`Creation/`)
-| Function | File |
-|----------|------|
-| `np.concatenate` | `np.concatenate.cs` |
-| `np.stack` | `np.stack.cs` |
-| `np.hstack` | `np.hstack.cs` |
-| `np.vstack` | `np.vstack.cs` |
-| `np.dstack` | `np.dstack.cs` |
+### Other
+`around`, `copyto`, `round_`, `size`
 
-### Broadcasting (`Creation/`)
-| Function | File |
-|----------|------|
-| `np.broadcast` | `np.broadcast.cs` |
-| `np.broadcast_to` | `np.broadcast_to.cs` |
-| `np.broadcast_arrays` | `np.broadcast_arrays.cs` |
-| `np.are_broadcastable` | `np.are_broadcastable.cs` |
+### Operators
+- Arithmetic: `+`, `-`, `*`, `/`, `%`, unary `-`
+- Comparison: `==`, `!=`, `<`, `>`, `<=`, `>=`
+- Logical: `&`, `|`, `!`
 
-### Math Functions (`Math/`)
-| Function | File |
-|----------|------|
-| `np.add`, `np.subtract`, `np.multiply`, `np.divide` | `np.math.cs` |
-| `np.mod`, `np.true_divide` | `np.math.cs` |
-| `np.positive`, `np.negative`, `np.convolve` | `np.math.cs` |
-| `np.sum` | `np.sum.cs` |
-| `np.prod`, `nd.prod()` | `np.math.cs`, `NDArray.prod.cs` |
-| `np.cumsum`, `nd.cumsum()` | `APIs/np.cumsum.cs`, `Math/NDArray.cumsum.cs` |
-| `np.power` | `np.power.cs` |
-| `np.sqrt` | `np.sqrt.cs` |
-| `np.abs`, `np.absolute` | `np.absolute.cs` |
-| `np.sign` | `np.sign.cs` |
-| `np.floor`, `np.ceil` | `np.floor.cs`, `np.ceil.cs` |
-| `np.round` | `np.round.cs` |
-| `np.clip` | `np.clip.cs` |
-| `np.modf` | `np.modf.cs` |
-| `np.maximum`, `np.minimum` | `np.maximum.cs`, `np.minimum.cs` |
-| `np.log`, `np.log2`, `np.log10`, `np.log1p` | `np.log.cs` |
-| `np.exp`, `np.exp2`, `np.expm1` | `Statistics/np.exp.cs` |
-| `np.sin`, `np.cos`, `np.tan` | `np.sin.cs`, `np.cos.cs`, `np.tan.cs` |
-
-### Statistics (`Statistics/`)
-| Function | File |
-|----------|------|
-| `np.mean`, `nd.mean()` | `np.mean.cs`, `NDArray.mean.cs` |
-| `np.std`, `nd.std()` | `np.std.cs`, `NDArray.std.cs` |
-| `np.var`, `nd.var()` | `np.var.cs`, `NDArray.var.cs` |
-| `np.amax`, `nd.amax()` | `Sorting_Searching_Counting/np.amax.cs`, `NDArray.amax.cs` |
-| `np.amin`, `nd.amin()` | `Sorting_Searching_Counting/np.min.cs`, `NDArray.amin.cs` |
-| `np.argmax`, `nd.argmax()` | `Sorting_Searching_Counting/np.argmax.cs`, `NDArray.argmax.cs` |
-| `np.argmin`, `nd.argmin()` | `Sorting_Searching_Counting/np.argmax.cs`, `NDArray.argmin.cs` |
-
-### Sorting & Searching (`Sorting_Searching_Counting/`)
-| Function | File |
-|----------|------|
-| `np.argsort`, `nd.argsort()` | `np.argsort.cs`, `ndarray.argsort.cs` |
-| `np.searchsorted` | `np.searchsorted.cs` |
-
-### Linear Algebra (`LinearAlgebra/`)
-| Function | File |
-|----------|------|
-| `np.dot`, `nd.dot()` | `np.dot.cs`, `NDArray.dot.cs` |
-| `np.matmul` | `np.matmul.cs` |
-| `np.outer` | `np.outer.cs` |
-| ~~`np.linalg.norm`~~ | `np.linalg.norm.cs` | **DEAD CODE**: declared `private static` — not accessible |
-| `nd.matrix_power()` | `NDArray.matrix_power.cs` | |
-| ~~`nd.inv()`~~ | `NdArray.Inv.cs` | **DEAD CODE**: returns null |
-| ~~`nd.qr()`~~ | `NdArray.QR.cs` | **DEAD CODE**: returns default |
-| ~~`nd.svd()`~~ | `NdArray.SVD.cs` | **DEAD CODE**: returns default |
-| ~~`nd.lstsq()`~~ | `NdArray.LstSq.cs` | **DEAD CODE**: named `lstqr`, returns null |
-| ~~`nd.multi_dot()`~~ | `NdArray.multi_dot.cs` | **DEAD CODE**: returns null |
-
-### Shape Manipulation (`Manipulation/`)
-| Function | File |
-|----------|------|
-| `np.reshape`, `nd.reshape()` | `np.reshape.cs` |
-| `np.transpose`, `nd.T` | `np.transpose.cs`, `NdArray.Transpose.cs` |
-| `np.ravel`, `nd.ravel()` | `np.ravel.cs`, `NDArray.ravel.cs` |
-| `nd.flatten()` | `NDArray.flatten.cs` |
-| `np.squeeze` | `np.squeeze.cs` |
-| `np.expand_dims` | `np.expand_dims.cs` |
-| `np.swapaxes` | `np.swapaxes.cs`, `NdArray.swapaxes.cs` |
-| `np.moveaxis` | `np.moveaxis.cs` |
-| `np.rollaxis` | `np.rollaxis.cs` |
-| `np.roll`, `nd.roll()` | `np.roll.cs`, `NDArray.roll.cs` | Fully implemented (all dtypes, with/without axis) |
-| `np.atleast_1d/2d/3d` | `np.atleastd.cs` |
-| `np.unique`, `nd.unique()` | `np.unique.cs`, `NDArray.unique.cs` |
-| `np.repeat` | `np.repeat.cs` |
-| ~~`nd.delete()`~~ | `NdArray.delete.cs` | **DEAD CODE**: returns null |
-| `np.copyto` | `np.copyto.cs` |
-
-### Logic Functions (`Logic/`)
-| Function | File | Notes |
-|----------|------|-------|
-| `np.all` | `np.all.cs` | All dtypes; SIMD optimized with early-exit |
-| `np.any` | `np.any.cs` | All dtypes; SIMD optimized with early-exit |
-| ~~`np.allclose`~~ | `np.allclose.cs` | **DEAD CODE**: depends on `np.isclose` which returns null |
-| `np.array_equal` | `np.array_equal.cs` | |
-| `np.isscalar` | `np.is.cs` | |
-| ~~`np.isnan`~~ | `np.is.cs` | **DEAD CODE**: `DefaultEngine.IsNan` returns null |
-| ~~`np.isfinite`~~ | `np.is.cs` | **DEAD CODE**: `DefaultEngine.IsFinite` returns null |
-| ~~`np.isclose`~~ | `np.is.cs` | **DEAD CODE**: `DefaultEngine.IsClose` returns null |
-| `np.find_common_type` | `np.find_common_type.cs` | |
-
-### Comparison Operators (`Operations/Elementwise/`)
-| Operator | File | Notes |
-|----------|------|-------|
-| `==` (element-wise) | `NDArray.Equals.cs` | SIMD optimized |
-| `!=` | `NDArray.NotEquals.cs` | SIMD optimized |
-| `>`, `>=` | `NDArray.Greater.cs` | SIMD optimized |
-| `<`, `<=` | `NDArray.Lower.cs` | SIMD optimized |
-| `&` (AND) | `NDArray.AND.cs` | Fixed in 0.41.x via ILKernel |
-| `\|` (OR) | `NDArray.OR.cs` | Fixed in 0.41.x via ILKernel |
-| `!` (NOT) | `NDArray.NOT.cs` | |
-
-### Arithmetic Operators (`Operations/Elementwise/`)
-| Operator | File |
-|----------|------|
-| `+`, `-`, `*`, `/`, `%`, unary `-` | `NDArray.Primitive.cs` |
-
-### Indexing & Selection (`Selection/`)
-| Feature | File |
-|---------|------|
-| Integer/slice indexing | `NDArray.Indexing.cs` |
-| Boolean masking | `NDArray.Indexing.Masking.cs` | Read works; setter throws NotImplementedException |
-| Fancy indexing (NDArray indices) | `NDArray.Indexing.Selection.cs` |
-| `np.nonzero` | `Indexing/np.nonzero.cs` |
-
-### Random Sampling (`RandomSampling/`)
-| Function | File |
-|----------|------|
-| `np.random.rand` | `np.random.rand.cs` |
-| `np.random.randn` | `np.random.randn.cs` |
-| `np.random.randint` | `np.random.randint.cs` |
-| `np.random.uniform` | `np.random.uniform.cs` |
-| `np.random.choice` | `np.random.choice.cs` |
-| `np.random.shuffle` | `np.random.shuffle.cs` |
-| `np.random.permutation` | `np.random.permutation.cs` |
-| `np.random.beta` | `np.random.beta.cs` |
-| `np.random.binomial` | `np.random.binomial.cs` |
-| `np.random.gamma` | `np.random.gamma.cs` |
-| `np.random.poisson` | `np.random.poisson.cs` |
-| `np.random.exponential` | `np.random.exponential.cs` |
-| `np.random.geometric` | `np.random.geometric.cs` |
-| `np.random.lognormal` | `np.random.lognormal.cs` |
-| `np.random.chisquare` | `np.random.chisquare.cs` |
-| `np.random.bernoulli` | `np.random.bernoulli.cs` |
-
-### File I/O (`APIs/`)
-| Function | File |
-|----------|------|
-| `np.save` (`.npy`) | `np.save.cs` |
-| `np.load` (`.npy`, `.npz`) | `np.load.cs` |
-| `np.fromfile` | `np.fromfile.cs` |
-| `nd.tofile()` | `np.tofile.cs` |
-
-### Other APIs (`APIs/`)
-| Function | File |
-|----------|------|
-| `np.size` | `np.size.cs` |
+### Indexing
+- Integer and slice indexing (`nd[0]`, `nd[1:3]`, `nd[::-1]`)
+- Boolean masking (`nd[mask]`) — read-only
+- Fancy indexing (`nd[indices]`)
 
 ---
 
@@ -590,14 +389,14 @@ Tests use typed category attributes defined in `TestCategory.cs`. Adding new bug
 The CI pipeline (`.github/workflows/build-and-release.yml`) uses TUnit's `--treenode-filter` to exclude `OpenBugs`:
 
 ```yaml
-env:
-  TEST_FILTER: '/*/*/*/*[Category!=OpenBugs]'
-
-- name: Test
-  run: dotnet run ... -- --treenode-filter "${{ env.TEST_FILTER }}"
+- name: Test (net10.0)
+  run: |
+    dotnet run --project test/NumSharp.UnitTest/NumSharp.UnitTest.csproj \
+      --configuration Release --no-build --framework net10.0 \
+      -- --treenode-filter '/*/*/*/*[Category!=OpenBugs]'
 ```
 
-This filter excludes all tests with `[OpenBugs]` or `[Category("OpenBugs")]` from CI runs. Tests pass locally when the bug is fixed — then remove the `[OpenBugs]` attribute.
+This filter excludes all tests with `[OpenBugs]` attribute from CI runs. Tests pass locally when the bug is fixed — then remove the `[OpenBugs]` attribute.
 
 ### Usage
 
@@ -630,7 +429,7 @@ dotnet test -- --treenode-filter "/*/*/*/*[Category=OpenBugs]"
 dotnet test -- --treenode-filter "/*/*/*/*[Category=Misaligned]"
 ```
 
-**OpenBugs files**: `OpenBugs.cs` (general bugs), `OpenBugs.Bitmap.cs` (bitmap bugs), `OpenBugs.ApiAudit.cs` (API audit failures).
+**OpenBugs files**: `OpenBugs.cs` (general), `OpenBugs.Bitmap.cs` (bitmap), `OpenBugs.ApiAudit.cs` (API audit), `OpenBugs.ILKernelBattle.cs` (IL kernel).
 
 ## CI Pipeline
 
@@ -712,16 +511,16 @@ NumSharp uses unsafe in many places, hence include `#:property AllowUnsafeBlocks
 ## Q&A - Design & Architecture
 
 **Q: Why unmanaged memory instead of Span<T>/Memory<T>?**
-A: Extensive benchmarking ~5 years ago showed unmanaged memory was fastest. Span/Memory weren't mature across the .NET ecosystem then. NDArray is self-managed memory allocation optimized for performance.
+A: Benchmarking showed unmanaged memory was fastest. NDArray is self-managed memory allocation optimized for performance.
 
 **Q: Why Regen templating instead of T4 or source generators?**
-A: Original needs felt too complicated for alternatives. Migration to T4 is possible but not prioritized. The ~200K lines of generated code is acceptable if it works correctly.
+A: Original needs felt too complicated for alternatives. Regen is mostly replaced by ILKernelGenerator which uses runtime IL emission.
 
 **Q: Why is TensorEngine abstracted?**
 A: To support potential future backends (GPU/CUDA, SIMD intrinsics, MKL/BLAS). Not implemented yet, but the architecture allows it.
 
 **Q: How closely does the API match NumPy?**
-A: Goal is as close as possible - all edge cases included (NaN handling, multi-type operations, broadcasting). Target is NumPy 2.x (latest version), upgraded from original 1.x target.
+A: Goal is as close as possible - all edge cases included (NaN handling, multi-type operations, broadcasting). Target is NumPy 2.x.
 
 **Q: Does np.random match NumPy's random state/seed behavior?**
 A: Yes, 1-to-1 matching.
@@ -742,7 +541,7 @@ A: Sometimes uses other np functions (no DefaultEngine needed). Sometimes requir
 A: Yes - breaking changes are accepted to align with NumPy 2.x behavior.
 
 **Q: What needs the most work?**
-A: Implementations that differ from original NumPy 2.x behavior. A comprehensive API mapping expedition (NumSharp vs NumPy 2.x) is planned to identify: what exists, what's missing, what has behavioral differences.
+A: Implementations that differ from NumPy 2.x behavior. See the Missing Functions section.
 
 ---
 
@@ -776,7 +575,7 @@ A: Static type information cache to avoid runtime reflection. Provides `InfoOf<T
 A: Generic typed wrapper providing type-safe access. Returns `T` from indexer instead of NDArray. Has typed `Address` pointer (`T*`) and `Array` property (`ArraySlice<T>`).
 
 **Q: When does DefaultEngine use parallelization?**
-A: For arrays exceeding 85,000 elements (`ParallelAbove = 84999`). Uses `Parallel.For` for large arrays, sequential loop for smaller ones.
+A: Parallelization is minimal. Most operations use SIMD vectorization instead for performance.
 
 ---
 
@@ -802,7 +601,7 @@ A: Core ops (`dot`, `matmul`) in `LinearAlgebra/`. Advanced decompositions (`inv
 A: TUnit framework in `test/NumSharp.UnitTest/`. Many tests adapted from NumPy's own test suite. Decent coverage but gaps in edge cases. Uses source-generated test discovery (no special flags needed).
 
 **Q: What .NET version is targeted?**
-A: Library multi-targets `net8.0` and `net10.0`. Tests currently target `net10.0` only (TUnit requires .NET 9+ runtime). Dropped `netstandard2.0` in the dotnet810 branch upgrade.
+A: Library multi-targets `net8.0` and `net10.0`. Tests require .NET 9+ runtime (TUnit requirement).
 
 **Q: What are the main dependencies?**
 A: No external runtime dependencies. `System.Memory` and `System.Runtime.CompilerServices.Unsafe` (previously NuGet packages) are built into the .NET 8+ runtime.
