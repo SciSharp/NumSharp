@@ -360,3 +360,4 @@ docs/DESIGN.md
 
 # Claude Code worktrees (local only)
 .claude/worktrees/
+!docs/releases/
