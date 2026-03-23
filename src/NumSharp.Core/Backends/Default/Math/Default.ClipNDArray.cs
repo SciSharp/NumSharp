@@ -56,6 +56,8 @@ namespace NumSharp.Backends
                 NumSharpException.ThrowIfNotWriteable(@out.Shape);
                 if (@out.Shape != lhs.Shape)
                     throw new ArgumentException($"@out's shape ({@out.Shape}) must match lhs's shape ({lhs.Shape}).'");
+                // Copy input data into @out - user-provided @out may contain garbage (e.g., np.empty)
+                np.copyto(@out, lhs);
             }
 
             var len = @out.size;
