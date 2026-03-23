@@ -357,3 +357,6 @@ test/NumSharp.UnitTest/DevTests*.cs
 
 # Local design documents (not tracked in git)
 docs/DESIGN.md
+
+# Claude Code worktrees (local only)
+.claude/worktrees/
