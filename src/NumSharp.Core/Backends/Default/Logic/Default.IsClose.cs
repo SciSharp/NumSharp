@@ -7,13 +7,13 @@ namespace NumSharp.Backends
         /// <summary>
         /// Returns a boolean array where two arrays are element-wise equal within a
         /// tolerance.
-        /// The tolerance values are positive, typically very small numbers.The    
+        /// The tolerance values are positive, typically very small numbers.The
         /// relative difference (`rtol` * abs(`b`)) and the absolute difference
         /// `atol` are added together to compare against the absolute difference
         /// between `a` and `b`.
         /// Warning: The default `atol` is not appropriate for comparing numbers
         /// that are much smaller than one(see Notes).
-        /// 
+        ///
         /// See also <seealso cref="allclose"/>
         ///
         ///Notes:
@@ -43,77 +43,40 @@ namespace NumSharp.Backends
         ///</returns>
         public override NDArray<bool> IsClose(NDArray a, NDArray b, double rtol = 1.0E-5, double atol = 1.0E-8, bool equal_nan = false)
         {
-            //    if (a.size > b.size)
-            //        throw new ArgumentException("Array a must not be larger in size than array b");
-            //    var result = new NDArray<bool>(a.shape);
-            //    bool[] rdata = result.Array;
-            //    if (a.dtype == np.uint8 || a.dtype == np.int16 || a.dtype == np.int32 || a.dtype == np.int64 && b.dtype == typeof(double) || b.dtype == typeof(float))
-            //    {
-            //        //  convert both to double and compare
-            //        double[] a_arr = a.Data<double>();
-            //        double[] b_arr = a.Data<double>();
-            //        for (int i = 0; i < a_arr.Length; i++)
-            //            rdata[i] = is_within_tol(a_arr[i], b_arr[i], rtol, atol, equal_nan);
-            //    }
-            //    var adata = a.Array;
-            //    switch (adata)
-            //    {
-            //        case double[] a_arr:
-            //            {
-            //                var b_arr = b.Data<double>();
-            //                for (int i = 0; i < a_arr.Length; i++)
-            //                    rdata[i] = is_within_tol(a_arr[i], b_arr[i], rtol, atol, equal_nan);
-            //                break;
-            //            }
-            //        case float[] a_arr:
-            //            {
-            //                var b_arr = b.Data<float>();
-            //                for (int i = 0; i < a_arr.Length; i++)
-            //                    rdata[i] = is_within_tol(a_arr[i], b_arr[i], rtol, atol, equal_nan);
-            //                break;
-            //            }
-            //        case Complex[] arr:
-            //            {
-            //                throw new NotImplementedException("Comparing Complex arrays is not implemented yet.");
-            //            }
-            //        default:
-            //            {
-            //                throw new IncorrectTypeException();
-            //            }
-            //    }
-            //    return result;
-            return null;
-        }
+            // NumPy implementation (from numpy/_core/numeric.py):
+            // result = (less_equal(abs(x - y), atol + rtol * abs(y))
+            //           & isfinite(y)
+            //           | (x == y))
+            // if equal_nan:
+            //     result |= isnan(x) & isnan(y)
 
-        private static bool is_within_tol(object a_obj, object b_obj, double rtol = 1.0E-5, double atol = 1.0E-8,
-            bool equal_nan = false)
-        {
-            return false;
-        }
+            // Convert to double for comparison (NumPy casts to inexact type)
+            var x = a.astype(NPTypeCode.Double, copy: false);
+            var y = b.astype(NPTypeCode.Double, copy: false);
 
-        //{
-        //    switch (a_obj)
-        //    {
-        //        case double a:
-        //            {
-        //                var b = (double)b_obj;
-        //                if (double.IsInfinity(a) && double.IsInfinity(b))
-        //                    return true;
-        //                if (equal_nan && double.IsNaN(a) && double.IsNaN(b))
-        //                    return true;
-        //                return Math.Abs(a - b) <= atol + rtol * Math.Abs(b);
-        //            }
-        //        case float a:
-        //            {
-        //                var b = (float)b_obj;
-        //                if (float.IsInfinity(a) && float.IsInfinity(b))
-        //                    return true;
-        //                if (equal_nan && float.IsNaN(a) && float.IsNaN(b))
-        //                    return true;
-        //                return Math.Abs(a - b) <= atol + rtol * Math.Abs(b);
-        //            }
-        //    }
-        //    throw new NotImplementedException($"Comparing type {a_obj.GetType()} not implemented");
-        //}
+            // Vectorized computation using existing np operations
+            var diff = np.abs(x - y);                    // |a - b|
+            var tolerance = atol + rtol * np.abs(y);     // atol + rtol * |b|
+
+            // Core formula: |a - b| <= tolerance AND diff is finite AND y is finite, OR exact equality
+            // Note: We explicitly check diffFinite because NumSharp's <= operator has a bug where
+            // NaN <= value returns True instead of False (IEEE 754 requires False for all NaN comparisons)
+            var diffFinite = np.isfinite(diff);          // diff must be finite for tolerance check
+            var withinTolerance = diff <= tolerance;     // |a - b| <= (atol + rtol * |b|)
+            var yFinite = np.isfinite(y);                // Only apply tolerance to finite values
+            var exactEqual = x == y;                     // Handles infinities (inf == inf is true)
+
+            // Combine: (within tolerance & diff finite & y finite) | exact equality
+            NDArray<bool> result = ((withinTolerance & diffFinite & yFinite) | exactEqual).MakeGeneric<bool>();
+
+            // Handle NaN comparison if requested
+            if (equal_nan)
+            {
+                NDArray<bool> bothNan = (np.isnan(x) & np.isnan(y)).MakeGeneric<bool>();
+                result = (result | bothNan).MakeGeneric<bool>();
+            }
+
+            return result;
+        }
     }
 }

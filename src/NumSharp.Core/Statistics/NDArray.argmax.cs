@@ -3,11 +3,11 @@
     public partial class NDArray
     {
         /// <summary>
-        ///     Returns the indices of the maximum values along an axis.
+        ///     Returns the index of the maximum value (flattened array).
         /// </summary>
-        /// <returns>The index of the maximal value in the array.</returns>
+        /// <returns>The index of the maximal value in the flattened array.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.argmax.html</remarks>
-        public int argmax()
+        public long argmax()
         {
             return np.argmax(this);
         }
@@ -15,11 +15,13 @@
         /// <summary>
         ///     Returns the indices of the maximum values along an axis.
         /// </summary>
-        /// <returns>Array of indices into the array. It has the same shape as a.shape with the dimension along axis removed.</returns>
+        /// <param name="axis">The axis along which to operate. By default, the index is into the flattened array.</param>
+        /// <param name="keepdims">If this is set to True, the axes which are reduced are left in the result as dimensions with size one.</param>
+        /// <returns>Array of indices into the array. It has the same shape as a.shape with the dimension along axis removed (unless keepdims is True).</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.argmax.html</remarks>
-        public int argmax(int axis)
+        public NDArray argmax(int axis, bool keepdims = false)
         {
-            return np.argmax(this, axis);
+            return np.argmax(this, axis, keepdims);
         }
     }
 }

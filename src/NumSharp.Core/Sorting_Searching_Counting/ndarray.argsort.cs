@@ -12,7 +12,7 @@ namespace NumSharp
         ///
         /// Perform an indirect sort along the given axis using the algorithm specified by the kind keyword.It returns an array of indices of the same shape as a that index data along the given axis in sorted order.
         /// </summary>
-        public NDArray argsort<T>(int axis = -1)
+        public NDArray argsort<T>(int axis = -1) where T : unmanaged
         {
             if (ndim < axis + 1) {
                 throw new IndexOutOfRangeException($"Axis = {axis} is out bounds for dimension = {ndim}");
@@ -28,17 +28,18 @@ namespace NumSharp
 
             if (requiredSize.Length == 0)
             {
-                var data = Array;
+                // NumPy argsort always returns int64 (long) indices
+                // Use NumPy-compatible comparison that puts NaN at the end
                 var sorted = Enumerable.Range(0, size)
-                    .Select(_ => new {Data = data[_], Index = _})
-                    .OrderBy(_ => _.Data)
-                    .Select(_ => _.Index)
+                    .Select(i => new {Data = GetAtIndex<T>(i), Index = (long)i})
+                    .OrderBy(item => item.Data, NumPyComparer<T>.Instance)
+                    .Select(item => item.Index)
                     .ToArray();
                 return np.array(sorted);
             }
 
-            // Sorted arguments array
-            var resultArray = new NDArray(typeof(T), shape);
+            // Sorted arguments array - NumPy argsort always returns int64 (long) indices
+            var resultArray = new NDArray(typeof(long), shape);
 
             var accessingIndices = AccessorCreator(requiredSize, Enumerable.Empty<int>(), 0);
 
@@ -95,14 +96,79 @@ namespace NumSharp
 
         /// <summary>
         /// Sorts the given data. This method should implement quick sort etc...
+        /// NumPy sort order: -Inf &lt; normal values &lt; +Inf &lt; NaN
         /// </summary>
         /// <typeparam name="T">Type of parameters</typeparam>
         /// <param name="accessIndex">Indexes to access the data</param>
         /// <returns>Sorted Data</returns>
-        private IEnumerable<int> Sort<T>(IEnumerable<IEnumerable<int>> accessIndex)
+        private IEnumerable<int> Sort<T>(IEnumerable<IEnumerable<int>> accessIndex) where T : unmanaged
         {
-            var sort = accessIndex.Select((x, index) => new {Data = this[x.ToArray()], Index = index});
-            return sort.OrderBy(a => a.Data).Select(a => a.Index);
+            // Extract the scalar value from the NDArray for proper comparison.
+            // this[indices] returns an NDArray even for scalar results, and NDArray
+            // doesn't implement IComparable, so we must extract the underlying value.
+            var sort = accessIndex.Select((x, index) => new {Data = this[x.ToArray()].GetAtIndex<T>(0), Index = index});
+
+            // Use NumPy-compatible comparison that puts NaN at the end
+            return sort.OrderBy(a => a.Data, NumPyComparer<T>.Instance).Select(a => a.Index);
+        }
+
+        /// <summary>
+        /// NumPy-compatible comparer for floating-point types.
+        /// Ordering: -Inf &lt; normal values &lt; +Inf &lt; NaN
+        /// </summary>
+        private sealed class NumPyComparer<T> : IComparer<T> where T : unmanaged
+        {
+            public static readonly NumPyComparer<T> Instance = new NumPyComparer<T>();
+
+            public int Compare(T x, T y)
+            {
+                // Handle double
+                if (typeof(T) == typeof(double))
+                {
+                    double dx = (double)(object)x;
+                    double dy = (double)(object)y;
+                    return CompareDouble(dx, dy);
+                }
+
+                // Handle float
+                if (typeof(T) == typeof(float))
+                {
+                    float fx = (float)(object)x;
+                    float fy = (float)(object)y;
+                    return CompareFloat(fx, fy);
+                }
+
+                // For non-floating types, use default comparison
+                return Comparer<T>.Default.Compare(x, y);
+            }
+
+            private static int CompareDouble(double x, double y)
+            {
+                // NaN sorts to end (greater than everything including +Inf)
+                bool xNaN = double.IsNaN(x);
+                bool yNaN = double.IsNaN(y);
+
+                if (xNaN && yNaN) return 0;
+                if (xNaN) return 1;  // x > y (NaN at end)
+                if (yNaN) return -1; // x < y (y is NaN, at end)
+
+                // Standard comparison for non-NaN values
+                return x.CompareTo(y);
+            }
+
+            private static int CompareFloat(float x, float y)
+            {
+                // NaN sorts to end (greater than everything including +Inf)
+                bool xNaN = float.IsNaN(x);
+                bool yNaN = float.IsNaN(y);
+
+                if (xNaN && yNaN) return 0;
+                if (xNaN) return 1;  // x > y (NaN at end)
+                if (yNaN) return -1; // x < y (y is NaN, at end)
+
+                // Standard comparison for non-NaN values
+                return x.CompareTo(y);
+            }
         }
 
         private class SortedData

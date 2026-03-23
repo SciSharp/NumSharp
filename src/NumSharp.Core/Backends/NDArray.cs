@@ -211,6 +211,16 @@ namespace NumSharp
         public NDArray(Type dtype, Shape shape) : this(dtype, shape, true) { }
 
         /// <summary>
+        /// Constructor which initialize elements with 0
+        /// type, shape, and order are given.
+        /// </summary>
+        /// <param name="dtype">internal data type</param>
+        /// <param name="shape">Shape of NDArray</param>
+        /// <param name="order">Memory order. Note: Only C-order is supported, F-order parameter is accepted but ignored.</param>
+        /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
+        public NDArray(Type dtype, Shape shape, char order) : this(dtype, shape, true) { }
+
+        /// <summary>
         ///     Constructor which initialize elements with length of <paramref name="size"/>
         /// </summary>
         /// <param name="dtype">Internal data type</param>

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using NumSharp.Generic;
 
 namespace NumSharp
@@ -35,18 +35,55 @@ namespace NumSharp
             }
         }
 
-        public static NDArray<bool> operator ==(NDArray left, object right)
+        /// <summary>
+        /// Element-wise equal comparison (==).
+        /// Supports all 12 dtypes and broadcasting.
+        /// </summary>
+        public static NDArray<bool> operator ==(NDArray lhs, NDArray rhs)
         {
-            if (right is null)
-                return Scalar<bool>(ReferenceEquals(left, null)).MakeGeneric<bool>();
+            if (lhs is null && rhs is null)
+                return Scalar<bool>(true).MakeGeneric<bool>();
 
-            if (left is null)
+            if (lhs is null || rhs is null)
                 return Scalar<bool>(false).MakeGeneric<bool>();
 
-            if (left.Shape.IsEmpty || left.size == 0)
+            // NumPy: empty array comparison returns empty array, not scalar
+            if (lhs.Shape.IsEmpty || lhs.size == 0)
+                return np.empty(lhs.Shape, NPTypeCode.Boolean).MakeGeneric<bool>();
+
+            return lhs.TensorEngine.Compare(lhs, rhs);
+        }
+
+        /// <summary>
+        /// Element-wise equal comparison with scalar (==).
+        /// </summary>
+        public static NDArray<bool> operator ==(NDArray lhs, object rhs)
+        {
+            if (rhs is null)
+                return Scalar<bool>(ReferenceEquals(lhs, null)).MakeGeneric<bool>();
+
+            if (lhs is null)
                 return Scalar<bool>(false).MakeGeneric<bool>();
 
-            return left.TensorEngine.Compare(left, np.asanyarray(right));
+            // NumPy: empty array comparison returns empty array, not scalar
+            if (lhs.Shape.IsEmpty || lhs.size == 0)
+                return np.empty(lhs.Shape, NPTypeCode.Boolean).MakeGeneric<bool>();
+
+            return lhs == np.asanyarray(rhs);
+        }
+
+        /// <summary>
+        /// Element-wise equal comparison with scalar on left (==).
+        /// </summary>
+        public static NDArray<bool> operator ==(object lhs, NDArray rhs)
+        {
+            if (lhs is null)
+                return Scalar<bool>(ReferenceEquals(rhs, null)).MakeGeneric<bool>();
+
+            if (rhs is null)
+                return Scalar<bool>(false).MakeGeneric<bool>();
+
+            return np.asanyarray(lhs) == rhs;
         }
 
         /// NumPy signature: numpy.equal(x1, x2, /, out=None, *, where=True, casting='same_kind', order='K', dtype=None, subok=True[, signature, extobj]) = <ufunc 'equal'>

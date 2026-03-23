@@ -12,7 +12,7 @@
         /// </summary>
         /// <returns>The sorted unique values.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.unique.html</remarks>
-        public static NDArray unique(in NDArray a)
+        public static NDArray unique(NDArray a)
             => a.unique();
     }
 }

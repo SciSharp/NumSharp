@@ -601,17 +601,18 @@ namespace NumSharp
             #endregion
 #else
             #region Compute
+		    // NumPy 2.x uses int64/uint64 for accumulating integer types to prevent overflow
 		    switch (typeCode)
 		    {
-			    case NPTypeCode.Boolean: return NPTypeCode.Int32;
-			    case NPTypeCode.Byte: return NPTypeCode.UInt32;
-			    case NPTypeCode.Int16: return NPTypeCode.Int32;
-			    case NPTypeCode.UInt16: return NPTypeCode.UInt32;
-			    case NPTypeCode.Int32: return NPTypeCode.Int32;
-			    case NPTypeCode.UInt32: return NPTypeCode.UInt32;
+			    case NPTypeCode.Boolean: return NPTypeCode.Int64;
+			    case NPTypeCode.Byte: return NPTypeCode.UInt64;
+			    case NPTypeCode.Int16: return NPTypeCode.Int64;
+			    case NPTypeCode.UInt16: return NPTypeCode.UInt64;
+			    case NPTypeCode.Int32: return NPTypeCode.Int64;
+			    case NPTypeCode.UInt32: return NPTypeCode.UInt64;
 			    case NPTypeCode.Int64: return NPTypeCode.Int64;
 			    case NPTypeCode.UInt64: return NPTypeCode.UInt64;
-			    case NPTypeCode.Char: return NPTypeCode.UInt32;
+			    case NPTypeCode.Char: return NPTypeCode.UInt64;
 			    case NPTypeCode.Double: return NPTypeCode.Double;
 			    case NPTypeCode.Single: return NPTypeCode.Single;
 			    case NPTypeCode.Decimal: return NPTypeCode.Decimal;

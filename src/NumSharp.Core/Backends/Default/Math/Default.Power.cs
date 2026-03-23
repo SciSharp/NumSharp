@@ -1,131 +1,46 @@
 ﻿using System;
-using DecimalMath;
-using NumSharp.Utilities;
-using System.Threading.Tasks;
+using NumSharp.Backends.Kernels;
 
 namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        // TODO! create an overload because np.power also allows to pass an array of exponents for every entry in the array
+        /// <summary>
+        /// Element-wise power with array exponents: x1 ** x2
+        /// </summary>
+        public override NDArray Power(NDArray lhs, NDArray rhs, Type dtype)
+            => Power(lhs, rhs, dtype?.GetTypeCode());
 
-        public override NDArray Power(in NDArray lhs, in ValueType rhs, Type dtype) => Power(lhs, rhs, dtype?.GetTypeCode());
+        /// <summary>
+        /// Element-wise power with array exponents: x1 ** x2
+        /// Uses ExecuteBinaryOp with BinaryOp.Power for broadcasting support.
+        /// </summary>
+        public override NDArray Power(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null)
+        {
+            var result = ExecuteBinaryOp(lhs, rhs, BinaryOp.Power);
+            if (typeCode.HasValue && result.typecode != typeCode.Value)
+                return Cast(result, typeCode.Value, copy: false);
+            return result;
+        }
 
-        public override NDArray Power(in NDArray lhs, in ValueType rhs, NPTypeCode? typeCode = null)
+        public override NDArray Power(NDArray lhs, ValueType rhs, Type dtype) => Power(lhs, rhs, dtype?.GetTypeCode());
+
+        public override NDArray Power(NDArray lhs, ValueType rhs, NPTypeCode? typeCode = null)
         {
             if (lhs.size == 0)
                 return lhs.Clone();
 
-            var @out = Cast(lhs, typeCode ?? lhs.typecode, copy: true);
-            var len = @out.size;
+            // Convert scalar exponent to NDArray and use ExecuteBinaryOp
+            // Type promotion is handled in ExecuteBinaryOp for Power operation
+            // The scalar is created with appropriate type to trigger correct promotion:
+            // - C# int/long → preserve integer type for int^int
+            // - C# float/double → promote to float64 for int^float
+            var rhsArray = NDArray.Scalar(rhs);
+            var result = ExecuteBinaryOp(lhs, rhsArray, BinaryOp.Power);
 
-            unsafe
-            {
-                switch (@out.GetTypeCode)
-                {
-#if _REGEN
-
-                    %foreach except(supported_numericals, "Decimal"),except(supported_numericals_lowercase, "decimal")%
-	                case NPTypeCode.#1:
-	                {
-                        var right = Converts.ToDouble(rhs);
-                        var out_addr = (#2*)@out.Address;
-                        for (int i = 0; i < len; i++) out_addr[i] = Converts.To#1(Math.Pow(out_addr[i], right));
-                        return @out;
-	                }
-	                %
-                    case NPTypeCode.Decimal:
-                    {
-                        var right = (decimal) Converts.ToDecimal(rhs);
-                        var out_addr = (decimal*)@out.Address;
-                        for (int i = 0; i < len; i++) out_addr[i] = DecimalEx.Pow(out_addr[i], right);
-                        return @out;
-	                }
-	                default:
-		                throw new NotSupportedException();
-#else
-	                case NPTypeCode.Byte:
-	                {
-                        var right = Converts.ToDouble(rhs);
-                        var out_addr = (byte*)@out.Address;
-                        for (int i = 0; i < len; i++) out_addr[i] = Converts.ToByte(Math.Pow(out_addr[i], right));
-                        return @out;
-	                }
-	                case NPTypeCode.Int16:
-	                {
-                        var right = Converts.ToDouble(rhs);
-                        var out_addr = (short*)@out.Address;
-                        for (int i = 0; i < len; i++) out_addr[i] = Converts.ToInt16(Math.Pow(out_addr[i], right));
-                        return @out;
-	                }
-	                case NPTypeCode.UInt16:
-	                {
-                        var right = Converts.ToDouble(rhs);
-                        var out_addr = (ushort*)@out.Address;
-                        for (int i = 0; i < len; i++) out_addr[i] = Converts.ToUInt16(Math.Pow(out_addr[i], right));
-                        return @out;
-	                }
-	                case NPTypeCode.Int32:
-	                {
-                        var right = Converts.ToDouble(rhs);
-                        var out_addr = (int*)@out.Address;
-                        for (int i = 0; i < len; i++) out_addr[i] = Converts.ToInt32(Math.Pow(out_addr[i], right));
-                        return @out;
-	                }
-	                case NPTypeCode.UInt32:
-	                {
-                        var right = Converts.ToDouble(rhs);
-                        var out_addr = (uint*)@out.Address;
-                        for (int i = 0; i < len; i++) out_addr[i] = Converts.ToUInt32(Math.Pow(out_addr[i], right));
-                        return @out;
-	                }
-	                case NPTypeCode.Int64:
-	                {
-                        var right = Converts.ToDouble(rhs);
-                        var out_addr = (long*)@out.Address;
-                        for (int i = 0; i < len; i++) out_addr[i] = Converts.ToInt64(Math.Pow(out_addr[i], right));
-                        return @out;
-	                }
-	                case NPTypeCode.UInt64:
-	                {
-                        var right = Converts.ToDouble(rhs);
-                        var out_addr = (ulong*)@out.Address;
-                        for (int i = 0; i < len; i++) out_addr[i] = Converts.ToUInt64(Math.Pow(out_addr[i], right));
-                        return @out;
-	                }
-	                case NPTypeCode.Char:
-	                {
-                        var right = Converts.ToDouble(rhs);
-                        var out_addr = (char*)@out.Address;
-                        for (int i = 0; i < len; i++) out_addr[i] = Converts.ToChar(Math.Pow(out_addr[i], right));
-                        return @out;
-	                }
-	                case NPTypeCode.Double:
-	                {
-                        var right = Converts.ToDouble(rhs);
-                        var out_addr = (double*)@out.Address;
-                        for (int i = 0; i < len; i++) out_addr[i] = Converts.ToDouble(Math.Pow(out_addr[i], right));
-                        return @out;
-	                }
-	                case NPTypeCode.Single:
-	                {
-                        var right = Converts.ToDouble(rhs);
-                        var out_addr = (float*)@out.Address;
-                        for (int i = 0; i < len; i++) out_addr[i] = Converts.ToSingle(Math.Pow(out_addr[i], right));
-                        return @out;
-	                }
-                    case NPTypeCode.Decimal:
-                    {
-                        var right = Converts.ToDecimal(rhs);
-                        var out_addr = (decimal*)@out.Address;
-                        for (int i = 0; i < len; i++) out_addr[i] = DecimalEx.Pow(out_addr[i], right);
-                        return @out;
-	                }
-	                default:
-		                throw new NotSupportedException();
-#endif
-                }
-            }
+            if (typeCode.HasValue && result.typecode != typeCode.Value)
+                return Cast(result, typeCode.Value, copy: false);
+            return result;
         }
     }
 }

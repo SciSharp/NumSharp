@@ -1,56 +1,31 @@
-﻿using NumSharp.Generic;
+﻿using NumSharp.Backends.Kernels;
+using NumSharp.Generic;
 
 namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
         /// <summary>
-        /// Test element-wise for Not a Number.
+        /// Test element-wise for NaN (Not a Number).
+        /// Returns False for all integer types (cannot be NaN), and checks float/double values.
         /// </summary>
-        /// <returns>The result is returned as a boolean array.</returns>
+        /// <param name="a">Input array</param>
+        /// <returns>Boolean array where True indicates the element is NaN</returns>
+        /// <remarks>
+        /// NumPy behavior:
+        /// - Float/Double: True if value is NaN
+        /// - Integer types: Always False (integers cannot be NaN)
+        /// - Infinity: Returns False (Inf is not NaN)
+        /// - Empty arrays: Returns empty bool array
+        /// </remarks>
         public override NDArray<bool> IsNan(NDArray a)
         {
-            return null;
-            //var result = new NDArray<bool>(a.shape);
-            //var data = a.Array;
-            //bool[] res = result.Array;
-
-            //switch (data)
-            //{
-            //    case double[] arr:
-            //        {
-            //            for (int i = 0; i < arr.Length; i++)
-            //                res[i] = double.IsNaN(arr[i]);
-            //            break;
-            //        }
-            //    case float[] arr:
-            //        {
-            //            for (int i = 0; i < arr.Length; i++)
-            //                res[i] = float.IsNaN(arr[i]);
-            //            break;
-            //        }
-            //    case int[] arr:
-            //        {
-            //            //for (int i = 0; i < data.Length; i++)
-            //            //    res[i] = false;
-            //            break;
-            //        }
-            //    case Int64[] arr:
-            //        {
-            //            //for (int i = 0; i < data.Length; i++)
-            //            //    res[i] = false;
-            //            break;
-            //        }
-            //    case Complex[] arr:
-            //        {
-            //            throw new NotImplementedException("Checking Complex array for NaN is not implemented yet.");
-            //        }
-            //    default:
-            //        {
-            //            throw new IncorrectTypeException();
-            //        }
-            //}
-            //return result;
+            // Use IL kernel with UnaryOp.IsNan
+            // The kernel handles:
+            // - Float/Double: calls float.IsNaN/double.IsNaN
+            // - All other types: returns false (integers cannot be NaN)
+            var result = ExecuteUnaryOp(a, UnaryOp.IsNan, NPTypeCode.Boolean);
+            return result.MakeGeneric<bool>();
         }
     }
 }

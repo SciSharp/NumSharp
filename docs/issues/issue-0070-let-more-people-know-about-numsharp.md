@@ -9,8 +9,8 @@
 
 ## Description
 
-I've written an article [here](https://medium.com/@haiping008/numsharp-numerical-net-7c6ab6edfe27) which introduce NumSharp. 
-
+I've written an article [here](https://medium.com/@haiping008/numsharp-numerical-net-7c6ab6edfe27) which introduce NumSharp. 
+
 @dotChris90 Can you start with the [docs](https://numsharp.readthedocs.io).
 
 ## Comments
@@ -40,17 +40,17 @@ Just idk if sphinx can parse c# for api documentations by doc comments.
 
 ### Comment 4 by @Oceania2018 (2018-11-08T11:34:21Z)
 
-We should use both of them, docfx is for generating md files, Sphinx is for organizing them, and make docs readable on readthedocs.io. 
-
-
+We should use both of them, docfx is for generating md files, Sphinx is for organizing them, and make docs readable on readthedocs.io. 
+
+
 I prefer arange().reshape(), keep same as numpy as much as possible.
 
 ### Comment 5 by @dotChris90 (2018-11-17T18:19:34Z)
 
-@Oceania2018 at the moment I experiment with docfx - it does not look as bad as i though. Especially the API documentation and the style looks promising. Moreover docfx is the one which is used from Microsoft I though. The hosting we could do on Github Pages. 
-
-Just feel annoyed at sphinx python doc, that it highlight my C# code but it thinks it is python lol so the code looks not good. And was investigating for C# docs at moment. 
-
+@Oceania2018 at the moment I experiment with docfx - it does not look as bad as i though. Especially the API documentation and the style looks promising. Moreover docfx is the one which is used from Microsoft I though. The hosting we could do on Github Pages. 
+
+Just feel annoyed at sphinx python doc, that it highlight my C# code but it thinks it is python lol so the code looks not good. And was investigating for C# docs at moment. 
+
 How you think of docfx? i tried at https://dotchris90.github.io/NumSharp/ I will not merge it to Scisharp/NumSharp - so dont worry but I will see how well this can look like. 
 
 ### Comment 6 by @Oceania2018 (2018-11-17T18:30:20Z)
@@ -119,5 +119,5 @@ docfx is looking good.
 
 ### Comment 17 by @Nucs (2019-08-06T13:03:10Z)
 
-@henon @Oceania2018, Should we implement a documentation page like discussed here?
+@henon @Oceania2018, Should we implement a documentation page like discussed here?
 https://dotnet.github.io/docfx/

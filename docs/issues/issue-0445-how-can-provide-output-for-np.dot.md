@@ -9,6 +9,6 @@
 
 ## Description
 
-I can't find the impl. of np.dot(inputA, inutB, out preallocatedArray).
-
+I can't find the impl. of np.dot(inputA, inutB, out preallocatedArray).
+
 Currently I am using np.dot(.....).copyTo(....). But I think it still allocates a tmp memory.  

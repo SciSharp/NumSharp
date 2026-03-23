@@ -8,20 +8,20 @@
 
 ## Description
 
-in function GetDtypeFromType
-...
-if (type == typeof(Byte))
-                return "|i1";
-...
-i1 gets translated to signed integer 
+in function GetDtypeFromType
+...
+if (type == typeof(Byte))
+                return "|i1";
+...
+i1 gets translated to signed integer 
 https://numpy.org/doc/stable/user/basics.types.html
 
 ## Comments
 
 ### Comment 1 by @Cle-O (2023-01-23T09:03:24Z)
 
-Bump. This issue is still existing.
-I am saving a numpy array (an image) with positive values only using _np.save()_.
-Positive values only are verified calling _amin()_ on the array.
-After reading the file again, the array contains negative values. 
+Bump. This issue is still existing.
+I am saving a numpy array (an image) with positive values only using _np.save()_.
+Positive values only are verified calling _amin()_ on the array.
+After reading the file again, the array contains negative values. 
 Is there a workaround for this?

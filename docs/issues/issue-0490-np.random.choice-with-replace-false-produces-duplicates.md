@@ -8,6 +8,6 @@
 
 ## Description
 
-e.g. np.random.choice(71, new Shape(40), **replace: false**) is producing duplicates.
-
+e.g. np.random.choice(71, new Shape(40), **replace: false**) is producing duplicates.
+
 I've tried setting the seed to provide a reproducible example, but that doesn't seem to work either.

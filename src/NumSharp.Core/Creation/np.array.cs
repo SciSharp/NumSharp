@@ -174,15 +174,15 @@ namespace NumSharp
                 Debug.Assert(strides[1] == 1);
 
                 T* addr = (T*)@out.Address;
-                Parallel.For(0, len1, i1 =>
+                for (int i1 = 0; i1 < len1; i1++)
                 {
                     T* addr1 = addr + i1 * stride1;
                     T[] src1 = data[i1];
-                    Parallel.For(0, len2, i2 =>
+                    for (int i2 = 0; i2 < len2; i2++)
                     {
                         *(addr1 + i2) = src1[i2];
-                    });
-                });
+                    }
+                }
 
                 return @out;
             }
@@ -214,20 +214,20 @@ namespace NumSharp
                 Debug.Assert(strides[2] == 1);
 
                 T* addr = (T*)@out.Address;
-                Parallel.For(0, len1, i1 =>
+                for (int i1 = 0; i1 < len1; i1++)
                 {
                     T* addr1 = addr + i1 * stride1;
                     T[][] src1 = data[i1];
-                    Parallel.For(0, len2, i2 =>
+                    for (int i2 = 0; i2 < len2; i2++)
                     {
                         T* addr2 = addr1 + i2 * stride2;
                         T[] src2 = src1[i2];
-                        Parallel.For(0, len3, i3 =>
+                        for (int i3 = 0; i3 < len3; i3++)
                         {
                             *(addr2 + i3) = src2[i3];
-                        });
-                    });
-                });
+                        }
+                    }
+                }
 
                 return @out;
             }
@@ -261,25 +261,25 @@ namespace NumSharp
                 Debug.Assert(strides[3] == 1);
 
                 T* addr = (T*)@out.Address;
-                Parallel.For(0, len1, i1 =>
+                for (int i1 = 0; i1 < len1; i1++)
                 {
                     T* addr1 = addr + i1 * stride1;
                     T[][][] src1 = data[i1];
-                    Parallel.For(0, len2, i2 =>
+                    for (int i2 = 0; i2 < len2; i2++)
                     {
                         T* addr2 = addr1 + i2 * stride2;
                         T[][] src2 = src1[i2];
-                        Parallel.For(0, len3, i3 =>
+                        for (int i3 = 0; i3 < len3; i3++)
                         {
                             T* addr3 = addr2 + i3 * stride3;
                             T[] src3 = src2[i3];
-                            Parallel.For(0, len4, i4 =>
+                            for (int i4 = 0; i4 < len4; i4++)
                             {
                                 *(addr3 + i4) = src3[i4];
-                            });
-                        });
-                    });
-                });
+                            }
+                        }
+                    }
+                }
 
                 return @out;
             }
@@ -315,30 +315,30 @@ namespace NumSharp
                 Debug.Assert(strides[4] == 1);
 
                 T* addr = (T*)@out.Address;
-                Parallel.For(0, len1, i1 =>
+                for (int i1 = 0; i1 < len1; i1++)
                 {
                     T* addr1 = addr + i1 * stride1;
                     T[][][][] src1 = data[i1];
-                    Parallel.For(0, len2, i2 =>
+                    for (int i2 = 0; i2 < len2; i2++)
                     {
                         T* addr2 = addr1 + i2 * stride2;
                         T[][][] src2 = src1[i2];
-                        Parallel.For(0, len3, i3 =>
+                        for (int i3 = 0; i3 < len3; i3++)
                         {
                             T* addr3 = addr2 + i3 * stride3;
                             T[][] src3 = src2[i3];
-                            Parallel.For(0, len4, i4 =>
+                            for (int i4 = 0; i4 < len4; i4++)
                             {
                                 T* addr4 = addr3 + i4 * stride4;
                                 T[] src4 = src3[i4];
-                                Parallel.For(0, len5, i5 =>
+                                for (int i5 = 0; i5 < len5; i5++)
                                 {
                                     *(addr4 + i5) = src4[i5];
-                                });
-                            });
-                        });
-                    });
-                });
+                                }
+                            }
+                        }
+                    }
+                }
 
                 return @out;
             }

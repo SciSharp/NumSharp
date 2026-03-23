@@ -10,12 +10,12 @@
 
 ## Description
 
-Test whether any array element along a given axis evaluates to True.
-https://docs.scipy.org/doc/numpy/reference/generated/numpy.any.html
+Test whether any array element along a given axis evaluates to True.
+https://numpy.org/doc/stable/reference/generated/numpy.any.html
 
 ## Comments
 
 ### Comment 1 by @Nucs (2019-10-12T11:16:22Z)
 
-Added in https://github.com/SciSharp/NumSharp/commit/f4ee1353e1d159a9e9334dcb38ee4f005160808c ,
+Added in https://github.com/SciSharp/NumSharp/commit/f4ee1353e1d159a9e9334dcb38ee4f005160808c ,
 Remaining open because specific axis support is not implemented yet.

@@ -8,9 +8,9 @@
 
 ## Description
 
-Hi
-I have a PyObject which is of a PyDict type, It contains an NDArray, i need to convert it to actual NDArray.
-
-How can i do that?
-
+Hi
+I have a PyObject which is of a PyDict type, It contains an NDArray, i need to convert it to actual NDArray.
+
+How can i do that?
+
 Thanks

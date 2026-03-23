@@ -8,25 +8,25 @@
 
 ## Description
 
-The shape of `x` is [200, 1000], of `w` is [1000, 500], and of `b` is [500]
-
-`b` is filled with zeros, `x` and `w` are random float64/double.
-
-Example code of NumSharp:
-
-```csharp
-var out = np.matmul(x, w) + b;
-```
-
-... takes 3-4 seconds.
-
-Example code of numpy:
-
-```python
-out = x @ w + b
-```
-
-... finishes immediately.
+The shape of `x` is [200, 1000], of `w` is [1000, 500], and of `b` is [500]
+
+`b` is filled with zeros, `x` and `w` are random float64/double.
+
+Example code of NumSharp:
+
+```csharp
+var out = np.matmul(x, w) + b;
+```
+
+... takes 3-4 seconds.
+
+Example code of numpy:
+
+```python
+out = x @ w + b
+```
+
+... finishes immediately.
 
 
 ## Comments

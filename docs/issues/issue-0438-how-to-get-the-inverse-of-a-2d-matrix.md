@@ -8,6 +8,6 @@
 
 ## Description
 
-How to get the inverse of a 2D matrix ？I find NumSharp/src/NumSharp.Core/LinearAlgebra/NdArray.Inv.cs just returns null.
-
+How to get the inverse of a 2D matrix ？I find NumSharp/src/NumSharp.Core/LinearAlgebra/NdArray.Inv.cs just returns null.
+
 Thanks for your help!

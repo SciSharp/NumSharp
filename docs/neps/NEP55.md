@@ -124,4 +124,4 @@ For NumSharp, consider:
 ## References
 
 - [NEP 55 Full Text](https://numpy.org/neps/nep-0055-string_dtype.html)
-- [NumPy StringDType docs](https://numpy.org/doc/stable/reference/arrays.strings.html)
+- [NumPy StringDType docs](https://numpy.org/doc/stable/reference/routines.strings.html)

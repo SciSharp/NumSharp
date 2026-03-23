@@ -9,11 +9,11 @@
 
 ## Description
 
-@Oceania2018 @fdncred I started our Wiki (was not a lot but at least some lines ....) 
-
-On https://github.com/Oceania2018/NumSharp/wiki/Design-guidelines I started a page with guidelines. 
-Because I found our discussions and investigations last weeks very interesting and want to write them down. Especially casting, performance, arange instead of ARange, ... such things. 
-
+@Oceania2018 @fdncred I started our Wiki (was not a lot but at least some lines ....) 
+
+On https://github.com/Oceania2018/NumSharp/wiki/Design-guidelines I started a page with guidelines. 
+Because I found our discussions and investigations last weeks very interesting and want to write them down. Especially casting, performance, arange instead of ARange, ... such things. 
+
 If you do not like some parts, or want to add something, feel free to change. ;) 
 
 ## Comments
@@ -49,7 +49,7 @@ In my mind hat sth like
 
 ### Comment 6 by @Oceania2018 (2018-11-15T04:00:32Z)
 
-Our hard work is worth it. NumSharp is providing enough methods to support high level library.
+Our hard work is worth it. NumSharp is providing enough methods to support high level library.
 @dotChris90 I don't want to implement a ploting library for now. Let's focus on NumSharp and Pandas.NET.
 
 ### Comment 7 by @dotChris90 (2018-11-15T04:08:50Z)

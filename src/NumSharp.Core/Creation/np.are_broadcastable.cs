@@ -1,5 +1,4 @@
-﻿
-using NumSharp.Backends;
+﻿using System.Linq;
 
 namespace NumSharp
 {
@@ -13,7 +12,9 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.broadcast_arrays.html</remarks>
         public static bool are_broadcastable(params NDArray[] ndArrays)
         {
-            return DefaultEngine.AreBroadcastable(ndArrays);
+            if (ndArrays.Length <= 1)
+                return true;
+            return Shape.AreBroadcastable(ndArrays.Select(a => a.Shape).ToArray());
         }
 
         /// <summary>
@@ -24,7 +25,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.broadcast_arrays.html</remarks>
         public static bool are_broadcastable(params Shape[] shapes)
         {
-            return DefaultEngine.AreBroadcastable(shapes);
+            return Shape.AreBroadcastable(shapes);
         }
 
         /// <summary>
@@ -35,7 +36,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.broadcast_arrays.html</remarks>
         public static bool are_broadcastable(params int[][] shapes)
         {
-            return DefaultEngine.AreBroadcastable(shapes);
+            return Shape.AreBroadcastable(shapes);
         }
 
         /// <summary>
@@ -47,7 +48,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.broadcast_arrays.html</remarks>
         public static bool are_broadcastable(NDArray lhs, NDArray rhs)
         {
-            return DefaultEngine.AreBroadcastable(lhs, rhs);
+            return Shape.AreBroadcastable(lhs.Shape, rhs.Shape);
         }
     }
 }

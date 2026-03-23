@@ -9,8 +9,8 @@
 
 ## Description
 
-Convert the input to an array.
-https://docs.scipy.org/doc/numpy-1.15.0/reference/generated/numpy.asarray.html
+Convert the input to an array.
+https://numpy.org/doc/stable-1.15.0/reference/generated/numpy.asarray.html
 
 ## Comments
 

@@ -16,5 +16,5 @@ numpy.flip
 
 ### Comment 1 by @Oceania2018 (2019-03-21T03:31:07Z)
 
-https://docs.scipy.org/doc/numpy/reference/generated/numpy.flip.html
+https://numpy.org/doc/stable/reference/generated/numpy.flip.html
 Please also past the python link, thanks.

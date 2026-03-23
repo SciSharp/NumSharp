@@ -70,11 +70,11 @@ namespace NumSharp.UnitTest.RandomSampling
             int nrSamples = 3;
             double[] probabilities = new double[] { 0.1, 0, 0.3, 0.6, 0 };
 
-            NDArray actual = rando.choice(5, (Shape)nrSamples, probabilities: probabilities);
+            NDArray actual = rando.choice(5, (Shape)nrSamples, p: probabilities);
 
             for (int i = 0; i < 10; i++) {
                 rando.seed(1000);
-                NDArray test = rando.choice(5, (Shape)nrSamples, probabilities: probabilities);
+                NDArray test = rando.choice(5, (Shape)nrSamples, p: probabilities);
                 for (int j = 0; j < actual.size; j++) {
                     Assert.AreEqual(actual.GetAtIndex<int>(j), test.GetAtIndex<int>(j), "Inconsistent choice sampling with the same seed. Expected the results to always be the same.");
                 }
@@ -91,12 +91,12 @@ namespace NumSharp.UnitTest.RandomSampling
             NDArray int_arr = new int[] { 42, 96, 3, 101 };
             double[] probabilities = new double[] { 0.5, 0.1, 0.0, 0.3 };
 
-            NDArray actual = rando.choice(int_arr, (Shape)nrSamples, probabilities: probabilities);
+            NDArray actual = rando.choice(int_arr, (Shape)nrSamples, p: probabilities);
 
             for (int i = 0; i < 10; i++)
             {
                 rando.seed(1000);
-                NDArray test = rando.choice(int_arr, (Shape)nrSamples, probabilities: probabilities);
+                NDArray test = rando.choice(int_arr, (Shape)nrSamples, p: probabilities);
                 for (int j = 0; j < actual.size; j++)
                 {
                     Assert.AreEqual(actual.GetAtIndex<int>(j), test.GetAtIndex<int>(j), "Inconsistent choice sampling with the same seed. Expected the results to always be the same.");

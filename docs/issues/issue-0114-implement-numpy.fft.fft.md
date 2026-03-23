@@ -9,5 +9,5 @@
 
 ## Description
 
-Compute the one-dimensional discrete Fourier Transform.
-https://docs.scipy.org/doc/numpy-1.15.0/reference/generated/numpy.fft.fft.html#numpy.fft.fft
+Compute the one-dimensional discrete Fourier Transform.
+https://numpy.org/doc/stable-1.15.0/reference/generated/numpy.fft.fft.html#numpy.fft.fft

@@ -13,12 +13,12 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public override NDArray Sum(in NDArray nd, int axis, Type dtype, bool keepdims = false)
+        public override NDArray Sum(NDArray nd, int axis, Type dtype, bool keepdims = false)
         {
             return Sum(nd, axis, dtype != null ? dtype.GetTypeCode() : default(NPTypeCode?), keepdims);
         }
 
-        public override NDArray Sum(in NDArray nd, int? axis = null, NPTypeCode? typeCode = null, bool keepdims = false)
+        public override NDArray Sum(NDArray nd, int? axis = null, NPTypeCode? typeCode = null, bool keepdims = false)
         {
             return ReduceAdd(nd, axis, keepdims, typeCode);
         }

@@ -138,49 +138,139 @@ def create_positive_array(n: int, dtype_name: str, seed: int = 42) -> np.ndarray
 # =============================================================================
 
 def run_arithmetic_benchmarks(n: int, dtype_name: str, iterations: int) -> List[BenchmarkResult]:
-    """Benchmark arithmetic operations for a specific dtype."""
+    """Benchmark arithmetic operations for a specific dtype.
+
+    Matches C# benchmark classes:
+    - AddBenchmarks: Add_Elementwise, NpAdd, Add_Scalar, Add_ScalarLiteral
+    - SubtractBenchmarks: Subtract_Elementwise, Subtract_Scalar, Subtract_ScalarLeft
+    - MultiplyBenchmarks: Multiply_Elementwise, Multiply_Square, Multiply_Scalar, Multiply_ScalarLiteral
+    - DivideBenchmarks: Divide_Elementwise, Divide_Scalar, Divide_ScalarLeft (CommonTypes only)
+    - ModuloBenchmarks: Modulo_Elementwise, Modulo_Scalar (CommonTypes only)
+    """
     results = []
     dtype = DTYPES[dtype_name]
 
     np.random.seed(42)
     a = create_random_array(n, dtype_name, seed=42)
     b = create_random_array(n, dtype_name, seed=43)
-    b_positive = np.abs(b) + 1  # For division
+    b_positive = create_positive_array(n, dtype_name, seed=43)  # Avoid div by zero
     scalar = dtype(5)
+    scalar2 = dtype(2)
 
-    # Add
+    # ========================================================================
+    # Add (matches AddBenchmarks.cs - ArithmeticTypes = 10 types)
+    # ========================================================================
+
+    # Add_Elementwise: a + b (element-wise)
     def add_elementwise(): return a + b
     r = benchmark(add_elementwise, n, iterations=iterations)
-    r.name, r.category, r.suite, r.dtype = f"a + b ({dtype_name})", "Add", "Arithmetic", dtype_name
+    r.name, r.category, r.suite, r.dtype = f"a + b (element-wise) ({dtype_name})", "Add", "Arithmetic", dtype_name
     results.append(r)
 
+    # NpAdd: np.add(a, b)
+    def np_add(): return np.add(a, b)
+    r = benchmark(np_add, n, iterations=iterations)
+    r.name, r.category, r.suite, r.dtype = f"np.add(a, b) ({dtype_name})", "Add", "Arithmetic", dtype_name
+    results.append(r)
+
+    # Add_Scalar: a + scalar
     def add_scalar(): return a + scalar
     r = benchmark(add_scalar, n, iterations=iterations)
     r.name, r.category, r.suite, r.dtype = f"a + scalar ({dtype_name})", "Add", "Arithmetic", dtype_name
     results.append(r)
 
-    # Subtract
+    # Add_ScalarLiteral: a + 5 (literal)
+    def add_scalar_literal(): return a + 5
+    r = benchmark(add_scalar_literal, n, iterations=iterations)
+    r.name, r.category, r.suite, r.dtype = f"a + 5 (literal) ({dtype_name})", "Add", "Arithmetic", dtype_name
+    results.append(r)
+
+    # ========================================================================
+    # Subtract (matches SubtractBenchmarks.cs - ArithmeticTypes = 10 types)
+    # ========================================================================
+
+    # Subtract_Elementwise: a - b (element-wise)
     def sub_elementwise(): return a - b
     r = benchmark(sub_elementwise, n, iterations=iterations)
-    r.name, r.category, r.suite, r.dtype = f"a - b ({dtype_name})", "Subtract", "Arithmetic", dtype_name
+    r.name, r.category, r.suite, r.dtype = f"a - b (element-wise) ({dtype_name})", "Subtract", "Arithmetic", dtype_name
     results.append(r)
 
-    # Multiply
+    # Subtract_Scalar: a - scalar
+    def sub_scalar(): return a - scalar
+    r = benchmark(sub_scalar, n, iterations=iterations)
+    r.name, r.category, r.suite, r.dtype = f"a - scalar ({dtype_name})", "Subtract", "Arithmetic", dtype_name
+    results.append(r)
+
+    # Subtract_ScalarLeft: scalar - a
+    def sub_scalar_left(): return scalar - a
+    r = benchmark(sub_scalar_left, n, iterations=iterations)
+    r.name, r.category, r.suite, r.dtype = f"scalar - a ({dtype_name})", "Subtract", "Arithmetic", dtype_name
+    results.append(r)
+
+    # ========================================================================
+    # Multiply (matches MultiplyBenchmarks.cs - ArithmeticTypes = 10 types)
+    # ========================================================================
+
+    # Multiply_Elementwise: a * b (element-wise)
     def mul_elementwise(): return a * b
     r = benchmark(mul_elementwise, n, iterations=iterations)
-    r.name, r.category, r.suite, r.dtype = f"a * b ({dtype_name})", "Multiply", "Arithmetic", dtype_name
+    r.name, r.category, r.suite, r.dtype = f"a * b (element-wise) ({dtype_name})", "Multiply", "Arithmetic", dtype_name
     results.append(r)
 
+    # Multiply_Square: a * a (square)
     def mul_square(): return a * a
     r = benchmark(mul_square, n, iterations=iterations)
-    r.name, r.category, r.suite, r.dtype = f"a * a ({dtype_name})", "Multiply", "Arithmetic", dtype_name
+    r.name, r.category, r.suite, r.dtype = f"a * a (square) ({dtype_name})", "Multiply", "Arithmetic", dtype_name
     results.append(r)
 
-    # Divide (float types only to avoid integer division issues)
-    if np.issubdtype(dtype, np.floating):
+    # Multiply_Scalar: a * scalar
+    def mul_scalar(): return a * scalar2
+    r = benchmark(mul_scalar, n, iterations=iterations)
+    r.name, r.category, r.suite, r.dtype = f"a * scalar ({dtype_name})", "Multiply", "Arithmetic", dtype_name
+    results.append(r)
+
+    # Multiply_ScalarLiteral: a * 2 (literal)
+    def mul_scalar_literal(): return a * 2
+    r = benchmark(mul_scalar_literal, n, iterations=iterations)
+    r.name, r.category, r.suite, r.dtype = f"a * 2 (literal) ({dtype_name})", "Multiply", "Arithmetic", dtype_name
+    results.append(r)
+
+    # ========================================================================
+    # Divide (matches DivideBenchmarks.cs - CommonTypes = 4 types)
+    # ========================================================================
+    if dtype_name in COMMON_DTYPES:
+        # Divide_Elementwise: a / b (element-wise)
         def div_elementwise(): return a / b_positive
         r = benchmark(div_elementwise, n, iterations=iterations)
-        r.name, r.category, r.suite, r.dtype = f"a / b ({dtype_name})", "Divide", "Arithmetic", dtype_name
+        r.name, r.category, r.suite, r.dtype = f"a / b (element-wise) ({dtype_name})", "Divide", "Arithmetic", dtype_name
+        results.append(r)
+
+        # Divide_Scalar: a / scalar
+        def div_scalar(): return a / scalar2
+        r = benchmark(div_scalar, n, iterations=iterations)
+        r.name, r.category, r.suite, r.dtype = f"a / scalar ({dtype_name})", "Divide", "Arithmetic", dtype_name
+        results.append(r)
+
+        # Divide_ScalarLeft: scalar / a
+        def div_scalar_left(): return scalar2 / b_positive
+        r = benchmark(div_scalar_left, n, iterations=iterations)
+        r.name, r.category, r.suite, r.dtype = f"scalar / a ({dtype_name})", "Divide", "Arithmetic", dtype_name
+        results.append(r)
+
+    # ========================================================================
+    # Modulo (matches ModuloBenchmarks.cs - CommonTypes = 4 types)
+    # ========================================================================
+    if dtype_name in COMMON_DTYPES:
+        # Modulo_Elementwise: a % b (element-wise)
+        def mod_elementwise(): return a % b_positive
+        r = benchmark(mod_elementwise, n, iterations=iterations)
+        r.name, r.category, r.suite, r.dtype = f"a % b (element-wise) ({dtype_name})", "Modulo", "Arithmetic", dtype_name
+        results.append(r)
+
+        # Modulo_Scalar: a % 7 (literal)
+        def mod_scalar(): return a % 7
+        r = benchmark(mod_scalar, n, iterations=iterations)
+        r.name, r.category, r.suite, r.dtype = f"a % 7 (literal) ({dtype_name})", "Modulo", "Arithmetic", dtype_name
         results.append(r)
 
     return results

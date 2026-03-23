@@ -8,14 +8,16 @@ namespace NumSharp
     public partial class NumPyRandom
     {
         /// <summary>
-        ///     Return random integers from the “discrete uniform” distribution of the specified dtype in the “half-open” interval [low, high). If high is None (the default), then results are from [0, low).
+        ///     Return random integers from the “discrete uniform” distribution in the half-open interval [low, high).
         /// </summary>
-        /// <param name="low">Lowest (signed) integer to be drawn from the distribution (unless high=-1, in which case this parameter is one above the highest such integer).</param>
-        /// <param name="high">If provided, one above the largest (signed) integer to be drawn from the distribution (see above for behavior if high=-1).</param>
-        /// <param name="size">The shape of the array.</param>
-        /// <param name="dtype">Desired dtype of the result. All dtypes are determined by their name, i.e., ‘int64’, ‘int’, etc, so byteorder is not available and a specific precision may have different C types depending on the platform. The default value is ‘np.int’.</param>
-        /// <returns></returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/random/generated/numpy.random.randint.html</remarks>
+        /// <param name=”low”>Lowest (signed) integer to be drawn from the distribution (unless high is not provided, in which case this parameter is one above the highest such integer).</param>
+        /// <param name=”high”>If provided, one above the largest (signed) integer to be drawn from the distribution. If not provided (-1), results are from [0, low).</param>
+        /// <param name=”size”>Output shape. If None, a single value is returned.</param>
+        /// <param name=”dtype”>Desired dtype of the result. Default is np.int32.</param>
+        /// <returns>Random integers from the appropriate distribution, or a single such random int if size not provided.</returns>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.randint.html
+        /// </remarks>
         public NDArray randint(long low, long high = -1, Shape size = default, Type dtype = null)
         {
             dtype = dtype ?? np.int32;

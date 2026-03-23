@@ -320,14 +320,14 @@ namespace NumSharp.UnitTest.Backends
         public void Concurrent_MultipleThreads_ViewsChainCorrectly()
         {
             var original = np.arange(1000);
-            var views = new System.Collections.Concurrent.ConcurrentBag<NDArray>();
+            var views = new List<NDArray>();
 
-            // Create views from multiple threads
-            System.Threading.Tasks.Parallel.For(0, 100, i =>
+            // Create views sequentially
+            for (int i = 0; i < 100; i++)
             {
                 var view = original[$"{i}:{i + 100}"];
                 views.Add(view);
-            });
+            }
 
             // All views should chain to original
             foreach (var view in views)

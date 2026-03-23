@@ -8,11 +8,11 @@
 
 ## Description
 
-Found a typo 
- np.random.stardard_normal(Batch_Size, X_Res * Y_Res, 1);
-
-should be 
- np.random.standard_normal(Batch_Size, X_Res * Y_Res, 1);
-
-Spelling Error "standard"
+Found a typo 
+ np.random.stardard_normal(Batch_Size, X_Res * Y_Res, 1);
+
+should be 
+ np.random.standard_normal(Batch_Size, X_Res * Y_Res, 1);
+
+Spelling Error "standard"
        

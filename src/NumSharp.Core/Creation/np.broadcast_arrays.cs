@@ -15,12 +15,12 @@ namespace NumSharp
             int len = ndArrays.Length;
             int i;
             var inputShapes = new Shape[len];
-            for (i = 0; i < len; i++) 
+            for (i = 0; i < len; i++)
                 inputShapes[i] = ndArrays[i].Shape;
-            var outputShapes = DefaultEngine.Broadcast(inputShapes);
+            var outputShapes = Shape.Broadcast(inputShapes);
 
             var list = new NDArray[len];
-            for (i = 0; i < len; i++) 
+            for (i = 0; i < len; i++)
                 list[i] = new NDArray(UnmanagedStorage.CreateBroadcastedUnsafe(ndArrays[i].Storage, outputShapes[i]));
 
             return list;
@@ -35,7 +35,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.broadcast_arrays.html</remarks>
         public static (NDArray Lhs, NDArray Rhs) broadcast_arrays(NDArray lhs, NDArray rhs)
         {
-            var (leftShape, rightShape) = DefaultEngine.Broadcast(lhs.Shape, rhs.Shape);
+            var (leftShape, rightShape) = Shape.Broadcast(lhs.Shape, rhs.Shape);
             return (new NDArray(UnmanagedStorage.CreateBroadcastedUnsafe(lhs.Storage, leftShape)),
                 new NDArray(UnmanagedStorage.CreateBroadcastedUnsafe(rhs.Storage, rightShape)));
         }

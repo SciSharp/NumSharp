@@ -1,85 +1,80 @@
 ﻿using System;
-using System.Threading.Tasks;
-using DecimalMath;
-using NumSharp.Utilities;
+using NumSharp.Backends.Kernels;
 
 namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public override (NDArray Fractional, NDArray Intergral) ModF(in NDArray nd, Type dtype) => ModF(nd, dtype?.GetTypeCode());
+        public override (NDArray Fractional, NDArray Intergral) ModF(NDArray nd, Type dtype) => ModF(nd, dtype?.GetTypeCode());
 
-        public override (NDArray Fractional, NDArray Intergral) ModF(in NDArray nd, NPTypeCode? typeCode = null)
+        /// <summary>
+        /// Return the fractional and integral parts of an array, element-wise.
+        ///
+        /// NumPy behavior (C standard modf):
+        /// - modf(1.5) = (0.5, 1.0)
+        /// - modf(-2.7) = (-0.7, -2.0)  -- sign of fractional matches input
+        /// - modf(inf) = (0.0, inf)
+        /// - modf(-inf) = (-0.0, -inf)
+        /// - modf(nan) = (nan, nan)
+        ///
+        /// Decimal is a NumSharp extension (NumPy doesn't have decimal type).
+        /// </summary>
+        public override (NDArray Fractional, NDArray Intergral) ModF(NDArray nd, NPTypeCode? typeCode = null)
         {
-            var @out = Cast(nd, typeCode ?? nd.typecode, copy: true);
-            var @out1 = Cast(nd, typeCode ?? nd.typecode, copy: true);
-            var len = @out.size;
+            var resolvedType = typeCode ?? nd.typecode;
 
+            // Validate type - modf only makes sense for floating-point types
+            if (resolvedType != NPTypeCode.Double &&
+                resolvedType != NPTypeCode.Single &&
+                resolvedType != NPTypeCode.Decimal)
+            {
+                throw new NotSupportedException(
+                    $"modf only supports floating-point types (Single, Double, Decimal), got {resolvedType}");
+            }
+
+            // Cast to target type and materialize to contiguous memory
+            // Cast with copy:true creates a contiguous copy, which is what we need
+            // for both SIMD processing and correct output
+            var fractional = Cast(nd, resolvedType, copy: true);
+            var integral = Cast(nd, resolvedType, copy: true);
+            var len = fractional.size;
+
+            if (len == 0)
+                return (fractional, integral);
+
+            // All paths now use SIMD-optimized helpers (arrays are guaranteed contiguous after Cast)
             unsafe
             {
-                switch (@out.GetTypeCode)
+                switch (resolvedType)
                 {
-#if _REGEN
-                    %foreach except(supported_numericals, "Decimal"),except(supported_numericals_lowercase, "decimal")%
-	                case NPTypeCode.#1:
-	                {
-                        var out_addr = (#2*)@out.Address;
-                        for (int i = 0; i < len; i++) out_addr[i] = Converts.To#1(Math.Frac(out_addr[i]));
-                        return @out;
-	                }
-	                %
-                    case NPTypeCode.Decimal:
-	                {
-                        var out_addr = (decimal*)@out.Address;
-                        for (int i = 0; i < len; i++) out_addr[i] = (DecimalEx.Frac(out_addr[i]));
-                        return @out;
-	                }
-	                default:
-		                throw new NotSupportedException();
-#else
                     case NPTypeCode.Double:
-                    {
-                        var out_addr = (double*)@out.Address;
-                        var out1_addr = (double*)@out1.Address;
-                        for (int i = 0; i < len; i++)
-                        {
-                            var trunc = Math.Truncate(out_addr[i]);
-                            out_addr[i] = Converts.ToDouble(out_addr[i] - trunc);
-                            *(out1_addr + i) = trunc;
-                        }
+                        ILKernelGenerator.ModfHelper((double*)fractional.Address, (double*)integral.Address, len);
+                        return (fractional, integral);
 
-                        return (@out, @out1);
-                    }
                     case NPTypeCode.Single:
-                    {
-                        var out_addr = (float*)@out.Address;
-                        var out1_addr = (float*)@out1.Address;
-                        for (int i = 0; i < len; i++)
-                        {
-                            var trunc = Math.Truncate(out_addr[i]);
-                            out_addr[i] = Converts.ToSingle(out_addr[i] - trunc);
-                            *(out1_addr + i) = Convert.ToSingle(trunc);
-                        }
+                        ILKernelGenerator.ModfHelper((float*)fractional.Address, (float*)integral.Address, len);
+                        return (fractional, integral);
 
-                        return (@out, @out1);
-                    }
                     case NPTypeCode.Decimal:
-                    {
-                        var out_addr = (decimal*)@out.Address;
-                        var out1_addr = (decimal*)@out1.Address;
-                        for (int i = 0; i < len; i++)
-                        {
-                            var trunc = Math.Truncate(out_addr[i]);
-                            out_addr[i] = out_addr[i] - trunc;
-                            *(out1_addr + i) = trunc;
-                        }
+                        ModfDecimal((decimal*)fractional.Address, (decimal*)integral.Address, len);
+                        return (fractional, integral);
 
-                        return (@out, @out1);
-                    }
                     default:
-                        throw new NotSupportedException();
-#endif
+                        throw new NotSupportedException($"Unexpected type: {resolvedType}");
                 }
+            }
+        }
+
+        /// <summary>
+        /// Scalar modf for decimal type (no SIMD, decimal is 128-bit).
+        /// </summary>
+        private static unsafe void ModfDecimal(decimal* data, decimal* integral, int size)
+        {
+            for (int i = 0; i < size; i++)
+            {
+                var trunc = Math.Truncate(data[i]);
+                integral[i] = trunc;
+                data[i] = data[i] - trunc;
             }
         }
     }

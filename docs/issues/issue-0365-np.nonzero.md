@@ -10,5 +10,5 @@
 
 ## Description
 
-Return the indices of the elements that are non-zero.
-https://docs.scipy.org/doc/numpy/reference/generated/numpy.nonzero.html
+Return the indices of the elements that are non-zero.
+https://numpy.org/doc/stable/reference/generated/numpy.nonzero.html

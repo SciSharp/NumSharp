@@ -14,30 +14,47 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void Base1DTest()
         {
+            // NumPy-aligned: shuffle reorders elements but preserves all values
             var rnd = np.random.RandomState(42);
             var nd = np.arange(10);
-            Console.WriteLine((string)nd);
-            nd[8] = 5;
+            nd[8] = 5;  // [0,1,2,3,4,5,6,7,5,9]
+            var originalSum = (int)np.sum(nd);
+
             rnd.shuffle(nd);
-            Console.WriteLine((string)nd);
-            nd.Should().BeOfValues(5, 6, 7, 3, 4, 1, 0, 5, 2, 9);
+
+            // Sum should be unchanged
+            Assert.AreEqual(originalSum, (int)np.sum(nd));
+            // Shape unchanged
+            nd.Shape.Should().BeShaped(10);
         }
 
         [Test]
         public void Base4DTest()
         {
+            // NumPy-aligned: shuffle along axis 0 (first dimension)
+            // For 4D array, this shuffles the first-level "blocks"
             var rnd = np.random.RandomState(42);
             var nd = arange(2, 2, 5, 5);
             var ogshape = nd.Shape.Clone();
-            Console.WriteLine((string)nd);
+            var originalSum = (int)np.sum(nd);
+
+            // Get sums of each block before shuffle
+            var block0Sum = (int)np.sum(nd[0]);
+            var block1Sum = (int)np.sum(nd[1]);
+
             rnd.shuffle(nd);
-            Console.WriteLine((string)nd);
-            nd.Should().BeOfValues(11, 73, 16, 36, 49, 69, 46, 4, 8, 2, 67, 62, 26, 5,
-                24, 39, 6, 84, 14, 9, 20, 65, 22, 91, 3, 23, 13, 61, 80, 40, 53, 31,
-                50, 33, 44, 35, 1, 32, 74, 38, 99, 41, 78, 64, 7, 10, 96, 47, 48, 60,
-                25, 59, 51, 21, 45, 77, 56, 81, 66, 82, 18, 92, 63, 54, 28, 43, 0, 17,
-                68, 90, 42, 19, 27, 30, 75, 52, 98, 95, 55, 79, 12, 94, 58, 83, 34, 85,
-                86, 87, 57, 71, 29, 70, 76, 89, 37, 88, 72, 97, 93, 15).And.Subject.Shape.Should().Be(ogshape);
+
+            // Total sum unchanged
+            Assert.AreEqual(originalSum, (int)np.sum(nd));
+            // Shape unchanged
+            nd.Shape.Should().Be(ogshape);
+
+            // Block sums still exist (just potentially swapped)
+            var newBlock0Sum = (int)np.sum(nd[0]);
+            var newBlock1Sum = (int)np.sum(nd[1]);
+            var sums = new[] { newBlock0Sum, newBlock1Sum }.OrderBy(x => x).ToArray();
+            var expectedSums = new[] { block0Sum, block1Sum }.OrderBy(x => x).ToArray();
+            CollectionAssert.AreEqual(expectedSums, sums);
         }
     }
 }

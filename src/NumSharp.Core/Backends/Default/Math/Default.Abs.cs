@@ -1,110 +1,29 @@
 ﻿using System;
-using System.Threading.Tasks;
-using DecimalMath;
-using NumSharp.Utilities;
+using NumSharp.Backends.Kernels;
 
 namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public override NDArray Abs(in NDArray nd, Type dtype) => Abs(nd, dtype?.GetTypeCode());
+        public override NDArray Abs(NDArray nd, Type dtype) => Abs(nd, dtype?.GetTypeCode());
 
-        public override NDArray Abs(in NDArray nd, NPTypeCode? typeCode = null)
+        /// <summary>
+        /// Element-wise absolute value using IL-generated kernels.
+        /// NumPy behavior: preserves input dtype (unlike sin/cos which promote to float).
+        /// </summary>
+        public override NDArray Abs(NDArray nd, NPTypeCode? typeCode = null)
         {
-            if (nd.size == 0)
-                return nd.Clone();
+            // np.abs preserves input dtype (unlike trigonometric functions)
+            // Only use explicit typeCode if provided, otherwise keep input type
+            var outputType = typeCode ?? nd.GetTypeCode;
 
-            var @out = Cast(nd, ResolveUnaryReturnType(nd, typeCode), copy: true);
-            if (@out.typecode.IsUnsigned())
-                return @out;
-
-            var len = @out.size;
-
-            unsafe
+            // Unsigned types are already non-negative - just return a copy with type cast
+            if (nd.typecode.IsUnsigned())
             {
-                switch (@out.GetTypeCode)
-                {
-#if _REGEN
-                    %foreach except(supported_numericals, "Decimal"),except(supported_numericals_lowercase, "decimal")%
-	                case NPTypeCode.#1:
-	                {
-                        var out_addr = (#2*)@out.Address;
-                        for (int i = 0; i < len; i++) out_addr[i] = Converts.To#1(Math.Abs(out_addr[i])));
-                        return @out;
-	                }
-	                %
-                    case NPTypeCode.Decimal:
-	                {
-                        var out_addr = (decimal*)@out.Address;
-                        for (int i = 0; i < len; i++) out_addr[i] = (DecimalEx.Abs(out_addr[i]));
-                        return @out;
-	                }
-	                default:
-		                throw new NotSupportedException();
-#else
-                    case NPTypeCode.Byte:
-	                {
-                        return @out;
-	                }
-	                case NPTypeCode.Int16:
-	                {
-                        var out_addr = (short*)@out.Address;
-                        for (int i = 0; i < len; i++) out_addr[i] = Converts.ToInt16(Math.Abs(out_addr[i]));
-                        return @out;
-	                }
-	                case NPTypeCode.UInt16:
-	                {
-                        return @out;
-	                }
-	                case NPTypeCode.Int32:
-	                {
-                        var out_addr = (int*)@out.Address;
-                        for (int i = 0; i < len; i++) out_addr[i] = Converts.ToInt32(Math.Abs(out_addr[i]));
-                        return @out;
-	                }
-	                case NPTypeCode.UInt32:
-	                {
-                        return @out;
-	                }
-	                case NPTypeCode.Int64:
-	                {
-                        var out_addr = (long*)@out.Address;
-                        for (int i = 0; i < len; i++) out_addr[i] = Converts.ToInt64(Math.Abs(out_addr[i]));
-                        return @out;
-	                }
-	                case NPTypeCode.UInt64:
-	                {
-                        return @out;
-	                }
-	                case NPTypeCode.Char:
-	                {
-                        var out_addr = (char*)@out.Address;
-                        for (int i = 0; i < len; i++) out_addr[i] = Converts.ToChar(Math.Abs(out_addr[i]));
-                        return @out;
-	                }
-	                case NPTypeCode.Double:
-	                {
-                        var out_addr = (double*)@out.Address;
-                        for (int i = 0; i < len; i++) out_addr[i] = Converts.ToDouble(Math.Abs(out_addr[i]));
-                        return @out;
-	                }
-	                case NPTypeCode.Single:
-	                {
-                        var out_addr = (float*)@out.Address;
-                        for (int i = 0; i < len; i++) out_addr[i] = Converts.ToSingle(Math.Abs(out_addr[i]));
-                        return @out;
-	                }
-                    case NPTypeCode.Decimal:
-	                {
-                        var out_addr = (decimal*)@out.Address;
-                        for (int i = 0; i < len; i++) out_addr[i] = (DecimalEx.Abs(out_addr[i]));
-                        return @out;
-	                }
-	                default:
-		                throw new NotSupportedException();
-#endif
-                }
+                return Cast(nd, outputType, copy: true);
             }
+
+            return ExecuteUnaryOp(nd, UnaryOp.Abs, outputType);
         }
     }
 }

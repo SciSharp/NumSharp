@@ -13,7 +13,6 @@ namespace NumSharp.UnitTest
     public class NdArrayConvolveTest
     {
         [Test]
-        [OpenBugs]
         public void ConvoleFull()
         {
             var series1 = np.array(new double[] {1, 2, 3});
@@ -27,7 +26,6 @@ namespace NumSharp.UnitTest
         }
 
         [Test]
-        [OpenBugs]
         public void ConvoleValid()
         {
             var series1 = np.array(new double[] {1, 2, 3});
@@ -41,7 +39,6 @@ namespace NumSharp.UnitTest
         }
 
         [Test]
-        [OpenBugs]
         public void ConvoleSame()
         {
             var series1 = np.array(new double[] {1, 2, 3});

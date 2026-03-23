@@ -354,3 +354,10 @@ docfx_project/src
 /coverage.xml
 test/NumSharp.Benchmark/LocalBenches.cs
 test/NumSharp.UnitTest/DevTests*.cs
+
+# Local design documents (not tracked in git)
+docs/DESIGN.md
+
+# Claude Code worktrees (local only)
+.claude/worktrees/
+!docs/releases/

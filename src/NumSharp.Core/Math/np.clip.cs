@@ -12,11 +12,11 @@ namespace NumSharp
         /// <param name="a">Array containing elements to clip.</param>
         /// <param name="a_max">Maximum value. If None, clipping is not performed on upper interval edge. Not more than one of a_min and a_max may be None.</param>
         /// <param name="a_min">Minimum value. If None, clipping is not performed on lower interval edge. Not more than one of a_min and a_max may be None.</param>
-        /// <param name="outType">The dtype the returned ndarray should be of, only non integer values are supported.</param>
+        /// <param name="dtype">The dtype the returned ndarray should be of, only non integer values are supported.</param>
         /// <returns>An array with the elements of a, but where values &lt; a_min are replaced with a_min, and those &gt; a_max with a_max.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.clip.html</remarks>
-        public static NDArray clip(in NDArray a, NDArray a_min, NDArray a_max, NPTypeCode? outType = null)
-            => a.TensorEngine.ClipNDArray(a, a_min, a_max, outType);
+        public static NDArray clip(NDArray a, NDArray a_min, NDArray a_max, NPTypeCode? dtype = null)
+            => a.TensorEngine.ClipNDArray(a, a_min, a_max, dtype);
 
         /// <summary>
         ///     Clip (limit) the values in an array.<br></br>
@@ -25,11 +25,11 @@ namespace NumSharp
         /// <param name="a">Array containing elements to clip.</param>
         /// <param name="a_max">Maximum value. If None, clipping is not performed on upper interval edge. Not more than one of a_min and a_max may be None.</param>
         /// <param name="a_min">Minimum value. If None, clipping is not performed on lower interval edge. Not more than one of a_min and a_max may be None.</param>
-        /// <param name="outType">The dtype the returned ndarray should be of, only non integer values are supported.</param>
+        /// <param name="dtype">The dtype the returned ndarray should be of, only non integer values are supported.</param>
         /// <returns>An array with the elements of a, but where values &lt; a_min are replaced with a_min, and those &gt; a_max with a_max.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.clip.html</remarks>
-        public static NDArray clip(in NDArray a, NDArray a_min, NDArray a_max, Type outType)
-            => a.TensorEngine.ClipNDArray(a, a_min, a_max, outType);
+        public static NDArray clip(NDArray a, NDArray a_min, NDArray a_max, Type dtype)
+            => a.TensorEngine.ClipNDArray(a, a_min, a_max, dtype);
 
         /// <summary>
         ///     Clip (limit) the values in an array.<br></br>
@@ -41,7 +41,7 @@ namespace NumSharp
         /// <param name="out">The results will be placed in this array. It may be the input array for in-place clipping. out must be of the right shape to hold the output. Its type is preserved.</param>
         /// <returns>An array with the elements of a, but where values &lt; a_min are replaced with a_min, and those &gt; a_max with a_max.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.clip.html</remarks>
-        public static NDArray clip(in NDArray a, NDArray a_min, NDArray a_max, NDArray @out)
+        public static NDArray clip(NDArray a, NDArray a_min, NDArray a_max, NDArray @out)
             => a.TensorEngine.ClipNDArray(a, a_min, a_max, (NPTypeCode?)null, @out);
     }
 }

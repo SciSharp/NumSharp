@@ -194,9 +194,9 @@ These entries in the map should note they correspond to deprecated NumPy APIs:
 
 ### 6.1 Old scipy-hosted URLs
 
-**385 occurrences across 121 files** of `https://docs.scipy.org/doc/numpy/...` in XML doc `<remarks>` tags.
+**385 occurrences across 121 files** of `https://numpy.org/doc/stable/...` in XML doc `<remarks>` tags.
 
-**Fix**: Bulk replace `https://docs.scipy.org/doc/numpy/` → `https://numpy.org/doc/stable/`
+**Fix**: Bulk replace `https://numpy.org/doc/stable/` → `https://numpy.org/doc/stable/`
 
 ### 6.2 Version-pinned NumPy 1.x URLs
 

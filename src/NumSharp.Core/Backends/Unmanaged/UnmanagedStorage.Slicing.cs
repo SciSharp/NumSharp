@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp.Backends
 {
@@ -97,20 +98,41 @@ namespace NumSharp.Backends
             if (slices.All(s => Equals(Slice.All, s)))
                 return Alias();
 
-            //handle broadcasted shape: materialize broadcast data into contiguous memory,
-            //then slice the contiguous result. We must use a Clean() shape (not the broadcast
-            //shape) so that strides match the contiguous data layout. Using _shape.Slice(slices)
-            //would attach broadcast strides [1,0] to contiguous data [3,1], causing wrong offsets.
-            if (_shape.IsBroadcasted)
-            {
-                var clonedData = CloneData();
-                var cleanShape = _shape.Clean();
-                return new UnmanagedStorage(clonedData, cleanShape).GetViewInternal(slices);
-            }
+            // Broadcast arrays: DO NOT materialize! Shape.Slice correctly handles stride=0.
+            // The old code materialized broadcast data, losing stride=0 information.
+            // NumPy preserves stride=0 when slicing broadcast views.
+            // Example: broadcast_to([1,2,3], (4,3)) with strides (0,1)
+            //   [:, 0] should give shape (4,) with stride (0,) - NOT materialized stride (3,)
+            //
+            // NOTE: Cumsum and other axis reductions need this to work correctly with
+            // broadcast arrays without requiring memory-expensive .copy() workarounds.
 
             var slicedShape = _shape.Slice(slices);
 
-            // NumPy-aligned: All slices return views (aliases) that share memory with the original.
+            // Handle empty slices (e.g., a[100:200] on a 10-element array)
+            // NumPy returns an empty array with shape (0,) or similar
+            if (slicedShape.size == 0)
+            {
+                // Create empty storage with correct dtype and shape
+                var emptySlice = ArraySlice.Allocate(_typecode, 0, false);
+                var emptyStorage = new UnmanagedStorage();
+                emptyStorage._Allocate(slicedShape, emptySlice);
+                return emptyStorage;
+            }
+
+            // NumPy-aligned optimization: For contiguous slices, slice the InternalArray directly
+            // and create a fresh shape with offset=0. This matches NumPy's data pointer adjustment
+            // for contiguous views and makes IsSliced=false for contiguous slices.
+            if (slicedShape.IsContiguous && slicedShape.offset > 0)
+            {
+                // Create a fresh contiguous shape (no offset)
+                var freshShape = new Shape(slicedShape.dimensions);
+                var view = new UnmanagedStorage(InternalArray.Slice(slicedShape.offset, slicedShape.size), freshShape);
+                view._baseStorage = _baseStorage ?? this;
+                return view;
+            }
+
+            // Non-contiguous slices: create an alias with the sliced shape.
             // The slicedShape contains the correct offset and strides computed by Shape.Slice().
             // Views with non-zero offset or non-standard strides use coordinate-based access.
             return Alias(slicedShape);

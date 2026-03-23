@@ -1,6 +1,7 @@
-﻿using System;
-using System.Diagnostics.CodeAnalysis;
+using System;
+using System.Runtime.CompilerServices;
 using NumSharp.Backends;
+using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp
 {
@@ -10,259 +11,100 @@ namespace NumSharp
         ///     Modify a sequence in-place by shuffling its contents.
         /// </summary>
         /// <param name="x">The array or list to be shuffled.</param>
-        /// <param name="passes">How many times to pass all items in a complexity of O(n*passes)</param>
-        /// <remarks>https://numpy.org/doc/stable/reference/random/generated/numpy.random.shuffle.html <br></br>Does not copy <paramref name="x"/></remarks>
-        [SuppressMessage("ReSharper", "TooWideLocalVariableScope")]
-        public void shuffle(NDArray x, int passes = 2)
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.shuffle.html
+        ///     <br/>
+        ///     This function only shuffles the array along the first axis of a multi-dimensional array.
+        ///     The order of sub-arrays is changed but their contents remain the same.
+        ///     <br/>
+        ///     Note: NumPy's Generator API (rng.shuffle) supports an axis parameter, but the legacy
+        ///     np.random.shuffle does not. This implementation matches the legacy API.
+        /// </remarks>
+        /// <example>
+        ///     <code>
+        ///     // 1D array - elements are shuffled
+        ///     var arr = np.arange(10);
+        ///     np.random.shuffle(arr);
+        ///
+        ///     // 2D array - rows are shuffled, contents within rows unchanged
+        ///     var arr2d = np.arange(9).reshape(3, 3);
+        ///     np.random.shuffle(arr2d);
+        ///     // e.g. [[6,7,8], [0,1,2], [3,4,5]] - rows reordered
+        ///     </code>
+        /// </example>
+        public void shuffle(NDArray x)
         {
-            var size = x.size;
-            var count = size * 2;
-            Func<int, int> transformOffset = x.Shape.TransformOffset;
-            unsafe
+            if (x.ndim == 0)
+                throw new ArgumentException("cannot shuffle a 0-dimensional array", nameof(x));
+
+            var n = x.shape[0];  // Always shuffle along first axis
+            if (n <= 1)
+                return; // Nothing to shuffle
+
+            // For 1D contiguous arrays, use optimized path
+            if (x.ndim == 1 && x.Shape.IsContiguous)
             {
-#if _REGEN
-                #region Compute
-		        switch (x.typecode)
-		        {
-			        %foreach supported_dtypes,supported_dtypes_lowercase%
-			        case NPTypeCode.#1:
-			        {
-				        var addr = (#2*)x.Address;
-                        var addr_index0 = addr + transformOffset(0);
-                        |#2 tmp; //index 0
-                        |#2* addr_swap;
-                        while (count-- > 1)
-                        {
-                            tmp = *addr_index0;
-                            addr_swap = addr + transformOffset(randomizer.Next(size));
-                            *addr_index0 = *addr_swap;
-                            *addr_swap = tmp;
-                        }
-                        break;
-			        }
-			        %
-			        default:
-				        throw new NotSupportedException();
-		        }
-                #endregion
-#else
-
-                #region Compute
-
-                switch (x.typecode)
-                {
-                    case NPTypeCode.Boolean:
-                    {
-                        var addr = (bool*)x.Address;
-                        var addr_index0 = addr + transformOffset(0);
-                        bool tmp; //index 0
-                        bool* addr_swap;
-                        while (count-- > 1)
-                        {
-                            tmp = *addr_index0;
-                            addr_swap = addr + transformOffset(randomizer.Next(size));
-                            *addr_index0 = *addr_swap;
-                            *addr_swap = tmp;
-                        }
-
-                        break;
-                    }
-
-                    case NPTypeCode.Byte:
-                    {
-                        var addr = (byte*)x.Address;
-                        var addr_index0 = addr + transformOffset(0);
-                        byte tmp; //index 0
-                        byte* addr_swap;
-                        while (count-- > 1)
-                        {
-                            tmp = *addr_index0;
-                            addr_swap = addr + transformOffset(randomizer.Next(size));
-                            *addr_index0 = *addr_swap;
-                            *addr_swap = tmp;
-                        }
-
-                        break;
-                    }
-
-                    case NPTypeCode.Int16:
-                    {
-                        var addr = (short*)x.Address;
-                        var addr_index0 = addr + transformOffset(0);
-                        short tmp; //index 0
-                        short* addr_swap;
-                        while (count-- > 1)
-                        {
-                            tmp = *addr_index0;
-                            addr_swap = addr + transformOffset(randomizer.Next(size));
-                            *addr_index0 = *addr_swap;
-                            *addr_swap = tmp;
-                        }
-
-                        break;
-                    }
-
-                    case NPTypeCode.UInt16:
-                    {
-                        var addr = (ushort*)x.Address;
-                        var addr_index0 = addr + transformOffset(0);
-                        ushort tmp; //index 0
-                        ushort* addr_swap;
-                        while (count-- > 1)
-                        {
-                            tmp = *addr_index0;
-                            addr_swap = addr + transformOffset(randomizer.Next(size));
-                            *addr_index0 = *addr_swap;
-                            *addr_swap = tmp;
-                        }
-
-                        break;
-                    }
-
-                    case NPTypeCode.Int32:
-                    {
-                        var addr = (int*)x.Address;
-                        var addr_index0 = addr + transformOffset(0);
-                        int tmp; //index 0
-                        int* addr_swap;
-                        while (count-- > 1)
-                        {
-                            tmp = *addr_index0;
-                            addr_swap = addr + transformOffset(randomizer.Next(size));
-                            *addr_index0 = *addr_swap;
-                            *addr_swap = tmp;
-                        }
-
-                        break;
-                    }
-
-                    case NPTypeCode.UInt32:
-                    {
-                        var addr = (uint*)x.Address;
-                        var addr_index0 = addr + transformOffset(0);
-                        uint tmp; //index 0
-                        uint* addr_swap;
-                        while (count-- > 1)
-                        {
-                            tmp = *addr_index0;
-                            addr_swap = addr + transformOffset(randomizer.Next(size));
-                            *addr_index0 = *addr_swap;
-                            *addr_swap = tmp;
-                        }
-
-                        break;
-                    }
-
-                    case NPTypeCode.Int64:
-                    {
-                        var addr = (long*)x.Address;
-                        var addr_index0 = addr + transformOffset(0);
-                        long tmp; //index 0
-                        long* addr_swap;
-                        while (count-- > 1)
-                        {
-                            tmp = *addr_index0;
-                            addr_swap = addr + transformOffset(randomizer.Next(size));
-                            *addr_index0 = *addr_swap;
-                            *addr_swap = tmp;
-                        }
-
-                        break;
-                    }
-
-                    case NPTypeCode.UInt64:
-                    {
-                        var addr = (ulong*)x.Address;
-                        var addr_index0 = addr + transformOffset(0);
-                        ulong tmp; //index 0
-                        ulong* addr_swap;
-                        while (count-- > 1)
-                        {
-                            tmp = *addr_index0;
-                            addr_swap = addr + transformOffset(randomizer.Next(size));
-                            *addr_index0 = *addr_swap;
-                            *addr_swap = tmp;
-                        }
-
-                        break;
-                    }
-
-                    case NPTypeCode.Char:
-                    {
-                        var addr = (char*)x.Address;
-                        var addr_index0 = addr + transformOffset(0);
-                        char tmp; //index 0
-                        char* addr_swap;
-                        while (count-- > 1)
-                        {
-                            tmp = *addr_index0;
-                            addr_swap = addr + transformOffset(randomizer.Next(size));
-                            *addr_index0 = *addr_swap;
-                            *addr_swap = tmp;
-                        }
-
-                        break;
-                    }
-
-                    case NPTypeCode.Double:
-                    {
-                        var addr = (double*)x.Address;
-                        var addr_index0 = addr + transformOffset(0);
-                        double tmp; //index 0
-                        double* addr_swap;
-                        while (count-- > 1)
-                        {
-                            tmp = *addr_index0;
-                            addr_swap = addr + transformOffset(randomizer.Next(size));
-                            *addr_index0 = *addr_swap;
-                            *addr_swap = tmp;
-                        }
-
-                        break;
-                    }
-
-                    case NPTypeCode.Single:
-                    {
-                        var addr = (float*)x.Address;
-                        var addr_index0 = addr + transformOffset(0);
-                        float tmp; //index 0
-                        float* addr_swap;
-                        while (count-- > 1)
-                        {
-                            tmp = *addr_index0;
-                            addr_swap = addr + transformOffset(randomizer.Next(size));
-                            *addr_index0 = *addr_swap;
-                            *addr_swap = tmp;
-                        }
-
-                        break;
-                    }
-
-                    case NPTypeCode.Decimal:
-                    {
-                        var addr = (decimal*)x.Address;
-                        var addr_index0 = addr + transformOffset(0);
-                        decimal tmp; //index 0
-                        decimal* addr_swap;
-                        while (count-- > 1)
-                        {
-                            tmp = *addr_index0;
-                            addr_swap = addr + transformOffset(randomizer.Next(size));
-                            *addr_index0 = *addr_swap;
-                            *addr_swap = tmp;
-                        }
-
-                        break;
-                    }
-
-                    default:
-                        throw new NotSupportedException();
-                }
-
-                #endregion
-
-#endif
+                Shuffle1DContiguous(x, n);
+                return;
             }
+
+            // For multi-dimensional arrays, shuffle along axis 0
+            // Fisher-Yates shuffle
+            for (int i = n - 1; i > 0; i--)
+            {
+                int j = randomizer.Next(i + 1);
+                if (i != j)
+                {
+                    SwapSlicesAxis0(x, i, j);
+                }
+            }
+        }
+
+        /// <summary>
+        ///     Optimized shuffle for 1D contiguous arrays.
+        /// </summary>
+        private unsafe void Shuffle1DContiguous(NDArray x, int n)
+        {
+            var itemSize = x.dtypesize;
+            var addr = (byte*)x.Address;
+
+            // Allocate temp buffer for swapping
+            var temp = stackalloc byte[itemSize];
+
+            // Fisher-Yates shuffle
+            for (int i = n - 1; i > 0; i--)
+            {
+                int j = randomizer.Next(i + 1);
+                if (i != j)
+                {
+                    var ptrI = addr + (long)i * itemSize;
+                    var ptrJ = addr + (long)j * itemSize;
+
+                    // Swap elements
+                    Buffer.MemoryCopy(ptrI, temp, itemSize, itemSize);
+                    Buffer.MemoryCopy(ptrJ, ptrI, itemSize, itemSize);
+                    Buffer.MemoryCopy(temp, ptrJ, itemSize, itemSize);
+                }
+            }
+        }
+
+        /// <summary>
+        ///     Swap two slices along axis 0.
+        /// </summary>
+        private static void SwapSlicesAxis0(NDArray x, int i, int j)
+        {
+            // Get slices at indices i and j along axis 0
+            var sliceI = x[i];
+            var sliceJ = x[j];
+
+            // Create a temporary copy of slice i
+            var temp = sliceI.copy();
+
+            // Copy j to i
+            np.copyto(sliceI, sliceJ);
+
+            // Copy temp (original i) to j
+            np.copyto(sliceJ, temp);
         }
     }
 }

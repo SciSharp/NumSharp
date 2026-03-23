@@ -8,6 +8,6 @@
 
 ## Description
 
-When I try to initialize an NDArray with the short type, it throws a System.NotSupportedException. It seems like it only does this with shorts, every other type works fine. Heres a line of code to run to reproduce
-
+When I try to initialize an NDArray with the short type, it throws a System.NotSupportedException. It seems like it only does this with shorts, every other type works fine. Heres a line of code to run to reproduce
+
 `var nd = new NDArray(dtype: np.int16, shape: new Shape(new []{1, 2}));`

@@ -1333,20 +1333,21 @@ namespace NumSharp.UnitTest.Creation
             var bc = np.broadcast_to(col, new Shape(3, 5));
 
             // Total sum: 2*5 + 6*5 + 10*5 = 90
-            Assert.AreEqual(90, (int)np.sum(bc));
+            // NEP50: int32 sum returns int64
+            Assert.AreEqual(90L, (long)np.sum(bc));
 
             // Sum along axis 0: [2+6+10, ...] = [18,18,18,18,18]
             var s0 = np.sum(bc, axis: 0);
             AssertShapeEqual(s0, 5);
             for (int c = 0; c < 5; c++)
-                Assert.AreEqual(18, s0.GetInt32(c));
+                Assert.AreEqual(18L, s0.GetInt64(c));
 
             // Sum along axis 1: [2*5, 6*5, 10*5] = [10,30,50]
             var s1 = np.sum(bc, axis: 1);
             AssertShapeEqual(s1, 3);
-            Assert.AreEqual(10, s1.GetInt32(0));
-            Assert.AreEqual(30, s1.GetInt32(1));
-            Assert.AreEqual(50, s1.GetInt32(2));
+            Assert.AreEqual(10L, s1.GetInt64(0));
+            Assert.AreEqual(30L, s1.GetInt64(1));
+            Assert.AreEqual(50L, s1.GetInt64(2));
         }
 
         /// <summary>

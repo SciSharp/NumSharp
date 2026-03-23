@@ -510,7 +510,8 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static sbyte ToSByte(decimal value)
         {
-            return decimal.ToSByte(decimal.Round(value, 0));
+            // NumPy uses truncation toward zero
+            return decimal.ToSByte(decimal.Truncate(value));
         }
 
 
@@ -648,7 +649,8 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static byte ToByte(decimal value)
         {
-            return decimal.ToByte(decimal.Round(value, 0));
+            // NumPy uses truncation toward zero
+            return decimal.ToByte(decimal.Truncate(value));
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -782,7 +784,8 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static short ToInt16(decimal value)
         {
-            return decimal.ToInt16(decimal.Round(value, 0));
+            // NumPy uses truncation toward zero
+            return decimal.ToInt16(decimal.Truncate(value));
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -926,7 +929,8 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static ushort ToUInt16(decimal value)
         {
-            return decimal.ToUInt16(decimal.Round(value, 0));
+            // NumPy uses truncation toward zero
+            return decimal.ToUInt16(decimal.Truncate(value));
         }
 
 
@@ -1051,25 +1055,11 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static int ToInt32(double value)
         {
-            if (value >= 0)
+            // NumPy uses truncation toward zero for float->int conversion
+            // This matches np.astype(int) behavior: np.array([1.7, -1.7]).astype(int) -> [1, -1]
+            if (value >= int.MinValue && value <= int.MaxValue)
             {
-                if (value < 2147483647.5)
-                {
-                    int result = (int)value;
-                    double dif = value - result;
-                    if (dif > 0.5 || dif == 0.5 && (result & 1) != 0) result++;
-                    return result;
-                }
-            }
-            else
-            {
-                if (value >= -2147483648.5)
-                {
-                    int result = (int)value;
-                    double dif = value - result;
-                    if (dif < -0.5 || dif == -0.5 && (result & 1) != 0) result--;
-                    return result;
-                }
+                return (int)value;  // C# cast truncates toward zero
             }
 
             throw new OverflowException(("Overflow_Int32"));
@@ -1079,7 +1069,8 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static int ToInt32(decimal value)
         {
-            return Converts.ToInt32(value);
+            // NumPy uses truncation toward zero for decimal->int conversion
+            return decimal.ToInt32(decimal.Truncate(value));
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -1215,12 +1206,10 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static uint ToUInt32(double value)
         {
-            if (value >= -0.5 && value < 4294967295.5)
+            // NumPy uses truncation toward zero for float->int conversion
+            if (value >= 0 && value <= uint.MaxValue)
             {
-                uint result = (uint)value;
-                double dif = value - result;
-                if (dif > 0.5 || dif == 0.5 && (result & 1) != 0) result++;
-                return result;
+                return (uint)value;  // C# cast truncates toward zero
             }
 
             throw new OverflowException(("Overflow_UInt32"));
@@ -1230,7 +1219,8 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static uint ToUInt32(decimal value)
         {
-            return decimal.ToUInt32(decimal.Round(value, 0));
+            // NumPy uses truncation toward zero
+            return decimal.ToUInt32(decimal.Truncate(value));
         }
 
 
@@ -1352,13 +1342,15 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static long ToInt64(double value)
         {
-            return checked((long)Math.Round(value));
+            // NumPy uses truncation toward zero for float->int conversion
+            return checked((long)value);
         }
 
         [MethodImpl(OptimizeAndInline)]
         public static long ToInt64(decimal value)
         {
-            return decimal.ToInt64(decimal.Round(value, 0));
+            // NumPy uses truncation toward zero
+            return decimal.ToInt64(decimal.Truncate(value));
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -1491,14 +1483,16 @@ namespace NumSharp.Utilities
         [MethodImpl(OptimizeAndInline)]
         public static ulong ToUInt64(double value)
         {
-            return checked((ulong)Math.Round(value));
+            // NumPy uses truncation toward zero for float->int conversion
+            return checked((ulong)value);
         }
 
 
         [MethodImpl(OptimizeAndInline)]
         public static ulong ToUInt64(decimal value)
         {
-            return decimal.ToUInt64(decimal.Round(value, 0));
+            // NumPy uses truncation toward zero
+            return decimal.ToUInt64(decimal.Truncate(value));
         }
 
 

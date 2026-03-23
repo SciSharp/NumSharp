@@ -6,123 +6,16 @@ namespace NumSharp
     public partial class NDArray
     {
         /// <summary>
-        /// Positives all negative values.
+        /// Numerical positive, element-wise.
+        /// This is an identity operation - returns +x (a copy of the input).
+        /// Equivalent to np.array(a, copy=True).
         /// </summary>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.positive.html</remarks>
         public NDArray positive()
         {
-            if (this.size == 0)
-                return this.Clone();
-
-            var @out = TensorEngine.Cast(this, dtype ?? this.dtype, copy: true);
-            var len = @out.size;
-
-            unsafe
-            {
-                switch (@out.GetTypeCode)
-                {
-                    case NPTypeCode.Boolean:
-                    {
-                        var out_addr = (bool*)@out.Address;
-                        var addr = (bool*)@out.Address;
-                        for (int i = 0; i < len; i++)
-                            out_addr[i] = !addr[i];
-                        return @out;
-                    }
-#if _REGEN
-                    %foreach supported_numericals_signed,supported_numericals_signed_lowercase%
-	                case NPTypeCode.#1:
-	                {
-                        var out_addr = (#2*)@out.Address;
-
-                        for (int i = 0; i < len; i++) {
-                            var val = out_addr[i];
-                            if (val < 0)
-                                out_addr[i] = -val;
-                        }
-                        return @out;
-	                }
-	                %
-                    %foreach supported_numericals_unsigned,supported_numericals_unsigned_lowercase,supported_numericals_unsigned_defaultvals
-	                case NPTypeCode.#1:
-	                default:
-		                throw new NotSupportedException();
-#else
-	                case NPTypeCode.Int16:
-	                {
-                        var out_addr = (short*)@out.Address;
-
-                        for (int i = 0; i < len; i++) {
-                            var val = out_addr[i];
-                            if (val < 0)
-                                out_addr[i] = (short) -val;
-                        }
-                        return @out;
-	                }
-	                case NPTypeCode.Int32:
-	                {
-                        var out_addr = (int*)@out.Address;
-
-                        for (int i = 0; i < len; i++) {
-                            var val = out_addr[i];
-                            if (val < 0)
-                                out_addr[i] = -val;
-                        }
-                        return @out;
-	                }
-	                case NPTypeCode.Int64:
-	                {
-                        var out_addr = (long*)@out.Address;
-
-                        for (int i = 0; i < len; i++) {
-                            var val = out_addr[i];
-                            if (val < 0)
-                                out_addr[i] = -val;
-                        }
-                        return @out;
-	                }
-	                case NPTypeCode.Double:
-	                {
-                        var out_addr = (double*)@out.Address;
-
-                        for (int i = 0; i < len; i++) {
-                            var val = out_addr[i];
-                            if (val < 0)
-                                out_addr[i] = -val;
-                        }
-                        return @out;
-	                }
-	                case NPTypeCode.Single:
-	                {
-                        var out_addr = (float*)@out.Address;
-
-                        for (int i = 0; i < len; i++) {
-                            var val = out_addr[i];
-                            if (val < 0)
-                                out_addr[i] = -val;
-                        }
-                        return @out;
-	                }
-	                case NPTypeCode.Decimal:
-	                {
-                        var out_addr = (decimal*)@out.Address;
-
-                        for (int i = 0; i < len; i++) {
-                            var val = out_addr[i];
-                            if (val < 0)
-                                out_addr[i] = -val;
-                        }
-                        return @out;
-	                }
-	                case NPTypeCode.Byte:
-	                case NPTypeCode.UInt16:
-	                case NPTypeCode.UInt32:
-	                case NPTypeCode.UInt64:
-	                case NPTypeCode.Char:
-	                default:
-		                throw new NotSupportedException();
-#endif
-                }
-            }
+            // np.positive is the identity function: +x == x
+            // It returns a copy of the array, preserving all values as-is
+            return this.Clone();
         }
     }
 }

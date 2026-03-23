@@ -34,6 +34,12 @@ namespace NumSharp
                 switch (indicesObjects[0])
                 {
                     case NDArray nd:
+                        // Boolean mask indexing: delegate to the specialized NDArray<bool> indexer
+                        if (nd.typecode == NPTypeCode.Boolean)
+                        {
+                            this[nd.MakeGeneric<bool>()] = values;
+                            return;
+                        }
                         SetIndices(this, new NDArray[] {nd}, values);
                         return;
                     case int i:
@@ -488,22 +494,36 @@ namespace NumSharp
                 }
             }
 
-            //based on recently made `computedOffsets` we retreive data -----------------------------------------
+            //based on recently made `computedOffsets` we set data -----------------------------------------
 
             if (!isSubshaped)
             {
                 var idxAddr = computedOffsets.Address;
-                var srcAddr = source.Address;
-                var dst = new NDArray<T>(Shape.Vector(computedOffsets.size), false);
-                T* dstAddr = dst.Address;
-                //indices point to a scalar
-                for (int i = 0; i < dst.size; i++)
-                    dstAddr[i] = *(srcAddr + idxAddr[i]);
-                return;
-                //if (retShape != null)
-                //    return dst.reshape(retShape);
+                var dstAddr = source.Address;
+                var valuesTyped = values.AsOrMakeGeneric<T>();
+                T* valAddr = valuesTyped.Address;
+                var valuesShape = valuesTyped.Shape;
+                int len = computedOffsets.size;
 
-                //return dst;
+                // Handle broadcasting: if values.size == 1, broadcast scalar
+                if (valuesTyped.size == 1)
+                {
+                    T val = *valAddr;
+                    for (int i = 0; i < len; i++)
+                        dstAddr[idxAddr[i]] = val;
+                }
+                else if (valuesShape.IsContiguous)
+                {
+                    for (int i = 0; i < len; i++)
+                        dstAddr[idxAddr[i]] = valAddr[i];
+                }
+                else
+                {
+                    // Non-contiguous values array
+                    for (int i = 0; i < len; i++)
+                        dstAddr[idxAddr[i]] = valAddr[valuesShape.TransformOffset(i)];
+                }
+                return;
             }
             else
             {

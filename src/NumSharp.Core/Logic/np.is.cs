@@ -64,6 +64,20 @@ namespace NumSharp
             => a.TensorEngine.IsNan(a);
 
         /// <summary>
+        /// Test element-wise for positive or negative infinity.
+        /// </summary>
+        /// <param name="a">Input array</param>
+        /// <returns>Boolean array where True indicates the element is positive or negative infinity</returns>
+        /// <remarks>
+        /// NumPy reference: https://numpy.org/doc/stable/reference/generated/numpy.isinf.html
+        /// - Float/Double: True if value is +Inf or -Inf
+        /// - Integer types: Always False (integers cannot be Inf)
+        /// - NaN: Returns False (NaN is not infinity)
+        /// </remarks>
+        public static NDArray<bool> isinf(NDArray a)
+            => a.TensorEngine.IsInf(a);
+
+        /// <summary>
         ///     Returns true incase of a number, bool or string. If null, returns false.
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.isscalar.html</remarks>

@@ -1,48 +1,53 @@
-﻿namespace NumSharp
+namespace NumSharp
 {
     public partial class NumPyRandom
     {
         /// <summary>
-        ///     Generates a random sample from a given 1-D array
+        ///     Generates a random sample from a given 1-D array.
         /// </summary>
-        /// <param name="arr">If an ndarray, a random sample is generated from its elements. If an int, the random sample is generated as if a were np.arange(a)</param>
-        /// <param name="shape">Output shape. If the given shape is, e.g., (m, n, k), then m * n * k samples are drawn. Default is None, in which case a single value is returned.</param>
-        /// <param name="replace">Whether the sample is with or without replacement</param>
-        /// <param name="probabilities">The probabilities associated with each entry in a. If not given the sample assumes a uniform distribution over all entries in a.</param>
-        /// <remarks>https://numpy.org/doc/stable/reference/random/generated/numpy.random.choice.html</remarks>
-        public NDArray choice(NDArray arr, Shape shape = default, bool replace = true, double[] probabilities = null)
+        /// <param name="a">Array to sample from.</param>
+        /// <param name="size">Output shape. Default is None, in which case a single value is returned.</param>
+        /// <param name="replace">Whether the sample is with or without replacement. Default is True.</param>
+        /// <param name="p">The probabilities associated with each entry in a. If not given, the sample assumes a uniform distribution over all entries.</param>
+        /// <returns>The generated random samples.</returns>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.choice.html
+        /// </remarks>
+        public NDArray choice(NDArray a, Shape size = default, bool replace = true, double[] p = null)
         {
-            int arrSize = arr.size;
-            NDArray mask = choice(arrSize, shape, probabilities: probabilities);
-            return arr[mask];
+            int arrSize = a.size;
+            NDArray mask = choice(arrSize, size, replace, p);
+            return a[mask];
         }
 
         /// <summary>
-        ///     Generates a random sample from a given 1-D array
+        ///     Generates a random sample from np.arange(a).
         /// </summary>
-        /// <param name="a">If an ndarray, a random sample is generated from its elements. If an int, the random sample is generated as if a were np.arange(a)</param>
-        /// <param name="shape">Output shape. If the given shape is, e.g., (m, n, k), then m * n * k samples are drawn. Default is None, in which case a single value is returned.</param>
-        /// <param name="replace">Whether the sample is with or without replacement</param>
-        /// <param name="probabilities">The probabilities associated with each entry in a. If not given the sample assumes a uniform distribution over all entries in a.</param>
-        /// <remarks>https://numpy.org/doc/stable/reference/random/generated/numpy.random.choice.html</remarks>
-        public NDArray choice(int a, Shape shape = default, bool replace = true, double[] probabilities = null)
+        /// <param name="a">If an int, the random sample is generated from np.arange(a).</param>
+        /// <param name="size">Output shape. Default is None, in which case a single value is returned.</param>
+        /// <param name="replace">Whether the sample is with or without replacement. Default is True.</param>
+        /// <param name="p">The probabilities associated with each entry. If not given, the sample assumes a uniform distribution.</param>
+        /// <returns>The generated random samples.</returns>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.choice.html
+        /// </remarks>
+        public NDArray choice(int a, Shape size = default, bool replace = true, double[] p = null)
         {
-            if (shape.IsEmpty)
-                shape = Shape.Scalar;
+            if (size.IsEmpty)
+                size = Shape.Scalar;
 
             NDArray arr = np.arange(a);
-            NDArray idx = null;
+            NDArray idx;
 
-            if (probabilities == null)
+            if (p == null)
             {
-                idx = randint(0, arr.size, shape);
+                idx = randint(0, arr.size, size);
             }
             else
             {
-
-                NDArray cdf = np.cumsum(probabilities);
+                NDArray cdf = np.cumsum(p);
                 cdf /= cdf[cdf.size - 1];
-                NDArray uniformSamples = uniform(0, 1, (int[]) shape);
+                NDArray uniformSamples = uniform(0, 1, (int[])size);
                 idx = np.searchsorted(cdf, uniformSamples);
             }
 

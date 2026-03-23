@@ -37,11 +37,11 @@ namespace NumSharp.Backends
         /// <param name="argname">A prefix to put before the error message, typically the name of the argument.</param>
         /// <param name="allow_duplicate">If False, the default, disallow an axis from being specified twice.</param>
         /// <returns>The normalized axis index, such that `0 <= normalized_axis < ndim`</returns>
-        public static int[] normalize_axis_tuple(int[] axis, object argname = null, bool allow_duplicate = false)
+        public static int[] normalize_axis_tuple(int[] axis, int ndim, object argname = null, bool allow_duplicate = false)
         {
             for (int i = 0; i < axis.Length; i++)
             {
-                axis[i] = check_and_adjust_axis(axis.Length, axis[i]);
+                axis[i] = check_and_adjust_axis(ndim, axis[i]);
             }
 
             return allow_duplicate ? (int[])axis.Clone() : axis.Distinct().ToArray();
@@ -59,15 +59,15 @@ namespace NumSharp.Backends
         /// <param name="argname">A prefix to put before the error message, typically the name of the argument.</param>
         /// <param name="allow_duplicate">If False, the default, disallow an axis from being specified twice.</param>
         /// <returns>The normalized axis index, such that `0 <= normalized_axis < ndim`</returns>
-        public static int[] normalize_axis_tuple(int axis, object argname = null, bool allow_duplicate = false)
+        public static int[] normalize_axis_tuple(int axis, int ndim, object argname = null, bool allow_duplicate = false)
         {
-            return normalize_axis_tuple(new int[] {axis}, argname, allow_duplicate);
+            return normalize_axis_tuple(new int[] {axis}, ndim, argname, allow_duplicate);
         }
 
-        public override NDArray MoveAxis(in NDArray nd, int[] source, int[] destinition)
+        public override NDArray MoveAxis(NDArray nd, int[] source, int[] destinition)
         {
-            source = normalize_axis_tuple(source);
-            destinition = normalize_axis_tuple(destinition);
+            source = normalize_axis_tuple(source, nd.ndim);
+            destinition = normalize_axis_tuple(destinition, nd.ndim);
             if (source.Length != destinition.Length)
                 throw new Exception("`source` and `destination` arguments must have the same number of elements'");
 
@@ -79,7 +79,7 @@ namespace NumSharp.Backends
             return Transpose(nd, order.ToArray());
         }
 
-        public override NDArray SwapAxes(in NDArray nd, int axis1, int axis2)
+        public override NDArray SwapAxes(NDArray nd, int axis1, int axis2)
         {
             var ndims = nd.ndim;
             var dims = new int[ndims];
@@ -95,7 +95,7 @@ namespace NumSharp.Backends
             return Transpose(nd, dims);
         }
 
-        public override NDArray RollAxis(in NDArray nd, int axis, int start = 0)
+        public override NDArray RollAxis(NDArray nd, int axis, int start = 0)
         {
             axis = check_and_adjust_axis(nd, axis);
             int n = nd.ndim;
@@ -120,7 +120,7 @@ namespace NumSharp.Backends
             return Transpose(nd, premutes.ToArray());
         }
 
-        public override NDArray Transpose(in NDArray nd, int[] premute = null)
+        public override NDArray Transpose(NDArray nd, int[] premute = null)
         {
             int i, n;
             var permutation = new int[nd.ndim];

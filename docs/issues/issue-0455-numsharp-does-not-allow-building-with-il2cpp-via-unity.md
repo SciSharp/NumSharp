@@ -8,12 +8,12 @@
 
 ## Description
 
-Hi, I am having trouble with building an Android app that is using a NumSharp package in Unity. 
-
-This is the error that I keep receiving:
-IL2CPP error for type 'NumSharp.LAPACKProviderType' in assembly '/UnityProject/Temp/StagingArea/assets/bin/Data/Managed/NumSharp.Core.dll'
-Additional information: Value of type 'int' is too large to convert to short.
-
+Hi, I am having trouble with building an Android app that is using a NumSharp package in Unity. 
+
+This is the error that I keep receiving:
+IL2CPP error for type 'NumSharp.LAPACKProviderType' in assembly '/UnityProject/Temp/StagingArea/assets/bin/Data/Managed/NumSharp.Core.dll'
+Additional information: Value of type 'int' is too large to convert to short.
+
 Any help would be much appreciated! Thanks
 
 ## Comments

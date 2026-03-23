@@ -9,8 +9,8 @@
 
 ## Description
 
-Do we have a C# version of something like this?
-https://github.com/lars76/kmeans-anchor-boxes
+Do we have a C# version of something like this?
+https://github.com/lars76/kmeans-anchor-boxes
 
 
 ## Comments
