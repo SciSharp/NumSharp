@@ -8,9 +8,9 @@
 
 ## Description
 
-hi,
-
-currently the sourcode just returns null, shouldn't the commented code work?
-
-
+hi,
+
+currently the sourcode just returns null, shouldn't the commented code work?
+
+
 https://github.com/SciSharp/NumSharp/blob/843309e7e873bfb0bec2d6e56b3dcba4b9e723e0/src/NumSharp.Core/Manipulation/NdArray.delete.cs#L9

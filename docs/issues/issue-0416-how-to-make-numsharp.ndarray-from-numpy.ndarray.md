@@ -14,15 +14,15 @@ _No description provided._
 
 ### Comment 1 by @djagatiya (2020-07-07T05:43:56Z)
 
-I found a solution, but is this the right way to do it?
-
-```
-Numpy.NDarray numpyArray = Numpy.np.random.randn(224,224,3);
-byte[] v = numpyArray.GetData<byte>();
-fixed (byte* packet = v)
-{
-    var block = new UnmanagedMemoryBlock<byte>(packet, v.Length);
-    var storage = new UnmanagedStorage(new ArraySlice<byte>(block), numpyArray.shape.Dimensions);
-    NumSharp.NDArray numSharpArray = new NumSharp.NDArray(storage);
-}
+I found a solution, but is this the right way to do it?
+
+```
+Numpy.NDarray numpyArray = Numpy.np.random.randn(224,224,3);
+byte[] v = numpyArray.GetData<byte>();
+fixed (byte* packet = v)
+{
+    var block = new UnmanagedMemoryBlock<byte>(packet, v.Length);
+    var storage = new UnmanagedStorage(new ArraySlice<byte>(block), numpyArray.shape.Dimensions);
+    NumSharp.NDArray numSharpArray = new NumSharp.NDArray(storage);
+}
 ```

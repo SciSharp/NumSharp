@@ -8,7 +8,7 @@
 
 ## Description
 
-Both library complement the functionality of **Numpy** library. There are some lack for methods between. So I want to know the converting method. 
+Both library complement the functionality of **Numpy** library. There are some lack for methods between. So I want to know the converting method. 
 Give me a hand~
 
 ## Comments

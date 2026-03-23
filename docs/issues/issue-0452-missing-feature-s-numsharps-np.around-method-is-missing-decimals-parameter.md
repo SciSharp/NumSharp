@@ -8,8 +8,8 @@
 
 ## Description
 
-In NumPy user has control over on how many decimal places the floating point number can be rounded to by setting **decimal** argument in **[numpy.around()](https://numpy.org/doc/stable/reference/generated/numpy.around.html)** method.
-
-However, NumSharp is missing this functionality.
-
+In NumPy user has control over on how many decimal places the floating point number can be rounded to by setting **decimal** argument in **[numpy.around()](https://numpy.org/doc/stable/reference/generated/numpy.around.html)** method.
+
+However, NumSharp is missing this functionality.
+
 It would be better if this feature is added to NumSharp's np.around() method.

@@ -8,19 +8,19 @@
 
 ## Description
 
- public static void ExtractPixelsArgb(DenseTensor<float> tensor, Span<byte> data, int pixelCount)
- {
-     Span<float> spanR = tensor.Buffer.Span;
-     Span<float> spanG = spanR[pixelCount..];
-     Span<float> spanB = spanG[pixelCount..];
-
-     int sidx = 0;
-     for (int i = 0; i < pixelCount; i++)
-     {
-         spanR[i] = data[sidx + 2] * 0.0039215686274509803921568627451f;
-         spanG[i] = data[sidx + 1] * 0.0039215686274509803921568627451f;
-         spanB[i] = data[sidx] * 0.0039215686274509803921568627451f;
-         sidx += 4;
-     }
- }
+ public static void ExtractPixelsArgb(DenseTensor<float> tensor, Span<byte> data, int pixelCount)
+ {
+     Span<float> spanR = tensor.Buffer.Span;
+     Span<float> spanG = spanR[pixelCount..];
+     Span<float> spanB = spanG[pixelCount..];
+
+     int sidx = 0;
+     for (int i = 0; i < pixelCount; i++)
+     {
+         spanR[i] = data[sidx + 2] * 0.0039215686274509803921568627451f;
+         spanG[i] = data[sidx + 1] * 0.0039215686274509803921568627451f;
+         spanB[i] = data[sidx] * 0.0039215686274509803921568627451f;
+         sidx += 4;
+     }
+ }
 Is there a faster way than this?

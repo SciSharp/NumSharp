@@ -14,5 +14,5 @@ I can't find anything that maps onto `numpy.unravel_index` - is it missing from 
 
 ### Comment 1 by @ChengYen-Tang (2022-09-09T18:40:19Z)
 
-I found a more complete package, maybe you can try it.
+I found a more complete package, maybe you can try it.
 https://github.com/Quansight-Labs/numpy.net

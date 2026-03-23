@@ -8,12 +8,12 @@
 
 ## Description
 
-Here is a link to what I think is the python sources for np.linalg:
-https://github.com/numpy/numpy/blob/master/numpy/linalg/linalg.py
-
-Other implementations:
-https://github.com/TheAlgorithms/C-Sharp/blob/master/Algorithms/Numeric/Pseudoinverse/PseudoInverse.cs
-https://github.com/accord-net/framework/blob/master/Sources/Accord.Math/Matrix/Matrix.Linear.Generated.cs#L298
+Here is a link to what I think is the python sources for np.linalg:
+https://github.com/numpy/numpy/blob/master/numpy/linalg/linalg.py
+
+Other implementations:
+https://github.com/TheAlgorithms/C-Sharp/blob/master/Algorithms/Numeric/Pseudoinverse/PseudoInverse.cs
+https://github.com/accord-net/framework/blob/master/Sources/Accord.Math/Matrix/Matrix.Linear.Generated.cs#L298
 
 
 ## Comments

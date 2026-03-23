@@ -8,7 +8,7 @@
 
 ## Description
 
-how to read .csv file or .txt file wiht Numsharp(np) in C#?
+how to read .csv file or .txt file wiht Numsharp(np) in C#?
 is it np.load(string filename)?
 
 ## Comments

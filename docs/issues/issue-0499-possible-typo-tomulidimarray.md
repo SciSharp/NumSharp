@@ -8,10 +8,10 @@
 
 ## Description
 
-Hi, recently I've been using this library and stumbled upon this method.
-
-https://github.com/SciSharp/NumSharp/blob/1fed94d2e556a7fdfc815775db68f9c8f195298a/src/NumSharp.Core/Casting/NdArrayToMultiDimArray.cs#L31
-
+Hi, recently I've been using this library and stumbled upon this method.
+
+https://github.com/SciSharp/NumSharp/blob/1fed94d2e556a7fdfc815775db68f9c8f195298a/src/NumSharp.Core/Casting/NdArrayToMultiDimArray.cs#L31
+
 Is `ToMuliDimArray()` typo of `ToMultiDimArray()`?
 
 ## Comments

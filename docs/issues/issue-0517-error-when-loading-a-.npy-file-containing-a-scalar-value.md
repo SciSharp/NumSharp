@@ -8,5 +8,5 @@
 
 ## Description
 
-Due to an off-by-one error, `np.load` fails to parse the file's header when `shape = ()` and triggers an `ArgumentOutOfRangeException`
+Due to an off-by-one error, `np.load` fails to parse the file's header when `shape = ()` and triggers an `ArgumentOutOfRangeException`
 (Also, the function doesn't consider this possibility when calculating the size of the underlying buffer).

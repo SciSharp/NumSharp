@@ -10,6 +10,6 @@
 
 ## Description
 
-Runing YOLO with `ndarray-indexing` branch.
-![image](https://user-images.githubusercontent.com/1705364/69483632-54d7e000-0def-11ea-99b4-3b2863490b39.png)
+Runing YOLO with `ndarray-indexing` branch.
+![image](https://user-images.githubusercontent.com/1705364/69483632-54d7e000-0def-11ea-99b4-3b2863490b39.png)
 

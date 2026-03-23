@@ -10,7 +10,7 @@
 
 ## Description
 
-Inner product of two arrays.
-https://docs.scipy.org/doc/numpy-1.15.1/reference/generated/numpy.inner.html#numpy.inner
-
+Inner product of two arrays.
+https://docs.scipy.org/doc/numpy-1.15.1/reference/generated/numpy.inner.html#numpy.inner
+
 `ndarray.inner` should be put in `LinearAlgebra` folder.
