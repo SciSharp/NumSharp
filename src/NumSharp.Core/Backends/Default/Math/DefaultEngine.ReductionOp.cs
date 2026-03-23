@@ -219,6 +219,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// Execute element-wise argmax reduction using IL kernels.
         /// Returns the index of the maximum value.
+        /// All types including Boolean, Single, Double now use unified IL kernel path.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         protected long argmax_elementwise_il(NDArray arr)
@@ -230,11 +231,10 @@ namespace NumSharp.Backends
 
             // ArgMax returns long (int64) to match NumPy 2.x behavior
             // Internally uses int kernels (arrays rarely exceed 2^31 elements), widens to long for API
-            // For floating point types, use scalar implementation which handles NaN correctly (NumPy: first NaN wins)
-            // For Boolean, use scalar implementation (IL doesn't support bool comparison directly)
+            // All types use IL kernels - NaN-aware helpers for float/double, bool-aware for boolean
             return inputType switch
             {
-                NPTypeCode.Boolean => (long)(int)argmax_elementwise(arr),  // Boolean scalar path
+                NPTypeCode.Boolean => ExecuteElementReduction<int>(arr, ReductionOp.ArgMax, NPTypeCode.Boolean),
                 NPTypeCode.Byte => ExecuteElementReduction<int>(arr, ReductionOp.ArgMax, NPTypeCode.Byte),
                 NPTypeCode.Int16 => ExecuteElementReduction<int>(arr, ReductionOp.ArgMax, NPTypeCode.Int16),
                 NPTypeCode.UInt16 => ExecuteElementReduction<int>(arr, ReductionOp.ArgMax, NPTypeCode.UInt16),
@@ -242,8 +242,8 @@ namespace NumSharp.Backends
                 NPTypeCode.UInt32 => ExecuteElementReduction<int>(arr, ReductionOp.ArgMax, NPTypeCode.UInt32),
                 NPTypeCode.Int64 => ExecuteElementReduction<int>(arr, ReductionOp.ArgMax, NPTypeCode.Int64),
                 NPTypeCode.UInt64 => ExecuteElementReduction<int>(arr, ReductionOp.ArgMax, NPTypeCode.UInt64),
-                NPTypeCode.Single => (long)(int)argmax_elementwise(arr),  // NaN-aware scalar path
-                NPTypeCode.Double => (long)(int)argmax_elementwise(arr),  // NaN-aware scalar path
+                NPTypeCode.Single => ExecuteElementReduction<int>(arr, ReductionOp.ArgMax, NPTypeCode.Single),
+                NPTypeCode.Double => ExecuteElementReduction<int>(arr, ReductionOp.ArgMax, NPTypeCode.Double),
                 NPTypeCode.Decimal => ExecuteElementReduction<int>(arr, ReductionOp.ArgMax, NPTypeCode.Decimal),
                 _ => throw new NotSupportedException($"ArgMax not supported for type {inputType}")
             };
@@ -252,6 +252,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// Execute element-wise argmin reduction using IL kernels.
         /// Returns the index of the minimum value.
+        /// All types including Boolean, Single, Double now use unified IL kernel path.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         protected long argmin_elementwise_il(NDArray arr)
@@ -263,11 +264,10 @@ namespace NumSharp.Backends
 
             // ArgMin returns long (int64) to match NumPy 2.x behavior
             // Internally uses int kernels (arrays rarely exceed 2^31 elements), widens to long for API
-            // For floating point types, use scalar implementation which handles NaN correctly (NumPy: first NaN wins)
-            // For Boolean, use scalar implementation (IL doesn't support bool comparison directly)
+            // All types use IL kernels - NaN-aware helpers for float/double, bool-aware for boolean
             return inputType switch
             {
-                NPTypeCode.Boolean => (long)(int)argmin_elementwise(arr),  // Boolean scalar path
+                NPTypeCode.Boolean => ExecuteElementReduction<int>(arr, ReductionOp.ArgMin, NPTypeCode.Boolean),
                 NPTypeCode.Byte => ExecuteElementReduction<int>(arr, ReductionOp.ArgMin, NPTypeCode.Byte),
                 NPTypeCode.Int16 => ExecuteElementReduction<int>(arr, ReductionOp.ArgMin, NPTypeCode.Int16),
                 NPTypeCode.UInt16 => ExecuteElementReduction<int>(arr, ReductionOp.ArgMin, NPTypeCode.UInt16),
@@ -275,8 +275,8 @@ namespace NumSharp.Backends
                 NPTypeCode.UInt32 => ExecuteElementReduction<int>(arr, ReductionOp.ArgMin, NPTypeCode.UInt32),
                 NPTypeCode.Int64 => ExecuteElementReduction<int>(arr, ReductionOp.ArgMin, NPTypeCode.Int64),
                 NPTypeCode.UInt64 => ExecuteElementReduction<int>(arr, ReductionOp.ArgMin, NPTypeCode.UInt64),
-                NPTypeCode.Single => (long)(int)argmin_elementwise(arr),  // NaN-aware scalar path
-                NPTypeCode.Double => (long)(int)argmin_elementwise(arr),  // NaN-aware scalar path
+                NPTypeCode.Single => ExecuteElementReduction<int>(arr, ReductionOp.ArgMin, NPTypeCode.Single),
+                NPTypeCode.Double => ExecuteElementReduction<int>(arr, ReductionOp.ArgMin, NPTypeCode.Double),
                 NPTypeCode.Decimal => ExecuteElementReduction<int>(arr, ReductionOp.ArgMin, NPTypeCode.Decimal),
                 _ => throw new NotSupportedException($"ArgMin not supported for type {inputType}")
             };

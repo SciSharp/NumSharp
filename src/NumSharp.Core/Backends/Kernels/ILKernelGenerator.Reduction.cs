@@ -787,6 +787,10 @@ namespace NumSharp.Backends.Kernels
         {
             switch (type)
             {
+                case NPTypeCode.Boolean:
+                    // For boolean, min is false (0)
+                    il.Emit(OpCodes.Ldc_I4_0);
+                    break;
                 case NPTypeCode.Byte:
                     il.Emit(OpCodes.Ldc_I4, (int)byte.MinValue);
                     break;
@@ -830,6 +834,10 @@ namespace NumSharp.Backends.Kernels
         {
             switch (type)
             {
+                case NPTypeCode.Boolean:
+                    // For boolean, max is true (1)
+                    il.Emit(OpCodes.Ldc_I4_1);
+                    break;
                 case NPTypeCode.Byte:
                     il.Emit(OpCodes.Ldc_I4, (int)byte.MaxValue);
                     break;
@@ -1229,11 +1237,30 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Emit ArgMax/ArgMin step - compare new value with accumulator, update index if better.
         /// Stack has [newValue]. Updates locAccum and locIdx.
+        /// For float/double, handles NaN correctly: first NaN always wins (NumPy behavior).
+        /// For boolean, handles True > False (ArgMax) and False < True (ArgMin).
         /// </summary>
         private static void EmitArgReductionStep(ILGenerator il, ReductionOp op, NPTypeCode type,
             LocalBuilder locAccum, LocalBuilder locIdx, LocalBuilder locI)
         {
-            // newValue is on stack, compare with locAccum
+            // For float/double, need NaN-aware comparison
+            // NumPy: first NaN always wins
+            // Condition: (newValue > accum) || (IsNaN(newValue) && !IsNaN(accum))  [ArgMax]
+            //           (newValue < accum) || (IsNaN(newValue) && !IsNaN(accum))  [ArgMin]
+            if (type == NPTypeCode.Single || type == NPTypeCode.Double)
+            {
+                EmitArgReductionStepNaN(il, op, type, locAccum, locIdx, locI);
+                return;
+            }
+
+            // For Boolean, special handling: True > False for ArgMax, False < True for ArgMin
+            if (type == NPTypeCode.Boolean)
+            {
+                EmitArgReductionStepBool(il, op, locAccum, locIdx, locI);
+                return;
+            }
+
+            // For non-floating, non-boolean types, simple comparison
             var lblSkip = il.DefineLabel();
 
             il.Emit(OpCodes.Dup); // [newValue, newValue]
@@ -1266,6 +1293,102 @@ namespace NumSharp.Backends.Kernels
             il.MarkLabel(lblSkip);
             // Not better, pop newValue
             il.Emit(OpCodes.Pop);
+
+            il.MarkLabel(lblEnd);
+        }
+
+        /// <summary>
+        /// Emit Boolean ArgMax/ArgMin step.
+        /// For ArgMax: True > False, so update if newValue is True and accum is False.
+        /// For ArgMin: False < True, so update if newValue is False and accum is True.
+        /// </summary>
+        private static void EmitArgReductionStepBool(ILGenerator il, ReductionOp op,
+            LocalBuilder locAccum, LocalBuilder locIdx, LocalBuilder locI)
+        {
+            var lblSkip = il.DefineLabel();
+            var lblEnd = il.DefineLabel();
+
+            // Stack: [newValue]
+            il.Emit(OpCodes.Dup); // [newValue, newValue]
+
+            if (op == ReductionOp.ArgMax)
+            {
+                // ArgMax: update if newValue=True && accum=False
+                // i.e., if newValue && !accum
+                il.Emit(OpCodes.Brfalse, lblSkip); // if newValue is False, skip
+
+                // newValue is True, check if accum is False
+                il.Emit(OpCodes.Ldloc, locAccum);
+                il.Emit(OpCodes.Brtrue, lblSkip); // if accum is True, skip (already have True)
+            }
+            else // ArgMin
+            {
+                // ArgMin: update if newValue=False && accum=True
+                // i.e., if !newValue && accum
+                il.Emit(OpCodes.Brtrue, lblSkip); // if newValue is True, skip
+
+                // newValue is False, check if accum is True
+                il.Emit(OpCodes.Ldloc, locAccum);
+                il.Emit(OpCodes.Brfalse, lblSkip); // if accum is False, skip (already have False)
+            }
+
+            // Update: newValue is better
+            // Stack: [newValue]
+            il.Emit(OpCodes.Stloc, locAccum);
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Stloc, locIdx);
+            il.Emit(OpCodes.Br, lblEnd);
+
+            il.MarkLabel(lblSkip);
+            il.Emit(OpCodes.Pop); // discard newValue
+
+            il.MarkLabel(lblEnd);
+        }
+
+        /// <summary>
+        /// Emit NaN-aware ArgMax/ArgMin step for float/double.
+        /// Condition: (newValue > accum) || (IsNaN(newValue) && !IsNaN(accum))
+        /// </summary>
+        private static void EmitArgReductionStepNaN(ILGenerator il, ReductionOp op, NPTypeCode type,
+            LocalBuilder locAccum, LocalBuilder locIdx, LocalBuilder locI)
+        {
+            var isNaNMethod = type == NPTypeCode.Single ? CachedMethods.FloatIsNaN : CachedMethods.DoubleIsNaN;
+
+            var lblUpdate = il.DefineLabel();
+            var lblSkip = il.DefineLabel();
+            var lblEnd = il.DefineLabel();
+
+            // Stack: [newValue]
+            il.Emit(OpCodes.Dup); // [newValue, newValue]
+
+            // First check: newValue > accum (ArgMax) or newValue < accum (ArgMin)
+            il.Emit(OpCodes.Ldloc, locAccum); // [newValue, newValue, accum]
+            if (op == ReductionOp.ArgMax)
+                il.Emit(OpCodes.Bgt_Un, lblUpdate); // NaN comparisons: Bgt_Un branches if unordered or greater
+            else
+                il.Emit(OpCodes.Blt_Un, lblUpdate); // NaN comparisons: Blt_Un branches if unordered or less
+
+            // Stack: [newValue]
+            // Second check: IsNaN(newValue) && !IsNaN(accum)
+            il.Emit(OpCodes.Dup); // [newValue, newValue]
+            il.EmitCall(OpCodes.Call, isNaNMethod, null); // [newValue, isNaN(newValue)]
+            il.Emit(OpCodes.Brfalse, lblSkip); // if !IsNaN(newValue), skip
+
+            // IsNaN(newValue) is true, check !IsNaN(accum)
+            il.Emit(OpCodes.Ldloc, locAccum);
+            il.EmitCall(OpCodes.Call, isNaNMethod, null);
+            il.Emit(OpCodes.Brtrue, lblSkip); // if IsNaN(accum), skip (accum already has NaN)
+
+            // Fall through: IsNaN(newValue) && !IsNaN(accum) -> update
+            il.MarkLabel(lblUpdate);
+            // Stack: [newValue]
+            il.Emit(OpCodes.Stloc, locAccum);
+            il.Emit(OpCodes.Ldloc, locI);
+            il.Emit(OpCodes.Stloc, locIdx);
+            il.Emit(OpCodes.Br, lblEnd);
+
+            il.MarkLabel(lblSkip);
+            il.Emit(OpCodes.Pop); // discard newValue
 
             il.MarkLabel(lblEnd);
         }

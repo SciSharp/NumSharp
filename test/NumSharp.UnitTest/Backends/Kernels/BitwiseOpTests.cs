@@ -227,7 +227,6 @@ public class BitwiseOpTests
     #region Broadcasting Tests
 
     [Test]
-    [OpenBugs] // Bitwise broadcasting may have issues
     public void BitwiseAnd_2D_With_1D_Broadcasting()
     {
         // NumPy: [[True, False], [True, False]] & [True, False]
@@ -237,14 +236,13 @@ public class BitwiseOpTests
         var result = a & b;
 
         result.Should().BeShaped(2, 2);
-        Assert.IsTrue(result.GetBoolean(0));
-        Assert.IsFalse(result.GetBoolean(1));
-        Assert.IsTrue(result.GetBoolean(2));
-        Assert.IsFalse(result.GetBoolean(3));
+        Assert.IsTrue((bool)result[0, 0]);
+        Assert.IsFalse((bool)result[0, 1]);
+        Assert.IsTrue((bool)result[1, 0]);
+        Assert.IsFalse((bool)result[1, 1]);
     }
 
     [Test]
-    [OpenBugs] // Bitwise broadcasting may have issues
     public void BitwiseOr_2D_With_1D_Broadcasting()
     {
         var a = np.array(new[,] { { true, false }, { false, false } });
@@ -252,10 +250,10 @@ public class BitwiseOpTests
         var result = a | b;
 
         result.Should().BeShaped(2, 2);
-        Assert.IsTrue(result.GetBoolean(0));
-        Assert.IsTrue(result.GetBoolean(1));
-        Assert.IsFalse(result.GetBoolean(2));
-        Assert.IsTrue(result.GetBoolean(3));
+        Assert.IsTrue((bool)result[0, 0]);
+        Assert.IsTrue((bool)result[0, 1]);
+        Assert.IsFalse((bool)result[1, 0]);
+        Assert.IsTrue((bool)result[1, 1]);
     }
 
     [Test]

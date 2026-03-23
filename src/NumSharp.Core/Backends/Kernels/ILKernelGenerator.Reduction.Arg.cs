@@ -26,19 +26,50 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Emit ArgMax/ArgMin SIMD loop.
         /// Uses helper methods for clean implementation with SIMD index tracking.
+        /// Dispatches to type-specific helpers for NaN-awareness (float/double) and Boolean.
         /// </summary>
         private static void EmitArgMaxMinSimdLoop(ILGenerator il, ElementReductionKernelKey key, int inputSize)
         {
-            var helperMethod = typeof(ILKernelGenerator).GetMethod(
-                key.Op == ReductionOp.ArgMax ? nameof(ArgMaxSimdHelper) : nameof(ArgMinSimdHelper),
-                BindingFlags.NonPublic | BindingFlags.Static);
+            // Dispatch to specialized helpers for types needing special handling
+            MethodInfo helperMethod;
+            bool isGeneric = true;
 
-            var genericHelper = helperMethod!.MakeGenericMethod(GetClrType(key.InputType));
+            if (key.InputType == NPTypeCode.Single)
+            {
+                helperMethod = typeof(ILKernelGenerator).GetMethod(
+                    key.Op == ReductionOp.ArgMax ? nameof(ArgMaxFloatNaNHelper) : nameof(ArgMinFloatNaNHelper),
+                    BindingFlags.NonPublic | BindingFlags.Static)!;
+                isGeneric = false;
+            }
+            else if (key.InputType == NPTypeCode.Double)
+            {
+                helperMethod = typeof(ILKernelGenerator).GetMethod(
+                    key.Op == ReductionOp.ArgMax ? nameof(ArgMaxDoubleNaNHelper) : nameof(ArgMinDoubleNaNHelper),
+                    BindingFlags.NonPublic | BindingFlags.Static)!;
+                isGeneric = false;
+            }
+            else if (key.InputType == NPTypeCode.Boolean)
+            {
+                helperMethod = typeof(ILKernelGenerator).GetMethod(
+                    key.Op == ReductionOp.ArgMax ? nameof(ArgMaxBoolHelper) : nameof(ArgMinBoolHelper),
+                    BindingFlags.NonPublic | BindingFlags.Static)!;
+                isGeneric = false;
+            }
+            else
+            {
+                // Generic SIMD path for integer types
+                helperMethod = typeof(ILKernelGenerator).GetMethod(
+                    key.Op == ReductionOp.ArgMax ? nameof(ArgMaxSimdHelper) : nameof(ArgMinSimdHelper),
+                    BindingFlags.NonPublic | BindingFlags.Static)!;
+            }
 
-            // Call helper: ArgMaxSimdHelper<T>(input, totalSize) or ArgMinSimdHelper<T>(input, totalSize)
+            if (isGeneric)
+                helperMethod = helperMethod.MakeGenericMethod(GetClrType(key.InputType));
+
+            // Call helper: *Helper(input, totalSize)
             il.Emit(OpCodes.Ldarg_0); // input
             il.Emit(OpCodes.Ldarg_S, (byte)4); // totalSize
-            il.EmitCall(OpCodes.Call, genericHelper, null);
+            il.EmitCall(OpCodes.Call, helperMethod, null);
 
             // Result (int) is already on stack
         }
@@ -308,6 +339,170 @@ namespace NumSharp.Backends.Kernels
                 }
                 return bestIndex;
             }
+        }
+
+        #endregion
+
+        #region NaN-Aware ArgMax/ArgMin Helpers (Float/Double)
+
+        /// <summary>
+        /// ArgMax helper for float with NaN awareness.
+        /// NumPy behavior: first NaN always wins (considered "maximum").
+        /// </summary>
+        internal static unsafe int ArgMaxFloatNaNHelper(void* input, int totalSize)
+        {
+            if (totalSize == 0) return -1;
+            if (totalSize == 1) return 0;
+
+            float* src = (float*)input;
+            float bestValue = src[0];
+            int bestIndex = 0;
+
+            for (int i = 1; i < totalSize; i++)
+            {
+                float val = src[i];
+                // NumPy: first NaN always wins
+                if (val > bestValue || (float.IsNaN(val) && !float.IsNaN(bestValue)))
+                {
+                    bestValue = val;
+                    bestIndex = i;
+                }
+            }
+            return bestIndex;
+        }
+
+        /// <summary>
+        /// ArgMin helper for float with NaN awareness.
+        /// NumPy behavior: first NaN always wins (considered "minimum").
+        /// </summary>
+        internal static unsafe int ArgMinFloatNaNHelper(void* input, int totalSize)
+        {
+            if (totalSize == 0) return -1;
+            if (totalSize == 1) return 0;
+
+            float* src = (float*)input;
+            float bestValue = src[0];
+            int bestIndex = 0;
+
+            for (int i = 1; i < totalSize; i++)
+            {
+                float val = src[i];
+                // NumPy: first NaN always wins
+                if (val < bestValue || (float.IsNaN(val) && !float.IsNaN(bestValue)))
+                {
+                    bestValue = val;
+                    bestIndex = i;
+                }
+            }
+            return bestIndex;
+        }
+
+        /// <summary>
+        /// ArgMax helper for double with NaN awareness.
+        /// NumPy behavior: first NaN always wins (considered "maximum").
+        /// </summary>
+        internal static unsafe int ArgMaxDoubleNaNHelper(void* input, int totalSize)
+        {
+            if (totalSize == 0) return -1;
+            if (totalSize == 1) return 0;
+
+            double* src = (double*)input;
+            double bestValue = src[0];
+            int bestIndex = 0;
+
+            for (int i = 1; i < totalSize; i++)
+            {
+                double val = src[i];
+                // NumPy: first NaN always wins
+                if (val > bestValue || (double.IsNaN(val) && !double.IsNaN(bestValue)))
+                {
+                    bestValue = val;
+                    bestIndex = i;
+                }
+            }
+            return bestIndex;
+        }
+
+        /// <summary>
+        /// ArgMin helper for double with NaN awareness.
+        /// NumPy behavior: first NaN always wins (considered "minimum").
+        /// </summary>
+        internal static unsafe int ArgMinDoubleNaNHelper(void* input, int totalSize)
+        {
+            if (totalSize == 0) return -1;
+            if (totalSize == 1) return 0;
+
+            double* src = (double*)input;
+            double bestValue = src[0];
+            int bestIndex = 0;
+
+            for (int i = 1; i < totalSize; i++)
+            {
+                double val = src[i];
+                // NumPy: first NaN always wins
+                if (val < bestValue || (double.IsNaN(val) && !double.IsNaN(bestValue)))
+                {
+                    bestValue = val;
+                    bestIndex = i;
+                }
+            }
+            return bestIndex;
+        }
+
+        #endregion
+
+        #region Boolean ArgMax/ArgMin Helpers
+
+        /// <summary>
+        /// ArgMax helper for boolean arrays.
+        /// Boolean: True=1, False=0, so argmax finds first True.
+        /// </summary>
+        internal static unsafe int ArgMaxBoolHelper(void* input, int totalSize)
+        {
+            if (totalSize == 0) return -1;
+            if (totalSize == 1) return 0;
+
+            bool* src = (bool*)input;
+            bool bestValue = src[0];
+            int bestIndex = 0;
+
+            // If first is already True, we can't do better
+            if (bestValue) return 0;
+
+            for (int i = 1; i < totalSize; i++)
+            {
+                if (src[i]) // True > False
+                {
+                    return i; // First True found
+                }
+            }
+            return bestIndex; // All False, return 0
+        }
+
+        /// <summary>
+        /// ArgMin helper for boolean arrays.
+        /// Boolean: True=1, False=0, so argmin finds first False.
+        /// </summary>
+        internal static unsafe int ArgMinBoolHelper(void* input, int totalSize)
+        {
+            if (totalSize == 0) return -1;
+            if (totalSize == 1) return 0;
+
+            bool* src = (bool*)input;
+            bool bestValue = src[0];
+            int bestIndex = 0;
+
+            // If first is already False, we can't do better
+            if (!bestValue) return 0;
+
+            for (int i = 1; i < totalSize; i++)
+            {
+                if (!src[i]) // False < True
+                {
+                    return i; // First False found
+                }
+            }
+            return bestIndex; // All True, return 0
         }
 
         #endregion
