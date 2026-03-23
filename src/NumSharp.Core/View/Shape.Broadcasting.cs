@@ -7,7 +7,7 @@ namespace NumSharp
     ///     Broadcasting operations for Shape.
     /// </summary>
     /// <remarks>
-    ///     Based on https://docs.scipy.org/doc/numpy-1.16.1/user/basics.broadcasting.html
+    ///     Based on https://numpy.org/doc/stable-1.16.1/user/basics.broadcasting.html
     ///     These are pure shape operations - they compute output shapes without touching array data.
     /// </remarks>
     public partial struct Shape

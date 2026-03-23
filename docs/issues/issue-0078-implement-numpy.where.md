@@ -10,7 +10,7 @@
 ## Description
 
 Return elements, either from x or y, depending on condition.
-https://docs.scipy.org/doc/numpy-1.13.0/reference/generated/numpy.where.html
+https://numpy.org/doc/stable-1.13.0/reference/generated/numpy.where.html
 
 ## Comments
 

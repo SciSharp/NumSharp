@@ -28,7 +28,7 @@ Most of the code in commented and return as null
 
 ### Comment 3 by @Nucs (2019-10-06T09:03:06Z)
 
-I misunderstood [np.where](https://docs.scipy.org/doc/numpy/reference/generated/numpy.where.html), I was sure that the first argument is something of a sort of Expression<Func<..., bool>>.
+I misunderstood [np.where](https://numpy.org/doc/stable/reference/generated/numpy.where.html), I was sure that the first argument is something of a sort of Expression<Func<..., bool>>.
 I'll need to implement each (comparing) operator separately and np.where will work then.
 I'll open up a separate issue for that. This might take a while as I'm unavailable (sunday is not a day off in my country 😅)
 

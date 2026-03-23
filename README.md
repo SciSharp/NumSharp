@@ -17,8 +17,8 @@ Here is a comparison code between NumSharp and NumPy (left is python, right is C
 
 ### Bold Features
 * Use of Unmanaged Memory and fast unsafe algorithms.
-* [Broadcasting](https://docs.scipy.org/doc/numpy-1.15.0/user/basics.broadcasting.html) n-d shapes against each other. ([intro](https://machinelearningmastery.com/broadcasting-with-numpy-arrays/))
-* [NDArray Slicing](https://docs.scipy.org/doc/numpy/reference/arrays.indexing.html) and nested/recusive slicing (`nd["-1, ::2"]["1::3, :, 0"]`)
+* [Broadcasting](https://numpy.org/doc/stable-1.15.0/user/basics.broadcasting.html) n-d shapes against each other. ([intro](https://machinelearningmastery.com/broadcasting-with-numpy-arrays/))
+* [NDArray Slicing](https://numpy.org/doc/stable/reference/arrays.indexing.html) and nested/recusive slicing (`nd["-1, ::2"]["1::3, :, 0"]`)
 * Axis iteration and support in all of our implemented functions.
 * Full and precise (to numpy) automatic type resolving and conversion (upcasting, downcasting and other cases)
 * Non-copy - most cases, similarly to numpy, does not perform copying but returns a view instead.

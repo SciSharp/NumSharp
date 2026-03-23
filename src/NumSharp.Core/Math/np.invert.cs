@@ -34,7 +34,7 @@ namespace NumSharp
         /// <param name="x">Only integer and boolean types are handled.</param>
         /// <param name="outType">The dtype the returned ndarray should be of.</param>
         /// <returns>Result. This is a scalar if x is a scalar.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.bitwise_not.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.invert.html</remarks>
         public static NDArray bitwise_not(in NDArray x, NPTypeCode? outType = null)
             => invert(x, outType);
 
@@ -44,7 +44,7 @@ namespace NumSharp
         /// <param name="x">Only integer and boolean types are handled.</param>
         /// <param name="outType">The dtype the returned ndarray should be of.</param>
         /// <returns>Result. This is a scalar if x is a scalar.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.bitwise_not.html</remarks>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.invert.html</remarks>
         public static NDArray bitwise_not(in NDArray x, Type outType)
             => invert(x, outType);
     }

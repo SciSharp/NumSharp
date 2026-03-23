@@ -15,7 +15,7 @@ numpy.rot90
 
 ### Comment 1 by @Oceania2018 (2019-03-21T03:31:46Z)
 
-https://docs.scipy.org/doc/numpy/reference/generated/numpy.rot90.html
+https://numpy.org/doc/stable/reference/generated/numpy.rot90.html
 
 ### Comment 2 by @solarflarefx (2021-01-25T22:53:39Z)
 

@@ -104,4 +104,4 @@ For now, NumSharp can continue with `NPTypeCode` enum. The NEP 42 architecture i
 
 - [NEP 42 Full Text](https://numpy.org/neps/nep-0042-new-dtypes.html)
 - [NEP 40 - Legacy dtypes](https://numpy.org/neps/nep-0040-legacy-datatype-impl.html)
-- [NEP 41 - First step towards new dtypes](https://numpy.org/neps/nep-0041-improved-dtype.html)
+- [NEP 41 - First step towards new dtypes](https://numpy.org/neps/nep-0041-improved-dtype-support.html)
