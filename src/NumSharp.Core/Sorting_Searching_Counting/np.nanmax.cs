@@ -14,7 +14,7 @@ namespace NumSharp
         /// Only applicable to float and double arrays.
         /// For integer arrays, this is equivalent to np.amax (no NaN values possible).
         /// </remarks>
-        public static NDArray nanmax(in NDArray a, int? axis = null, bool keepdims = false)
+        public static NDArray nanmax(NDArray a, int? axis = null, bool keepdims = false)
             => a.TensorEngine.NanMax(a, axis, keepdims);
     }
 }

@@ -6,7 +6,7 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public override NDArray ReduceMean(in NDArray arr, int? axis_, bool keepdims = false, NPTypeCode? typeCode = null)
+        public override NDArray ReduceMean(NDArray arr, int? axis_, bool keepdims = false, NPTypeCode? typeCode = null)
         {
             var shape = arr.Shape;
 

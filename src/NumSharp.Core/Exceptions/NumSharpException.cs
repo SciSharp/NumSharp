@@ -35,7 +35,7 @@ namespace NumSharp
         ///     NumSharp raises: NumSharpException: assignment destination is read-only
         /// </remarks>
         [MethodImpl(Inline)]
-        public static void ThrowIfNotWriteable(in Shape shape, string name = "assignment destination")
+        public static void ThrowIfNotWriteable(Shape shape, string name = "assignment destination")
         {
             if (!shape.IsWriteable)
                 ThrowReadOnly(name);

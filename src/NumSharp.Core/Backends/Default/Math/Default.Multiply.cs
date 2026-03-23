@@ -10,7 +10,7 @@ namespace NumSharp.Backends
         /// </summary>
         public override NDArray Multiply(NDArray lhs, NDArray rhs)
         {
-            return ExecuteBinaryOp(in lhs, in rhs, BinaryOp.Multiply);
+            return ExecuteBinaryOp(lhs, rhs, BinaryOp.Multiply);
         }
     }
 }

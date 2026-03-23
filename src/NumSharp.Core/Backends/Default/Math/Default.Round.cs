@@ -6,23 +6,23 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public override NDArray Round(in NDArray nd, Type dtype) => Round(nd, dtype?.GetTypeCode());
+        public override NDArray Round(NDArray nd, Type dtype) => Round(nd, dtype?.GetTypeCode());
 
-        public override NDArray Round(in NDArray nd, int decimals, Type dtype) => Round(nd, decimals, dtype?.GetTypeCode());
+        public override NDArray Round(NDArray nd, int decimals, Type dtype) => Round(nd, decimals, dtype?.GetTypeCode());
 
         /// <summary>
         /// Element-wise round using IL-generated kernels.
         /// </summary>
-        public override NDArray Round(in NDArray nd, NPTypeCode? typeCode = null)
+        public override NDArray Round(NDArray nd, NPTypeCode? typeCode = null)
         {
-            return ExecuteUnaryOp(in nd, UnaryOp.Round, ResolveUnaryReturnType(nd, typeCode));
+            return ExecuteUnaryOp(nd, UnaryOp.Round, ResolveUnaryReturnType(nd, typeCode));
         }
 
         /// <summary>
         /// Element-wise round with specified decimal places.
         /// Note: This overload uses traditional loop implementation for precision control.
         /// </summary>
-        public override NDArray Round(in NDArray nd, int decimals, NPTypeCode? typeCode = null)
+        public override NDArray Round(NDArray nd, int decimals, NPTypeCode? typeCode = null)
         {
             if (nd.size == 0)
                 return nd.Clone();

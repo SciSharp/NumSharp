@@ -12,7 +12,7 @@ namespace NumSharp
         /// <param name="dtype">The dtype the returned ndarray should be of, only non integer values are supported.</param>
         /// <returns>The sine of each element of x. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.cos.html</remarks>
-        public static NDArray cos(in NDArray x, NPTypeCode? dtype = null) 
+        public static NDArray cos(NDArray x, NPTypeCode? dtype = null) 
             => x.TensorEngine.Cos(x, dtype);
 
         /// <summary>
@@ -22,7 +22,7 @@ namespace NumSharp
         /// <param name="dtype">The dtype the returned ndarray should be of, only non integer values are supported.</param>
         /// <returns>The sine of each element of x. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.cos.html</remarks>
-        public static NDArray cos(in NDArray x, Type dtype) 
+        public static NDArray cos(NDArray x, Type dtype) 
             => x.TensorEngine.Cos(x, dtype);
 
         /// <summary>
@@ -33,7 +33,7 @@ namespace NumSharp
         /// <param name="dtype">The dtype the returned ndarray should be of, only non integer values are supported.</param>
         /// <returns>Output array of same shape as x. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.cosh.html</remarks>
-        public static NDArray cosh(in NDArray x, NPTypeCode? dtype = null) 
+        public static NDArray cosh(NDArray x, NPTypeCode? dtype = null) 
             => x.TensorEngine.Cosh(x, dtype);
 
         /// <summary>
@@ -44,7 +44,7 @@ namespace NumSharp
         /// <param name="dtype">The dtype the returned ndarray should be of, only non integer values are supported.</param>
         /// <returns>Output array of same shape as x. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.cosh.html</remarks>
-        public static NDArray cosh(in NDArray x, Type dtype) 
+        public static NDArray cosh(NDArray x, Type dtype) 
             => x.TensorEngine.Cosh(x, dtype);
 
         /// <summary>
@@ -55,7 +55,7 @@ namespace NumSharp
         /// <param name="dtype">The dtype the returned ndarray should be of, only non integer values are supported.</param>
         /// <returns>The angle of the ray intersecting the unit circle at the given x-coordinate in radians [0, pi]. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.arccos.html</remarks>
-        public static NDArray arccos(in NDArray x, NPTypeCode? dtype = null)
+        public static NDArray arccos(NDArray x, NPTypeCode? dtype = null)
             => x.TensorEngine.ACos(x, dtype);
 
         /// <summary>
@@ -66,7 +66,7 @@ namespace NumSharp
         /// <param name="dtype">The dtype the returned ndarray should be of, only non integer values are supported.</param>
         /// <returns>The angle of the ray intersecting the unit circle at the given x-coordinate in radians [0, pi]. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.arccos.html</remarks>
-        public static NDArray arccos(in NDArray x, Type dtype)
+        public static NDArray arccos(NDArray x, Type dtype)
             => x.TensorEngine.ACos(x, dtype);
     }
 }

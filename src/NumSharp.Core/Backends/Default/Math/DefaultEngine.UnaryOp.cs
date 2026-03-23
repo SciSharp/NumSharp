@@ -19,7 +19,7 @@ namespace NumSharp.Backends
         /// <param name="typeCode">Optional output type (null = same as input or float for trig/sqrt)</param>
         /// <returns>Result array with specified or promoted type</returns>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        internal unsafe NDArray ExecuteUnaryOp(in NDArray nd, UnaryOp op, NPTypeCode? typeCode = null)
+        internal unsafe NDArray ExecuteUnaryOp(NDArray nd, UnaryOp op, NPTypeCode? typeCode = null)
         {
             if (nd.size == 0)
             {
@@ -89,7 +89,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// Execute scalar unary operation using IL-generated delegate.
         /// </summary>
-        private NDArray ExecuteScalarUnary(in NDArray nd, UnaryOp op, NPTypeCode outputType)
+        private NDArray ExecuteScalarUnary(NDArray nd, UnaryOp op, NPTypeCode outputType)
         {
             var inputType = nd.GetTypeCode;
             var key = new UnaryScalarKernelKey(inputType, outputType, op);
@@ -145,7 +145,7 @@ namespace NumSharp.Backends
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static unsafe void ExecuteUnaryKernel(
             UnaryKernel kernel,
-            in NDArray input, NDArray result)
+            NDArray input, NDArray result)
         {
             int inputElemSize = input.dtypesize;
             var inputShape = input.Shape;

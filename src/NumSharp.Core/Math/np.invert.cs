@@ -15,7 +15,7 @@ namespace NumSharp
         /// <param name="outType">The dtype the returned ndarray should be of.</param>
         /// <returns>Result. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.invert.html</remarks>
-        public static NDArray invert(in NDArray x, NPTypeCode? outType = null)
+        public static NDArray invert(NDArray x, NPTypeCode? outType = null)
             => x.TensorEngine.Invert(x, outType);
 
         /// <summary>
@@ -25,7 +25,7 @@ namespace NumSharp
         /// <param name="outType">The dtype the returned ndarray should be of.</param>
         /// <returns>Result. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.invert.html</remarks>
-        public static NDArray invert(in NDArray x, Type outType)
+        public static NDArray invert(NDArray x, Type outType)
             => x.TensorEngine.Invert(x, outType);
 
         /// <summary>
@@ -35,7 +35,7 @@ namespace NumSharp
         /// <param name="outType">The dtype the returned ndarray should be of.</param>
         /// <returns>Result. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.invert.html</remarks>
-        public static NDArray bitwise_not(in NDArray x, NPTypeCode? outType = null)
+        public static NDArray bitwise_not(NDArray x, NPTypeCode? outType = null)
             => invert(x, outType);
 
         /// <summary>
@@ -45,7 +45,7 @@ namespace NumSharp
         /// <param name="outType">The dtype the returned ndarray should be of.</param>
         /// <returns>Result. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.invert.html</remarks>
-        public static NDArray bitwise_not(in NDArray x, Type outType)
+        public static NDArray bitwise_not(NDArray x, Type outType)
             => invert(x, outType);
     }
 }

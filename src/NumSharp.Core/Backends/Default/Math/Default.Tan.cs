@@ -5,14 +5,14 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public override NDArray Tan(in NDArray nd, Type dtype) => Tan(nd, dtype?.GetTypeCode());
+        public override NDArray Tan(NDArray nd, Type dtype) => Tan(nd, dtype?.GetTypeCode());
 
         /// <summary>
         /// Element-wise tangent using IL-generated kernels.
         /// </summary>
-        public override NDArray Tan(in NDArray nd, NPTypeCode? typeCode = null)
+        public override NDArray Tan(NDArray nd, NPTypeCode? typeCode = null)
         {
-            return ExecuteUnaryOp(in nd, UnaryOp.Tan, ResolveUnaryReturnType(nd, typeCode));
+            return ExecuteUnaryOp(nd, UnaryOp.Tan, ResolveUnaryReturnType(nd, typeCode));
         }
     }
 }

@@ -5,14 +5,14 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public override NDArray Reciprocal(in NDArray nd, Type dtype) => Reciprocal(nd, dtype?.GetTypeCode());
+        public override NDArray Reciprocal(NDArray nd, Type dtype) => Reciprocal(nd, dtype?.GetTypeCode());
 
         /// <summary>
         /// Element-wise reciprocal (1/x) using IL-generated kernels.
         /// </summary>
-        public override NDArray Reciprocal(in NDArray nd, NPTypeCode? typeCode = null)
+        public override NDArray Reciprocal(NDArray nd, NPTypeCode? typeCode = null)
         {
-            return ExecuteUnaryOp(in nd, UnaryOp.Reciprocal, ResolveUnaryReturnType(nd, typeCode));
+            return ExecuteUnaryOp(nd, UnaryOp.Reciprocal, ResolveUnaryReturnType(nd, typeCode));
         }
     }
 }

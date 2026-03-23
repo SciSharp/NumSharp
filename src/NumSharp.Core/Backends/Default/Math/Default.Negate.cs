@@ -7,16 +7,16 @@ namespace NumSharp.Backends
         /// <summary>
         /// Element-wise negation using IL-generated kernels.
         /// </summary>
-        public override NDArray Negate(in NDArray nd)
+        public override NDArray Negate(NDArray nd)
         {
             // Boolean negation is logical NOT, not arithmetic negation
             // Use LogicalNot which properly handles non-contiguous arrays
             if (nd.GetTypeCode == NPTypeCode.Boolean)
             {
-                return ExecuteUnaryOp(in nd, UnaryOp.LogicalNot);
+                return ExecuteUnaryOp(nd, UnaryOp.LogicalNot);
             }
 
-            return ExecuteUnaryOp(in nd, UnaryOp.Negate);
+            return ExecuteUnaryOp(nd, UnaryOp.Negate);
         }
     }
 }

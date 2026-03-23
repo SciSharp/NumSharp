@@ -6,7 +6,7 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public override NDArray ReduceAdd(in NDArray arr, int? axis_, bool keepdims = false, NPTypeCode? typeCode = null, NDArray @out = null)
+        public override NDArray ReduceAdd(NDArray arr, int? axis_, bool keepdims = false, NPTypeCode? typeCode = null, NDArray @out = null)
         {
             var shape = arr.Shape;
 
@@ -35,7 +35,7 @@ namespace NumSharp.Backends
             return ExecuteAxisReduction(arr, axis, keepdims, outputType, @out, ReductionOp.Sum);
         }
 
-        private NDArray HandleElementWiseSum(in NDArray arr, bool keepdims, NPTypeCode? typeCode, NDArray @out)
+        private NDArray HandleElementWiseSum(NDArray arr, bool keepdims, NPTypeCode? typeCode, NDArray @out)
         {
             var result = sum_elementwise_il(arr, typeCode);
             if (@out != null) { @out.SetAtIndex(result, 0); return @out; }
@@ -45,7 +45,7 @@ namespace NumSharp.Backends
             return r;
         }
 
-        private unsafe NDArray ExecuteAxisReduction(in NDArray arr, int axis, bool keepdims, NPTypeCode outputType, NDArray @out, ReductionOp op)
+        private unsafe NDArray ExecuteAxisReduction(NDArray arr, int axis, bool keepdims, NPTypeCode outputType, NDArray @out, ReductionOp op)
         {
             var shape = arr.Shape;
             var inputType = arr.GetTypeCode;
@@ -89,7 +89,7 @@ namespace NumSharp.Backends
         /// - np.min(zeros((0,3)), axis=0) raises ValueError (reducing along empty dimension)
         /// - np.min(zeros((0,3)), axis=1) returns [] with shape (0,) (output is also empty)
         /// </summary>
-        private NDArray HandleEmptyArrayMinMaxReduction(in NDArray arr, int? axis_, bool keepdims, NPTypeCode? typeCode, string opName)
+        private NDArray HandleEmptyArrayMinMaxReduction(NDArray arr, int? axis_, bool keepdims, NPTypeCode? typeCode, string opName)
         {
             var shape = arr.Shape;
 
@@ -120,7 +120,7 @@ namespace NumSharp.Backends
             return result;
         }
 
-        private NDArray HandleEmptyArrayReduction(in NDArray arr, int? axis_, bool keepdims, NPTypeCode? typeCode, NDArray @out, ReductionOp op)
+        private NDArray HandleEmptyArrayReduction(NDArray arr, int? axis_, bool keepdims, NPTypeCode? typeCode, NDArray @out, ReductionOp op)
         {
             var shape = arr.Shape;
             if (axis_ == null)
@@ -145,7 +145,7 @@ namespace NumSharp.Backends
             return result;
         }
 
-        private NDArray HandleScalarReduction(in NDArray arr, bool keepdims, NPTypeCode? typeCode, NDArray @out)
+        private NDArray HandleScalarReduction(NDArray arr, bool keepdims, NPTypeCode? typeCode, NDArray @out)
         {
             var r = typeCode.HasValue ? Cast(arr, typeCode.Value, true) : arr.Clone();
             if (@out != null) { @out.SetAtIndex(r.GetAtIndex(0), 0); return @out; }
@@ -154,7 +154,7 @@ namespace NumSharp.Backends
             return r;
         }
 
-        private NDArray HandleTrivialAxisReduction(in NDArray arr, int axis, bool keepdims, NPTypeCode outputType, NDArray @out)
+        private NDArray HandleTrivialAxisReduction(NDArray arr, int axis, bool keepdims, NPTypeCode outputType, NDArray @out)
         {
             if (@out != null) return null;
             var shape = arr.Shape;

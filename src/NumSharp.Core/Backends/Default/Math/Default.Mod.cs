@@ -8,9 +8,9 @@ namespace NumSharp.Backends
         /// Element-wise modulo using IL-generated kernels.
         /// Supports all 144 type combinations with automatic type promotion.
         /// </summary>
-        public override NDArray Mod(in NDArray lhs, in NDArray rhs)
+        public override NDArray Mod(NDArray lhs, NDArray rhs)
         {
-            return ExecuteBinaryOp(in lhs, in rhs, BinaryOp.Mod);
+            return ExecuteBinaryOp(lhs, rhs, BinaryOp.Mod);
         }
     }
 }

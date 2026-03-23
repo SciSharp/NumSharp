@@ -8,9 +8,9 @@ namespace NumSharp.Backends
         /// Element-wise division using IL-generated kernels.
         /// Supports all 144 type combinations with automatic type promotion.
         /// </summary>
-        public override NDArray Divide(in NDArray lhs, in NDArray rhs)
+        public override NDArray Divide(NDArray lhs, NDArray rhs)
         {
-            return ExecuteBinaryOp(in lhs, in rhs, BinaryOp.Divide);
+            return ExecuteBinaryOp(lhs, rhs, BinaryOp.Divide);
         }
     }
 }

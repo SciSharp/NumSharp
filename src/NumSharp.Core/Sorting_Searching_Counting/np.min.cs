@@ -11,7 +11,7 @@ namespace NumSharp
         /// <typeparam name="T">the type expected as a return, cast is performed if necessary.</typeparam>
         /// <returns>Minimum of a. If axis is None, the result is a scalar value. If axis is given, the result is an array of dimension a.ndim - 1.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.amin.html</remarks>
-        public static T amin<T>(in NDArray a) where T : unmanaged => a.amin<T>();
+        public static T amin<T>(NDArray a) where T : unmanaged => a.amin<T>();
 
         /// <summary>
         ///     Return the minimum of an array or minimum along an axis.
@@ -22,7 +22,7 @@ namespace NumSharp
         /// <param name="dtype">the type expected as a return, null will remain the same dtype.</param>
         /// <returns>Minimum of a. If axis is None, the result is a scalar value. If axis is given, the result is an array of dimension a.ndim - 1.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.amin.html</remarks>
-        public static NDArray amin(in NDArray a, int? axis = null, bool keepdims = false, Type dtype = null)
+        public static NDArray amin(NDArray a, int? axis = null, bool keepdims = false, Type dtype = null)
         {
             // Delegate to TensorEngine which handles keepdims for axis=null
             return a.TensorEngine.ReduceAMin(a, axis, keepdims, dtype?.GetTypeCode());
@@ -37,7 +37,7 @@ namespace NumSharp
         /// <param name="dtype">the type expected as a return, null will remain the same dtype.</param>
         /// <returns>Minimum of a. If axis is None, the result is a scalar value. If axis is given, the result is an array of dimension a.ndim - 1.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.amin.html</remarks>
-        public static NDArray min(in NDArray a, int? axis = null, bool keepdims = false, Type dtype = null)
+        public static NDArray min(NDArray a, int? axis = null, bool keepdims = false, Type dtype = null)
         {
             // Delegate to TensorEngine which handles keepdims for axis=null
             return a.TensorEngine.ReduceAMin(a, axis, keepdims, dtype?.GetTypeCode());

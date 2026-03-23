@@ -14,7 +14,7 @@ namespace NumSharp
         /// Only applicable to float and double arrays.
         /// For integer arrays, this is equivalent to np.amin (no NaN values possible).
         /// </remarks>
-        public static NDArray nanmin(in NDArray a, int? axis = null, bool keepdims = false)
+        public static NDArray nanmin(NDArray a, int? axis = null, bool keepdims = false)
             => a.TensorEngine.NanMin(a, axis, keepdims);
     }
 }

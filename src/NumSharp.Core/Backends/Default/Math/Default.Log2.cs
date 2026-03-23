@@ -5,14 +5,14 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public override NDArray Log2(in NDArray nd, Type dtype) => Log2(nd, dtype?.GetTypeCode());
+        public override NDArray Log2(NDArray nd, Type dtype) => Log2(nd, dtype?.GetTypeCode());
 
         /// <summary>
         /// Element-wise log base 2 using IL-generated kernels.
         /// </summary>
-        public override NDArray Log2(in NDArray nd, NPTypeCode? typeCode = null)
+        public override NDArray Log2(NDArray nd, NPTypeCode? typeCode = null)
         {
-            return ExecuteUnaryOp(in nd, UnaryOp.Log2, ResolveUnaryReturnType(nd, typeCode));
+            return ExecuteUnaryOp(nd, UnaryOp.Log2, ResolveUnaryReturnType(nd, typeCode));
         }
     }
 }

@@ -21,7 +21,7 @@ namespace NumSharp.Backends
         /// <param name="op">Comparison operation to perform</param>
         /// <returns>Result array with bool type</returns>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        internal unsafe NDArray<bool> ExecuteComparisonOp(in NDArray lhs, in NDArray rhs, ComparisonOp op)
+        internal unsafe NDArray<bool> ExecuteComparisonOp(NDArray lhs, NDArray rhs, ComparisonOp op)
         {
             var lhsType = lhs.GetTypeCode;
             var rhsType = rhs.GetTypeCode;
@@ -73,7 +73,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// Execute scalar × scalar comparison using IL-generated delegate.
         /// </summary>
-        private NDArray<bool> ExecuteComparisonScalarScalar(in NDArray lhs, in NDArray rhs, ComparisonOp op)
+        private NDArray<bool> ExecuteComparisonScalarScalar(NDArray lhs, NDArray rhs, ComparisonOp op)
         {
             var lhsType = lhs.GetTypeCode;
             var rhsType = rhs.GetTypeCode;
@@ -104,7 +104,7 @@ namespace NumSharp.Backends
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static NDArray<bool> InvokeComparisonScalarLhs<TLhs>(
-            Delegate func, TLhs lhsVal, in NDArray rhs, NPTypeCode rhsType)
+            Delegate func, TLhs lhsVal, NDArray rhs, NPTypeCode rhsType)
         {
             // Dispatch based on rhs type
             return rhsType switch
@@ -131,7 +131,7 @@ namespace NumSharp.Backends
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static unsafe void ExecuteComparisonKernel(
             ComparisonKernel kernel,
-            in NDArray lhs, in NDArray rhs, NDArray<bool> result,
+            NDArray lhs, NDArray rhs, NDArray<bool> result,
             Shape lhsShape, Shape rhsShape)
         {
             // Get element sizes for offset calculation
@@ -165,37 +165,37 @@ namespace NumSharp.Backends
         /// Element-wise equal comparison (==).
         /// Overrides TensorEngine.Compare - used by the == operator.
         /// </summary>
-        public override NDArray<bool> Compare(in NDArray lhs, in NDArray rhs)
+        public override NDArray<bool> Compare(NDArray lhs, NDArray rhs)
             => ExecuteComparisonOp(lhs, rhs, ComparisonOp.Equal);
 
         /// <summary>
         /// Element-wise not-equal comparison (!=).
         /// </summary>
-        public override NDArray<bool> NotEqual(in NDArray lhs, in NDArray rhs)
+        public override NDArray<bool> NotEqual(NDArray lhs, NDArray rhs)
             => ExecuteComparisonOp(lhs, rhs, ComparisonOp.NotEqual);
 
         /// <summary>
         /// Element-wise less-than comparison (&lt;).
         /// </summary>
-        public override NDArray<bool> Less(in NDArray lhs, in NDArray rhs)
+        public override NDArray<bool> Less(NDArray lhs, NDArray rhs)
             => ExecuteComparisonOp(lhs, rhs, ComparisonOp.Less);
 
         /// <summary>
         /// Element-wise less-than-or-equal comparison (&lt;=).
         /// </summary>
-        public override NDArray<bool> LessEqual(in NDArray lhs, in NDArray rhs)
+        public override NDArray<bool> LessEqual(NDArray lhs, NDArray rhs)
             => ExecuteComparisonOp(lhs, rhs, ComparisonOp.LessEqual);
 
         /// <summary>
         /// Element-wise greater-than comparison (&gt;).
         /// </summary>
-        public override NDArray<bool> Greater(in NDArray lhs, in NDArray rhs)
+        public override NDArray<bool> Greater(NDArray lhs, NDArray rhs)
             => ExecuteComparisonOp(lhs, rhs, ComparisonOp.Greater);
 
         /// <summary>
         /// Element-wise greater-than-or-equal comparison (&gt;=).
         /// </summary>
-        public override NDArray<bool> GreaterEqual(in NDArray lhs, in NDArray rhs)
+        public override NDArray<bool> GreaterEqual(NDArray lhs, NDArray rhs)
             => ExecuteComparisonOp(lhs, rhs, ComparisonOp.GreaterEqual);
 
         #endregion

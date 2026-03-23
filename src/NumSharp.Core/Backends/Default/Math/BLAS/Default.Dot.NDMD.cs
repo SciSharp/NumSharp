@@ -17,7 +17,7 @@ namespace NumSharp.Backends
         /// for every combination of dimension counts. The new implementation uses dynamic iteration
         /// with optional SIMD optimization for contiguous float/double arrays.
         /// </remarks>
-        public static NDArray DotNDMD(in NDArray lhs, in NDArray rhs)
+        public static NDArray DotNDMD(NDArray lhs, NDArray rhs)
         {
 #if MINIMAL
             return null;

@@ -19,7 +19,7 @@ namespace NumSharp.Backends
         /// </remarks>
         /// <param name="nd">Input array</param>
         /// <returns>Array of NDArray&lt;int&gt;, one per dimension containing indices of non-zero elements</returns>
-        public override NDArray<int>[] NonZero(in NDArray nd)
+        public override NDArray<int>[] NonZero(NDArray nd)
         {
             // Type dispatch to generic implementation
             switch (nd.typecode)
@@ -82,7 +82,7 @@ namespace NumSharp.Backends
         /// <remarks>
         /// NumPy-aligned: np.count_nonzero([0, 1, 0, 2]) = 2
         /// </remarks>
-        public override int CountNonZero(in NDArray nd)
+        public override int CountNonZero(NDArray nd)
         {
             if (nd.size == 0)
                 return 0;
@@ -110,7 +110,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// Count non-zero elements along a specific axis.
         /// </summary>
-        public override NDArray CountNonZero(in NDArray nd, int axis, bool keepdims = false)
+        public override NDArray CountNonZero(NDArray nd, int axis, bool keepdims = false)
         {
             var shape = nd.Shape;
 

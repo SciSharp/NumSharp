@@ -299,7 +299,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// IL-generated axis variance reduction. Returns null if kernel not available.
         /// </summary>
-        private unsafe NDArray ExecuteAxisVarReductionIL(in NDArray arr, int axis, bool keepdims, NPTypeCode outputType, int ddof)
+        private unsafe NDArray ExecuteAxisVarReductionIL(NDArray arr, int axis, bool keepdims, NPTypeCode outputType, int ddof)
         {
             var shape = arr.Shape;
             var inputType = arr.GetTypeCode;

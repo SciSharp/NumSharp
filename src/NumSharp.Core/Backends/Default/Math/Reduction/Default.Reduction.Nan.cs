@@ -8,7 +8,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// Return the sum of array elements over a given axis treating NaNs as zero.
         /// </summary>
-        public override NDArray NanSum(in NDArray a, int? axis = null, bool keepdims = false)
+        public override NDArray NanSum(NDArray a, int? axis = null, bool keepdims = false)
         {
             var arr = a;
             var shape = arr.Shape;
@@ -50,7 +50,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// Return the product of array elements over a given axis treating NaNs as ones.
         /// </summary>
-        public override NDArray NanProd(in NDArray a, int? axis = null, bool keepdims = false)
+        public override NDArray NanProd(NDArray a, int? axis = null, bool keepdims = false)
         {
             var arr = a;
             var shape = arr.Shape;
@@ -92,7 +92,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// Return minimum of an array or minimum along an axis, ignoring NaNs.
         /// </summary>
-        public override NDArray NanMin(in NDArray a, int? axis = null, bool keepdims = false)
+        public override NDArray NanMin(NDArray a, int? axis = null, bool keepdims = false)
         {
             var arr = a;
             var shape = arr.Shape;
@@ -122,7 +122,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// Return maximum of an array or maximum along an axis, ignoring NaNs.
         /// </summary>
-        public override NDArray NanMax(in NDArray a, int? axis = null, bool keepdims = false)
+        public override NDArray NanMax(NDArray a, int? axis = null, bool keepdims = false)
         {
             var arr = a;
             var shape = arr.Shape;
@@ -359,7 +359,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// Execute a NaN-aware axis reduction.
         /// </summary>
-        private unsafe NDArray ExecuteNanAxisReduction(in NDArray arr, int axis, bool keepdims, ReductionOp op)
+        private unsafe NDArray ExecuteNanAxisReduction(NDArray arr, int axis, bool keepdims, ReductionOp op)
         {
             var shape = arr.Shape;
 

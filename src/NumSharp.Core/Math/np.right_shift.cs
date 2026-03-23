@@ -19,7 +19,7 @@ namespace NumSharp
         /// Example:
         ///   np.right_shift(20, 2) = 5  # 0b10100 -> 0b101
         /// </remarks>
-        public static NDArray right_shift(in NDArray x1, in NDArray x2) => x1.TensorEngine.RightShift(x1, x2);
+        public static NDArray right_shift(NDArray x1, NDArray x2) => x1.TensorEngine.RightShift(x1, x2);
 
         /// <summary>
         /// Shift the bits of an integer to the right by a scalar amount.
@@ -27,6 +27,6 @@ namespace NumSharp
         /// <param name="x1">Input array (integer types only).</param>
         /// <param name="x2">Number of bits to shift.</param>
         /// <returns>Array with bits shifted right.</returns>
-        public static NDArray right_shift(in NDArray x1, int x2) => x1.TensorEngine.RightShift(x1, x2);
+        public static NDArray right_shift(NDArray x1, int x2) => x1.TensorEngine.RightShift(x1, x2);
     }
 }

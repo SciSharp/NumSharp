@@ -8,9 +8,9 @@ namespace NumSharp.Backends
         /// Element-wise subtraction using IL-generated kernels.
         /// Supports all 144 type combinations with automatic type promotion.
         /// </summary>
-        public override NDArray Subtract(in NDArray lhs, in NDArray rhs)
+        public override NDArray Subtract(NDArray lhs, NDArray rhs)
         {
-            return ExecuteBinaryOp(in lhs, in rhs, BinaryOp.Subtract);
+            return ExecuteBinaryOp(lhs, rhs, BinaryOp.Subtract);
         }
     }
 }

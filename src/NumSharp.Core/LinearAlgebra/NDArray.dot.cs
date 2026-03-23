@@ -17,7 +17,7 @@
         ///         - If a is an N-D array and b is an M-D array(where M>=2), it is a sum product over the last axis of a and the second-to-last axis of b:<br></br>
         ///           dot(a, b)[i,j,k,m] = sum(a[i,j,:] * b[k,:,m])
         /// </remarks>
-        public NDArray dot(in NDArray b)
+        public NDArray dot(NDArray b)
             => TensorEngine.Dot(this, b);
     }
 }

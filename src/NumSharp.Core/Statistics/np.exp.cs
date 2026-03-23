@@ -12,7 +12,7 @@ namespace NumSharp
         /// <param name="dtype">The dtype of the returned NDArray</param>
         /// <returns>The natural logarithm of x, element-wise. This is a scalar NDArray.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.exp.html</remarks>
-        public static NDArray exp(in NDArray a, Type dtype) => a.TensorEngine.Exp(a, dtype);
+        public static NDArray exp(NDArray a, Type dtype) => a.TensorEngine.Exp(a, dtype);
 
         /// <summary>
         ///     Base-e exponential, element-wise.
@@ -21,7 +21,7 @@ namespace NumSharp
         /// <param name="typeCode">The dtype of the returned NDArray</param>
         /// <returns>The natural logarithm of x, element-wise. This is a scalar NDArray.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.exp.html</remarks>
-        public static NDArray exp(in NDArray a, NPTypeCode typeCode) => a.TensorEngine.Exp(a, typeCode);
+        public static NDArray exp(NDArray a, NPTypeCode typeCode) => a.TensorEngine.Exp(a, typeCode);
 
         /// <summary>
         ///     Base-e exponential, element-wise.
@@ -29,7 +29,7 @@ namespace NumSharp
         /// <param name="a">Input value.</param>
         /// <returns>The natural logarithm of x, element-wise. This is a scalar NDArray.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.exp.html</remarks>
-        public static NDArray exp(in NDArray a) => a.TensorEngine.Exp(a); 
+        public static NDArray exp(NDArray a) => a.TensorEngine.Exp(a); 
         
         /// <summary>
         ///     Calculate 2**p for all p in the input array.
@@ -37,7 +37,7 @@ namespace NumSharp
         /// <param name="a">Input value.</param>
         /// <returns>Element-wise 2 to the power x. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.exp2.html</remarks>
-        public static NDArray exp2(in NDArray a, Type dtype) => a.TensorEngine.Exp2(a, dtype);
+        public static NDArray exp2(NDArray a, Type dtype) => a.TensorEngine.Exp2(a, dtype);
 
         /// <summary>
         ///     Calculate 2**p for all p in the input array.
@@ -45,7 +45,7 @@ namespace NumSharp
         /// <param name="a">Input value.</param>
         /// <returns>Element-wise 2 to the power x. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.exp2.html</remarks>
-        public static NDArray exp2(in NDArray a, NPTypeCode typeCode) => a.TensorEngine.Exp2(a, typeCode);
+        public static NDArray exp2(NDArray a, NPTypeCode typeCode) => a.TensorEngine.Exp2(a, typeCode);
 
         /// <summary>
         ///     Calculate 2**p for all p in the input array.
@@ -53,7 +53,7 @@ namespace NumSharp
         /// <param name="a">Input value.</param>
         /// <returns>Element-wise 2 to the power x. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.exp2.html</remarks>
-        public static NDArray exp2(in NDArray a) => a.TensorEngine.Exp2(a);        
+        public static NDArray exp2(NDArray a) => a.TensorEngine.Exp2(a);        
 
         /// <summary>
         ///     Calculate exp(x) - 1 for all elements in the array.
@@ -61,7 +61,7 @@ namespace NumSharp
         /// <param name="a">Input value.</param>
         /// <returns>Element-wise exponential minus one: out = exp(x) - 1. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.expm1.html</remarks>
-        public static NDArray expm1(in NDArray a, Type dtype) => a.TensorEngine.Expm1(a, dtype);
+        public static NDArray expm1(NDArray a, Type dtype) => a.TensorEngine.Expm1(a, dtype);
 
         /// <summary>
         ///     Calculate exp(x) - 1 for all elements in the array.
@@ -69,7 +69,7 @@ namespace NumSharp
         /// <param name="a">Input value.</param>
         /// <returns>Element-wise exponential minus one: out = exp(x) - 1. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.expm1.html</remarks>
-        public static NDArray expm1(in NDArray a, NPTypeCode typeCode) => a.TensorEngine.Expm1(a, typeCode);
+        public static NDArray expm1(NDArray a, NPTypeCode typeCode) => a.TensorEngine.Expm1(a, typeCode);
 
         /// <summary>
         ///     Calculate exp(x) - 1 for all elements in the array.
@@ -77,6 +77,6 @@ namespace NumSharp
         /// <param name="a">Input value.</param>
         /// <returns>Element-wise exponential minus one: out = exp(x) - 1. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.expm1.html</remarks>
-        public static NDArray expm1(in NDArray a) => a.TensorEngine.Expm1(a);
+        public static NDArray expm1(NDArray a) => a.TensorEngine.Expm1(a);
     }
 }

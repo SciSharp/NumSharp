@@ -19,7 +19,7 @@ namespace NumSharp.Backends
         /// <param name="op">Operation to perform</param>
         /// <returns>Result array with promoted type</returns>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        internal unsafe NDArray ExecuteBinaryOp(in NDArray lhs, in NDArray rhs, BinaryOp op)
+        internal unsafe NDArray ExecuteBinaryOp(NDArray lhs, NDArray rhs, BinaryOp op)
         {
             var lhsType = lhs.GetTypeCode;
             var rhsType = rhs.GetTypeCode;
@@ -104,7 +104,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// Execute scalar × scalar operation using IL-generated delegate.
         /// </summary>
-        private NDArray ExecuteScalarScalar(in NDArray lhs, in NDArray rhs, BinaryOp op, NPTypeCode resultType)
+        private NDArray ExecuteScalarScalar(NDArray lhs, NDArray rhs, BinaryOp op, NPTypeCode resultType)
         {
             var lhsType = lhs.GetTypeCode;
             var rhsType = rhs.GetTypeCode;
@@ -135,7 +135,7 @@ namespace NumSharp.Backends
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static NDArray InvokeBinaryScalarLhs<TLhs>(
-            Delegate func, TLhs lhsVal, in NDArray rhs, NPTypeCode rhsType, NPTypeCode resultType)
+            Delegate func, TLhs lhsVal, NDArray rhs, NPTypeCode rhsType, NPTypeCode resultType)
         {
             // Dispatch based on rhs type
             return rhsType switch
@@ -223,7 +223,7 @@ namespace NumSharp.Backends
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static unsafe void ExecuteKernel(
             MixedTypeKernel kernel,
-            in NDArray lhs, in NDArray rhs, NDArray result,
+            NDArray lhs, NDArray rhs, NDArray result,
             Shape lhsShape, Shape rhsShape)
         {
             // Get element sizes for offset calculation
@@ -256,7 +256,7 @@ namespace NumSharp.Backends
         /// Fallback to legacy implementation when IL kernel is not available.
         /// </summary>
         private void FallbackBinaryOp(
-            in NDArray lhs, in NDArray rhs, NDArray result,
+            NDArray lhs, NDArray rhs, NDArray result,
             BinaryOp op, Shape lhsShape, Shape rhsShape)
         {
             // For now, throw - all kernels should be generatable

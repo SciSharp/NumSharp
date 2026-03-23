@@ -15,7 +15,7 @@ namespace NumSharp
         /// <param name="dtype">The dtype the returned ndarray should be of, only non integer values are supported.</param>
         /// <returns>An array with the elements of a, but where values &lt; a_min are replaced with a_min, and those &gt; a_max with a_max.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.clip.html</remarks>
-        public static NDArray clip(in NDArray a, NDArray a_min, NDArray a_max, NPTypeCode? dtype = null)
+        public static NDArray clip(NDArray a, NDArray a_min, NDArray a_max, NPTypeCode? dtype = null)
             => a.TensorEngine.ClipNDArray(a, a_min, a_max, dtype);
 
         /// <summary>
@@ -28,7 +28,7 @@ namespace NumSharp
         /// <param name="dtype">The dtype the returned ndarray should be of, only non integer values are supported.</param>
         /// <returns>An array with the elements of a, but where values &lt; a_min are replaced with a_min, and those &gt; a_max with a_max.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.clip.html</remarks>
-        public static NDArray clip(in NDArray a, NDArray a_min, NDArray a_max, Type dtype)
+        public static NDArray clip(NDArray a, NDArray a_min, NDArray a_max, Type dtype)
             => a.TensorEngine.ClipNDArray(a, a_min, a_max, dtype);
 
         /// <summary>
@@ -41,7 +41,7 @@ namespace NumSharp
         /// <param name="out">The results will be placed in this array. It may be the input array for in-place clipping. out must be of the right shape to hold the output. Its type is preserved.</param>
         /// <returns>An array with the elements of a, but where values &lt; a_min are replaced with a_min, and those &gt; a_max with a_max.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.clip.html</remarks>
-        public static NDArray clip(in NDArray a, NDArray a_min, NDArray a_max, NDArray @out)
+        public static NDArray clip(NDArray a, NDArray a_min, NDArray a_max, NDArray @out)
             => a.TensorEngine.ClipNDArray(a, a_min, a_max, (NPTypeCode?)null, @out);
     }
 }

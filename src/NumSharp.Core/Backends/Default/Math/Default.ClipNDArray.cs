@@ -28,10 +28,10 @@ namespace NumSharp.Backends
         //
         // =============================================================================
 
-        public override NDArray ClipNDArray(in NDArray lhs, in NDArray min, in NDArray max, Type dtype, NDArray @out = null)
+        public override NDArray ClipNDArray(NDArray lhs, NDArray min, NDArray max, Type dtype, NDArray @out = null)
             => ClipNDArray(lhs, min, max, dtype?.GetTypeCode(), @out);
 
-        public override NDArray ClipNDArray(in NDArray lhs, in NDArray min, in NDArray max, NPTypeCode? typeCode = null, NDArray @out = null)
+        public override NDArray ClipNDArray(NDArray lhs, NDArray min, NDArray max, NPTypeCode? typeCode = null, NDArray @out = null)
         {
             if (lhs.size == 0)
                 return lhs.Clone();

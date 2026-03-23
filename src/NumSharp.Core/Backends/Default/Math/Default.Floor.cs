@@ -5,14 +5,14 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public override NDArray Floor(in NDArray nd, Type dtype) => Floor(nd, dtype?.GetTypeCode());
+        public override NDArray Floor(NDArray nd, Type dtype) => Floor(nd, dtype?.GetTypeCode());
 
         /// <summary>
         /// Element-wise floor using IL-generated kernels.
         /// </summary>
-        public override NDArray Floor(in NDArray nd, NPTypeCode? typeCode = null)
+        public override NDArray Floor(NDArray nd, NPTypeCode? typeCode = null)
         {
-            return ExecuteUnaryOp(in nd, UnaryOp.Floor, ResolveUnaryReturnType(nd, typeCode));
+            return ExecuteUnaryOp(nd, UnaryOp.Floor, ResolveUnaryReturnType(nd, typeCode));
         }
     }
 }

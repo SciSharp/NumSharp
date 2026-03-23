@@ -11,7 +11,7 @@
         /// <param name="destination">Destination positions for each of the original axes. These must also be unique (distinct).</param>
         /// <returns>Array with moved axes.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.moveaxis.html</remarks>
-        public static NDArray moveaxis(in NDArray a, int source, int destination)
+        public static NDArray moveaxis(NDArray a, int source, int destination)
             => a.TensorEngine.MoveAxis(a, new[] {source}, new[] {destination});
 
         /// <summary>
@@ -23,7 +23,7 @@
         /// <param name="destination">Destination positions for each of the original axes. These must also be unique (distinct).</param>
         /// <returns>Array with moved axes.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.moveaxis.html</remarks>
-        public static NDArray moveaxis(in NDArray a, int[] source, int destination)
+        public static NDArray moveaxis(NDArray a, int[] source, int destination)
             => a.TensorEngine.MoveAxis(a, source, new[] {destination});
 
         /// <summary>
@@ -35,7 +35,7 @@
         /// <param name="destination">Destination positions for each of the original axes. These must also be unique (distinct).</param>
         /// <returns>Array with moved axes.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.moveaxis.html</remarks>
-        public static NDArray moveaxis(in NDArray a, int source, int[] destination)
+        public static NDArray moveaxis(NDArray a, int source, int[] destination)
             => a.TensorEngine.MoveAxis(a, new[] {source}, destination);
 
         /// <summary>
@@ -47,7 +47,7 @@
         /// <param name="destination">Destination positions for each of the original axes. These must also be unique (distinct).</param>
         /// <returns>Array with moved axes.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.moveaxis.html</remarks>
-        public static NDArray moveaxis(in NDArray a, int[] source, int[] destination)
+        public static NDArray moveaxis(NDArray a, int[] source, int[] destination)
             => a.TensorEngine.MoveAxis(a, source, destination);
     }
 }

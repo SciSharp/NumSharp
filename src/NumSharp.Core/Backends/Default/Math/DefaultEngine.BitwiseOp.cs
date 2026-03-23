@@ -11,7 +11,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// Execute bitwise AND operation.
         /// </summary>
-        public override NDArray BitwiseAnd(in NDArray lhs, in NDArray rhs)
+        public override NDArray BitwiseAnd(NDArray lhs, NDArray rhs)
         {
             return ExecuteBinaryOp(lhs, rhs, BinaryOp.BitwiseAnd);
         }
@@ -19,7 +19,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// Execute bitwise OR operation.
         /// </summary>
-        public override NDArray BitwiseOr(in NDArray lhs, in NDArray rhs)
+        public override NDArray BitwiseOr(NDArray lhs, NDArray rhs)
         {
             return ExecuteBinaryOp(lhs, rhs, BinaryOp.BitwiseOr);
         }
@@ -27,7 +27,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// Execute bitwise XOR operation.
         /// </summary>
-        public override NDArray BitwiseXor(in NDArray lhs, in NDArray rhs)
+        public override NDArray BitwiseXor(NDArray lhs, NDArray rhs)
         {
             return ExecuteBinaryOp(lhs, rhs, BinaryOp.BitwiseXor);
         }

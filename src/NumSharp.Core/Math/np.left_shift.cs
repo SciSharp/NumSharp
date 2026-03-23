@@ -18,7 +18,7 @@ namespace NumSharp
         /// Example:
         ///   np.left_shift(5, 2) = 20  # 0b101 -> 0b10100
         /// </remarks>
-        public static NDArray left_shift(in NDArray x1, in NDArray x2) => x1.TensorEngine.LeftShift(x1, x2);
+        public static NDArray left_shift(NDArray x1, NDArray x2) => x1.TensorEngine.LeftShift(x1, x2);
 
         /// <summary>
         /// Shift the bits of an integer to the left by a scalar amount.
@@ -26,6 +26,6 @@ namespace NumSharp
         /// <param name="x1">Input array (integer types only).</param>
         /// <param name="x2">Number of bits to shift.</param>
         /// <returns>Array with bits shifted left.</returns>
-        public static NDArray left_shift(in NDArray x1, int x2) => x1.TensorEngine.LeftShift(x1, x2);
+        public static NDArray left_shift(NDArray x1, int x2) => x1.TensorEngine.LeftShift(x1, x2);
     }
 }

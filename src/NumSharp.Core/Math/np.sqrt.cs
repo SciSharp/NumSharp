@@ -12,7 +12,7 @@ namespace NumSharp
         /// <param name="x">The values whose square-roots are required.</param>
         /// <returns>An array of the same shape as x, containing the positive square-root of each element in x. If any element in x is complex, a complex array is returned (and the square-roots of negative reals are calculated). If all of the elements in x are real, so is y, with negative elements returning nan. If out was provided, y is a reference to it. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.sqrt.html</remarks>
-        public static NDArray sqrt(in NDArray x, NPTypeCode? dtype = null)
+        public static NDArray sqrt(NDArray x, NPTypeCode? dtype = null)
             => x.TensorEngine.Sqrt(x, dtype);
 
         /// <summary>
@@ -22,7 +22,7 @@ namespace NumSharp
         /// <param name="dtype">The dtype the returned ndarray should be of, only non integer values are supported.</param>
         /// <returns>An array of the same shape as x, containing the positive square-root of each element in x. If any element in x is complex, a complex array is returned (and the square-roots of negative reals are calculated). If all of the elements in x are real, so is y, with negative elements returning nan. If out was provided, y is a reference to it. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.sqrt.html</remarks>
-        public static NDArray sqrt(in NDArray x, Type dtype)
+        public static NDArray sqrt(NDArray x, Type dtype)
             => x.TensorEngine.Sqrt(x);
     }
 }

@@ -64,7 +64,7 @@ namespace NumSharp.Backends
             return normalize_axis_tuple(new int[] {axis}, ndim, argname, allow_duplicate);
         }
 
-        public override NDArray MoveAxis(in NDArray nd, int[] source, int[] destinition)
+        public override NDArray MoveAxis(NDArray nd, int[] source, int[] destinition)
         {
             source = normalize_axis_tuple(source, nd.ndim);
             destinition = normalize_axis_tuple(destinition, nd.ndim);
@@ -79,7 +79,7 @@ namespace NumSharp.Backends
             return Transpose(nd, order.ToArray());
         }
 
-        public override NDArray SwapAxes(in NDArray nd, int axis1, int axis2)
+        public override NDArray SwapAxes(NDArray nd, int axis1, int axis2)
         {
             var ndims = nd.ndim;
             var dims = new int[ndims];
@@ -95,7 +95,7 @@ namespace NumSharp.Backends
             return Transpose(nd, dims);
         }
 
-        public override NDArray RollAxis(in NDArray nd, int axis, int start = 0)
+        public override NDArray RollAxis(NDArray nd, int axis, int start = 0)
         {
             axis = check_and_adjust_axis(nd, axis);
             int n = nd.ndim;
@@ -120,7 +120,7 @@ namespace NumSharp.Backends
             return Transpose(nd, premutes.ToArray());
         }
 
-        public override NDArray Transpose(in NDArray nd, int[] premute = null)
+        public override NDArray Transpose(NDArray nd, int[] premute = null)
         {
             int i, n;
             var permutation = new int[nd.ndim];

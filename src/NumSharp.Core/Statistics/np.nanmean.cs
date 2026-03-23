@@ -14,7 +14,7 @@ namespace NumSharp
         /// <param name="keepdims">If this is set to True, the axes which are reduced are left in the result as dimensions with size one.</param>
         /// <returns>A new array containing the mean values, with NaN values ignored. If all values along an axis are NaN, returns NaN for that slice.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.nanmean.html</remarks>
-        public static NDArray nanmean(in NDArray a, int? axis = null, bool keepdims = false)
+        public static NDArray nanmean(NDArray a, int? axis = null, bool keepdims = false)
         {
             var arr = a;
             var shape = arr.Shape;

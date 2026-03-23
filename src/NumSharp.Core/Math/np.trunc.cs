@@ -12,7 +12,7 @@ namespace NumSharp
         /// <param name="dtype">The dtype the returned ndarray should be of.</param>
         /// <returns>The truncated value of each element in x. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.trunc.html</remarks>
-        public static NDArray trunc(in NDArray x, NPTypeCode? dtype = null)
+        public static NDArray trunc(NDArray x, NPTypeCode? dtype = null)
             => x.TensorEngine.Truncate(x, dtype);
 
         /// <summary>
@@ -23,7 +23,7 @@ namespace NumSharp
         /// <param name="dtype">The dtype the returned ndarray should be of.</param>
         /// <returns>The truncated value of each element in x. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.trunc.html</remarks>
-        public static NDArray trunc(in NDArray x, Type dtype)
+        public static NDArray trunc(NDArray x, Type dtype)
             => x.TensorEngine.Truncate(x, dtype);
     }
 }

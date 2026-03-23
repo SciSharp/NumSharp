@@ -9,7 +9,7 @@
         /// <param name="axis1">First axis.</param>
         /// <param name="axis2">Second axis.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.swapaxes.html</remarks>
-        public static NDArray swapaxes(in NDArray a, int axis1, int axis2)
+        public static NDArray swapaxes(NDArray a, int axis1, int axis2)
             => a.TensorEngine.SwapAxes(a, axis1, axis2);
     }
 }

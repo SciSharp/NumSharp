@@ -163,7 +163,7 @@ namespace NumSharp.Backends.Kernels
         /// <typeparam name="T">Element type</typeparam>
         /// <param name="data">Pointer to array data (base address)</param>
         /// <param name="shape">Array dimensions</param>
-        /// <param name="strides">Array strides (in elements, not bytes)</param>
+        /// <param name="strides">Array strides (elements, not bytes)</param>
         /// <param name="offset">Base offset into storage</param>
         /// <returns>Array of NDArray&lt;int&gt;, one per dimension</returns>
         internal static unsafe NumSharp.Generic.NDArray<int>[] FindNonZeroStridedHelper<T>(

@@ -84,7 +84,7 @@ namespace NumSharp.Backends.Kernels
     /// <param name="lhs">Left operand value</param>
     /// <param name="rhs">Right operand value</param>
     /// <returns>Result of binary operation</returns>
-    public delegate TOut BinaryScalar<in TLhs, in TRhs, out TOut>(TLhs lhs, TRhs rhs);
+    public delegate TOut BinaryScalar<in TLhs, TRhs, out TOut>(TLhs lhs, TRhs rhs);
 
     /// <summary>
     /// Comparison scalar function delegate.

@@ -14,7 +14,7 @@ namespace NumSharp.Backends
         /// <param name="x">x-coordinates. If y.shape != x.shape, they must be broadcastable.</param>
         /// <param name="dtype">Output dtype (overrides type promotion)</param>
         /// <returns>Array of angles in radians, range [-pi, pi]</returns>
-        public override NDArray ATan2(in NDArray y, in NDArray x, Type dtype)
+        public override NDArray ATan2(NDArray y, NDArray x, Type dtype)
             => ATan2(y, x, dtype?.GetTypeCode());
 
         /// <summary>
@@ -26,7 +26,7 @@ namespace NumSharp.Backends
         /// <param name="x">x-coordinates. If y.shape != x.shape, they must be broadcastable.</param>
         /// <param name="typeCode">Output dtype (overrides type promotion). If null, uses NumPy rules.</param>
         /// <returns>Array of angles in radians, range [-pi, pi]</returns>
-        public override NDArray ATan2(in NDArray y, in NDArray x, NPTypeCode? typeCode = null)
+        public override NDArray ATan2(NDArray y, NDArray x, NPTypeCode? typeCode = null)
         {
             // Handle empty array
             if (y.size == 0)
@@ -44,7 +44,7 @@ namespace NumSharp.Backends
         /// Execute ATan2 using IL-generated kernels.
         /// Handles type promotion, broadcasting, and kernel dispatch.
         /// </summary>
-        private unsafe NDArray ExecuteATan2Op(in NDArray y, in NDArray x, NPTypeCode? typeCode)
+        private unsafe NDArray ExecuteATan2Op(NDArray y, NDArray x, NPTypeCode? typeCode)
         {
             var yType = y.GetTypeCode;
             var xType = x.GetTypeCode;
@@ -123,7 +123,7 @@ namespace NumSharp.Backends
         /// Execute scalar x scalar ATan2 operation.
         /// </summary>
         private static NDArray ExecuteATan2ScalarScalar(
-            in NDArray y, in NDArray x,
+            NDArray y, NDArray x,
             NPTypeCode yType, NPTypeCode xType, NPTypeCode resultType)
         {
             // Get values as double for Math.Atan2
@@ -146,7 +146,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// Convert NDArray scalar to double.
         /// </summary>
-        private static double ConvertToDouble(in NDArray arr, NPTypeCode type)
+        private static double ConvertToDouble(NDArray arr, NPTypeCode type)
         {
             return type switch
             {
@@ -169,7 +169,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// Convert NDArray scalar to decimal.
         /// </summary>
-        private static decimal ConvertToDecimal(in NDArray arr, NPTypeCode type)
+        private static decimal ConvertToDecimal(NDArray arr, NPTypeCode type)
         {
             return type switch
             {
@@ -227,7 +227,7 @@ namespace NumSharp.Backends
         /// </summary>
         private static unsafe void ExecuteATan2Kernel(
             MixedTypeKernel kernel,
-            in NDArray y, in NDArray x, NDArray result,
+            NDArray y, NDArray x, NDArray result,
             Shape yShape, Shape xShape)
         {
             // Get element sizes for offset calculation

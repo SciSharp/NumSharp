@@ -13,7 +13,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// Bitwise left shift (x1 &lt;&lt; x2).
         /// </summary>
-        public override NDArray LeftShift(in NDArray lhs, in NDArray rhs)
+        public override NDArray LeftShift(NDArray lhs, NDArray rhs)
         {
             ValidateIntegerType(lhs, "left_shift");
             ValidateIntegerType(rhs, "left_shift");
@@ -24,7 +24,7 @@ namespace NumSharp.Backends
         /// Bitwise left shift (x1 &lt;&lt; scalar).
         /// SIMD optimized for contiguous arrays.
         /// </summary>
-        public override NDArray LeftShift(in NDArray lhs, in ValueType rhs)
+        public override NDArray LeftShift(NDArray lhs, ValueType rhs)
         {
             ValidateIntegerType(lhs, "left_shift");
             return ExecuteShiftOpScalar(lhs, rhs, isLeftShift: true);
@@ -35,7 +35,7 @@ namespace NumSharp.Backends
         /// Uses arithmetic shift for signed types (sign bit extended).
         /// Uses logical shift for unsigned types (zeros filled).
         /// </summary>
-        public override NDArray RightShift(in NDArray lhs, in NDArray rhs)
+        public override NDArray RightShift(NDArray lhs, NDArray rhs)
         {
             ValidateIntegerType(lhs, "right_shift");
             ValidateIntegerType(rhs, "right_shift");
@@ -46,7 +46,7 @@ namespace NumSharp.Backends
         /// Bitwise right shift (x1 &gt;&gt; scalar).
         /// SIMD optimized for contiguous arrays.
         /// </summary>
-        public override NDArray RightShift(in NDArray lhs, in ValueType rhs)
+        public override NDArray RightShift(NDArray lhs, ValueType rhs)
         {
             ValidateIntegerType(lhs, "right_shift");
             return ExecuteShiftOpScalar(lhs, rhs, isLeftShift: false);
@@ -55,7 +55,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// Validate that the array is an integer type.
         /// </summary>
-        private static void ValidateIntegerType(in NDArray arr, string opName)
+        private static void ValidateIntegerType(NDArray arr, string opName)
         {
             var typeCode = arr.GetTypeCode;
             if (typeCode != NPTypeCode.Byte &&
@@ -71,7 +71,7 @@ namespace NumSharp.Backends
         /// Execute shift operation with array operands (element-wise shifts).
         /// Uses IL kernel for scalar loop (no SIMD for variable shift amounts).
         /// </summary>
-        private unsafe NDArray ExecuteShiftOp(in NDArray lhs, in NDArray rhs, bool isLeftShift)
+        private unsafe NDArray ExecuteShiftOp(NDArray lhs, NDArray rhs, bool isLeftShift)
         {
             var (broadcastedLhs, broadcastedRhs) = np.broadcast_arrays(lhs, rhs);
             // Create result with clean (contiguous) strides, not broadcast strides
@@ -148,7 +148,7 @@ namespace NumSharp.Backends
         /// Execute shift operation with scalar operand (uniform shift).
         /// SIMD optimized path for contiguous arrays.
         /// </summary>
-        private unsafe NDArray ExecuteShiftOpScalar(in NDArray lhs, in ValueType rhs, bool isLeftShift)
+        private unsafe NDArray ExecuteShiftOpScalar(NDArray lhs, ValueType rhs, bool isLeftShift)
         {
             int shiftAmount = Convert.ToInt32(rhs);
 

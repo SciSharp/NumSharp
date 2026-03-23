@@ -11,7 +11,7 @@ namespace NumSharp
         /// <param name="a">The array for which to count non-zeros.</param>
         /// <returns>Number of non-zero values in the array.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.count_nonzero.html</remarks>
-        public static int count_nonzero(in NDArray a)
+        public static int count_nonzero(NDArray a)
         {
             if (a.size == 0)
                 return 0;
@@ -27,7 +27,7 @@ namespace NumSharp
         /// <param name="keepdims">If True, the axes which are reduced are left in the result as dimensions with size one.</param>
         /// <returns>Number of non-zero values along the specified axis.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.count_nonzero.html</remarks>
-        public static NDArray count_nonzero(in NDArray a, int axis, bool keepdims = false)
+        public static NDArray count_nonzero(NDArray a, int axis, bool keepdims = false)
         {
             if (a.size == 0)
             {

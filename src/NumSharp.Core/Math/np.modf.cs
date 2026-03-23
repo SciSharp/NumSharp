@@ -13,7 +13,7 @@ namespace NumSharp
         /// <param name="dtype">The dtype the returned ndarray should be of, only non integer values are supported.</param>
         /// <returns>Fractional part of x. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.modf.html</remarks>
-        public static (NDArray Fractional, NDArray Intergral) modf(in NDArray x, NPTypeCode? dtype = null)
+        public static (NDArray Fractional, NDArray Intergral) modf(NDArray x, NPTypeCode? dtype = null)
             => x.TensorEngine.ModF(x, dtype);
 
         /// <summary>
@@ -24,7 +24,7 @@ namespace NumSharp
         /// <param name="dtype">The dtype the returned ndarray should be of, only non integer values are supported.</param>
         /// <returns>Fractional part of x. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.modf.html</remarks>
-        public static (NDArray Fractional, NDArray Intergral) modf(in NDArray x, Type dtype) 
+        public static (NDArray Fractional, NDArray Intergral) modf(NDArray x, Type dtype) 
             => x.TensorEngine.ModF(x, dtype);
     }
 }

@@ -299,7 +299,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// IL-generated axis standard deviation reduction. Returns null if kernel not available.
         /// </summary>
-        private unsafe NDArray ExecuteAxisStdReductionIL(in NDArray arr, int axis, bool keepdims, NPTypeCode outputType, int ddof)
+        private unsafe NDArray ExecuteAxisStdReductionIL(NDArray arr, int axis, bool keepdims, NPTypeCode outputType, int ddof)
         {
             var shape = arr.Shape;
             var inputType = arr.GetTypeCode;

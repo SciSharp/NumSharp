@@ -12,7 +12,7 @@ namespace NumSharp
         /// <param name="dtype">The dtype the returned ndarray should be of.</param>
         /// <returns>Return array containing 1/x for each element in x. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.reciprocal.html</remarks>
-        public static NDArray reciprocal(in NDArray x, NPTypeCode? dtype = null)
+        public static NDArray reciprocal(NDArray x, NPTypeCode? dtype = null)
             => x.TensorEngine.Reciprocal(x, dtype);
 
         /// <summary>
@@ -23,7 +23,7 @@ namespace NumSharp
         /// <param name="dtype">The dtype the returned ndarray should be of.</param>
         /// <returns>Return array containing 1/x for each element in x. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.reciprocal.html</remarks>
-        public static NDArray reciprocal(in NDArray x, Type dtype)
+        public static NDArray reciprocal(NDArray x, Type dtype)
             => x.TensorEngine.Reciprocal(x, dtype);
     }
 }

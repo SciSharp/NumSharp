@@ -13,7 +13,7 @@ namespace NumSharp
         /// <param name="dtype">The dtype the returned ndarray should be of, only non integer values are supported.</param>
         /// <returns>The floor of each element in x. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.floor.html</remarks>
-        public static NDArray floor(in NDArray x, NPTypeCode? dtype = null)
+        public static NDArray floor(NDArray x, NPTypeCode? dtype = null)
             => x.TensorEngine.Floor(x, dtype);
 
         /// <summary>
@@ -24,7 +24,7 @@ namespace NumSharp
         /// <param name="dtype">The dtype the returned ndarray should be of, only non integer values are supported.</param>
         /// <returns>The floor of each element in x. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.floor.html</remarks>
-        public static NDArray floor(in NDArray x, Type dtype) 
+        public static NDArray floor(NDArray x, Type dtype) 
             => x.TensorEngine.Floor(x, dtype);
     }
 }

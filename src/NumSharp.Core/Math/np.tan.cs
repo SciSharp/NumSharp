@@ -13,7 +13,7 @@ namespace NumSharp
         /// <param name="dtype">The dtype the returned ndarray should be of, only non integer values are supported.</param>
         /// <returns>The sine of each element of x. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.tan.html</remarks>
-        public static NDArray tan(in NDArray x, NPTypeCode? dtype = null) 
+        public static NDArray tan(NDArray x, NPTypeCode? dtype = null) 
             => x.TensorEngine.Tan(x, dtype);
 
         /// <summary>
@@ -23,7 +23,7 @@ namespace NumSharp
         /// <param name="dtype">The dtype the returned ndarray should be of, only non integer values are supported.</param>
         /// <returns>The sine of each element of x. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.tan.html</remarks>
-        public static NDArray tan(in NDArray x, Type dtype) 
+        public static NDArray tan(NDArray x, Type dtype) 
             => x.TensorEngine.Tan(x, dtype);
 
         /// <summary>
@@ -34,7 +34,7 @@ namespace NumSharp
         /// <param name="dtype">The dtype the returned ndarray should be of, only non integer values are supported.</param>
         /// <returns>The sine of each element of x. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.tanh.html</remarks>
-        public static NDArray tanh(in NDArray x, NPTypeCode? dtype = null) 
+        public static NDArray tanh(NDArray x, NPTypeCode? dtype = null) 
             => x.TensorEngine.Tanh(x, dtype);
 
         /// <summary>
@@ -45,7 +45,7 @@ namespace NumSharp
         /// <param name="dtype">The dtype the returned ndarray should be of, only non integer values are supported.</param>
         /// <returns>The sine of each element of x. This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.tanh.html</remarks>
-        public static NDArray tanh(in NDArray x, Type dtype) 
+        public static NDArray tanh(NDArray x, Type dtype) 
             => x.TensorEngine.Tanh(x, dtype);
 
         /// <summary>
@@ -56,7 +56,7 @@ namespace NumSharp
         /// <param name="dtype">The dtype the returned ndarray should be of, only non integer values are supported.</param>
         /// <returns>Return has the same shape as x. Its real part is in [-pi/2, pi/2] (arctan(+/-inf) returns +/-pi/2). This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.arctan.html</remarks>
-        public static NDArray arctan(in NDArray x, NPTypeCode? dtype = null)
+        public static NDArray arctan(NDArray x, NPTypeCode? dtype = null)
             => x.TensorEngine.ATan(x, dtype);
 
         /// <summary>
@@ -67,7 +67,7 @@ namespace NumSharp
         /// <param name="dtype">The dtype the returned ndarray should be of, only non integer values are supported.</param>
         /// <returns>Return has the same shape as x. Its real part is in [-pi/2, pi/2] (arctan(+/-inf) returns +/-pi/2). This is a scalar if x is a scalar.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.arctan.html</remarks>
-        public static NDArray arctan(in NDArray x, Type dtype)
+        public static NDArray arctan(NDArray x, Type dtype)
             => x.TensorEngine.ATan(x, dtype);
 
         /// <summary>
@@ -79,7 +79,7 @@ namespace NumSharp
         /// <param name="dtype">The dtype the returned ndarray should be of, only non integer values are supported.</param>
         /// <returns>The Array of angles in radians, in the range [-pi, pi]. This is a scalar if both x1 and x2 are scalars.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.arctan2.html</remarks>
-        public static NDArray arctan2(in NDArray y, in NDArray x, NPTypeCode? dtype = null)
+        public static NDArray arctan2(NDArray y, NDArray x, NPTypeCode? dtype = null)
             => x.TensorEngine.ATan2(y, x, dtype);
 
         /// <summary>
@@ -91,7 +91,7 @@ namespace NumSharp
         /// <param name="dtype">The dtype the returned ndarray should be of, only non integer values are supported.</param>
         /// <returns>The Array of angles in radians, in the range [-pi, pi]. This is a scalar if both x1 and x2 are scalars.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.arctan2.html</remarks>
-        public static NDArray arctan2(in NDArray y, in NDArray x, Type dtype)
+        public static NDArray arctan2(NDArray y, NDArray x, Type dtype)
             => x.TensorEngine.ATan2(y, x, dtype);
     }
 }

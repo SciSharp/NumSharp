@@ -6,7 +6,7 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public override unsafe NDArray ReduceCumMul(in NDArray arr, int? axis_, NPTypeCode? typeCode = null)
+        public override unsafe NDArray ReduceCumMul(NDArray arr, int? axis_, NPTypeCode? typeCode = null)
         {
             // NumPy: cumprod on boolean arrays treats True as 1 and False as 0, returning int64
             // Convert boolean input to int64 to match NumPy behavior
@@ -110,7 +110,7 @@ namespace NumSharp.Backends
             return ret;
         }
 
-        protected unsafe NDArray cumprod_elementwise(in NDArray arr, NPTypeCode? typeCode)
+        protected unsafe NDArray cumprod_elementwise(NDArray arr, NPTypeCode? typeCode)
         {
             if (arr.Shape.IsScalar || (arr.Shape.NDim == 1 && arr.Shape.size == 1))
                 return typeCode.HasValue ? Cast(arr, typeCode.Value, true) : arr.Clone();
@@ -141,7 +141,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// Fallback element-wise cumprod using iterators.
         /// </summary>
-        private unsafe NDArray cumprod_elementwise_fallback(in NDArray arr, NDArray ret, NPTypeCode retType)
+        private unsafe NDArray cumprod_elementwise_fallback(NDArray arr, NDArray ret, NPTypeCode retType)
         {
             // Handle Decimal separately for precision
             if (arr.GetTypeCode == NPTypeCode.Decimal && retType == NPTypeCode.Decimal)

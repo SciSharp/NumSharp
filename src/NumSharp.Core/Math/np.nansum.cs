@@ -14,7 +14,7 @@ namespace NumSharp
         /// Only applicable to float and double arrays.
         /// For integer arrays, this is equivalent to np.sum (no NaN values possible).
         /// </remarks>
-        public static NDArray nansum(in NDArray a, int? axis = null, bool keepdims = false)
+        public static NDArray nansum(NDArray a, int? axis = null, bool keepdims = false)
             => a.TensorEngine.NanSum(a, axis, keepdims);
     }
 }

@@ -6,7 +6,7 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public override NDArray Clip(in NDArray lhs, in ValueType min, in ValueType max, Type dtype) => Clip(lhs, min, max, dtype?.GetTypeCode());
+        public override NDArray Clip(NDArray lhs, ValueType min, ValueType max, Type dtype) => Clip(lhs, min, max, dtype?.GetTypeCode());
 
         /// <summary>
         /// Clips array values to a specified range [min, max].
@@ -22,7 +22,7 @@ namespace NumSharp.Backends
         /// The Cast(copy: true) call ensures we have a contiguous output array,
         /// so the SIMD path is always taken for supported types.
         /// </remarks>
-        public override NDArray Clip(in NDArray lhs, in ValueType min, in ValueType max, NPTypeCode? typeCode = null)
+        public override NDArray Clip(NDArray lhs, ValueType min, ValueType max, NPTypeCode? typeCode = null)
         {
             if (lhs.size == 0)
                 return lhs.Clone();

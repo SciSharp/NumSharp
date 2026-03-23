@@ -12,7 +12,7 @@ namespace NumSharp.Backends
     {
 
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.dot.html</remarks>
-        public override NDArray Dot(in NDArray left, in NDArray right)
+        public override NDArray Dot(NDArray left, NDArray right)
         {
             //Dot product of two arrays.Specifically,
             //If both a and b are 1 - D arrays, it is inner product of vectors(without complex conjugation).

@@ -14,7 +14,7 @@ namespace NumSharp
         /// Only applicable to float and double arrays.
         /// For integer arrays, this is equivalent to np.prod (no NaN values possible).
         /// </remarks>
-        public static NDArray nanprod(in NDArray a, int? axis = null, bool keepdims = false)
+        public static NDArray nanprod(NDArray a, int? axis = null, bool keepdims = false)
             => a.TensorEngine.NanProd(a, axis, keepdims);
     }
 }

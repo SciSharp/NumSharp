@@ -20,7 +20,7 @@ namespace NumSharp.Backends
         /// <param name="accumulatorType">Optional accumulator type (defaults to input type)</param>
         /// <returns>Scalar result</returns>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        internal unsafe TResult ExecuteElementReduction<TResult>(in NDArray arr, ReductionOp op, NPTypeCode? accumulatorType = null)
+        internal unsafe TResult ExecuteElementReduction<TResult>(NDArray arr, ReductionOp op, NPTypeCode? accumulatorType = null)
             where TResult : unmanaged
         {
             if (arr.size == 0)
@@ -64,7 +64,7 @@ namespace NumSharp.Backends
         /// Execute scalar reduction - just return the value, possibly converted.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static TResult ExecuteScalarReduction<TResult>(in NDArray arr, ReductionOp op, NPTypeCode accumType)
+        private static TResult ExecuteScalarReduction<TResult>(NDArray arr, ReductionOp op, NPTypeCode accumType)
             where TResult : unmanaged
         {
             // For ArgMax/ArgMin of scalar, index is 0
@@ -84,7 +84,7 @@ namespace NumSharp.Backends
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static unsafe TResult ExecuteTypedReductionKernel<TResult>(
             TypedElementReductionKernel<TResult> kernel,
-            in NDArray input)
+            NDArray input)
             where TResult : unmanaged
         {
             int inputElemSize = input.dtypesize;
@@ -333,7 +333,7 @@ namespace NumSharp.Backends
         /// <returns>Result array, or null if SIMD kernel not available</returns>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         protected unsafe NDArray TryExecuteAxisReductionSimd(
-            in NDArray arr,
+            NDArray arr,
             int axis,
             ReductionOp op,
             NPTypeCode outputTypeCode)
@@ -410,7 +410,7 @@ namespace NumSharp.Backends
         /// Falls back to iterator-based approach if SIMD not available.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        protected NDArray sum_axis_simd(in NDArray arr, int axis, NPTypeCode outputTypeCode)
+        protected NDArray sum_axis_simd(NDArray arr, int axis, NPTypeCode outputTypeCode)
         {
             return TryExecuteAxisReductionSimd(arr, axis, ReductionOp.Sum, outputTypeCode);
         }
@@ -420,7 +420,7 @@ namespace NumSharp.Backends
         /// Falls back to iterator-based approach if SIMD not available.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        protected NDArray prod_axis_simd(in NDArray arr, int axis, NPTypeCode outputTypeCode)
+        protected NDArray prod_axis_simd(NDArray arr, int axis, NPTypeCode outputTypeCode)
         {
             return TryExecuteAxisReductionSimd(arr, axis, ReductionOp.Prod, outputTypeCode);
         }
@@ -430,7 +430,7 @@ namespace NumSharp.Backends
         /// Falls back to iterator-based approach if SIMD not available.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        protected NDArray max_axis_simd(in NDArray arr, int axis, NPTypeCode outputTypeCode)
+        protected NDArray max_axis_simd(NDArray arr, int axis, NPTypeCode outputTypeCode)
         {
             return TryExecuteAxisReductionSimd(arr, axis, ReductionOp.Max, outputTypeCode);
         }
@@ -440,7 +440,7 @@ namespace NumSharp.Backends
         /// Falls back to iterator-based approach if SIMD not available.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        protected NDArray min_axis_simd(in NDArray arr, int axis, NPTypeCode outputTypeCode)
+        protected NDArray min_axis_simd(NDArray arr, int axis, NPTypeCode outputTypeCode)
         {
             return TryExecuteAxisReductionSimd(arr, axis, ReductionOp.Min, outputTypeCode);
         }

@@ -5,14 +5,14 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public override NDArray Sinh(in NDArray nd, Type dtype) => Sinh(nd, dtype?.GetTypeCode());
+        public override NDArray Sinh(NDArray nd, Type dtype) => Sinh(nd, dtype?.GetTypeCode());
 
         /// <summary>
         /// Element-wise hyperbolic sine using IL-generated kernels.
         /// </summary>
-        public override NDArray Sinh(in NDArray nd, NPTypeCode? typeCode = null)
+        public override NDArray Sinh(NDArray nd, NPTypeCode? typeCode = null)
         {
-            return ExecuteUnaryOp(in nd, UnaryOp.Sinh, ResolveUnaryReturnType(nd, typeCode));
+            return ExecuteUnaryOp(nd, UnaryOp.Sinh, ResolveUnaryReturnType(nd, typeCode));
         }
     }
 }

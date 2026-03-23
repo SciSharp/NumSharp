@@ -6,30 +6,30 @@ namespace NumSharp
     public static partial class np
     {
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.add.html</remarks>
-        public static NDArray add(in NDArray x1, in NDArray x2)
+        public static NDArray add(NDArray x1, NDArray x2)
             => x1.TensorEngine.Add(x1, x2);
 
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.divide.html</remarks>
-        public static NDArray divide(in NDArray x1, in NDArray x2)
+        public static NDArray divide(NDArray x1, NDArray x2)
             => x1.TensorEngine.Divide(x1, x2);
 
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.true_divide.html</remarks>
-        public static NDArray true_divide(in NDArray x1, in NDArray x2) 
+        public static NDArray true_divide(NDArray x1, NDArray x2) 
             => x1.TensorEngine.Divide(x1, x2);
 
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.multiply.html</remarks>
-        public static NDArray multiply(in NDArray x1, in NDArray x2)
+        public static NDArray multiply(NDArray x1, NDArray x2)
             => x1.TensorEngine.Multiply(x1, x2);
 
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.subtract.html</remarks>
-        public static NDArray subtract(in NDArray x1, in NDArray x2)
+        public static NDArray subtract(NDArray x1, NDArray x2)
             => x1.TensorEngine.Subtract(x1, x2);
 
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.mod.html</remarks>
-        public static NDArray mod(in NDArray x1, in NDArray x2)
+        public static NDArray mod(NDArray x1, NDArray x2)
             => x1.TensorEngine.Mod(x1, x2);
 
-        public static NDArray mod(in NDArray x1, in float x2)
+        public static NDArray mod(NDArray x1, float x2)
             => x1.TensorEngine.Mod(x1, x2);
 
         /// <summary>
@@ -55,21 +55,21 @@ namespace NumSharp
         /// <param name="keepdims">If this is set to True, the axes which are reduced are left in the result as dimensions with size one. With this option, the result will broadcast correctly against the input array.</param>
         /// <returns>An array shaped as a but with the specified axis removed.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.prod.html</remarks>
-        public static NDArray prod(in NDArray a, int? axis = null, Type dtype = null, bool keepdims = false) //todo impl a version with keepdims
+        public static NDArray prod(NDArray a, int? axis = null, Type dtype = null, bool keepdims = false) //todo impl a version with keepdims
             => a.TensorEngine.ReduceProduct(a, axis, keepdims, dtype != null ? dtype.GetTypeCode() : (NPTypeCode?)null);
 
         /// <summary>
         ///     Numerical positive, element-wise.
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.positive.html</remarks>
-        public static NDArray positive(in NDArray nd)
+        public static NDArray positive(NDArray nd)
             => nd.positive();
 
         /// <summary>
         ///     Numerical negative, element-wise.
         /// </summary>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.negative.html</remarks>
-        public static NDArray negative(in NDArray nd)
+        public static NDArray negative(NDArray nd)
             => nd.negative();
     }
 }
