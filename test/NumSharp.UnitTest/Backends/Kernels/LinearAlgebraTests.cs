@@ -123,9 +123,9 @@ public class LinearAlgebraTests
 
         Assert.AreEqual(1, result.ndim);
         Assert.AreEqual(3, result.size);
-        Assert.AreEqual(120, result.GetInt32(0));
-        Assert.AreEqual(135, result.GetInt32(1));
-        Assert.AreEqual(150, result.GetInt32(2));
+        Assert.AreEqual(120L, result.GetInt64(0));
+        Assert.AreEqual(135L, result.GetInt64(1));
+        Assert.AreEqual(150L, result.GetInt64(2));
     }
 
     [Test]

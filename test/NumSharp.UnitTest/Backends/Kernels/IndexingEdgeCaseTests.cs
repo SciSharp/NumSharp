@@ -86,8 +86,8 @@ public class IndexingEdgeCaseTests
 
         Assert.AreEqual(2, result.shape[0]);
         Assert.AreEqual(2, result.shape[1]);
-        Assert.AreEqual(6, result.GetInt32(0, 0));
-        Assert.AreEqual(11, result.GetInt32(1, 1));
+        Assert.AreEqual(6L, result.GetInt64(0, 0));
+        Assert.AreEqual(11L, result.GetInt64(1, 1));
     }
 
     [Test]
@@ -98,8 +98,8 @@ public class IndexingEdgeCaseTests
 
         var result = arr["::-1, ::-1"];
 
-        Assert.AreEqual(11, result.GetInt32(0, 0));
-        Assert.AreEqual(0, result.GetInt32(2, 3));
+        Assert.AreEqual(11L, result.GetInt64(0, 0));
+        Assert.AreEqual(0L, result.GetInt64(2, 3));
     }
 
     #endregion
@@ -151,7 +151,7 @@ public class IndexingEdgeCaseTests
 
         Assert.AreEqual(1, result.ndim);  // Flattened to 1D
         Assert.AreEqual(6, result.size);
-        Assert.AreEqual(6, result.GetInt32(0));
+        Assert.AreEqual(6L, result.GetInt64(0));
     }
 
     [Test]
@@ -166,8 +166,8 @@ public class IndexingEdgeCaseTests
 
         Assert.AreEqual(2, result.shape[0]);
         Assert.AreEqual(4, result.shape[1]);
-        Assert.AreEqual(0, result.GetInt32(0, 0));
-        Assert.AreEqual(8, result.GetInt32(1, 0));
+        Assert.AreEqual(0L, result.GetInt64(0, 0));
+        Assert.AreEqual(8L, result.GetInt64(1, 0));
     }
 
     #endregion
