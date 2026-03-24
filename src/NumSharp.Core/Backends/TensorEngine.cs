@@ -212,7 +212,7 @@ namespace NumSharp
 
         #region Indexing
 
-        public abstract NDArray<int>[] NonZero(NDArray a);
+        public abstract NDArray<long>[] NonZero(NDArray a);
 
         public abstract long CountNonZero(NDArray a);
 

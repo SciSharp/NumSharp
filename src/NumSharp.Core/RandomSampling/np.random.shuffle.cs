@@ -49,8 +49,10 @@ namespace NumSharp
             }
 
             // For multi-dimensional arrays, shuffle along axis 0
-            // Fisher-Yates shuffle
-            for (int i = n - 1; i > 0; i--)
+            // Fisher-Yates shuffle (limited to int range for Random.Next)
+            if (n > int.MaxValue)
+                throw new NotSupportedException($"Shuffle along axis 0 not supported for dimension size {n} > int.MaxValue");
+            for (int i = (int)n - 1; i > 0; i--)
             {
                 int j = randomizer.Next(i + 1);
                 if (i != j)
@@ -63,8 +65,12 @@ namespace NumSharp
         /// <summary>
         ///     Optimized shuffle for 1D contiguous arrays.
         /// </summary>
-        private unsafe void Shuffle1DContiguous(NDArray x, int n)
+        private unsafe void Shuffle1DContiguous(NDArray x, long n)
         {
+            // Random.Next only supports int range
+            if (n > int.MaxValue)
+                throw new NotSupportedException($"Shuffle not supported for arrays with size {n} > int.MaxValue");
+
             var itemSize = x.dtypesize;
             var addr = (byte*)x.Address;
 
@@ -72,7 +78,8 @@ namespace NumSharp
             var temp = stackalloc byte[itemSize];
 
             // Fisher-Yates shuffle
-            for (int i = n - 1; i > 0; i--)
+            int nInt = (int)n;
+            for (int i = nInt - 1; i > 0; i--)
             {
                 int j = randomizer.Next(i + 1);
                 if (i != j)

@@ -60,7 +60,7 @@ namespace NumSharp
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.broadcast_arrays.html</remarks>
         public static bool are_broadcastable(long[] shape1, long[] shape2)
         {
-            return DefaultEngine.AreBroadcastable(new[] { new Shape(shape1), new Shape(shape2) });
+            return Shape.AreBroadcastable(new Shape(shape1), new Shape(shape2));
         }
     }
 }

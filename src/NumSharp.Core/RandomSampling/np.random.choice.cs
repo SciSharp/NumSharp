@@ -1,3 +1,5 @@
+using System;
+
 namespace NumSharp
 {
     public partial class NumPyRandom
@@ -15,7 +17,10 @@ namespace NumSharp
         /// </remarks>
         public NDArray choice(NDArray a, Shape size = default, bool replace = true, double[] p = null)
         {
-            int arrSize = a.size;
+            // choice operates on 1D arrays which are practically limited to int range
+            if (a.size > int.MaxValue)
+                throw new ArgumentException($"Array size {a.size} exceeds maximum supported size for choice", nameof(a));
+            int arrSize = (int)a.size;
             NDArray mask = choice(arrSize, size, replace, p);
             return a[mask];
         }

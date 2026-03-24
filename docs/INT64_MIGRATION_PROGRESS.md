@@ -6,275 +6,258 @@ This document tracks the progress of migrating recent commits to comply with the
 
 ## Session Summary
 
-**Date**: 2026-03-24
+**Date**: 2026-03-24 (Updated)
 **Focus**: Fixing int32 violations in commits introduced via rebase from master (ikernel branch)
 
 ---
 
-## Completed Fixes
+## Build Status
 
-### 1. ILKernelGenerator.Reduction.Arg.cs
-
-**Location**: `src/NumSharp.Core/Backends/Kernels/ILKernelGenerator.Reduction.Arg.cs`
-
-**Changes**:
-- `ArgMaxSimdHelper<T>()` - Return type `int` → `long`, parameter `int totalSize` → `long totalSize`
-- `ArgMinSimdHelper<T>()` - Return type `int` → `long`, parameter `int totalSize` → `long totalSize`
-- `ArgMaxFloatNaNHelper()` - Return type `int` → `long`, parameter `int totalSize` → `long totalSize`
-- `ArgMinFloatNaNHelper()` - Return type `int` → `long`, parameter `int totalSize` → `long totalSize`
-- `ArgMaxDoubleNaNHelper()` - Return type `int` → `long`, parameter `int totalSize` → `long totalSize`
-- `ArgMinDoubleNaNHelper()` - Return type `int` → `long`, parameter `int totalSize` → `long totalSize`
-- `ArgMaxBoolHelper()` - Return type `int` → `long`, parameter `int totalSize` → `long totalSize`
-- `ArgMinBoolHelper()` - Return type `int` → `long`, parameter `int totalSize` → `long totalSize`
-- All internal `int bestIndex` → `long bestIndex`
-- All internal `int i` loop counters → `long i`
-- All `int vectorEnd` → `long vectorEnd`
+**BUILD: PASSING** (0 errors)
+**Tests**: 193 failures (memory corruption issues under investigation)
 
 ---
 
-### 2. ILKernelGenerator.Reduction.Axis.Simd.cs
+## Completed Fixes (Session 2)
 
-**Location**: `src/NumSharp.Core/Backends/Kernels/ILKernelGenerator.Reduction.Axis.Simd.cs`
+### 15. Shape.Broadcasting.cs
+
+**Location**: `src/NumSharp.Core/View/Shape.Broadcasting.cs`
 
 **Changes**:
-- `int[] outputDimStridesArray` → `long[]`
-- `DivideByCountTyped<T>(T value, int count)` → `long count`
-- `ReduceContiguousAxis<T>(T* data, int size, ...)` → `long size`
-- `ReduceContiguousAxisSimd256<T>()` - `int vectorEnd` → `long`, `int i` → `long i`, `int unrollStep/End` → `long`
-- `ReduceContiguousAxisSimd128<T>()` - Same changes as above
-- `ReduceContiguousAxisScalar<T>(T* data, int size, ...)` → `long size`, `int i` → `long i`
-- `ReduceStridedAxis<T>(T* data, int size, int stride, ...)` → `long size, long stride`
-- `ReduceStridedAxisGatherFloat()` → `long size, long stride`, added `int strideInt = (int)stride` for AVX2 gather
-- `ReduceStridedAxisGatherDouble()` → `long size, long stride`, added `int strideInt = (int)stride` for AVX2 gather
-- `ReduceStridedAxisScalar<T>()` → `long size, long stride`, `int i` → `long i`, `int unrollEnd` → `long`
+- `var mit = new int[nd]` -> `new long[nd]` (ResolveReturnShape)
+- `int tmp` -> `long tmp` (all methods)
+- `var mitDims = new int[nd]` -> `new long[nd]` (Broadcast methods)
+- `var broadcastStrides = new int[nd]` -> `new long[nd]`
+- `var zeroStrides = new int[...]` -> `new long[...]`
+- `var leftStrides/rightStrides = new int[nd]` -> `new long[nd]`
+- `int bufSize` -> `long bufSize`
+- Constructor calls updated: `(int[])mitDims.Clone()` -> `(long[])mitDims.Clone()`
+- `stackalloc int[nd]` -> `stackalloc long[nd]` (AreBroadcastable)
 
 ---
 
-### 3. ILKernelGenerator.Reduction.Axis.cs
+### 16. NDArray.cs (Constructor Overloads)
 
-**Location**: `src/NumSharp.Core/Backends/Kernels/ILKernelGenerator.Reduction.Axis.cs`
+**Location**: `src/NumSharp.Core/Backends/NDArray.cs`
 
 **Changes**:
-- Line 247: `for (int i = 0; i < axisSize; i++)` → `for (long i = 0; ...)`
-- Line 362: `for (int outIdx = 0; outIdx < outputSize; outIdx++)` → `for (long outIdx = 0; ...)`
-- Line 382: `for (int i = 0; i < axisSize; i++)` → `for (long i = 0; ...)`
+- Added `public NDArray(NPTypeCode dtype, long size)` constructor
+- Added `public NDArray(NPTypeCode dtype, long size, bool fillZeros)` constructor
 
 ---
 
-### 4. ILKernelGenerator.Reduction.NaN.cs
+### 17. NumSharp.Core.csproj
 
-**Location**: `src/NumSharp.Core/Backends/Kernels/ILKernelGenerator.Reduction.NaN.cs`
+**Location**: `src/NumSharp.Core/NumSharp.Core.csproj`
 
 **Changes**:
-- Fixed rebase conflict: `public sealed partial class` → `public static partial class`
+- Added exclusion for Regen template files: `<Compile Remove="**\*.template.cs" />`
+- Added exclusion for disabled files: `<Compile Remove="**\*.regen_disabled" />`
 
 ---
 
-### 5. ILKernelGenerator.Masking.cs
+### 18. np.random.choice.cs
 
-**Location**: `src/NumSharp.Core/Backends/Kernels/ILKernelGenerator.Masking.cs`
+**Location**: `src/NumSharp.Core/RandomSampling/np.random.choice.cs`
 
 **Changes**:
-- `ConvertFlatIndicesToCoordinates(..., int[] shape)` → `long[] shape`
-- `FindNonZeroStridedHelper<T>(..., int[] shape, ...)` → `long[] shape`
+- Added `using System;` for ArgumentException
+- Added size overflow check with explicit cast: `if (a.size > int.MaxValue) throw`
 
 ---
 
-### 6. Default.Reduction.Nan.cs
+### 19. np.random.shuffle.cs
 
-**Location**: `src/NumSharp.Core/Backends/Default/Math/Reduction/Default.Reduction.Nan.cs`
+**Location**: `src/NumSharp.Core/RandomSampling/np.random.shuffle.cs`
 
 **Changes**:
-- `var keepdimsShape = new int[arr.ndim]` → `new long[arr.ndim]` (2 occurrences)
-- `var outputDims = new int[arr.ndim - 1]` → `new long[arr.ndim - 1]` (2 occurrences)
-- `int axisSize = shape.dimensions[axis]` → `long axisSize`
-- `int outputSize = result.size` → `long outputSize`
-- `fixed (int* inputStrides = ...)` → `fixed (long* ...)`
-- `fixed (int* inputDims = ...)` → `fixed (long* ...)`
-- `fixed (int* outputStrides = ...)` → `fixed (long* ...)`
-- `var ks = new int[arr.ndim]` → `new long[arr.ndim]` (2 occurrences)
-- `int[] outputDimStrides` → `long[]`
-- `for (int outIdx = 0; ...)` → `for (long outIdx = 0; ...)`
-- `int remaining`, `int inputBaseOffset`, `int coord` → `long`
-- `ReduceNanAxisScalarFloat(NDArray arr, int baseOffset, int axisSize, int axisStride, ...)` → all `long`
-- `ReduceNanAxisScalarDouble(...)` → all `long`
-- All `for (int i = 0; i < axisSize; i++)` → `for (long i = 0; ...)`
+- `Shuffle1DContiguous(NDArray x, int n)` -> `long n`
+- Added overflow check for shuffle dimension > int.MaxValue
+- Loop counters updated for long-compatible iteration
 
 ---
 
-### 7. Default.NonZero.cs
+### 20. np.size.cs
+
+**Location**: `src/NumSharp.Core/APIs/np.size.cs`
+
+**Changes**:
+- Return type `public static int size(...)` -> `long`
+
+---
+
+### 21. Default.Transpose.cs
+
+**Location**: `src/NumSharp.Core/Backends/Default/ArrayManipulation/Default.Transpose.cs`
+
+**Changes**:
+- `var emptyDims = new int[n]` -> `new long[n]`
+- `var permutedDims = new int[n]` -> `new long[n]`
+- `var permutedStrides = new int[n]` -> `new long[n]`
+- `int bufSize` -> `long bufSize`
+
+---
+
+### 22. Default.NonZero.cs (Return Type)
 
 **Location**: `src/NumSharp.Core/Backends/Default/Indexing/Default.NonZero.cs`
 
 **Changes**:
-- `public override int CountNonZero(NDArray nd)` → `long`
-- `var outputDims = new int[nd.ndim - 1]` → `new long[...]`
-- `var ks = new int[nd.ndim]` → `new long[...]`
-- `private static unsafe int count_nonzero<T>(...)` → `long`, `int count` → `long count`
-- `for (int i = 0; i < size; i++)` → `for (long i = 0; ...)`
-- `count_nonzero_axis<T>()`:
-  - `long axisSize = shape.dimensions[axis]`
-  - `Span<int> outputDimStrides` → `Span<long>`
-  - `int axisStride` → `long axisStride`
-  - `for (int outIdx = 0; ...)` → `for (long outIdx = 0; ...)`
-  - `int remaining`, `int inputBaseOffset`, `int coord` → `long`
-  - `for (int i = 0; i < axisSize; i++)` → `for (long i = 0; ...)`
+- `public override NDArray<int>[] NonZero(...)` -> `NDArray<long>[]`
+- `private static unsafe NDArray<int>[] nonzeros<T>(...)` -> `NDArray<long>[]`
+- Removed outdated SIMD path using `kp` variable
 
 ---
 
-### 8. Default.BooleanMask.cs
-
-**Location**: `src/NumSharp.Core/Backends/Default/Indexing/Default.BooleanMask.cs`
-
-**Changes**:
-- `int size = arr.size` → `long size`
-- `int trueCount = ILKernelGenerator.CountTrueSimdHelper(...)` → `long trueCount`
-- `int trueCount = 0` → `long trueCount = 0`
-- `int destIdx`, `int srcIdx` → `long destIdx`, `long srcIdx`
-
----
-
-### 9. TensorEngine.cs
+### 23. TensorEngine.cs (NonZero)
 
 **Location**: `src/NumSharp.Core/Backends/TensorEngine.cs`
 
 **Changes**:
-- `public abstract int CountNonZero(NDArray a)` → `long`
-- Removed duplicate `CountNonZero(in NDArray a)` declarations (rebase conflict)
+- `public abstract NDArray<int>[] NonZero(...)` -> `NDArray<long>[]`
 
 ---
 
-### 10. np.count_nonzero.cs
+### 24. np.nonzero.cs
 
-**Location**: `src/NumSharp.Core/APIs/np.count_nonzero.cs`
+**Location**: `src/NumSharp.Core/Indexing/np.nonzero.cs`
 
 **Changes**:
-- `public static int count_nonzero(NDArray a)` → `long`
-- `var ks = new int[a.ndim]` → `new long[a.ndim]`
+- Return type `NDArray<int>[]` -> `NDArray<long>[]`
 
 ---
 
-### 11. np.any.cs
+### 25. np.are_broadcastable.cs
 
-**Location**: `src/NumSharp.Core/Logic/np.any.cs`
+**Location**: `src/NumSharp.Core/Creation/np.are_broadcastable.cs`
 
 **Changes**:
-- `int[] inputShape = nd.shape` → `long[]`
-- `int[] outputShape = new int[...]` → `long[]`
-- `int axisSize = inputShape[axis]` → `long`
-- `int postAxisStride = 1` → `long`
-- `ComputeAnyPerAxis<T>(..., int axisSize, int postAxisStride, ...)` → `long, long`
-- Internal `int blockIndex`, `int inBlockIndex`, `int inputStartIndex` → `long`
-- `for (int a = 0; a < axisSize; a++)` → `for (long a = 0; ...)`
+- Fixed undefined `DefaultEngine` reference -> `Shape.AreBroadcastable`
 
 ---
 
-### 12. np.all.cs
+### 26. np.array.cs
 
-**Location**: `src/NumSharp.Core/Logic/np.all.cs`
+**Location**: `src/NumSharp.Core/Creation/np.array.cs`
 
 **Changes**:
-- Same pattern as np.any.cs (mirror changes)
+- `int stride1 = strides[0]` -> `long stride1` (4 locations)
+- `int stride2 = strides[1]` -> `long stride2` (3 locations)
+- `int stride3 = strides[2]` -> `long stride3` (2 locations)
+- `int stride4 = strides[3]` -> `long stride4` (1 location)
 
 ---
 
-### 13. np.random.rand.cs
+### 27. NDArray.matrix_power.cs
 
-**Location**: `src/NumSharp.Core/RandomSampling/np.random.rand.cs`
+**Location**: `src/NumSharp.Core/LinearAlgebra/NDArray.matrix_power.cs`
 
 **Changes**:
-- Removed duplicate `random(params int[] size)` and `random(Shape shape)` methods (rebase conflict)
+- `np.eye(product.shape[0])` -> `np.eye((int)product.shape[0])` with comment
 
 ---
 
-### 14. Default.Op.Boolean.template.cs
+### 28. NDArray.Indexing.Masking.cs
 
-**Location**: `src/NumSharp.Core/Operations/Elementwise/Templates/Default.Op.Boolean.template.cs`
+**Location**: `src/NumSharp.Core/Selection/NDArray.Indexing.Masking.cs`
 
 **Changes**:
-- **Deleted** - Duplicate of Default.Op.Equals.template.cs (rebase conflict)
+- `var newShape = new int[...]` -> `new long[...]` (BooleanScalarIndex)
+- `int trueCount = indices[0].size` -> `long trueCount`
+- `var emptyShape = new int[...]` -> `new long[...]`
+- `var resultShape = new int[...]` -> `new long[...]`
+- Loop counters `for (int idx = 0; ...)` -> `for (long idx = 0; ...)`
+- `indices[dim].GetInt32(idx)` -> `indices[dim].GetInt64(idx)`
+
+---
+
+### 29. ILKernelGenerator.Reduction.Axis.Simd.cs (Delegate)
+
+**Location**: `src/NumSharp.Core/Backends/Kernels/ILKernelGenerator.Reduction.Axis.Simd.cs`
+
+**Changes**:
+- Lambda parameters updated to match `AxisReductionKernel` delegate:
+  - `int* inputStrides` -> `long*`
+  - `int* inputShape` -> `long*`
+  - `int* outputStrides` -> `long*`
+  - `int axisSize` -> `long`
+  - `int outputSize` -> `long`
+- `AxisReductionSimdHelper<T>` signature updated to match
+- `int axisStride` -> `long axisStride`
+- Loop counters `for (int outIdx = 0; ...)` -> `for (long outIdx = 0; ...)`
+- `int remaining`, `int inputBaseOffset`, `int outputOffset` -> `long`
+- `int coord` -> `long coord`
+- Fixed integer division in `DivideByCountTyped` for int type
+
+---
+
+## Previously Completed Fixes (Session 1)
+
+### 1-14. (See previous session)
+
+Files fixed in previous session include:
+- ILKernelGenerator.Reduction.Arg.cs
+- ILKernelGenerator.Reduction.Axis.Simd.cs (partial)
+- ILKernelGenerator.Reduction.Axis.cs
+- ILKernelGenerator.Reduction.NaN.cs
+- ILKernelGenerator.Masking.cs
+- Default.Reduction.Nan.cs
+- Default.NonZero.cs
+- Default.BooleanMask.cs
+- TensorEngine.cs
+- np.count_nonzero.cs
+- np.any.cs
+- np.all.cs
+- np.random.rand.cs
+- Default.Op.Boolean.template.cs (deleted)
+
+---
+
+## Known Issues
+
+### Memory Corruption in Tests (193 failures)
+
+Tests are showing memory corruption symptoms:
+- Values like `34359738376` or `-9223365347867329507` appearing instead of expected values
+- "index < Count, Memory corruption expected" assertion failures
+- Affects clip, view semantics, and other tests
+
+**Likely Causes**:
+1. Stride calculations using wrong types somewhere
+2. Offset calculations not fully migrated
+3. Some kernel paths still using int where long is needed
+
+**Investigation Needed**: Focus on clip kernel and view/slice operations.
 
 ---
 
 ## Remaining Work
 
-### High Priority - Build Blocking (~96 errors)
-
-#### Shape.Broadcasting.cs
-**Location**: `src/NumSharp.Core/View/Shape.Broadcasting.cs`
-
-**Issues** (lines approximate):
-- Line 50, 71, 131, 191, 217, 221, 251, 265, 288, 301, 320, 331, 335, 336: `int` → `long` conversions needed
-- Lines 223-224, 253-254, 267-268, 338: `int[]` → `long[]` argument mismatches
-- Pattern: Methods returning/using `int[]` for dimensions need `long[]`
-
-#### NDArray`1.cs
-**Location**: `src/NumSharp.Core/Generics/NDArray`1.cs`
-
-**Issues**:
-- Line 92: Constructor signature mismatch (NPTypeCode, long, bool)
-- Line 146: Constructor signature mismatch (NPTypeCode, long)
-- Likely needs constructor overloads or signature updates
-
-#### np.random.choice.cs
-**Location**: `src/NumSharp.Core/RandomSampling/np.random.choice.cs`
-
-**Issues**:
-- Line 18: `int` → `long` conversion needed
-
----
-
 ### Medium Priority - Not Yet Audited
-
-These files were identified in the initial scan but not yet fixed:
 
 | File | Issue |
 |------|-------|
-| `np.load.cs` | `int[] shape` declarations (lines 30, 137, 158, 177, 211, 244, 283) |
-| `np.save.cs` | `int[] shape` declarations (lines 55, 74, 87, 102, 120, 159, 209) |
-| `NDArray.cs` | `int[] indices` parameters (convenience overloads - may keep for API compat) |
+| `np.load.cs` | `int[] shape` declarations |
+| `np.save.cs` | `int[] shape` declarations |
+| `NDArray.cs` | `int[] indices` parameters (may keep for API compat) |
 | `NdArray.ReShape.cs` | `int[] shape` parameters |
 | `NDArray`1.ReShape.cs` | `int[] shape` parameters |
 
----
+### User Request: Random Functions
 
-### Delegate Signature Changes (Deferred)
-
-The `AxisReductionKernel` delegate in `ILKernelGenerator.Reduction.Axis.Simd.cs` still uses:
-```csharp
-(void* input, void* output, int* inputStrides, int* inputShape,
- int* outputStrides, int axis, int axisSize, int ndim, int outputSize)
-```
-
-This needs to be:
-```csharp
-(void* input, void* output, long* inputStrides, long* inputShape,
- long* outputStrides, int axis, long axisSize, int ndim, long outputSize)
-```
-
-**Impact**: Requires updating:
-1. The delegate definition
-2. All kernel generation code that creates these delegates
-3. All callers that invoke these kernels
-
----
-
-## Testing Status
-
-**Build Status**: FAILING (96 errors remaining)
-**Tests**: Not run (blocked by build errors)
+User requested all random functions support long. Current state:
+- Some random functions have int limits due to `Random.Next(int)` limitation
+- Need to add long overloads or use alternative random generation for large arrays
 
 ---
 
 ## Next Steps
 
-1. Fix `Shape.Broadcasting.cs` - Main source of cascading errors
-2. Fix `NDArray`1.cs` constructor signatures
-3. Fix `np.random.choice.cs`
-4. Run build to verify
-5. Continue with medium priority files
-6. Update delegate signatures (major change)
-7. Run full test suite
+1. **Investigate memory corruption** - Focus on clip kernel and stride calculations
+2. **Add long support to random functions** - User requirement
+3. **Audit remaining files** - np.load.cs, np.save.cs, reshape methods
+4. **Run full test suite** after corruption fix
 
 ---
 

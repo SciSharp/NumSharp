@@ -170,7 +170,7 @@ namespace NumSharp
                 NDArray @out = new NDArray(InfoOf<T>.NPTypeCode, new Shape(len1, len2));
 
                 var strides = @out.strides;
-                int stride1 = strides[0];
+                long stride1 = strides[0];
                 Debug.Assert(strides[1] == 1);
 
                 T* addr = (T*)@out.Address;
@@ -209,8 +209,8 @@ namespace NumSharp
                 NDArray @out = new NDArray(InfoOf<T>.NPTypeCode, new Shape(len1, len2, len3));
 
                 var strides = @out.strides;
-                int stride1 = strides[0];
-                int stride2 = strides[1];
+                long stride1 = strides[0];
+                long stride2 = strides[1];
                 Debug.Assert(strides[2] == 1);
 
                 T* addr = (T*)@out.Address;
@@ -255,9 +255,9 @@ namespace NumSharp
                 NDArray @out = new NDArray(InfoOf<T>.NPTypeCode, new Shape(len1, len2, len3, len4));
 
                 var strides = @out.strides;
-                int stride1 = strides[0];
-                int stride2 = strides[1];
-                int stride3 = strides[2];
+                long stride1 = strides[0];
+                long stride2 = strides[1];
+                long stride3 = strides[2];
                 Debug.Assert(strides[3] == 1);
 
                 T* addr = (T*)@out.Address;
@@ -308,10 +308,10 @@ namespace NumSharp
                 NDArray @out = new NDArray(InfoOf<T>.NPTypeCode, new Shape(len1, len2, len3, len4, len5));
 
                 var strides = @out.strides;
-                int stride1 = strides[0];
-                int stride2 = strides[1];
-                int stride3 = strides[2];
-                int stride4 = strides[3];
+                long stride1 = strides[0];
+                long stride2 = strides[1];
+                long stride3 = strides[2];
+                long stride4 = strides[3];
                 Debug.Assert(strides[4] == 1);
 
                 T* addr = (T*)@out.Address;

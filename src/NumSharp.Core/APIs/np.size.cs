@@ -11,7 +11,7 @@ namespace NumSharp
         /// <param name="axis">Axis along which the elements are counted. By default, give the total number of elements.</param>
         /// <returns>Number of elements along the specified axis.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ma.size.html</remarks>
-        public static int size(NDArray a, int? axis = null)
+        public static long size(NDArray a, int? axis = null)
         {
             if (a == null)
                 throw new ArgumentNullException(nameof(a));

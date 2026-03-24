@@ -29,8 +29,8 @@ namespace NumSharp.Backends.Kernels
         private static unsafe AxisReductionKernel CreateAxisReductionKernelTyped<T>(AxisReductionKernelKey key)
             where T : unmanaged
         {
-            return (void* input, void* output, int* inputStrides, int* inputShape,
-                    int* outputStrides, int axis, int axisSize, int ndim, int outputSize) =>
+            return (void* input, void* output, long* inputStrides, long* inputShape,
+                    long* outputStrides, int axis, long axisSize, int ndim, long outputSize) =>
             {
                 AxisReductionSimdHelper<T>(
                     (T*)input, (T*)output,
@@ -57,12 +57,12 @@ namespace NumSharp.Backends.Kernels
         /// <param name="op">Reduction operation</param>
         internal static unsafe void AxisReductionSimdHelper<T>(
             T* input, T* output,
-            int* inputStrides, int* inputShape, int* outputStrides,
-            int axis, int axisSize, int ndim, int outputSize,
+            long* inputStrides, long* inputShape, long* outputStrides,
+            int axis, long axisSize, int ndim, long outputSize,
             ReductionOp op)
             where T : unmanaged
         {
-            int axisStride = inputStrides[axis];
+            long axisStride = inputStrides[axis];
 
             // Check if the reduction axis is contiguous (stride == 1)
             bool axisContiguous = axisStride == 1;
@@ -89,19 +89,19 @@ namespace NumSharp.Backends.Kernels
             bool isMean = op == ReductionOp.Mean;
 
             // Sequential loop over output elements
-            for (int outIdx = 0; outIdx < outputSize; outIdx++)
+            for (long outIdx = 0; outIdx < outputSize; outIdx++)
             {
                 // Convert linear output index to coordinates and compute input base offset
-                int remaining = outIdx;
-                int inputBaseOffset = 0;
-                int outputOffset = 0;
+                long remaining = outIdx;
+                long inputBaseOffset = 0;
+                long outputOffset = 0;
 
                 for (int d = 0; d < outputNdim; d++)
                 {
                     // Map output dimension d to input dimension
                     int inputDim = d >= axis ? d + 1 : d;
 
-                    int coord = remaining / outputDimStridesArray[d];
+                    long coord = remaining / outputDimStridesArray[d];
                     remaining = remaining % outputDimStridesArray[d];
 
                     inputBaseOffset += coord * inputStrides[inputDim];
@@ -149,7 +149,7 @@ namespace NumSharp.Backends.Kernels
             if (typeof(T) == typeof(int))
             {
                 // Integer division
-                int result = (int)(object)value / count;
+                int result = (int)((int)(object)value / count);
                 return (T)(object)result;
             }
             if (typeof(T) == typeof(long))

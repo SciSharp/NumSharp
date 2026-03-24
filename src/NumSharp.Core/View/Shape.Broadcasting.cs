@@ -31,12 +31,12 @@ namespace NumSharp
                 return leftShape;
 
             int i, nd, k;
-            int tmp;
+            long tmp;
 
             nd = Math.Max(leftShape.NDim, rightShape.NDim);
 
             // This is the shared shape aka the target broadcast
-            var mit = new int[nd];
+            var mit = new long[nd];
 
             // Discover the broadcast shape in each dimension
             for (i = 0; i < nd; i++)
@@ -104,7 +104,8 @@ namespace NumSharp
                 return shapes[0].Clean();
 
             Shape mit;
-            int i, nd, k, tmp;
+            int i, nd, k;
+            long tmp;
 
             int len = shapes.Length;
 
@@ -164,7 +165,8 @@ namespace NumSharp
             if (shapes.Length == 1)
                 return new Shape[] { shapes[0].Clean() };
 
-            int i, nd, k, j, tmp;
+            int i, nd, k, j;
+            long tmp;
 
             var ret = new Shape[shapes.Length];
             int len = shapes.Length;
@@ -176,7 +178,7 @@ namespace NumSharp
                 nd = Math.Max(nd, shapes[i].NDim);
 
             // Use temporary array for broadcast dimensions (not Shape.Empty)
-            var mitDims = new int[nd];
+            var mitDims = new long[nd];
 
             // Discover the broadcast shape in each dimension
             for (i = 0; i < nd; i++)
@@ -207,7 +209,7 @@ namespace NumSharp
                 int ogNd = ogiter.NDim;
 
                 // Compute broadcast strides
-                var broadcastStrides = new int[nd];
+                var broadcastStrides = new long[nd];
                 for (j = 0; j < nd; j++)
                 {
                     k = j + ogNd - nd;
@@ -218,9 +220,9 @@ namespace NumSharp
                 }
 
                 // Create immutable shape via constructor
-                int bufSize = ogiter.bufferSize > 0 ? ogiter.bufferSize : ogiter.size;
+                long bufSize = ogiter.bufferSize > 0 ? ogiter.bufferSize : ogiter.size;
                 ret[i] = new Shape(
-                    (int[])mitDims.Clone(),
+                    (long[])mitDims.Clone(),
                     broadcastStrides,
                     ogiter.offset,
                     bufSize
@@ -242,15 +244,16 @@ namespace NumSharp
             if (leftShape._hashCode != 0 && leftShape._hashCode == rightShape._hashCode)
                 return (leftShape, rightShape);
 
-            int i, nd, k, j, tmp;
+            int i, nd, k, j;
+            long tmp;
 
             // Is left a scalar - broadcast to right's shape with zero strides
             if (leftShape.IsScalar || leftShape.NDim == 1 && leftShape.size == 1)
             {
-                var zeroStrides = new int[rightShape.NDim];
-                int leftBufSize = leftShape.bufferSize > 0 ? leftShape.bufferSize : leftShape.size;
+                var zeroStrides = new long[rightShape.NDim];
+                long leftBufSize = leftShape.bufferSize > 0 ? leftShape.bufferSize : leftShape.size;
                 var left = new Shape(
-                    (int[])rightShape.dimensions.Clone(),
+                    (long[])rightShape.dimensions.Clone(),
                     zeroStrides,
                     leftShape.offset,
                     leftBufSize
@@ -261,10 +264,10 @@ namespace NumSharp
             // Is right a scalar - broadcast to left's shape with zero strides
             if (rightShape.IsScalar || rightShape.NDim == 1 && rightShape.size == 1)
             {
-                var zeroStrides = new int[leftShape.NDim];
-                int rightBufSize = rightShape.bufferSize > 0 ? rightShape.bufferSize : rightShape.size;
+                var zeroStrides = new long[leftShape.NDim];
+                long rightBufSize = rightShape.bufferSize > 0 ? rightShape.bufferSize : rightShape.size;
                 var right = new Shape(
-                    (int[])leftShape.dimensions.Clone(),
+                    (long[])leftShape.dimensions.Clone(),
                     zeroStrides,
                     rightShape.offset,
                     rightBufSize
@@ -273,11 +276,10 @@ namespace NumSharp
             }
 
             // General case: compute broadcast shape
-            tmp = 0;
             nd = Math.Max(rightShape.NDim, leftShape.NDim);
 
             // Compute broadcast dimensions into temporary array
-            var mitDims = new int[nd];
+            var mitDims = new long[nd];
             for (i = 0; i < nd; i++)
             {
                 mitDims[i] = 1;
@@ -310,7 +312,7 @@ namespace NumSharp
             }
 
             // Compute left broadcast strides
-            var leftStrides = new int[nd];
+            var leftStrides = new long[nd];
             for (j = 0; j < nd; j++)
             {
                 k = j + leftShape.NDim - nd;
@@ -321,7 +323,7 @@ namespace NumSharp
             }
 
             // Compute right broadcast strides
-            var rightStrides = new int[nd];
+            var rightStrides = new long[nd];
             for (j = 0; j < nd; j++)
             {
                 k = j + rightShape.NDim - nd;
@@ -332,11 +334,11 @@ namespace NumSharp
             }
 
             // Create immutable shapes via constructors
-            int leftBufSize2 = leftShape.bufferSize > 0 ? leftShape.bufferSize : leftShape.size;
-            int rightBufSize2 = rightShape.bufferSize > 0 ? rightShape.bufferSize : rightShape.size;
+            long leftBufSize2 = leftShape.bufferSize > 0 ? leftShape.bufferSize : leftShape.size;
+            long rightBufSize2 = rightShape.bufferSize > 0 ? rightShape.bufferSize : rightShape.size;
 
             var leftResult = new Shape(mitDims, leftStrides, leftShape.offset, leftBufSize2);
-            var rightResult = new Shape((int[])mitDims.Clone(), rightStrides, rightShape.offset, rightBufSize2);
+            var rightResult = new Shape((long[])mitDims.Clone(), rightStrides, rightShape.offset, rightBufSize2);
 
             return (leftResult, rightResult);
         }
@@ -351,11 +353,11 @@ namespace NumSharp
             if (shapes.Length <= 1)
                 return true;
 
-            int i, nd, k, tmp;
+            int i, nd, k;
+            long tmp;
 
             int len = shapes.Length;
 
-            tmp = 0;
             // Discover the broadcast number of dimensions
             // Gets the largest ndim of all iterators
             nd = 0;
@@ -363,7 +365,7 @@ namespace NumSharp
                 nd = Math.Max(nd, shapes[i].NDim);
 
             // This is the shared shape aka the target broadcast
-            var mit = stackalloc int[nd];
+            var mit = stackalloc long[nd];
 
             // Discover the broadcast shape in each dimension
             for (i = 0; i < nd; i++)

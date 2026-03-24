@@ -19,8 +19,8 @@ namespace NumSharp.Backends
         /// - Handles contiguous and strided arrays efficiently
         /// </remarks>
         /// <param name="nd">Input array</param>
-        /// <returns>Array of NDArray&lt;int&gt;, one per dimension containing indices of non-zero elements</returns>
-        public override NDArray<int>[] NonZero(NDArray nd)
+        /// <returns>Array of NDArray&lt;long&gt;, one per dimension containing indices of non-zero elements</returns>
+        public override NDArray<long>[] NonZero(NDArray nd)
         {
             // Type dispatch to generic implementation
             switch (nd.typecode)
@@ -44,9 +44,9 @@ namespace NumSharp.Backends
 
         /// <summary>
         /// Generic implementation of nonzero using ILKernelGenerator.
-        /// Both contiguous and strided paths now use the unified IL-based approach.
+        /// Uses coordinate-based iteration via ILKernelGenerator for all cases.
         /// </summary>
-        private static unsafe NDArray<int>[] nonzeros<T>(NDArray<T> x) where T : unmanaged
+        private static unsafe NDArray<long>[] nonzeros<T>(NDArray<T> x) where T : unmanaged
         {
             // Ensure at least 1D (NumPy behavior)
             x = np.atleast_1d(x).MakeGeneric<T>();
@@ -58,22 +58,14 @@ namespace NumSharp.Backends
             // NumPy: np.nonzero(np.array([])) -> (array([], dtype=int64),)
             if (size == 0)
             {
-                var emptyResult = new NDArray<int>[ndim];
+                var emptyResult = new NDArray<long>[ndim];
                 for (int i = 0; i < ndim; i++)
-                    emptyResult[i] = new NDArray<int>(0);
+                    emptyResult[i] = new NDArray<long>(0);
                 return emptyResult;
             }
 
-            // SIMD fast path for contiguous arrays
-            if (shape.IsContiguous && ILKernelGenerator.Enabled && ILKernelGenerator.VectorBits > 0)
-            {
-                var flatIndices = new ArraySlice<long>(Math.Max(16L, size / 4L));
-                kp.FindNonZero((T*)x.Address, size, flatIndices);
-                return kp.ConvertFlatToCoordinates(flatIndices, x.shape);
-            }
-
-            // Strided path for non-contiguous arrays (transposed, sliced, etc.)
-            // Uses coordinate-based iteration via ILKernelGenerator
+            // Use strided helper for all cases (handles both contiguous and non-contiguous)
+            // The ILKernelGenerator.FindNonZeroStridedHelper uses coordinate-based iteration
             return ILKernelGenerator.FindNonZeroStridedHelper((T*)x.Address, shape.dimensions, shape.strides, shape.offset);
         }
 
