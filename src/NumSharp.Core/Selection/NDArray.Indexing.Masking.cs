@@ -259,8 +259,8 @@ namespace NumSharp
             var result = new NDArray(this.dtype, new Shape(resultShape));
 
             // Copy selected slices
-            int destIdx = 0;
-            for (int srcIdx = 0; srcIdx < mask.size; srcIdx++)
+            long destIdx = 0;
+            for (long srcIdx = 0; srcIdx < mask.size; srcIdx++)
             {
                 if (mask.GetBoolean(srcIdx))
                 {

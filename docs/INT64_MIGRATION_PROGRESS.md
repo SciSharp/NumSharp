@@ -18,6 +18,56 @@ This document tracks the progress of migrating recent commits to comply with the
 
 ---
 
+## Completed Fixes (Session 5)
+
+### 39. NDArray.Indexing.Masking.cs - Additional loop counter fix
+
+**Location**: `src/NumSharp.Core/Selection/NDArray.Indexing.Masking.cs`
+
+**Changes**:
+- `int destIdx = 0; for (int srcIdx = 0; srcIdx < mask.size; srcIdx++)` → `long destIdx = 0; for (long srcIdx = 0; ...)`
+
+### 40. NdArrayToJaggedArray.cs - Overflow checks for managed array limits
+
+**Location**: `src/NumSharp.Core/Casting/NdArrayToJaggedArray.cs`
+
+**Changes**:
+- Added overflow checks for all cases (2D through 6D)
+- Added explicit `(int)shape[x]` casts with checks before managed array allocation
+- Changed loop comparisons from `shape[x]` to `ret.Length`, `ret[i].Length`, etc. (managed array lengths are int)
+- Example: `if (shape[0] > int.MaxValue || shape[1] > int.MaxValue) throw new InvalidOperationException(...)`
+- This is a valid exception per guide: managed arrays limited to int indices
+
+### 41. NDArray.matrix_power.cs - Overflow check
+
+**Location**: `src/NumSharp.Core/LinearAlgebra/NDArray.matrix_power.cs`
+
+**Changes**:
+- Added overflow check: `if (product.shape[0] > int.MaxValue) throw new OverflowException(...)`
+- `np.eye` requires int parameter
+
+---
+
+## Audited - Valid Exceptions (No Changes Needed)
+
+### np.load.cs / np.save.cs
+
+**Status**: Valid Exception - No changes needed
+
+**Reason**: These files interface with:
+1. The `.npy` file format which uses int32 for shape values
+2. Managed `Array` class which uses int indices (GetLength returns int)
+
+Per the developer guide "Valid Exceptions" section: "Managed Array Allocation: .NET arrays limited to int indexing"
+
+### Shape.cs explicit operators
+
+**Status**: Already correctly implemented
+
+The `explicit operator int[](Shape shape)` and `explicit operator int(Shape shape)` already have proper overflow checks with `OverflowException`.
+
+---
+
 ## Completed Fixes (Session 4)
 
 ### 32. Default.All.cs - Loop counter fix
@@ -321,15 +371,20 @@ Tests that use `np.arange()` followed by `GetInt32()` need to be updated:
 
 ## Remaining Work
 
-### Medium Priority - Not Yet Audited
+### Medium Priority - Audited (Valid Exceptions)
+
+| File | Status |
+|------|--------|
+| `np.load.cs` | ✅ Valid exception - managed Array API + .npy format |
+| `np.save.cs` | ✅ Valid exception - managed Array API + .npy format |
+| `NdArray.ReShape.cs` | ✅ Has both `int[]` and `long[]` overloads (convenience) |
+| `NDArray`1.ReShape.cs` | ✅ Same - convenience overloads |
+
+### Low Priority - API Compatibility
 
 | File | Issue |
 |------|-------|
-| `np.load.cs` | `int[] shape` declarations |
-| `np.save.cs` | `int[] shape` declarations |
-| `NDArray.cs` | `int[] indices` parameters (may keep for API compat) |
-| `NdArray.ReShape.cs` | `int[] shape` parameters |
-| `NDArray`1.ReShape.cs` | `int[] shape` parameters |
+| `NDArray.cs` | `int[] indices` parameters - keep for API compat, delegates to long[] |
 
 ### User Request: Random Functions
 
