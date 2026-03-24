@@ -85,11 +85,12 @@ namespace NumSharp.UnitTest.RandomSampling
         }
 
         [Test]
-        public void Laplace_Scalar_ReturnsShape1Array()
+        public void Laplace_Scalar_ReturnsScalar()
         {
             np.random.seed(42);
             var result = np.random.laplace();
-            Assert.AreEqual(1, result.ndim);
+            // NumPy returns a scalar (0-dimensional) when no size is given
+            Assert.AreEqual(0, result.ndim);
             Assert.AreEqual(1, result.size);
         }
 
@@ -147,7 +148,7 @@ namespace NumSharp.UnitTest.RandomSampling
         {
             // From NumPy: assert_equal(np.random.laplace(scale=0), 0)
             var result = np.random.laplace(scale: 0);
-            Assert.AreEqual(0.0, (double)result[0], "laplace(scale=0) should return 0 (the default loc)");
+            Assert.AreEqual(0.0, result.GetDouble(0), "laplace(scale=0) should return 0 (the default loc)");
         }
 
         /// <summary>

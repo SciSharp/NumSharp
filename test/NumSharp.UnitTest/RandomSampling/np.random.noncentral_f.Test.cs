@@ -8,12 +8,14 @@ namespace NumSharp.UnitTest.RandomSampling
     public class NoncentralFTests
     {
         [Test]
-        public void NoncentralF_ReturnsScalarArray_WhenNoSize()
+        public void NoncentralF_ReturnsScalar_WhenNoSize()
         {
             np.random.seed(42);
             var result = np.random.noncentral_f(5, 10, 2);
 
-            result.shape.Should().ContainInOrder(1);
+            // NumPy returns a scalar (0-dimensional) when no size is given
+            result.ndim.Should().Be(0);
+            result.size.Should().Be(1);
             result.dtype.Should().Be(typeof(double));
         }
 

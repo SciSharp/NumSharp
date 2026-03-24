@@ -8,12 +8,14 @@ namespace NumSharp.UnitTest.RandomSampling
     public class StandardTTests
     {
         [Test]
-        public void StandardT_ReturnsScalarArray_WhenNoSize()
+        public void StandardT_ReturnsScalar_WhenNoSize()
         {
             np.random.seed(42);
             var result = np.random.standard_t(10);
 
-            result.shape.Should().ContainInOrder(1);
+            // NumPy returns a scalar (0-dimensional) when no size is given
+            result.ndim.Should().Be(0);
+            result.size.Should().Be(1);
             result.dtype.Should().Be(typeof(double));
         }
 

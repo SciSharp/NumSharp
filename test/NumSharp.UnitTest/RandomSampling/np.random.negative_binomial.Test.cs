@@ -136,11 +136,12 @@ namespace NumSharp.UnitTest.RandomSampling
         }
 
         [Test]
-        public void NegativeBinomial_Scalar_ReturnsShape1Array()
+        public void NegativeBinomial_Scalar_ReturnsScalar()
         {
             np.random.seed(42);
             var result = np.random.negative_binomial(10, 0.5);
-            Assert.AreEqual(1, result.ndim);
+            // NumPy returns a scalar (0-dimensional) when no size is given
+            Assert.AreEqual(0, result.ndim);
             Assert.AreEqual(1, result.size);
         }
 

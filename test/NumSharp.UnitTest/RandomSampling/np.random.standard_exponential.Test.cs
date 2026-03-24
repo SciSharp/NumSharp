@@ -88,11 +88,12 @@ namespace NumSharp.UnitTest.RandomSampling
         }
 
         [Test]
-        public void StandardExponential_Scalar_ReturnsShape1Array()
+        public void StandardExponential_Scalar_ReturnsScalar()
         {
             np.random.seed(42);
             var result = np.random.standard_exponential();
-            Assert.AreEqual(1, result.ndim);
+            // NumPy returns a scalar (0-dimensional) when no size is given
+            Assert.AreEqual(0, result.ndim);
             Assert.AreEqual(1, result.size);
         }
 
