@@ -64,7 +64,7 @@ namespace NumSharp
         /// <returns>A single random value.</returns>
         public T randn<T>()
         {
-            return (T)Converts.ChangeType(randomizer.NextDouble(), InfoOf<T>.NPTypeCode);
+            return (T)Converts.ChangeType(NextGaussian(), InfoOf<T>.NPTypeCode);
         }
 
         /// <summary>
@@ -120,10 +120,8 @@ namespace NumSharp
                 var array = new NDArray<double>(new Shape(size));
                 var dst = array.Address;
 
-                Func<double> nextDouble = randomizer.NextDouble;
                 for (long i = 0; i < array.size; i++)
-                    dst[i] = loc + scale * Math.Sqrt(-2.0 * Math.Log(1.0 - nextDouble()))
-                                        * Math.Sin(2.0 * Math.PI * (1.0 - nextDouble()));
+                    dst[i] = loc + scale * NextGaussian();
 
                 return array;
             }

@@ -125,9 +125,7 @@ namespace NumSharp
 
                 do
                 {
-                    // Generate standard normal using Box-Muller
-                    x = Math.Sqrt(-2.0 * Math.Log(1.0 - randomizer.NextDouble()))
-                        * Math.Sin(2.0 * Math.PI * (1.0 - randomizer.NextDouble()));
+                    x = NextGaussian();
                     t = 1.0 + c * x;
                     v = t * t * t;
                 } while (v <= 0);
