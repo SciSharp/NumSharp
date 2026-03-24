@@ -125,7 +125,7 @@ namespace NumSharp.UnitTest
         public void Parity_RandomIndices()
         {
             // Test with random indices
-            var rnd = new Randomizer();
+            var rnd = new MT19937();
             var dims = new[] { rnd.Next(2, 10), rnd.Next(2, 10), rnd.Next(2, 10) };
             var shape = new Shape(dims);
 

@@ -35,7 +35,7 @@ namespace NumSharp.UnitTest
 
             Assert.IsTrue(shape0.GetCoordinates(index).SequenceEqual(new long[] { 1, 2, 1 }));
 
-            var rnd = new Randomizer();
+            var rnd = new MT19937();
             var randomIndex = new long[] { rnd.Next(0, 3), rnd.Next(0, 2), rnd.Next(0, 1) };
 
             long index1 = shape0.GetOffset(randomIndex);

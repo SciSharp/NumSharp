@@ -189,7 +189,7 @@ namespace NumSharp.UnitTest
         public void Uniform_Seed42_ShouldMatchNumPy()
         {
             np.random.seed(42);
-            var result = np.random.uniform(0, 1);
+            var result = np.random.uniform(0.0, 1.0, 1);
 
             const double expected = 0.3745401188473625;
             var actual = result.GetDouble(0);
@@ -268,10 +268,10 @@ namespace NumSharp.UnitTest
         public void Poisson_Seed42_ShouldMatchNumPy()
         {
             np.random.seed(42);
-            var result = np.random.poisson(5);
+            var result = np.random.poisson(5.0, 1);
 
             const int expected = 5;
-            var actual = result.GetInt32(0);
+            var actual = (int)result.GetDouble(0);
 
             actual.Should().Be(expected,
                 "poisson(5) with seed=42 should match NumPy");
@@ -286,10 +286,10 @@ namespace NumSharp.UnitTest
         public void Binomial_Seed42_ShouldMatchNumPy()
         {
             np.random.seed(42);
-            var result = np.random.binomial(10, 0.5);
+            var result = np.random.binomial(10, 0.5, 1);
 
             const int expected = 4;
-            var actual = result.GetInt32(0);
+            var actual = (int)result.GetDouble(0);
 
             actual.Should().Be(expected,
                 "binomial(10,0.5) with seed=42 should match NumPy");

@@ -121,7 +121,7 @@ namespace NumSharp.UnitTest.Creation
         {
             var nd = np.arange(9d).reshape(3, 3).MakeGeneric<double>();
 
-            var random = new Randomizer();
+            var random = new MT19937();
             nd.ReplaceData(nd.Data<double>().Select(x => x + random.NextDouble()).ToArray());
             nd[1, 0] = 1.0;
             nd[0, 0] = 9.0;
@@ -139,7 +139,7 @@ namespace NumSharp.UnitTest.Creation
         {
             var np = NumSharp.np.arange(9).MakeGeneric<double>();
 
-            var random = new Randomizer();
+            var random = new MT19937();
             np.ReplaceData(np.Data<double>().Select(x => x + random.NextDouble()).ToArray());
             np[1] = 1;
             np[2] -= 4;

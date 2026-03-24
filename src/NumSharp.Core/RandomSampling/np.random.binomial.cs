@@ -64,7 +64,7 @@ namespace NumSharp
             {
                 x = x + bernoulli(p, size);
             }
-            return x / n;
+            return x;
         }
     }
 }
