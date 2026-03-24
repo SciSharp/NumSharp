@@ -204,7 +204,7 @@ _restart:
                 var block = new UnmanagedMemoryBlock<byte>(blocksize);
 
                 var addr = new IntPtr(block.Address);
-                for (int i = 0; i < count; i++, addr += SingleSize)
+                for (long i = 0; i < count; i++, addr += SingleSize)
                     availables_blocks.Push(addr);
 
                 _blocks.Add(block);

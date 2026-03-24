@@ -42,9 +42,9 @@ namespace NumSharp
             unsafe
             {
                 var addr = result.Address;
-                var len = result.size;
+                long len = result.size;
                 Func<double> nextDouble = randomizer.NextDouble;
-                for (int i = 0; i < len; i++)
+                for (long i = 0; i < len; i++)
                     addr[i] = nextDouble() < p ? 1 : 0;
             }
 

@@ -18,6 +18,62 @@ This document tracks the progress of migrating recent commits to comply with the
 
 ---
 
+## Completed Fixes (Session 4)
+
+### 32. Default.All.cs - Loop counter fix
+
+**Location**: `src/NumSharp.Core/Backends/Default/Logic/Default.All.cs`
+
+**Changes**:
+- `var len = nd.size; for (int i = 0; i < len; i++)` → `long len = nd.size; for (long i = 0; i < len; i++)`
+
+### 33. Default.Any.cs - Loop counter fix
+
+**Location**: `src/NumSharp.Core/Backends/Default/Logic/Default.Any.cs`
+
+**Changes**:
+- Same fix as Default.All.cs
+
+### 34. np.random.poisson.cs - Loop counter fix
+
+**Location**: `src/NumSharp.Core/RandomSampling/np.random.poisson.cs`
+
+**Changes**:
+- `var len = result.size; for (int i = 0; i < len; i++)` → `long len; for (long i ...)`
+
+### 35. np.random.bernoulli.cs - Loop counter fix
+
+**Location**: `src/NumSharp.Core/RandomSampling/np.random.bernoulli.cs`
+
+**Changes**:
+- Same pattern fix for loop counter
+
+### 36. StackedMemoryPool.cs - Loop counter fix
+
+**Location**: `src/NumSharp.Core/Backends/Unmanaged/Pooling/StackedMemoryPool.cs`
+
+**Changes**:
+- `for (int i = 0; i < count; i++, addr += SingleSize)` → `for (long i = 0; i < count; i++, ...)`
+- `count` parameter is `long`, so loop counter must be `long`
+
+### 37. NDArray.Indexing.Masking.cs - Multiple fixes
+
+**Location**: `src/NumSharp.Core/Selection/NDArray.Indexing.Masking.cs`
+
+**Changes**:
+- `for (int idx = 0; idx < trueCount; idx++)` → `for (long idx = 0; idx < trueCount; idx++)`
+- `indices[dim].GetInt32(idx)` → `indices[dim].GetInt64(idx)` (nonzero now returns `NDArray<long>[]`)
+- `int valueIdx = 0; for (int i = 0; i < mask.size; i++)` → `long valueIdx = 0; for (long i ...)`
+
+### 38. np.random.randn.cs - Loop counter fix
+
+**Location**: `src/NumSharp.Core/RandomSampling/np.random.randn.cs`
+
+**Changes**:
+- `for (int i = 0; i < array.size; i++)` → `for (long i = 0; i < array.size; i++)`
+
+---
+
 ## Completed Fixes (Session 3)
 
 ### 30. np.random.shuffle.cs - NextLong fix

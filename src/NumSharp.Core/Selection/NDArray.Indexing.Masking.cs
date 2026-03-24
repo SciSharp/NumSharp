@@ -175,13 +175,13 @@ namespace NumSharp
             var result = new NDArray(this.dtype, new Shape(resultShape));
 
             // Copy selected slices using the nonzero indices
-            for (int idx = 0; idx < trueCount; idx++)
+            for (long idx = 0; idx < trueCount; idx++)
             {
                 // Build the index tuple from nonzero results
                 var srcSlice = this;
                 for (int dim = 0; dim < mask.ndim; dim++)
                 {
-                    srcSlice = srcSlice[indices[dim].GetInt32(idx)];
+                    srcSlice = srcSlice[indices[dim].GetInt64(idx)];
                 }
                 np.copyto(result[idx], srcSlice);
             }
@@ -284,8 +284,8 @@ namespace NumSharp
             // NumSharp represents scalars as shape [1], not shape []
             bool isScalarValue = value.size == 1;
 
-            int valueIdx = 0;
-            for (int i = 0; i < mask.size; i++)
+            long valueIdx = 0;
+            for (long i = 0; i < mask.size; i++)
             {
                 if (mask.GetBoolean(i))
                 {

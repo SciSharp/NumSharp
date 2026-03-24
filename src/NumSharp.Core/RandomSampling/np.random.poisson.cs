@@ -38,9 +38,9 @@ namespace NumSharp
             var result = new NDArray<double>(size);
             unsafe
             {
-                var len = result.size;
+                long len = result.size;
                 var resultArray = result.Address;
-                for (int i = 0; i < len; i++)
+                for (long i = 0; i < len; i++)
                     resultArray[i] = Knuth(lam);
             }
 

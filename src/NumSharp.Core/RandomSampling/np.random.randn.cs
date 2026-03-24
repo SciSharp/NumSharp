@@ -89,7 +89,7 @@ namespace NumSharp
                 var dst = array.Address;
 
                 Func<double> nextDouble = randomizer.NextDouble;
-                for (int i = 0; i < array.size; i++)
+                for (long i = 0; i < array.size; i++)
                     dst[i] = loc + scale * Math.Sqrt(-2.0 * Math.Log(1.0 - nextDouble()))
                                         * Math.Sin(2.0 * Math.PI * (1.0 - nextDouble()));
 
