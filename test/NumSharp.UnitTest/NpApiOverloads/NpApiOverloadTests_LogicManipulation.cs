@@ -530,7 +530,7 @@ public class NpApiOverloadTests_LogicManipulation
     {
         // NumPy: np.count_nonzero([0, 1, 0, 2, 0, 3]) -> 3
         var a = np.array(new int[] { 0, 1, 0, 2, 0, 3 });
-        int result = np.count_nonzero(a);
+        long result = np.count_nonzero(a);
 
         await Assert.That(result).IsEqualTo(3);
     }
@@ -569,13 +569,13 @@ public class NpApiOverloadTests_LogicManipulation
     {
         // NumPy: np.nonzero([0, 1, 0, 2]) -> (array([1, 3]),)
         var a = np.array(new int[] { 0, 1, 0, 2 });
-        NDArray<int>[] result = np.nonzero(a);
+        NDArray<long>[] result = np.nonzero(a);
 
         await Assert.That(result).IsNotNull();
         await Assert.That(result.Length).IsEqualTo(1);
         await Assert.That(result[0].size).IsEqualTo(2);
-        await Assert.That(result[0].GetInt32(0)).IsEqualTo(1);
-        await Assert.That(result[0].GetInt32(1)).IsEqualTo(3);
+        await Assert.That(result[0].GetInt64(0)).IsEqualTo(1L);
+        await Assert.That(result[0].GetInt64(1)).IsEqualTo(3L);
     }
 
     [Test]
@@ -583,7 +583,7 @@ public class NpApiOverloadTests_LogicManipulation
     {
         // NumPy: np.nonzero([[0, 1], [2, 0]]) -> (array([0, 1]), array([1, 0]))
         var a = np.array(new int[,] { { 0, 1 }, { 2, 0 } });
-        NDArray<int>[] result = np.nonzero(a);
+        NDArray<long>[] result = np.nonzero(a);
 
         await Assert.That(result).IsNotNull();
         await Assert.That(result.Length).IsEqualTo(2);

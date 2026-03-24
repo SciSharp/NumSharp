@@ -26,8 +26,8 @@ public class BattleProofTests : TestClass
 
         var z = y * 2;
 
-        Assert.AreEqual(2, z.GetInt32(0), "y[0]*2 = 1*2 = 2");
-        Assert.AreEqual(6, z.GetInt32(1), "y[1]*2 = 3*2 = 6");
+        Assert.AreEqual(2L, z.GetInt64(0), "y[0]*2 = 1*2 = 2");
+        Assert.AreEqual(6L, z.GetInt64(1), "y[1]*2 = 3*2 = 6");
     }
 
     [Test]

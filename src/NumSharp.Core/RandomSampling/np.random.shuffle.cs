@@ -49,12 +49,10 @@ namespace NumSharp
             }
 
             // For multi-dimensional arrays, shuffle along axis 0
-            // Fisher-Yates shuffle (limited to int range for Random.Next)
-            if (n > int.MaxValue)
-                throw new NotSupportedException($"Shuffle along axis 0 not supported for dimension size {n} > int.MaxValue");
-            for (int i = (int)n - 1; i > 0; i--)
+            // Fisher-Yates shuffle using NextInt64 for full long range support
+            for (long i = n - 1; i > 0; i--)
             {
-                int j = randomizer.Next(i + 1);
+                long j = randomizer.NextLong(i + 1);
                 if (i != j)
                 {
                     SwapSlicesAxis0(x, i, j);
@@ -98,7 +96,7 @@ namespace NumSharp
         /// <summary>
         ///     Swap two slices along axis 0.
         /// </summary>
-        private static void SwapSlicesAxis0(NDArray x, int i, int j)
+        private static void SwapSlicesAxis0(NDArray x, long i, long j)
         {
             // Get slices at indices i and j along axis 0
             var sliceI = x[i];

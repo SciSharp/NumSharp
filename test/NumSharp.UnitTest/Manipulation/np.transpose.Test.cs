@@ -26,7 +26,7 @@ namespace NumSharp.UnitTest.Manipulation
         public void Case3()
         {
             var nd = np.arange(2 * 3).reshape(1, 2, 3);
-            np.transpose(nd, new long[] {1, 0, 2}).Should()
+            np.transpose(nd, new int[] {1, 0, 2}).Should()
                 .BeOfValues(0, 1, 2, 3, 4, 5)
                 .And.BeShaped(2, 1, 3);
         }

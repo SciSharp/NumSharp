@@ -18,6 +18,27 @@ This document tracks the progress of migrating recent commits to comply with the
 
 ---
 
+## Completed Fixes (Session 3)
+
+### 30. np.random.shuffle.cs - NextLong fix
+
+**Location**: `src/NumSharp.Core/RandomSampling/np.random.shuffle.cs`
+
+**Changes**:
+- `randomizer.NextInt64(i + 1)` → `randomizer.NextLong(i + 1)` (method name was wrong)
+- `SwapSlicesAxis0(NDArray x, int i, int j)` → `long i, long j`
+
+### 31. Test fixes for Int64 dtype
+
+**Files**:
+- `BattleProofTests.cs`: `GetInt32` → `GetInt64` for arange-based tests
+- `np.transpose.Test.cs`: `new long[]` → `new int[]` for axis array (axes stay int)
+- `ReadmeExample.cs`: Cast `n_samples` to int for `np.ones()` calls
+- `NpApiOverloadTests_LogicManipulation.cs`: `int` → `long` for count_nonzero, `NDArray<int>[]` → `NDArray<long>[]` for nonzero
+- `BooleanIndexing.BattleTests.cs`: `shape.SequenceEqual(new[])` → `shape.SequenceEqual(new long[])`
+
+---
+
 ## Completed Fixes (Session 2)
 
 ### 15. Shape.Broadcasting.cs
@@ -216,19 +237,29 @@ Files fixed in previous session include:
 
 ## Known Issues
 
-### Memory Corruption in Tests (193 failures)
+### "Memory Corruption" in Tests - ROOT CAUSE IDENTIFIED
 
-Tests are showing memory corruption symptoms:
-- Values like `34359738376` or `-9223365347867329507` appearing instead of expected values
-- "index < Count, Memory corruption expected" assertion failures
-- Affects clip, view semantics, and other tests
+The "index < Count, Memory corruption expected" assertion errors are **NOT actual memory corruption**.
 
-**Likely Causes**:
-1. Stride calculations using wrong types somewhere
-2. Offset calculations not fully migrated
-3. Some kernel paths still using int where long is needed
+**Root Cause**: Tests calling `GetInt32()` on Int64 arrays.
 
-**Investigation Needed**: Focus on clip kernel and view/slice operations.
+When `np.arange()` was changed to return Int64 (NumPy 2.x alignment), many tests that use `GetInt32()` started failing because:
+1. For an Int64 array, `_arrayInt32` is null (default struct with Count=0)
+2. Calling `_arrayInt32[anyIndex]` triggers `Debug.Assert(index < Count)` where Count=0
+3. This fails for any non-negative index, appearing as "memory corruption"
+
+**Solution**: Update tests to use `GetInt64()` instead of `GetInt32()` when working with arrays created by `np.arange()`.
+
+**Verified**: Scripts using correct getter methods work perfectly.
+
+### Remaining Test Updates Needed
+
+Tests that use `np.arange()` followed by `GetInt32()` need to be updated:
+- `NegativeSlice_2D_Corner`, `NegativeSlice_2D_FullReverse`
+- `BooleanIndex_2D_Flattens`
+- `Dot_1D_2D_Larger`
+- Various `Base_*` memory leak tests
+- NDIterator reference tests (separate issue - casting during iteration)
 
 ---
 
