@@ -11,7 +11,7 @@ namespace NumSharp
         /// <param name="a">The array for which to count non-zeros.</param>
         /// <returns>Number of non-zero values in the array.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.count_nonzero.html</remarks>
-        public static int count_nonzero(NDArray a)
+        public static long count_nonzero(NDArray a)
         {
             if (a.size == 0)
                 return 0;
@@ -42,7 +42,7 @@ namespace NumSharp
                 var result = np.zeros(new Shape(resultShape), NPTypeCode.Int64);
                 if (keepdims)
                 {
-                    var ks = new int[a.ndim];
+                    var ks = new long[a.ndim];
                     for (int d = 0, sd = 0; d < a.ndim; d++)
                         ks[d] = (d == axis) ? 1 : resultShape[sd++];
                     result.Storage.Reshape(new Shape(ks));

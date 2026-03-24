@@ -214,16 +214,12 @@ namespace NumSharp
 
         public abstract NDArray<int>[] NonZero(NDArray a);
 
-        public abstract int CountNonZero(NDArray a);
+        public abstract long CountNonZero(NDArray a);
 
         public abstract NDArray CountNonZero(NDArray a, int axis, bool keepdims = false);
 
         // Boolean masking
         public abstract NDArray BooleanMask(NDArray arr, NDArray mask);
-
-        public abstract int CountNonZero(in NDArray a);
-
-        public abstract NDArray CountNonZero(in NDArray a, int axis, bool keepdims = false);
 
         #endregion
     }

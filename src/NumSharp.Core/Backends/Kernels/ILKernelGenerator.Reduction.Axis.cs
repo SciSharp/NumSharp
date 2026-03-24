@@ -244,7 +244,7 @@ namespace NumSharp.Backends.Kernels
                     _ => 0.0
                 };
 
-                for (int i = 0; i < axisSize; i++)
+                for (long i = 0; i < axisSize; i++)
                 {
                     long inputOffset = inputBaseOffset + i * axisStride;
                     double val = ReadAsDouble(inputBytes + inputOffset * inputElemSize, inputType);
@@ -359,7 +359,7 @@ namespace NumSharp.Backends.Kernels
                 }
             }
 
-            for (int outIdx = 0; outIdx < outputSize; outIdx++)
+            for (long outIdx = 0; outIdx < outputSize; outIdx++)
             {
                 // Convert linear output index to coordinates and compute offsets
                 long remaining = outIdx;
@@ -379,7 +379,7 @@ namespace NumSharp.Backends.Kernels
                 TAccum accum = GetIdentityValueTyped<TAccum>(op);
                 TInput* axisStart = input + inputBaseOffset;
 
-                for (int i = 0; i < axisSize; i++)
+                for (long i = 0; i < axisSize; i++)
                 {
                     TInput val = axisStart[i * axisStride];
                     accum = CombineScalarsPromoted<TInput, TAccum>(accum, val, op);

@@ -120,7 +120,7 @@ namespace NumSharp.Backends.Kernels
         /// <param name="shape">Shape of the array</param>
         /// <returns>Array of NDArray&lt;long&gt;, one per dimension</returns>
         internal static unsafe NumSharp.Generic.NDArray<long>[] ConvertFlatIndicesToCoordinates(
-            System.Collections.Generic.List<long> flatIndices, int[] shape)
+            System.Collections.Generic.List<long> flatIndices, long[] shape)
         {
             int ndim = shape.Length;
             int len = flatIndices.Count;
@@ -167,7 +167,7 @@ namespace NumSharp.Backends.Kernels
         /// <param name="offset">Base offset into storage</param>
         /// <returns>Array of NDArray&lt;long&gt;, one per dimension</returns>
         internal static unsafe NumSharp.Generic.NDArray<long>[] FindNonZeroStridedHelper<T>(
-            T* data, int[] shape, long[] strides, long offset) where T : unmanaged
+            T* data, long[] shape, long[] strides, long offset) where T : unmanaged
         {
             int ndim = shape.Length;
 

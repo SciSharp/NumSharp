@@ -41,8 +41,8 @@ namespace NumSharp
                 throw new ArgumentOutOfRangeException(nameof(axis));
             }
 
-            int[] inputShape = nd.shape;
-            int[] outputShape = new int[keepdims ? inputShape.Length : inputShape.Length - 1];
+            long[] inputShape = nd.shape;
+            long[] outputShape = new long[keepdims ? inputShape.Length : inputShape.Length - 1];
             int outputIndex = 0;
             for (int i = 0; i < inputShape.Length; i++)
             {
@@ -59,9 +59,9 @@ namespace NumSharp
             NDArray<bool> resultArray = zeros<bool>(outputShape).MakeGeneric<bool>();
             Span<bool> resultSpan = resultArray.GetData().AsSpan<bool>();
 
-            int axisSize = inputShape[axis];
+            long axisSize = inputShape[axis];
 
-            int postAxisStride = 1;
+            long postAxisStride = 1;
             for (int i = axis + 1; i < inputShape.Length; i++)
             {
                 postAxisStride *= inputShape[i];
@@ -93,20 +93,21 @@ namespace NumSharp
             return resultArray;
         }
 
-        private static bool ComputeAnyPerAxis<T>(NDArray<T> nd, int axisSize, int postAxisStride, Span<bool> resultSpan) where T : unmanaged
+        private static bool ComputeAnyPerAxis<T>(NDArray<T> nd, long axisSize, long postAxisStride, Span<bool> resultSpan) where T : unmanaged
         {
             Span<T> inputSpan = nd.GetData().AsSpan<T>();
 
             for (int o = 0; o < resultSpan.Length; o++)
             {
-                int blockIndex = o / postAxisStride;
-                int inBlockIndex = o % postAxisStride;
-                int inputStartIndex = blockIndex * axisSize * postAxisStride + inBlockIndex;
+                long blockIndex = o / postAxisStride;
+                long inBlockIndex = o % postAxisStride;
+                long inputStartIndex = blockIndex * axisSize * postAxisStride + inBlockIndex;
 
                 bool currentResult = false;
-                for (int a = 0; a < axisSize; a++)
+                for (long a = 0; a < axisSize; a++)
                 {
-                    int inputIndex = inputStartIndex + a * postAxisStride;
+                    // Span indexing requires int, safe here as we're iterating through the span
+                    int inputIndex = (int)(inputStartIndex + a * postAxisStride);
                     if (!inputSpan[inputIndex].Equals(default(T)))
                     {
                         currentResult = true;
