@@ -1,4 +1,6 @@
-﻿namespace NumSharp
+﻿using System;
+
+namespace NumSharp
 {
     /// <summary>
     ///     A class that serves as numpy.random.RandomState in python.
@@ -27,6 +29,26 @@
         }
 
         protected internal NumPyRandom() : this(new Randomizer()) { }
+
+        #endregion
+
+        #region Gaussian
+
+        /// <summary>
+        ///     Returns a random sample from the standard normal distribution (mean=0, std=1).
+        ///     Uses the Box-Muller transform.
+        /// </summary>
+        protected internal double NextGaussian()
+        {
+            double u1, u2;
+            do
+            {
+                u1 = randomizer.NextDouble();
+            } while (u1 == 0); // Avoid log(0)
+            u2 = randomizer.NextDouble();
+
+            return Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+        }
 
         #endregion
 
