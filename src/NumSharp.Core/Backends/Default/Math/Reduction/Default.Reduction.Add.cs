@@ -173,10 +173,21 @@ namespace NumSharp.Backends
             return result;
         }
 
-        private static int NormalizeAxis(int axis, int ndim)
+        /// <summary>
+        ///     Normalizes a possibly-negative axis to a non-negative index and validates bounds.
+        ///     Matches NumPy's axis normalization exactly.
+        /// </summary>
+        /// <param name="axis">The axis value (can be negative).</param>
+        /// <param name="ndim">The number of dimensions in the array.</param>
+        /// <returns>The normalized non-negative axis.</returns>
+        /// <exception cref="AxisError">If the axis is out of bounds after normalization.</exception>
+        internal static int NormalizeAxis(int axis, int ndim)
         {
-            while (axis < 0) axis = ndim + axis;
-            if (axis >= ndim) throw new ArgumentOutOfRangeException(nameof(axis));
+            int originalAxis = axis;
+            if (axis < 0)
+                axis += ndim;
+            if (axis < 0 || axis >= ndim)
+                throw new AxisError(originalAxis, ndim);
             return axis;
         }
     }

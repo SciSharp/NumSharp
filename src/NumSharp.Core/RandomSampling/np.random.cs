@@ -122,18 +122,81 @@ namespace NumSharp
         #endregion
 
         /// <summary>
-        ///     Seeds the generator.
+        ///     Seeds the generator with a uint value (full NumPy range).
         ///     It can be called again to re-seed the generator.
         /// </summary>
+        /// <param name="seed">Seed value in range [0, 2^32-1].</param>
         /// <remarks>
         ///     This uses the MT19937 algorithm matching NumPy exactly.
         ///     Same seed produces identical sequences to NumPy.
         /// </remarks>
-        public void seed(int seed)
+        public void seed(uint seed)
         {
-            Seed = seed;
+            Seed = (int)seed;
             randomizer = new MT19937(seed);
             // Clear Gaussian cache on reseed (NumPy behavior)
+            _hasGauss = false;
+            _gaussCache = 0.0;
+        }
+
+        /// <summary>
+        ///     Seeds the generator with an int value.
+        ///     Validates that seed is non-negative (NumPy behavior).
+        /// </summary>
+        /// <param name="seed">Seed value in range [0, 2^31-1].</param>
+        /// <exception cref="ValueError">If seed is negative.</exception>
+        /// <remarks>
+        ///     NumPy accepts 0 to 2^32-1. Negative values throw:
+        ///     "Seed must be between 0 and 2**32 - 1"
+        /// </remarks>
+        public void seed(int seed)
+        {
+            if (seed < 0)
+                throw new ValueError("Seed must be between 0 and 2**32 - 1");
+            this.seed((uint)seed);
+        }
+
+        /// <summary>
+        ///     Seeds the generator with a long value.
+        ///     Validates that seed is in range [0, 2^32-1] (NumPy behavior).
+        /// </summary>
+        /// <param name="seed">Seed value in range [0, 2^32-1].</param>
+        /// <exception cref="ValueError">If seed is out of range.</exception>
+        public void seed(long seed)
+        {
+            if (seed < 0 || seed > uint.MaxValue)
+                throw new ValueError("Seed must be between 0 and 2**32 - 1");
+            this.seed((uint)seed);
+        }
+
+        /// <summary>
+        ///     Seeds the generator with a ulong value.
+        ///     Validates that seed is in range [0, 2^32-1] (NumPy behavior).
+        /// </summary>
+        /// <param name="seed">Seed value in range [0, 2^32-1].</param>
+        /// <exception cref="ValueError">If seed is out of range.</exception>
+        public void seed(ulong seed)
+        {
+            if (seed > uint.MaxValue)
+                throw new ValueError("Seed must be between 0 and 2**32 - 1");
+            this.seed((uint)seed);
+        }
+
+        /// <summary>
+        ///     Seeds the generator with an array of uint values.
+        ///     Matches NumPy's init_by_array seeding.
+        /// </summary>
+        /// <param name="seed">Array of seed values.</param>
+        public void seed(uint[] seed)
+        {
+            if (seed == null || seed.Length == 0)
+            {
+                this.seed(0u);
+                return;
+            }
+            Seed = (int)seed[0];
+            randomizer = new MT19937();
+            randomizer.SeedByArray(seed);
             _hasGauss = false;
             _gaussCache = 0.0;
         }
