@@ -329,7 +329,7 @@ namespace NumSharp.UnitTest.Backends
             {
                 for (int col = 0; col < 3; col++)
                 {
-                    broadcasted.GetInt32(row, col).Should().Be(expectedValues[col]);
+                    broadcasted.GetInt64(row, col).Should().Be(expectedValues[col]);
                 }
             }
         }
@@ -357,7 +357,7 @@ namespace NumSharp.UnitTest.Backends
             {
                 for (int j = 0; j < 4; j++)
                 {
-                    reshaped.GetInt32(i, j).Should().Be(expected++);
+                    reshaped.GetInt64(i, j).Should().Be(expected++);
                 }
             }
         }
@@ -381,10 +381,10 @@ namespace NumSharp.UnitTest.Backends
 
             // Verify transposed data
             transposed.Shape.dimensions.Should().BeEquivalentTo(new long[] { 3, 2 });
-            transposed.GetInt32(0, 0).Should().Be(0);
-            transposed.GetInt32(0, 1).Should().Be(3);
-            transposed.GetInt32(1, 0).Should().Be(1);
-            transposed.GetInt32(1, 1).Should().Be(4);
+            transposed.GetInt64(0, 0).Should().Be(0);
+            transposed.GetInt64(0, 1).Should().Be(3);
+            transposed.GetInt64(1, 0).Should().Be(1);
+            transposed.GetInt64(1, 1).Should().Be(4);
         }
 
         #endregion

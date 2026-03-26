@@ -127,10 +127,11 @@ namespace NumSharp.UnitTest.Manipulation
         public void SlicedArray_StridedView()
         {
             // Sliced arrays should work correctly
+            // np.arange returns int64 by default (NumPy 2.x)
             var a = np.arange(10);  // [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
             var sliced = a["::2"];  // [0, 2, 4, 6, 8]
             var nd = np.repeat(sliced, 2);
-            nd.ToArray<int>().Should().ContainInOrder(0, 0, 2, 2, 4, 4, 6, 6, 8, 8);
+            nd.ToArray<long>().Should().ContainInOrder(0L, 0L, 2L, 2L, 4L, 4L, 6L, 6L, 8L, 8L);
         }
 
         [Test]

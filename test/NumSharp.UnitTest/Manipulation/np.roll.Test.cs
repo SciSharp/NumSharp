@@ -474,33 +474,36 @@ namespace NumSharp.UnitTest.Manipulation
         public void Roll_Scalar_ZeroShift()
         {
             // np.roll(np.array(42), 0) => array(42)
+            // NDArray.Scalar(42) creates int32
             var s = NDArray.Scalar(42);
             var result = np.roll(s, 0);
 
-            result.shape.Should().BeEquivalentTo(Array.Empty<int>());
-            result.GetInt64(0).Should().Be(42);
+            result.shape.Should().BeEquivalentTo(Array.Empty<long>());
+            result.GetInt32(0).Should().Be(42);
         }
 
         [Test]
         public void Roll_Scalar_PositiveShift()
         {
             // np.roll(np.array(42), 1) => array(42)
+            // NDArray.Scalar(42) creates int32
             var s = NDArray.Scalar(42);
             var result = np.roll(s, 1);
 
-            result.shape.Should().BeEquivalentTo(Array.Empty<int>());
-            result.GetInt64(0).Should().Be(42);
+            result.shape.Should().BeEquivalentTo(Array.Empty<long>());
+            result.GetInt32(0).Should().Be(42);
         }
 
         [Test]
         public void Roll_Scalar_NegativeShift()
         {
             // np.roll(np.array(42), -1) => array(42)
+            // NDArray.Scalar(42) creates int32
             var s = NDArray.Scalar(42);
             var result = np.roll(s, -1);
 
-            result.shape.Should().BeEquivalentTo(Array.Empty<int>());
-            result.GetInt64(0).Should().Be(42);
+            result.shape.Should().BeEquivalentTo(Array.Empty<long>());
+            result.GetInt32(0).Should().Be(42);
         }
 
         // ================================================================
