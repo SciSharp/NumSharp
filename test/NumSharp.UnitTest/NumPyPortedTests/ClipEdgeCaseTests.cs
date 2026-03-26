@@ -118,7 +118,8 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         [Test]
         public void Clip_Int32_PreservesDtype()
         {
-            var arr = np.arange(10);  // int32 by default
+            // Explicit int32 array for testing dtype preservation
+            var arr = np.array(new int[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 });
             var result = np.clip(arr, 2, 7);
             Assert.AreEqual(np.int32, result.dtype);
         }
@@ -126,7 +127,8 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         [Test]
         public void Clip_Int64_PreservesDtype()
         {
-            var arr = np.arange(10).astype(np.int64);
+            // np.arange returns int64 by default (NumPy 2.x)
+            var arr = np.arange(10);
             var result = np.clip(arr, 2L, 7L);
             Assert.AreEqual(np.int64, result.dtype);
         }

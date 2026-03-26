@@ -14,26 +14,26 @@ namespace NumSharp.UnitTest.Manipulation
         {
             var nd = np.arange(6);
             var n1 = np.reshape(nd, 3, 2);
-            var n = n1.MakeGeneric<int>();
+            var n = n1.MakeGeneric<long>();
 
             Assert.IsTrue(n[0, 0] == 0);
             Assert.IsTrue(n[1, 1] == 3);
             Assert.IsTrue(n[2, 1] == 5);
 
-            n = np.reshape(np.arange(6), 2, 3, 1).MakeGeneric<int>();
+            n = np.reshape(np.arange(6), 2, 3, 1).MakeGeneric<long>();
             Assert.IsTrue(n[1, 1, 0] == 4);
             Assert.IsTrue(n[1, 2, 0] == 5);
 
-            n = np.reshape(np.arange(12), 2, 3, 2).MakeGeneric<int>();
+            n = np.reshape(np.arange(12), 2, 3, 2).MakeGeneric<long>();
             Assert.IsTrue(n[0, 0, 1] == 1);
             Assert.IsTrue(n[1, 0, 1] == 7);
             Assert.IsTrue(n[1, 1, 0] == 8);
 
-            n = np.reshape(np.arange(12), 3, 4).MakeGeneric<int>();
+            n = np.reshape(np.arange(12), 3, 4).MakeGeneric<long>();
             Assert.IsTrue(n[1, 1] == 5);
             Assert.IsTrue(n[2, 0] == 8);
 
-            n = np.reshape(n, 2, 6).MakeGeneric<int>();
+            n = np.reshape(n, 2, 6).MakeGeneric<long>();
 
             Assert.IsTrue(n[1, 0] == 6);
         }
@@ -64,13 +64,13 @@ namespace NumSharp.UnitTest.Manipulation
             Assert.IsTrue(nd.shape[0] == 4);
             Assert.IsTrue(nd.shape[1] == 3);
 
-            nd = np.arange(12).MakeGeneric<int>();
+            nd = np.arange(12).MakeGeneric<long>();
             nd = nd.reshape(1, 3, 4);
             nd = nd.reshape(3, -1);
             Assert.IsTrue(nd.shape[0] == 3);
             Assert.IsTrue(nd.shape[1] == 4);
 
-            nd = np.arange(100 * 100 * 3).MakeGeneric<int>();
+            nd = np.arange(100 * 100 * 3).MakeGeneric<long>();
             nd = nd.reshape(100, 100, 3);
             nd = nd.reshape(-1, 3);
             Assert.IsTrue(nd.shape[0] == 10000);
@@ -86,8 +86,8 @@ namespace NumSharp.UnitTest.Manipulation
         [Test]
         public void ValueTest()
         {
-            var x = np.arange(4).MakeGeneric<int>();
-            var y = x.reshape(2, 2).MakeGeneric<int>();
+            var x = np.arange(4).MakeGeneric<long>();
+            var y = x.reshape(2, 2).MakeGeneric<long>();
             y[0, 1] = 8;
             Assert.AreEqual(x[1], y[0, 1]);
         }

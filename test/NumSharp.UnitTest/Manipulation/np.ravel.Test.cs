@@ -13,7 +13,7 @@ namespace NumSharp.UnitTest.Manipulation
         [Test]
         public void Ravel_1D_AlreadyFlat()
         {
-            var a = np.array(new[] { 1, 2, 3, 4, 5 });
+            var a = np.array(new long[] { 1, 2, 3, 4, 5 });
             var r = np.ravel(a);
 
             r.Should().BeShaped(5);
@@ -23,7 +23,7 @@ namespace NumSharp.UnitTest.Manipulation
         [Test]
         public void Ravel_1D_Instance()
         {
-            var a = np.array(new[] { 10, 20, 30 });
+            var a = np.array(new long[] { 10, 20, 30 });
             var r = a.ravel();
 
             r.Should().BeShaped(3);
@@ -38,7 +38,7 @@ namespace NumSharp.UnitTest.Manipulation
         public void Ravel_2D_COrder()
         {
             // NumPy: np.ravel([[1,2,3],[4,5,6]]) = [1,2,3,4,5,6]
-            var a = np.array(new int[,] { { 1, 2, 3 }, { 4, 5, 6 } });
+            var a = np.array(new long[,] { { 1, 2, 3 }, { 4, 5, 6 } });
             var r = np.ravel(a);
 
             r.Should().BeShaped(6);
@@ -48,7 +48,7 @@ namespace NumSharp.UnitTest.Manipulation
         [Test]
         public void Ravel_2D_Instance()
         {
-            var a = np.array(new int[,] { { 1, 2 }, { 3, 4 } });
+            var a = np.array(new long[,] { { 1, 2 }, { 3, 4 } });
             var r = a.ravel();
 
             r.Should().BeShaped(4);
@@ -58,7 +58,7 @@ namespace NumSharp.UnitTest.Manipulation
         [Test]
         public void Ravel_2D_SingleRow()
         {
-            var a = np.array(new int[,] { { 1, 2, 3, 4, 5 } });
+            var a = np.array(new long[,] { { 1, 2, 3, 4, 5 } });
             var r = np.ravel(a);
 
             r.Should().BeShaped(5);
@@ -68,7 +68,7 @@ namespace NumSharp.UnitTest.Manipulation
         [Test]
         public void Ravel_2D_SingleColumn()
         {
-            var a = np.array(new int[,] { { 1 }, { 2 }, { 3 } });
+            var a = np.array(new long[,] { { 1 }, { 2 }, { 3 } });
             var r = np.ravel(a);
 
             r.Should().BeShaped(3);
@@ -100,8 +100,8 @@ namespace NumSharp.UnitTest.Manipulation
 
             r.Should().BeShaped(24);
             r.ndim.Should().Be(1);
-            r.GetInt32(0).Should().Be(0);
-            r.GetInt32(23).Should().Be(23);
+            r.GetInt64(0).Should().Be(0);
+            r.GetInt64(23).Should().Be(23);
         }
 
         // ================================================================
@@ -112,6 +112,7 @@ namespace NumSharp.UnitTest.Manipulation
         public void Ravel_Scalar()
         {
             // NumPy: np.ravel(np.array(42)) = [42] shape=(1,)
+            // np.array(42) creates int32 array
             var a = np.array(42);
             var r = np.ravel(a);
 
@@ -134,7 +135,7 @@ namespace NumSharp.UnitTest.Manipulation
         [Test]
         public void Ravel_SingleElement()
         {
-            var a = np.array(new int[,] { { 42 } });
+            var a = np.array(new long[,] { { 42 } });
             var r = np.ravel(a);
 
             r.Should().BeShaped(1);
@@ -149,7 +150,7 @@ namespace NumSharp.UnitTest.Manipulation
         public void Ravel_Broadcast_RowBroadcast()
         {
             // NumPy: np.ravel(np.broadcast_to([1,2,3], (3,3))) = [1,2,3,1,2,3,1,2,3]
-            var a = np.broadcast_to(np.array(new[] { 1, 2, 3 }), new Shape(3, 3));
+            var a = np.broadcast_to(np.array(new long[] { 1, 2, 3 }), new Shape(3, 3));
             var r = np.ravel(a);
 
             r.Should().BeShaped(9);
@@ -161,7 +162,7 @@ namespace NumSharp.UnitTest.Manipulation
         {
             // NumPy: np.ravel(np.broadcast_to([[10],[20],[30]], (3,3)))
             //      = [10,10,10,20,20,20,30,30,30]
-            var col = np.array(new int[,] { { 10 }, { 20 }, { 30 } });
+            var col = np.array(new long[,] { { 10 }, { 20 }, { 30 } });
             var a = np.broadcast_to(col, new Shape(3, 3));
             var r = np.ravel(a);
 
@@ -173,7 +174,7 @@ namespace NumSharp.UnitTest.Manipulation
         public void Ravel_Broadcast_2x3_ColumnBroadcast()
         {
             // np.ravel(np.broadcast_to([[1],[2]], (2,3))) = [1,1,1,2,2,2]
-            var col = np.array(new int[,] { { 1 }, { 2 } });
+            var col = np.array(new long[,] { { 1 }, { 2 } });
             var a = np.broadcast_to(col, new Shape(2, 3));
             var r = np.ravel(a);
 
@@ -226,7 +227,7 @@ namespace NumSharp.UnitTest.Manipulation
         public void Ravel_Transposed_2D()
         {
             // NumPy: np.ravel(np.array([[1,2,3],[4,5,6]]).T) = [1,4,2,5,3,6]
-            var a = np.array(new int[,] { { 1, 2, 3 }, { 4, 5, 6 } });
+            var a = np.array(new long[,] { { 1, 2, 3 }, { 4, 5, 6 } });
             var r = np.ravel(a.T);
 
             r.Should().BeShaped(6);
@@ -254,11 +255,11 @@ namespace NumSharp.UnitTest.Manipulation
         public void Ravel_Contiguous_IsView()
         {
             // NumPy: ravel of contiguous array returns view (shared memory)
-            var a = np.array(new[] { 1, 2, 3, 4, 5 });
+            var a = np.array(new long[] { 1, 2, 3, 4, 5 });
             var r = np.ravel(a);
 
-            r.SetInt32(99, 0);
-            a.GetInt32(0).Should().Be(99,
+            r.SetInt64(99, 0);
+            a.GetInt64(0).Should().Be(99,
                 "ravel of contiguous 1D array should return a view (shared memory). " +
                 "NumPy: modifying ravel output modifies original.");
         }
@@ -267,11 +268,11 @@ namespace NumSharp.UnitTest.Manipulation
         public void Ravel_Contiguous2D_IsView()
         {
             // NumPy: ravel of contiguous 2D array returns view
-            var a = np.array(new int[,] { { 1, 2, 3 }, { 4, 5, 6 } });
+            var a = np.array(new long[,] { { 1, 2, 3 }, { 4, 5, 6 } });
             var r = np.ravel(a);
 
-            r.SetInt32(99, 0);
-            a.GetInt32(0, 0).Should().Be(99,
+            r.SetInt64(99, 0);
+            a.GetInt64(0, 0).Should().Be(99,
                 "ravel of contiguous 2D array should return a view. " +
                 "NumPy: modifying ravel output modifies original.");
         }
@@ -288,8 +289,8 @@ namespace NumSharp.UnitTest.Manipulation
             var s = a["::2"];
             var r = np.ravel(s);
 
-            r.SetInt32(99, 0);
-            s.GetInt32(0).Should().Be(0,
+            r.SetInt64(99, 0);
+            s.GetInt64(0).Should().Be(0,
                 "ravel of step-2 slice should return a copy. " +
                 "NumPy: step-2 slice is not C-contiguous.");
         }
@@ -298,12 +299,12 @@ namespace NumSharp.UnitTest.Manipulation
         public void Ravel_Broadcast_IsCopy()
         {
             // NumPy: ravel of broadcast array returns copy
-            var src = np.array(new[] { 1, 2, 3 });
+            var src = np.array(new long[] { 1, 2, 3 });
             var bc = np.broadcast_to(src, new Shape(2, 3));
             var r = np.ravel(bc);
 
-            r.SetInt32(99, 0);
-            src.GetInt32(0).Should().Be(1,
+            r.SetInt64(99, 0);
+            src.GetInt64(0).Should().Be(1,
                 "ravel of broadcast array should return a copy. " +
                 "NumPy: broadcast is not contiguous.");
         }
@@ -316,8 +317,8 @@ namespace NumSharp.UnitTest.Manipulation
             var s = a[":", "1:3"];
             var r = np.ravel(s);
 
-            r.SetInt32(99, 0);
-            s.GetInt32(0, 0).Should().Be(1,
+            r.SetInt64(99, 0);
+            s.GetInt64(0, 0).Should().Be(1,
                 "ravel of column slice should return a copy. " +
                 "NumPy: column slice is not C-contiguous.");
         }
@@ -337,8 +338,8 @@ namespace NumSharp.UnitTest.Manipulation
             var s = a["2:7"];  // [2,3,4,5,6] — contiguous in memory
             var r = np.ravel(s);
 
-            r.SetInt32(99, 0);
-            s.GetInt32(0).Should().Be(99,
+            r.SetInt64(99, 0);
+            s.GetInt64(0).Should().Be(99,
                 "NumPy: ravel of contiguous 1D slice (step=1) returns a view. " +
                 "NumSharp: Shape.IsContiguous returns false for all slices, even " +
                 "contiguous ones (step=1, no offset gaps). This causes ravel to " +
@@ -355,8 +356,8 @@ namespace NumSharp.UnitTest.Manipulation
             var s = a["1:3"];  // rows 1-2, contiguous in memory
             var r = np.ravel(s);
 
-            r.SetInt32(99, 0);
-            s.GetInt32(0, 0).Should().Be(99,
+            r.SetInt64(99, 0);
+            s.GetInt64(0, 0).Should().Be(99,
                 "NumPy: ravel of contiguous 2D row slice returns a view. " +
                 "NumSharp: Shape.IsContiguous is false for all sliced shapes, " +
                 "even when the slice is contiguous in memory.");
@@ -370,11 +371,11 @@ namespace NumSharp.UnitTest.Manipulation
         public void Flatten_Contiguous_IsCopy()
         {
             // NumPy: flatten always returns a copy, even for contiguous arrays
-            var a = np.array(new[] { 1, 2, 3, 4, 5 });
+            var a = np.array(new long[] { 1, 2, 3, 4, 5 });
             var f = a.flatten();
 
-            f.SetInt32(99, 0);
-            a.GetInt32(0).Should().Be(1,
+            f.SetInt64(99, 0);
+            a.GetInt64(0).Should().Be(1,
                 "flatten should always return a copy. " +
                 "NumPy: modifying flatten output never modifies original.");
         }
@@ -382,7 +383,7 @@ namespace NumSharp.UnitTest.Manipulation
         [Test]
         public void Flatten_2D_Values()
         {
-            var a = np.array(new int[,] { { 1, 2, 3 }, { 4, 5, 6 } });
+            var a = np.array(new long[,] { { 1, 2, 3 }, { 4, 5, 6 } });
             var f = a.flatten();
 
             f.Should().BeShaped(6);
@@ -392,7 +393,7 @@ namespace NumSharp.UnitTest.Manipulation
         [Test]
         public void Flatten_Broadcast()
         {
-            var bc = np.broadcast_to(np.array(new[] { 1, 2, 3 }), new Shape(2, 3));
+            var bc = np.broadcast_to(np.array(new long[] { 1, 2, 3 }), new Shape(2, 3));
             var f = bc.flatten();
 
             f.Should().BeShaped(6);
@@ -402,12 +403,12 @@ namespace NumSharp.UnitTest.Manipulation
         [Test]
         public void Flatten_Broadcast_IsCopy()
         {
-            var src = np.array(new[] { 1, 2, 3 });
+            var src = np.array(new long[] { 1, 2, 3 });
             var bc = np.broadcast_to(src, new Shape(2, 3));
             var f = bc.flatten();
 
-            f.SetInt32(99, 0);
-            src.GetInt32(0).Should().Be(1,
+            f.SetInt64(99, 0);
+            src.GetInt64(0).Should().Be(1,
                 "flatten of broadcast array should not modify source");
         }
 
@@ -512,12 +513,12 @@ namespace NumSharp.UnitTest.Manipulation
         [Test]
         public void Ravel_Broadcast_OriginalNotModified()
         {
-            var src = np.array(new[] { 1, 2, 3 });
+            var src = np.array(new long[] { 1, 2, 3 });
             var bc = np.broadcast_to(src, new Shape(2, 3));
             var r = np.ravel(bc);
 
             // Modify ravel output
-            r.SetInt32(99, 0);
+            r.SetInt64(99, 0);
 
             // Original source should not change
             src.Should().BeOfValues(1, 2, 3);
@@ -530,10 +531,10 @@ namespace NumSharp.UnitTest.Manipulation
             var s = a["::2"];
             var r = np.ravel(s);
 
-            r.SetInt32(99, 0);
+            r.SetInt64(99, 0);
 
             // Original should not change
-            a.GetInt32(0).Should().Be(0);
+            a.GetInt64(0).Should().Be(0);
         }
 
         // ================================================================
@@ -543,7 +544,7 @@ namespace NumSharp.UnitTest.Manipulation
         [Test]
         public void Ravel_EquivalentToFlatten_Values()
         {
-            var a = np.array(new int[,] { { 1, 2, 3 }, { 4, 5, 6 } });
+            var a = np.array(new long[,] { { 1, 2, 3 }, { 4, 5, 6 } });
 
             var r = np.ravel(a);
             var f = a.flatten();
@@ -555,7 +556,7 @@ namespace NumSharp.UnitTest.Manipulation
         [Test]
         public void Ravel_EquivalentToFlatten_Broadcast()
         {
-            var bc = np.broadcast_to(np.array(new[] { 1, 2, 3 }), new Shape(2, 3));
+            var bc = np.broadcast_to(np.array(new long[] { 1, 2, 3 }), new Shape(2, 3));
 
             var r = np.ravel(bc);
             var f = bc.flatten();
@@ -628,8 +629,8 @@ namespace NumSharp.UnitTest.Manipulation
             var r = np.ravel(a);
 
             r.Should().BeShaped(1000);
-            r.GetInt32(0).Should().Be(0);
-            r.GetInt32(999).Should().Be(999);
+            r.GetInt64(0).Should().Be(0);
+            r.GetInt64(999).Should().Be(999);
         }
     }
 }

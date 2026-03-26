@@ -128,7 +128,7 @@ namespace NumSharp.UnitTest.Manipulation
             // Exact replication of NumPy TestRoll.test_roll1d
             var x = np.arange(10);
             var xr = np.roll(x, 2);
-            xr.Should().Be(np.array(new int[] { 8, 9, 0, 1, 2, 3, 4, 5, 6, 7 }));
+            xr.Should().Be(np.array(new long[] { 8, 9, 0, 1, 2, 3, 4, 5, 6, 7 }));
         }
 
         // ================================================================
@@ -265,7 +265,7 @@ namespace NumSharp.UnitTest.Manipulation
         {
             var x2 = np.arange(10).reshape(2, 5);
             var x2r = np.roll(x2, 1);
-            x2r.Should().Be(np.array(new int[,] { { 9, 0, 1, 2, 3 }, { 4, 5, 6, 7, 8 } }));
+            x2r.Should().Be(np.array(new long[,] { { 9, 0, 1, 2, 3 }, { 4, 5, 6, 7, 8 } }));
         }
 
         [Test]
@@ -273,7 +273,7 @@ namespace NumSharp.UnitTest.Manipulation
         {
             var x2 = np.arange(10).reshape(2, 5);
             var x2r = np.roll(x2, 1, 0);
-            x2r.Should().Be(np.array(new int[,] { { 5, 6, 7, 8, 9 }, { 0, 1, 2, 3, 4 } }));
+            x2r.Should().Be(np.array(new long[,] { { 5, 6, 7, 8, 9 }, { 0, 1, 2, 3, 4 } }));
         }
 
         [Test]
@@ -281,7 +281,7 @@ namespace NumSharp.UnitTest.Manipulation
         {
             var x2 = np.arange(10).reshape(2, 5);
             var x2r = np.roll(x2, 1, 1);
-            x2r.Should().Be(np.array(new int[,] { { 4, 0, 1, 2, 3 }, { 9, 5, 6, 7, 8 } }));
+            x2r.Should().Be(np.array(new long[,] { { 4, 0, 1, 2, 3 }, { 9, 5, 6, 7, 8 } }));
         }
 
         [Test]
@@ -290,7 +290,7 @@ namespace NumSharp.UnitTest.Manipulation
             var x2 = np.arange(10).reshape(2, 5);
             // roll(x2, 6, axis=1) same as roll(x2, 1, axis=1)
             var x2r = np.roll(x2, 6, 1);
-            x2r.Should().Be(np.array(new int[,] { { 4, 0, 1, 2, 3 }, { 9, 5, 6, 7, 8 } }));
+            x2r.Should().Be(np.array(new long[,] { { 4, 0, 1, 2, 3 }, { 9, 5, 6, 7, 8 } }));
         }
 
         [Test]
@@ -299,7 +299,7 @@ namespace NumSharp.UnitTest.Manipulation
             var x2 = np.arange(10).reshape(2, 5);
             // roll(x2, -4, axis=1) same as roll(x2, 1, axis=1)
             var x2r = np.roll(x2, -4, 1);
-            x2r.Should().Be(np.array(new int[,] { { 4, 0, 1, 2, 3 }, { 9, 5, 6, 7, 8 } }));
+            x2r.Should().Be(np.array(new long[,] { { 4, 0, 1, 2, 3 }, { 9, 5, 6, 7, 8 } }));
         }
 
         // ================================================================
@@ -478,7 +478,7 @@ namespace NumSharp.UnitTest.Manipulation
             var result = np.roll(s, 0);
 
             result.shape.Should().BeEquivalentTo(Array.Empty<int>());
-            result.GetInt32(0).Should().Be(42);
+            result.GetInt64(0).Should().Be(42);
         }
 
         [Test]
@@ -489,7 +489,7 @@ namespace NumSharp.UnitTest.Manipulation
             var result = np.roll(s, 1);
 
             result.shape.Should().BeEquivalentTo(Array.Empty<int>());
-            result.GetInt32(0).Should().Be(42);
+            result.GetInt64(0).Should().Be(42);
         }
 
         [Test]
@@ -500,7 +500,7 @@ namespace NumSharp.UnitTest.Manipulation
             var result = np.roll(s, -1);
 
             result.shape.Should().BeEquivalentTo(Array.Empty<int>());
-            result.GetInt32(0).Should().Be(42);
+            result.GetInt64(0).Should().Be(42);
         }
 
         // ================================================================
@@ -556,11 +556,11 @@ namespace NumSharp.UnitTest.Manipulation
             var result = np.roll(orig, 1, 0);
 
             // Mutate result
-            result.SetInt32(999, 0, 0);
+            result.SetInt64(999, 0, 0);
 
             // orig unchanged
-            orig.GetInt32(0, 0).Should().Be(0);
-            orig.GetInt32(1, 0).Should().Be(3);
+            orig.GetInt64(0, 0).Should().Be(0);
+            orig.GetInt64(1, 0).Should().Be(3);
         }
 
         [Test]
@@ -569,10 +569,10 @@ namespace NumSharp.UnitTest.Manipulation
             var orig = np.arange(5);
             var result = np.roll(orig, 2);
 
-            result.SetInt32(999, 0);
+            result.SetInt64(999, 0);
 
             // orig[0] still 0
-            orig.GetInt32(0).Should().Be(0);
+            orig.GetInt64(0).Should().Be(0);
         }
 
         // ================================================================
@@ -588,8 +588,8 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfValues(0, 1, 2, 3, 4);
 
             // Modify result, original should be unaffected
-            r.SetInt32(999, 0);
-            a.GetInt32(0).Should().Be(0);
+            r.SetInt64(999, 0);
+            a.GetInt64(0).Should().Be(0);
         }
 
         // ================================================================
@@ -599,7 +599,7 @@ namespace NumSharp.UnitTest.Manipulation
         [Test]
         public void Roll_SingleElement_AnyShift()
         {
-            var a = np.array(new int[] { 42 });
+            var a = np.array(new long[] { 42 });
 
             np.roll(a, 0).Should().BeOfValues(42);
             np.roll(a, 1).Should().BeOfValues(42);
@@ -802,7 +802,7 @@ namespace NumSharp.UnitTest.Manipulation
             // Flattened: [1,2,3,4,5,1,2,3,4,5,1,2,3,4,5]
             // roll by 1: [5,1,2,3,4,5,1,2,3,4,5,1,2,3,4]
             // reshaped: [[5,1,2,3,4],[5,1,2,3,4],[5,1,2,3,4]]
-            var row = np.array(new int[,] { { 1, 2, 3, 4, 5 } });
+            var row = np.array(new long[,] { { 1, 2, 3, 4, 5 } });
             var row_bc = np.broadcast_to(row, new Shape(3, 5));
 
             var result = np.roll(row_bc, 1);
@@ -816,7 +816,7 @@ namespace NumSharp.UnitTest.Manipulation
         {
             // All rows identical, rolling along axis 0 just reorders identical rows
             // => [[1,2,3,4,5],[1,2,3,4,5],[1,2,3,4,5]]
-            var row = np.array(new int[,] { { 1, 2, 3, 4, 5 } });
+            var row = np.array(new long[,] { { 1, 2, 3, 4, 5 } });
             var row_bc = np.broadcast_to(row, new Shape(3, 5));
 
             var result = np.roll(row_bc, 1, 0);
@@ -829,7 +829,7 @@ namespace NumSharp.UnitTest.Manipulation
         public void Roll_BroadcastArray_RowBroadcast_Axis1()
         {
             // Each row [1,2,3,4,5], rolled by 1 => [5,1,2,3,4]
-            var row = np.array(new int[,] { { 1, 2, 3, 4, 5 } });
+            var row = np.array(new long[,] { { 1, 2, 3, 4, 5 } });
             var row_bc = np.broadcast_to(row, new Shape(3, 5));
 
             var result = np.roll(row_bc, 1, 1);
@@ -842,7 +842,7 @@ namespace NumSharp.UnitTest.Manipulation
         public void Roll_BroadcastArray_RowBroadcast_NegativeAxis1()
         {
             // Each row [1,2,3,4,5], rolled by -1 => [2,3,4,5,1]
-            var row = np.array(new int[,] { { 1, 2, 3, 4, 5 } });
+            var row = np.array(new long[,] { { 1, 2, 3, 4, 5 } });
             var row_bc = np.broadcast_to(row, new Shape(3, 5));
 
             var result = np.roll(row_bc, -1, 1);
@@ -858,7 +858,7 @@ namespace NumSharp.UnitTest.Manipulation
             // Flattened: [10,10,10,10,20,20,20,20,30,30,30,30]
             // roll by 1: [30,10,10,10,10,20,20,20,20,30,30,30]
             // reshaped: [[30,10,10,10],[10,20,20,20],[20,30,30,30]]
-            var col = np.array(new int[,] { { 10 }, { 20 }, { 30 } });
+            var col = np.array(new long[,] { { 10 }, { 20 }, { 30 } });
             var col_bc = np.broadcast_to(col, new Shape(3, 4));
 
             var result = np.roll(col_bc, 1);
@@ -872,7 +872,7 @@ namespace NumSharp.UnitTest.Manipulation
         {
             // col_bc: [[10,10,10,10],[20,20,20,20],[30,30,30,30]]
             // roll(axis=0, 1) => [[30,30,30,30],[10,10,10,10],[20,20,20,20]]
-            var col = np.array(new int[,] { { 10 }, { 20 }, { 30 } });
+            var col = np.array(new long[,] { { 10 }, { 20 }, { 30 } });
             var col_bc = np.broadcast_to(col, new Shape(3, 4));
 
             var result = np.roll(col_bc, 1, 0);
@@ -886,7 +886,7 @@ namespace NumSharp.UnitTest.Manipulation
         {
             // col_bc: [[10,10,10,10],[20,20,20,20],[30,30,30,30]]
             // roll(axis=1, 1) => same (all values in each row are identical)
-            var col = np.array(new int[,] { { 10 }, { 20 }, { 30 } });
+            var col = np.array(new long[,] { { 10 }, { 20 }, { 30 } });
             var col_bc = np.broadcast_to(col, new Shape(3, 4));
 
             var result = np.roll(col_bc, 1, 1);
@@ -1300,9 +1300,9 @@ namespace NumSharp.UnitTest.Manipulation
             var r = np.roll(a, 37);
 
             // First element should be 100-37=63
-            r.GetInt32(0).Should().Be(63);
+            r.GetInt64(0).Should().Be(63);
             // Element at index 37 should be 0
-            r.GetInt32(37).Should().Be(0);
+            r.GetInt64(37).Should().Be(0);
             r.size.Should().Be(100);
         }
 

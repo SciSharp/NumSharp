@@ -12,8 +12,9 @@ namespace NumSharp.UnitTest.Extensions
         public void absolute()
         {
             //2D - np.abs now correctly preserves int dtype (NumPy-aligned)
+            // np.arange returns int64 by default (NumPy 2.x)
             var n = np.arange(-2, 2).reshape(2, 2);
-            var n1 = np.abs(n).MakeGeneric<int>();
+            var n1 = np.abs(n).MakeGeneric<long>();
 
             Assert.IsTrue(n1[0, 0] == 2);
             Assert.IsTrue(n1[0, 1] == 1);
@@ -22,7 +23,7 @@ namespace NumSharp.UnitTest.Extensions
 
             //3D
             n = np.arange(-4, 4).reshape(2, 2, 2);
-            n1 = np.abs(n).MakeGeneric<int>();
+            n1 = np.abs(n).MakeGeneric<long>();
             Assert.IsTrue(n1[0, 0, 0] == 4);
             Assert.IsTrue(n1[0, 0, 1] == 3);
             Assert.IsTrue(n1[1, 0, 0] == 0);
@@ -30,7 +31,7 @@ namespace NumSharp.UnitTest.Extensions
 
             //4D
             n = np.arange(-12, 12).reshape(2, 3, 2, 2);
-            n1 = np.abs(n).MakeGeneric<int>();
+            n1 = np.abs(n).MakeGeneric<long>();
             Assert.IsTrue(n1[0, 0, 0, 0] == 12);
             Assert.IsTrue(n1[0, 1, 0, 0] == 8);
             Assert.IsTrue(n1[1, 2, 1, 1] == 11);

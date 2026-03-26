@@ -45,8 +45,12 @@ namespace NumSharp.Backends
             var boundsToCheck = new NDArray[] { lhs, min, max }.Where(nd => !(nd is null)).ToArray();
             var broadcasted = np.broadcast_arrays(boundsToCheck);
 
-            var _min = min is null ? null : np.broadcast_to(min, lhs.Shape);
-            var _max = max is null ? null : np.broadcast_to(max, lhs.Shape);
+            // Determine output dtype
+            var outType = typeCode ?? lhs.typecode;
+
+            // Broadcast and cast min/max to output dtype to avoid mixed-type kernel bugs
+            var _min = min is null ? null : np.broadcast_to(min, lhs.Shape).astype(outType);
+            var _max = max is null ? null : np.broadcast_to(max, lhs.Shape).astype(outType);
 
             // Create or validate output array
             if (@out is null)

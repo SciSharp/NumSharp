@@ -67,14 +67,14 @@ namespace NumSharp.UnitTest.Manipulation
 
             r.Should().BeShaped(6, 4);
             r.Should().BeOfSize(24);
-            r.GetInt32(0, 0).Should().Be(0);
-            r.GetInt32(0, 1).Should().Be(1);
-            r.GetInt32(0, 2).Should().Be(2);
-            r.GetInt32(0, 3).Should().Be(3);
-            r.GetInt32(5, 0).Should().Be(20);
-            r.GetInt32(5, 1).Should().Be(21);
-            r.GetInt32(5, 2).Should().Be(22);
-            r.GetInt32(5, 3).Should().Be(23);
+            r.GetInt64(0, 0).Should().Be(0);
+            r.GetInt64(0, 1).Should().Be(1);
+            r.GetInt64(0, 2).Should().Be(2);
+            r.GetInt64(0, 3).Should().Be(3);
+            r.GetInt64(5, 0).Should().Be(20);
+            r.GetInt64(5, 1).Should().Be(21);
+            r.GetInt64(5, 2).Should().Be(22);
+            r.GetInt64(5, 3).Should().Be(23);
         }
 
         [Test]
@@ -99,10 +99,10 @@ namespace NumSharp.UnitTest.Manipulation
             var r = np.reshape(a, 6, 4);
 
             r.Should().BeShaped(6, 4);
-            r.GetInt32(0, 0).Should().Be(0);
-            r.GetInt32(0, 3).Should().Be(3);
-            r.GetInt32(5, 0).Should().Be(20);
-            r.GetInt32(5, 3).Should().Be(23);
+            r.GetInt64(0, 0).Should().Be(0);
+            r.GetInt64(0, 3).Should().Be(3);
+            r.GetInt64(5, 0).Should().Be(20);
+            r.GetInt64(5, 3).Should().Be(23);
         }
 
         [Test]
@@ -120,11 +120,11 @@ namespace NumSharp.UnitTest.Manipulation
         public void Reshape_SingleElement()
         {
             // NumPy: np.array([42]).reshape(1,1,1) = value 42, shape (1,1,1)
-            var a = np.array(new[] { 42 });
+            var a = np.array(new long[] { 42 });
             var r = np.reshape(a, 1, 1, 1);
 
             r.Should().BeShaped(1, 1, 1);
-            r.GetInt32(0, 0, 0).Should().Be(42);
+            r.GetInt64(0, 0, 0).Should().Be(42);
         }
 
         [Test]
@@ -135,12 +135,12 @@ namespace NumSharp.UnitTest.Manipulation
             var r = np.reshape(a, 6, 1);
 
             r.Should().BeShaped(6, 1);
-            r.GetInt32(0, 0).Should().Be(0);
-            r.GetInt32(1, 0).Should().Be(1);
-            r.GetInt32(2, 0).Should().Be(2);
-            r.GetInt32(3, 0).Should().Be(3);
-            r.GetInt32(4, 0).Should().Be(4);
-            r.GetInt32(5, 0).Should().Be(5);
+            r.GetInt64(0, 0).Should().Be(0);
+            r.GetInt64(1, 0).Should().Be(1);
+            r.GetInt64(2, 0).Should().Be(2);
+            r.GetInt64(3, 0).Should().Be(3);
+            r.GetInt64(4, 0).Should().Be(4);
+            r.GetInt64(5, 0).Should().Be(5);
         }
 
         #endregion
@@ -199,11 +199,11 @@ namespace NumSharp.UnitTest.Manipulation
             var r = np.reshape(a, -1, 1);
 
             r.Should().BeShaped(5, 1);
-            r.GetInt32(0, 0).Should().Be(0);
-            r.GetInt32(1, 0).Should().Be(1);
-            r.GetInt32(2, 0).Should().Be(2);
-            r.GetInt32(3, 0).Should().Be(3);
-            r.GetInt32(4, 0).Should().Be(4);
+            r.GetInt64(0, 0).Should().Be(0);
+            r.GetInt64(1, 0).Should().Be(1);
+            r.GetInt64(2, 0).Should().Be(2);
+            r.GetInt64(3, 0).Should().Be(3);
+            r.GetInt64(4, 0).Should().Be(4);
         }
 
         #endregion
@@ -218,10 +218,10 @@ namespace NumSharp.UnitTest.Manipulation
             var r = a.reshape(2, 3);
 
             // Modify reshaped array
-            r.SetInt32(99, 0, 1);
+            r.SetInt64(99, 0, 1);
 
             // Original array should see the change at index 1
-            a.GetInt32(1).Should().Be(99);
+            a.GetInt64(1).Should().Be(99);
         }
 
         [Test]
@@ -232,9 +232,9 @@ namespace NumSharp.UnitTest.Manipulation
             var r1 = a.reshape(4, 6);
             var r2 = r1.reshape(2, 3, 4);
 
-            r2.SetInt32(888, 0, 1, 2);
+            r2.SetInt64(888, 0, 1, 2);
 
-            a.GetInt32(6).Should().Be(888);
+            a.GetInt64(6).Should().Be(888);
         }
 
         [Test]
@@ -247,8 +247,8 @@ namespace NumSharp.UnitTest.Manipulation
 
             r2.Should().BeOfValues(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11);
 
-            r2.SetInt32(777, 5);
-            a.GetInt32(5).Should().Be(777);
+            r2.SetInt64(777, 5);
+            a.GetInt64(5).Should().Be(777);
         }
 
         #endregion
@@ -261,6 +261,7 @@ namespace NumSharp.UnitTest.Manipulation
             // NumPy: np.array(42).reshape(1) → shape (1,), val [42]
             // Note: NumSharp doesn't have true 0-dim scalars; np.array(42) creates shape (1,)
             // This test passes because NumSharp scalar is already (1,)
+            // np.array(42) creates int32 array
             var a = np.array(42);
             var r = np.reshape(a, 1);
 
@@ -273,6 +274,7 @@ namespace NumSharp.UnitTest.Manipulation
         {
             // NumPy: np.array(42).reshape(1,1) → shape (1,1), val [[42]]
             // Note: NumSharp doesn't have true 0-dim scalars; np.array(42) creates shape (1,)
+            // np.array(42) creates int32 array
             var a = np.array(42);
             var r = np.reshape(a, 1, 1);
 
@@ -286,7 +288,7 @@ namespace NumSharp.UnitTest.Manipulation
         {
             // NumPy: np.array([42]).reshape(()) → scalar 42
             // Bug: Known NRE bug when reshaping to empty shape
-            var a = np.array(new[] { 42 });
+            var a = np.array(new long[] { 42 });
             var r = np.reshape(a, new Shape());
 
             r.Should().BeScalar(42);
@@ -423,9 +425,9 @@ namespace NumSharp.UnitTest.Manipulation
             var s = a["2:8"];
             var r = s.reshape(2, 3);
 
-            r.SetInt32(99, 0, 0);
+            r.SetInt64(99, 0, 0);
 
-            a.GetInt32(2).Should().Be(99);
+            a.GetInt64(2).Should().Be(99);
         }
 
         #endregion
@@ -436,7 +438,7 @@ namespace NumSharp.UnitTest.Manipulation
         public void Reshape_RowBroadcast_CopyReshape()
         {
             // NumPy: broadcast_to([1,2,3], (3,3)), copy then reshape(9) = [1,2,3,1,2,3,1,2,3]
-            var a = np.array(new[] { 1, 2, 3 });
+            var a = np.array(new long[] { 1, 2, 3 });
             var b = np.broadcast_to(a, new Shape(3, 3));
             var c = b.copy();
             var r = np.reshape(c, 9);
@@ -450,7 +452,7 @@ namespace NumSharp.UnitTest.Manipulation
         {
             // NumPy: broadcast_to([[10],[20],[30]], (3,3)), copy then reshape(9)
             // = [10,10,10,20,20,20,30,30,30]
-            var a = np.array(new int[,] { { 10 }, { 20 }, { 30 } });
+            var a = np.array(new long[,] { { 10 }, { 20 }, { 30 } });
             var b = np.broadcast_to(a, new Shape(3, 3));
             var c = b.copy();
             var r = np.reshape(c, 9);
@@ -464,7 +466,7 @@ namespace NumSharp.UnitTest.Manipulation
         {
             // NumPy: np.reshape(broadcast_to([1,2,3], (3,3)), 9) = [1,2,3,1,2,3,1,2,3]
             // This should work since reshape handles broadcast through _reshapeBroadcast
-            var a = np.array(new[] { 1, 2, 3 });
+            var a = np.array(new long[] { 1, 2, 3 });
             var b = np.broadcast_to(a, new Shape(3, 3));
             var r = np.reshape(b, 9);
 
@@ -477,7 +479,7 @@ namespace NumSharp.UnitTest.Manipulation
         {
             // NumPy: broadcast_to column [[10],[20],[30]], reshape(9)
             // = [10,10,10,20,20,20,30,30,30]
-            var a = np.array(new int[,] { { 10 }, { 20 }, { 30 } });
+            var a = np.array(new long[,] { { 10 }, { 20 }, { 30 } });
             var b = np.broadcast_to(a, new Shape(3, 3));
             var r = np.reshape(b, 9);
 
@@ -492,7 +494,7 @@ namespace NumSharp.UnitTest.Manipulation
         [Test]
         public void Reshape_Boolean()
         {
-            var a = np.array(new[] { true, false, true, false, true, false });
+            var a = np.array(new bool[] { true, false, true, false, true, false });
             var r = np.reshape(a, 2, 3);
 
             r.Should().BeShaped(2, 3);
@@ -536,7 +538,7 @@ namespace NumSharp.UnitTest.Manipulation
         [Test]
         public void Reshape_Int32()
         {
-            var a = np.array(new[] { 0, 1, 2, 3, 4, 5 });
+            var a = np.array(new int[] { 0, 1, 2, 3, 4, 5 });
             var r = np.reshape(a, 2, 3);
 
             r.Should().BeShaped(2, 3);
@@ -580,7 +582,7 @@ namespace NumSharp.UnitTest.Manipulation
         [Test]
         public void Reshape_Char()
         {
-            var a = np.array(new[] { 'a', 'b', 'c', 'd', 'e', 'f' });
+            var a = np.array(new char[] { 'a', 'b', 'c', 'd', 'e', 'f' });
             var r = np.reshape(a, 2, 3);
 
             r.Should().BeShaped(2, 3);
@@ -591,7 +593,7 @@ namespace NumSharp.UnitTest.Manipulation
         [Test]
         public void Reshape_Single()
         {
-            var a = np.array(new[] { 0f, 1f, 2f, 3f, 4f, 5f });
+            var a = np.array(new float[] { 0f, 1f, 2f, 3f, 4f, 5f });
             var r = np.reshape(a, 2, 3);
 
             r.Should().BeShaped(2, 3);
@@ -602,7 +604,7 @@ namespace NumSharp.UnitTest.Manipulation
         [Test]
         public void Reshape_Double()
         {
-            var a = np.array(new[] { 0.0, 1.0, 2.0, 3.0, 4.0, 5.0 });
+            var a = np.array(new double[] { 0.0, 1.0, 2.0, 3.0, 4.0, 5.0 });
             var r = np.reshape(a, 2, 3);
 
             r.Should().BeShaped(2, 3);
@@ -613,7 +615,7 @@ namespace NumSharp.UnitTest.Manipulation
         [Test]
         public void Reshape_Decimal()
         {
-            var a = np.array(new[] { 0m, 1m, 2m, 3m, 4m, 5m });
+            var a = np.array(new decimal[] { 0m, 1m, 2m, 3m, 4m, 5m });
             var r = np.reshape(a, 2, 3);
 
             r.Should().BeShaped(2, 3);
@@ -636,16 +638,16 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfSize(10000);
 
             // Check first and last 5 elements
-            r.GetInt32(0).Should().Be(0);
-            r.GetInt32(1).Should().Be(1);
-            r.GetInt32(2).Should().Be(2);
-            r.GetInt32(3).Should().Be(3);
-            r.GetInt32(4).Should().Be(4);
-            r.GetInt32(9995).Should().Be(9995);
-            r.GetInt32(9996).Should().Be(9996);
-            r.GetInt32(9997).Should().Be(9997);
-            r.GetInt32(9998).Should().Be(9998);
-            r.GetInt32(9999).Should().Be(9999);
+            r.GetInt64(0).Should().Be(0);
+            r.GetInt64(1).Should().Be(1);
+            r.GetInt64(2).Should().Be(2);
+            r.GetInt64(3).Should().Be(3);
+            r.GetInt64(4).Should().Be(4);
+            r.GetInt64(9995).Should().Be(9995);
+            r.GetInt64(9996).Should().Be(9996);
+            r.GetInt64(9997).Should().Be(9997);
+            r.GetInt64(9998).Should().Be(9998);
+            r.GetInt64(9999).Should().Be(9999);
         }
 
         [Test]
@@ -659,10 +661,10 @@ namespace NumSharp.UnitTest.Manipulation
             r.Should().BeOfSize(10000);
 
             // Check corner elements
-            r.GetInt32(0, 0).Should().Be(0);
-            r.GetInt32(0, 199).Should().Be(199);
-            r.GetInt32(49, 0).Should().Be(9800);
-            r.GetInt32(49, 199).Should().Be(9999);
+            r.GetInt64(0, 0).Should().Be(0);
+            r.GetInt64(0, 199).Should().Be(199);
+            r.GetInt64(49, 0).Should().Be(9800);
+            r.GetInt64(49, 199).Should().Be(9999);
         }
 
         #endregion
@@ -745,10 +747,10 @@ namespace NumSharp.UnitTest.Manipulation
             var t = a.T;
             var r = t.reshape(6);
 
-            r.SetInt32(999, 0);
+            r.SetInt64(999, 0);
 
             // Original should be unchanged (transpose made a copy)
-            a.GetInt32(0, 0).Should().Be(0);
+            a.GetInt64(0, 0).Should().Be(0);
         }
 
         #endregion

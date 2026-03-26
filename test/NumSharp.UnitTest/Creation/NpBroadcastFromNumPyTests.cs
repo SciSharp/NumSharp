@@ -63,7 +63,7 @@ namespace NumSharp.UnitTest.Creation
         [Test]
         public void BroadcastArrays_Same()
         {
-            var x = np.array(new int[,] { { 1, 2, 3 } }); // shape (1,3)
+            var x = np.array(new long[,] { { 1, 2, 3 } }); // shape (1,3)
             var (a, b) = np.broadcast_arrays(x, x);
 
             AssertShapeEqual(a, 1, 3);
@@ -89,19 +89,19 @@ namespace NumSharp.UnitTest.Creation
         [Test]
         public void BroadcastArrays_OneOff()
         {
-            var x = np.array(new int[,] { { 1, 2, 3 } });    // shape (1,3)
-            var y = np.array(new int[,] { { 1 }, { 2 }, { 3 } }); // shape (3,1)
+            var x = np.array(new long[,] { { 1, 2, 3 } });    // shape (1,3)
+            var y = np.array(new long[,] { { 1 }, { 2 }, { 3 } }); // shape (3,1)
             var (a, b) = np.broadcast_arrays(x, y);
 
             AssertShapeEqual(a, 3, 3);
             AssertShapeEqual(b, 3, 3);
 
             // a should be [[1,2,3],[1,2,3],[1,2,3]]
-            var expected_a = np.array(new int[,] { { 1, 2, 3 }, { 1, 2, 3 }, { 1, 2, 3 } });
+            var expected_a = np.array(new long[,] { { 1, 2, 3 }, { 1, 2, 3 }, { 1, 2, 3 } });
             np.array_equal(a, expected_a).Should().BeTrue();
 
             // b should be [[1,1,1],[2,2,2],[3,3,3]]
-            var expected_b = np.array(new int[,] { { 1, 1, 1 }, { 2, 2, 2 }, { 3, 3, 3 } });
+            var expected_b = np.array(new long[,] { { 1, 1, 1 }, { 2, 2, 2 }, { 3, 3, 3 } });
             np.array_equal(b, expected_b).Should().BeTrue();
         }
 
@@ -410,19 +410,19 @@ namespace NumSharp.UnitTest.Creation
         [Test]
         public void BroadcastTo_IsView()
         {
-            var x = np.array(new int[] { 1, 2, 3 });
+            var x = np.array(new long[] { 1, 2, 3 });
             var y = np.broadcast_to(x, new Shape(2, 3));
 
             AssertShapeEqual(y, 2, 3);
 
             // Verify it's a view by checking values match
             // and that the broadcasted array shares data
-            Assert.AreEqual(1, y.GetInt32(0, 0));
-            Assert.AreEqual(2, y.GetInt32(0, 1));
-            Assert.AreEqual(3, y.GetInt32(0, 2));
-            Assert.AreEqual(1, y.GetInt32(1, 0));
-            Assert.AreEqual(2, y.GetInt32(1, 1));
-            Assert.AreEqual(3, y.GetInt32(1, 2));
+            Assert.AreEqual(1, y.GetInt64(0, 0));
+            Assert.AreEqual(2, y.GetInt64(0, 1));
+            Assert.AreEqual(3, y.GetInt64(0, 2));
+            Assert.AreEqual(1, y.GetInt64(1, 0));
+            Assert.AreEqual(2, y.GetInt64(1, 1));
+            Assert.AreEqual(3, y.GetInt64(1, 2));
         }
 
         /// <summary>
@@ -439,7 +439,7 @@ namespace NumSharp.UnitTest.Creation
             var x = np.arange(3); // [0, 1, 2]
             var y = np.broadcast_to(x, new Shape(2, 3));
 
-            var expected = np.array(new int[,] { { 0, 1, 2 }, { 0, 1, 2 } });
+            var expected = np.array(new long[,] { { 0, 1, 2 }, { 0, 1, 2 } });
             np.array_equal(y, expected).Should().BeTrue();
         }
 
@@ -457,10 +457,10 @@ namespace NumSharp.UnitTest.Creation
             var scalar = NDArray.Scalar(5);
 
             var r1 = np.broadcast_to(scalar, new Shape(3));
-            np.array_equal(r1, np.array(new int[] { 5, 5, 5 })).Should().BeTrue();
+            np.array_equal(r1, np.array(new long[] { 5, 5, 5 })).Should().BeTrue();
 
             var r2 = np.broadcast_to(scalar, new Shape(2, 3));
-            np.array_equal(r2, np.array(new int[,] { { 5, 5, 5 }, { 5, 5, 5 } })).Should().BeTrue();
+            np.array_equal(r2, np.array(new long[,] { { 5, 5, 5 }, { 5, 5, 5 } })).Should().BeTrue();
         }
 
         /// <summary>
@@ -474,11 +474,11 @@ namespace NumSharp.UnitTest.Creation
         [Test]
         public void BroadcastTo_ColumnToMatrix()
         {
-            var x = np.array(new int[,] { { 1 }, { 2 }, { 3 } }); // shape (3,1)
+            var x = np.array(new long[,] { { 1 }, { 2 }, { 3 } }); // shape (3,1)
             var y = np.broadcast_to(x, new Shape(3, 3));
 
             AssertShapeEqual(y, 3, 3);
-            var expected = np.array(new int[,] { { 1, 1, 1 }, { 2, 2, 2 }, { 3, 3, 3 } });
+            var expected = np.array(new long[,] { { 1, 1, 1 }, { 2, 2, 2 }, { 3, 3, 3 } });
             np.array_equal(y, expected).Should().BeTrue();
         }
 
@@ -663,17 +663,17 @@ namespace NumSharp.UnitTest.Creation
         [Test]
         public void Add_ScalarAndArray()
         {
-            var arr = np.array(new int[] { 1, 2, 3 });
+            var arr = np.array(new long[] { 1, 2, 3 });
             var scalar = NDArray.Scalar(1);
 
             // scalar + array
             var r1 = scalar + arr;
-            np.array_equal(r1, np.array(new int[] { 2, 3, 4 })).Should().BeTrue();
+            np.array_equal(r1, np.array(new long[] { 2, 3, 4 })).Should().BeTrue();
 
             // array + scalar
             var scalar10 = NDArray.Scalar(10);
             var r2 = arr + scalar10;
-            np.array_equal(r2, np.array(new int[] { 11, 12, 13 })).Should().BeTrue();
+            np.array_equal(r2, np.array(new long[] { 11, 12, 13 })).Should().BeTrue();
         }
 
         /// <summary>
@@ -690,7 +690,7 @@ namespace NumSharp.UnitTest.Creation
             var result = a + b;
 
             AssertShapeEqual(result, 2, 3);
-            var expected = np.array(new int[,] { { 0, 2, 4 }, { 3, 5, 7 } });
+            var expected = np.array(new long[,] { { 0, 2, 4 }, { 3, 5, 7 } });
             np.array_equal(result, expected).Should().BeTrue();
         }
 
@@ -704,12 +704,12 @@ namespace NumSharp.UnitTest.Creation
         [Test]
         public void Add_ColumnPlusRow()
         {
-            var col = np.array(new int[,] { { 0 }, { 1 }, { 2 } }); // shape (3,1)
-            var row = np.array(new int[,] { { 0, 1, 2 } });          // shape (1,3)
+            var col = np.array(new long[,] { { 0 }, { 1 }, { 2 } }); // shape (3,1)
+            var row = np.array(new long[,] { { 0, 1, 2 } });          // shape (1,3)
             var result = col + row;
 
             AssertShapeEqual(result, 3, 3);
-            var expected = np.array(new int[,] { { 0, 1, 2 }, { 1, 2, 3 }, { 2, 3, 4 } });
+            var expected = np.array(new long[,] { { 0, 1, 2 }, { 1, 2, 3 }, { 2, 3, 4 } });
             np.array_equal(result, expected).Should().BeTrue();
         }
 
@@ -747,7 +747,7 @@ namespace NumSharp.UnitTest.Creation
             var result = a - b;
 
             AssertShapeEqual(result, 2, 3);
-            var expected = np.array(new int[,] { { 0, 0, 0 }, { 3, 3, 3 } });
+            var expected = np.array(new long[,] { { 0, 0, 0 }, { 3, 3, 3 } });
             np.array_equal(result, expected).Should().BeTrue();
         }
 
@@ -761,11 +761,11 @@ namespace NumSharp.UnitTest.Creation
         public void Multiply_Broadcast()
         {
             var a = np.arange(6).reshape(2, 3); // [[0,1,2],[3,4,5]]
-            var b = np.array(new int[] { 1, 2, 3 });
+            var b = np.array(new long[] { 1, 2, 3 });
             var result = a * b;
 
             AssertShapeEqual(result, 2, 3);
-            var expected = np.array(new int[,] { { 0, 2, 6 }, { 3, 8, 15 } });
+            var expected = np.array(new long[,] { { 0, 2, 6 }, { 3, 8, 15 } });
             np.array_equal(result, expected).Should().BeTrue();
         }
 
@@ -844,28 +844,28 @@ namespace NumSharp.UnitTest.Creation
         [Test]
         public void BroadcastArrays_ReturnsViews()
         {
-            var x = np.array(new int[] { 1, 2, 3 });      // shape (3,)
-            var y = np.array(new int[,] { { 1 }, { 2 } }); // shape (2,1)
+            var x = np.array(new long[] { 1, 2, 3 });      // shape (3,)
+            var y = np.array(new long[,] { { 1 }, { 2 } }); // shape (2,1)
             var (a, b) = np.broadcast_arrays(x, y);
 
             AssertShapeEqual(a, 2, 3);
             AssertShapeEqual(b, 2, 3);
 
             // a should broadcast x across rows: [[1,2,3],[1,2,3]]
-            Assert.AreEqual(1, a.GetInt32(0, 0));
-            Assert.AreEqual(2, a.GetInt32(0, 1));
-            Assert.AreEqual(3, a.GetInt32(0, 2));
-            Assert.AreEqual(1, a.GetInt32(1, 0));
-            Assert.AreEqual(2, a.GetInt32(1, 1));
-            Assert.AreEqual(3, a.GetInt32(1, 2));
+            Assert.AreEqual(1, a.GetInt64(0, 0));
+            Assert.AreEqual(2, a.GetInt64(0, 1));
+            Assert.AreEqual(3, a.GetInt64(0, 2));
+            Assert.AreEqual(1, a.GetInt64(1, 0));
+            Assert.AreEqual(2, a.GetInt64(1, 1));
+            Assert.AreEqual(3, a.GetInt64(1, 2));
 
             // b should broadcast y across columns: [[1,1,1],[2,2,2]]
-            Assert.AreEqual(1, b.GetInt32(0, 0));
-            Assert.AreEqual(1, b.GetInt32(0, 1));
-            Assert.AreEqual(1, b.GetInt32(0, 2));
-            Assert.AreEqual(2, b.GetInt32(1, 0));
-            Assert.AreEqual(2, b.GetInt32(1, 1));
-            Assert.AreEqual(2, b.GetInt32(1, 2));
+            Assert.AreEqual(1, b.GetInt64(0, 0));
+            Assert.AreEqual(1, b.GetInt64(0, 1));
+            Assert.AreEqual(1, b.GetInt64(0, 2));
+            Assert.AreEqual(2, b.GetInt64(1, 0));
+            Assert.AreEqual(2, b.GetInt64(1, 1));
+            Assert.AreEqual(2, b.GetInt64(1, 2));
         }
 
         /// <summary>
@@ -886,14 +886,14 @@ namespace NumSharp.UnitTest.Creation
             var y = x[":, 0:1"]; // shape (3,1), values [0],[4],[8]
 
             AssertShapeEqual(y, 3, 1);
-            Assert.AreEqual(0, y.GetInt32(0, 0));
-            Assert.AreEqual(4, y.GetInt32(1, 0));
-            Assert.AreEqual(8, y.GetInt32(2, 0));
+            Assert.AreEqual(0, y.GetInt64(0, 0));
+            Assert.AreEqual(4, y.GetInt64(1, 0));
+            Assert.AreEqual(8, y.GetInt64(2, 0));
 
             var z = np.broadcast_to(y, new Shape(3, 4));
             AssertShapeEqual(z, 3, 4);
 
-            var expected = np.array(new int[,] { { 0, 0, 0, 0 }, { 4, 4, 4, 4 }, { 8, 8, 8, 8 } });
+            var expected = np.array(new long[,] { { 0, 0, 0, 0 }, { 4, 4, 4, 4 }, { 8, 8, 8, 8 } });
             np.array_equal(z, expected).Should().BeTrue();
         }
 
@@ -915,7 +915,7 @@ namespace NumSharp.UnitTest.Creation
             var result = x + y;
 
             AssertShapeEqual(result, 3, 4);
-            var expected = np.array(new int[,]
+            var expected = np.array(new long[,]
             {
                 { 0, 1, 2, 3 },
                 { 8, 9, 10, 11 },
@@ -1083,11 +1083,11 @@ namespace NumSharp.UnitTest.Creation
         [Test]
         public void BroadcastTo_IdentityShape()
         {
-            var x = np.array(new int[] { 42 });
+            var x = np.array(new long[] { 42 });
             var y = np.broadcast_to(x, new Shape(1));
 
             AssertShapeEqual(y, 1);
-            Assert.AreEqual(42, y.GetInt32(0));
+            Assert.AreEqual(42, y.GetInt64(0));
         }
 
         /// <summary>
@@ -1122,7 +1122,7 @@ namespace NumSharp.UnitTest.Creation
         [Test]
         public void BroadcastTo_StridesCorrect()
         {
-            var x = np.array(new int[] { 1, 2, 3 }); // shape (3,)
+            var x = np.array(new long[] { 1, 2, 3 }); // shape (3,)
             var y = np.broadcast_to(x, new Shape(4, 3));
 
             AssertShapeEqual(y, 4, 3);
@@ -1181,24 +1181,25 @@ namespace NumSharp.UnitTest.Creation
         [Test]
         public void BroadcastTo_ReversedSlice()
         {
+            // np.arange returns int64 by default (NumPy 2.x)
             var rev = np.arange(3)["::-1"]; // [2, 1, 0]
-            Assert.AreEqual(2, rev.GetInt32(0));
-            Assert.AreEqual(1, rev.GetInt32(1));
-            Assert.AreEqual(0, rev.GetInt32(2));
+            Assert.AreEqual(2L, rev.GetInt64(0));
+            Assert.AreEqual(1L, rev.GetInt64(1));
+            Assert.AreEqual(0L, rev.GetInt64(2));
 
             var brev = np.broadcast_to(rev, new Shape(2, 3));
             AssertShapeEqual(brev, 2, 3);
 
             // Verify correct values via element access
-            Assert.AreEqual(2, brev.GetInt32(0, 0));
-            Assert.AreEqual(1, brev.GetInt32(0, 1));
-            Assert.AreEqual(0, brev.GetInt32(0, 2));
-            Assert.AreEqual(2, brev.GetInt32(1, 0));
-            Assert.AreEqual(1, brev.GetInt32(1, 1));
-            Assert.AreEqual(0, brev.GetInt32(1, 2));
+            Assert.AreEqual(2L, brev.GetInt64(0, 0));
+            Assert.AreEqual(1L, brev.GetInt64(0, 1));
+            Assert.AreEqual(0L, brev.GetInt64(0, 2));
+            Assert.AreEqual(2L, brev.GetInt64(1, 0));
+            Assert.AreEqual(1L, brev.GetInt64(1, 1));
+            Assert.AreEqual(0L, brev.GetInt64(1, 2));
 
             // Verify via array_equal
-            var expected = np.array(new int[,] { { 2, 1, 0 }, { 2, 1, 0 } });
+            var expected = np.array(new long[,] { { 2, 1, 0 }, { 2, 1, 0 } });
             np.array_equal(brev, expected).Should().BeTrue();
         }
 
@@ -1216,21 +1217,21 @@ namespace NumSharp.UnitTest.Creation
         public void BroadcastTo_StepSlice()
         {
             var stepped = np.arange(6)["::2"]; // [0, 2, 4]
-            Assert.AreEqual(0, stepped.GetInt32(0));
-            Assert.AreEqual(2, stepped.GetInt32(1));
-            Assert.AreEqual(4, stepped.GetInt32(2));
+            Assert.AreEqual(0, stepped.GetInt64(0));
+            Assert.AreEqual(2, stepped.GetInt64(1));
+            Assert.AreEqual(4, stepped.GetInt64(2));
 
             var bstepped = np.broadcast_to(stepped, new Shape(2, 3));
             AssertShapeEqual(bstepped, 2, 3);
 
-            Assert.AreEqual(0, bstepped.GetInt32(0, 0));
-            Assert.AreEqual(2, bstepped.GetInt32(0, 1));
-            Assert.AreEqual(4, bstepped.GetInt32(0, 2));
-            Assert.AreEqual(0, bstepped.GetInt32(1, 0));
-            Assert.AreEqual(2, bstepped.GetInt32(1, 1));
-            Assert.AreEqual(4, bstepped.GetInt32(1, 2));
+            Assert.AreEqual(0, bstepped.GetInt64(0, 0));
+            Assert.AreEqual(2, bstepped.GetInt64(0, 1));
+            Assert.AreEqual(4, bstepped.GetInt64(0, 2));
+            Assert.AreEqual(0, bstepped.GetInt64(1, 0));
+            Assert.AreEqual(2, bstepped.GetInt64(1, 1));
+            Assert.AreEqual(4, bstepped.GetInt64(1, 2));
 
-            var expected = np.array(new int[,] { { 0, 2, 4 }, { 0, 2, 4 } });
+            var expected = np.array(new long[,] { { 0, 2, 4 }, { 0, 2, 4 } });
             np.array_equal(bstepped, expected).Should().BeTrue();
         }
 
@@ -1253,14 +1254,14 @@ namespace NumSharp.UnitTest.Creation
             var col = x[":, 1:2"]; // shape (3,1): [[1],[5],[9]]
 
             AssertShapeEqual(col, 3, 1);
-            Assert.AreEqual(1, col.GetInt32(0, 0));
-            Assert.AreEqual(5, col.GetInt32(1, 0));
-            Assert.AreEqual(9, col.GetInt32(2, 0));
+            Assert.AreEqual(1, col.GetInt64(0, 0));
+            Assert.AreEqual(5, col.GetInt64(1, 0));
+            Assert.AreEqual(9, col.GetInt64(2, 0));
 
             var bcol = np.broadcast_to(col, new Shape(3, 3));
             AssertShapeEqual(bcol, 3, 3);
 
-            var expected = np.array(new int[,] { { 1, 1, 1 }, { 5, 5, 5 }, { 9, 9, 9 } });
+            var expected = np.array(new long[,] { { 1, 1, 1 }, { 5, 5, 5 }, { 9, 9, 9 } });
             np.array_equal(bcol, expected).Should().BeTrue();
         }
 
@@ -1282,13 +1283,13 @@ namespace NumSharp.UnitTest.Creation
             var dslice = x["::2, :"]; // rows 0 and 2: shape (2,4)
             var dslice_col = dslice[":, 0:1"]; // shape (2,1): [[0],[8]]
 
-            Assert.AreEqual(0, dslice_col.GetInt32(0, 0));
-            Assert.AreEqual(8, dslice_col.GetInt32(1, 0));
+            Assert.AreEqual(0, dslice_col.GetInt64(0, 0));
+            Assert.AreEqual(8, dslice_col.GetInt64(1, 0));
 
             var bdslice = np.broadcast_to(dslice_col, new Shape(2, 4));
             AssertShapeEqual(bdslice, 2, 4);
 
-            var expected = np.array(new int[,] { { 0, 0, 0, 0 }, { 8, 8, 8, 8 } });
+            var expected = np.array(new long[,] { { 0, 0, 0, 0 }, { 8, 8, 8, 8 } });
             np.array_equal(bdslice, expected).Should().BeTrue();
         }
 
@@ -1309,7 +1310,7 @@ namespace NumSharp.UnitTest.Creation
             var result = brev + ones;
 
             AssertShapeEqual(result, 2, 3);
-            var expected = np.array(new int[,] { { 3, 2, 1 }, { 3, 2, 1 } });
+            var expected = np.array(new long[,] { { 3, 2, 1 }, { 3, 2, 1 } });
             np.array_equal(result, expected).Should().BeTrue();
         }
 
@@ -1369,13 +1370,13 @@ namespace NumSharp.UnitTest.Creation
             // flatten should produce [2,1,0,2,1,0]
             var flat = brev.flatten();
             AssertShapeEqual(flat, 6);
-            var expected_flat = np.array(new int[] { 2, 1, 0, 2, 1, 0 });
+            var expected_flat = np.array(new long[] { 2, 1, 0, 2, 1, 0 });
             np.array_equal(flat, expected_flat).Should().BeTrue();
 
             // copy should produce a contiguous copy with correct values
             var copied = np.copy(brev);
             AssertShapeEqual(copied, 2, 3);
-            var expected_copy = np.array(new int[,] { { 2, 1, 0 }, { 2, 1, 0 } });
+            var expected_copy = np.array(new long[,] { { 2, 1, 0 }, { 2, 1, 0 } });
             np.array_equal(copied, expected_copy).Should().BeTrue();
         }
 
@@ -1402,7 +1403,7 @@ namespace NumSharp.UnitTest.Creation
         [Test]
         public void BroadcastTo_WriteThrough_ThrowsReadOnly()
         {
-            var x = np.array(new int[] { 1, 2, 3, 4 });
+            var x = np.array(new long[] { 1, 2, 3, 4 });
             var bx = np.broadcast_to(x, new Shape(2, 4));
 
             // NumSharp correctly prevents writing to broadcast views (like NumPy).
@@ -1411,7 +1412,7 @@ namespace NumSharp.UnitTest.Creation
                 .WithMessage("assignment destination is read-only");
 
             // Verify original was not modified
-            x.GetInt32(0).Should().Be(1);
+            x.GetInt64(0).Should().Be(1);
         }
 
         /// <summary>
@@ -1513,7 +1514,7 @@ namespace NumSharp.UnitTest.Creation
         [Test]
         public void Add_MixedDtypeBroadcast()
         {
-            var i32 = np.array(new int[] { 1, 2, 3 });
+            var i32 = np.array(new long[] { 1, 2, 3 });
             var f64 = np.array(new double[] { 0.5 });
             var result = i32 + f64;
 
@@ -1533,15 +1534,15 @@ namespace NumSharp.UnitTest.Creation
         [Test]
         public void Add_NegativeValuesBroadcast()
         {
-            var a = np.array(new int[] { -3, -2, -1, 0, 1, 2, 3 });
-            var b = np.array(new int[,] { { 10 }, { -10 } });
+            var a = np.array(new long[] { -3, -2, -1, 0, 1, 2, 3 });
+            var b = np.array(new long[,] { { 10 }, { -10 } });
             var result = a + b;
 
             AssertShapeEqual(result, 2, 7);
-            Assert.AreEqual(7, result.GetInt32(0, 0));
-            Assert.AreEqual(13, result.GetInt32(0, 6));
-            Assert.AreEqual(-13, result.GetInt32(1, 0));
-            Assert.AreEqual(-7, result.GetInt32(1, 6));
+            Assert.AreEqual(7, result.GetInt64(0, 0));
+            Assert.AreEqual(13, result.GetInt64(0, 6));
+            Assert.AreEqual(-13, result.GetInt64(1, 0));
+            Assert.AreEqual(-7, result.GetInt64(1, 6));
         }
 
         /// <summary>
@@ -1553,17 +1554,17 @@ namespace NumSharp.UnitTest.Creation
         [Test]
         public void Maximum_Broadcast()
         {
-            var a = np.array(new int[] { 1, 5, 3 });
-            var b = np.array(new int[,] { { 2 }, { 4 } });
+            var a = np.array(new long[] { 1, 5, 3 });
+            var b = np.array(new long[,] { { 2 }, { 4 } });
             var mx = np.maximum(a, b);
 
             AssertShapeEqual(mx, 2, 3);
-            Assert.AreEqual(2, mx.GetInt32(0, 0));
-            Assert.AreEqual(5, mx.GetInt32(0, 1));
-            Assert.AreEqual(3, mx.GetInt32(0, 2));
-            Assert.AreEqual(4, mx.GetInt32(1, 0));
-            Assert.AreEqual(5, mx.GetInt32(1, 1));
-            Assert.AreEqual(4, mx.GetInt32(1, 2));
+            Assert.AreEqual(2, mx.GetInt64(0, 0));
+            Assert.AreEqual(5, mx.GetInt64(0, 1));
+            Assert.AreEqual(3, mx.GetInt64(0, 2));
+            Assert.AreEqual(4, mx.GetInt64(1, 0));
+            Assert.AreEqual(5, mx.GetInt64(1, 1));
+            Assert.AreEqual(4, mx.GetInt64(1, 2));
         }
 
         /// <summary>
@@ -1584,10 +1585,10 @@ namespace NumSharp.UnitTest.Creation
             var result = col + row;
 
             AssertShapeEqual(result, 4, 5);
-            Assert.AreEqual(13, result.GetInt32(0, 0)); // 3+10
-            Assert.AreEqual(17, result.GetInt32(0, 4)); // 3+14
-            Assert.AreEqual(28, result.GetInt32(3, 0)); // 18+10
-            Assert.AreEqual(32, result.GetInt32(3, 4)); // 18+14
+            Assert.AreEqual(13, result.GetInt64(0, 0)); // 3+10
+            Assert.AreEqual(17, result.GetInt64(0, 4)); // 3+14
+            Assert.AreEqual(28, result.GetInt64(3, 0)); // 18+10
+            Assert.AreEqual(32, result.GetInt64(3, 4)); // 18+14
         }
 
         /// <summary>
@@ -1601,15 +1602,15 @@ namespace NumSharp.UnitTest.Creation
         [Test]
         public void BroadcastTo_ThenSlice()
         {
-            var x = np.array(new int[] { 10, 20, 30 });
+            var x = np.array(new long[] { 10, 20, 30 });
             var bx = np.broadcast_to(x, new Shape(4, 3));
             var sliced = bx["1:3, :"];
 
             AssertShapeEqual(sliced, 2, 3);
-            Assert.AreEqual(10, sliced.GetInt32(0, 0));
-            Assert.AreEqual(30, sliced.GetInt32(0, 2));
-            Assert.AreEqual(10, sliced.GetInt32(1, 0));
-            Assert.AreEqual(30, sliced.GetInt32(1, 2));
+            Assert.AreEqual(10, sliced.GetInt64(0, 0));
+            Assert.AreEqual(30, sliced.GetInt64(0, 2));
+            Assert.AreEqual(10, sliced.GetInt64(1, 0));
+            Assert.AreEqual(30, sliced.GetInt64(1, 2));
         }
 
         /// <summary>
@@ -1623,17 +1624,17 @@ namespace NumSharp.UnitTest.Creation
         [Test]
         public void BroadcastTo_ThenIntegerIndex()
         {
-            var bx = np.broadcast_to(np.array(new int[] { 10, 20, 30 }), new Shape(4, 3));
+            var bx = np.broadcast_to(np.array(new long[] { 10, 20, 30 }), new Shape(4, 3));
 
             var row0 = bx["0"];
             AssertShapeEqual(row0, 3);
-            Assert.AreEqual(10, row0.GetInt32(0));
-            Assert.AreEqual(20, row0.GetInt32(1));
-            Assert.AreEqual(30, row0.GetInt32(2));
+            Assert.AreEqual(10, row0.GetInt64(0));
+            Assert.AreEqual(20, row0.GetInt64(1));
+            Assert.AreEqual(30, row0.GetInt64(2));
 
             var rowLast = bx["-1"];
-            Assert.AreEqual(10, rowLast.GetInt32(0));
-            Assert.AreEqual(30, rowLast.GetInt32(2));
+            Assert.AreEqual(10, rowLast.GetInt64(0));
+            Assert.AreEqual(30, rowLast.GetInt64(2));
         }
 
         /// <summary>
@@ -1652,9 +1653,9 @@ namespace NumSharp.UnitTest.Creation
             var t = np.transpose(c);
 
             AssertShapeEqual(t, 3, 3);
-            Assert.AreEqual(1, t.GetInt32(0, 1));
-            Assert.AreEqual(1, t.GetInt32(1, 0));
-            Assert.AreEqual(4, t.GetInt32(2, 2));
+            Assert.AreEqual(1, t.GetInt64(0, 1));
+            Assert.AreEqual(1, t.GetInt64(1, 0));
+            Assert.AreEqual(4, t.GetInt64(2, 2));
         }
 
         /// <summary>
@@ -1668,17 +1669,17 @@ namespace NumSharp.UnitTest.Creation
         [Test]
         public void BroadcastResult_Reshape()
         {
-            var c = np.arange(6).reshape(2, 3) + np.array(new int[] { 1, 2, 3 });
+            var c = np.arange(6).reshape(2, 3) + np.array(new long[] { 1, 2, 3 });
             // c = [[1,3,5],[4,6,8]]
             var r = c.reshape(3, 2);
 
             AssertShapeEqual(r, 3, 2);
-            Assert.AreEqual(1, r.GetInt32(0, 0));
-            Assert.AreEqual(3, r.GetInt32(0, 1));
-            Assert.AreEqual(5, r.GetInt32(1, 0));
-            Assert.AreEqual(4, r.GetInt32(1, 1));
-            Assert.AreEqual(6, r.GetInt32(2, 0));
-            Assert.AreEqual(8, r.GetInt32(2, 1));
+            Assert.AreEqual(1, r.GetInt64(0, 0));
+            Assert.AreEqual(3, r.GetInt64(0, 1));
+            Assert.AreEqual(5, r.GetInt64(1, 0));
+            Assert.AreEqual(4, r.GetInt64(1, 1));
+            Assert.AreEqual(6, r.GetInt64(2, 0));
+            Assert.AreEqual(8, r.GetInt64(2, 1));
         }
 
         /// <summary>
@@ -1724,7 +1725,7 @@ namespace NumSharp.UnitTest.Creation
         public void Add_ScalarPlusScalar()
         {
             var c = NDArray.Scalar(5) + NDArray.Scalar(3);
-            Assert.AreEqual(8, c.GetInt32(0));
+            Assert.AreEqual(8, c.GetInt64(0));
         }
 
         /// <summary>
@@ -1756,10 +1757,10 @@ namespace NumSharp.UnitTest.Creation
             var neg = -c;
 
             AssertShapeEqual(neg, 2, 3);
-            Assert.AreEqual(0, neg.GetInt32(0, 0));
-            Assert.AreEqual(-2, neg.GetInt32(0, 2));
-            Assert.AreEqual(-1, neg.GetInt32(1, 0));
-            Assert.AreEqual(-3, neg.GetInt32(1, 2));
+            Assert.AreEqual(0, neg.GetInt64(0, 0));
+            Assert.AreEqual(-2, neg.GetInt64(0, 2));
+            Assert.AreEqual(-1, neg.GetInt64(1, 0));
+            Assert.AreEqual(-3, neg.GetInt64(1, 2));
         }
 
         /// <summary>
@@ -1885,15 +1886,15 @@ namespace NumSharp.UnitTest.Creation
         [Test]
         public void ReBroadcast_2Arg_SameShape()
         {
-            var a = np.broadcast_to(np.array(new int[] { 1, 2, 3 }), new Shape(3, 3));
+            var a = np.broadcast_to(np.array(new long[] { 1, 2, 3 }), new Shape(3, 3));
             var b = np.broadcast_to(a, new Shape(3, 3));
 
             AssertShapeEqual(b, 3, 3);
             for (int r = 0; r < 3; r++)
             {
-                b.GetInt32(r, 0).Should().Be(1);
-                b.GetInt32(r, 1).Should().Be(2);
-                b.GetInt32(r, 2).Should().Be(3);
+                b.GetInt64(r, 0).Should().Be(1);
+                b.GetInt64(r, 1).Should().Be(2);
+                b.GetInt64(r, 2).Should().Be(3);
             }
         }
 
@@ -1910,7 +1911,7 @@ namespace NumSharp.UnitTest.Creation
         [Test]
         public void ReBroadcast_2Arg_HigherDim()
         {
-            var col = np.array(new int[,] { { 1 }, { 2 }, { 3 } });
+            var col = np.array(new long[,] { { 1 }, { 2 }, { 3 } });
             var a = np.broadcast_to(col, new Shape(3, 3));
             var b = np.broadcast_to(a, new Shape(2, 3, 3));
 
@@ -1918,7 +1919,7 @@ namespace NumSharp.UnitTest.Creation
             for (int d = 0; d < 2; d++)
                 for (int r = 0; r < 3; r++)
                     for (int c = 0; c < 3; c++)
-                        b.GetInt32(d, r, c).Should().Be(r + 1,
+                        b.GetInt64(d, r, c).Should().Be(r + 1,
                             $"b[{d},{r},{c}] should be {r + 1}");
         }
 
@@ -1969,15 +1970,15 @@ namespace NumSharp.UnitTest.Creation
             var result = np.broadcast_arrays(new NDArray[] { col, target });
 
             AssertShapeEqual(result[0], 3, 3);
-            result[0].GetInt32(0, 0).Should().Be(1, "row 0 = value from x[0,1]=1");
-            result[0].GetInt32(0, 1).Should().Be(1);
-            result[0].GetInt32(0, 2).Should().Be(1);
-            result[0].GetInt32(1, 0).Should().Be(5, "row 1 = value from x[1,1]=5");
-            result[0].GetInt32(1, 1).Should().Be(5);
-            result[0].GetInt32(1, 2).Should().Be(5);
-            result[0].GetInt32(2, 0).Should().Be(9, "row 2 = value from x[2,1]=9");
-            result[0].GetInt32(2, 1).Should().Be(9);
-            result[0].GetInt32(2, 2).Should().Be(9);
+            result[0].GetInt64(0, 0).Should().Be(1, "row 0 = value from x[0,1]=1");
+            result[0].GetInt64(0, 1).Should().Be(1);
+            result[0].GetInt64(0, 2).Should().Be(1);
+            result[0].GetInt64(1, 0).Should().Be(5, "row 1 = value from x[1,1]=5");
+            result[0].GetInt64(1, 1).Should().Be(5);
+            result[0].GetInt64(1, 2).Should().Be(5);
+            result[0].GetInt64(2, 0).Should().Be(9, "row 2 = value from x[2,1]=9");
+            result[0].GetInt64(2, 1).Should().Be(9);
+            result[0].GetInt64(2, 2).Should().Be(9);
         }
 
         /// <summary>
@@ -2010,8 +2011,8 @@ namespace NumSharp.UnitTest.Creation
 
             for (int r = 0; r < 3; r++)
                 for (int c = 0; c < 3; c++)
-                    viaNarg[0].GetInt32(r, c).Should().Be(via2arg.GetInt32(r, c),
-                        $"N-arg[{r},{c}] should equal 2-arg[{r},{c}]={via2arg.GetInt32(r, c)}");
+                    viaNarg[0].GetInt64(r, c).Should().Be(via2arg.GetInt64(r, c),
+                        $"N-arg[{r},{c}] should equal 2-arg[{r},{c}]={via2arg.GetInt64(r, c)}");
         }
 
         #endregion

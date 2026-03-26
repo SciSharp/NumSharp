@@ -29,7 +29,7 @@ namespace NumSharp.UnitTest.Selection
         {
             var nd = np.arange(4).reshape(2, 2);
 
-            var row1 = (nd[0] as NDArray).MakeGeneric<int>();
+            var row1 = (nd[0] as NDArray).MakeGeneric<long>();
             Assert.AreEqual(row1[0], 0);
             Assert.AreEqual(row1[1], 1);
         }
@@ -38,7 +38,7 @@ namespace NumSharp.UnitTest.Selection
         public void NDArrayAccess3Dim()
         {
             NDArray nd = np.arange(1, 19, 1).reshape(3, 3, 2);
-            var row1 = (nd[0] as NDArray).MakeGeneric<int>();
+            var row1 = (nd[0] as NDArray).MakeGeneric<long>();
             Assert.AreEqual(row1[0, 0], 1);
             Assert.AreEqual(row1[0, 1], 2);
             Assert.AreEqual(row1[1, 0], 3);
@@ -537,9 +537,9 @@ namespace NumSharp.UnitTest.Selection
             //array([0, 10, 11, 12, 4])
             //>>>
 
-            var x = np.arange(5).MakeGeneric<int>();
-            var y1 = np.arange(5, 8).MakeGeneric<int>();
-            var y2 = np.arange(10, 13).MakeGeneric<int>();
+            var x = np.arange(5).MakeGeneric<long>();
+            var y1 = np.arange(5, 8).MakeGeneric<long>();
+            var y2 = np.arange(10, 13).MakeGeneric<long>();
 
             AssertAreEqual(new int[] { 0, 1, 2, 3, 4 }, x.ToArray<int>());
 
@@ -627,9 +627,9 @@ namespace NumSharp.UnitTest.Selection
             //       [12, 13, 14],
             //       [ 6,  7,  8]])
 
-            var x = np.arange(9).reshape(3, 3).MakeGeneric<int>();
-            var y1 = np.arange(6, 9).MakeGeneric<int>();
-            var y2 = np.arange(12, 15).MakeGeneric<int>();
+            var x = np.arange(9).reshape(3, 3).MakeGeneric<long>();
+            var y1 = np.arange(6, 9).MakeGeneric<long>();
+            var y2 = np.arange(12, 15).MakeGeneric<long>();
 
             AssertAreEqual(new int[] { 0, 1, 2, 3, 4, 5, 6, 7, 8 }, x.ToArray<int>());
 
