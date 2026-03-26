@@ -329,7 +329,7 @@ namespace NumSharp.UnitTest.Backends
             {
                 for (int col = 0; col < 3; col++)
                 {
-                    broadcasted.GetInt64(row, col).Should().Be(expectedValues[col]);
+                    broadcasted.GetInt32(row, col).Should().Be(expectedValues[col]);
                 }
             }
         }

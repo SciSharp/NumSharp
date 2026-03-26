@@ -135,10 +135,10 @@ namespace NumSharp.UnitTest.Creation
             var r = np.vstack(bcol, other);
             r.shape.Should().BeEquivalentTo(new long[] { 4, 3 });
 
-            r.GetInt32(0, 0).Should().Be(0, "Row 0 should be [0,0,0]");
-            r.GetInt32(1, 0).Should().Be(2, "Row 1 should be [2,2,2]");
-            r.GetInt32(2, 0).Should().Be(4, "Row 2 should be [4,4,4]");
-            r.GetInt32(3, 0).Should().Be(10, "Row 3 should be [10,20,30]");
+            r.GetInt64(0, 0).Should().Be(0L, "Row 0 should be [0,0,0]");
+            r.GetInt64(1, 0).Should().Be(2L, "Row 1 should be [2,2,2]");
+            r.GetInt64(2, 0).Should().Be(4L, "Row 2 should be [4,4,4]");
+            r.GetInt64(3, 0).Should().Be(10L, "Row 3 should be [10,20,30]");
         }
 
         /// <summary>
@@ -159,10 +159,10 @@ namespace NumSharp.UnitTest.Creation
             var r = np.concatenate(new NDArray[] { bcol, other }, axis: 0);
             r.shape.Should().BeEquivalentTo(new long[] { 4, 3 });
 
-            r.GetInt32(0, 0).Should().Be(1, "Row 0 should be [1,1,1]");
-            r.GetInt32(1, 0).Should().Be(5, "Row 1 should be [5,5,5]");
-            r.GetInt32(2, 0).Should().Be(9, "Row 2 should be [9,9,9]");
-            r.GetInt32(3, 0).Should().Be(1, "Row 3 should be [1,1,1]");
+            r.GetInt64(0, 0).Should().Be(1L, "Row 0 should be [1,1,1]");
+            r.GetInt64(1, 0).Should().Be(5L, "Row 1 should be [5,5,5]");
+            r.GetInt64(2, 0).Should().Be(9L, "Row 2 should be [9,9,9]");
+            r.GetInt64(3, 0).Should().Be(1L, "Row 3 should be [1,1,1]");
         }
     }
 }

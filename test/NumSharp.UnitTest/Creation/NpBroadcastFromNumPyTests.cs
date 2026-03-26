@@ -1724,8 +1724,9 @@ namespace NumSharp.UnitTest.Creation
         [Test]
         public void Add_ScalarPlusScalar()
         {
+            // NDArray.Scalar(int) creates int32 scalar
             var c = NDArray.Scalar(5) + NDArray.Scalar(3);
-            Assert.AreEqual(8, c.GetInt64(0));
+            Assert.AreEqual(8, c.GetInt32(0));
         }
 
         /// <summary>

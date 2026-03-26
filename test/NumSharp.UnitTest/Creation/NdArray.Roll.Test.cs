@@ -64,11 +64,11 @@ namespace NumSharp.UnitTest.Creation
             var x3 = x2.roll(1, 0);
             var x4 = x2.roll(1, 1);
 
-            int[,] x3_ = (Array)x3 as int[,];
-            int[,] x4_ = (Array)x4 as int[,];
+            long[,] x3_ = (Array)x3 as long[,];
+            long[,] x4_ = (Array)x4 as long[,];
 
-            int[,] expX3 = {{5, 6, 7, 8, 9}, {0, 1, 2, 3, 4}};
-            int[,] expX4 = {{4, 0, 1, 2, 3}, {9, 5, 6, 7, 8}};
+            long[,] expX3 = {{5, 6, 7, 8, 9}, {0, 1, 2, 3, 4}};
+            long[,] expX4 = {{4, 0, 1, 2, 3}, {9, 5, 6, 7, 8}};
 
             for (int idx = 0; idx < expX3.GetLength(0); idx++)
             for (int jdx = 0; jdx < expX3.GetLength(1); jdx++)

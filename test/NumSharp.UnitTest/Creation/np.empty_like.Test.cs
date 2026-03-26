@@ -500,8 +500,8 @@ namespace NumSharp.UnitTest.Creation
             var s = a["1:3"];
             var r = np.empty_like(s);
             r.SetAtIndex(999, 0);
-            s.GetInt32(0, 0).Should().Be(4, "writing to result must not affect sliced prototype");
-            a.GetInt32(1, 0).Should().Be(4, "writing to result must not affect original array");
+            s.GetInt64(0, 0).Should().Be(4L, "writing to result must not affect sliced prototype");
+            a.GetInt64(1, 0).Should().Be(4L, "writing to result must not affect original array");
         }
 
         [Test]
