@@ -240,3 +240,33 @@ No changes needed - this is a platform limitation, not a bug.
 | 8 | Array creation parameters | **COMPLETE** |
 
 **Int64 migration is COMPLETE.** All phases are done or identified as platform limitations.
+
+---
+
+## Phase 9: Random Sampling (COMPLETE)
+
+### Stack Overflow Bug Fix
+
+Shape.dimensions changed from `int[]` to `long[]`. Random functions had:
+```csharp
+public NDArray foo(Shape size) => foo(size.dimensions);  // size.dimensions is long[]
+public NDArray foo(params int[] size) { ... }            // No long[] overload!
+```
+
+The implicit `long[]` → `Shape` conversion caused infinite recursion.
+
+**Fix**: Added `long[]` overloads with implementation, `int[]` delegates via `Shape.ComputeLongShape()`.
+
+| Status | File | Functions Fixed |
+|--------|------|-----------------|
+| [x] | `np.random.bernoulli.cs` | `bernoulli` |
+| [x] | `np.random.beta.cs` | `beta` |
+| [x] | `np.random.binomial.cs` | `binomial` |
+| [x] | `np.random.chisquare.cs` | `chisquare` |
+| [x] | `np.random.exponential.cs` | `exponential` |
+| [x] | `np.random.gamma.cs` | `gamma`, `Marsaglia` |
+| [x] | `np.random.geometric.cs` | `geometric` |
+| [x] | `np.random.lognormal.cs` | `lognormal` |
+| [x] | `np.random.poisson.cs` | `poisson` |
+| [x] | `np.random.randn.cs` | `randn`, `normal`, `standard_normal` |
+| [x] | `np.random.uniform.cs` | `uniform` |

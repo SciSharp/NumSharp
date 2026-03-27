@@ -40,7 +40,23 @@ namespace NumSharp
         ///     (includes low, but excludes high). In other words, any value within the
         ///     given interval is equally likely to be drawn by uniform.
         /// </remarks>
-        public NDArray uniform(double low, double high, params int[] size)
+        public NDArray uniform(double low, double high, params int[] size) => uniform(low, high, Shape.ComputeLongShape(size));
+
+        /// <summary>
+        ///     Draw samples from a uniform distribution.
+        /// </summary>
+        /// <param name="low">Lower boundary of the output interval. All values generated will be >= low. Default is 0.</param>
+        /// <param name="high">Upper boundary of the output interval. All values generated will be &lt; high. Default is 1.0.</param>
+        /// <param name="size">Output shape.</param>
+        /// <returns>Drawn samples from the parameterized uniform distribution.</returns>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.uniform.html
+        ///     <br/>
+        ///     Samples are uniformly distributed over the half-open interval [low, high)
+        ///     (includes low, but excludes high). In other words, any value within the
+        ///     given interval is equally likely to be drawn by uniform.
+        /// </remarks>
+        public NDArray uniform(double low, double high, params long[] size)
         {
             if (size == null || size.Length == 0)
             {
