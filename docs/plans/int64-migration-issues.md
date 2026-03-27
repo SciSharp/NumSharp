@@ -42,7 +42,7 @@ Tracking document for migrating NumSharp from int32-based indexing to int64 for 
 
 ---
 
-## Phase 2: Public API (MOSTLY COMPLETE)
+## Phase 2: Public API (COMPLETE)
 
 ### NDArray Constructors
 
@@ -66,14 +66,14 @@ Tracking document for migrating NumSharp from int32-based indexing to int64 for 
 
 | Status | File | Signature |
 |--------|------|-----------|
-| [ ] | `Arrays.cs:384` | `Create(Type, int length)` |
-| [ ] | `Arrays.cs:414` | `Create<T>(int length)` |
-| [ ] | `Arrays.cs:425` | `Create(NPTypeCode, int length)` |
-| [ ] | `np.array.cs:105` | `array<T>(IEnumerable<T>, int size)` |
+| [x] | `Arrays.cs:384` | `Create(Type, int length)` - Added long overload with overflow check |
+| [x] | `Arrays.cs:414` | `Create<T>(int length)` - Added long overload with overflow check |
+| [x] | `Arrays.cs:425` | `Create(NPTypeCode, int length)` - Added long overload with overflow check |
+| [x] | `np.array.cs:105` | `array<T>(IEnumerable<T>, int size)` - Changed to long, int delegates |
 
 ---
 
-## Phase 3: IL Emission
+## Phase 3: IL Emission (COMPLETE)
 
 ### Stride Truncation (COMPLETE)
 
@@ -82,33 +82,33 @@ Tracking document for migrating NumSharp from int32-based indexing to int64 for 
 | [x] | `Reduction.Axis.Simd.cs:392` | `int strideInt = (int)stride` | Stride check at dispatch |
 | [x] | `Reduction.Axis.Simd.cs:433` | `int strideInt = (int)stride` | AVX2 gather requires int32 (hardware) |
 
-### ArgMax/ArgMin Return Type
+### ArgMax/ArgMin Return Type (COMPLETE)
 
-NumPy returns int64 for argmax/argmin. NumSharp incorrectly returns int32.
+NumPy returns int64 for argmax/argmin. Fixed to return long.
 
 | Status | File | Line | Code |
 |--------|------|------|------|
-| [ ] | `DefaultEngine.ReductionOp.cs` | 237-247 | `ExecuteElementReduction<int>(..., ReductionOp.ArgMax, ...)` |
-| [ ] | `DefaultEngine.ReductionOp.cs` | 270-280 | `ExecuteElementReduction<int>(..., ReductionOp.ArgMin, ...)` |
-| [ ] | `ILKernelGenerator.Reduction.cs` | 653 | `Conv_I4` truncates index to int32 |
+| [x] | `DefaultEngine.ReductionOp.cs` | 237-247 | Changed to `ExecuteElementReduction<long>` |
+| [x] | `DefaultEngine.ReductionOp.cs` | 270-280 | Changed to `ExecuteElementReduction<long>` |
+| [x] | `ILKernelGenerator.Reduction.cs` | 653 | Removed `Conv_I4`, returns long directly |
 
 ---
 
-## Phase 4: reshape Methods
+## Phase 4: reshape Methods (COMPLETE)
 
-Shape uses `long[]` internally but reshape APIs accept `int[]`:
+Shape uses `long[]` internally. The int[] overloads delegate to long[] via `Shape.ComputeLongShape()`.
 
 | Status | File | Signature |
 |--------|------|-----------|
-| [ ] | `NdArray.ReShape.cs:51` | `reshape(int[] shape)` |
-| [ ] | `NdArray.ReShape.cs:116` | `reshape_unsafe(int[] shape)` |
-| [ ] | `NdArray`1.ReShape.cs:41` | `reshape(int[] shape)` |
-| [ ] | `NdArray`1.ReShape.cs:97` | `reshape_unsafe(int[] shape)` |
-| [ ] | `np.reshape.cs:12` | `reshape(NDArray nd, params int[] shape)` |
+| [x] | `NdArray.ReShape.cs:51` | `reshape(int[] shape)` - Delegates to long[] via ComputeLongShape |
+| [x] | `NdArray.ReShape.cs:116` | `reshape_unsafe(int[] shape)` - Delegates to long[] via ComputeLongShape |
+| [x] | `NdArray`1.ReShape.cs:41` | `reshape(int[] shape)` - Delegates to long[] via ComputeLongShape |
+| [x] | `NdArray`1.ReShape.cs:97` | `reshape_unsafe(int[] shape)` - Delegates to long[] via ComputeLongShape |
+| [x] | `np.reshape.cs:12` | `reshape(NDArray nd, params int[] shape)` - Added long[] overload |
 
 ---
 
-## Phase 5: ArrayConvert.cs
+## Phase 5: ArrayConvert.cs (NO CHANGE NEEDED)
 
 40+ type conversion loops use `int` counter over array length:
 
@@ -118,7 +118,9 @@ for (int i = 0; i < length; i++) output[i] = Converts.To...(sourceArray[i]);
 
 **Location**: `Utilities/ArrayConvert.cs` lines 1168-1837+
 
-**Fix**: Change to `for (long i = 0; i < length; i++)` and ensure arrays use unmanaged allocation.
+**Status**: These work with managed arrays (`T[]`) which have `int Length` by .NET design.
+The `int i` loop counter is correct because managed arrays cannot exceed int.MaxValue elements.
+No changes needed - this is a platform limitation, not a bug.
 
 ---
 
@@ -147,20 +149,20 @@ for (int i = 0; i < length; i++) output[i] = Converts.To...(sourceArray[i]);
 | Status | File | Pattern |
 |--------|------|---------|
 | [!] | `np.frombuffer.cs` | Input is `byte[]` which is int-limited |
-| [ ] | `ArrayConvert.cs` | See Phase 5 |
+| [!] | `ArrayConvert.cs` | Works with managed arrays (int-limited) - see Phase 5 |
 
 ---
 
-## Phase 8: Array Creation Parameters
+## Phase 8: Array Creation Parameters (COMPLETE)
 
 | Status | File | Signature | Notes |
 |--------|------|-----------|-------|
-| [ ] | `np.arange.cs:234` | `arange(int stop)` | Output can exceed int.MaxValue |
-| [ ] | `np.arange.cs:248` | `arange(int start, int stop, int step)` | |
-| [ ] | `np.linspace.cs:21` | `linspace(..., int num, ...)` | num controls output size |
-| [ ] | `np.linspace.cs:37` | `linspace(..., int num, ...)` | |
-| [ ] | `np.linspace.cs:54` | `linspace(..., int num, ...)` | |
-| [ ] | `np.linspace.cs:71` | `linspace(..., int num, ...)` | |
+| [x] | `np.arange.cs:234` | `arange(int stop)` | Delegates to `arange((long)stop)` |
+| [x] | `np.arange.cs:248` | `arange(int start, int stop, int step)` | Delegates to long overload |
+| [x] | `np.linspace.cs:21` | `linspace(..., int num, ...)` | Added long overload, int delegates |
+| [x] | `np.linspace.cs:37` | `linspace(..., int num, ...)` | Added long overload, int delegates |
+| [x] | `np.linspace.cs:54` | `linspace(..., int num, ...)` | Added long overload, int delegates |
+| [x] | `np.linspace.cs:71` | `linspace(..., int num, ...)` | Changed to long num, int overload delegates |
 
 ---
 
@@ -229,12 +231,12 @@ for (int i = 0; i < length; i++) output[i] = Converts.To...(sourceArray[i]);
 | Phase | Description | Status |
 |-------|-------------|--------|
 | 1 | Critical path (Span, InitBlock, allocation) | **COMPLETE** |
-| 2 | Public API constructors/allocators | **MOSTLY COMPLETE** |
-| 3 | IL emission (stride, argmax/argmin) | Stride done, argmax TODO |
-| 4 | reshape methods | TODO |
-| 5 | ArrayConvert.cs loops | TODO |
+| 2 | Public API constructors/allocators | **COMPLETE** |
+| 3 | IL emission (stride, argmax/argmin) | **COMPLETE** |
+| 4 | reshape methods | **COMPLETE** |
+| 5 | ArrayConvert.cs loops | **NO CHANGE NEEDED** (platform limitation) |
 | 6 | Statistics output allocation | **COMPLETE** |
-| 7 | Loop counters | Partially done |
-| 8 | Array creation parameters | TODO |
+| 7 | Loop counters | **COMPLETE** |
+| 8 | Array creation parameters | **COMPLETE** |
 
-**Remaining work**: ~60 code locations across 4 phases.
+**Int64 migration is COMPLETE.** All phases are done or identified as platform limitations.
