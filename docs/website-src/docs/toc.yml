@@ -8,6 +8,8 @@
   href: compliance.md
 - name: Array API Standard
   href: array-api-standard.md
+- name: IL Generation
+  href: il-generation.md
 - name: Extending Libraries
   href: extensions/index.md
   expanded: false

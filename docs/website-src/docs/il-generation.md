@@ -2,7 +2,7 @@
 
 NumSharp achieves near-native performance through runtime IL (Intermediate Language) generation using `System.Reflection.Emit.DynamicMethod`. This document provides a comprehensive guide to the IL kernel system architecture, techniques, and coverage.
 
-If you're working on NumSharp internals or trying to understand how NumSharp achieves its performance, this guide will walk you through the entire IL kernel system. Whether you're debugging a performance issue, adding a new operation, or simply curious about the implementation, you'll find detailed explanations and practical examples throughout.
+This guide walks through the entire IL kernel system—useful for working on NumSharp internals, understanding its performance characteristics, debugging issues, adding new operations, or simply learning about the implementation. Detailed explanations and practical examples are provided throughout.
 
 ## Table of Contents
 
@@ -24,9 +24,9 @@ If you're working on NumSharp internals or trying to understand how NumSharp ach
 
 ### Why IL Generation?
 
-You might wonder why NumSharp goes through the complexity of generating IL at runtime rather than using straightforward C# loops. The answer lies in the dramatic performance gains this approach enables.
+Why go through the complexity of generating IL at runtime rather than using straightforward C# loops? The answer lies in the dramatic performance gains this approach enables.
 
-When you call an operation like `np.add(a, b)`, NumSharp doesn't simply iterate through elements with generic code. Instead, it generates specialized machine code tailored to your exact types and array layouts. This eliminates the overhead that would otherwise kill performance in a numerical computing library.
+When an operation like `np.add(a, b)` executes, NumSharp doesn't simply iterate through elements with generic code. Instead, it generates specialized machine code tailored to the exact types and array layouts involved. This eliminates the overhead that would otherwise kill performance in a numerical computing library.
 
 NumSharp generates optimized machine code at runtime rather than relying on interpreted loops or generic abstractions. This provides:
 
@@ -52,7 +52,13 @@ These aren't theoretical numbers—they reflect real-world benchmarks on modern 
 
 ## Architecture
 
-Understanding the architecture will help you navigate the codebase and know where to look when debugging or extending the system.
+Understanding the architecture will help you navigate the codebase and know where to look when debugging or extending the system. If you've ever wondered how NumSharp achieves its performance, this section reveals the magic behind the curtain.
+
+### Why a Static Partial Class?
+
+The `ILKernelGenerator` is structured as a static partial class split across many files for practical reasons: IL generation code tends to be verbose—emitting individual opcodes line by line adds up quickly. By splitting responsibilities across 28 files, each file remains focused and manageable. Fixing a bug in matrix multiplication? Go straight to `ILKernelGenerator.MatMul.cs`. Adding a new unary operation? The path is clear.
+
+The static nature ensures zero allocation overhead when requesting kernels. There's no object instantiation, no virtual dispatch—just direct method calls to retrieve cached delegates.
 
 ### Core Components
 
@@ -103,7 +109,15 @@ When you perform an operation like `a + b` on two NDArrays, here's what happens 
 7. Caller invokes delegate with array pointers
 ```
 
-The first time you execute a particular operation (say, adding two `float` arrays), there's a one-time cost to generate and JIT-compile the kernel. All subsequent calls with the same type and operation hit the cache, so you get the optimized delegate immediately. This is why the second iteration of your code often runs noticeably faster than the first.
+The first execution of a particular operation (say, adding two `float` arrays) incurs a one-time cost to generate and JIT-compile the kernel. All subsequent calls with the same type and operation hit the cache, returning the optimized delegate immediately. This is why the second iteration of a loop often runs noticeably faster than the first.
+
+### Understanding the JIT Partnership
+
+An important point: NumSharp's IL generation works *with* the .NET JIT compiler, not as a replacement for it. Calling `dm.CreateDelegate<T>()` hands a sequence of IL instructions to the JIT. The JIT then applies its own optimizations—register allocation, instruction scheduling, constant folding—before producing native machine code.
+
+This partnership is powerful. The IL generation code focuses on correct memory access patterns and SIMD intrinsic calls. The JIT handles low-level details of mapping that IL to the specific CPU. On a machine with AVX-512, the JIT uses those wider registers. On older hardware, it falls back gracefully.
+
+This is why debugging IL generation can be tricky: the emitted code isn't the code that runs. The JIT may transform IL significantly. Tools like WinDbg's `!dumpil` command or Disassembly view in Visual Studio help reveal what actually executes.
 
 ---
 
@@ -169,11 +183,11 @@ Beyond the main partial class files, you'll find these supporting files that def
 
 ## Execution Paths
 
-One of the most important concepts to understand is how NumSharp selects the right execution path for your arrays. Not all arrays are created equal—a contiguous array can use blazing-fast SIMD loops, while a transposed or sliced array may need coordinate-based iteration.
+One of the most important concepts is how NumSharp selects the right execution path for arrays. Not all arrays are created equal—a contiguous array can use blazing-fast SIMD loops, while a transposed or sliced array may need coordinate-based iteration.
 
 ### StrideDetector Classification
 
-Before executing any operation, NumSharp analyzes your arrays' memory layout using `StrideDetector.Classify<T>()`. This determines which code path will be most efficient for your specific situation:
+Before executing any operation, NumSharp analyzes the arrays' memory layout using `StrideDetector.Classify<T>()`. This determines which code path will be most efficient:
 
 ```csharp
 public enum ExecutionPath
@@ -188,7 +202,7 @@ public enum ExecutionPath
 
 ### Path Selection Logic
 
-Understanding this priority order helps you predict which path your code will take. If you're seeing slower-than-expected performance, check whether your arrays are hitting the General path when you expected SimdFull:
+Understanding this priority order helps predict which path code will take. Slower-than-expected performance often means arrays are hitting the General path instead of SimdFull:
 
 ```csharp
 // Priority order (first match wins):
@@ -199,7 +213,19 @@ Understanding this priority order helps you predict which path your code will ta
 5. Otherwise → General (coordinate-based)
 ```
 
-**Tip:** If you need maximum performance, ensure your arrays are contiguous. You can check this with `ndarray.IsContiguous` or force contiguity with `np.ascontiguousarray()`.
+**Tip:** For maximum performance, ensure arrays are contiguous. Check with `ndarray.IsContiguous` or force contiguity with `np.ascontiguousarray()`.
+
+### Practical Implications
+
+Code like `result = a + b` abstracts away memory layout concerns. But understanding execution paths helps write faster NumSharp code:
+
+1. **Prefer contiguous arrays**: Operations on freshly-allocated arrays (from `np.zeros`, `np.arange`, etc.) hit the SimdFull path. Sliced or transposed arrays may fall to slower paths.
+
+2. **Scalar broadcast is nearly free**: With `a + 5`, the scalar `5` is broadcast. This hits SimdScalarRight, which broadcasts the scalar to a SIMD vector once and reuses it—nearly as fast as SimdFull.
+
+3. **Transposed views are slow**: A transposed array (`a.T`) has non-contiguous memory access. Operations use coordinate-based iteration, which is significantly slower. For multiple operations on a transposed array, calling `np.ascontiguousarray()` once upfront often pays off.
+
+4. **Inner-dimension slicing is cheap**: Slicing like `a[:, 0:100]` takes chunks of the inner dimension. These chunks may still be contiguous enough for SimdChunk optimization.
 
 ### Path-Specific Code Generation
 
@@ -231,11 +257,39 @@ for linearIdx = 0 to totalSize:
 
 ## SIMD Optimization Techniques
 
-This section covers the optimization techniques used throughout the IL kernel system. If you're implementing a new operation or trying to squeeze out more performance, these patterns are your toolkit.
+This section covers the optimization techniques used throughout the IL kernel system. These patterns form the toolkit for implementing new operations or squeezing out more performance. These aren't theoretical—they're the actual techniques implemented in the ILKernelGenerator code.
+
+Understanding these patterns serves two purposes: appreciating why NumSharp performs the way it does, and knowing what techniques to apply when adding new operations.
+
+### The Three-Level Loop Structure
+
+Before diving into specific techniques, understand the standard loop structure used throughout the IL kernels:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  4x Unrolled SIMD Loop (processes 4 vectors per iteration) │
+│  - Maximum throughput, minimum loop overhead                │
+│  - Continues while: i <= totalSize - vectorCount * 4        │
+└─────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────┐
+│  Remainder SIMD Loop (0-3 vectors)                          │
+│  - Handles leftover full vectors                            │
+│  - Continues while: i <= totalSize - vectorCount            │
+└─────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────┐
+│  Scalar Tail Loop (0 to vectorCount-1 elements)             │
+│  - Processes remaining individual elements                  │
+│  - Continues while: i < totalSize                           │
+└─────────────────────────────────────────────────────────────┘
+```
+
+This structure appears everywhere: binary operations, unary operations, reductions, comparisons. Once you recognize it, you'll see it throughout the codebase.
 
 ### 1. Loop Unrolling (4x)
 
-You might think that processing one vector at a time is efficient enough, but modern CPUs can execute multiple independent instructions simultaneously. By unrolling the loop 4x, we give the CPU more work to parallelize:
+Processing one vector at a time might seem efficient enough, but modern CPUs can execute multiple independent instructions simultaneously. By unrolling the loop 4x, the CPU gets more work to parallelize.
 
 Processing 4 vectors per iteration reduces loop overhead and enables instruction-level parallelism:
 
@@ -265,7 +319,7 @@ for (; i < size; i++)
 
 ### 2. Tree Reduction
 
-When you have 4 accumulator vectors and need to combine them into a single result, the naive approach creates a serial dependency chain where each addition must wait for the previous one. Tree reduction solves this by allowing parallel execution:
+With 4 accumulator vectors that need combining into a single result, the naive approach creates a serial dependency chain where each addition must wait for the previous one. Tree reduction solves this by allowing parallel execution:
 
 ```csharp
 // Instead of: result = acc0 + acc1 + acc2 + acc3 (serial - each add waits for previous)
@@ -292,7 +346,7 @@ var acc3 = Vector256<double>.Zero;
 
 ### 4. FMA (Fused Multiply-Add)
 
-If you're running on a CPU with FMA support (most Intel Haswell and newer, AMD Piledriver and newer), you get a significant boost. FMA performs `a * b + c` in a single instruction with only one rounding step, which is both faster and more accurate:
+On CPUs with FMA support (Intel Haswell and newer, AMD Piledriver and newer), a significant boost is available. FMA performs `a * b + c` in a single instruction with only one rounding step, which is both faster and more accurate:
 
 ```csharp
 if (Fma.IsSupported)
@@ -301,11 +355,11 @@ else
     c = Vector256.Add(c, Vector256.Multiply(a, b));
 ```
 
-The IL kernel system automatically detects FMA availability at runtime and uses it when possible. You don't need to do anything special—just make sure you're running on capable hardware.
+The IL kernel system automatically detects FMA availability at runtime and uses it when possible. No special configuration needed—just capable hardware.
 
 ### 5. Cache Blocking (MatMul)
 
-Matrix multiplication is where cache blocking becomes critical. Without it, you'd constantly fetch data from main memory, destroying performance. The GEBP (General Block Panel) algorithm ensures that your working set fits in cache:
+Matrix multiplication is where cache blocking becomes critical. Without it, constant fetching from main memory destroys performance. The GEBP (General Block Panel) algorithm ensures the working set fits in cache:
 
 ```csharp
 // Block sizes tuned for L1=32KB, L2=256KB
@@ -319,9 +373,19 @@ const int NR = 16;   // Micro-kernel cols (2 vectors)
 
 These constants were tuned empirically for typical modern CPUs. If you're targeting specialized hardware, you might benefit from different values.
 
+### Why These Numbers?
+
+The specific values like 4x unrolling or 64-element block sizes aren't arbitrary:
+
+- **4x unrolling**: Modern CPUs have 4-8 execution units that can run SIMD operations in parallel. Unrolling 4x saturates these units without excessive code bloat. Going to 8x provides diminishing returns and increases instruction cache pressure.
+
+- **Block sizes (MC=64, KC=256, MR=8, NR=16)**: These are tuned for typical L1/L2 cache sizes. MC×KC should fit in L2 (~256KB), while MR×KC should fit in L1 (~32KB). The micro-kernel dimensions (MR×NR) are chosen to maximize register usage—on x86-64, you have 16 YMM registers, and an 8×16 micro-kernel needs 8 accumulators plus 2 for A and B panels.
+
+If you're running on a system with different cache sizes (e.g., ARM with larger L1, or a server with huge L3), these values could be retuned. For most desktop/laptop CPUs made in the last decade, they work well.
+
 ### 6. Early Exit (Boolean Reductions)
 
-For `np.all()` and `np.any()`, you don't always need to scan the entire array. If you're checking whether all elements are true and you find a false, you can stop immediately. The IL kernels exploit this with SIMD-accelerated early exit:
+For `np.all()` and `np.any()`, scanning the entire array isn't always necessary. When checking whether all elements are true, finding a single false allows immediate termination. The IL kernels exploit this with SIMD-accelerated early exit:
 
 ```csharp
 // All: exit when first zero found
@@ -344,6 +408,18 @@ for (; i <= vectorEnd; i += vectorCount)
 ---
 
 ## Operation Coverage
+
+This section provides a comprehensive reference of every operation the IL kernel system supports. When you're implementing a new feature or debugging existing code, use these tables to understand what's available and how each operation is implemented.
+
+### How to Read These Tables
+
+Each table shows:
+- **Operation**: The NumPy-equivalent operation name
+- **SIMD**: The Vector256/Vector128 method or intrinsic used for SIMD acceleration
+- **Scalar**: The IL opcode or .NET method used for the scalar fallback path
+- **Types/Notes**: Which types are supported or special considerations
+
+If you see "-" in the SIMD column, that operation doesn't have SIMD acceleration—it falls back to scalar loops. This doesn't necessarily mean it's slow; operations like `Sin` and `Cos` call highly optimized `MathF`/`Math` methods that the JIT may vectorize internally on modern .NET versions.
 
 ### Binary Operations
 
@@ -440,6 +516,26 @@ for (; i <= vectorEnd; i += vectorCount)
 
 ## Type Support
 
+Understanding how different types are handled will help you predict performance and avoid surprises. Not all types are created equal when it comes to SIMD optimization.
+
+### The Type Hierarchy
+
+NumSharp supports 12 types, but they fall into natural categories with different performance characteristics:
+
+**SIMD-Friendly Types** (4-8 elements per Vector256):
+- `float`, `double`: Full SIMD support including transcendental functions via Vector256 methods
+- `int`, `uint`, `long`, `ulong`: Full SIMD for arithmetic and bitwise operations
+- `short`, `ushort`, `byte`: SIMD works but with more elements per vector (16-32)
+
+**Limited SIMD Types**:
+- `bool`: Used only for comparison results and masking; limited SIMD via byte representation
+- `char`: Treated as `ushort` internally; SIMD works but rarely used
+
+**No SIMD Types**:
+- `decimal`: 128-bit type with no hardware SIMD support; always uses scalar loops
+
+When you're working with decimal arrays, expect performance roughly 8-16x slower than float/double equivalents. This isn't a NumSharp limitation—it's inherent to the decimal type's complexity.
+
 ### All 12 NumSharp Types
 
 | NPTypeCode | CLR Type | Size | SIMD Support |
@@ -482,6 +578,29 @@ Minimum element counts where SIMD overhead is worthwhile:
 ---
 
 ## Cache System
+
+The cache system is what makes IL generation practical. Without caching, every operation would incur the overhead of IL emission and JIT compilation—potentially tens of milliseconds. With caching, you pay this cost once per unique operation type, then get sub-microsecond delegate lookups forever after.
+
+### How Caching Works
+
+When you call `GetContiguousKernel<float>(BinaryOp.Add)`, here's what happens:
+
+1. **Key construction**: A cache key is created: `(BinaryOp.Add, typeof(float))`
+2. **Cache lookup**: The `ConcurrentDictionary` checks if this key exists
+3. **Cache hit**: If found, return the cached delegate immediately (~50ns)
+4. **Cache miss**: Generate IL, JIT-compile, cache, and return (~5-50ms first time)
+
+The cache is global and lives for the application lifetime. Once a kernel is generated, it's never regenerated. This is why warm-up loops are common in benchmarking code—the first iteration pays the JIT tax.
+
+### Cache Key Design Philosophy
+
+Each operation category has its own key structure because different operations need different parameters to fully specify the generated code:
+
+- **Contiguous binary**: Just need `(Type, Operation)` since both arrays are contiguous
+- **Mixed-type binary**: Need `(LhsType, RhsType, ResultType, Operation, ExecutionPath)`
+- **Axis reductions**: Need `(InputType, AccumulatorType, Operation, InnerAxisContiguous)`
+
+The key principle: the cache key must capture everything that affects the generated IL. If two operations would generate identical IL, they should share a cache entry. If they would generate different IL, they need different keys.
 
 ### Cache Key Structures
 
@@ -596,6 +715,20 @@ public unsafe delegate void ComparisonKernel(
 
 ## Adding New Operations
 
+Adding a new operation to the IL kernel system might seem daunting at first, but it follows a well-established pattern. This section walks you through the process step by step, with practical guidance at each stage.
+
+### Before You Start
+
+Ask yourself these questions:
+
+1. **Does NumPy have this operation?** If so, study NumPy's behavior carefully—edge cases, type handling, NaN behavior. NumSharp aims for NumPy compatibility.
+
+2. **Does SIMD acceleration make sense?** Operations like `np.sin` don't have direct SIMD intrinsics, so they call `Math.Sin` in a scalar loop. That's fine—don't force SIMD where it doesn't fit.
+
+3. **What types need support?** Most operations should support all 12 NumSharp types. Some (bitwise operations) only make sense for integers.
+
+4. **Are there existing similar operations?** Copy-paste-modify is encouraged. If you're adding `Sinh`, look at how `Sin` is implemented.
+
 ### Step 1: Define the Operation
 
 Add to the appropriate enum in `KernelOp.cs`:
@@ -669,17 +802,73 @@ private static bool CanUseUnarySimd(UnaryKernelKey key)
 }
 ```
 
-### Step 6: Test
+### Step 6: Test Thoroughly
 
-Write tests covering:
-- All 12 types
-- Contiguous and strided arrays
-- Edge cases (NaN, Inf, empty arrays)
-- NumPy compatibility verification
+This is where most bugs are caught. Write comprehensive tests covering:
+
+**Type Coverage:**
+- All 12 NumSharp types (Boolean, Byte, Int16, UInt16, Int32, UInt32, Int64, UInt64, Char, Single, Double, Decimal)
+- Pay special attention to signed/unsigned differences
+
+**Array Layout Coverage:**
+- Contiguous arrays (the fast SIMD path)
+- Strided arrays (sliced, transposed)
+- Broadcast arrays (scalar × array)
+
+**Edge Cases:**
+- Empty arrays (`np.array([])`)
+- Single-element arrays
+- NaN and Inf values (for float/double)
+- Boundary values (min/max of each type)
+- Very large arrays (tests SIMD loop correctness)
+
+**NumPy Verification:**
+```python
+# Run actual NumPy and record the expected output
+import numpy as np
+arr = np.array([1.0, 2.0, 3.0])
+result = np.my_new_op(arr)
+print(result)  # Use this as your expected value
+```
+
+### Step 7: Benchmark (Optional but Recommended)
+
+If you're adding a performance-critical operation, verify that your IL kernel actually provides speedup:
+
+```csharp
+// Simple benchmark pattern
+var arr = np.random.rand(10_000_000);
+
+// Warm up (JIT compile)
+_ = np.my_new_op(arr);
+
+// Measure
+var sw = Stopwatch.StartNew();
+for (int i = 0; i < 100; i++)
+    _ = np.my_new_op(arr);
+Console.WriteLine($"{sw.ElapsedMilliseconds / 100.0} ms per call");
+```
+
+Compare against a naive scalar implementation to quantify the speedup. If you're not seeing expected gains, check that your arrays are hitting the SIMD path (contiguous, supported type).
 
 ---
 
 ## Performance Considerations
+
+This section helps you understand when you'll see the best performance from NumSharp and when to expect limitations. Use this knowledge to write faster code and to set appropriate expectations.
+
+### The Performance Hierarchy
+
+Not all operations achieve the same speedups. Here's a rough hierarchy from fastest to slowest:
+
+1. **Contiguous SIMD operations** (8-16x faster than scalar): `np.add`, `np.multiply`, etc. on contiguous float/double arrays
+2. **Scalar broadcast operations** (6-12x faster): `array + 5`, `array * 2.0`
+3. **Type-promoting operations** (3-6x faster): `int32_array + float64_array`
+4. **Strided operations** (2-3x faster): Operations on sliced/transposed arrays
+5. **Reductions** (4-8x faster): `np.sum`, `np.mean`, `np.max` with horizontal SIMD
+6. **Scalar-only operations** (1-2x faster): `np.sin`, `np.power` where SIMD isn't available
+
+The "faster than scalar" comparisons are against naive C# loops. Actual speedup depends on CPU, memory bandwidth, and array sizes.
 
 ### When IL Kernels Are Used
 
@@ -712,6 +901,24 @@ All NumSharp allocations are naturally aligned (managed memory). For optimal SIM
 ---
 
 ## Debugging IL Generation
+
+IL generation bugs are notoriously difficult to debug. Unlike regular C# code where you get helpful compiler errors, IL generation failures often manifest as cryptic runtime exceptions or—worse—silently wrong results. This section arms you with the tools and techniques to track down these issues.
+
+### The Nature of IL Bugs
+
+Before diving into specific techniques, here are the kinds of bugs commonly encountered:
+
+1. **Stack imbalance**: You pushed more values than you popped (or vice versa). The JIT catches this and throws `InvalidProgramException`.
+
+2. **Type mismatch**: You tried to store a value of the wrong type. For example, you have a `double` on the stack but emit `Stind_I4`. This causes `VerificationException` or corrupted data.
+
+3. **Missing conversions**: You forgot to convert between types. For example, loading a `byte` and comparing with an `int` without `Conv_I4` first.
+
+4. **Wrong opcode**: Using `Shr` when you needed `Shr_Un` for unsigned right shift, or `Div` when you needed `Div_Un`.
+
+5. **Off-by-one in loops**: Your loop bounds are wrong, causing buffer overruns or missed elements.
+
+The catch-all exception handlers in `TryGet*Kernel()` methods are intentional—they let NumSharp gracefully fall back to scalar implementations when IL generation fails. During development, disabling these catches temporarily reveals the actual exceptions.
 
 ### Enable Diagnostics
 
@@ -786,14 +993,129 @@ public unsafe delegate void ContiguousKernel<T>(
 
 ---
 
+## Common Pitfalls and How to Avoid Them
+
+Over time, contributors have encountered the same IL generation pitfalls repeatedly. Learning from these mistakes will save you debugging time.
+
+### Pitfall 1: Forgetting Conv_I for Pointer Arithmetic
+
+When computing pointer offsets, the index is often a `long` but the element size is an `int`. You need to convert properly:
+
+```csharp
+// WRONG: Multiplying long by int can produce wrong results
+il.Emit(OpCodes.Ldloc, locI);        // long index
+il.Emit(OpCodes.Ldc_I4, elementSize); // int size
+il.Emit(OpCodes.Mul);                 // Result type is ambiguous!
+
+// CORRECT: Convert index to native int for pointer arithmetic
+il.Emit(OpCodes.Ldloc, locI);        // long index
+il.Emit(OpCodes.Conv_I);             // Convert to native int
+il.Emit(OpCodes.Ldc_I4, elementSize);
+il.Emit(OpCodes.Mul);
+il.Emit(OpCodes.Add);                // Add to base pointer
+```
+
+### Pitfall 2: Stack Imbalance in Branches
+
+When you have conditional branches, both paths must leave the stack in the same state:
+
+```csharp
+// WRONG: Different stack states
+il.Emit(OpCodes.Ldloc, locValue);
+il.Emit(OpCodes.Brfalse, lblElse);
+il.Emit(OpCodes.Ldc_I4_1);
+il.Emit(OpCodes.Ldc_I4_2);  // Extra value on stack!
+il.Emit(OpCodes.Br, lblEnd);
+il.MarkLabel(lblElse);
+il.Emit(OpCodes.Ldc_I4_0);
+il.MarkLabel(lblEnd);
+
+// CORRECT: Both paths leave one value on stack
+il.Emit(OpCodes.Ldloc, locValue);
+il.Emit(OpCodes.Brfalse, lblElse);
+il.Emit(OpCodes.Ldc_I4_1);
+il.Emit(OpCodes.Br, lblEnd);
+il.MarkLabel(lblElse);
+il.Emit(OpCodes.Ldc_I4_0);
+il.MarkLabel(lblEnd);
+```
+
+### Pitfall 3: Using Wrong Indirect Load/Store
+
+Each type has specific load/store opcodes. Using the wrong one causes subtle corruption:
+
+```csharp
+// For uint: use Ldind_U4, not Ldind_I4
+// For ulong: use Ldind_I8 (same as long)
+// For float: use Ldind_R4
+// For double: use Ldind_R8
+```
+
+The helpers `EmitLoadIndirect()` and `EmitStoreIndirect()` handle this correctly—use them instead of emitting opcodes directly.
+
+### Pitfall 4: Forgetting Unsigned Operations
+
+Division and right shift have signed and unsigned variants:
+
+```csharp
+// For signed types: Div, Shr
+// For unsigned types: Div_Un, Shr_Un
+
+// WRONG: Using Div for uint gives signed semantics
+il.Emit(OpCodes.Div);
+
+// CORRECT: Check type and use appropriate opcode
+if (IsUnsignedType(type))
+    il.Emit(OpCodes.Div_Un);
+else
+    il.Emit(OpCodes.Div);
+```
+
+### Pitfall 5: Not Handling Empty Arrays
+
+Always check for empty arrays at the start of your kernel. Many SIMD operations will fail or produce undefined behavior on zero-length data:
+
+```csharp
+// At kernel start, check totalSize and return early
+il.Emit(OpCodes.Ldarg, totalSizeArgIndex);
+il.Emit(OpCodes.Ldc_I8, 0L);
+il.Emit(OpCodes.Ble, lblReturn);  // If totalSize <= 0, return immediately
+```
+
+---
+
 ## Summary
 
-The ILKernelGenerator system is the performance backbone of NumSharp, providing:
+You've now explored the ILKernelGenerator system, NumSharp's performance backbone. Let's recap what you've learned:
 
-- **Runtime code generation** via System.Reflection.Emit
-- **SIMD vectorization** with Vector128/256/512 support
-- **Type specialization** eliminating boxing and virtual dispatch
-- **Path optimization** for different memory layouts
-- **Cache efficiency** through blocking and panel packing
+**Core Architecture:**
+- The system uses `System.Reflection.Emit.DynamicMethod` to generate specialized kernels at runtime
+- 28 partial class files organize the code by operation category
+- Kernels are cached by operation key for instant reuse after first generation
+- The JIT compiler further optimizes the emitted IL to native machine code
 
-This enables NumSharp to achieve performance competitive with native NumPy while maintaining the safety and productivity of managed .NET code.
+**Optimization Techniques:**
+- **SIMD vectorization** with Vector128/256/512 processes 4-32 elements per instruction
+- **4x loop unrolling** maximizes instruction-level parallelism
+- **Tree reduction** combines accumulator vectors efficiently
+- **Cache blocking** (GEBP algorithm) optimizes matrix multiplication
+- **Early exit** accelerates boolean reductions like `np.all()` and `np.any()`
+
+**Execution Paths:**
+- **SimdFull**: Both arrays contiguous—maximum performance
+- **SimdScalarRight/Left**: Broadcast operations—nearly as fast
+- **SimdChunk**: Inner dimension contiguous—partial SIMD benefit
+- **General**: Arbitrary strides—coordinate-based iteration (slowest)
+
+**Type Support:**
+- All 12 NumSharp types are supported (with varying SIMD capabilities)
+- Float/double have the best SIMD support
+- Decimal requires scalar-only loops
+
+**Practical Guidance:**
+- Keep arrays contiguous for best performance
+- Watch for common IL pitfalls (stack balance, type conversions, signed/unsigned)
+- Test thoroughly across types, layouts, and edge cases
+- Benchmark to verify expected speedups
+
+This enables NumSharp to achieve performance competitive with native NumPy while maintaining the safety and productivity of managed .NET code. A call like `np.add(a, b)` invokes machine code specifically optimized for the exact types and array layouts involved—generated in milliseconds, cached forever, and executed in microseconds.
