@@ -270,3 +270,4 @@ The implicit `long[]` → `Shape` conversion caused infinite recursion.
 | [x] | `np.random.poisson.cs` | `poisson` |
 | [x] | `np.random.randn.cs` | `randn`, `normal`, `standard_normal` |
 | [x] | `np.random.uniform.cs` | `uniform` |
+| [x] | `np.random.choice.cs` | `choice` - now supports long population sizes |
