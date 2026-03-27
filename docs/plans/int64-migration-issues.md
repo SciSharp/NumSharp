@@ -61,6 +61,35 @@ This document tracks potential issues when migrating from int32-based indexing t
 | Status | File | Line | Code | Notes |
 |--------|------|------|------|-------|
 | [ ] | `Reduction.cs` | 653 | `Conv_I4` | NumPy returns int64 for argmax/argmin |
+| [ ] | `DefaultEngine.ReductionOp.cs` | 237-247 | `ExecuteElementReduction<int>` | Comment says int64 but code uses int |
+| [ ] | `DefaultEngine.ReductionOp.cs` | 270-280 | `ExecuteElementReduction<int>` | Comment says int64 but code uses int |
+
+---
+
+## HIGH - ArrayConvert.cs Loop Counters
+
+40+ instances of `for (int i = 0; i < length; i++)` in type conversion loops.
+These iterate over array length which could exceed int.MaxValue.
+
+| Status | File | Lines | Pattern |
+|--------|------|-------|---------|
+| [ ] | `ArrayConvert.cs` | 1168-1837+ | `for (int i = 0; i < length; i++) output[i] = Converts.To...` |
+
+**Fix needed**: Change to `for (long i = 0; i < length; i++)` and ensure output array uses unmanaged allocation.
+
+---
+
+## HIGH - reshape with int[] Parameters
+
+| Status | File | Line | Signature |
+|--------|------|------|-----------|
+| [ ] | `NdArray.ReShape.cs` | 51 | `reshape(int[] shape)` |
+| [ ] | `NdArray.ReShape.cs` | 116 | `reshape_unsafe(int[] shape)` |
+| [ ] | `NdArray\`1.ReShape.cs` | 41 | `reshape(int[] shape)` |
+| [ ] | `NdArray\`1.ReShape.cs` | 97 | `reshape_unsafe(int[] shape)` |
+| [ ] | `np.reshape.cs` | 12 | `reshape(NDArray nd, params int[] shape)` |
+
+**Note**: Shape now uses `long[]` internally. These int[] overloads need long[] counterparts.
 
 ---
 
@@ -150,6 +179,29 @@ These use `int` loop counter over potentially large sizes:
 
 ---
 
+## MEDIUM - arange/linspace with int Parameters
+
+| Status | File | Line | Signature |
+|--------|------|------|-----------|
+| [ ] | `np.arange.cs` | 234 | `arange(int stop)` |
+| [ ] | `np.arange.cs` | 248 | `arange(int start, int stop, int step = 1)` |
+| [ ] | `np.linspace.cs` | 21,37,54,71 | `linspace(..., int num, ...)` |
+
+**Note**: These control output size. `num` should support long for >2B element arrays.
+
+---
+
+## LOW - Hashset/Dictionary Count Property
+
+| Status | File | Line | Property |
+|--------|------|------|----------|
+| [!] | `Hashset\`1.cs` | 361 | `public int Count` |
+| [!] | `ConcurrentHashset\`1.cs` | 310 | `public int Count` |
+
+**Note**: .NET collection pattern uses int Count. Would require custom interface.
+
+---
+
 ## OK - Confirmed Correct as int32
 
 These use int32 correctly and don't need migration:
@@ -224,26 +276,45 @@ grep -rn "checked\s*\(|unchecked\s*\(" --include="*.cs"
 
 ## Summary Statistics
 
-| Category | Count | Priority |
-|----------|-------|----------|
-| Span<T> limitation | 3 | CRITICAL |
-| Explicit truncation | 2 | CRITICAL |
-| Array allocation | 1 | CRITICAL |
-| InitBlockUnaligned | 3 | CRITICAL |
-| Stride truncation | 2 | HIGH |
-| ArgMax/ArgMin return | 1 | HIGH |
-| Public API (int params) | 14+ | HIGH |
-| Output allocation | 6 | MEDIUM |
-| for loops with int | 40+ | MEDIUM |
-| stackalloc | 3 | MEDIUM |
-| String limitation | 3 | LOW (won't fix) |
+| Category | Count | Status | Priority |
+|----------|-------|--------|----------|
+| Span<T> limitation | 3 | DONE | CRITICAL |
+| Explicit truncation | 2 | DONE | CRITICAL |
+| Array allocation | 1 | DONE | CRITICAL |
+| InitBlockUnaligned | 3 | DONE | CRITICAL |
+| Stride truncation | 2 | DONE | HIGH |
+| ArgMax/ArgMin return | 3 | TODO | HIGH |
+| ArrayConvert.cs loops | 40+ | TODO | HIGH |
+| reshape int[] params | 5 | TODO | HIGH |
+| Public API (int params) | 14+ | MOSTLY DONE | HIGH |
+| Output allocation | 6 | DONE | MEDIUM |
+| arange/linspace params | 4 | TODO | MEDIUM |
+| stackalloc | 3 | TODO | MEDIUM |
+| String limitation | 3 | WON'T FIX | LOW |
+| Hashset Count | 2 | WON'T FIX | LOW |
 
 ---
 
 ## Recommended Fix Order
 
-1. **Phase 1 - Critical path**: Fix Span<T>, array allocation, InitBlockUnaligned
-2. **Phase 2 - Public API**: Add long overloads to constructors and Allocate methods
-3. **Phase 3 - IL emission**: Fix stride truncation, argmax/argmin return type
-4. **Phase 4 - Loops**: Convert int loop counters to long where needed
-5. **Document**: String limitations as known platform constraints
+1. **Phase 1 - Critical path**: ~~Fix Span<T>, array allocation, InitBlockUnaligned~~ DONE
+2. **Phase 2 - Public API**: ~~Add long overloads to constructors and Allocate methods~~ MOSTLY DONE
+3. **Phase 3 - IL emission**: ~~Fix stride truncation~~, argmax/argmin return type
+4. **Phase 4 - reshape**: Add long[] overloads to reshape methods
+5. **Phase 5 - ArrayConvert**: Fix 40+ loop counters, use unmanaged allocation
+6. **Phase 6 - Loops**: Convert remaining int loop counters to long where needed
+7. **Document**: String/Hashset limitations as known platform constraints
+
+---
+
+## Files Already Using long Correctly
+
+These files are confirmed to use long-based indexing:
+
+| File | Notes |
+|------|-------|
+| `ValueCoordinatesIncrementor.cs` | Uses `long[]` for dimensions and Index |
+| `Shape.cs` | Internal dimensions/strides are `long[]` |
+| `UnmanagedMemoryBlock\`1.cs` | Count is `long`, address arithmetic uses long |
+| `ArraySlice\`1.cs` | Count is `long`, indexers use long |
+| `SimdMatMul.cs` | Loop variables are long, pointer arithmetic uses long |
