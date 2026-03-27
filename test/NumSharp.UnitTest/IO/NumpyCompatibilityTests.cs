@@ -13,7 +13,7 @@ namespace NumSharp.UnitTest.IO
     /// </summary>
     public class NumpyCompatibilityTests
     {
-        private const string TestDir = "../../../../test_compat";
+        private const string TestDir = "test_compat";
 
         private static bool TestFilesExist()
         {
@@ -69,10 +69,17 @@ namespace NumSharp.UnitTest.IO
             var arr = np.load_npy(Path.Combine(TestDir, "scalar.npy"));
 
             // NumPy scalars have shape () and ndim 0
-            Console.WriteLine($"Scalar loaded: ndim={arr.ndim}, shape=[{string.Join(",", arr.shape)}], size={arr.size}");
+            // NumSharp SHOULD load this as a true scalar
+            Console.WriteLine($"Scalar loaded: ndim={arr.ndim}, shape=[{string.Join(",", arr.shape)}], size={arr.size}, IsScalar={arr.Shape.IsScalar}");
 
             Assert.AreEqual(1, arr.size);
             Assert.AreEqual(42, arr.GetInt64(0)); // NumPy default int is int64
+
+            // Verify it's a TRUE scalar (ndim=0, shape=[])
+            // This is the NumPy-compatible behavior
+            Assert.AreEqual(0, arr.ndim, "NumPy scalar should have ndim=0");
+            Assert.AreEqual(0, arr.shape.Length, "NumPy scalar should have empty shape");
+            Assert.IsTrue(arr.Shape.IsScalar, "Should be marked as scalar");
         }
 
         [Test]
