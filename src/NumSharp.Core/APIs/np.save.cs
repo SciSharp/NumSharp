@@ -1,320 +1,306 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
-using System.Linq;
-using System.Runtime.InteropServices;
+using NumSharp.IO;
 
 namespace NumSharp
 {
     public static partial class np
     {
-        #region NpyFormat
+        #region np.save
 
-        public static void save(string filepath, Array arr)
+        /// <summary>
+        /// Save an array to a binary file in NumPy .npy format.
+        /// </summary>
+        /// <param name="file">File path. If it doesn't end with .npy, the extension is added.</param>
+        /// <param name="arr">Array data to be saved.</param>
+        /// <remarks>
+        /// The .npy format is the standard binary file format in NumPy for persisting
+        /// a single arbitrary NumPy array on disk. The format stores all of the shape
+        /// and dtype information necessary to reconstruct the array correctly.
+        ///
+        /// For saving multiple arrays, use <see cref="savez"/> or <see cref="savez_compressed"/>.
+        /// </remarks>
+        /// <example>
+        /// <code>
+        /// var arr = np.arange(10);
+        /// np.save("data.npy", arr);
+        ///
+        /// // .npy extension is added automatically
+        /// np.save("data", arr);  // saves as data.npy
+        /// </code>
+        /// </example>
+        public static void save(string file, NDArray arr)
         {
-            Save(arr, filepath);
+            if (file == null)
+                throw new ArgumentNullException(nameof(file));
+            if (arr == null)
+                throw new ArgumentNullException(nameof(arr));
+
+            // Add .npy extension if not present
+            if (!file.EndsWith(".npy", StringComparison.OrdinalIgnoreCase))
+                file += ".npy";
+
+            using var stream = new FileStream(file, FileMode.Create, FileAccess.Write, FileShare.None);
+            save(stream, arr);
         }
 
-        public static void save(string filepath, NDArray arr)
+        /// <summary>
+        /// Save an array to a stream in NumPy .npy format.
+        /// </summary>
+        /// <param name="stream">Stream to write to.</param>
+        /// <param name="arr">Array data to be saved.</param>
+        /// <remarks>
+        /// Data is appended to the stream. Multiple arrays can be written to the same
+        /// file by calling save multiple times on the same stream.
+        /// </remarks>
+        public static void save(Stream stream, NDArray arr)
         {
-            Save((Array)arr, filepath);
-        }
+            if (stream == null)
+                throw new ArgumentNullException(nameof(stream));
+            if (arr == null)
+                throw new ArgumentNullException(nameof(arr));
 
-        public static byte[] Save(Array array)
-        {
-            using (var stream = new MemoryStream())
-            {
-                Save(array, stream);
-                return stream.ToArray();
-            }
-        }
-
-
-        public static ulong Save(Array array, string path)
-        {
-            if (Path.GetExtension(path) != ".npy")
-            {
-                path += ".npy";
-            }
-
-            using (var stream = new FileStream(path, FileMode.Create))
-                return Save(array, stream);
-        }
-
-        public static ulong Save(Array array, Stream stream)
-        {
-            using (var writer = new BinaryWriter(stream
-                , System.Text.Encoding.ASCII, leaveOpen: true
-            ))
-            {
-                Type type;
-                int maxLength;
-                string dtype = GetDtypeFromType(array, out type, out maxLength);
-
-                int[] shape = Enumerable.Range(0, array.Rank).Select(d => array.GetLength(d)).ToArray();
-
-                ulong bytesWritten = (ulong)writeHeader(writer, dtype, shape);
-
-                if (array.GetType().GetElementType().IsArray || array.GetType().GetElementType() == typeof(string))
-                {
-                    if (type == typeof(String))
-                        return bytesWritten + writeStringMatrix(writer, array, maxLength, shape);
-                    return bytesWritten + writeValueJagged(writer, array, maxLength, shape);
-                }
-                else
-                {
-                    if (type == typeof(String))
-                        return bytesWritten + writeStringMatrix(writer, array, maxLength, shape);
-                    return bytesWritten + writeValueMatrix(writer, array, maxLength, shape);
-                }
-            }
-        }
-
-        private static ulong writeValueMatrix(BinaryWriter reader, Array matrix, int bytes, int[] shape)
-        {
-            long total = 1;
-            for (int i = 0; i < shape.Length; i++)
-                total *= shape[i];
-            var buffer = new byte[bytes * total];
-
-            Buffer.BlockCopy(matrix, 0, buffer, 0, buffer.Length);
-            reader.Write(buffer, 0, buffer.Length);
-
-            return (ulong)buffer.LongLength;
-        }
-
-        static IEnumerable<T> Enumerate<T>(Array a, int[] dimensions, int pos)
-        {
-            if (pos == dimensions.Length - 1)
-            {
-                for (int i = 0; i < dimensions[pos]; i++)
-                    yield return (T)a.GetValue(i);
-            }
-            else
-            {
-                for (int i = 0; i < dimensions[pos]; i++)
-                    foreach (var subArray in Enumerate<T>(a.GetValue(i) as Array, dimensions, pos + 1))
-                        yield return subArray;
-            }
-        }
-
-        private static ulong writeValueJagged(BinaryWriter reader, Array matrix, int bytes, int[] shape)
-        {
-            int last = shape[shape.Length - 1];
-            byte[] buffer = new byte[bytes * last];
-            int[] first = shape.Take(shape.Length - 1).ToArray();
-
-            ulong writtenBytes = 0;
-            foreach (Array arr in Enumerate<Array>(matrix, first, 0))
-            {
-                Array.Clear(buffer, arr.Length, buffer.Length - buffer.Length);
-                Buffer.BlockCopy(arr, 0, buffer, 0, buffer.Length);
-                reader.Write(buffer, 0, buffer.Length);
-                writtenBytes += (ulong)buffer.LongLength;
-            }
-
-            return writtenBytes;
-        }
-
-        private static ulong writeStringMatrix(BinaryWriter reader, Array matrix, int bytes, int[] shape)
-        {
-            var buffer = new byte[bytes];
-            var empty = new byte[bytes];
-            empty[0] = byte.MinValue;
-            for (int i = 1; i < empty.Length; i++)
-                empty[i] = byte.MaxValue;
-
-            ulong writtenBytes = 0;
-
-            unsafe
-            {
-                fixed (byte* b = buffer)
-                {
-                    foreach (String s in Enumerate<String>(matrix, shape, 0))
-                    {
-                        if (s != null)
-                        {
-                            int c = 0;
-                            for (int i = 0; i < s.Length; i++)
-                                b[c++] = (byte)s[i];
-                            for (; c < buffer.Length; c++)
-                                b[c] = byte.MinValue;
-
-                            reader.Write(buffer, 0, bytes);
-                        }
-                        else
-                        {
-                            reader.Write(empty, 0, bytes);
-                        }
-
-                        writtenBytes += (ulong)buffer.LongLength;
-                    }
-                }
-            }
-
-            return writtenBytes;
-        }
-
-        private static int writeHeader(BinaryWriter writer, string dtype, int[] shape)
-        {
-            // The first 6 bytes are a magic string: exactly "x93NUMPY"
-
-            char[] magic = {'N', 'U', 'M', 'P', 'Y'};
-            writer.Write((byte)147);
-            writer.Write(magic);
-            writer.Write((byte)1); // major
-            writer.Write((byte)0); // minor;
-
-            string tuple = String.Join(", ", shape.Select(i => i.ToString()).ToArray());
-            if (shape.Length == 1)
-                tuple += ","; // 1-dim array's shape is (R,)
-            string header = "{{'descr': '{0}', 'fortran_order': False, 'shape': ({1}), }}";
-            header = String.Format(header, dtype, tuple);
-            int preamble = 10; // magic string (6) + 4
-
-            int len = header.Length + 1; // the 1 is to account for the missing \n at the end
-            int headerSize = len + preamble;
-
-            int pad = 16 - (headerSize % 16);
-            header = header.PadRight(header.Length + pad);
-            header += "\n";
-            headerSize = header.Length + preamble;
-
-            if (headerSize % 16 != 0)
-                throw new Exception();
-
-            writer.Write((ushort)header.Length);
-            for (int i = 0; i < header.Length; i++)
-                writer.Write((byte)header[i]);
-
-            return headerSize;
-        }
-
-        static Type GetInnerMostType(Type arrayType)
-        {
-            if (arrayType.GetElementType().IsArray)
-                return GetInnerMostType(arrayType.GetElementType());
-            return arrayType.GetElementType();
-        }
-
-        private static string GetDtypeFromType(Array array, out Type type, out int bytes)
-        {
-            type = GetInnerMostType(array.GetType());
-
-            bytes = 1;
-
-            if (type == typeof(String))
-            {
-                int[] shape = Enumerable.Range(0, array.Rank).Select(d => array.GetLength(d)).ToArray();
-                foreach (String s in Enumerate<String>(array, shape, 0))
-                {
-                    if (s.Length > bytes)
-                        bytes = s.Length;
-                }
-            }
-            else if (type == typeof(bool))
-            {
-                bytes = 1;
-            }
-            else
-            {
-                bytes = System.Runtime.InteropServices.Marshal.SizeOf(type);
-            }
-
-            if (type == typeof(bool))
-                return "|b1";
-            if (type == typeof(Byte))
-                return "|i1";
-            if (type == typeof(Int16))
-                return "<i2";
-            if (type == typeof(Int32))
-                return "<i4";
-            if (type == typeof(Int64))
-                return "<i8";
-            if (type == typeof(Single))
-                return "<f4";
-            if (type == typeof(Double))
-                return "<f8";
-            if (type == typeof(UInt16))
-                return "<u2";
-            if (type == typeof(UInt32))
-                return "<u4";
-            if (type == typeof(UInt64))
-                return "<u8";
-            if (type == typeof(String))
-                return "|S" + bytes;
-
-            throw new NotSupportedException();
+            NpyFormat.WriteArray(stream, arr);
         }
 
         #endregion
 
-        #region NpzFormat
+        #region np.savez
 
-        const CompressionLevel DEFAULT_COMPRESSION = CompressionLevel.Fastest;
-
-        public static byte[] Save_Npz(Dictionary<string, Array> arrays, CompressionLevel compression = DEFAULT_COMPRESSION)
+        /// <summary>
+        /// Save several arrays into a single file in uncompressed .npz format.
+        /// </summary>
+        /// <param name="file">File path. If it doesn't end with .npz, the extension is added.</param>
+        /// <param name="arrays">Arrays to save. Will be named arr_0, arr_1, etc.</param>
+        /// <remarks>
+        /// The .npz file format is a zipped archive of .npy files. Each file in the archive
+        /// contains one array in .npy format.
+        ///
+        /// For compression, use <see cref="savez_compressed"/>.
+        /// </remarks>
+        /// <example>
+        /// <code>
+        /// var x = np.arange(10);
+        /// var y = np.sin(x);
+        /// np.savez("data.npz", x, y);
+        ///
+        /// // Load back
+        /// using var npz = np.load("data.npz") as NpzFile;
+        /// var x_loaded = npz["arr_0"];
+        /// var y_loaded = npz["arr_1"];
+        /// </code>
+        /// </example>
+        public static void savez(string file, params NDArray[] arrays)
         {
-            using (var stream = new MemoryStream())
+            var dict = new Dictionary<string, NDArray>();
+            for (int i = 0; i < arrays.Length; i++)
+                dict[$"arr_{i}"] = arrays[i];
+
+            SaveNpzInternal(file, dict, compress: false);
+        }
+
+        /// <summary>
+        /// Save several arrays into a single file in uncompressed .npz format with named keys.
+        /// </summary>
+        /// <param name="file">File path. If it doesn't end with .npz, the extension is added.</param>
+        /// <param name="arrays">Dictionary mapping names to arrays.</param>
+        /// <remarks>
+        /// Keys should be valid filenames (avoid / or . characters).
+        /// </remarks>
+        /// <example>
+        /// <code>
+        /// var weights = np.random.randn(100, 50);
+        /// var biases = np.zeros(50);
+        /// np.savez("model.npz", new Dictionary&lt;string, NDArray&gt; {
+        ///     ["weights"] = weights,
+        ///     ["biases"] = biases
+        /// });
+        ///
+        /// // Load back
+        /// using var npz = np.load("model.npz") as NpzFile;
+        /// var w = npz["weights"];
+        /// var b = npz["biases"];
+        /// </code>
+        /// </example>
+        public static void savez(string file, Dictionary<string, NDArray> arrays)
+        {
+            SaveNpzInternal(file, arrays, compress: false);
+        }
+
+        /// <summary>
+        /// Save several arrays into a single file in uncompressed .npz format.
+        /// Combines positional and named arrays.
+        /// </summary>
+        /// <param name="file">File path.</param>
+        /// <param name="positionalArrays">Arrays named arr_0, arr_1, etc.</param>
+        /// <param name="namedArrays">Arrays with explicit names.</param>
+        public static void savez(string file, NDArray[] positionalArrays, Dictionary<string, NDArray> namedArrays)
+        {
+            var combined = new Dictionary<string, NDArray>(namedArrays);
+            for (int i = 0; i < positionalArrays.Length; i++)
             {
-                Save_Npz(arrays, stream, compression, leaveOpen: true);
-                return stream.ToArray();
+                string key = $"arr_{i}";
+                if (combined.ContainsKey(key))
+                    throw new ArgumentException($"Cannot use positional array and keyword '{key}'");
+                combined[key] = positionalArrays[i];
+            }
+
+            SaveNpzInternal(file, combined, compress: false);
+        }
+
+        #endregion
+
+        #region np.savez_compressed
+
+        /// <summary>
+        /// Save several arrays into a single file in compressed .npz format.
+        /// </summary>
+        /// <param name="file">File path. If it doesn't end with .npz, the extension is added.</param>
+        /// <param name="arrays">Arrays to save. Will be named arr_0, arr_1, etc.</param>
+        /// <remarks>
+        /// Uses ZIP_DEFLATED compression. For uncompressed archives, use <see cref="savez"/>.
+        /// </remarks>
+        public static void savez_compressed(string file, params NDArray[] arrays)
+        {
+            var dict = new Dictionary<string, NDArray>();
+            for (int i = 0; i < arrays.Length; i++)
+                dict[$"arr_{i}"] = arrays[i];
+
+            SaveNpzInternal(file, dict, compress: true);
+        }
+
+        /// <summary>
+        /// Save several arrays into a single file in compressed .npz format with named keys.
+        /// </summary>
+        /// <param name="file">File path. If it doesn't end with .npz, the extension is added.</param>
+        /// <param name="arrays">Dictionary mapping names to arrays.</param>
+        public static void savez_compressed(string file, Dictionary<string, NDArray> arrays)
+        {
+            SaveNpzInternal(file, arrays, compress: true);
+        }
+
+        /// <summary>
+        /// Save several arrays into a single file in compressed .npz format.
+        /// Combines positional and named arrays.
+        /// </summary>
+        public static void savez_compressed(string file, NDArray[] positionalArrays, Dictionary<string, NDArray> namedArrays)
+        {
+            var combined = new Dictionary<string, NDArray>(namedArrays);
+            for (int i = 0; i < positionalArrays.Length; i++)
+            {
+                string key = $"arr_{i}";
+                if (combined.ContainsKey(key))
+                    throw new ArgumentException($"Cannot use positional array and keyword '{key}'");
+                combined[key] = positionalArrays[i];
+            }
+
+            SaveNpzInternal(file, combined, compress: true);
+        }
+
+        #endregion
+
+        #region Internal
+
+        /// <summary>
+        /// Internal implementation for saving .npz files.
+        /// </summary>
+        private static void SaveNpzInternal(string file, Dictionary<string, NDArray> arrays, bool compress)
+        {
+            if (file == null)
+                throw new ArgumentNullException(nameof(file));
+            if (arrays == null)
+                throw new ArgumentNullException(nameof(arrays));
+
+            // Add .npz extension if not present
+            if (!file.EndsWith(".npz", StringComparison.OrdinalIgnoreCase))
+                file += ".npz";
+
+            var compression = compress ? CompressionLevel.Optimal : CompressionLevel.NoCompression;
+
+            using var fileStream = new FileStream(file, FileMode.Create, FileAccess.Write, FileShare.None);
+            using var archive = new ZipArchive(fileStream, ZipArchiveMode.Create, leaveOpen: false);
+
+            foreach (var kvp in arrays)
+            {
+                string entryName = kvp.Key;
+                if (!entryName.EndsWith(".npy", StringComparison.OrdinalIgnoreCase))
+                    entryName += ".npy";
+
+                var entry = archive.CreateEntry(entryName, compression);
+                using var entryStream = entry.Open();
+                NpyFormat.WriteArray(entryStream, kvp.Value);
             }
         }
 
-        public static byte[] Save_Npz(Array array, CompressionLevel compression = DEFAULT_COMPRESSION)
+        /// <summary>
+        /// Save .npz to stream.
+        /// </summary>
+        internal static void SaveNpzToStream(Stream stream, Dictionary<string, NDArray> arrays, bool compress, bool leaveOpen = false)
         {
-            using (var stream = new MemoryStream())
+            var compression = compress ? CompressionLevel.Optimal : CompressionLevel.NoCompression;
+
+            using var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen);
+
+            foreach (var kvp in arrays)
             {
-                Save_Npz(array, stream, compression, leaveOpen: true);
-                return stream.ToArray();
+                string entryName = kvp.Key;
+                if (!entryName.EndsWith(".npy", StringComparison.OrdinalIgnoreCase))
+                    entryName += ".npy";
+
+                var entry = archive.CreateEntry(entryName, compression);
+                using var entryStream = entry.Open();
+                NpyFormat.WriteArray(entryStream, kvp.Value);
             }
         }
 
+        #endregion
 
-        public static void Save_Npz(Dictionary<string, Array> arrays, string path, CompressionLevel compression = DEFAULT_COMPRESSION)
+        #region Convenience Overloads
+
+        /// <summary>
+        /// Save NDArray to .npy file (NumPy-compatible binary format).
+        /// </summary>
+        public static void save(string file, Array arr)
         {
-            using (var stream = new FileStream(path, FileMode.Create))
-            {
-                Save_Npz(arrays, stream, compression);
-            }
+            save(file, np.array(arr));
         }
 
-        public static void Save_Npz(Array array, string path, CompressionLevel compression = DEFAULT_COMPRESSION)
+        /// <summary>
+        /// Save to byte array in .npy format.
+        /// </summary>
+        public static byte[] save(NDArray arr)
         {
-            using (var stream = new FileStream(path, FileMode.Create))
-            {
-                Save_Npz(array, stream, compression);
-            }
+            using var stream = new MemoryStream();
+            save(stream, arr);
+            return stream.ToArray();
         }
 
-        public static void Save_Npz(Dictionary<string, Array> arrays, Stream stream, CompressionLevel compression = DEFAULT_COMPRESSION, bool leaveOpen = false)
+        /// <summary>
+        /// Save multiple arrays to byte array in .npz format.
+        /// </summary>
+        public static byte[] savez(params NDArray[] arrays)
         {
-            using (var zip = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: leaveOpen))
-            {
-                foreach (KeyValuePair<string, Array> p in arrays)
-                {
-                    var entry = zip.CreateEntry(p.Key, compression);
-                    using (Stream s = entry.Open())
-                    {
-                        Save(p.Value, s);
-                    }
-                }
-            }
+            using var stream = new MemoryStream();
+            var dict = new Dictionary<string, NDArray>();
+            for (int i = 0; i < arrays.Length; i++)
+                dict[$"arr_{i}"] = arrays[i];
+            SaveNpzToStream(stream, dict, compress: false, leaveOpen: true);
+            return stream.ToArray();
         }
 
-        public static void Save_Npz(Array array, Stream stream, CompressionLevel compression = DEFAULT_COMPRESSION, bool leaveOpen = false)
+        /// <summary>
+        /// Save multiple arrays to byte array in compressed .npz format.
+        /// </summary>
+        public static byte[] savez_compressed(params NDArray[] arrays)
         {
-            using (var zip = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: leaveOpen))
-            {
-                var entry = zip.CreateEntry("arr_0");
-                using (Stream s = entry.Open())
-                {
-                    Save(array, s);
-                }
-                
-            }
+            using var stream = new MemoryStream();
+            var dict = new Dictionary<string, NDArray>();
+            for (int i = 0; i < arrays.Length; i++)
+                dict[$"arr_{i}"] = arrays[i];
+            SaveNpzToStream(stream, dict, compress: true, leaveOpen: true);
+            return stream.ToArray();
         }
 
         #endregion

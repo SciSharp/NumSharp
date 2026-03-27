@@ -1,496 +1,225 @@
-﻿using System;
-using System.Collections;
-using System.Collections.Generic;
+using System;
 using System.IO;
-using System.Linq;
-using NumSharp.Utilities;
+using NumSharp.IO;
 
 namespace NumSharp
 {
     public static partial class np
     {
-        #region NpyFormat
+        #region np.load
 
-        //Signature from numpy doc:
-        //   numpy.load(file, mmap_mode=None, allow_pickle=True, fix_imports=True, encoding='ASCII')[source]
-        public static NDArray load(string path)
+        /// <summary>
+        /// Load arrays from .npy or .npz files.
+        /// </summary>
+        /// <param name="file">File path to load from.</param>
+        /// <param name="maxHeaderSize">Maximum header size for security (default 10000).</param>
+        /// <returns>
+        /// For .npy files: the loaded NDArray.
+        /// For .npz files: an NpzFile (dictionary-like, must be disposed).
+        /// </returns>
+        /// <remarks>
+        /// File type is automatically detected by magic bytes:
+        /// - \x93NUMPY → .npy file
+        /// - PK\x03\x04 or PK\x05\x06 → .npz (ZIP) file
+        ///
+        /// For .npz files, arrays are loaded lazily. The returned NpzFile must be
+        /// disposed (use 'using' statement) to release file handles.
+        /// </remarks>
+        /// <example>
+        /// <code>
+        /// // Load single array
+        /// var arr = np.load("data.npy");
+        ///
+        /// // Load multiple arrays from .npz
+        /// using var npz = np.load("data.npz") as NpzFile;
+        /// var x = npz["arr_0"];
+        /// var y = npz["arr_1"];
+        ///
+        /// // Or with pattern matching
+        /// var result = np.load("data.npz");
+        /// if (result is NpzFile npz)
+        /// {
+        ///     using (npz)
+        ///     {
+        ///         var x = npz["x"];
+        ///     }
+        /// }
+        /// </code>
+        /// </example>
+        public static object load(string file, int maxHeaderSize = NpyFormat.MaxHeaderSize)
         {
-            using (var stream = new FileStream(path, FileMode.Open))
-                return load(stream);
-        }
+            if (file == null)
+                throw new ArgumentNullException(nameof(file));
 
-        public static NDArray load(Stream stream)
-        {
-            using (var reader = new BinaryReader(stream, System.Text.Encoding.ASCII
-                , leaveOpen: true
-            ))
+            var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read);
+
+            try
             {
-                int bytes;
-                Type type;
-                int[] shape;
-                if (!parseReader(reader, out bytes, out type, out shape))
-                    throw new FormatException();
-
-                Array array = Arrays.Create(type, shape.Aggregate((dims, dim) => dims * dim));
-
-                var result = new NDArray(readValueMatrix(reader, array, bytes, type, shape));
-                return result.reshape(shape);
+                return LoadFromStream(stream, ownStream: true, maxHeaderSize);
+            }
+            catch
+            {
+                stream.Dispose();
+                throw;
             }
         }
 
-        public static T Load<T>(byte[] bytes)
-            where T : class,
-            ICloneable,
-            IList, ICollection, IEnumerable
-            , IStructuralComparable, IStructuralEquatable
+        /// <summary>
+        /// Load array from stream.
+        /// </summary>
+        /// <param name="stream">Stream to read from. Must support seeking for file type detection.</param>
+        /// <param name="maxHeaderSize">Maximum header size for security.</param>
+        /// <returns>NDArray or NpzFile depending on content.</returns>
+        public static object load(Stream stream, int maxHeaderSize = NpyFormat.MaxHeaderSize)
         {
-            if (typeof(T).IsArray && (typeof(T).GetElementType().IsArray || typeof(T).GetElementType() == typeof(string)))
-                return LoadJagged(bytes) as T;
-            return LoadMatrix(bytes) as T;
+            if (stream == null)
+                throw new ArgumentNullException(nameof(stream));
+
+            return LoadFromStream(stream, ownStream: false, maxHeaderSize);
         }
 
-        public static T Load<T>(byte[] bytes, out T value)
-            where T : class,
-            ICloneable,
-            IList, ICollection, IEnumerable
-            , IStructuralComparable, IStructuralEquatable
+        /// <summary>
+        /// Load array from byte array.
+        /// </summary>
+        /// <param name="bytes">Byte array containing .npy or .npz data.</param>
+        /// <param name="maxHeaderSize">Maximum header size for security.</param>
+        /// <returns>NDArray or NpzFile depending on content.</returns>
+        public static object load(byte[] bytes, int maxHeaderSize = NpyFormat.MaxHeaderSize)
         {
-            return value = Load<T>(bytes);
-        }
+            if (bytes == null)
+                throw new ArgumentNullException(nameof(bytes));
 
-
-        public static T Load<T>(string path, out T value)
-            where T : class,
-            ICloneable,
-            IList, ICollection, IEnumerable
-            , IStructuralComparable, IStructuralEquatable
-        {
-            return value = Load<T>(path);
-        }
-
-        public static T Load<T>(Stream stream, out T value)
-            where T : class,
-            ICloneable,
-            IList, ICollection, IEnumerable
-            , IStructuralComparable, IStructuralEquatable
-        {
-            return value = Load<T>(stream);
-        }
-
-
-        public static T Load<T>(string path)
-            where T : class,
-            ICloneable,
-            IList, ICollection, IEnumerable
-            , IStructuralComparable, IStructuralEquatable
-        {
-            using (var stream = new FileStream(path, FileMode.Open))
-                return Load<T>(stream);
-        }
-
-
-        public static T Load<T>(Stream stream)
-            where T : class,
-            ICloneable,
-            IList, ICollection, IEnumerable
-            , IStructuralComparable, IStructuralEquatable
-        {
-            if (typeof(T).IsArray && (typeof(T).GetElementType().IsArray || typeof(T).GetElementType() == typeof(string)))
-                return LoadJagged(stream) as T;
-            return LoadMatrix(stream) as T;
-        }
-
-        public static Array LoadMatrix(byte[] bytes)
-        {
-            using (var stream = new MemoryStream(bytes))
-                return LoadMatrix(stream);
-        }
-
-
-        public static Array LoadMatrix(string path)
-        {
-            using (var stream = new FileStream(path, FileMode.Open))
-                return LoadMatrix(stream);
-        }
-
-
-        public static Array LoadJagged(byte[] bytes)
-        {
-            using (var stream = new MemoryStream(bytes))
-                return LoadJagged(stream);
-        }
-
-        public static Array LoadJagged(string path)
-        {
-            using (var stream = new FileStream(path, FileMode.Open))
-                return LoadJagged(stream);
-        }
-
-        public static Array LoadMatrix(Stream stream)
-        {
-            using (var reader = new BinaryReader(stream, System.Text.Encoding.ASCII
-                , leaveOpen: true
-            ))
-            {
-                int bytes;
-                Type type;
-                int[] shape;
-                if (!parseReader(reader, out bytes, out type, out shape))
-                    throw new FormatException();
-
-                Array matrix = Arrays.Create(type, shape);
-
-                if (type == typeof(String))
-                    return readStringMatrix(reader, matrix, bytes, type, shape);
-                return readValueMatrix(reader, matrix, bytes, type, shape);
-            }
-        }
-
-
-        public static Array LoadJagged(Stream stream, bool trim = true)
-        {
-            using (var reader = new BinaryReader(stream, System.Text.Encoding.ASCII
-                , leaveOpen: true
-            ))
-            {
-                int bytes;
-                Type type;
-                int[] shape;
-                if (!parseReader(reader, out bytes, out type, out shape))
-                    throw new FormatException();
-
-                Array matrix = Arrays.Create(type, shape);
-
-                if (type == typeof(String))
-                {
-                    Array result = readStringMatrix(reader, matrix, bytes, type, shape);
-
-                    //if (trim)
-                    //    return result.Trim();
-                    return result;
-                }
-
-                return readValueJagged(reader, matrix, bytes, type, shape);
-            }
-        }
-
-        private static Array readValueMatrix(BinaryReader reader, Array matrix, int bytes, Type type, int[] shape)
-        {
-            long total = 1;
-            for (int i = 0; i < shape.Length; i++)
-                total *= shape[i];
-            var buffer = new byte[bytes * total];
-
-            reader.Read(buffer, 0, buffer.Length);
-            Buffer.BlockCopy(buffer, 0, matrix, 0, buffer.Length);
-
-            return matrix;
-        }
-
-        static IEnumerable<int[]> GetIndices(Array array, int[] current, int pos)
-        {
-            if (pos == current.Length)
-                yield return current;
-            else
-            {
-                for (int i = 0; i < array.GetLength(pos); i++)
-                {
-                    current[pos] = i;
-                    foreach (var ind in GetIndices(array, current, pos + 1))
-                        yield return ind;
-                    current[pos] = 0;
-                }
-            }
-        }
-
-        static IEnumerable<int[]> GetIndices(Array array)
-        {
-            return GetIndices(array, new int[array.Rank], 0);
-        }
-
-        private static Array readValueJagged(BinaryReader reader, Array matrix, int bytes, Type type, int[] shape)
-        {
-            int last = shape[shape.Length - 1];
-            byte[] buffer = new byte[bytes * last];
-
-            int[] firsts = new int[shape.Length - 1];
-            for (int i = 0; i < firsts.Length; i++)
-                firsts[i] = -1;
-
-            foreach (var p in GetIndices(matrix))
-            {
-                bool changed = false;
-                for (int i = 0; i < firsts.Length; i++)
-                {
-                    if (firsts[i] != p[i])
-                    {
-                        firsts[i] = p[i];
-                        changed = true;
-                    }
-                }
-
-                if (!changed)
-                    continue;
-
-                Array arr = (Array)matrix.GetValue(indices: firsts);
-
-                reader.Read(buffer, 0, buffer.Length);
-                Buffer.BlockCopy(buffer, 0, arr, 0, buffer.Length);
-            }
-
-            return matrix;
-        }
-
-        private static Array readStringMatrix(BinaryReader reader, Array matrix, int bytes, Type type, int[] shape)
-        {
-            var buffer = new byte[bytes];
-
-            unsafe
-            {
-                fixed (byte* b = buffer)
-                {
-                    foreach (var p in GetIndices(matrix))
-                    {
-                        reader.Read(buffer, 0, bytes);
-                        if (buffer[0] == byte.MinValue)
-                        {
-                            bool isNull = true;
-                            for (int i = 1; i < buffer.Length; i++)
-                            {
-                                if (buffer[i] != byte.MaxValue)
-                                {
-                                    isNull = false;
-                                    break;
-                                }
-                            }
-
-                            if (isNull)
-                            {
-                                matrix.SetValue(value: null, indices: p);
-                                continue;
-                            }
-                        }
-
-                        String s = new String((sbyte*)b);
-                        matrix.SetValue(value: s, indices: p);
-                    }
-                }
-            }
-
-            return matrix;
-        }
-
-        private static bool parseReader(BinaryReader reader, out int bytes, out Type t, out int[] shape)
-        {
-            bytes = 0;
-            t = null;
-            shape = null;
-
-            // The first 6 bytes are a magic string: exactly "x93NUMPY"
-            if (reader.ReadChar() != 63) return false;
-            if (reader.ReadChar() != 'N') return false;
-            if (reader.ReadChar() != 'U') return false;
-            if (reader.ReadChar() != 'M') return false;
-            if (reader.ReadChar() != 'P') return false;
-            if (reader.ReadChar() != 'Y') return false;
-
-            byte major = reader.ReadByte(); // 1
-            byte minor = reader.ReadByte(); // 0
-
-            if (major != 1 || minor != 0)
-                throw new NotSupportedException();
-
-            ushort len = reader.ReadUInt16();
-
-            string header = new String(reader.ReadChars(len));
-            string mark = "'descr': '";
-            int s = header.IndexOf(mark) + mark.Length;
-            int e = header.IndexOf("'", s + 1);
-            string type = header.Substring(s, e - s);
-            bool? isLittleEndian;
-            t = GetType(type, out bytes, out isLittleEndian);
-
-            if (isLittleEndian.HasValue && isLittleEndian.Value == false)
-                throw new Exception();
-
-            mark = "'fortran_order': ";
-            s = header.IndexOf(mark) + mark.Length;
-            e = header.IndexOf(",", s + 1);
-            bool fortran = bool.Parse(header.Substring(s, e - s));
-
-            if (fortran)
-                throw new Exception();
-
-            mark = "'shape': (";
-            s = header.IndexOf(mark) + mark.Length;
-            e = header.IndexOf(")", s + 1);
-            shape = header.Substring(s, e - s).Split(',').Where(v => !String.IsNullOrEmpty(v)).Select(Int32.Parse).ToArray();
-
-            return true;
-        }
-
-        private static Type GetType(string dtype, out int bytes, out bool? isLittleEndian)
-        {
-            isLittleEndian = IsLittleEndian(dtype);
-            bytes = Int32.Parse(dtype.Substring(2));
-
-            string typeCode = dtype.Substring(1);
-
-            if (typeCode == "b1")
-                return typeof(bool);
-            if (typeCode == "i1")
-                return typeof(Byte);
-            if (typeCode == "i2")
-                return typeof(Int16);
-            if (typeCode == "i4")
-                return typeof(Int32);
-            if (typeCode == "i8")
-                return typeof(Int64);
-            if (typeCode == "u1")
-                return typeof(Byte);
-            if (typeCode == "u2")
-                return typeof(UInt16);
-            if (typeCode == "u4")
-                return typeof(UInt32);
-            if (typeCode == "u8")
-                return typeof(UInt64);
-            if (typeCode == "f4")
-                return typeof(Single);
-            if (typeCode == "f8")
-                return typeof(Double);
-            if (typeCode.StartsWith("S"))
-                return typeof(String);
-
-            throw new NotSupportedException();
-        }
-
-        private static bool? IsLittleEndian(string type)
-        {
-            bool? littleEndian = null;
-
-            switch (type[0])
-            {
-                case '<':
-                    littleEndian = true;
-                    break;
-                case '>':
-                    littleEndian = false;
-                    break;
-                case '|':
-                    littleEndian = null;
-                    break;
-                default:
-                    throw new Exception();
-            }
-
-            return littleEndian;
+            var stream = new MemoryStream(bytes, writable: false);
+            return LoadFromStream(stream, ownStream: true, maxHeaderSize);
         }
 
         #endregion
 
-        #region NpzFormat
+        #region Typed Load Methods
 
-        public static void Load_Npz<T>(byte[] bytes, out T value)
-            where T : class,
-            ICloneable,
-            IList, ICollection, IEnumerable, IStructuralComparable, IStructuralEquatable
+        /// <summary>
+        /// Load a single .npy file and return as NDArray.
+        /// </summary>
+        /// <param name="file">Path to .npy file.</param>
+        /// <param name="maxHeaderSize">Maximum header size for security.</param>
+        /// <returns>The loaded NDArray.</returns>
+        /// <exception cref="FormatException">If the file is not a valid .npy file.</exception>
+        public static NDArray load_npy(string file, int maxHeaderSize = NpyFormat.MaxHeaderSize)
         {
-            using (var dict = Load_Npz<T>(bytes))
+            using var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read);
+            return NpyFormat.ReadArray(stream, maxHeaderSize);
+        }
+
+        /// <summary>
+        /// Load a single .npy file from stream.
+        /// </summary>
+        public static NDArray load_npy(Stream stream, int maxHeaderSize = NpyFormat.MaxHeaderSize)
+        {
+            return NpyFormat.ReadArray(stream, maxHeaderSize);
+        }
+
+        /// <summary>
+        /// Load a single .npy file from byte array.
+        /// </summary>
+        public static NDArray load_npy(byte[] bytes, int maxHeaderSize = NpyFormat.MaxHeaderSize)
+        {
+            using var stream = new MemoryStream(bytes, writable: false);
+            return NpyFormat.ReadArray(stream, maxHeaderSize);
+        }
+
+        /// <summary>
+        /// Load a .npz file and return as NpzFile.
+        /// </summary>
+        /// <param name="file">Path to .npz file.</param>
+        /// <param name="maxHeaderSize">Maximum header size for security.</param>
+        /// <returns>NpzFile with lazy-loading arrays. Must be disposed.</returns>
+        public static NpzFile load_npz(string file, int maxHeaderSize = NpyFormat.MaxHeaderSize)
+        {
+            var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read);
+            return new NpzFile(stream, ownStream: true, maxHeaderSize);
+        }
+
+        /// <summary>
+        /// Load a .npz file from stream.
+        /// </summary>
+        public static NpzFile load_npz(Stream stream, bool ownStream = false, int maxHeaderSize = NpyFormat.MaxHeaderSize)
+        {
+            return new NpzFile(stream, ownStream, maxHeaderSize);
+        }
+
+        /// <summary>
+        /// Load a .npz file from byte array.
+        /// </summary>
+        public static NpzFile load_npz(byte[] bytes, int maxHeaderSize = NpyFormat.MaxHeaderSize)
+        {
+            var stream = new MemoryStream(bytes, writable: false);
+            return new NpzFile(stream, ownStream: true, maxHeaderSize);
+        }
+
+        #endregion
+
+        #region Internal
+
+        /// <summary>
+        /// Internal implementation for loading from stream.
+        /// </summary>
+        private static object LoadFromStream(Stream stream, bool ownStream, int maxHeaderSize)
+        {
+            if (!stream.CanSeek)
+                throw new ArgumentException("Stream must support seeking for file type detection", nameof(stream));
+
+            // Read magic bytes for type detection
+            const int magicLen = 6;
+            long startPosition = stream.Position;
+
+            if (stream.Length - startPosition < magicLen)
+                throw new EndOfStreamException("File too small to be a valid .npy or .npz file");
+
+            byte[] magic = new byte[magicLen];
+            int bytesRead = stream.Read(magic, 0, magicLen);
+
+            if (bytesRead == 0)
+                throw new EndOfStreamException("No data left in file");
+
+            // Seek back to start position (not to 0, to support multiple arrays in one stream)
+            stream.Position = startPosition;
+
+            // Check for ZIP (.npz) magic: PK\x03\x04 or PK\x05\x06 (empty)
+            if ((magic[0] == 0x50 && magic[1] == 0x4B) &&
+                ((magic[2] == 0x03 && magic[3] == 0x04) ||
+                 (magic[2] == 0x05 && magic[3] == 0x06)))
             {
-                value = dict.Values.First();
+                // NPZ file - return NpzFile for lazy loading
+                return new NpzFile(stream, ownStream, maxHeaderSize);
             }
-        }
 
-        public static void Load_Npz<T>(string path, out T value)
-            where T : class,
-            ICloneable,
-            IList, ICollection, IEnumerable, IStructuralComparable, IStructuralEquatable
-        {
-            using (var dict = Load_Npz<T>(path))
+            // Check for NPY magic: \x93NUMPY
+            if (magic[0] == 0x93 &&
+                magic[1] == 'N' &&
+                magic[2] == 'U' &&
+                magic[3] == 'M' &&
+                magic[4] == 'P' &&
+                magic[5] == 'Y')
             {
-                value = dict.Values.First();
+                // NPY file
+                try
+                {
+                    return NpyFormat.ReadArray(stream, maxHeaderSize);
+                }
+                finally
+                {
+                    if (ownStream)
+                        stream.Dispose();
+                }
             }
-        }
 
-        public static void Load_Npz<T>(Stream stream, out T value)
-            where T : class,
-            ICloneable,
-            IList, ICollection, IEnumerable, IStructuralComparable, IStructuralEquatable
-        {
-            using (var dict = Load_Npz<T>(stream))
-            {
-                value = dict.Values.First();
-            }
-        }
+            // Unknown format
+            if (ownStream)
+                stream.Dispose();
 
-        public static NpzDictionary<T> Load_Npz<T>(byte[] bytes)
-            where T : class,
-            ICloneable,
-            IList, ICollection, IEnumerable, IStructuralComparable, IStructuralEquatable
-        {
-            return Load_Npz<T>(new MemoryStream(bytes));
-        }
-
-        public static NpzDictionary<T> Load_Npz<T>(string path, out NpzDictionary<T> value)
-            where T : class,
-            ICloneable,
-            IList, ICollection, IEnumerable, IStructuralComparable, IStructuralEquatable
-        {
-            return value = Load_Npz<T>(new FileStream(path, FileMode.Open));
-        }
-
-        public static NpzDictionary<T> Load_Npz<T>(Stream stream, out NpzDictionary<T> value)
-            where T : class,
-            ICloneable,
-            IList, ICollection, IEnumerable, IStructuralComparable, IStructuralEquatable
-        {
-            return value = Load_Npz<T>(stream);
-        }
-
-        public static NpzDictionary<T> Load_Npz<T>(string path)
-            where T : class,
-            ICloneable,
-            IList, ICollection, IEnumerable, IStructuralComparable, IStructuralEquatable
-        {
-            return Load_Npz<T>(new FileStream(path, FileMode.Open));
-        }
-
-        public static NpzDictionary<T> Load_Npz<T>(Stream stream)
-            where T : class,
-            ICloneable,
-            IList, ICollection, IEnumerable, IStructuralComparable, IStructuralEquatable
-        {
-            return new NpzDictionary<T>(stream);
-        }
-
-        public static NpzDictionary<Array> LoadMatrix_Npz(byte[] bytes)
-        {
-            return LoadMatrix_Npz(new MemoryStream(bytes));
-        }
-
-        public static NpzDictionary<Array> LoadMatrix_Npz(string path)
-        {
-            return LoadMatrix_Npz(new FileStream(path, FileMode.Open));
-        }
-
-        public static NpzDictionary<Array> LoadMatrix_Npz(Stream stream)
-        {
-            return new NpzDictionary(stream, jagged: false);
-        }
-
-        public static NpzDictionary<Array> LoadJagged_Npz(byte[] bytes)
-        {
-            return LoadJagged_Npz(new MemoryStream(bytes));
-        }
-
-        public static NpzDictionary<Array> LoadJagged_Npz(string path)
-        {
-            return LoadJagged_Npz(new FileStream(path, FileMode.Open));
-        }
-
-        public static NpzDictionary<Array> LoadJagged_Npz(Stream stream, bool trim = true)
-        {
-            return new NpzDictionary(stream, jagged: true);
+            throw new FormatException(
+                $"Unknown file format. Expected .npy (\\x93NUMPY) or .npz (PK), " +
+                $"got: \\x{magic[0]:X2}\\x{magic[1]:X2}\\x{magic[2]:X2}\\x{magic[3]:X2}");
         }
 
         #endregion
