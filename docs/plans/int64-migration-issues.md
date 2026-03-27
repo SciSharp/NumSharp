@@ -271,3 +271,30 @@ The implicit `long[]` → `Shape` conversion caused infinite recursion.
 | [x] | `np.random.randn.cs` | `randn`, `normal`, `standard_normal` |
 | [x] | `np.random.uniform.cs` | `uniform` |
 | [x] | `np.random.choice.cs` | `choice` - now supports long population sizes |
+| [x] | `np.repeat.cs` | `repeat` - now supports long repeat counts |
+
+---
+
+## Phase 10: Known Remaining Issues
+
+### Fancy Indexing (Int32 Only)
+
+`NDArray.Indexing.Selection.Getter.cs` lines 337-359 force all index arrays to `int32`:
+```csharp
+if (idxs.typecode != NPTypeCode.Int32)
+    idxs = idxs.astype(NPTypeCode.Int32, true);
+```
+
+**Impact**: Fancy indexing (`arr[indices]`) cannot use indices > int.MaxValue.
+**Status**: Requires larger refactor of FetchIndices/SetIndices machinery.
+**Workaround**: Use coordinate-based indexing or loops for >2B element access.
+
+### Platform Limitations (Won't Fix)
+
+| Limitation | Files Affected | Reason |
+|------------|----------------|--------|
+| Span<T> int length | `ArraySlice.cs`, `UnmanagedStorage.cs`, `SimdMatMul.cs` | .NET platform |
+| List<T>.Count is int | `ILKernelGenerator.Masking.cs` | ICollection<T> interface |
+| Hashset<T>.Count is int | `NDArray.unique.cs` | ICollection<T> interface |
+| string length is int | `NDArray.String.cs` | .NET platform |
+| Array.SetValue uses int[] | `NdArrayToMultiDimArray.cs` | .NET platform |
