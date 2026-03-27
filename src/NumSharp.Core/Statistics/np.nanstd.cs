@@ -181,21 +181,14 @@ namespace NumSharp
                 outputShapeList.Add(1);
 
             var outputShape = outputShapeList.ToArray();
-            long outputSize = 1;
-            foreach (var dim in outputShape)
-                outputSize *= dim;
-
-            // .NET arrays are int-indexed
-            if (outputSize > int.MaxValue)
-                throw new InvalidOperationException($"Output size {outputSize} exceeds int.MaxValue ({int.MaxValue}). C#/.NET managed arrays are limited to int32 indexing.");
-
             long axisLen = inputShape[axis];
 
-            // Create output array
+            // Create output array using unmanaged allocation (supports >2GB)
             NDArray result;
             if (arr.GetTypeCode == NPTypeCode.Single)
             {
-                var outputData = new float[(int)outputSize];
+                result = new NDArray(NPTypeCode.Single, new Shape(outputShape));
+                long outputSize = result.size;
 
                 for (long outIdx = 0; outIdx < outputSize; outIdx++)
                 {
@@ -233,7 +226,7 @@ namespace NumSharp
 
                     if (count <= ddof)
                     {
-                        outputData[outIdx] = float.NaN;
+                        result.SetSingle(float.NaN, outCoords);
                     }
                     else
                     {
@@ -261,15 +254,14 @@ namespace NumSharp
                             }
                         }
 
-                        outputData[outIdx] = (float)Math.Sqrt(sumSq / (count - ddof));
+                        result.SetSingle((float)Math.Sqrt(sumSq / (count - ddof)), outCoords);
                     }
                 }
-
-                result = new NDArray(outputData).reshape(outputShape);
             }
             else // Double
             {
-                var outputData = new double[(int)outputSize];
+                result = new NDArray(NPTypeCode.Double, new Shape(outputShape));
+                long outputSize = result.size;
 
                 for (long outIdx = 0; outIdx < outputSize; outIdx++)
                 {
@@ -306,7 +298,7 @@ namespace NumSharp
 
                     if (count <= ddof)
                     {
-                        outputData[outIdx] = double.NaN;
+                        result.SetDouble(double.NaN, outCoords);
                     }
                     else
                     {
@@ -334,11 +326,9 @@ namespace NumSharp
                             }
                         }
 
-                        outputData[outIdx] = Math.Sqrt(sumSq / (count - ddof));
+                        result.SetDouble(Math.Sqrt(sumSq / (count - ddof)), outCoords);
                     }
                 }
-
-                result = new NDArray(outputData).reshape(outputShape);
             }
 
             // Handle keepdims

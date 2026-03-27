@@ -128,21 +128,14 @@ namespace NumSharp
                 outputShapeList.Add(1);
 
             var outputShape = outputShapeList.ToArray();
-            long outputSize = 1;
-            foreach (var dim in outputShape)
-                outputSize *= dim;
-
-            // .NET arrays are int-indexed
-            if (outputSize > int.MaxValue)
-                throw new InvalidOperationException($"Output size {outputSize} exceeds int.MaxValue ({int.MaxValue}). C#/.NET managed arrays are limited to int32 indexing.");
-
             long axisLen = inputShape[axis];
 
-            // Create output array
+            // Create output array using unmanaged allocation (supports >2GB)
             NDArray result;
             if (arr.GetTypeCode == NPTypeCode.Single)
             {
-                var outputData = new float[(int)outputSize];
+                result = new NDArray(NPTypeCode.Single, new Shape(outputShape));
+                long outputSize = result.size;
 
                 // Iterate over output positions
                 for (long outIdx = 0; outIdx < outputSize; outIdx++)
@@ -181,14 +174,13 @@ namespace NumSharp
                         }
                     }
 
-                    outputData[outIdx] = count > 0 ? (float)(sum / count) : float.NaN;
+                    result.SetSingle(count > 0 ? (float)(sum / count) : float.NaN, outCoords);
                 }
-
-                result = new NDArray(outputData).reshape(outputShape);
             }
             else // Double
             {
-                var outputData = new double[(int)outputSize];
+                result = new NDArray(NPTypeCode.Double, new Shape(outputShape));
+                long outputSize = result.size;
 
                 for (long outIdx = 0; outIdx < outputSize; outIdx++)
                 {
@@ -223,10 +215,8 @@ namespace NumSharp
                         }
                     }
 
-                    outputData[outIdx] = count > 0 ? sum / count : double.NaN;
+                    result.SetDouble(count > 0 ? sum / count : double.NaN, outCoords);
                 }
-
-                result = new NDArray(outputData).reshape(outputShape);
             }
 
             // Handle keepdims

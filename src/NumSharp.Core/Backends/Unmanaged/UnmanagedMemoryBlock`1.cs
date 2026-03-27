@@ -752,7 +752,7 @@ namespace NumSharp.Backends.Unmanaged
         [MethodImpl(OptimizeAndInline)]
         public IEnumerator<T> GetEnumerator()
         {
-            for (var i = 0; i < Count; i++) yield return GetIndex(i);
+            for (long i = 0; i < Count; i++) yield return GetIndex(i);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -765,7 +765,7 @@ namespace NumSharp.Backends.Unmanaged
         public bool Contains(T item)
         {
             long len = Count;
-            for (var i = 0; i < len; i++)
+            for (long i = 0; i < len; i++)
             {
                 if ((*(Address + i)).Equals(item)) return true;
             }
@@ -777,7 +777,7 @@ namespace NumSharp.Backends.Unmanaged
         public void CopyTo(T[] array, int arrayIndex)
         {
             long len = Count;
-            for (var i = 0; i < len; i++)
+            for (long i = 0; i < len; i++)
             {
                 array[i + arrayIndex] = *(Address + i);
             }

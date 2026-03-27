@@ -1464,7 +1464,12 @@ namespace NumSharp.Backends
                 throw new ArrayTypeMismatchException($"The given type argument '{typeof(T).Name}' doesn't match the type of the internal data '{InternalArray.TypeCode}'");
 
             var src = (T*)Address;
-            var ret = new T[Shape.Size];
+
+            // .NET arrays are limited to int32 indexing
+            if (Shape.Size > int.MaxValue)
+                throw new InvalidOperationException($"Array size {Shape.Size} exceeds int.MaxValue. Use ToArraySlice() for large arrays.");
+
+            var ret = new T[(int)Shape.Size];
 
             // NumPy-aligned: For contiguous shapes, use fast memory copy.
             // Must account for shape.offset which indicates the starting position in the buffer.

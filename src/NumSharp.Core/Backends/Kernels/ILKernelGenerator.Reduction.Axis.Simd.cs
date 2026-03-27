@@ -365,7 +365,8 @@ namespace NumSharp.Backends.Kernels
 
             // Try AVX2 gather for float/double - provides ~2-3x speedup for strided access
             // Only beneficial when we have enough elements to amortize gather overhead
-            if (Avx2.IsSupported && size >= 8)
+            // AVX2 gather requires int32 indices, so stride must fit in int32
+            if (Avx2.IsSupported && size >= 8 && stride <= int.MaxValue)
             {
                 if (typeof(T) == typeof(float))
                 {

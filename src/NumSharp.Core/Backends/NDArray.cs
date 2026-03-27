@@ -238,6 +238,23 @@ namespace NumSharp
         public NDArray(Type dtype, int size, bool fillZeros) : this(dtype, Shape.Vector(size), fillZeros) { }
 
         /// <summary>
+        ///     Constructor which initialize elements with length of <paramref name="size"/> (long for >2GB arrays)
+        /// </summary>
+        /// <param name="dtype">Internal data type</param>
+        /// <param name="size">The size as a single dimension shape</param>
+        /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
+        public NDArray(Type dtype, long size) : this(dtype, Shape.Vector(size), true) { }
+
+        /// <summary>
+        ///     Constructor which initialize elements with length of <paramref name="size"/> (long for >2GB arrays)
+        /// </summary>
+        /// <param name="dtype">Internal data type</param>
+        /// <param name="size">The size as a single dimension shape</param>
+        /// <param name="fillZeros">Should set the values of the new allocation to default(dtype)? otherwise - old memory noise</param>
+        /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
+        public NDArray(Type dtype, long size, bool fillZeros) : this(dtype, Shape.Vector(size), fillZeros) { }
+
+        /// <summary>
         /// Constructor which initialize elements with 0
         /// type and shape are given.
         /// </summary>
