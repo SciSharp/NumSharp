@@ -646,11 +646,11 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Br, lblLoop);
             il.MarkLabel(lblLoopEnd);
 
-            // Return accumulator or index (ArgMax/ArgMin returns int32 per NumPy)
+            // Return accumulator or index (ArgMax/ArgMin returns int64 per NumPy 2.x)
             if (key.Op == ReductionOp.ArgMax || key.Op == ReductionOp.ArgMin)
             {
                 il.Emit(OpCodes.Ldloc, locArgIdx);
-                il.Emit(OpCodes.Conv_I4); // Convert long index to int32 for NumPy compatibility
+                // locArgIdx is already long (int64), return as-is for >2GB array support
             }
             else
             {

@@ -96,6 +96,7 @@ namespace NumSharp
         /// </summary>
         /// <typeparam name="T">The type of given array, must be compliant to numpy's supported dtypes.</typeparam>
         /// <param name="data">The enumeration of data to create <see cref="NDArray"/> from.</param>
+        /// <param name="size">Maximum number of items to read from <paramref name="data"/>.</param>
         /// <returns>An <see cref="NDArray"/> with the data and shape of the given array.</returns>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.array.html <br></br>
@@ -103,6 +104,21 @@ namespace NumSharp
         ///     <paramref name="size"/> can be used to limit the amount of items to read form <paramref name="data"/>. Reading stops on either size or <paramref name="data"/> ends.
         /// </remarks>
         public static NDArray array<T>(IEnumerable<T> data, int size) where T : unmanaged
+            => array(data, (long)size);
+
+        /// <summary>
+        ///     Creates a Vector <see cref="NDArray"/> from given <paramref name="data"/>.
+        /// </summary>
+        /// <typeparam name="T">The type of given array, must be compliant to numpy's supported dtypes.</typeparam>
+        /// <param name="data">The enumeration of data to create <see cref="NDArray"/> from.</param>
+        /// <param name="size">Maximum number of items to read from <paramref name="data"/>.</param>
+        /// <returns>An <see cref="NDArray"/> with the data and shape of the given array.</returns>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.array.html <br></br>
+        ///     Always performs a copy.<br></br>
+        ///     <paramref name="size"/> can be used to limit the amount of items to read form <paramref name="data"/>. Reading stops on either size or <paramref name="data"/> ends.
+        /// </remarks>
+        public static NDArray array<T>(IEnumerable<T> data, long size) where T : unmanaged
         {
             var slice = new ArraySlice<T>(new UnmanagedMemoryBlock<T>(size));
             unsafe

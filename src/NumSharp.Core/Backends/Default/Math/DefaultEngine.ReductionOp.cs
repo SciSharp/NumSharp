@@ -230,21 +230,21 @@ namespace NumSharp.Backends
             var inputType = arr.GetTypeCode;
 
             // ArgMax returns long (int64) to match NumPy 2.x behavior
-            // Internally uses int kernels (arrays rarely exceed 2^31 elements), widens to long for API
+            // IL kernel tracks index as long internally, supports arrays >2GB elements
             // All types use IL kernels - NaN-aware helpers for float/double, bool-aware for boolean
             return inputType switch
             {
-                NPTypeCode.Boolean => ExecuteElementReduction<int>(arr, ReductionOp.ArgMax, NPTypeCode.Boolean),
-                NPTypeCode.Byte => ExecuteElementReduction<int>(arr, ReductionOp.ArgMax, NPTypeCode.Byte),
-                NPTypeCode.Int16 => ExecuteElementReduction<int>(arr, ReductionOp.ArgMax, NPTypeCode.Int16),
-                NPTypeCode.UInt16 => ExecuteElementReduction<int>(arr, ReductionOp.ArgMax, NPTypeCode.UInt16),
-                NPTypeCode.Int32 => ExecuteElementReduction<int>(arr, ReductionOp.ArgMax, NPTypeCode.Int32),
-                NPTypeCode.UInt32 => ExecuteElementReduction<int>(arr, ReductionOp.ArgMax, NPTypeCode.UInt32),
-                NPTypeCode.Int64 => ExecuteElementReduction<int>(arr, ReductionOp.ArgMax, NPTypeCode.Int64),
-                NPTypeCode.UInt64 => ExecuteElementReduction<int>(arr, ReductionOp.ArgMax, NPTypeCode.UInt64),
-                NPTypeCode.Single => ExecuteElementReduction<int>(arr, ReductionOp.ArgMax, NPTypeCode.Single),
-                NPTypeCode.Double => ExecuteElementReduction<int>(arr, ReductionOp.ArgMax, NPTypeCode.Double),
-                NPTypeCode.Decimal => ExecuteElementReduction<int>(arr, ReductionOp.ArgMax, NPTypeCode.Decimal),
+                NPTypeCode.Boolean => ExecuteElementReduction<long>(arr, ReductionOp.ArgMax, NPTypeCode.Boolean),
+                NPTypeCode.Byte => ExecuteElementReduction<long>(arr, ReductionOp.ArgMax, NPTypeCode.Byte),
+                NPTypeCode.Int16 => ExecuteElementReduction<long>(arr, ReductionOp.ArgMax, NPTypeCode.Int16),
+                NPTypeCode.UInt16 => ExecuteElementReduction<long>(arr, ReductionOp.ArgMax, NPTypeCode.UInt16),
+                NPTypeCode.Int32 => ExecuteElementReduction<long>(arr, ReductionOp.ArgMax, NPTypeCode.Int32),
+                NPTypeCode.UInt32 => ExecuteElementReduction<long>(arr, ReductionOp.ArgMax, NPTypeCode.UInt32),
+                NPTypeCode.Int64 => ExecuteElementReduction<long>(arr, ReductionOp.ArgMax, NPTypeCode.Int64),
+                NPTypeCode.UInt64 => ExecuteElementReduction<long>(arr, ReductionOp.ArgMax, NPTypeCode.UInt64),
+                NPTypeCode.Single => ExecuteElementReduction<long>(arr, ReductionOp.ArgMax, NPTypeCode.Single),
+                NPTypeCode.Double => ExecuteElementReduction<long>(arr, ReductionOp.ArgMax, NPTypeCode.Double),
+                NPTypeCode.Decimal => ExecuteElementReduction<long>(arr, ReductionOp.ArgMax, NPTypeCode.Decimal),
                 _ => throw new NotSupportedException($"ArgMax not supported for type {inputType}")
             };
         }
@@ -263,21 +263,21 @@ namespace NumSharp.Backends
             var inputType = arr.GetTypeCode;
 
             // ArgMin returns long (int64) to match NumPy 2.x behavior
-            // Internally uses int kernels (arrays rarely exceed 2^31 elements), widens to long for API
+            // IL kernel tracks index as long internally, supports arrays >2GB elements
             // All types use IL kernels - NaN-aware helpers for float/double, bool-aware for boolean
             return inputType switch
             {
-                NPTypeCode.Boolean => ExecuteElementReduction<int>(arr, ReductionOp.ArgMin, NPTypeCode.Boolean),
-                NPTypeCode.Byte => ExecuteElementReduction<int>(arr, ReductionOp.ArgMin, NPTypeCode.Byte),
-                NPTypeCode.Int16 => ExecuteElementReduction<int>(arr, ReductionOp.ArgMin, NPTypeCode.Int16),
-                NPTypeCode.UInt16 => ExecuteElementReduction<int>(arr, ReductionOp.ArgMin, NPTypeCode.UInt16),
-                NPTypeCode.Int32 => ExecuteElementReduction<int>(arr, ReductionOp.ArgMin, NPTypeCode.Int32),
-                NPTypeCode.UInt32 => ExecuteElementReduction<int>(arr, ReductionOp.ArgMin, NPTypeCode.UInt32),
-                NPTypeCode.Int64 => ExecuteElementReduction<int>(arr, ReductionOp.ArgMin, NPTypeCode.Int64),
-                NPTypeCode.UInt64 => ExecuteElementReduction<int>(arr, ReductionOp.ArgMin, NPTypeCode.UInt64),
-                NPTypeCode.Single => ExecuteElementReduction<int>(arr, ReductionOp.ArgMin, NPTypeCode.Single),
-                NPTypeCode.Double => ExecuteElementReduction<int>(arr, ReductionOp.ArgMin, NPTypeCode.Double),
-                NPTypeCode.Decimal => ExecuteElementReduction<int>(arr, ReductionOp.ArgMin, NPTypeCode.Decimal),
+                NPTypeCode.Boolean => ExecuteElementReduction<long>(arr, ReductionOp.ArgMin, NPTypeCode.Boolean),
+                NPTypeCode.Byte => ExecuteElementReduction<long>(arr, ReductionOp.ArgMin, NPTypeCode.Byte),
+                NPTypeCode.Int16 => ExecuteElementReduction<long>(arr, ReductionOp.ArgMin, NPTypeCode.Int16),
+                NPTypeCode.UInt16 => ExecuteElementReduction<long>(arr, ReductionOp.ArgMin, NPTypeCode.UInt16),
+                NPTypeCode.Int32 => ExecuteElementReduction<long>(arr, ReductionOp.ArgMin, NPTypeCode.Int32),
+                NPTypeCode.UInt32 => ExecuteElementReduction<long>(arr, ReductionOp.ArgMin, NPTypeCode.UInt32),
+                NPTypeCode.Int64 => ExecuteElementReduction<long>(arr, ReductionOp.ArgMin, NPTypeCode.Int64),
+                NPTypeCode.UInt64 => ExecuteElementReduction<long>(arr, ReductionOp.ArgMin, NPTypeCode.UInt64),
+                NPTypeCode.Single => ExecuteElementReduction<long>(arr, ReductionOp.ArgMin, NPTypeCode.Single),
+                NPTypeCode.Double => ExecuteElementReduction<long>(arr, ReductionOp.ArgMin, NPTypeCode.Double),
+                NPTypeCode.Decimal => ExecuteElementReduction<long>(arr, ReductionOp.ArgMin, NPTypeCode.Decimal),
                 _ => throw new NotSupportedException($"ArgMin not supported for type {inputType}")
             };
         }
