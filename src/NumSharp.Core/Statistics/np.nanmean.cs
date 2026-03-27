@@ -134,7 +134,7 @@ namespace NumSharp
 
             // .NET arrays are int-indexed
             if (outputSize > int.MaxValue)
-                throw new InvalidOperationException("Output size exceeds maximum supported array size");
+                throw new InvalidOperationException($"Output size {outputSize} exceeds int.MaxValue ({int.MaxValue}). C#/.NET managed arrays are limited to int32 indexing.");
 
             long axisLen = inputShape[axis];
 

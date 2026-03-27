@@ -180,7 +180,6 @@ The `explicit operator int[](Shape shape)` and `explicit operator int(Shape shap
 
 **Changes**:
 - Added exclusion for Regen template files: `<Compile Remove="**\*.template.cs" />`
-- Added exclusion for disabled files: `<Compile Remove="**\*.regen_disabled" />`
 
 ---
 

@@ -52,7 +52,6 @@
   <!-- Exclude Regen template files from compilation -->
   <ItemGroup>
     <Compile Remove="**\*.template.cs" />
-    <Compile Remove="**\*.regen_disabled" />
   </ItemGroup>
 
   <Target Name="LogDebugInfo">

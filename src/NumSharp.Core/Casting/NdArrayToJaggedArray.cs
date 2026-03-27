@@ -38,7 +38,7 @@ namespace NumSharp
                 {
                     // Managed arrays limited to int indices
                     if (shape[0] > int.MaxValue || shape[1] > int.MaxValue)
-                        throw new InvalidOperationException("Shape dimensions exceed managed array limits for jagged array conversion.");
+                        throw new InvalidOperationException($"Shape dimension exceeds int.MaxValue ({int.MaxValue}). C#/.NET managed arrays are limited to int32 indexing; use NDArray directly for large arrays.");
 
                     T[][] ret = new T[(int)shape[0]][];
                     for (int i = 0; i < ret.Length; i++)
@@ -55,7 +55,7 @@ namespace NumSharp
                 {
                     // Managed arrays limited to int indices
                     if (shape[0] > int.MaxValue || shape[1] > int.MaxValue || shape[2] > int.MaxValue)
-                        throw new InvalidOperationException("Shape dimensions exceed managed array limits for jagged array conversion.");
+                        throw new InvalidOperationException($"Shape dimension exceeds int.MaxValue ({int.MaxValue}). C#/.NET managed arrays are limited to int32 indexing; use NDArray directly for large arrays.");
 
                     T[][][] ret = new T[(int)shape[0]][][];
                     for (int i = 0; i < ret.Length; i++)
@@ -83,7 +83,7 @@ namespace NumSharp
                 {
                     // Managed arrays limited to int indices
                     if (shape[0] > int.MaxValue || shape[1] > int.MaxValue || shape[2] > int.MaxValue || shape[3] > int.MaxValue)
-                        throw new InvalidOperationException("Shape dimensions exceed managed array limits for jagged array conversion.");
+                        throw new InvalidOperationException($"Shape dimension exceeds int.MaxValue ({int.MaxValue}). C#/.NET managed arrays are limited to int32 indexing; use NDArray directly for large arrays.");
 
                     T[][][][] ret = new T[(int)shape[0]][][][];
                     for (int i = 0; i < ret.Length; i++)
@@ -121,7 +121,7 @@ namespace NumSharp
                     // Managed arrays limited to int indices
                     if (shape[0] > int.MaxValue || shape[1] > int.MaxValue || shape[2] > int.MaxValue ||
                         shape[3] > int.MaxValue || shape[4] > int.MaxValue)
-                        throw new InvalidOperationException("Shape dimensions exceed managed array limits for jagged array conversion.");
+                        throw new InvalidOperationException($"Shape dimension exceeds int.MaxValue ({int.MaxValue}). C#/.NET managed arrays are limited to int32 indexing; use NDArray directly for large arrays.");
 
                     T[][][][][] ret = new T[(int)shape[0]][][][][];
                     for (int i = 0; i < ret.Length; i++)
@@ -166,7 +166,7 @@ namespace NumSharp
                     // NOTE: This case appears buggy - creates 3D array for 6D input
                     // Managed arrays limited to int indices
                     if (shape[0] > int.MaxValue || shape[1] > int.MaxValue || shape[2] > int.MaxValue)
-                        throw new InvalidOperationException("Shape dimensions exceed managed array limits for jagged array conversion.");
+                        throw new InvalidOperationException($"Shape dimension exceeds int.MaxValue ({int.MaxValue}). C#/.NET managed arrays are limited to int32 indexing; use NDArray directly for large arrays.");
 
                     T[][][] ret = new T[(int)shape[0]][][];
                     for (int i = 0; i < ret.Length; i++)
