@@ -142,7 +142,7 @@ namespace NumSharp.Backends.Kernels
             var locBRow = il.DeclareLocal(typeof(float*));  // 7: pointer to B[k,:]
             var locCAddr = il.DeclareLocal(typeof(float*)); // 8: temp C address for SIMD store
 
-            int vectorCount = Vector256<float>.Count;
+            long vectorCount = Vector256<float>.Count;
             int elementSize = sizeof(float);
 
             // Labels
@@ -171,8 +171,7 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Stloc, locSize);
 
             // idx = 0
-            il.Emit(OpCodes.Ldc_I4_0);
-            il.Emit(OpCodes.Conv_I8);       // Convert to long
+            il.Emit(OpCodes.Ldc_I8, 0L);
             il.Emit(OpCodes.Stloc, locIdx);
 
             il.MarkLabel(lblZeroLoop);
@@ -184,9 +183,9 @@ namespace NumSharp.Backends.Kernels
             // c[idx] = 0
             il.Emit(OpCodes.Ldarg_2);      // c
             il.Emit(OpCodes.Ldloc, locIdx);
-            il.Emit(OpCodes.Conv_I);
-            il.Emit(OpCodes.Ldc_I4, elementSize);
+            il.Emit(OpCodes.Ldc_I8, (long)elementSize);
             il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
             il.Emit(OpCodes.Add);
             il.Emit(OpCodes.Ldc_R4, 0.0f);
             il.Emit(OpCodes.Stind_R4);
@@ -202,14 +201,12 @@ namespace NumSharp.Backends.Kernels
 
             // ========== COMPUTE jEnd = N - vectorCount ==========
             il.Emit(OpCodes.Ldarg, 4);     // N
-            il.Emit(OpCodes.Ldc_I4, vectorCount);
-            il.Emit(OpCodes.Conv_I8);       // Convert to long
+            il.Emit(OpCodes.Ldc_I8, vectorCount);
             il.Emit(OpCodes.Sub);
             il.Emit(OpCodes.Stloc, locJEnd);
 
             // ========== OUTER LOOP: for (i = 0; i < M; i++) ==========
-            il.Emit(OpCodes.Ldc_I4_0);
-            il.Emit(OpCodes.Conv_I8);       // Convert to long
+            il.Emit(OpCodes.Ldc_I8, 0L);
             il.Emit(OpCodes.Stloc, locI);
 
             il.MarkLabel(lblOuterLoop);
@@ -223,9 +220,9 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Ldloc, locI);
             il.Emit(OpCodes.Ldarg, 4);     // N
             il.Emit(OpCodes.Mul);
-            il.Emit(OpCodes.Conv_I);
-            il.Emit(OpCodes.Ldc_I4, elementSize);
+            il.Emit(OpCodes.Ldc_I8, (long)elementSize);
             il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
             il.Emit(OpCodes.Add);
             il.Emit(OpCodes.Stloc, locCRow);
 
@@ -234,15 +231,14 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Ldloc, locI);
             il.Emit(OpCodes.Ldarg, 5);     // K
             il.Emit(OpCodes.Mul);
-            il.Emit(OpCodes.Conv_I);
-            il.Emit(OpCodes.Ldc_I4, elementSize);
+            il.Emit(OpCodes.Ldc_I8, (long)elementSize);
             il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
             il.Emit(OpCodes.Add);
             il.Emit(OpCodes.Stloc, locARow);
 
             // ========== MIDDLE LOOP: for (k = 0; k < K; k++) ==========
-            il.Emit(OpCodes.Ldc_I4_0);
-            il.Emit(OpCodes.Conv_I8);       // Convert to long
+            il.Emit(OpCodes.Ldc_I8, 0L);
             il.Emit(OpCodes.Stloc, locK);
 
             il.MarkLabel(lblMiddleLoop);
@@ -254,9 +250,9 @@ namespace NumSharp.Backends.Kernels
             // aik = aRow[k]
             il.Emit(OpCodes.Ldloc, locARow);
             il.Emit(OpCodes.Ldloc, locK);
-            il.Emit(OpCodes.Conv_I);
-            il.Emit(OpCodes.Ldc_I4, elementSize);
+            il.Emit(OpCodes.Ldc_I8, (long)elementSize);
             il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
             il.Emit(OpCodes.Add);
             il.Emit(OpCodes.Ldind_R4);
             il.Emit(OpCodes.Stloc, locAik);
@@ -266,15 +262,14 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Ldloc, locK);
             il.Emit(OpCodes.Ldarg, 4);     // N
             il.Emit(OpCodes.Mul);
-            il.Emit(OpCodes.Conv_I);
-            il.Emit(OpCodes.Ldc_I4, elementSize);
+            il.Emit(OpCodes.Ldc_I8, (long)elementSize);
             il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
             il.Emit(OpCodes.Add);
             il.Emit(OpCodes.Stloc, locBRow);
 
             // ========== INNER SIMD LOOP: for (j = 0; j <= jEnd; j += 8) ==========
-            il.Emit(OpCodes.Ldc_I4_0);
-            il.Emit(OpCodes.Conv_I8);       // Convert to long
+            il.Emit(OpCodes.Ldc_I8, 0L);
             il.Emit(OpCodes.Stloc, locJ);
 
             il.MarkLabel(lblInnerSimd);
@@ -306,9 +301,9 @@ namespace NumSharp.Backends.Kernels
             // Address for store
             il.Emit(OpCodes.Ldloc, locCRow);
             il.Emit(OpCodes.Ldloc, locJ);
-            il.Emit(OpCodes.Conv_I);
-            il.Emit(OpCodes.Ldc_I4, elementSize);
+            il.Emit(OpCodes.Ldc_I8, (long)elementSize);
             il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
             il.Emit(OpCodes.Add);
 
             // Load cRow[j]
@@ -319,9 +314,9 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Ldloc, locAik);
             il.Emit(OpCodes.Ldloc, locBRow);
             il.Emit(OpCodes.Ldloc, locJ);
-            il.Emit(OpCodes.Conv_I);
-            il.Emit(OpCodes.Ldc_I4, elementSize);
+            il.Emit(OpCodes.Ldc_I8, (long)elementSize);
             il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
             il.Emit(OpCodes.Add);
             il.Emit(OpCodes.Ldind_R4);
             il.Emit(OpCodes.Mul);
@@ -400,9 +395,9 @@ namespace NumSharp.Backends.Kernels
             // Compute C address: cRow + j * elementSize
             il.Emit(OpCodes.Ldloc, locCRow);
             il.Emit(OpCodes.Ldloc, locJ);
-            il.Emit(OpCodes.Conv_I);
-            il.Emit(OpCodes.Ldc_I4, elementSize);
+            il.Emit(OpCodes.Ldc_I8, (long)elementSize);
             il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
             il.Emit(OpCodes.Add);
             il.Emit(OpCodes.Stloc, locCAddr);
 
@@ -417,9 +412,9 @@ namespace NumSharp.Backends.Kernels
             // Load B vector
             il.Emit(OpCodes.Ldloc, locBRow);
             il.Emit(OpCodes.Ldloc, locJ);
-            il.Emit(OpCodes.Conv_I);
-            il.Emit(OpCodes.Ldc_I4, elementSize);
+            il.Emit(OpCodes.Ldc_I8, (long)elementSize);
             il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
             il.Emit(OpCodes.Add);
             il.EmitCall(OpCodes.Call, loadMethod, null);
 
@@ -453,7 +448,7 @@ namespace NumSharp.Backends.Kernels
             var locBRow = il.DeclareLocal(typeof(double*));
             var locCAddr = il.DeclareLocal(typeof(double*)); // temp C address for SIMD store
 
-            int vectorCount = Vector256<double>.Count;
+            long vectorCount = Vector256<double>.Count;
             int elementSize = sizeof(double);
 
             var lblZeroLoop = il.DefineLabel();
@@ -476,8 +471,7 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Mul);
             il.Emit(OpCodes.Stloc, locSize);
 
-            il.Emit(OpCodes.Ldc_I4_0);
-            il.Emit(OpCodes.Conv_I8);       // Convert to long
+            il.Emit(OpCodes.Ldc_I8, 0L);
             il.Emit(OpCodes.Stloc, locIdx);
 
             il.MarkLabel(lblZeroLoop);
@@ -487,15 +481,15 @@ namespace NumSharp.Backends.Kernels
 
             il.Emit(OpCodes.Ldarg_2);
             il.Emit(OpCodes.Ldloc, locIdx);
-            il.Emit(OpCodes.Conv_I);
-            il.Emit(OpCodes.Ldc_I4, elementSize);
+            il.Emit(OpCodes.Ldc_I8, (long)elementSize);
             il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
             il.Emit(OpCodes.Add);
             il.Emit(OpCodes.Ldc_R8, 0.0);
             il.Emit(OpCodes.Stind_R8);
 
             il.Emit(OpCodes.Ldloc, locIdx);
-            il.Emit(OpCodes.Ldc_I4_1);
+            il.Emit(OpCodes.Ldc_I8, 1L);
             il.Emit(OpCodes.Add);
             il.Emit(OpCodes.Stloc, locIdx);
             il.Emit(OpCodes.Br, lblZeroLoop);
@@ -504,12 +498,12 @@ namespace NumSharp.Backends.Kernels
 
             // jEnd = N - vectorCount
             il.Emit(OpCodes.Ldarg, 4);
-            il.Emit(OpCodes.Ldc_I4, vectorCount);
+            il.Emit(OpCodes.Ldc_I8, vectorCount);
             il.Emit(OpCodes.Sub);
             il.Emit(OpCodes.Stloc, locJEnd);
 
             // Outer loop: i
-            il.Emit(OpCodes.Ldc_I4_0);
+            il.Emit(OpCodes.Ldc_I8, 0L);
             il.Emit(OpCodes.Stloc, locI);
 
             il.MarkLabel(lblOuterLoop);
@@ -522,9 +516,9 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Ldloc, locI);
             il.Emit(OpCodes.Ldarg, 4);
             il.Emit(OpCodes.Mul);
-            il.Emit(OpCodes.Conv_I);
-            il.Emit(OpCodes.Ldc_I4, elementSize);
+            il.Emit(OpCodes.Ldc_I8, (long)elementSize);
             il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
             il.Emit(OpCodes.Add);
             il.Emit(OpCodes.Stloc, locCRow);
 
@@ -533,14 +527,14 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Ldloc, locI);
             il.Emit(OpCodes.Ldarg, 5);
             il.Emit(OpCodes.Mul);
-            il.Emit(OpCodes.Conv_I);
-            il.Emit(OpCodes.Ldc_I4, elementSize);
+            il.Emit(OpCodes.Ldc_I8, (long)elementSize);
             il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
             il.Emit(OpCodes.Add);
             il.Emit(OpCodes.Stloc, locARow);
 
             // Middle loop: k
-            il.Emit(OpCodes.Ldc_I4_0);
+            il.Emit(OpCodes.Ldc_I8, 0L);
             il.Emit(OpCodes.Stloc, locK);
 
             il.MarkLabel(lblMiddleLoop);
@@ -551,9 +545,9 @@ namespace NumSharp.Backends.Kernels
             // aik = aRow[k]
             il.Emit(OpCodes.Ldloc, locARow);
             il.Emit(OpCodes.Ldloc, locK);
-            il.Emit(OpCodes.Conv_I);
-            il.Emit(OpCodes.Ldc_I4, elementSize);
+            il.Emit(OpCodes.Ldc_I8, (long)elementSize);
             il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
             il.Emit(OpCodes.Add);
             il.Emit(OpCodes.Ldind_R8);
             il.Emit(OpCodes.Stloc, locAik);
@@ -563,14 +557,14 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Ldloc, locK);
             il.Emit(OpCodes.Ldarg, 4);
             il.Emit(OpCodes.Mul);
-            il.Emit(OpCodes.Conv_I);
-            il.Emit(OpCodes.Ldc_I4, elementSize);
+            il.Emit(OpCodes.Ldc_I8, (long)elementSize);
             il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
             il.Emit(OpCodes.Add);
             il.Emit(OpCodes.Stloc, locBRow);
 
             // Inner SIMD loop
-            il.Emit(OpCodes.Ldc_I4_0);
+            il.Emit(OpCodes.Ldc_I8, 0L);
             il.Emit(OpCodes.Stloc, locJ);
 
             il.MarkLabel(lblInnerSimd);
@@ -581,7 +575,7 @@ namespace NumSharp.Backends.Kernels
             EmitSimdBodyDouble(il, locCRow, locBRow, locJ, locAik, locCAddr);
 
             il.Emit(OpCodes.Ldloc, locJ);
-            il.Emit(OpCodes.Ldc_I4, vectorCount);
+            il.Emit(OpCodes.Ldc_I8, vectorCount);
             il.Emit(OpCodes.Add);
             il.Emit(OpCodes.Stloc, locJ);
             il.Emit(OpCodes.Br, lblInnerSimd);
@@ -596,18 +590,18 @@ namespace NumSharp.Backends.Kernels
 
             il.Emit(OpCodes.Ldloc, locCRow);
             il.Emit(OpCodes.Ldloc, locJ);
-            il.Emit(OpCodes.Conv_I);
-            il.Emit(OpCodes.Ldc_I4, elementSize);
+            il.Emit(OpCodes.Ldc_I8, (long)elementSize);
             il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
             il.Emit(OpCodes.Add);
             il.Emit(OpCodes.Dup);
             il.Emit(OpCodes.Ldind_R8);
             il.Emit(OpCodes.Ldloc, locAik);
             il.Emit(OpCodes.Ldloc, locBRow);
             il.Emit(OpCodes.Ldloc, locJ);
-            il.Emit(OpCodes.Conv_I);
-            il.Emit(OpCodes.Ldc_I4, elementSize);
+            il.Emit(OpCodes.Ldc_I8, (long)elementSize);
             il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
             il.Emit(OpCodes.Add);
             il.Emit(OpCodes.Ldind_R8);
             il.Emit(OpCodes.Mul);
@@ -615,7 +609,7 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Stind_R8);
 
             il.Emit(OpCodes.Ldloc, locJ);
-            il.Emit(OpCodes.Ldc_I4_1);
+            il.Emit(OpCodes.Ldc_I8, 1L);
             il.Emit(OpCodes.Add);
             il.Emit(OpCodes.Stloc, locJ);
             il.Emit(OpCodes.Br, lblInnerScalar);
@@ -624,7 +618,7 @@ namespace NumSharp.Backends.Kernels
 
             // k++
             il.Emit(OpCodes.Ldloc, locK);
-            il.Emit(OpCodes.Ldc_I4_1);
+            il.Emit(OpCodes.Ldc_I8, 1L);
             il.Emit(OpCodes.Add);
             il.Emit(OpCodes.Stloc, locK);
             il.Emit(OpCodes.Br, lblMiddleLoop);
@@ -633,7 +627,7 @@ namespace NumSharp.Backends.Kernels
 
             // i++
             il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Ldc_I4_1);
+            il.Emit(OpCodes.Ldc_I8, 1L);
             il.Emit(OpCodes.Add);
             il.Emit(OpCodes.Stloc, locI);
             il.Emit(OpCodes.Br, lblOuterLoop);
@@ -681,9 +675,9 @@ namespace NumSharp.Backends.Kernels
             // Compute C address: cRow + j * elementSize
             il.Emit(OpCodes.Ldloc, locCRow);
             il.Emit(OpCodes.Ldloc, locJ);
-            il.Emit(OpCodes.Conv_I);
-            il.Emit(OpCodes.Ldc_I4, elementSize);
+            il.Emit(OpCodes.Ldc_I8, (long)elementSize);
             il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
             il.Emit(OpCodes.Add);
             il.Emit(OpCodes.Stloc, locCAddr);
 
@@ -698,9 +692,9 @@ namespace NumSharp.Backends.Kernels
             // Load B vector
             il.Emit(OpCodes.Ldloc, locBRow);
             il.Emit(OpCodes.Ldloc, locJ);
-            il.Emit(OpCodes.Conv_I);
-            il.Emit(OpCodes.Ldc_I4, elementSize);
+            il.Emit(OpCodes.Ldc_I8, (long)elementSize);
             il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
             il.Emit(OpCodes.Add);
             il.EmitCall(OpCodes.Call, loadMethod, null);
 

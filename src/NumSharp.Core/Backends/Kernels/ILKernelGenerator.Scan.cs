@@ -213,7 +213,7 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Stloc, locAccum);
 
             // i = 0
-            il.Emit(OpCodes.Ldc_I4_0);
+            il.Emit(OpCodes.Ldc_I8, 0L);
             il.Emit(OpCodes.Stloc, locI);
 
             il.MarkLabel(lblLoop);
@@ -226,9 +226,9 @@ namespace NumSharp.Backends.Kernels
             // Load input[i], convert to output type, add to accumulator
             il.Emit(OpCodes.Ldarg_0); // input
             il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Conv_I);
-            il.Emit(OpCodes.Ldc_I4, inputSize);
+            il.Emit(OpCodes.Ldc_I8, (long)inputSize);
             il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
             il.Emit(OpCodes.Add);
             EmitLoadIndirect(il, key.InputType);
             EmitConvertTo(il, key.InputType, key.OutputType);
@@ -241,16 +241,16 @@ namespace NumSharp.Backends.Kernels
             // Store accumulator to output[i]
             il.Emit(OpCodes.Ldarg_1); // output
             il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Conv_I);
-            il.Emit(OpCodes.Ldc_I4, outputSize);
+            il.Emit(OpCodes.Ldc_I8, (long)outputSize);
             il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
             il.Emit(OpCodes.Add);
             il.Emit(OpCodes.Ldloc, locAccum);
             EmitStoreIndirect(il, key.OutputType);
 
             // i++
             il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Ldc_I4_1);
+            il.Emit(OpCodes.Ldc_I8, 1L);
             il.Emit(OpCodes.Add);
             il.Emit(OpCodes.Stloc, locI);
 
@@ -282,8 +282,7 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Stloc, locAccum);
 
             // i = 0
-            il.Emit(OpCodes.Ldc_I4_0);
-            il.Emit(OpCodes.Conv_I8);
+            il.Emit(OpCodes.Ldc_I8, 0L);
             il.Emit(OpCodes.Stloc, locI);
 
             // Main loop
@@ -295,8 +294,7 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Bge, lblLoopEnd);
 
             // Calculate offset from linear index
-            il.Emit(OpCodes.Ldc_I4_0);
-            il.Emit(OpCodes.Conv_I8);
+            il.Emit(OpCodes.Ldc_I8, 0L);
             il.Emit(OpCodes.Stloc, locOffset);
             il.Emit(OpCodes.Ldloc, locI);
             il.Emit(OpCodes.Stloc, locIdx);
@@ -364,9 +362,9 @@ namespace NumSharp.Backends.Kernels
             // Load input[offset]
             il.Emit(OpCodes.Ldarg_0); // input
             il.Emit(OpCodes.Ldloc, locOffset);
-            il.Emit(OpCodes.Conv_I);
-            il.Emit(OpCodes.Ldc_I4, inputSize);
+            il.Emit(OpCodes.Ldc_I8, (long)inputSize);
             il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
             il.Emit(OpCodes.Add);
             EmitLoadIndirect(il, key.InputType);
             EmitConvertTo(il, key.InputType, key.OutputType);
@@ -379,16 +377,16 @@ namespace NumSharp.Backends.Kernels
             // Store accumulator to output[i] (output is always contiguous)
             il.Emit(OpCodes.Ldarg_1); // output
             il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Conv_I);
-            il.Emit(OpCodes.Ldc_I4, outputSize);
+            il.Emit(OpCodes.Ldc_I8, (long)outputSize);
             il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
             il.Emit(OpCodes.Add);
             il.Emit(OpCodes.Ldloc, locAccum);
             EmitStoreIndirect(il, key.OutputType);
 
             // i++
             il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Ldc_I4_1);
+            il.Emit(OpCodes.Ldc_I8, 1L);
             il.Emit(OpCodes.Add);
             il.Emit(OpCodes.Stloc, locI);
 

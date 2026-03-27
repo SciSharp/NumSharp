@@ -250,9 +250,9 @@ namespace NumSharp.Backends.Kernels
                         il.Emit(OpCodes.Ldc_I8, (long)offset);
                         il.Emit(OpCodes.Add);
                     }
-                    il.Emit(OpCodes.Conv_I);
-                    il.Emit(OpCodes.Ldc_I4, elementSize);
+                    il.Emit(OpCodes.Ldc_I8, (long)elementSize);
                     il.Emit(OpCodes.Mul);
+                    il.Emit(OpCodes.Conv_I);
                     il.Emit(OpCodes.Add);
                     EmitVectorLoad<T>(il);
 
@@ -264,9 +264,9 @@ namespace NumSharp.Backends.Kernels
                         il.Emit(OpCodes.Ldc_I8, (long)offset);
                         il.Emit(OpCodes.Add);
                     }
-                    il.Emit(OpCodes.Conv_I);
-                    il.Emit(OpCodes.Ldc_I4, elementSize);
+                    il.Emit(OpCodes.Ldc_I8, (long)elementSize);
                     il.Emit(OpCodes.Mul);
+                    il.Emit(OpCodes.Conv_I);
                     il.Emit(OpCodes.Add);
                     EmitVectorLoad<T>(il);
 
@@ -281,9 +281,9 @@ namespace NumSharp.Backends.Kernels
                         il.Emit(OpCodes.Ldc_I8, (long)offset);
                         il.Emit(OpCodes.Add);
                     }
-                    il.Emit(OpCodes.Conv_I);
-                    il.Emit(OpCodes.Ldc_I4, elementSize);
+                    il.Emit(OpCodes.Ldc_I8, (long)elementSize);
                     il.Emit(OpCodes.Mul);
+                    il.Emit(OpCodes.Conv_I);
                     il.Emit(OpCodes.Add);
                     EmitVectorStore<T>(il);
                 }
@@ -308,18 +308,18 @@ namespace NumSharp.Backends.Kernels
                 // Load lhs vector: Vector256.Load(lhs + i)
                 il.Emit(OpCodes.Ldarg_0);                      // lhs
                 il.Emit(OpCodes.Ldloc, locI);
-                il.Emit(OpCodes.Conv_I);
-                il.Emit(OpCodes.Ldc_I4, elementSize);
+                il.Emit(OpCodes.Ldc_I8, (long)elementSize);
                 il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Conv_I);
                 il.Emit(OpCodes.Add);
                 EmitVectorLoad<T>(il);
 
                 // Load rhs vector: Vector256.Load(rhs + i)
                 il.Emit(OpCodes.Ldarg_1);                      // rhs
                 il.Emit(OpCodes.Ldloc, locI);
-                il.Emit(OpCodes.Conv_I);
-                il.Emit(OpCodes.Ldc_I4, elementSize);
+                il.Emit(OpCodes.Ldc_I8, (long)elementSize);
                 il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Conv_I);
                 il.Emit(OpCodes.Add);
                 EmitVectorLoad<T>(il);
 
@@ -329,9 +329,9 @@ namespace NumSharp.Backends.Kernels
                 // Store result: Vector256.Store(result, result + i)
                 il.Emit(OpCodes.Ldarg_2);                      // result
                 il.Emit(OpCodes.Ldloc, locI);
-                il.Emit(OpCodes.Conv_I);
-                il.Emit(OpCodes.Ldc_I4, elementSize);
+                il.Emit(OpCodes.Ldc_I8, (long)elementSize);
                 il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Conv_I);
                 il.Emit(OpCodes.Add);
                 EmitVectorStore<T>(il);
 
@@ -403,26 +403,26 @@ namespace NumSharp.Backends.Kernels
             // Address: result + i * elementSize
             il.Emit(OpCodes.Ldarg_2);                      // result
             il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Conv_I);
-            il.Emit(OpCodes.Ldc_I4, elementSize);
+            il.Emit(OpCodes.Ldc_I8, (long)elementSize);
             il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
             il.Emit(OpCodes.Add);
 
             // Load lhs[i]
             il.Emit(OpCodes.Ldarg_0);                      // lhs
             il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Conv_I);
-            il.Emit(OpCodes.Ldc_I4, elementSize);
+            il.Emit(OpCodes.Ldc_I8, (long)elementSize);
             il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
             il.Emit(OpCodes.Add);
             EmitLoadIndirect<T>(il);
 
             // Load rhs[i]
             il.Emit(OpCodes.Ldarg_1);                      // rhs
             il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Conv_I);
-            il.Emit(OpCodes.Ldc_I4, elementSize);
+            il.Emit(OpCodes.Ldc_I8, (long)elementSize);
             il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
             il.Emit(OpCodes.Add);
             EmitLoadIndirect<T>(il);
 

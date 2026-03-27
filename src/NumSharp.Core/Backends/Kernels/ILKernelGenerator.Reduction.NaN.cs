@@ -144,7 +144,7 @@ namespace NumSharp.Backends.Kernels
 
             var clrType = GetClrType(key.InputType);
             var vectorType = GetVectorType(clrType);
-            int vectorCount = GetVectorCount(key.InputType);
+            long vectorCount = GetVectorCount(key.InputType);
 
             // Locals
             var locI = il.DeclareLocal(typeof(long));           // Loop counter
@@ -199,8 +199,7 @@ namespace NumSharp.Backends.Kernels
 
             // vectorEnd = totalSize - vectorCount
             il.Emit(OpCodes.Ldarg_S, (byte)4); // totalSize
-            il.Emit(OpCodes.Ldc_I4, vectorCount);
-            il.Emit(OpCodes.Conv_I8);
+            il.Emit(OpCodes.Ldc_I8, vectorCount);
             il.Emit(OpCodes.Sub);
             il.Emit(OpCodes.Stloc, locVectorEnd);
 
@@ -219,9 +218,9 @@ namespace NumSharp.Backends.Kernels
             // vec = Vector.Load(input + i * inputSize)
             il.Emit(OpCodes.Ldarg_0); // input
             il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Conv_I);
-            il.Emit(OpCodes.Ldc_I4, inputSize);
+            il.Emit(OpCodes.Ldc_I8, (long)inputSize);
             il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
             il.Emit(OpCodes.Add);
             EmitVectorLoad(il, key.InputType);
             il.Emit(OpCodes.Stloc, locVec);
@@ -255,8 +254,7 @@ namespace NumSharp.Backends.Kernels
 
             // i += vectorCount
             il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Ldc_I4, vectorCount);
-            il.Emit(OpCodes.Conv_I8);
+            il.Emit(OpCodes.Ldc_I8, vectorCount);
             il.Emit(OpCodes.Add);
             il.Emit(OpCodes.Stloc, locI);
 
@@ -285,9 +283,9 @@ namespace NumSharp.Backends.Kernels
             // Load input[i]
             il.Emit(OpCodes.Ldarg_0);
             il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Conv_I);
-            il.Emit(OpCodes.Ldc_I4, inputSize);
+            il.Emit(OpCodes.Ldc_I8, (long)inputSize);
             il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
             il.Emit(OpCodes.Add);
             EmitLoadIndirect(il, key.InputType);
 
@@ -387,9 +385,9 @@ namespace NumSharp.Backends.Kernels
             // vec = Vector.Load(input + i * inputSize)
             il.Emit(OpCodes.Ldarg_0);
             il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Conv_I);
-            il.Emit(OpCodes.Ldc_I4, inputSize);
+            il.Emit(OpCodes.Ldc_I8, (long)inputSize);
             il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
             il.Emit(OpCodes.Add);
             EmitVectorLoad(il, key.InputType);
             il.Emit(OpCodes.Stloc, locVec);
@@ -423,8 +421,7 @@ namespace NumSharp.Backends.Kernels
 
             // i += vectorCount
             il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Ldc_I4, vectorCount);
-            il.Emit(OpCodes.Conv_I8);
+            il.Emit(OpCodes.Ldc_I8, vectorCount);
             il.Emit(OpCodes.Add);
             il.Emit(OpCodes.Stloc, locI);
 
@@ -447,9 +444,9 @@ namespace NumSharp.Backends.Kernels
             // Load input[i]
             il.Emit(OpCodes.Ldarg_0);
             il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Conv_I);
-            il.Emit(OpCodes.Ldc_I4, inputSize);
+            il.Emit(OpCodes.Ldc_I8, (long)inputSize);
             il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
             il.Emit(OpCodes.Add);
             EmitLoadIndirect(il, key.InputType);
 
@@ -513,7 +510,7 @@ namespace NumSharp.Backends.Kernels
             // Similar to EmitReductionSimdLoop but with NaN masking
             var clrType = GetClrType(key.InputType);
             var vectorType = GetVectorType(clrType);
-            int vectorCount = GetVectorCount(key.InputType);
+            long vectorCount = GetVectorCount(key.InputType);
 
             var locI = il.DeclareLocal(typeof(long));
             var locVectorEnd = il.DeclareLocal(typeof(long));
@@ -543,8 +540,7 @@ namespace NumSharp.Backends.Kernels
 
             // vectorEnd = totalSize - vectorCount
             il.Emit(OpCodes.Ldarg_S, (byte)4);
-            il.Emit(OpCodes.Ldc_I4, vectorCount);
-            il.Emit(OpCodes.Conv_I8);
+            il.Emit(OpCodes.Ldc_I8, vectorCount);
             il.Emit(OpCodes.Sub);
             il.Emit(OpCodes.Stloc, locVectorEnd);
 
@@ -562,9 +558,9 @@ namespace NumSharp.Backends.Kernels
             // Load vector
             il.Emit(OpCodes.Ldarg_0);
             il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Conv_I);
-            il.Emit(OpCodes.Ldc_I4, inputSize);
+            il.Emit(OpCodes.Ldc_I8, (long)inputSize);
             il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
             il.Emit(OpCodes.Add);
             EmitVectorLoad(il, key.InputType);
             il.Emit(OpCodes.Stloc, locVec);
@@ -599,8 +595,7 @@ namespace NumSharp.Backends.Kernels
 
             // i += vectorCount
             il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Ldc_I4, vectorCount);
-            il.Emit(OpCodes.Conv_I8);
+            il.Emit(OpCodes.Ldc_I8, vectorCount);
             il.Emit(OpCodes.Add);
             il.Emit(OpCodes.Stloc, locI);
 
@@ -622,9 +617,9 @@ namespace NumSharp.Backends.Kernels
             // Load input[i]
             il.Emit(OpCodes.Ldarg_0);
             il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Conv_I);
-            il.Emit(OpCodes.Ldc_I4, inputSize);
+            il.Emit(OpCodes.Ldc_I8, (long)inputSize);
             il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
             il.Emit(OpCodes.Add);
             EmitLoadIndirect(il, key.InputType);
 
@@ -782,9 +777,9 @@ namespace NumSharp.Backends.Kernels
             // Load input[offset]
             il.Emit(OpCodes.Ldarg_0);
             il.Emit(OpCodes.Ldloc, locOffset);
-            il.Emit(OpCodes.Conv_I);
-            il.Emit(OpCodes.Ldc_I4, inputSize);
+            il.Emit(OpCodes.Ldc_I8, (long)inputSize);
             il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
             il.Emit(OpCodes.Add);
             EmitLoadIndirect(il, key.InputType);
             EmitConvertTo(il, key.InputType, key.AccumulatorType);
