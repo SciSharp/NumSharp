@@ -13,7 +13,16 @@ namespace NumSharp
         /// <param name="repeats">The number of repetitions for each element.</param>
         /// <returns>Output array which has the same shape as a, except along the given axis.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.repeat.html
-        public static NDArray repeat(NDArray a, int repeats)
+        public static NDArray repeat(NDArray a, int repeats) => repeat(a, (long)repeats);
+
+        /// <summary>
+        ///     Repeat elements of an array.
+        /// </summary>
+        /// <param name="a">Input array.</param>
+        /// <param name="repeats">The number of repetitions for each element.</param>
+        /// <returns>Output array which has the same shape as a, except along the given axis.</returns>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.repeat.html
+        public static NDArray repeat(NDArray a, long repeats)
         {
             if (repeats < 0)
                 throw new ArgumentException("repeats may not contain negative values");
@@ -99,6 +108,16 @@ namespace NumSharp
         /// <returns>A 1-D array with the scalar repeated.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.repeat.html
         public static unsafe NDArray repeat<T>(T a, int repeats) where T : unmanaged
+            => repeat(a, (long)repeats);
+
+        /// <summary>
+        ///     Repeat a scalar value.
+        /// </summary>
+        /// <param name="a">Input scalar.</param>
+        /// <param name="repeats">The number of repetitions.</param>
+        /// <returns>A 1-D array with the scalar repeated.</returns>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.repeat.html
+        public static unsafe NDArray repeat<T>(T a, long repeats) where T : unmanaged
         {
             if (repeats < 0)
                 throw new ArgumentException("repeats may not contain negative values");
@@ -108,7 +127,7 @@ namespace NumSharp
 
             var ret = new NDArray(InfoOf<T>.NPTypeCode, Shape.Vector(repeats));
             var dst = (T*)ret.Address;
-            for (int j = 0; j < repeats; j++)
+            for (long j = 0; j < repeats; j++)
                 dst[j] = a;
             return ret;
         }
@@ -117,7 +136,7 @@ namespace NumSharp
         ///     Generic implementation for repeating with scalar repeat count.
         ///     Uses direct pointer access for performance (no allocations per element).
         /// </summary>
-        private static unsafe NDArray RepeatScalarTyped<T>(NDArray a, int repeats, long totalSize) where T : unmanaged
+        private static unsafe NDArray RepeatScalarTyped<T>(NDArray a, long repeats, long totalSize) where T : unmanaged
         {
             var ret = new NDArray(a.GetTypeCode, Shape.Vector(totalSize));
             var src = (T*)a.Address;
@@ -128,7 +147,7 @@ namespace NumSharp
             for (long i = 0; i < srcSize; i++)
             {
                 T val = src[i];
-                for (int j = 0; j < repeats; j++)
+                for (long j = 0; j < repeats; j++)
                     dst[outIdx++] = val;
             }
 
