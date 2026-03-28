@@ -473,15 +473,34 @@ namespace NumSharp.IO
         {
             string header = FormatHeaderDict(d);
 
-            // Add growth axis padding
-            if (d.TryGetValue("shape", out var shapeObj) && shapeObj is int[] shape && shape.Length > 0)
+            // Add growth axis padding (NumPy adds space for in-place header modification when appending)
+            if (d.TryGetValue("shape", out var shapeObj))
             {
-                bool fortranOrder = d.TryGetValue("fortran_order", out var fo) && fo is bool b && b;
-                int growthAxis = fortranOrder ? shape.Length - 1 : 0;
-                int currentDigits = shape[growthAxis].ToString().Length;
-                int padding = GrowthAxisMaxDigits - currentDigits;
-                if (padding > 0)
-                    header += new string(' ', padding);
+                int shapeLength = 0;
+                long growthAxisValue = 0;
+
+                if (shapeObj is long[] longShape && longShape.Length > 0)
+                {
+                    shapeLength = longShape.Length;
+                    bool fortranOrder = d.TryGetValue("fortran_order", out var fo) && fo is bool b && b;
+                    int growthAxis = fortranOrder ? shapeLength - 1 : 0;
+                    growthAxisValue = longShape[growthAxis];
+                }
+                else if (shapeObj is int[] intShape && intShape.Length > 0)
+                {
+                    shapeLength = intShape.Length;
+                    bool fortranOrder = d.TryGetValue("fortran_order", out var fo) && fo is bool b && b;
+                    int growthAxis = fortranOrder ? shapeLength - 1 : 0;
+                    growthAxisValue = intShape[growthAxis];
+                }
+
+                if (shapeLength > 0)
+                {
+                    int currentDigits = growthAxisValue.ToString().Length;
+                    int padding = GrowthAxisMaxDigits - currentDigits;
+                    if (padding > 0)
+                        header += new string(' ', padding);
+                }
             }
 
             byte[] wrappedHeader = version.HasValue
