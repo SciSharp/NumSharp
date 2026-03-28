@@ -988,4 +988,62 @@ public class LongIndexingSmokeTest
         Assert.AreEqual(1.0, dst.GetDouble(0));
         Assert.AreEqual(1.0, dst.GetDouble(TestSize - 1));
     }
+
+    // ================================================================
+    // LINEAR ALGEBRA
+    // ================================================================
+
+    [Test]
+    public async Task NDArray_Dot_1D_WorksWithLargeArrays()
+    {
+        // dot product of two 1D vectors: sum of element-wise products
+        var a = np.ones(new Shape(TestSize), np.float64);
+        var b = np.ones(new Shape(TestSize), np.float64);
+        var result = np.dot(a, b);
+        Assert.AreEqual(0, result.ndim); // Scalar result
+        Assert.AreEqual((double)TestSize, result.GetDouble(0), 0.001);
+    }
+
+    [Test]
+    public async Task NDArray_Dot_2D_WorksWithLargeArrays()
+    {
+        // Matrix multiplication: (100x100) @ (100x100) = (100x100)
+        // Each element = sum of 100 ones = 100
+        var a = np.ones(new Shape(100L, 100L), np.float64);
+        var b = np.ones(new Shape(100L, 100L), np.float64);
+        var result = np.dot(a, b);
+        Assert.AreEqual(2, result.ndim);
+        Assert.AreEqual(100, result.shape[0]);
+        Assert.AreEqual(100, result.shape[1]);
+        Assert.AreEqual(100.0, result.GetDouble(0, 0), 0.001);
+    }
+
+    [Test]
+    public async Task NDArray_Matmul_WorksWithLargeArrays()
+    {
+        // Matrix multiplication: (100x100) @ (100x100) = (100x100)
+        var a = np.ones(new Shape(100L, 100L), np.float64);
+        var b = np.ones(new Shape(100L, 100L), np.float64);
+        var result = np.matmul(a, b);
+        Assert.AreEqual(2, result.ndim);
+        Assert.AreEqual(100, result.shape[0]);
+        Assert.AreEqual(100, result.shape[1]);
+        Assert.AreEqual(100.0, result.GetDouble(0, 0), 0.001);
+    }
+
+    [Test]
+    public async Task NDArray_Outer_WorksWithLargeArrays()
+    {
+        // Outer product: (1000,) x (1000,) = (1000, 1000)
+        // Each element = a[i] * b[j] = 2 * 3 = 6
+        var a = np.full(new Shape(1000L), 2.0, np.float64);
+        var b = np.full(new Shape(1000L), 3.0, np.float64);
+        var result = np.outer(a, b);
+        Assert.AreEqual(2, result.ndim);
+        Assert.AreEqual(1000, result.shape[0]);
+        Assert.AreEqual(1000, result.shape[1]);
+        Assert.AreEqual(TestSize, result.size);
+        Assert.AreEqual(6.0, result.GetDouble(0, 0), 0.001);
+        Assert.AreEqual(6.0, result.GetDouble(999, 999), 0.001);
+    }
 }
