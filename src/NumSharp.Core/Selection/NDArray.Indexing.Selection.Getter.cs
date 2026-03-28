@@ -333,10 +333,8 @@ namespace NumSharp
                     idxs = idxs.flat;
                 }
 
-                //handle non-int32 index
-                if (idxs.typecode != NPTypeCode.Int32)
-                    idxs = idxs.astype(NPTypeCode.Int32, true);
-
+                //normalize index dtype (accepts all integer types, rejects float/decimal/etc.)
+                idxs = NormalizeIndexArray(idxs);
                 indices[0] = idxs;
             }
             else
@@ -354,9 +352,8 @@ namespace NumSharp
                     if (nd.size != indicesSize)
                         broadcastRequired = true;
 
-                    //handle non-int32 index
-                    if (nd.typecode != NPTypeCode.Int32)
-                        indices[i] = nd.astype(NPTypeCode.Int32);
+                    //normalize index dtype (accepts all integer types, rejects float/decimal/etc.)
+                    indices[i] = NormalizeIndexArray(nd);
                 }
 
                 //handle broadcasting

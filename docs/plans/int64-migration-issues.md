@@ -238,6 +238,8 @@ No changes needed - this is a platform limitation, not a bug.
 | 6 | Statistics output allocation | **COMPLETE** |
 | 7 | Loop counters | **COMPLETE** |
 | 8 | Array creation parameters | **COMPLETE** |
+| 9 | Random sampling | **COMPLETE** |
+| 10 | Fancy indexing (all integer types) | **COMPLETE** |
 
 **Int64 migration is COMPLETE.** All phases are done or identified as platform limitations.
 
@@ -275,21 +277,28 @@ The implicit `long[]` → `Shape` conversion caused infinite recursion.
 
 ---
 
-## Phase 10: Known Remaining Issues
+## Phase 10: Fancy Indexing (COMPLETE)
 
-### Fancy Indexing (Int32 Only)
+### All Integer Index Types Now Supported
 
-`NDArray.Indexing.Selection.Getter.cs` lines 337-359 force all index arrays to `int32`:
-```csharp
-if (idxs.typecode != NPTypeCode.Int32)
-    idxs = idxs.astype(NPTypeCode.Int32, true);
-```
+Fixed fancy indexing to match NumPy behavior - accepts all integer types for index arrays.
 
-**Impact**: Fancy indexing (`arr[indices]`) cannot use indices > int.MaxValue.
-**Status**: Requires larger refactor of FetchIndices/SetIndices machinery.
-**Workaround**: Use coordinate-based indexing or loops for >2B element access.
+| Status | Change |
+|--------|--------|
+| [x] | Added `NormalizeIndexArray()` helper in `NDArray.Indexing.Selection.cs` |
+| [x] | Updated `Getter.cs` to use `NormalizeIndexArray()` instead of forcing Int32 |
+| [x] | Updated `Setter.cs` to use `NormalizeIndexArray()` instead of forcing Int32 |
 
-### Platform Limitations (Won't Fix)
+**Behavior (matches NumPy):**
+- `Int32`, `Int64`: Used directly (no conversion)
+- `Byte`, `Int16`, `UInt16`, `UInt32`, `UInt64`: Converted to `Int64`
+- `Single`, `Double`, `Decimal`, `Boolean`, `Char`: Throws `IndexOutOfRangeException`
+
+**`PrepareIndexGetters()` already supported both Int32 and Int64** - the fix was simply removing the forced conversion to Int32 at the call sites.
+
+---
+
+## Platform Limitations (Won't Fix)
 
 | Limitation | Files Affected | Reason |
 |------------|----------------|--------|
