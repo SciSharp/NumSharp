@@ -11,6 +11,7 @@ namespace NumSharp.Utilities
     /// <summary>
     /// Extension methods for UnmanagedSpan{T} and ReadOnlyUnmanagedSpan{T}.
     /// These provide SIMD-accelerated operations where possible.
+    /// All methods support full 64-bit indexing natively.
     /// </summary>
     public static class UnmanagedSpanExtensions
     {
@@ -37,16 +38,10 @@ namespace NumSharp.Utilities
             if (span.Length == 0)
                 return false;
 
-            if (span.Length > int.MaxValue)
-            {
-                return ContainsLong(span, value);
-            }
-
-            // Use Unsafe.AsRef to convert readonly ref to mutable ref (safe since we're only reading)
             ref T searchSpace = ref Unsafe.AsRef(in span.GetPinnableReference());
-            int length = (int)span.Length;
+            long length = span.Length;
 
-            // Try SIMD path for numeric types via byte reinterpretation
+            // Try SIMD path for numeric types
             if (TryContainsValueType(ref searchSpace, value, length, out bool result))
                 return result;
 
@@ -54,7 +49,7 @@ namespace NumSharp.Utilities
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe bool TryContainsValueType<T>(ref T searchSpace, T value, int length, out bool result) where T : unmanaged
+        private static unsafe bool TryContainsValueType<T>(ref T searchSpace, T value, long length, out bool result) where T : unmanaged
         {
             result = false;
 
@@ -112,21 +107,6 @@ namespace NumSharp.Utilities
             return false; // Not a supported numeric type
         }
 
-        private static bool ContainsLong<T>(ReadOnlyUnmanagedSpan<T> span, T value) where T : unmanaged, IEquatable<T>
-        {
-            long remaining = span.Length;
-            long offset = 0;
-            while (remaining > 0)
-            {
-                int chunkSize = (int)Math.Min(remaining, int.MaxValue);
-                if (Contains(span.Slice(offset, chunkSize), value))
-                    return true;
-                offset += chunkSize;
-                remaining -= chunkSize;
-            }
-            return false;
-        }
-
         // ==================================================================================
         // IndexOf
         // ==================================================================================
@@ -150,22 +130,18 @@ namespace NumSharp.Utilities
             if (span.Length == 0)
                 return -1;
 
-            if (span.Length > int.MaxValue)
-            {
-                return IndexOfLong(span, value);
-            }
-
             ref T searchSpace = ref Unsafe.AsRef(in span.GetPinnableReference());
-            int length = (int)span.Length;
+            long length = span.Length;
 
-            if (TryIndexOfValueType(ref searchSpace, value, length, out int result))
+            // Try SIMD path for numeric types
+            if (TryIndexOfValueType(ref searchSpace, value, length, out long result))
                 return result;
 
             return UnmanagedSpanHelpers.IndexOf(ref searchSpace, value, length);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe bool TryIndexOfValueType<T>(ref T searchSpace, T value, int length, out int result) where T : unmanaged
+        private static unsafe bool TryIndexOfValueType<T>(ref T searchSpace, T value, long length, out long result) where T : unmanaged
         {
             result = -1;
 
@@ -223,22 +199,6 @@ namespace NumSharp.Utilities
             return false;
         }
 
-        private static long IndexOfLong<T>(ReadOnlyUnmanagedSpan<T> span, T value) where T : unmanaged, IEquatable<T>
-        {
-            long remaining = span.Length;
-            long offset = 0;
-            while (remaining > 0)
-            {
-                int chunkSize = (int)Math.Min(remaining, int.MaxValue);
-                long idx = IndexOf(span.Slice(offset, chunkSize), value);
-                if (idx >= 0)
-                    return offset + idx;
-                offset += chunkSize;
-                remaining -= chunkSize;
-            }
-            return -1;
-        }
-
         // ==================================================================================
         // LastIndexOf
         // ==================================================================================
@@ -262,22 +222,18 @@ namespace NumSharp.Utilities
             if (span.Length == 0)
                 return -1;
 
-            if (span.Length > int.MaxValue)
-            {
-                return LastIndexOfLong(span, value);
-            }
-
             ref T searchSpace = ref Unsafe.AsRef(in span.GetPinnableReference());
-            int length = (int)span.Length;
+            long length = span.Length;
 
-            if (TryLastIndexOfValueType(ref searchSpace, value, length, out int result))
+            // Try SIMD path for numeric types
+            if (TryLastIndexOfValueType(ref searchSpace, value, length, out long result))
                 return result;
 
             return UnmanagedSpanHelpers.LastIndexOf(ref searchSpace, value, length);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe bool TryLastIndexOfValueType<T>(ref T searchSpace, T value, int length, out int result) where T : unmanaged
+        private static unsafe bool TryLastIndexOfValueType<T>(ref T searchSpace, T value, long length, out long result) where T : unmanaged
         {
             result = -1;
 
@@ -320,21 +276,6 @@ namespace NumSharp.Utilities
             return false;
         }
 
-        private static long LastIndexOfLong<T>(ReadOnlyUnmanagedSpan<T> span, T value) where T : unmanaged, IEquatable<T>
-        {
-            long remaining = span.Length;
-            while (remaining > 0)
-            {
-                int chunkSize = (int)Math.Min(remaining, int.MaxValue);
-                long offset = remaining - chunkSize;
-                long idx = LastIndexOf(span.Slice(offset, chunkSize), value);
-                if (idx >= 0)
-                    return offset + idx;
-                remaining = offset;
-            }
-            return -1;
-        }
-
         // ==================================================================================
         // SequenceEqual
         // ==================================================================================
@@ -361,15 +302,11 @@ namespace NumSharp.Utilities
             if (span.Length == 0)
                 return true;
 
-            if (span.Length > int.MaxValue)
-            {
-                return SequenceEqualLong(span, other);
-            }
-
             ref T first = ref Unsafe.AsRef(in span.GetPinnableReference());
             ref T second = ref Unsafe.AsRef(in other.GetPinnableReference());
-            int length = (int)span.Length;
+            long length = span.Length;
 
+            // Try SIMD path for numeric types
             if (TrySequenceEqualValueType(ref first, ref second, length, out bool result))
                 return result;
 
@@ -377,7 +314,7 @@ namespace NumSharp.Utilities
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe bool TrySequenceEqualValueType<T>(ref T first, ref T second, int length, out bool result) where T : unmanaged
+        private static unsafe bool TrySequenceEqualValueType<T>(ref T first, ref T second, long length, out bool result) where T : unmanaged
         {
             result = false;
 
@@ -413,21 +350,6 @@ namespace NumSharp.Utilities
             }
 
             return false;
-        }
-
-        private static bool SequenceEqualLong<T>(ReadOnlyUnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> other) where T : unmanaged, IEquatable<T>
-        {
-            long remaining = span.Length;
-            long offset = 0;
-            while (remaining > 0)
-            {
-                int chunkSize = (int)Math.Min(remaining, int.MaxValue);
-                if (!SequenceEqual(span.Slice(offset, chunkSize), other.Slice(offset, chunkSize)))
-                    return false;
-                offset += chunkSize;
-                remaining -= chunkSize;
-            }
-            return true;
         }
 
         // ==================================================================================

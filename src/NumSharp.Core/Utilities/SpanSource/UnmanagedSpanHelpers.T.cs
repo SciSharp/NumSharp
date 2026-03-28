@@ -170,7 +170,7 @@ namespace NumSharp.Utilities
             }
         }
 
-        public static int IndexOf<T>(ref T searchSpace, int searchSpaceLength, ref T value, int valueLength) where T : IEquatable<T>?
+        public static long IndexOf<T>(ref T searchSpace, long searchSpaceLength, ref T value, long valueLength) where T : IEquatable<T>?
         {
             Debug.Assert(searchSpaceLength >= 0);
             Debug.Assert(valueLength >= 0);
@@ -180,20 +180,20 @@ namespace NumSharp.Utilities
 
             T valueHead = value;
             ref T valueTail = ref Unsafe.Add(ref value, 1);
-            int valueTailLength = valueLength - 1;
+            long valueTailLength = valueLength - 1;
 
-            int index = 0;
+            long index = 0;
             while (true)
             {
                 Debug.Assert(0 <= index && index <= searchSpaceLength); // Ensures no deceptive underflows in the computation of "remainingSearchSpaceLength".
-                int remainingSearchSpaceLength = searchSpaceLength - index - valueTailLength;
+                long remainingSearchSpaceLength = searchSpaceLength - index - valueTailLength;
                 if (remainingSearchSpaceLength <= 0)
                 {
                     break;  // The unsearched portion is now shorter than the sequence we're looking for. So it can't be there.
                 }
 
                 // Do a quick search for the first element of "value".
-                int relativeIndex = IndexOf(ref Unsafe.Add(ref searchSpace, index), valueHead, remainingSearchSpaceLength);
+                long relativeIndex = IndexOf(ref Unsafe.Add(ref searchSpace, (nint)index), valueHead, remainingSearchSpaceLength);
                 if (relativeIndex < 0)
                 {
                     break;
@@ -201,7 +201,7 @@ namespace NumSharp.Utilities
                 index += relativeIndex;
 
                 // Found the first element of "value". See if the tail matches.
-                if (SequenceEqual(ref Unsafe.Add(ref searchSpace, index + 1), ref valueTail, valueTailLength))
+                if (SequenceEqual(ref Unsafe.Add(ref searchSpace, (nint)(index + 1)), ref valueTail, valueTailLength))
                 {
                     return index;  // The tail matched. Return a successful find.
                 }
@@ -212,7 +212,7 @@ namespace NumSharp.Utilities
         }
 
         // Adapted from IndexOf(...)
-        public static bool Contains<T>(ref T searchSpace, T value, int length) where T : IEquatable<T>?
+        public static bool Contains<T>(ref T searchSpace, T value, long length) where T : IEquatable<T>?
         {
             Debug.Assert(length >= 0);
 
@@ -227,13 +227,13 @@ namespace NumSharp.Utilities
                     length -= 8;
 
                     if (value.Equals(Unsafe.Add(ref searchSpace, index + 0)) ||
-                        value.Equals(Unsafe.Add(ref searchSpace, index + 1)) ||
-                        value.Equals(Unsafe.Add(ref searchSpace, index + 2)) ||
-                        value.Equals(Unsafe.Add(ref searchSpace, index + 3)) ||
-                        value.Equals(Unsafe.Add(ref searchSpace, index + 4)) ||
-                        value.Equals(Unsafe.Add(ref searchSpace, index + 5)) ||
-                        value.Equals(Unsafe.Add(ref searchSpace, index + 6)) ||
-                        value.Equals(Unsafe.Add(ref searchSpace, index + 7)))
+                        value.Equals(Unsafe.Add(ref searchSpace, (nint)(index + 1))) ||
+                        value.Equals(Unsafe.Add(ref searchSpace, (nint)(index + 2))) ||
+                        value.Equals(Unsafe.Add(ref searchSpace, (nint)(index + 3))) ||
+                        value.Equals(Unsafe.Add(ref searchSpace, (nint)(index + 4))) ||
+                        value.Equals(Unsafe.Add(ref searchSpace, (nint)(index + 5))) ||
+                        value.Equals(Unsafe.Add(ref searchSpace, (nint)(index + 6))) ||
+                        value.Equals(Unsafe.Add(ref searchSpace, (nint)(index + 7))))
                     {
                         return true;
                     }
@@ -246,9 +246,9 @@ namespace NumSharp.Utilities
                     length -= 4;
 
                     if (value.Equals(Unsafe.Add(ref searchSpace, index + 0)) ||
-                        value.Equals(Unsafe.Add(ref searchSpace, index + 1)) ||
-                        value.Equals(Unsafe.Add(ref searchSpace, index + 2)) ||
-                        value.Equals(Unsafe.Add(ref searchSpace, index + 3)))
+                        value.Equals(Unsafe.Add(ref searchSpace, (nint)(index + 1))) ||
+                        value.Equals(Unsafe.Add(ref searchSpace, (nint)(index + 2))) ||
+                        value.Equals(Unsafe.Add(ref searchSpace, (nint)(index + 3))))
                     {
                         return true;
                     }
@@ -260,7 +260,7 @@ namespace NumSharp.Utilities
                 {
                     length--;
 
-                    if (value.Equals(Unsafe.Add(ref searchSpace, index)))
+                    if (value.Equals(Unsafe.Add(ref searchSpace, (nint)index)))
                     {
                         return true;
                     }
@@ -270,10 +270,10 @@ namespace NumSharp.Utilities
             }
             else
             {
-                nint len = length;
+                nint len = (nint)length;
                 for (index = 0; index < len; index++)
                 {
-                    if ((object?)Unsafe.Add(ref searchSpace, index) is null)
+                    if ((object?)Unsafe.Add(ref searchSpace, (nint)index) is null)
                     {
                         return true;
                     }
@@ -283,7 +283,7 @@ namespace NumSharp.Utilities
             return false;
         }
 
-        public static int IndexOf<T>(ref T searchSpace, T value, int length) where T : IEquatable<T>?
+        public static long IndexOf<T>(ref T searchSpace, T value, long length) where T : IEquatable<T>?
         {
             Debug.Assert(length >= 0);
 
@@ -296,37 +296,37 @@ namespace NumSharp.Utilities
                 {
                     length -= 8;
 
-                    if (value.Equals(Unsafe.Add(ref searchSpace, index)))
+                    if (value.Equals(Unsafe.Add(ref searchSpace, (nint)index)))
                     {
-                        return (int)index;
+                        return (long)index;
                     }
-                    if (value.Equals(Unsafe.Add(ref searchSpace, index + 1)))
+                    if (value.Equals(Unsafe.Add(ref searchSpace, (nint)(index + 1))))
                     {
-                        return (int)(index + 1);
+                        return (long)(index + 1);
                     }
-                    if (value.Equals(Unsafe.Add(ref searchSpace, index + 2)))
+                    if (value.Equals(Unsafe.Add(ref searchSpace, (nint)(index + 2))))
                     {
-                        return (int)(index + 2);
+                        return (long)(index + 2);
                     }
-                    if (value.Equals(Unsafe.Add(ref searchSpace, index + 3)))
+                    if (value.Equals(Unsafe.Add(ref searchSpace, (nint)(index + 3))))
                     {
-                        return (int)(index + 3);
+                        return (long)(index + 3);
                     }
-                    if (value.Equals(Unsafe.Add(ref searchSpace, index + 4)))
+                    if (value.Equals(Unsafe.Add(ref searchSpace, (nint)(index + 4))))
                     {
-                        return (int)(index + 4);
+                        return (long)(index + 4);
                     }
-                    if (value.Equals(Unsafe.Add(ref searchSpace, index + 5)))
+                    if (value.Equals(Unsafe.Add(ref searchSpace, (nint)(index + 5))))
                     {
-                        return (int)(index + 5);
+                        return (long)(index + 5);
                     }
-                    if (value.Equals(Unsafe.Add(ref searchSpace, index + 6)))
+                    if (value.Equals(Unsafe.Add(ref searchSpace, (nint)(index + 6))))
                     {
-                        return (int)(index + 6);
+                        return (long)(index + 6);
                     }
-                    if (value.Equals(Unsafe.Add(ref searchSpace, index + 7)))
+                    if (value.Equals(Unsafe.Add(ref searchSpace, (nint)(index + 7))))
                     {
-                        return (int)(index + 7);
+                        return (long)(index + 7);
                     }
 
                     index += 8;
@@ -336,21 +336,21 @@ namespace NumSharp.Utilities
                 {
                     length -= 4;
 
-                    if (value.Equals(Unsafe.Add(ref searchSpace, index)))
+                    if (value.Equals(Unsafe.Add(ref searchSpace, (nint)index)))
                     {
-                        return (int)index;
+                        return (long)index;
                     }
-                    if (value.Equals(Unsafe.Add(ref searchSpace, index + 1)))
+                    if (value.Equals(Unsafe.Add(ref searchSpace, (nint)(index + 1))))
                     {
-                        return (int)(index + 1);
+                        return (long)(index + 1);
                     }
-                    if (value.Equals(Unsafe.Add(ref searchSpace, index + 2)))
+                    if (value.Equals(Unsafe.Add(ref searchSpace, (nint)(index + 2))))
                     {
-                        return (int)(index + 2);
+                        return (long)(index + 2);
                     }
-                    if (value.Equals(Unsafe.Add(ref searchSpace, index + 3)))
+                    if (value.Equals(Unsafe.Add(ref searchSpace, (nint)(index + 3))))
                     {
-                        return (int)(index + 3);
+                        return (long)(index + 3);
                     }
 
                     index += 4;
@@ -358,9 +358,9 @@ namespace NumSharp.Utilities
 
                 while (length > 0)
                 {
-                    if (value.Equals(Unsafe.Add(ref searchSpace, index)))
+                    if (value.Equals(Unsafe.Add(ref searchSpace, (nint)index)))
                     {
-                        return (int)index;
+                        return (long)index;
                     }
 
                     index += 1;
@@ -372,9 +372,9 @@ namespace NumSharp.Utilities
                 nint len = (nint)length;
                 for (index = 0; index < len; index++)
                 {
-                    if ((object?)Unsafe.Add(ref searchSpace, index) is null)
+                    if ((object?)Unsafe.Add(ref searchSpace, (nint)index) is null)
                     {
-                        return (int)index;
+                        return (long)index;
                     }
                 }
             }
@@ -382,61 +382,61 @@ namespace NumSharp.Utilities
             return -1;
         }
 
-        public static int IndexOfAny<T>(ref T searchSpace, T value0, T value1, int length) where T : IEquatable<T>?
+        public static long IndexOfAny<T>(ref T searchSpace, T value0, T value1, long length) where T : IEquatable<T>?
         {
             Debug.Assert(length >= 0);
 
             T lookUp;
-            int index = 0;
+            long index = 0;
             if (default(T) != null || ((object?)value0 != null && (object?)value1 != null))
             {
                 Debug.Assert(value0 is not null && value1 is not null);
 
                 while ((length - index) >= 8)
                 {
-                    lookUp = Unsafe.Add(ref searchSpace, index);
+                    lookUp = Unsafe.Add(ref searchSpace, (nint)index);
                     if (value0.Equals(lookUp) || value1.Equals(lookUp))
                     {
                         return index;
                     }
 
-                    lookUp = Unsafe.Add(ref searchSpace, index + 1);
+                    lookUp = Unsafe.Add(ref searchSpace, (nint)(index + 1));
                     if (value0.Equals(lookUp) || value1.Equals(lookUp))
                     {
                         return index + 1;
                     }
 
-                    lookUp = Unsafe.Add(ref searchSpace, index + 2);
+                    lookUp = Unsafe.Add(ref searchSpace, (nint)(index + 2));
                     if (value0.Equals(lookUp) || value1.Equals(lookUp))
                     {
                         return index + 2;
                     }
 
-                    lookUp = Unsafe.Add(ref searchSpace, index + 3);
+                    lookUp = Unsafe.Add(ref searchSpace, (nint)(index + 3));
                     if (value0.Equals(lookUp) || value1.Equals(lookUp))
                     {
                         return index + 3;
                     }
 
-                    lookUp = Unsafe.Add(ref searchSpace, index + 4);
+                    lookUp = Unsafe.Add(ref searchSpace, (nint)(index + 4));
                     if (value0.Equals(lookUp) || value1.Equals(lookUp))
                     {
                         return index + 4;
                     }
 
-                    lookUp = Unsafe.Add(ref searchSpace, index + 5);
+                    lookUp = Unsafe.Add(ref searchSpace, (nint)(index + 5));
                     if (value0.Equals(lookUp) || value1.Equals(lookUp))
                     {
                         return index + 5;
                     }
 
-                    lookUp = Unsafe.Add(ref searchSpace, index + 6);
+                    lookUp = Unsafe.Add(ref searchSpace, (nint)(index + 6));
                     if (value0.Equals(lookUp) || value1.Equals(lookUp))
                     {
                         return index + 6;
                     }
 
-                    lookUp = Unsafe.Add(ref searchSpace, index + 7);
+                    lookUp = Unsafe.Add(ref searchSpace, (nint)(index + 7));
                     if (value0.Equals(lookUp) || value1.Equals(lookUp))
                     {
                         return index + 7;
@@ -447,25 +447,25 @@ namespace NumSharp.Utilities
 
                 if ((length - index) >= 4)
                 {
-                    lookUp = Unsafe.Add(ref searchSpace, index);
+                    lookUp = Unsafe.Add(ref searchSpace, (nint)index);
                     if (value0.Equals(lookUp) || value1.Equals(lookUp))
                     {
                         return index;
                     }
 
-                    lookUp = Unsafe.Add(ref searchSpace, index + 1);
+                    lookUp = Unsafe.Add(ref searchSpace, (nint)(index + 1));
                     if (value0.Equals(lookUp) || value1.Equals(lookUp))
                     {
                         return index + 1;
                     }
 
-                    lookUp = Unsafe.Add(ref searchSpace, index + 2);
+                    lookUp = Unsafe.Add(ref searchSpace, (nint)(index + 2));
                     if (value0.Equals(lookUp) || value1.Equals(lookUp))
                     {
                         return index + 2;
                     }
 
-                    lookUp = Unsafe.Add(ref searchSpace, index + 3);
+                    lookUp = Unsafe.Add(ref searchSpace, (nint)(index + 3));
                     if (value0.Equals(lookUp) || value1.Equals(lookUp))
                     {
                         return index + 3;
@@ -476,7 +476,7 @@ namespace NumSharp.Utilities
 
                 while (index < length)
                 {
-                    lookUp = Unsafe.Add(ref searchSpace, index);
+                    lookUp = Unsafe.Add(ref searchSpace, (nint)index);
                     if (value0.Equals(lookUp) || value1.Equals(lookUp))
                     {
                         return index;
@@ -489,7 +489,7 @@ namespace NumSharp.Utilities
             {
                 for (index = 0; index < length; index++)
                 {
-                    lookUp = Unsafe.Add(ref searchSpace, index);
+                    lookUp = Unsafe.Add(ref searchSpace, (nint)index);
                     if ((object?)lookUp is null)
                     {
                         if ((object?)value0 is null || (object?)value1 is null)
@@ -507,61 +507,61 @@ namespace NumSharp.Utilities
             return -1;
         }
 
-        public static int IndexOfAny<T>(ref T searchSpace, T value0, T value1, T value2, int length) where T : IEquatable<T>?
+        public static long IndexOfAny<T>(ref T searchSpace, T value0, T value1, T value2, long length) where T : IEquatable<T>?
         {
             Debug.Assert(length >= 0);
 
             T lookUp;
-            int index = 0;
+            long index = 0;
             if (default(T) != null || ((object?)value0 != null && (object?)value1 != null && (object?)value2 != null))
             {
                 Debug.Assert(value0 is not null && value1 is not null && value2 is not null);
 
                 while ((length - index) >= 8)
                 {
-                    lookUp = Unsafe.Add(ref searchSpace, index);
+                    lookUp = Unsafe.Add(ref searchSpace, (nint)index);
                     if (value0.Equals(lookUp) || value1.Equals(lookUp) || value2.Equals(lookUp))
                     {
                         return index;
                     }
 
-                    lookUp = Unsafe.Add(ref searchSpace, index + 1);
+                    lookUp = Unsafe.Add(ref searchSpace, (nint)(index + 1));
                     if (value0.Equals(lookUp) || value1.Equals(lookUp) || value2.Equals(lookUp))
                     {
                         return index + 1;
                     }
 
-                    lookUp = Unsafe.Add(ref searchSpace, index + 2);
+                    lookUp = Unsafe.Add(ref searchSpace, (nint)(index + 2));
                     if (value0.Equals(lookUp) || value1.Equals(lookUp) || value2.Equals(lookUp))
                     {
                         return index + 2;
                     }
 
-                    lookUp = Unsafe.Add(ref searchSpace, index + 3);
+                    lookUp = Unsafe.Add(ref searchSpace, (nint)(index + 3));
                     if (value0.Equals(lookUp) || value1.Equals(lookUp) || value2.Equals(lookUp))
                     {
                         return index + 3;
                     }
 
-                    lookUp = Unsafe.Add(ref searchSpace, index + 4);
+                    lookUp = Unsafe.Add(ref searchSpace, (nint)(index + 4));
                     if (value0.Equals(lookUp) || value1.Equals(lookUp) || value2.Equals(lookUp))
                     {
                         return index + 4;
                     }
 
-                    lookUp = Unsafe.Add(ref searchSpace, index + 5);
+                    lookUp = Unsafe.Add(ref searchSpace, (nint)(index + 5));
                     if (value0.Equals(lookUp) || value1.Equals(lookUp) || value2.Equals(lookUp))
                     {
                         return index + 5;
                     }
 
-                    lookUp = Unsafe.Add(ref searchSpace, index + 6);
+                    lookUp = Unsafe.Add(ref searchSpace, (nint)(index + 6));
                     if (value0.Equals(lookUp) || value1.Equals(lookUp) || value2.Equals(lookUp))
                     {
                         return index + 6;
                     }
 
-                    lookUp = Unsafe.Add(ref searchSpace, index + 7);
+                    lookUp = Unsafe.Add(ref searchSpace, (nint)(index + 7));
                     if (value0.Equals(lookUp) || value1.Equals(lookUp) || value2.Equals(lookUp))
                     {
                         return index + 7;
@@ -572,25 +572,25 @@ namespace NumSharp.Utilities
 
                 if ((length - index) >= 4)
                 {
-                    lookUp = Unsafe.Add(ref searchSpace, index);
+                    lookUp = Unsafe.Add(ref searchSpace, (nint)index);
                     if (value0.Equals(lookUp) || value1.Equals(lookUp) || value2.Equals(lookUp))
                     {
                         return index;
                     }
 
-                    lookUp = Unsafe.Add(ref searchSpace, index + 1);
+                    lookUp = Unsafe.Add(ref searchSpace, (nint)(index + 1));
                     if (value0.Equals(lookUp) || value1.Equals(lookUp) || value2.Equals(lookUp))
                     {
                         return index + 1;
                     }
 
-                    lookUp = Unsafe.Add(ref searchSpace, index + 2);
+                    lookUp = Unsafe.Add(ref searchSpace, (nint)(index + 2));
                     if (value0.Equals(lookUp) || value1.Equals(lookUp) || value2.Equals(lookUp))
                     {
                         return index + 2;
                     }
 
-                    lookUp = Unsafe.Add(ref searchSpace, index + 3);
+                    lookUp = Unsafe.Add(ref searchSpace, (nint)(index + 3));
                     if (value0.Equals(lookUp) || value1.Equals(lookUp) || value2.Equals(lookUp))
                     {
                         return index + 3;
@@ -601,7 +601,7 @@ namespace NumSharp.Utilities
 
                 while (index < length)
                 {
-                    lookUp = Unsafe.Add(ref searchSpace, index);
+                    lookUp = Unsafe.Add(ref searchSpace, (nint)index);
                     if (value0.Equals(lookUp) || value1.Equals(lookUp) || value2.Equals(lookUp))
                     {
                         return index;
@@ -614,7 +614,7 @@ namespace NumSharp.Utilities
             {
                 for (index = 0; index < length; index++)
                 {
-                    lookUp = Unsafe.Add(ref searchSpace, index);
+                    lookUp = Unsafe.Add(ref searchSpace, (nint)index);
                     if ((object?)lookUp is null)
                     {
                         if ((object?)value0 is null || (object?)value1 is null || (object?)value2 is null)
@@ -632,7 +632,7 @@ namespace NumSharp.Utilities
             return -1;
         }
 
-        public static int IndexOfAny<T>(ref T searchSpace, int searchSpaceLength, ref T value, int valueLength) where T : IEquatable<T>?
+        public static long IndexOfAny<T>(ref T searchSpace, long searchSpaceLength, ref T value, long valueLength) where T : IEquatable<T>?
         {
             Debug.Assert(searchSpaceLength >= 0);
             Debug.Assert(valueLength >= 0);
@@ -656,12 +656,12 @@ namespace NumSharp.Utilities
                 // Calling ValueType.Equals (devirtualized), which takes 'this' byref. We'll make
                 // a byval copy of the candidate from the search space in the outer loop, then in
                 // the inner loop we'll pass a ref (as 'this') to each element in the needle.
-                for (int i = 0; i < searchSpaceLength; i++)
+                for (long i = 0; i < searchSpaceLength; i++)
                 {
-                    T candidate = Unsafe.Add(ref searchSpace, i);
-                    for (int j = 0; j < valueLength; j++)
+                    T candidate = Unsafe.Add(ref searchSpace, (nint)i);
+                    for (long j = 0; j < valueLength; j++)
                     {
-                        if (Unsafe.Add(ref value, j)!.Equals(candidate))
+                        if (Unsafe.Add(ref value, (nint)j)!.Equals(candidate))
                         {
                             return i;
                         }
@@ -672,14 +672,14 @@ namespace NumSharp.Utilities
             {
                 // Calling IEquatable<T>.Equals (virtual dispatch). We'll perform the null check
                 // in the outer loop instead of in the inner loop to save some branching.
-                for (int i = 0; i < searchSpaceLength; i++)
+                for (long i = 0; i < searchSpaceLength; i++)
                 {
-                    T candidate = Unsafe.Add(ref searchSpace, i);
+                    T candidate = Unsafe.Add(ref searchSpace, (nint)i);
                     if (candidate is not null)
                     {
-                        for (int j = 0; j < valueLength; j++)
+                        for (long j = 0; j < valueLength; j++)
                         {
-                            if (candidate.Equals(Unsafe.Add(ref value, j)))
+                            if (candidate.Equals(Unsafe.Add(ref value, (nint)j)))
                             {
                                 return i;
                             }
@@ -687,9 +687,9 @@ namespace NumSharp.Utilities
                     }
                     else
                     {
-                        for (int j = 0; j < valueLength; j++)
+                        for (long j = 0; j < valueLength; j++)
                         {
-                            if (Unsafe.Add(ref value, j) is null)
+                            if (Unsafe.Add(ref value, (nint)j) is null)
                             {
                                 return i;
                             }
@@ -701,7 +701,7 @@ namespace NumSharp.Utilities
             return -1; // not found
         }
 
-        public static int LastIndexOf<T>(ref T searchSpace, int searchSpaceLength, ref T value, int valueLength) where T : IEquatable<T>?
+        public static long LastIndexOf<T>(ref T searchSpace, long searchSpaceLength, ref T value, long valueLength) where T : IEquatable<T>?
         {
             Debug.Assert(searchSpaceLength >= 0);
             Debug.Assert(valueLength >= 0);
@@ -709,13 +709,13 @@ namespace NumSharp.Utilities
             if (valueLength == 0)
                 return searchSpaceLength;  // A zero-length sequence is always treated as "found" at the end of the search space.
 
-            int valueTailLength = valueLength - 1;
+            long valueTailLength = valueLength - 1;
             if (valueTailLength == 0)
             {
                 return LastIndexOf(ref searchSpace, value, searchSpaceLength);
             }
 
-            int index = 0;
+            long index = 0;
 
             T valueHead = value;
             ref T valueTail = ref Unsafe.Add(ref value, 1);
@@ -723,21 +723,21 @@ namespace NumSharp.Utilities
             while (true)
             {
                 Debug.Assert(0 <= index && index <= searchSpaceLength); // Ensures no deceptive underflows in the computation of "remainingSearchSpaceLength".
-                int remainingSearchSpaceLength = searchSpaceLength - index - valueTailLength;
+                long remainingSearchSpaceLength = searchSpaceLength - index - valueTailLength;
                 if (remainingSearchSpaceLength <= 0)
                 {
                     break;  // The unsearched portion is now shorter than the sequence we're looking for. So it can't be there.
                 }
 
                 // Do a quick search for the first element of "value".
-                int relativeIndex = LastIndexOf(ref searchSpace, valueHead, remainingSearchSpaceLength);
+                long relativeIndex = LastIndexOf(ref searchSpace, valueHead, remainingSearchSpaceLength);
                 if (relativeIndex < 0)
                 {
                     break;
                 }
 
                 // Found the first element of "value". See if the tail matches.
-                if (SequenceEqual(ref Unsafe.Add(ref searchSpace, relativeIndex + 1), ref valueTail, valueTailLength))
+                if (SequenceEqual(ref Unsafe.Add(ref searchSpace, (nint)(relativeIndex + 1)), ref valueTail, valueTailLength))
                 {
                     return relativeIndex;  // The tail matched. Return a successful find.
                 }
@@ -747,7 +747,7 @@ namespace NumSharp.Utilities
             return -1;
         }
 
-        public static int LastIndexOf<T>(ref T searchSpace, T value, int length) where T : IEquatable<T>?
+        public static long LastIndexOf<T>(ref T searchSpace, T value, long length) where T : IEquatable<T>?
         {
             Debug.Assert(length >= 0);
 
@@ -759,35 +759,35 @@ namespace NumSharp.Utilities
                 {
                     length -= 8;
 
-                    if (value.Equals(Unsafe.Add(ref searchSpace, length + 7)))
+                    if (value.Equals(Unsafe.Add(ref searchSpace, (nint)(length + 7))))
                     {
                         return length + 7;
                     }
-                    if (value.Equals(Unsafe.Add(ref searchSpace, length + 6)))
+                    if (value.Equals(Unsafe.Add(ref searchSpace, (nint)(length + 6))))
                     {
                         return length + 6;
                     }
-                    if (value.Equals(Unsafe.Add(ref searchSpace, length + 5)))
+                    if (value.Equals(Unsafe.Add(ref searchSpace, (nint)(length + 5))))
                     {
                         return length + 5;
                     }
-                    if (value.Equals(Unsafe.Add(ref searchSpace, length + 4)))
+                    if (value.Equals(Unsafe.Add(ref searchSpace, (nint)(length + 4))))
                     {
                         return length + 4;
                     }
-                    if (value.Equals(Unsafe.Add(ref searchSpace, length + 3)))
+                    if (value.Equals(Unsafe.Add(ref searchSpace, (nint)(length + 3))))
                     {
                         return length + 3;
                     }
-                    if (value.Equals(Unsafe.Add(ref searchSpace, length + 2)))
+                    if (value.Equals(Unsafe.Add(ref searchSpace, (nint)(length + 2))))
                     {
                         return length + 2;
                     }
-                    if (value.Equals(Unsafe.Add(ref searchSpace, length + 1)))
+                    if (value.Equals(Unsafe.Add(ref searchSpace, (nint)(length + 1))))
                     {
                         return length + 1;
                     }
-                    if (value.Equals(Unsafe.Add(ref searchSpace, length)))
+                    if (value.Equals(Unsafe.Add(ref searchSpace, (nint)length)))
                     {
                         return length;
                     }
@@ -797,19 +797,19 @@ namespace NumSharp.Utilities
                 {
                     length -= 4;
 
-                    if (value.Equals(Unsafe.Add(ref searchSpace, length + 3)))
+                    if (value.Equals(Unsafe.Add(ref searchSpace, (nint)(length + 3))))
                     {
                         return length + 3;
                     }
-                    if (value.Equals(Unsafe.Add(ref searchSpace, length + 2)))
+                    if (value.Equals(Unsafe.Add(ref searchSpace, (nint)(length + 2))))
                     {
                         return length + 2;
                     }
-                    if (value.Equals(Unsafe.Add(ref searchSpace, length + 1)))
+                    if (value.Equals(Unsafe.Add(ref searchSpace, (nint)(length + 1))))
                     {
                         return length + 1;
                     }
-                    if (value.Equals(Unsafe.Add(ref searchSpace, length)))
+                    if (value.Equals(Unsafe.Add(ref searchSpace, (nint)length)))
                     {
                         return length;
                     }
@@ -819,7 +819,7 @@ namespace NumSharp.Utilities
                 {
                     length--;
 
-                    if (value.Equals(Unsafe.Add(ref searchSpace, length)))
+                    if (value.Equals(Unsafe.Add(ref searchSpace, (nint)length)))
                     {
                         return length;
                     }
@@ -829,7 +829,7 @@ namespace NumSharp.Utilities
             {
                 for (length--; length >= 0; length--)
                 {
-                    if ((object?)Unsafe.Add(ref searchSpace, length) is null)
+                    if ((object?)Unsafe.Add(ref searchSpace, (nint)length) is null)
                     {
                         return length;
                     }
@@ -839,7 +839,7 @@ namespace NumSharp.Utilities
             return -1;
         }
 
-        public static int LastIndexOfAny<T>(ref T searchSpace, T value0, T value1, int length) where T : IEquatable<T>?
+        public static long LastIndexOfAny<T>(ref T searchSpace, T value0, T value1, long length) where T : IEquatable<T>?
         {
             Debug.Assert(length >= 0);
 
@@ -852,49 +852,49 @@ namespace NumSharp.Utilities
                 {
                     length -= 8;
 
-                    lookUp = Unsafe.Add(ref searchSpace, length + 7);
+                    lookUp = Unsafe.Add(ref searchSpace, (nint)(length + 7));
                     if (value0.Equals(lookUp) || value1.Equals(lookUp))
                     {
                         return length + 7;
                     }
 
-                    lookUp = Unsafe.Add(ref searchSpace, length + 6);
+                    lookUp = Unsafe.Add(ref searchSpace, (nint)(length + 6));
                     if (value0.Equals(lookUp) || value1.Equals(lookUp))
                     {
                         return length + 6;
                     }
 
-                    lookUp = Unsafe.Add(ref searchSpace, length + 5);
+                    lookUp = Unsafe.Add(ref searchSpace, (nint)(length + 5));
                     if (value0.Equals(lookUp) || value1.Equals(lookUp))
                     {
                         return length + 5;
                     }
 
-                    lookUp = Unsafe.Add(ref searchSpace, length + 4);
+                    lookUp = Unsafe.Add(ref searchSpace, (nint)(length + 4));
                     if (value0.Equals(lookUp) || value1.Equals(lookUp))
                     {
                         return length + 4;
                     }
 
-                    lookUp = Unsafe.Add(ref searchSpace, length + 3);
+                    lookUp = Unsafe.Add(ref searchSpace, (nint)(length + 3));
                     if (value0.Equals(lookUp) || value1.Equals(lookUp))
                     {
                         return length + 3;
                     }
 
-                    lookUp = Unsafe.Add(ref searchSpace, length + 2);
+                    lookUp = Unsafe.Add(ref searchSpace, (nint)(length + 2));
                     if (value0.Equals(lookUp) || value1.Equals(lookUp))
                     {
                         return length + 2;
                     }
 
-                    lookUp = Unsafe.Add(ref searchSpace, length + 1);
+                    lookUp = Unsafe.Add(ref searchSpace, (nint)(length + 1));
                     if (value0.Equals(lookUp) || value1.Equals(lookUp))
                     {
                         return length + 1;
                     }
 
-                    lookUp = Unsafe.Add(ref searchSpace, length);
+                    lookUp = Unsafe.Add(ref searchSpace, (nint)length);
                     if (value0.Equals(lookUp) || value1.Equals(lookUp))
                     {
                         return length;
@@ -905,25 +905,25 @@ namespace NumSharp.Utilities
                 {
                     length -= 4;
 
-                    lookUp = Unsafe.Add(ref searchSpace, length + 3);
+                    lookUp = Unsafe.Add(ref searchSpace, (nint)(length + 3));
                     if (value0.Equals(lookUp) || value1.Equals(lookUp))
                     {
                         return length + 3;
                     }
 
-                    lookUp = Unsafe.Add(ref searchSpace, length + 2);
+                    lookUp = Unsafe.Add(ref searchSpace, (nint)(length + 2));
                     if (value0.Equals(lookUp) || value1.Equals(lookUp))
                     {
                         return length + 2;
                     }
 
-                    lookUp = Unsafe.Add(ref searchSpace, length + 1);
+                    lookUp = Unsafe.Add(ref searchSpace, (nint)(length + 1));
                     if (value0.Equals(lookUp) || value1.Equals(lookUp))
                     {
                         return length + 1;
                     }
 
-                    lookUp = Unsafe.Add(ref searchSpace, length);
+                    lookUp = Unsafe.Add(ref searchSpace, (nint)length);
                     if (value0.Equals(lookUp) || value1.Equals(lookUp))
                     {
                         return length;
@@ -934,7 +934,7 @@ namespace NumSharp.Utilities
                 {
                     length--;
 
-                    lookUp = Unsafe.Add(ref searchSpace, length);
+                    lookUp = Unsafe.Add(ref searchSpace, (nint)length);
                     if (value0.Equals(lookUp) || value1.Equals(lookUp))
                     {
                         return length;
@@ -945,7 +945,7 @@ namespace NumSharp.Utilities
             {
                 for (length--; length >= 0; length--)
                 {
-                    lookUp = Unsafe.Add(ref searchSpace, length);
+                    lookUp = Unsafe.Add(ref searchSpace, (nint)length);
                     if ((object?)lookUp is null)
                     {
                         if ((object?)value0 is null || (object?)value1 is null)
@@ -963,7 +963,7 @@ namespace NumSharp.Utilities
             return -1;
         }
 
-        public static int LastIndexOfAny<T>(ref T searchSpace, T value0, T value1, T value2, int length) where T : IEquatable<T>?
+        public static long LastIndexOfAny<T>(ref T searchSpace, T value0, T value1, T value2, long length) where T : IEquatable<T>?
         {
             Debug.Assert(length >= 0);
 
@@ -976,49 +976,49 @@ namespace NumSharp.Utilities
                 {
                     length -= 8;
 
-                    lookUp = Unsafe.Add(ref searchSpace, length + 7);
+                    lookUp = Unsafe.Add(ref searchSpace, (nint)(length + 7));
                     if (value0.Equals(lookUp) || value1.Equals(lookUp) || value2.Equals(lookUp))
                     {
                         return length + 7;
                     }
 
-                    lookUp = Unsafe.Add(ref searchSpace, length + 6);
+                    lookUp = Unsafe.Add(ref searchSpace, (nint)(length + 6));
                     if (value0.Equals(lookUp) || value1.Equals(lookUp) || value2.Equals(lookUp))
                     {
                         return length + 6;
                     }
 
-                    lookUp = Unsafe.Add(ref searchSpace, length + 5);
+                    lookUp = Unsafe.Add(ref searchSpace, (nint)(length + 5));
                     if (value0.Equals(lookUp) || value1.Equals(lookUp) || value2.Equals(lookUp))
                     {
                         return length + 5;
                     }
 
-                    lookUp = Unsafe.Add(ref searchSpace, length + 4);
+                    lookUp = Unsafe.Add(ref searchSpace, (nint)(length + 4));
                     if (value0.Equals(lookUp) || value1.Equals(lookUp) || value2.Equals(lookUp))
                     {
                         return length + 4;
                     }
 
-                    lookUp = Unsafe.Add(ref searchSpace, length + 3);
+                    lookUp = Unsafe.Add(ref searchSpace, (nint)(length + 3));
                     if (value0.Equals(lookUp) || value1.Equals(lookUp) || value2.Equals(lookUp))
                     {
                         return length + 3;
                     }
 
-                    lookUp = Unsafe.Add(ref searchSpace, length + 2);
+                    lookUp = Unsafe.Add(ref searchSpace, (nint)(length + 2));
                     if (value0.Equals(lookUp) || value1.Equals(lookUp) || value2.Equals(lookUp))
                     {
                         return length + 2;
                     }
 
-                    lookUp = Unsafe.Add(ref searchSpace, length + 1);
+                    lookUp = Unsafe.Add(ref searchSpace, (nint)(length + 1));
                     if (value0.Equals(lookUp) || value1.Equals(lookUp) || value2.Equals(lookUp))
                     {
                         return length + 1;
                     }
 
-                    lookUp = Unsafe.Add(ref searchSpace, length);
+                    lookUp = Unsafe.Add(ref searchSpace, (nint)length);
                     if (value0.Equals(lookUp) || value1.Equals(lookUp) || value2.Equals(lookUp))
                     {
                         return length;
@@ -1029,25 +1029,25 @@ namespace NumSharp.Utilities
                 {
                     length -= 4;
 
-                    lookUp = Unsafe.Add(ref searchSpace, length + 3);
+                    lookUp = Unsafe.Add(ref searchSpace, (nint)(length + 3));
                     if (value0.Equals(lookUp) || value1.Equals(lookUp) || value2.Equals(lookUp))
                     {
                         return length + 3;
                     }
 
-                    lookUp = Unsafe.Add(ref searchSpace, length + 2);
+                    lookUp = Unsafe.Add(ref searchSpace, (nint)(length + 2));
                     if (value0.Equals(lookUp) || value1.Equals(lookUp) || value2.Equals(lookUp))
                     {
                         return length + 2;
                     }
 
-                    lookUp = Unsafe.Add(ref searchSpace, length + 1);
+                    lookUp = Unsafe.Add(ref searchSpace, (nint)(length + 1));
                     if (value0.Equals(lookUp) || value1.Equals(lookUp) || value2.Equals(lookUp))
                     {
                         return length + 1;
                     }
 
-                    lookUp = Unsafe.Add(ref searchSpace, length);
+                    lookUp = Unsafe.Add(ref searchSpace, (nint)length);
                     if (value0.Equals(lookUp) || value1.Equals(lookUp) || value2.Equals(lookUp))
                     {
                         return length;
@@ -1058,7 +1058,7 @@ namespace NumSharp.Utilities
                 {
                     length--;
 
-                    lookUp = Unsafe.Add(ref searchSpace, length);
+                    lookUp = Unsafe.Add(ref searchSpace, (nint)length);
                     if (value0.Equals(lookUp) || value1.Equals(lookUp) || value2.Equals(lookUp))
                     {
                         return length;
@@ -1069,7 +1069,7 @@ namespace NumSharp.Utilities
             {
                 for (length--; length >= 0; length--)
                 {
-                    lookUp = Unsafe.Add(ref searchSpace, length);
+                    lookUp = Unsafe.Add(ref searchSpace, (nint)length);
                     if ((object?)lookUp is null)
                     {
                         if ((object?)value0 is null || (object?)value1 is null || (object?)value2 is null)
@@ -1087,7 +1087,7 @@ namespace NumSharp.Utilities
             return -1;
         }
 
-        public static int LastIndexOfAny<T>(ref T searchSpace, int searchSpaceLength, ref T value, int valueLength) where T : IEquatable<T>?
+        public static long LastIndexOfAny<T>(ref T searchSpace, long searchSpaceLength, ref T value, long valueLength) where T : IEquatable<T>?
         {
             Debug.Assert(searchSpaceLength >= 0);
             Debug.Assert(valueLength >= 0);
@@ -1099,12 +1099,12 @@ namespace NumSharp.Utilities
             // This logic is similar, but it runs backward.
             if (typeof(T).IsValueType)
             {
-                for (int i = searchSpaceLength - 1; i >= 0; i--)
+                for (long i = searchSpaceLength - 1; i >= 0; i--)
                 {
-                    T candidate = Unsafe.Add(ref searchSpace, i);
-                    for (int j = 0; j < valueLength; j++)
+                    T candidate = Unsafe.Add(ref searchSpace, (nint)i);
+                    for (long j = 0; j < valueLength; j++)
                     {
-                        if (Unsafe.Add(ref value, j)!.Equals(candidate))
+                        if (Unsafe.Add(ref value, (nint)j)!.Equals(candidate))
                         {
                             return i;
                         }
@@ -1113,14 +1113,14 @@ namespace NumSharp.Utilities
             }
             else
             {
-                for (int i = searchSpaceLength - 1; i >= 0; i--)
+                for (long i = searchSpaceLength - 1; i >= 0; i--)
                 {
-                    T candidate = Unsafe.Add(ref searchSpace, i);
+                    T candidate = Unsafe.Add(ref searchSpace, (nint)i);
                     if (candidate is not null)
                     {
-                        for (int j = 0; j < valueLength; j++)
+                        for (long j = 0; j < valueLength; j++)
                         {
-                            if (candidate.Equals(Unsafe.Add(ref value, j)))
+                            if (candidate.Equals(Unsafe.Add(ref value, (nint)j)))
                             {
                                 return i;
                             }
@@ -1128,9 +1128,9 @@ namespace NumSharp.Utilities
                     }
                     else
                     {
-                        for (int j = 0; j < valueLength; j++)
+                        for (long j = 0; j < valueLength; j++)
                         {
-                            if (Unsafe.Add(ref value, j) is null)
+                            if (Unsafe.Add(ref value, (nint)j) is null)
                             {
                                 return i;
                             }
@@ -1142,13 +1142,13 @@ namespace NumSharp.Utilities
             return -1; // not found
         }
 
-        internal static int IndexOfAnyExcept<T>(ref T searchSpace, T value0, int length)
+        internal static long IndexOfAnyExcept<T>(ref T searchSpace, T value0, long length)
         {
             Debug.Assert(length >= 0, "Expected non-negative length");
 
-            for (int i = 0; i < length; i++)
+            for (long i = 0; i < length; i++)
             {
-                if (!EqualityComparer<T>.Default.Equals(Unsafe.Add(ref searchSpace, i), value0))
+                if (!EqualityComparer<T>.Default.Equals(Unsafe.Add(ref searchSpace, (nint)i), value0))
                 {
                     return i;
                 }
@@ -1157,13 +1157,13 @@ namespace NumSharp.Utilities
             return -1;
         }
 
-        internal static int LastIndexOfAnyExcept<T>(ref T searchSpace, T value0, int length)
+        internal static long LastIndexOfAnyExcept<T>(ref T searchSpace, T value0, long length)
         {
             Debug.Assert(length >= 0, "Expected non-negative length");
 
-            for (int i = length - 1; i >= 0; i--)
+            for (long i = length - 1; i >= 0; i--)
             {
-                if (!EqualityComparer<T>.Default.Equals(Unsafe.Add(ref searchSpace, i), value0))
+                if (!EqualityComparer<T>.Default.Equals(Unsafe.Add(ref searchSpace, (nint)i), value0))
                 {
                     return i;
                 }
@@ -1172,13 +1172,13 @@ namespace NumSharp.Utilities
             return -1;
         }
 
-        internal static int IndexOfAnyExcept<T>(ref T searchSpace, T value0, T value1, int length)
+        internal static long IndexOfAnyExcept<T>(ref T searchSpace, T value0, T value1, long length)
         {
             Debug.Assert(length >= 0, "Expected non-negative length");
 
-            for (int i = 0; i < length; i++)
+            for (long i = 0; i < length; i++)
             {
-                ref T current = ref Unsafe.Add(ref searchSpace, i);
+                ref T current = ref Unsafe.Add(ref searchSpace, (nint)i);
                 if (!EqualityComparer<T>.Default.Equals(current, value0) && !EqualityComparer<T>.Default.Equals(current, value1))
                 {
                     return i;
@@ -1188,13 +1188,13 @@ namespace NumSharp.Utilities
             return -1;
         }
 
-        internal static int LastIndexOfAnyExcept<T>(ref T searchSpace, T value0, T value1, int length)
+        internal static long LastIndexOfAnyExcept<T>(ref T searchSpace, T value0, T value1, long length)
         {
             Debug.Assert(length >= 0, "Expected non-negative length");
 
-            for (int i = length - 1; i >= 0; i--)
+            for (long i = length - 1; i >= 0; i--)
             {
-                ref T current = ref Unsafe.Add(ref searchSpace, i);
+                ref T current = ref Unsafe.Add(ref searchSpace, (nint)i);
                 if (!EqualityComparer<T>.Default.Equals(current, value0) && !EqualityComparer<T>.Default.Equals(current, value1))
                 {
                     return i;
@@ -1204,13 +1204,13 @@ namespace NumSharp.Utilities
             return -1;
         }
 
-        internal static int IndexOfAnyExcept<T>(ref T searchSpace, T value0, T value1, T value2, int length)
+        internal static long IndexOfAnyExcept<T>(ref T searchSpace, T value0, T value1, T value2, long length)
         {
             Debug.Assert(length >= 0, "Expected non-negative length");
 
-            for (int i = 0; i < length; i++)
+            for (long i = 0; i < length; i++)
             {
-                ref T current = ref Unsafe.Add(ref searchSpace, i);
+                ref T current = ref Unsafe.Add(ref searchSpace, (nint)i);
                 if (!EqualityComparer<T>.Default.Equals(current, value0)
                     && !EqualityComparer<T>.Default.Equals(current, value1)
                     && !EqualityComparer<T>.Default.Equals(current, value2))
@@ -1222,13 +1222,13 @@ namespace NumSharp.Utilities
             return -1;
         }
 
-        internal static int LastIndexOfAnyExcept<T>(ref T searchSpace, T value0, T value1, T value2, int length)
+        internal static long LastIndexOfAnyExcept<T>(ref T searchSpace, T value0, T value1, T value2, long length)
         {
             Debug.Assert(length >= 0, "Expected non-negative length");
 
-            for (int i = length - 1; i >= 0; i--)
+            for (long i = length - 1; i >= 0; i--)
             {
-                ref T current = ref Unsafe.Add(ref searchSpace, i);
+                ref T current = ref Unsafe.Add(ref searchSpace, (nint)i);
                 if (!EqualityComparer<T>.Default.Equals(current, value0)
                     && !EqualityComparer<T>.Default.Equals(current, value1)
                     && !EqualityComparer<T>.Default.Equals(current, value2))
@@ -1240,13 +1240,13 @@ namespace NumSharp.Utilities
             return -1;
         }
 
-        internal static int IndexOfAnyExcept<T>(ref T searchSpace, T value0, T value1, T value2, T value3, int length)
+        internal static long IndexOfAnyExcept<T>(ref T searchSpace, T value0, T value1, T value2, T value3, long length)
         {
             Debug.Assert(length >= 0, "Expected non-negative length");
 
-            for (int i = 0; i < length; i++)
+            for (long i = 0; i < length; i++)
             {
-                ref T current = ref Unsafe.Add(ref searchSpace, i);
+                ref T current = ref Unsafe.Add(ref searchSpace, (nint)i);
                 if (!EqualityComparer<T>.Default.Equals(current, value0)
                     && !EqualityComparer<T>.Default.Equals(current, value1)
                     && !EqualityComparer<T>.Default.Equals(current, value2)
@@ -1259,13 +1259,13 @@ namespace NumSharp.Utilities
             return -1;
         }
 
-        internal static int LastIndexOfAnyExcept<T>(ref T searchSpace, T value0, T value1, T value2, T value3, int length)
+        internal static long LastIndexOfAnyExcept<T>(ref T searchSpace, T value0, T value1, T value2, T value3, long length)
         {
             Debug.Assert(length >= 0, "Expected non-negative length");
 
-            for (int i = length - 1; i >= 0; i--)
+            for (long i = length - 1; i >= 0; i--)
             {
-                ref T current = ref Unsafe.Add(ref searchSpace, i);
+                ref T current = ref Unsafe.Add(ref searchSpace, (nint)i);
                 if (!EqualityComparer<T>.Default.Equals(current, value0)
                     && !EqualityComparer<T>.Default.Equals(current, value1)
                     && !EqualityComparer<T>.Default.Equals(current, value2)
@@ -1278,7 +1278,7 @@ namespace NumSharp.Utilities
             return -1;
         }
 
-        public static bool SequenceEqual<T>(ref T first, ref T second, int length) where T : IEquatable<T>?
+        public static bool SequenceEqual<T>(ref T first, ref T second, long length) where T : IEquatable<T>?
         {
             Debug.Assert(length >= 0);
 
@@ -1404,19 +1404,19 @@ namespace NumSharp.Utilities
             return true;
         }
 
-        public static int SequenceCompareTo<T>(ref T first, int firstLength, ref T second, int secondLength)
+        public static int SequenceCompareTo<T>(ref T first, long firstLength, ref T second, long secondLength)
             where T : IComparable<T>?
         {
             Debug.Assert(firstLength >= 0);
             Debug.Assert(secondLength >= 0);
 
-            int minLength = firstLength;
+            long minLength = firstLength;
             if (minLength > secondLength)
                 minLength = secondLength;
-            for (int i = 0; i < minLength; i++)
+            for (long i = 0; i < minLength; i++)
             {
-                T lookUp = Unsafe.Add(ref second, i);
-                int result = (Unsafe.Add(ref first, i)?.CompareTo(lookUp) ?? (((object?)lookUp is null) ? 0 : -1));
+                T lookUp = Unsafe.Add(ref second, (nint)i);
+                int result = (Unsafe.Add(ref first, (nint)i)?.CompareTo(lookUp) ?? (((object?)lookUp is null) ? 0 : -1));
                 if (result != 0)
                 {
                     return result;
@@ -1432,12 +1432,12 @@ namespace NumSharp.Utilities
         // ==================================================================================
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal static bool ContainsValueType<T>(ref T searchSpace, T value, int length) where T : struct, INumber<T>
+        internal static bool ContainsValueType<T>(ref T searchSpace, T value, long length) where T : struct, INumber<T>
         {
             return NonPackedContainsValueType(ref searchSpace, value, length);
         }
 
-        internal static bool NonPackedContainsValueType<T>(ref T searchSpace, T value, int length) where T : struct, INumber<T>
+        internal static bool NonPackedContainsValueType<T>(ref T searchSpace, T value, long length) where T : struct, INumber<T>
         {
             Debug.Assert(length >= 0, "Expected non-negative length");
 
@@ -1495,7 +1495,7 @@ namespace NumSharp.Utilities
             {
                 Vector512<T> current, values = Vector512.Create(value);
                 ref T currentSearchSpace = ref searchSpace;
-                ref T oneVectorAwayFromEnd = ref Unsafe.Add(ref searchSpace, (uint)(length - Vector512<T>.Count));
+                ref T oneVectorAwayFromEnd = ref Unsafe.Add(ref searchSpace, (nint)(length - Vector512<T>.Count));
 
                 // Loop until either we've finished all elements or there's less than a vector's-worth remaining.
                 do
@@ -1512,7 +1512,7 @@ namespace NumSharp.Utilities
                 while (IsAddressLessThanOrEqualTo(ref currentSearchSpace, ref oneVectorAwayFromEnd));
 
                 // If any elements remain, process the last vector in the search space.
-                if ((uint)length % Vector512<T>.Count != 0)
+                if (length % Vector512<T>.Count != 0)
                 {
                     current = Vector512.LoadUnsafe(ref oneVectorAwayFromEnd);
 
@@ -1526,7 +1526,7 @@ namespace NumSharp.Utilities
             {
                 Vector256<T> equals, values = Vector256.Create(value);
                 ref T currentSearchSpace = ref searchSpace;
-                ref T oneVectorAwayFromEnd = ref Unsafe.Add(ref searchSpace, (uint)(length - Vector256<T>.Count));
+                ref T oneVectorAwayFromEnd = ref Unsafe.Add(ref searchSpace, (nint)(length - Vector256<T>.Count));
 
                 // Loop until either we've finished all elements or there's less than a vector's-worth remaining.
                 do
@@ -1543,7 +1543,7 @@ namespace NumSharp.Utilities
                 while (IsAddressLessThanOrEqualTo(ref currentSearchSpace, ref oneVectorAwayFromEnd));
 
                 // If any elements remain, process the last vector in the search space.
-                if ((uint)length % Vector256<T>.Count != 0)
+                if (length % Vector256<T>.Count != 0)
                 {
                     equals = Vector256.Equals(values, Vector256.LoadUnsafe(ref oneVectorAwayFromEnd));
                     if (equals != Vector256<T>.Zero)
@@ -1556,7 +1556,7 @@ namespace NumSharp.Utilities
             {
                 Vector128<T> equals, values = Vector128.Create(value);
                 ref T currentSearchSpace = ref searchSpace;
-                ref T oneVectorAwayFromEnd = ref Unsafe.Add(ref searchSpace, (uint)(length - Vector128<T>.Count));
+                ref T oneVectorAwayFromEnd = ref Unsafe.Add(ref searchSpace, (nint)(length - Vector128<T>.Count));
 
                 // Loop until either we've finished all elements or there's less than a vector's-worth remaining.
                 do
@@ -1573,7 +1573,7 @@ namespace NumSharp.Utilities
                 while (IsAddressLessThanOrEqualTo(ref currentSearchSpace, ref oneVectorAwayFromEnd));
 
                 // If any elements remain, process the first vector in the search space.
-                if ((uint)length % Vector128<T>.Count != 0)
+                if (length % Vector128<T>.Count != 0)
                 {
                     equals = Vector128.Equals(values, Vector128.LoadUnsafe(ref oneVectorAwayFromEnd));
                     if (equals != Vector128<T>.Zero)
@@ -1587,12 +1587,12 @@ namespace NumSharp.Utilities
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal static int IndexOfValueType<T>(ref T searchSpace, T value, int length) where T : struct, INumber<T>
+        internal static long IndexOfValueType<T>(ref T searchSpace, T value, long length) where T : struct, INumber<T>
         {
             return NonPackedIndexOfValueType(ref searchSpace, value, length);
         }
 
-        internal static int NonPackedIndexOfValueType<T>(ref T searchSpace, T value, int length) where T : struct, INumber<T>
+        internal static long NonPackedIndexOfValueType<T>(ref T searchSpace, T value, long length) where T : struct, INumber<T>
         {
             Debug.Assert(length >= 0, "Expected non-negative length");
 
@@ -1604,14 +1604,14 @@ namespace NumSharp.Utilities
                 {
                     length -= 8;
 
-                    if (Unsafe.Add(ref searchSpace, offset) == value) return (int)offset;
-                    if (Unsafe.Add(ref searchSpace, offset + 1) == value) return (int)(offset + 1);
-                    if (Unsafe.Add(ref searchSpace, offset + 2) == value) return (int)(offset + 2);
-                    if (Unsafe.Add(ref searchSpace, offset + 3) == value) return (int)(offset + 3);
-                    if (Unsafe.Add(ref searchSpace, offset + 4) == value) return (int)(offset + 4);
-                    if (Unsafe.Add(ref searchSpace, offset + 5) == value) return (int)(offset + 5);
-                    if (Unsafe.Add(ref searchSpace, offset + 6) == value) return (int)(offset + 6);
-                    if (Unsafe.Add(ref searchSpace, offset + 7) == value) return (int)(offset + 7);
+                    if (Unsafe.Add(ref searchSpace, offset) == value) return (long)offset;
+                    if (Unsafe.Add(ref searchSpace, offset + 1) == value) return (long)(offset + 1);
+                    if (Unsafe.Add(ref searchSpace, offset + 2) == value) return (long)(offset + 2);
+                    if (Unsafe.Add(ref searchSpace, offset + 3) == value) return (long)(offset + 3);
+                    if (Unsafe.Add(ref searchSpace, offset + 4) == value) return (long)(offset + 4);
+                    if (Unsafe.Add(ref searchSpace, offset + 5) == value) return (long)(offset + 5);
+                    if (Unsafe.Add(ref searchSpace, offset + 6) == value) return (long)(offset + 6);
+                    if (Unsafe.Add(ref searchSpace, offset + 7) == value) return (long)(offset + 7);
 
                     offset += 8;
                 }
@@ -1620,10 +1620,10 @@ namespace NumSharp.Utilities
                 {
                     length -= 4;
 
-                    if (Unsafe.Add(ref searchSpace, offset) == value) return (int)offset;
-                    if (Unsafe.Add(ref searchSpace, offset + 1) == value) return (int)(offset + 1);
-                    if (Unsafe.Add(ref searchSpace, offset + 2) == value) return (int)(offset + 2);
-                    if (Unsafe.Add(ref searchSpace, offset + 3) == value) return (int)(offset + 3);
+                    if (Unsafe.Add(ref searchSpace, offset) == value) return (long)offset;
+                    if (Unsafe.Add(ref searchSpace, offset + 1) == value) return (long)(offset + 1);
+                    if (Unsafe.Add(ref searchSpace, offset + 2) == value) return (long)(offset + 2);
+                    if (Unsafe.Add(ref searchSpace, offset + 3) == value) return (long)(offset + 3);
 
                     offset += 4;
                 }
@@ -1634,7 +1634,7 @@ namespace NumSharp.Utilities
 
                     if (Unsafe.Add(ref searchSpace, offset) == value)
                     {
-                        return (int)offset;
+                        return (long)offset;
                     }
 
                     offset += 1;
@@ -1646,7 +1646,7 @@ namespace NumSharp.Utilities
             {
                 Vector512<T> current, values = Vector512.Create(value);
                 ref T currentSearchSpace = ref searchSpace;
-                ref T oneVectorAwayFromEnd = ref Unsafe.Add(ref searchSpace, length - Vector512<T>.Count);
+                ref T oneVectorAwayFromEnd = ref Unsafe.Add(ref searchSpace, (nint)(length - Vector512<T>.Count));
 
                 // Loop until either we've finished all elements or there's less than a vector's-worth remaining.
                 do
@@ -1664,7 +1664,7 @@ namespace NumSharp.Utilities
                 while (IsAddressLessThanOrEqualTo(ref currentSearchSpace, ref oneVectorAwayFromEnd));
 
                 // If any elements remain, process the last vector in the search space.
-                if ((uint)length % Vector512<T>.Count != 0)
+                if (length % Vector512<T>.Count != 0)
                 {
                     current = Vector512.LoadUnsafe(ref oneVectorAwayFromEnd);
                     var equals = Vector512.Equals(values, current);
@@ -1679,7 +1679,7 @@ namespace NumSharp.Utilities
             {
                 Vector256<T> equals, values = Vector256.Create(value);
                 ref T currentSearchSpace = ref searchSpace;
-                ref T oneVectorAwayFromEnd = ref Unsafe.Add(ref searchSpace, length - Vector256<T>.Count);
+                ref T oneVectorAwayFromEnd = ref Unsafe.Add(ref searchSpace, (nint)(length - Vector256<T>.Count));
 
                 // Loop until either we've finished all elements or there's less than a vector's-worth remaining.
                 do
@@ -1696,7 +1696,7 @@ namespace NumSharp.Utilities
                 while (IsAddressLessThanOrEqualTo(ref currentSearchSpace, ref oneVectorAwayFromEnd));
 
                 // If any elements remain, process the last vector in the search space.
-                if ((uint)length % Vector256<T>.Count != 0)
+                if (length % Vector256<T>.Count != 0)
                 {
                     equals = Vector256.Equals(values, Vector256.LoadUnsafe(ref oneVectorAwayFromEnd));
                     if (equals != Vector256<T>.Zero)
@@ -1709,7 +1709,7 @@ namespace NumSharp.Utilities
             {
                 Vector128<T> equals, values = Vector128.Create(value);
                 ref T currentSearchSpace = ref searchSpace;
-                ref T oneVectorAwayFromEnd = ref Unsafe.Add(ref searchSpace, length - Vector128<T>.Count);
+                ref T oneVectorAwayFromEnd = ref Unsafe.Add(ref searchSpace, (nint)(length - Vector128<T>.Count));
 
                 // Loop until either we've finished all elements or there's less than a vector's-worth remaining.
                 do
@@ -1726,7 +1726,7 @@ namespace NumSharp.Utilities
                 while (IsAddressLessThanOrEqualTo(ref currentSearchSpace, ref oneVectorAwayFromEnd));
 
                 // If any elements remain, process the first vector in the search space.
-                if ((uint)length % Vector128<T>.Count != 0)
+                if (length % Vector128<T>.Count != 0)
                 {
                     equals = Vector128.Equals(values, Vector128.LoadUnsafe(ref oneVectorAwayFromEnd));
                     if (equals != Vector128<T>.Zero)
@@ -1740,12 +1740,12 @@ namespace NumSharp.Utilities
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal static int LastIndexOfValueType<T>(ref T searchSpace, T value, int length) where T : struct, INumber<T>
+        internal static long LastIndexOfValueType<T>(ref T searchSpace, T value, long length) where T : struct, INumber<T>
         {
             return NonPackedLastIndexOfValueType(ref searchSpace, value, length);
         }
 
-        internal static int NonPackedLastIndexOfValueType<T>(ref T searchSpace, T value, int length) where T : struct, INumber<T>
+        internal static long NonPackedLastIndexOfValueType<T>(ref T searchSpace, T value, long length) where T : struct, INumber<T>
         {
             Debug.Assert(length >= 0, "Expected non-negative length");
 
@@ -1757,14 +1757,14 @@ namespace NumSharp.Utilities
                 {
                     length -= 8;
 
-                    if (Unsafe.Add(ref searchSpace, offset) == value) return (int)offset;
-                    if (Unsafe.Add(ref searchSpace, offset - 1) == value) return (int)(offset - 1);
-                    if (Unsafe.Add(ref searchSpace, offset - 2) == value) return (int)(offset - 2);
-                    if (Unsafe.Add(ref searchSpace, offset - 3) == value) return (int)(offset - 3);
-                    if (Unsafe.Add(ref searchSpace, offset - 4) == value) return (int)(offset - 4);
-                    if (Unsafe.Add(ref searchSpace, offset - 5) == value) return (int)(offset - 5);
-                    if (Unsafe.Add(ref searchSpace, offset - 6) == value) return (int)(offset - 6);
-                    if (Unsafe.Add(ref searchSpace, offset - 7) == value) return (int)(offset - 7);
+                    if (Unsafe.Add(ref searchSpace, offset) == value) return (long)offset;
+                    if (Unsafe.Add(ref searchSpace, offset - 1) == value) return (long)(offset - 1);
+                    if (Unsafe.Add(ref searchSpace, offset - 2) == value) return (long)(offset - 2);
+                    if (Unsafe.Add(ref searchSpace, offset - 3) == value) return (long)(offset - 3);
+                    if (Unsafe.Add(ref searchSpace, offset - 4) == value) return (long)(offset - 4);
+                    if (Unsafe.Add(ref searchSpace, offset - 5) == value) return (long)(offset - 5);
+                    if (Unsafe.Add(ref searchSpace, offset - 6) == value) return (long)(offset - 6);
+                    if (Unsafe.Add(ref searchSpace, offset - 7) == value) return (long)(offset - 7);
 
                     offset -= 8;
                 }
@@ -1773,10 +1773,10 @@ namespace NumSharp.Utilities
                 {
                     length -= 4;
 
-                    if (Unsafe.Add(ref searchSpace, offset) == value) return (int)offset;
-                    if (Unsafe.Add(ref searchSpace, offset - 1) == value) return (int)(offset - 1);
-                    if (Unsafe.Add(ref searchSpace, offset - 2) == value) return (int)(offset - 2);
-                    if (Unsafe.Add(ref searchSpace, offset - 3) == value) return (int)(offset - 3);
+                    if (Unsafe.Add(ref searchSpace, offset) == value) return (long)offset;
+                    if (Unsafe.Add(ref searchSpace, offset - 1) == value) return (long)(offset - 1);
+                    if (Unsafe.Add(ref searchSpace, offset - 2) == value) return (long)(offset - 2);
+                    if (Unsafe.Add(ref searchSpace, offset - 3) == value) return (long)(offset - 3);
 
                     offset -= 4;
                 }
@@ -1787,7 +1787,7 @@ namespace NumSharp.Utilities
 
                     if (Unsafe.Add(ref searchSpace, offset) == value)
                     {
-                        return (int)offset;
+                        return (long)offset;
                     }
 
                     offset -= 1;
@@ -1798,7 +1798,7 @@ namespace NumSharp.Utilities
             else if (Vector512.IsHardwareAccelerated && length >= Vector512<T>.Count)
             {
                 Vector512<T> current, values = Vector512.Create(value);
-                nint offset = length - Vector512<T>.Count;
+                long offset = length - Vector512<T>.Count;
 
                 // Loop until either we've finished all elements or there's less than a vector's-worth remaining.
                 do
@@ -1816,7 +1816,7 @@ namespace NumSharp.Utilities
                 while (offset >= 0);
 
                 // If any elements remain, process the first vector in the search space.
-                if ((uint)length % Vector512<T>.Count != 0)
+                if (length % Vector512<T>.Count != 0)
                 {
                     current = Vector512.LoadUnsafe(ref searchSpace);
                     var equals = Vector512.Equals(values, current);
@@ -1830,7 +1830,7 @@ namespace NumSharp.Utilities
             else if (Vector256.IsHardwareAccelerated && length >= Vector256<T>.Count)
             {
                 Vector256<T> equals, values = Vector256.Create(value);
-                nint offset = length - Vector256<T>.Count;
+                long offset = length - Vector256<T>.Count;
 
                 // Loop until either we've finished all elements or there's less than a vector's-worth remaining.
                 do
@@ -1847,7 +1847,7 @@ namespace NumSharp.Utilities
                 while (offset >= 0);
 
                 // If any elements remain, process the first vector in the search space.
-                if ((uint)length % Vector256<T>.Count != 0)
+                if (length % Vector256<T>.Count != 0)
                 {
                     equals = Vector256.Equals(values, Vector256.LoadUnsafe(ref searchSpace));
                     if (equals != Vector256<T>.Zero)
@@ -1859,7 +1859,7 @@ namespace NumSharp.Utilities
             else
             {
                 Vector128<T> equals, values = Vector128.Create(value);
-                nint offset = length - Vector128<T>.Count;
+                long offset = length - Vector128<T>.Count;
 
                 // Loop until either we've finished all elements or there's less than a vector's-worth remaining.
                 do
@@ -1876,7 +1876,7 @@ namespace NumSharp.Utilities
                 while (offset >= 0);
 
                 // If any elements remain, process the first vector in the search space.
-                if ((uint)length % Vector128<T>.Count != 0)
+                if (length % Vector128<T>.Count != 0)
                 {
                     equals = Vector128.Equals(values, Vector128.LoadUnsafe(ref searchSpace));
                     if (equals != Vector128<T>.Zero)
@@ -1890,12 +1890,12 @@ namespace NumSharp.Utilities
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal static int IndexOfAnyValueType<T>(ref T searchSpace, T value0, T value1, int length) where T : struct, INumber<T>
+        internal static long IndexOfAnyValueType<T>(ref T searchSpace, T value0, T value1, long length) where T : struct, INumber<T>
         {
             return NonPackedIndexOfAnyValueType(ref searchSpace, value0, value1, length);
         }
 
-        internal static int NonPackedIndexOfAnyValueType<T>(ref T searchSpace, T value0, T value1, int length) where T : struct, INumber<T>
+        internal static long NonPackedIndexOfAnyValueType<T>(ref T searchSpace, T value0, T value1, long length) where T : struct, INumber<T>
         {
             Debug.Assert(length >= 0, "Expected non-negative length");
 
@@ -1910,16 +1910,16 @@ namespace NumSharp.Utilities
 
                     ref T current = ref Unsafe.Add(ref searchSpace, offset);
                     lookUp = current;
-                    if (lookUp == value0 || lookUp == value1) return (int)offset;
+                    if (lookUp == value0 || lookUp == value1) return (long)offset;
 
                     lookUp = Unsafe.Add(ref current, 1);
-                    if (lookUp == value0 || lookUp == value1) return (int)(offset + 1);
+                    if (lookUp == value0 || lookUp == value1) return (long)(offset + 1);
 
                     lookUp = Unsafe.Add(ref current, 2);
-                    if (lookUp == value0 || lookUp == value1) return (int)(offset + 2);
+                    if (lookUp == value0 || lookUp == value1) return (long)(offset + 2);
 
                     lookUp = Unsafe.Add(ref current, 3);
-                    if (lookUp == value0 || lookUp == value1) return (int)(offset + 3);
+                    if (lookUp == value0 || lookUp == value1) return (long)(offset + 3);
 
                     offset += 4;
                 }
@@ -1929,7 +1929,7 @@ namespace NumSharp.Utilities
                     length -= 1;
 
                     lookUp = Unsafe.Add(ref searchSpace, offset);
-                    if (lookUp == value0 || lookUp == value1) return (int)offset;
+                    if (lookUp == value0 || lookUp == value1) return (long)offset;
 
                     offset += 1;
                 }
@@ -1940,7 +1940,7 @@ namespace NumSharp.Utilities
             {
                 Vector512<T> current, values0 = Vector512.Create(value0), values1 = Vector512.Create(value1);
                 ref T currentSearchSpace = ref searchSpace;
-                ref T oneVectorAwayFromEnd = ref Unsafe.Add(ref searchSpace, length - Vector512<T>.Count);
+                ref T oneVectorAwayFromEnd = ref Unsafe.Add(ref searchSpace, (nint)(length - Vector512<T>.Count));
 
                 do
                 {
@@ -1956,7 +1956,7 @@ namespace NumSharp.Utilities
                 }
                 while (IsAddressLessThanOrEqualTo(ref currentSearchSpace, ref oneVectorAwayFromEnd));
 
-                if ((uint)length % Vector512<T>.Count != 0)
+                if (length % Vector512<T>.Count != 0)
                 {
                     current = Vector512.LoadUnsafe(ref oneVectorAwayFromEnd);
                     var equals = Vector512.Equals(current, values0) | Vector512.Equals(current, values1);
@@ -1971,7 +1971,7 @@ namespace NumSharp.Utilities
             {
                 Vector256<T> current, equals, values0 = Vector256.Create(value0), values1 = Vector256.Create(value1);
                 ref T currentSearchSpace = ref searchSpace;
-                ref T oneVectorAwayFromEnd = ref Unsafe.Add(ref searchSpace, length - Vector256<T>.Count);
+                ref T oneVectorAwayFromEnd = ref Unsafe.Add(ref searchSpace, (nint)(length - Vector256<T>.Count));
 
                 do
                 {
@@ -1988,7 +1988,7 @@ namespace NumSharp.Utilities
                 }
                 while (IsAddressLessThanOrEqualTo(ref currentSearchSpace, ref oneVectorAwayFromEnd));
 
-                if ((uint)length % Vector256<T>.Count != 0)
+                if (length % Vector256<T>.Count != 0)
                 {
                     current = Vector256.LoadUnsafe(ref oneVectorAwayFromEnd);
                     equals = Vector256.Equals(current, values0) | Vector256.Equals(current, values1);
@@ -2003,7 +2003,7 @@ namespace NumSharp.Utilities
             {
                 Vector128<T> current, equals, values0 = Vector128.Create(value0), values1 = Vector128.Create(value1);
                 ref T currentSearchSpace = ref searchSpace;
-                ref T oneVectorAwayFromEnd = ref Unsafe.Add(ref searchSpace, length - Vector128<T>.Count);
+                ref T oneVectorAwayFromEnd = ref Unsafe.Add(ref searchSpace, (nint)(length - Vector128<T>.Count));
 
                 do
                 {
@@ -2020,7 +2020,7 @@ namespace NumSharp.Utilities
                 }
                 while (IsAddressLessThanOrEqualTo(ref currentSearchSpace, ref oneVectorAwayFromEnd));
 
-                if ((uint)length % Vector128<T>.Count != 0)
+                if (length % Vector128<T>.Count != 0)
                 {
                     current = Vector128.LoadUnsafe(ref oneVectorAwayFromEnd);
                     equals = Vector128.Equals(current, values0) | Vector128.Equals(current, values1);
@@ -2036,12 +2036,12 @@ namespace NumSharp.Utilities
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal static int IndexOfAnyValueType<T>(ref T searchSpace, T value0, T value1, T value2, int length) where T : struct, INumber<T>
+        internal static long IndexOfAnyValueType<T>(ref T searchSpace, T value0, T value1, T value2, long length) where T : struct, INumber<T>
         {
             return NonPackedIndexOfAnyValueType(ref searchSpace, value0, value1, value2, length);
         }
 
-        internal static int NonPackedIndexOfAnyValueType<T>(ref T searchSpace, T value0, T value1, T value2, int length) where T : struct, INumber<T>
+        internal static long NonPackedIndexOfAnyValueType<T>(ref T searchSpace, T value0, T value1, T value2, long length) where T : struct, INumber<T>
         {
             Debug.Assert(length >= 0, "Expected non-negative length");
 
@@ -2056,16 +2056,16 @@ namespace NumSharp.Utilities
 
                     ref T current = ref Unsafe.Add(ref searchSpace, offset);
                     lookUp = current;
-                    if (lookUp == value0 || lookUp == value1 || lookUp == value2) return (int)offset;
+                    if (lookUp == value0 || lookUp == value1 || lookUp == value2) return (long)offset;
 
                     lookUp = Unsafe.Add(ref current, 1);
-                    if (lookUp == value0 || lookUp == value1 || lookUp == value2) return (int)(offset + 1);
+                    if (lookUp == value0 || lookUp == value1 || lookUp == value2) return (long)(offset + 1);
 
                     lookUp = Unsafe.Add(ref current, 2);
-                    if (lookUp == value0 || lookUp == value1 || lookUp == value2) return (int)(offset + 2);
+                    if (lookUp == value0 || lookUp == value1 || lookUp == value2) return (long)(offset + 2);
 
                     lookUp = Unsafe.Add(ref current, 3);
-                    if (lookUp == value0 || lookUp == value1 || lookUp == value2) return (int)(offset + 3);
+                    if (lookUp == value0 || lookUp == value1 || lookUp == value2) return (long)(offset + 3);
 
                     offset += 4;
                 }
@@ -2075,7 +2075,7 @@ namespace NumSharp.Utilities
                     length -= 1;
 
                     lookUp = Unsafe.Add(ref searchSpace, offset);
-                    if (lookUp == value0 || lookUp == value1 || lookUp == value2) return (int)offset;
+                    if (lookUp == value0 || lookUp == value1 || lookUp == value2) return (long)offset;
 
                     offset += 1;
                 }
@@ -2086,7 +2086,7 @@ namespace NumSharp.Utilities
             {
                 Vector512<T> current, values0 = Vector512.Create(value0), values1 = Vector512.Create(value1), values2 = Vector512.Create(value2);
                 ref T currentSearchSpace = ref searchSpace;
-                ref T oneVectorAwayFromEnd = ref Unsafe.Add(ref searchSpace, length - Vector512<T>.Count);
+                ref T oneVectorAwayFromEnd = ref Unsafe.Add(ref searchSpace, (nint)(length - Vector512<T>.Count));
 
                 do
                 {
@@ -2102,7 +2102,7 @@ namespace NumSharp.Utilities
                 }
                 while (IsAddressLessThanOrEqualTo(ref currentSearchSpace, ref oneVectorAwayFromEnd));
 
-                if ((uint)length % Vector512<T>.Count != 0)
+                if (length % Vector512<T>.Count != 0)
                 {
                     current = Vector512.LoadUnsafe(ref oneVectorAwayFromEnd);
                     var equals = Vector512.Equals(current, values0) | Vector512.Equals(current, values1) | Vector512.Equals(current, values2);
@@ -2117,7 +2117,7 @@ namespace NumSharp.Utilities
             {
                 Vector256<T> current, equals, values0 = Vector256.Create(value0), values1 = Vector256.Create(value1), values2 = Vector256.Create(value2);
                 ref T currentSearchSpace = ref searchSpace;
-                ref T oneVectorAwayFromEnd = ref Unsafe.Add(ref searchSpace, length - Vector256<T>.Count);
+                ref T oneVectorAwayFromEnd = ref Unsafe.Add(ref searchSpace, (nint)(length - Vector256<T>.Count));
 
                 do
                 {
@@ -2134,7 +2134,7 @@ namespace NumSharp.Utilities
                 }
                 while (IsAddressLessThanOrEqualTo(ref currentSearchSpace, ref oneVectorAwayFromEnd));
 
-                if ((uint)length % Vector256<T>.Count != 0)
+                if (length % Vector256<T>.Count != 0)
                 {
                     current = Vector256.LoadUnsafe(ref oneVectorAwayFromEnd);
                     equals = Vector256.Equals(current, values0) | Vector256.Equals(current, values1) | Vector256.Equals(current, values2);
@@ -2149,7 +2149,7 @@ namespace NumSharp.Utilities
             {
                 Vector128<T> current, equals, values0 = Vector128.Create(value0), values1 = Vector128.Create(value1), values2 = Vector128.Create(value2);
                 ref T currentSearchSpace = ref searchSpace;
-                ref T oneVectorAwayFromEnd = ref Unsafe.Add(ref searchSpace, length - Vector128<T>.Count);
+                ref T oneVectorAwayFromEnd = ref Unsafe.Add(ref searchSpace, (nint)(length - Vector128<T>.Count));
 
                 do
                 {
@@ -2166,7 +2166,7 @@ namespace NumSharp.Utilities
                 }
                 while (IsAddressLessThanOrEqualTo(ref currentSearchSpace, ref oneVectorAwayFromEnd));
 
-                if ((uint)length % Vector128<T>.Count != 0)
+                if (length % Vector128<T>.Count != 0)
                 {
                     current = Vector128.LoadUnsafe(ref oneVectorAwayFromEnd);
                     equals = Vector128.Equals(current, values0) | Vector128.Equals(current, values1) | Vector128.Equals(current, values2);
@@ -2184,7 +2184,7 @@ namespace NumSharp.Utilities
         /// <summary>
         /// SIMD-accelerated sequence equality check for value types.
         /// </summary>
-        internal static unsafe bool SequenceEqualValueType<T>(ref T first, ref T second, int length) where T : struct, INumber<T>
+        internal static unsafe bool SequenceEqualValueType<T>(ref T first, ref T second, long length) where T : struct, INumber<T>
         {
             Debug.Assert(length >= 0);
 
@@ -2250,7 +2250,7 @@ namespace NumSharp.Utilities
             {
                 ref T currentFirst = ref first;
                 ref T currentSecond = ref second;
-                ref T oneVectorAwayFromEnd = ref Unsafe.Add(ref first, length - Vector512<T>.Count);
+                ref T oneVectorAwayFromEnd = ref Unsafe.Add(ref first, (nint)(length - Vector512<T>.Count));
 
                 do
                 {
@@ -2264,10 +2264,10 @@ namespace NumSharp.Utilities
                 }
                 while (IsAddressLessThanOrEqualTo(ref currentFirst, ref oneVectorAwayFromEnd));
 
-                if ((uint)length % Vector512<T>.Count != 0)
+                if (length % Vector512<T>.Count != 0)
                 {
-                    ref T lastVectorFirst = ref Unsafe.Add(ref first, length - Vector512<T>.Count);
-                    ref T lastVectorSecond = ref Unsafe.Add(ref second, length - Vector512<T>.Count);
+                    ref T lastVectorFirst = ref Unsafe.Add(ref first, (nint)(length - Vector512<T>.Count));
+                    ref T lastVectorSecond = ref Unsafe.Add(ref second, (nint)(length - Vector512<T>.Count));
                     if (Vector512.LoadUnsafe(ref lastVectorFirst) != Vector512.LoadUnsafe(ref lastVectorSecond))
                     {
                         return false;
@@ -2280,7 +2280,7 @@ namespace NumSharp.Utilities
             {
                 ref T currentFirst = ref first;
                 ref T currentSecond = ref second;
-                ref T oneVectorAwayFromEnd = ref Unsafe.Add(ref first, length - Vector256<T>.Count);
+                ref T oneVectorAwayFromEnd = ref Unsafe.Add(ref first, (nint)(length - Vector256<T>.Count));
 
                 do
                 {
@@ -2294,10 +2294,10 @@ namespace NumSharp.Utilities
                 }
                 while (IsAddressLessThanOrEqualTo(ref currentFirst, ref oneVectorAwayFromEnd));
 
-                if ((uint)length % Vector256<T>.Count != 0)
+                if (length % Vector256<T>.Count != 0)
                 {
-                    ref T lastVectorFirst = ref Unsafe.Add(ref first, length - Vector256<T>.Count);
-                    ref T lastVectorSecond = ref Unsafe.Add(ref second, length - Vector256<T>.Count);
+                    ref T lastVectorFirst = ref Unsafe.Add(ref first, (nint)(length - Vector256<T>.Count));
+                    ref T lastVectorSecond = ref Unsafe.Add(ref second, (nint)(length - Vector256<T>.Count));
                     if (Vector256.LoadUnsafe(ref lastVectorFirst) != Vector256.LoadUnsafe(ref lastVectorSecond))
                     {
                         return false;
@@ -2310,7 +2310,7 @@ namespace NumSharp.Utilities
             {
                 ref T currentFirst = ref first;
                 ref T currentSecond = ref second;
-                ref T oneVectorAwayFromEnd = ref Unsafe.Add(ref first, length - Vector128<T>.Count);
+                ref T oneVectorAwayFromEnd = ref Unsafe.Add(ref first, (nint)(length - Vector128<T>.Count));
 
                 do
                 {
@@ -2324,10 +2324,10 @@ namespace NumSharp.Utilities
                 }
                 while (IsAddressLessThanOrEqualTo(ref currentFirst, ref oneVectorAwayFromEnd));
 
-                if ((uint)length % Vector128<T>.Count != 0)
+                if (length % Vector128<T>.Count != 0)
                 {
-                    ref T lastVectorFirst = ref Unsafe.Add(ref first, length - Vector128<T>.Count);
-                    ref T lastVectorSecond = ref Unsafe.Add(ref second, length - Vector128<T>.Count);
+                    ref T lastVectorFirst = ref Unsafe.Add(ref first, (nint)(length - Vector128<T>.Count));
+                    ref T lastVectorSecond = ref Unsafe.Add(ref second, (nint)(length - Vector128<T>.Count));
                     if (Vector128.LoadUnsafe(ref lastVectorFirst) != Vector128.LoadUnsafe(ref lastVectorSecond))
                     {
                         return false;
@@ -2343,51 +2343,51 @@ namespace NumSharp.Utilities
         // ==================================================================================
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe int ComputeFirstIndex<T>(ref T searchSpace, ref T current, Vector128<T> equals) where T : struct
+        private static unsafe long ComputeFirstIndex<T>(ref T searchSpace, ref T current, Vector128<T> equals) where T : struct
         {
             uint notEqualsElements = IsAllNegativeOnes(equals.AsByte());
             int index = BitOperations.TrailingZeroCount(notEqualsElements) / sizeof(T);
-            return index + (int)((nuint)Unsafe.ByteOffset(ref searchSpace, ref current) / (nuint)sizeof(T));
+            return index + (long)((nuint)Unsafe.ByteOffset(ref searchSpace, ref current) / (nuint)sizeof(T));
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe int ComputeFirstIndex<T>(ref T searchSpace, ref T current, Vector256<T> equals) where T : struct
+        private static unsafe long ComputeFirstIndex<T>(ref T searchSpace, ref T current, Vector256<T> equals) where T : struct
         {
             uint notEqualsElements = IsAllNegativeOnes(equals.AsByte());
             int index = BitOperations.TrailingZeroCount(notEqualsElements) / sizeof(T);
-            return index + (int)((nuint)Unsafe.ByteOffset(ref searchSpace, ref current) / (nuint)sizeof(T));
+            return index + (long)((nuint)Unsafe.ByteOffset(ref searchSpace, ref current) / (nuint)sizeof(T));
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe int ComputeFirstIndex<T>(ref T searchSpace, ref T current, Vector512<T> equals) where T : struct
+        private static unsafe long ComputeFirstIndex<T>(ref T searchSpace, ref T current, Vector512<T> equals) where T : struct
         {
             ulong notEqualsElements = IsAllNegativeOnes(equals.AsByte());
             int index = BitOperations.TrailingZeroCount(notEqualsElements) / sizeof(T);
-            return index + (int)((nuint)Unsafe.ByteOffset(ref searchSpace, ref current) / (nuint)sizeof(T));
+            return index + (long)((nuint)Unsafe.ByteOffset(ref searchSpace, ref current) / (nuint)sizeof(T));
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe int ComputeLastIndex<T>(nint offset, Vector128<T> equals) where T : struct
+        private static unsafe long ComputeLastIndex<T>(long offset, Vector128<T> equals) where T : struct
         {
             uint notEqualsElements = IsAllNegativeOnes(equals.AsByte());
             int index = 31 - BitOperations.LeadingZeroCount(notEqualsElements); // 31 = 32 - 1 for 0-indexed
-            return (int)offset + index / sizeof(T);
+            return offset + index / sizeof(T);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe int ComputeLastIndex<T>(nint offset, Vector256<T> equals) where T : struct
+        private static unsafe long ComputeLastIndex<T>(long offset, Vector256<T> equals) where T : struct
         {
             uint notEqualsElements = IsAllNegativeOnes(equals.AsByte());
             int index = 31 - BitOperations.LeadingZeroCount(notEqualsElements);
-            return (int)offset + index / sizeof(T);
+            return offset + index / sizeof(T);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe int ComputeLastIndex<T>(nint offset, Vector512<T> equals) where T : struct
+        private static unsafe long ComputeLastIndex<T>(long offset, Vector512<T> equals) where T : struct
         {
             ulong notEqualsElements = IsAllNegativeOnes(equals.AsByte());
             int index = 63 - BitOperations.LeadingZeroCount(notEqualsElements);
-            return (int)offset + index / sizeof(T);
+            return offset + index / sizeof(T);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
