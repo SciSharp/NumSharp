@@ -21,7 +21,7 @@ namespace System
         }
 
         public static int BinarySearch<T, TComparable>(
-            ref T spanStart, int length, TComparable comparable)
+            ref T spanStart, long length, TComparable comparable)
             where TComparable : IComparable<T>, allows ref struct
         {
             int lo = 0;
@@ -34,8 +34,8 @@ namespace System
                 //       `length <= int.MaxValue`, and indices are >= 0
                 //       and thus cannot overflow an uint.
                 //       Saves one subtraction per loop compared to
-                //       `int i = lo + ((hi - lo) >> 1);`
-                int i = (int)(((uint)hi + (uint)lo) >> 1);
+                //       `long i = lo + ((hi - lo) >> 1);`
+                long i = (int)(((uint)hi + (uint)lo) >> 1);
 
                 int c = comparable.CompareTo(Unsafe.Add(ref spanStart, i));
                 if (c == 0)

@@ -17,13 +17,13 @@ namespace System
     /// <summary>
     /// Extension methods for Span{T}, Memory{T}, and friends.
     /// </summary>
-    public static partial class MemoryExtensions
+    public static partial class UnmanagedSpanExtensions
     {
         /// <summary>
         /// Creates a new span over the portion of the target array.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static UnmanagedSpan<T> AsUnmanagedSpan<T>(this T[]? array, int start)
+        public static UnmanagedSpan<T> AsUnmanagedSpan<T>(this T[]? array, long start)
         {
             if (array == null)
             {
@@ -83,7 +83,7 @@ namespace System
             if (!typeof(T).IsValueType && array.GetType() != typeof(T[]))
                 ThrowHelper.ThrowArrayTypeMismatchException();
 
-            (int start, int length) = range.GetOffsetAndLength(array.Length);
+            (long start, long length) = range.GetOffsetAndLength(array.Length);
             return new UnmanagedSpan<T>(ref Unsafe.Add(ref MemoryMarshal.GetArrayDataReference(array), (nint)(uint)start /* force zero-extension */), length);
         }
 
@@ -111,7 +111,7 @@ namespace System
         /// Thrown when the specified <paramref name="start"/> index is not in range (&lt;0 or &gt;text.Length).
         /// </exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static ReadOnlyUnmanagedSpan<char> AsUnmanagedSpan(this string? text, int start)
+        public static ReadOnlyUnmanagedSpan<char> AsUnmanagedSpan(this string? text, long start)
         {
             if (text == null)
             {
@@ -174,7 +174,7 @@ namespace System
                 return default;
             }
 
-            (int start, int length) = range.GetOffsetAndLength(text.Length);
+            (long start, long length) = range.GetOffsetAndLength(text.Length);
             return new ReadOnlyUnmanagedSpan<char>(ref Unsafe.Add(ref text.GetRawStringData(), (nint)(uint)start /* force zero-extension */), length);
         }
 
@@ -189,7 +189,7 @@ namespace System
         /// Thrown when the specified <paramref name="start"/> index or <paramref name="length"/> is not in range.
         /// </exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static ReadOnlyUnmanagedSpan<char> AsUnmanagedSpan(this string? text, int start, int length)
+        public static ReadOnlyUnmanagedSpan<char> AsUnmanagedSpan(this string? text, long start, long length)
         {
             if (text == null)
             {
@@ -228,7 +228,7 @@ namespace System
         /// <exception cref="ArgumentOutOfRangeException">
         /// Thrown when the specified <paramref name="start"/> index is not in range (&lt;0 or &gt;text.Length).
         /// </exception>
-        public static ReadOnlyMemory<char> AsMemory(this string? text, int start)
+        public static ReadOnlyMemory<char> AsMemory(this string? text, long start)
         {
             if (text == null)
             {
@@ -271,7 +271,7 @@ namespace System
         /// <exception cref="ArgumentOutOfRangeException">
         /// Thrown when the specified <paramref name="start"/> index or <paramref name="length"/> is not in range.
         /// </exception>
-        public static ReadOnlyMemory<char> AsMemory(this string? text, int start, int length)
+        public static ReadOnlyMemory<char> AsMemory(this string? text, long start, long length)
         {
             if (text == null)
             {
@@ -308,7 +308,7 @@ namespace System
                 return default;
             }
 
-            (int start, int length) = range.GetOffsetAndLength(text.Length);
+            (long start, long length) = range.GetOffsetAndLength(text.Length);
             return new ReadOnlyMemory<char>(text, start, length);
         }
 
@@ -702,7 +702,7 @@ namespace System
         /// <param name="value">The value to search for.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         [OverloadResolutionPriority(-1)]
-        public static int IndexOf<T>(this UnmanagedSpan<T> span, T value) where T : IEquatable<T>? =>
+        public static long IndexOf<T>(this UnmanagedSpan<T> span, T value) where T : IEquatable<T>? =>
             IndexOf((ReadOnlyUnmanagedSpan<T>)span, value);
 
         /// <summary>
@@ -712,7 +712,7 @@ namespace System
         /// <param name="value">The sequence to search for.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         [OverloadResolutionPriority(-1)]
-        public static int IndexOf<T>(this UnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> value) where T : IEquatable<T>? =>
+        public static long IndexOf<T>(this UnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> value) where T : IEquatable<T>? =>
             IndexOf((ReadOnlyUnmanagedSpan<T>)span, value);
 
         /// <summary>
@@ -722,7 +722,7 @@ namespace System
         /// <param name="value">The value to search for.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         [OverloadResolutionPriority(-1)]
-        public static int LastIndexOf<T>(this UnmanagedSpan<T> span, T value) where T : IEquatable<T>? =>
+        public static long LastIndexOf<T>(this UnmanagedSpan<T> span, T value) where T : IEquatable<T>? =>
             LastIndexOf((ReadOnlyUnmanagedSpan<T>)span, value);
 
         /// <summary>
@@ -732,7 +732,7 @@ namespace System
         /// <param name="value">The sequence to search for.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         [OverloadResolutionPriority(-1)]
-        public static int LastIndexOf<T>(this UnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> value) where T : IEquatable<T>? =>
+        public static long LastIndexOf<T>(this UnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> value) where T : IEquatable<T>? =>
             LastIndexOf((ReadOnlyUnmanagedSpan<T>)span, value);
 
         /// <summary>Searches for the first index of any value other than the specified <paramref name="value"/>.</summary>
@@ -744,7 +744,7 @@ namespace System
         /// If all of the values are <paramref name="value"/>, returns -1.
         /// </returns>
         [OverloadResolutionPriority(-1)]
-        public static int IndexOfAnyExcept<T>(this UnmanagedSpan<T> span, T value) where T : IEquatable<T>? =>
+        public static long IndexOfAnyExcept<T>(this UnmanagedSpan<T> span, T value) where T : IEquatable<T>? =>
             IndexOfAnyExcept((ReadOnlyUnmanagedSpan<T>)span, value);
 
         /// <summary>Searches for the first index of any value other than the specified <paramref name="value0"/> or <paramref name="value1"/>.</summary>
@@ -757,7 +757,7 @@ namespace System
         /// If all of the values are <paramref name="value0"/> or <paramref name="value1"/>, returns -1.
         /// </returns>
         [OverloadResolutionPriority(-1)]
-        public static int IndexOfAnyExcept<T>(this UnmanagedSpan<T> span, T value0, T value1) where T : IEquatable<T>? =>
+        public static long IndexOfAnyExcept<T>(this UnmanagedSpan<T> span, T value0, T value1) where T : IEquatable<T>? =>
             IndexOfAnyExcept((ReadOnlyUnmanagedSpan<T>)span, value0, value1);
 
         /// <summary>Searches for the first index of any value other than the specified <paramref name="value0"/>, <paramref name="value1"/>, or <paramref name="value2"/>.</summary>
@@ -771,7 +771,7 @@ namespace System
         /// If all of the values are <paramref name="value0"/>, <paramref name="value1"/>, or <paramref name="value2"/>, returns -1.
         /// </returns>
         [OverloadResolutionPriority(-1)]
-        public static int IndexOfAnyExcept<T>(this UnmanagedSpan<T> span, T value0, T value1, T value2) where T : IEquatable<T>? =>
+        public static long IndexOfAnyExcept<T>(this UnmanagedSpan<T> span, T value0, T value1, T value2) where T : IEquatable<T>? =>
             IndexOfAnyExcept((ReadOnlyUnmanagedSpan<T>)span, value0, value1, value2);
 
         /// <summary>Searches for the first index of any value other than the specified <paramref name="values"/>.</summary>
@@ -783,7 +783,7 @@ namespace System
         /// If all of the values are in <paramref name="values"/>, returns -1.
         /// </returns>
         [OverloadResolutionPriority(-1)]
-        public static int IndexOfAnyExcept<T>(this UnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> values) where T : IEquatable<T>? =>
+        public static long IndexOfAnyExcept<T>(this UnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> values) where T : IEquatable<T>? =>
             IndexOfAnyExcept((ReadOnlyUnmanagedSpan<T>)span, values);
 
         /// <summary>Searches for the first index of any value other than the specified <paramref name="values"/>.</summary>
@@ -796,7 +796,7 @@ namespace System
         /// </returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         [OverloadResolutionPriority(-1)]
-        public static int IndexOfAnyExcept<T>(this UnmanagedSpan<T> span, SearchValues<T> values) where T : IEquatable<T>? =>
+        public static long IndexOfAnyExcept<T>(this UnmanagedSpan<T> span, SearchValues<T> values) where T : IEquatable<T>? =>
             IndexOfAnyExcept((ReadOnlyUnmanagedSpan<T>)span, values);
 
         /// <summary>Searches for the first index of any value other than the specified <paramref name="value"/>.</summary>
@@ -808,7 +808,7 @@ namespace System
         /// If all of the values are <paramref name="value"/>, returns -1.
         /// </returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static unsafe int IndexOfAnyExcept<T>(this ReadOnlyUnmanagedSpan<T> span, T value) where T : IEquatable<T>?
+        public static unsafe long IndexOfAnyExcept<T>(this ReadOnlyUnmanagedSpan<T> span, T value) where T : IEquatable<T>?
         {
             if (RuntimeHelpers.IsBitwiseEquatable<T>())
             {
@@ -855,7 +855,7 @@ namespace System
         /// If all of the values are <paramref name="value"/>, returns -1.
         /// </returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static unsafe int IndexOfAnyExcept<T>(this ReadOnlyUnmanagedSpan<T> span, T value, IEqualityComparer<T>? comparer = null)
+        public static unsafe long IndexOfAnyExcept<T>(this ReadOnlyUnmanagedSpan<T> span, T value, IEqualityComparer<T>? comparer = null)
         {
             if (typeof(T).IsValueType && (comparer is null || comparer == EqualityComparer<T>.Default))
             {
@@ -894,7 +894,7 @@ namespace System
                 return IndexOfAnyExceptDefaultComparer(span, value);
                 static int IndexOfAnyExceptDefaultComparer(ReadOnlyUnmanagedSpan<T> span, T value)
                 {
-                    for (int i = 0; i < span.Length; i++)
+                    for (long i = 0; i < span.Length; i++)
                     {
                         if (!EqualityComparer<T>.Default.Equals(span[i], value))
                         {
@@ -912,7 +912,7 @@ namespace System
                 {
                     comparer ??= EqualityComparer<T>.Default;
 
-                    for (int i = 0; i < span.Length; i++)
+                    for (long i = 0; i < span.Length; i++)
                     {
                         if (!comparer.Equals(span[i], value))
                         {
@@ -935,7 +935,7 @@ namespace System
         /// If all of the values are <paramref name="value0"/> or <paramref name="value1"/>, returns -1.
         /// </returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static unsafe int IndexOfAnyExcept<T>(this ReadOnlyUnmanagedSpan<T> span, T value0, T value1) where T : IEquatable<T>?
+        public static unsafe long IndexOfAnyExcept<T>(this ReadOnlyUnmanagedSpan<T> span, T value0, T value1) where T : IEquatable<T>?
         {
             if (RuntimeHelpers.IsBitwiseEquatable<T>())
             {
@@ -971,7 +971,7 @@ namespace System
         /// If all of the values are <paramref name="value0"/> or <paramref name="value1"/>, returns -1.
         /// </returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static unsafe int IndexOfAnyExcept<T>(this ReadOnlyUnmanagedSpan<T> span, T value0, T value1, IEqualityComparer<T>? comparer = null)
+        public static unsafe long IndexOfAnyExcept<T>(this ReadOnlyUnmanagedSpan<T> span, T value0, T value1, IEqualityComparer<T>? comparer = null)
         {
             if (typeof(T).IsValueType && (comparer is null || comparer == EqualityComparer<T>.Default))
             {
@@ -998,7 +998,7 @@ namespace System
                 return IndexOfAnyExceptDefaultComparer(span, value0, value1);
                 static int IndexOfAnyExceptDefaultComparer(ReadOnlyUnmanagedSpan<T> span, T value0, T value1)
                 {
-                    for (int i = 0; i < span.Length; i++)
+                    for (long i = 0; i < span.Length; i++)
                     {
                         if (!EqualityComparer<T>.Default.Equals(span[i], value0) &&
                             !EqualityComparer<T>.Default.Equals(span[i], value1))
@@ -1017,7 +1017,7 @@ namespace System
                 {
                     comparer ??= EqualityComparer<T>.Default;
 
-                    for (int i = 0; i < span.Length; i++)
+                    for (long i = 0; i < span.Length; i++)
                     {
                         if (!comparer.Equals(span[i], value0) &&
                             !comparer.Equals(span[i], value1))
@@ -1042,7 +1042,7 @@ namespace System
         /// If all of the values are <paramref name="value0"/>, <paramref name="value1"/>, and <paramref name="value2"/>, returns -1.
         /// </returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static unsafe int IndexOfAnyExcept<T>(this ReadOnlyUnmanagedSpan<T> span, T value0, T value1, T value2) where T : IEquatable<T>?
+        public static unsafe long IndexOfAnyExcept<T>(this ReadOnlyUnmanagedSpan<T> span, T value0, T value1, T value2) where T : IEquatable<T>?
         {
             if (RuntimeHelpers.IsBitwiseEquatable<T>())
             {
@@ -1081,7 +1081,7 @@ namespace System
         /// If all of the values are <paramref name="value0"/>, <paramref name="value1"/>, and <paramref name="value2"/>, returns -1.
         /// </returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static unsafe int IndexOfAnyExcept<T>(this ReadOnlyUnmanagedSpan<T> span, T value0, T value1, T value2, IEqualityComparer<T>? comparer = null)
+        public static unsafe long IndexOfAnyExcept<T>(this ReadOnlyUnmanagedSpan<T> span, T value0, T value1, T value2, IEqualityComparer<T>? comparer = null)
         {
             if (typeof(T).IsValueType && (comparer is null || comparer == EqualityComparer<T>.Default))
             {
@@ -1110,7 +1110,7 @@ namespace System
                 return IndexOfAnyExceptDefaultComparer(span, value0, value1, value2);
                 static int IndexOfAnyExceptDefaultComparer(ReadOnlyUnmanagedSpan<T> span, T value0, T value1, T value2)
                 {
-                    for (int i = 0; i < span.Length; i++)
+                    for (long i = 0; i < span.Length; i++)
                     {
                         if (!EqualityComparer<T>.Default.Equals(span[i], value0) &&
                             !EqualityComparer<T>.Default.Equals(span[i], value1) &&
@@ -1129,7 +1129,7 @@ namespace System
                 static int IndexOfAnyExceptComparer(ReadOnlyUnmanagedSpan<T> span, T value0, T value1, T value2, IEqualityComparer<T>? comparer)
                 {
                     comparer ??= EqualityComparer<T>.Default;
-                    for (int i = 0; i < span.Length; i++)
+                    for (long i = 0; i < span.Length; i++)
                     {
                         if (!comparer.Equals(span[i], value0) &&
                             !comparer.Equals(span[i], value1) &&
@@ -1182,7 +1182,7 @@ namespace System
         /// The index in the span of the first occurrence of any value other than those in <paramref name="values"/>.
         /// If all of the values are in <paramref name="values"/>, returns -1.
         /// </returns>
-        public static unsafe int IndexOfAnyExcept<T>(this ReadOnlyUnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> values) where T : IEquatable<T>?
+        public static unsafe long IndexOfAnyExcept<T>(this ReadOnlyUnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> values) where T : IEquatable<T>?
         {
             switch (values.Length)
             {
@@ -1244,7 +1244,7 @@ namespace System
                             values.Length);
                     }
 
-                    for (int i = 0; i < span.Length; i++)
+                    for (long i = 0; i < span.Length; i++)
                     {
                         if (!values.Contains(span[i]))
                         {
@@ -1265,7 +1265,7 @@ namespace System
         /// The index in the span of the first occurrence of any value other than those in <paramref name="values"/>.
         /// If all of the values are in <paramref name="values"/>, returns -1.
         /// </returns>
-        public static int IndexOfAnyExcept<T>(this ReadOnlyUnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> values, IEqualityComparer<T>? comparer = null)
+        public static long IndexOfAnyExcept<T>(this ReadOnlyUnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> values, IEqualityComparer<T>? comparer = null)
         {
             switch (values.Length)
             {
@@ -1282,7 +1282,7 @@ namespace System
                     return IndexOfAnyExcept(span, values[0], values[1], values[2], comparer);
 
                 default:
-                    for (int i = 0; i < span.Length; i++)
+                    for (long i = 0; i < span.Length; i++)
                     {
                         if (!values.Contains(span[i], comparer))
                         {
@@ -1303,7 +1303,7 @@ namespace System
         /// If all of the values are in <paramref name="values"/>, returns -1.
         /// </returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static int IndexOfAnyExcept<T>(this ReadOnlyUnmanagedSpan<T> span, SearchValues<T> values) where T : IEquatable<T>?
+        public static long IndexOfAnyExcept<T>(this ReadOnlyUnmanagedSpan<T> span, SearchValues<T> values) where T : IEquatable<T>?
         {
             if (values is null)
             {
@@ -1322,7 +1322,7 @@ namespace System
         /// If all of the values are <paramref name="value"/>, returns -1.
         /// </returns>
         [OverloadResolutionPriority(-1)]
-        public static int LastIndexOfAnyExcept<T>(this UnmanagedSpan<T> span, T value) where T : IEquatable<T>? =>
+        public static long LastIndexOfAnyExcept<T>(this UnmanagedSpan<T> span, T value) where T : IEquatable<T>? =>
             LastIndexOfAnyExcept((ReadOnlyUnmanagedSpan<T>)span, value);
 
         /// <summary>Searches for the last index of any value other than the specified <paramref name="value0"/> or <paramref name="value1"/>.</summary>
@@ -1335,7 +1335,7 @@ namespace System
         /// If all of the values are <paramref name="value0"/> or <paramref name="value1"/>, returns -1.
         /// </returns>
         [OverloadResolutionPriority(-1)]
-        public static int LastIndexOfAnyExcept<T>(this UnmanagedSpan<T> span, T value0, T value1) where T : IEquatable<T>? =>
+        public static long LastIndexOfAnyExcept<T>(this UnmanagedSpan<T> span, T value0, T value1) where T : IEquatable<T>? =>
             LastIndexOfAnyExcept((ReadOnlyUnmanagedSpan<T>)span, value0, value1);
 
         /// <summary>Searches for the last index of any value other than the specified <paramref name="value0"/>, <paramref name="value1"/>, or <paramref name="value2"/>.</summary>
@@ -1349,7 +1349,7 @@ namespace System
         /// If all of the values are <paramref name="value0"/>, <paramref name="value1"/>, and <paramref name="value2"/>, returns -1.
         /// </returns>
         [OverloadResolutionPriority(-1)]
-        public static int LastIndexOfAnyExcept<T>(this UnmanagedSpan<T> span, T value0, T value1, T value2) where T : IEquatable<T>? =>
+        public static long LastIndexOfAnyExcept<T>(this UnmanagedSpan<T> span, T value0, T value1, T value2) where T : IEquatable<T>? =>
             LastIndexOfAnyExcept((ReadOnlyUnmanagedSpan<T>)span, value0, value1, value2);
 
         /// <summary>Searches for the last index of any value other than the specified <paramref name="values"/>.</summary>
@@ -1361,7 +1361,7 @@ namespace System
         /// If all of the values are in <paramref name="values"/>, returns -1.
         /// </returns>
         [OverloadResolutionPriority(-1)]
-        public static int LastIndexOfAnyExcept<T>(this UnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> values) where T : IEquatable<T>? =>
+        public static long LastIndexOfAnyExcept<T>(this UnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> values) where T : IEquatable<T>? =>
             LastIndexOfAnyExcept((ReadOnlyUnmanagedSpan<T>)span, values);
 
         /// <summary>Searches for the last index of any value other than the specified <paramref name="values"/>.</summary>
@@ -1374,7 +1374,7 @@ namespace System
         /// </returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         [OverloadResolutionPriority(-1)]
-        public static int LastIndexOfAnyExcept<T>(this UnmanagedSpan<T> span, SearchValues<T> values) where T : IEquatable<T>? =>
+        public static long LastIndexOfAnyExcept<T>(this UnmanagedSpan<T> span, SearchValues<T> values) where T : IEquatable<T>? =>
             LastIndexOfAnyExcept((ReadOnlyUnmanagedSpan<T>)span, values);
 
         /// <summary>Searches for the last index of any value other than the specified <paramref name="value"/>.</summary>
@@ -1386,7 +1386,7 @@ namespace System
         /// If all of the values are <paramref name="value"/>, returns -1.
         /// </returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static unsafe int LastIndexOfAnyExcept<T>(this ReadOnlyUnmanagedSpan<T> span, T value) where T : IEquatable<T>?
+        public static unsafe long LastIndexOfAnyExcept<T>(this ReadOnlyUnmanagedSpan<T> span, T value) where T : IEquatable<T>?
         {
             if (RuntimeHelpers.IsBitwiseEquatable<T>())
             {
@@ -1433,7 +1433,7 @@ namespace System
         /// If all of the values are <paramref name="value"/>, returns -1.
         /// </returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static unsafe int LastIndexOfAnyExcept<T>(this ReadOnlyUnmanagedSpan<T> span, T value, IEqualityComparer<T>? comparer = null)
+        public static unsafe long LastIndexOfAnyExcept<T>(this ReadOnlyUnmanagedSpan<T> span, T value, IEqualityComparer<T>? comparer = null)
         {
             if (typeof(T).IsValueType && (comparer is null || comparer == EqualityComparer<T>.Default))
             {
@@ -1472,7 +1472,7 @@ namespace System
                 return LastIndexOfAnyExceptDefaultComparer(span, value);
                 static int LastIndexOfAnyExceptDefaultComparer(ReadOnlyUnmanagedSpan<T> span, T value)
                 {
-                    for (int i = span.Length - 1; i >= 0; i--)
+                    for (long i = span.Length - 1; i >= 0; i--)
                     {
                         if (!EqualityComparer<T>.Default.Equals(span[i], value))
                         {
@@ -1490,7 +1490,7 @@ namespace System
                 {
                     comparer ??= EqualityComparer<T>.Default;
 
-                    for (int i = span.Length - 1; i >= 0; i--)
+                    for (long i = span.Length - 1; i >= 0; i--)
                     {
                         if (!comparer.Equals(span[i], value))
                         {
@@ -1513,7 +1513,7 @@ namespace System
         /// If all of the values are <paramref name="value0"/> or <paramref name="value1"/>, returns -1.
         /// </returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static unsafe int LastIndexOfAnyExcept<T>(this ReadOnlyUnmanagedSpan<T> span, T value0, T value1) where T : IEquatable<T>?
+        public static unsafe long LastIndexOfAnyExcept<T>(this ReadOnlyUnmanagedSpan<T> span, T value0, T value1) where T : IEquatable<T>?
         {
             if (RuntimeHelpers.IsBitwiseEquatable<T>())
             {
@@ -1549,7 +1549,7 @@ namespace System
         /// If all of the values are <paramref name="value0"/> or <paramref name="value1"/>, returns -1.
         /// </returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static unsafe int LastIndexOfAnyExcept<T>(this ReadOnlyUnmanagedSpan<T> span, T value0, T value1, IEqualityComparer<T>? comparer = null)
+        public static unsafe long LastIndexOfAnyExcept<T>(this ReadOnlyUnmanagedSpan<T> span, T value0, T value1, IEqualityComparer<T>? comparer = null)
         {
             if (typeof(T).IsValueType && (comparer is null || comparer == EqualityComparer<T>.Default))
             {
@@ -1576,7 +1576,7 @@ namespace System
                 return LastIndexOfAnyExceptDefaultComparer(span, value0, value1);
                 static int LastIndexOfAnyExceptDefaultComparer(ReadOnlyUnmanagedSpan<T> span, T value0, T value1)
                 {
-                    for (int i = span.Length - 1; i >= 0; i--)
+                    for (long i = span.Length - 1; i >= 0; i--)
                     {
                         if (!EqualityComparer<T>.Default.Equals(span[i], value0) &&
                             !EqualityComparer<T>.Default.Equals(span[i], value1))
@@ -1595,7 +1595,7 @@ namespace System
                 {
                     comparer ??= EqualityComparer<T>.Default;
 
-                    for (int i = span.Length - 1; i >= 0; i--)
+                    for (long i = span.Length - 1; i >= 0; i--)
                     {
                         if (!comparer.Equals(span[i], value0) &&
                             !comparer.Equals(span[i], value1))
@@ -1620,7 +1620,7 @@ namespace System
         /// If all of the values are <paramref name="value0"/>, <paramref name="value1"/>, and <paramref name="value2"/>, returns -1.
         /// </returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static unsafe int LastIndexOfAnyExcept<T>(this ReadOnlyUnmanagedSpan<T> span, T value0, T value1, T value2) where T : IEquatable<T>?
+        public static unsafe long LastIndexOfAnyExcept<T>(this ReadOnlyUnmanagedSpan<T> span, T value0, T value1, T value2) where T : IEquatable<T>?
         {
             if (RuntimeHelpers.IsBitwiseEquatable<T>())
             {
@@ -1659,7 +1659,7 @@ namespace System
         /// If all of the values are <paramref name="value0"/>, <paramref name="value1"/>, and <paramref name="value2"/>, returns -1.
         /// </returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static unsafe int LastIndexOfAnyExcept<T>(this ReadOnlyUnmanagedSpan<T> span, T value0, T value1, T value2, IEqualityComparer<T>? comparer = null)
+        public static unsafe long LastIndexOfAnyExcept<T>(this ReadOnlyUnmanagedSpan<T> span, T value0, T value1, T value2, IEqualityComparer<T>? comparer = null)
         {
             if (typeof(T).IsValueType && (comparer is null || comparer == EqualityComparer<T>.Default))
             {
@@ -1688,7 +1688,7 @@ namespace System
                 return LastIndexOfAnyExceptDefaultComparer(span, value0, value1, value2);
                 static int LastIndexOfAnyExceptDefaultComparer(ReadOnlyUnmanagedSpan<T> span, T value0, T value1, T value2)
                 {
-                    for (int i = span.Length - 1; i >= 0; i--)
+                    for (long i = span.Length - 1; i >= 0; i--)
                     {
                         if (!EqualityComparer<T>.Default.Equals(span[i], value0) &&
                             !EqualityComparer<T>.Default.Equals(span[i], value1) &&
@@ -1708,7 +1708,7 @@ namespace System
                 {
                     comparer ??= EqualityComparer<T>.Default;
 
-                    for (int i = span.Length - 1; i >= 0; i--)
+                    for (long i = span.Length - 1; i >= 0; i--)
                     {
                         if (!comparer.Equals(span[i], value0) &&
                             !comparer.Equals(span[i], value1) &&
@@ -1761,7 +1761,7 @@ namespace System
         /// The index in the span of the first occurrence of any value other than those in <paramref name="values"/>.
         /// If all of the values are in <paramref name="values"/>, returns -1.
         /// </returns>
-        public static unsafe int LastIndexOfAnyExcept<T>(this ReadOnlyUnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> values) where T : IEquatable<T>?
+        public static unsafe long LastIndexOfAnyExcept<T>(this ReadOnlyUnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> values) where T : IEquatable<T>?
         {
             switch (values.Length)
             {
@@ -1824,7 +1824,7 @@ namespace System
                             values.Length);
                     }
 
-                    for (int i = span.Length - 1; i >= 0; i--)
+                    for (long i = span.Length - 1; i >= 0; i--)
                     {
                         if (!values.Contains(span[i]))
                         {
@@ -1845,7 +1845,7 @@ namespace System
         /// The index in the span of the first occurrence of any value other than those in <paramref name="values"/>.
         /// If all of the values are in <paramref name="values"/>, returns -1.
         /// </returns>
-        public static int LastIndexOfAnyExcept<T>(this ReadOnlyUnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> values, IEqualityComparer<T>? comparer = null)
+        public static long LastIndexOfAnyExcept<T>(this ReadOnlyUnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> values, IEqualityComparer<T>? comparer = null)
         {
             switch (values.Length)
             {
@@ -1862,7 +1862,7 @@ namespace System
                     return LastIndexOfAnyExcept(span, values[0], values[1], values[2], comparer);
 
                 default:
-                    for (int i = span.Length - 1; i >= 0; i--)
+                    for (long i = span.Length - 1; i >= 0; i--)
                     {
                         if (!values.Contains(span[i], comparer))
                         {
@@ -1883,7 +1883,7 @@ namespace System
         /// If all of the values are in <paramref name="values"/>, returns -1.
         /// </returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static int LastIndexOfAnyExcept<T>(this ReadOnlyUnmanagedSpan<T> span, SearchValues<T> values) where T : IEquatable<T>?
+        public static long LastIndexOfAnyExcept<T>(this ReadOnlyUnmanagedSpan<T> span, SearchValues<T> values) where T : IEquatable<T>?
         {
             if (values is null)
             {
@@ -1896,7 +1896,7 @@ namespace System
         /// <inheritdoc cref="IndexOfAnyInRange{T}(ReadOnlyUnmanagedSpan{T}, T, T)"/>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         [OverloadResolutionPriority(-1)]
-        public static int IndexOfAnyInRange<T>(this UnmanagedSpan<T> span, T lowInclusive, T highInclusive) where T : IComparable<T> =>
+        public static long IndexOfAnyInRange<T>(this UnmanagedSpan<T> span, T lowInclusive, T highInclusive) where T : IComparable<T> =>
             IndexOfAnyInRange((ReadOnlyUnmanagedSpan<T>)span, lowInclusive, highInclusive);
 
         /// <summary>Searches for the first index of any value in the range between <paramref name="lowInclusive"/> and <paramref name="highInclusive"/>, inclusive.</summary>
@@ -1909,7 +1909,7 @@ namespace System
         /// If all of the values are outside of the specified range, returns -1.
         /// </returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static int IndexOfAnyInRange<T>(this ReadOnlyUnmanagedSpan<T> span, T lowInclusive, T highInclusive) where T : IComparable<T>
+        public static long IndexOfAnyInRange<T>(this ReadOnlyUnmanagedSpan<T> span, T lowInclusive, T highInclusive) where T : IComparable<T>
         {
             if (lowInclusive is null || highInclusive is null)
             {
@@ -1967,7 +1967,7 @@ namespace System
         /// <inheritdoc cref="IndexOfAnyExceptInRange{T}(ReadOnlyUnmanagedSpan{T}, T, T)"/>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         [OverloadResolutionPriority(-1)]
-        public static int IndexOfAnyExceptInRange<T>(this UnmanagedSpan<T> span, T lowInclusive, T highInclusive) where T : IComparable<T> =>
+        public static long IndexOfAnyExceptInRange<T>(this UnmanagedSpan<T> span, T lowInclusive, T highInclusive) where T : IComparable<T> =>
             IndexOfAnyExceptInRange((ReadOnlyUnmanagedSpan<T>)span, lowInclusive, highInclusive);
 
         /// <summary>Searches for the first index of any value outside of the range between <paramref name="lowInclusive"/> and <paramref name="highInclusive"/>, inclusive.</summary>
@@ -1980,7 +1980,7 @@ namespace System
         /// If all of the values are inside of the specified range, returns -1.
         /// </returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static int IndexOfAnyExceptInRange<T>(this ReadOnlyUnmanagedSpan<T> span, T lowInclusive, T highInclusive) where T : IComparable<T>
+        public static long IndexOfAnyExceptInRange<T>(this ReadOnlyUnmanagedSpan<T> span, T lowInclusive, T highInclusive) where T : IComparable<T>
         {
             if (lowInclusive is null || highInclusive is null)
             {
@@ -2038,7 +2038,7 @@ namespace System
         /// <inheritdoc cref="LastIndexOfAnyInRange{T}(ReadOnlyUnmanagedSpan{T}, T, T)"/>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         [OverloadResolutionPriority(-1)]
-        public static int LastIndexOfAnyInRange<T>(this UnmanagedSpan<T> span, T lowInclusive, T highInclusive) where T : IComparable<T> =>
+        public static long LastIndexOfAnyInRange<T>(this UnmanagedSpan<T> span, T lowInclusive, T highInclusive) where T : IComparable<T> =>
             LastIndexOfAnyInRange((ReadOnlyUnmanagedSpan<T>)span, lowInclusive, highInclusive);
 
         /// <summary>Searches for the last index of any value in the range between <paramref name="lowInclusive"/> and <paramref name="highInclusive"/>, inclusive.</summary>
@@ -2051,7 +2051,7 @@ namespace System
         /// If all of the values are outside of the specified range, returns -1.
         /// </returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static int LastIndexOfAnyInRange<T>(this ReadOnlyUnmanagedSpan<T> span, T lowInclusive, T highInclusive) where T : IComparable<T>
+        public static long LastIndexOfAnyInRange<T>(this ReadOnlyUnmanagedSpan<T> span, T lowInclusive, T highInclusive) where T : IComparable<T>
         {
             if (lowInclusive is null || highInclusive is null)
             {
@@ -2109,7 +2109,7 @@ namespace System
         /// <inheritdoc cref="LastIndexOfAnyExceptInRange{T}(ReadOnlyUnmanagedSpan{T}, T, T)"/>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         [OverloadResolutionPriority(-1)]
-        public static int LastIndexOfAnyExceptInRange<T>(this UnmanagedSpan<T> span, T lowInclusive, T highInclusive) where T : IComparable<T> =>
+        public static long LastIndexOfAnyExceptInRange<T>(this UnmanagedSpan<T> span, T lowInclusive, T highInclusive) where T : IComparable<T> =>
             LastIndexOfAnyExceptInRange((ReadOnlyUnmanagedSpan<T>)span, lowInclusive, highInclusive);
 
         /// <summary>Searches for the last index of any value outside of the range between <paramref name="lowInclusive"/> and <paramref name="highInclusive"/>, inclusive.</summary>
@@ -2122,7 +2122,7 @@ namespace System
         /// If all of the values are inside of the specified range, returns -1.
         /// </returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static int LastIndexOfAnyExceptInRange<T>(this ReadOnlyUnmanagedSpan<T> span, T lowInclusive, T highInclusive) where T : IComparable<T>
+        public static long LastIndexOfAnyExceptInRange<T>(this ReadOnlyUnmanagedSpan<T> span, T lowInclusive, T highInclusive) where T : IComparable<T>
         {
             if (lowInclusive is null || highInclusive is null)
             {
@@ -2198,7 +2198,7 @@ namespace System
         /// Determines the relative order of the sequences being compared by comparing the elements using IComparable{T}.CompareTo(T).
         /// </summary>
         [OverloadResolutionPriority(-1)]
-        public static int SequenceCompareTo<T>(this UnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> other) where T : IComparable<T>? =>
+        public static long SequenceCompareTo<T>(this UnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> other) where T : IComparable<T>? =>
             SequenceCompareTo((ReadOnlyUnmanagedSpan<T>)span, other);
 
         /// <summary>
@@ -2207,7 +2207,7 @@ namespace System
         /// <param name="span">The span to search.</param>
         /// <param name="value">The value to search for.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static unsafe int IndexOf<T>(this ReadOnlyUnmanagedSpan<T> span, T value) where T : IEquatable<T>?
+        public static unsafe long IndexOf<T>(this ReadOnlyUnmanagedSpan<T> span, T value) where T : IEquatable<T>?
         {
             if (RuntimeHelpers.IsBitwiseEquatable<T>())
             {
@@ -2246,7 +2246,7 @@ namespace System
         /// <param name="value">The value to search for.</param>
         /// <param name="comparer">The <see cref="IEqualityComparer{T}"/> implementation to use when comparing elements, or <see langword="null"/> to use the default <see cref="IEqualityComparer{T}"/> for the type of an element.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static unsafe int IndexOf<T>(this ReadOnlyUnmanagedSpan<T> span, T value, IEqualityComparer<T>? comparer = null)
+        public static unsafe long IndexOf<T>(this ReadOnlyUnmanagedSpan<T> span, T value, IEqualityComparer<T>? comparer = null)
         {
             if (typeof(T).IsValueType && (comparer is null || comparer == EqualityComparer<T>.Default))
             {
@@ -2280,7 +2280,7 @@ namespace System
                 return IndexOfDefaultComparer(span, value);
                 static int IndexOfDefaultComparer(ReadOnlyUnmanagedSpan<T> span, T value)
                 {
-                    for (int i = 0; i < span.Length; i++)
+                    for (long i = 0; i < span.Length; i++)
                     {
                         if (EqualityComparer<T>.Default.Equals(span[i], value))
                         {
@@ -2297,7 +2297,7 @@ namespace System
                 static int IndexOfComparer(ReadOnlyUnmanagedSpan<T> span, T value, IEqualityComparer<T>? comparer)
                 {
                     comparer ??= EqualityComparer<T>.Default;
-                    for (int i = 0; i < span.Length; i++)
+                    for (long i = 0; i < span.Length; i++)
                     {
                         if (comparer.Equals(span[i], value))
                         {
@@ -2316,7 +2316,7 @@ namespace System
         /// <param name="span">The span to search.</param>
         /// <param name="value">The sequence to search for.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static unsafe int IndexOf<T>(this ReadOnlyUnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> value) where T : IEquatable<T>?
+        public static unsafe long IndexOf<T>(this ReadOnlyUnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> value) where T : IEquatable<T>?
         {
             if (RuntimeHelpers.IsBitwiseEquatable<T>())
             {
@@ -2345,7 +2345,7 @@ namespace System
         /// <param name="value">The sequence to search for.</param>
         /// <param name="comparer">The <see cref="IEqualityComparer{T}"/> implementation to use when comparing elements, or <see langword="null"/> to use the default <see cref="IEqualityComparer{T}"/> for the type of an element.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static unsafe int IndexOf<T>(this ReadOnlyUnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> value, IEqualityComparer<T>? comparer = null)
+        public static unsafe long IndexOf<T>(this ReadOnlyUnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> value, IEqualityComparer<T>? comparer = null)
         {
             if (RuntimeHelpers.IsBitwiseEquatable<T>() && (comparer is null || comparer == EqualityComparer<T>.Default))
             {
@@ -2402,7 +2402,7 @@ namespace System
         /// <param name="span">The span to search.</param>
         /// <param name="value">The value to search for.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static unsafe int LastIndexOf<T>(this ReadOnlyUnmanagedSpan<T> span, T value) where T : IEquatable<T>?
+        public static unsafe long LastIndexOf<T>(this ReadOnlyUnmanagedSpan<T> span, T value) where T : IEquatable<T>?
         {
             if (RuntimeHelpers.IsBitwiseEquatable<T>())
             {
@@ -2446,7 +2446,7 @@ namespace System
         /// <param name="value">The value to search for.</param>
         /// <param name="comparer">The <see cref="IEqualityComparer{T}"/> implementation to use when comparing elements, or <see langword="null"/> to use the default <see cref="IEqualityComparer{T}"/> for the type of an element.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static unsafe int LastIndexOf<T>(this ReadOnlyUnmanagedSpan<T> span, T value, IEqualityComparer<T>? comparer = null)
+        public static unsafe long LastIndexOf<T>(this ReadOnlyUnmanagedSpan<T> span, T value, IEqualityComparer<T>? comparer = null)
         {
             if (typeof(T).IsValueType && (comparer is null || comparer == EqualityComparer<T>.Default))
             {
@@ -2485,7 +2485,7 @@ namespace System
                 return LastIndexOfDefaultComparer(span, value);
                 static int LastIndexOfDefaultComparer(ReadOnlyUnmanagedSpan<T> span, T value)
                 {
-                    for (int i = span.Length - 1; i >= 0; i--)
+                    for (long i = span.Length - 1; i >= 0; i--)
                     {
                         if (EqualityComparer<T>.Default.Equals(span[i], value))
                         {
@@ -2503,7 +2503,7 @@ namespace System
                 {
                     comparer ??= EqualityComparer<T>.Default;
 
-                    for (int i = span.Length - 1; i >= 0; i--)
+                    for (long i = span.Length - 1; i >= 0; i--)
                     {
                         if (comparer.Equals(span[i], value))
                         {
@@ -2522,7 +2522,7 @@ namespace System
         /// <param name="span">The span to search.</param>
         /// <param name="value">The sequence to search for.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static unsafe int LastIndexOf<T>(this ReadOnlyUnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> value) where T : IEquatable<T>?
+        public static unsafe long LastIndexOf<T>(this ReadOnlyUnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> value) where T : IEquatable<T>?
         {
             if (RuntimeHelpers.IsBitwiseEquatable<T>())
             {
@@ -2554,7 +2554,7 @@ namespace System
         /// <param name="value">The sequence to search for.</param>
         /// <param name="comparer">The <see cref="IEqualityComparer{T}"/> implementation to use when comparing elements, or <see langword="null"/> to use the default <see cref="IEqualityComparer{T}"/> for the type of an element.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static unsafe int LastIndexOf<T>(this ReadOnlyUnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> value, IEqualityComparer<T>? comparer = null)
+        public static unsafe long LastIndexOf<T>(this ReadOnlyUnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> value, IEqualityComparer<T>? comparer = null)
         {
             if (RuntimeHelpers.IsBitwiseEquatable<T>())
             {
@@ -2613,7 +2613,7 @@ namespace System
         /// <param name="value1">One of the values to search for.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         [OverloadResolutionPriority(-1)]
-        public static int IndexOfAny<T>(this UnmanagedSpan<T> span, T value0, T value1) where T : IEquatable<T>? =>
+        public static long IndexOfAny<T>(this UnmanagedSpan<T> span, T value0, T value1) where T : IEquatable<T>? =>
             IndexOfAny((ReadOnlyUnmanagedSpan<T>)span, value0, value1);
 
         /// <summary>
@@ -2625,7 +2625,7 @@ namespace System
         /// <param name="value2">One of the values to search for.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         [OverloadResolutionPriority(-1)]
-        public static int IndexOfAny<T>(this UnmanagedSpan<T> span, T value0, T value1, T value2) where T : IEquatable<T>? =>
+        public static long IndexOfAny<T>(this UnmanagedSpan<T> span, T value0, T value1, T value2) where T : IEquatable<T>? =>
             IndexOfAny((ReadOnlyUnmanagedSpan<T>)span, value0, value1, value2);
 
         /// <summary>
@@ -2635,7 +2635,7 @@ namespace System
         /// <param name="values">The set of values to search for.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         [OverloadResolutionPriority(-1)]
-        public static int IndexOfAny<T>(this UnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> values) where T : IEquatable<T>? =>
+        public static long IndexOfAny<T>(this UnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> values) where T : IEquatable<T>? =>
             IndexOfAny((ReadOnlyUnmanagedSpan<T>)span, values);
 
         /// <summary>
@@ -2645,7 +2645,7 @@ namespace System
         /// <param name="values">The set of values to search for.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         [OverloadResolutionPriority(-1)]
-        public static int IndexOfAny<T>(this UnmanagedSpan<T> span, SearchValues<T> values) where T : IEquatable<T>? =>
+        public static long IndexOfAny<T>(this UnmanagedSpan<T> span, SearchValues<T> values) where T : IEquatable<T>? =>
             IndexOfAny((ReadOnlyUnmanagedSpan<T>)span, values);
 
         /// <summary>
@@ -2655,7 +2655,7 @@ namespace System
         /// <param name="values">The set of values to search for.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         [OverloadResolutionPriority(-1)]
-        public static int IndexOfAny(this UnmanagedSpan<char> span, SearchValues<string> values) =>
+        public static long IndexOfAny(this UnmanagedSpan<char> span, SearchValues<string> values) =>
             IndexOfAny((ReadOnlyUnmanagedSpan<char>)span, values);
 
         /// <summary>
@@ -2665,7 +2665,7 @@ namespace System
         /// <param name="value0">One of the values to search for.</param>
         /// <param name="value1">One of the values to search for.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static unsafe int IndexOfAny<T>(this ReadOnlyUnmanagedSpan<T> span, T value0, T value1) where T : IEquatable<T>?
+        public static unsafe long IndexOfAny<T>(this ReadOnlyUnmanagedSpan<T> span, T value0, T value1) where T : IEquatable<T>?
         {
             if (RuntimeHelpers.IsBitwiseEquatable<T>())
             {
@@ -2698,7 +2698,7 @@ namespace System
         /// <param name="value1">One of the values to search for.</param>
         /// <param name="comparer">The <see cref="IEqualityComparer{T}"/> implementation to use when comparing elements, or <see langword="null"/> to use the default <see cref="IEqualityComparer{T}"/> for the type of an element.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static unsafe int IndexOfAny<T>(this ReadOnlyUnmanagedSpan<T> span, T value0, T value1, IEqualityComparer<T>? comparer = null)
+        public static unsafe long IndexOfAny<T>(this ReadOnlyUnmanagedSpan<T> span, T value0, T value1, IEqualityComparer<T>? comparer = null)
         {
             if (typeof(T).IsValueType && (comparer is null || comparer == EqualityComparer<T>.Default))
             {
@@ -2725,7 +2725,7 @@ namespace System
                 return IndexOfAnyDefaultComparer(span, value0, value1);
                 static int IndexOfAnyDefaultComparer(ReadOnlyUnmanagedSpan<T> span, T value0, T value1)
                 {
-                    for (int i = 0; i < span.Length; i++)
+                    for (long i = 0; i < span.Length; i++)
                     {
                         if (EqualityComparer<T>.Default.Equals(span[i], value0) ||
                             EqualityComparer<T>.Default.Equals(span[i], value1))
@@ -2743,7 +2743,7 @@ namespace System
                 static int IndexOfAnyComparer(ReadOnlyUnmanagedSpan<T> span, T value0, T value1, IEqualityComparer<T>? comparer)
                 {
                     comparer ??= EqualityComparer<T>.Default;
-                    for (int i = 0; i < span.Length; i++)
+                    for (long i = 0; i < span.Length; i++)
                     {
                         if (comparer.Equals(span[i], value0) ||
                             comparer.Equals(span[i], value1))
@@ -2765,7 +2765,7 @@ namespace System
         /// <param name="value1">One of the values to search for.</param>
         /// <param name="value2">One of the values to search for.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static unsafe int IndexOfAny<T>(this ReadOnlyUnmanagedSpan<T> span, T value0, T value1, T value2) where T : IEquatable<T>?
+        public static unsafe long IndexOfAny<T>(this ReadOnlyUnmanagedSpan<T> span, T value0, T value1, T value2) where T : IEquatable<T>?
         {
             if (RuntimeHelpers.IsBitwiseEquatable<T>())
             {
@@ -2801,7 +2801,7 @@ namespace System
         /// <param name="value2">One of the values to search for.</param>
         /// <param name="comparer">The <see cref="IEqualityComparer{T}"/> implementation to use when comparing elements, or <see langword="null"/> to use the default <see cref="IEqualityComparer{T}"/> for the type of an element.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static unsafe int IndexOfAny<T>(this ReadOnlyUnmanagedSpan<T> span, T value0, T value1, T value2, IEqualityComparer<T>? comparer = null)
+        public static unsafe long IndexOfAny<T>(this ReadOnlyUnmanagedSpan<T> span, T value0, T value1, T value2, IEqualityComparer<T>? comparer = null)
         {
             if (typeof(T).IsValueType && (comparer is null || comparer == EqualityComparer<T>.Default))
             {
@@ -2830,7 +2830,7 @@ namespace System
                 return IndexOfAnyDefaultComparer(span, value0, value1, value2);
                 static int IndexOfAnyDefaultComparer(ReadOnlyUnmanagedSpan<T> span, T value0, T value1, T value2)
                 {
-                    for (int i = 0; i < span.Length; i++)
+                    for (long i = 0; i < span.Length; i++)
                     {
                         if (EqualityComparer<T>.Default.Equals(span[i], value0) ||
                             EqualityComparer<T>.Default.Equals(span[i], value1) ||
@@ -2849,7 +2849,7 @@ namespace System
                 static int IndexOfAnyComparer(ReadOnlyUnmanagedSpan<T> span, T value0, T value1, T value2, IEqualityComparer<T>? comparer)
                 {
                     comparer ??= EqualityComparer<T>.Default;
-                    for (int i = 0; i < span.Length; i++)
+                    for (long i = 0; i < span.Length; i++)
                     {
                         if (comparer.Equals(span[i], value0) ||
                             comparer.Equals(span[i], value1) ||
@@ -2870,7 +2870,7 @@ namespace System
         /// <param name="span">The span to search.</param>
         /// <param name="values">The set of values to search for.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static unsafe int IndexOfAny<T>(this ReadOnlyUnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> values) where T : IEquatable<T>?
+        public static unsafe long IndexOfAny<T>(this ReadOnlyUnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> values) where T : IEquatable<T>?
         {
             if (RuntimeHelpers.IsBitwiseEquatable<T>())
             {
@@ -2970,7 +2970,7 @@ namespace System
         /// <param name="span">The span to search.</param>
         /// <param name="values">The set of values to search for.</param>
         /// <param name="comparer">The <see cref="IEqualityComparer{T}"/> implementation to use when comparing elements, or <see langword="null"/> to use the default <see cref="IEqualityComparer{T}"/> for the type of an element.</param>
-        public static int IndexOfAny<T>(this ReadOnlyUnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> values, IEqualityComparer<T>? comparer = null)
+        public static long IndexOfAny<T>(this ReadOnlyUnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> values, IEqualityComparer<T>? comparer = null)
         {
             switch (values.Length)
             {
@@ -2989,7 +2989,7 @@ namespace System
                 default:
                     comparer ??= EqualityComparer<T>.Default;
 
-                    for (int i = 0; i < span.Length; i++)
+                    for (long i = 0; i < span.Length; i++)
                     {
                         if (values.Contains(span[i], comparer))
                         {
@@ -3008,7 +3008,7 @@ namespace System
         /// <param name="values">The set of values to search for.</param>
         /// <returns>The first index of any of the specified values, or -1 if none are found.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static int IndexOfAny<T>(this ReadOnlyUnmanagedSpan<T> span, SearchValues<T> values) where T : IEquatable<T>?
+        public static long IndexOfAny<T>(this ReadOnlyUnmanagedSpan<T> span, SearchValues<T> values) where T : IEquatable<T>?
         {
             if (values is null)
             {
@@ -3025,7 +3025,7 @@ namespace System
         /// <param name="values">The set of values to search for.</param>
         /// <returns>The first index of any of the specified values, or -1 if none are found.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static int IndexOfAny(this ReadOnlyUnmanagedSpan<char> span, SearchValues<string> values)
+        public static long IndexOfAny(this ReadOnlyUnmanagedSpan<char> span, SearchValues<string> values)
         {
             if (values is null)
             {
@@ -3043,7 +3043,7 @@ namespace System
         /// <param name="value1">One of the values to search for.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         [OverloadResolutionPriority(-1)]
-        public static int LastIndexOfAny<T>(this UnmanagedSpan<T> span, T value0, T value1) where T : IEquatable<T>? =>
+        public static long LastIndexOfAny<T>(this UnmanagedSpan<T> span, T value0, T value1) where T : IEquatable<T>? =>
             LastIndexOfAny((ReadOnlyUnmanagedSpan<T>)span, value0, value1);
 
         /// <summary>
@@ -3055,7 +3055,7 @@ namespace System
         /// <param name="value2">One of the values to search for.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         [OverloadResolutionPriority(-1)]
-        public static int LastIndexOfAny<T>(this UnmanagedSpan<T> span, T value0, T value1, T value2) where T : IEquatable<T>? =>
+        public static long LastIndexOfAny<T>(this UnmanagedSpan<T> span, T value0, T value1, T value2) where T : IEquatable<T>? =>
             LastIndexOfAny((ReadOnlyUnmanagedSpan<T>)span, value0, value1, value2);
 
         /// <summary>
@@ -3065,7 +3065,7 @@ namespace System
         /// <param name="values">The set of values to search for.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         [OverloadResolutionPriority(-1)]
-        public static int LastIndexOfAny<T>(this UnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> values) where T : IEquatable<T>? =>
+        public static long LastIndexOfAny<T>(this UnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> values) where T : IEquatable<T>? =>
             LastIndexOfAny((ReadOnlyUnmanagedSpan<T>)span, values);
 
         /// <summary>
@@ -3075,7 +3075,7 @@ namespace System
         /// <param name="values">The set of values to search for.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         [OverloadResolutionPriority(-1)]
-        public static int LastIndexOfAny<T>(this UnmanagedSpan<T> span, SearchValues<T> values) where T : IEquatable<T>? =>
+        public static long LastIndexOfAny<T>(this UnmanagedSpan<T> span, SearchValues<T> values) where T : IEquatable<T>? =>
             LastIndexOfAny((ReadOnlyUnmanagedSpan<T>)span, values);
 
         /// <summary>
@@ -3085,7 +3085,7 @@ namespace System
         /// <param name="value0">One of the values to search for.</param>
         /// <param name="value1">One of the values to search for.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static unsafe int LastIndexOfAny<T>(this ReadOnlyUnmanagedSpan<T> span, T value0, T value1) where T : IEquatable<T>?
+        public static unsafe long LastIndexOfAny<T>(this ReadOnlyUnmanagedSpan<T> span, T value0, T value1) where T : IEquatable<T>?
         {
             if (RuntimeHelpers.IsBitwiseEquatable<T>())
             {
@@ -3118,7 +3118,7 @@ namespace System
         /// <param name="value1">One of the values to search for.</param>
         /// <param name="comparer">The <see cref="IEqualityComparer{T}"/> implementation to use when comparing elements, or <see langword="null"/> to use the default <see cref="IEqualityComparer{T}"/> for the type of an element.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static unsafe int LastIndexOfAny<T>(this ReadOnlyUnmanagedSpan<T> span, T value0, T value1, IEqualityComparer<T>? comparer = null)
+        public static unsafe long LastIndexOfAny<T>(this ReadOnlyUnmanagedSpan<T> span, T value0, T value1, IEqualityComparer<T>? comparer = null)
         {
             if (typeof(T).IsValueType && (comparer is null || comparer == EqualityComparer<T>.Default))
             {
@@ -3145,7 +3145,7 @@ namespace System
                 return LastIndexOfAnyDefaultComparer(span, value0, value1);
                 static int LastIndexOfAnyDefaultComparer(ReadOnlyUnmanagedSpan<T> span, T value0, T value1)
                 {
-                    for (int i = span.Length - 1; i >= 0; i--)
+                    for (long i = span.Length - 1; i >= 0; i--)
                     {
                         if (EqualityComparer<T>.Default.Equals(span[i], value0) ||
                             EqualityComparer<T>.Default.Equals(span[i], value1))
@@ -3164,7 +3164,7 @@ namespace System
                 {
                     comparer ??= EqualityComparer<T>.Default;
 
-                    for (int i = span.Length - 1; i >= 0; i--)
+                    for (long i = span.Length - 1; i >= 0; i--)
                     {
                         if (comparer.Equals(span[i], value0) ||
                             comparer.Equals(span[i], value1))
@@ -3186,7 +3186,7 @@ namespace System
         /// <param name="value1">One of the values to search for.</param>
         /// <param name="value2">One of the values to search for.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static unsafe int LastIndexOfAny<T>(this ReadOnlyUnmanagedSpan<T> span, T value0, T value1, T value2) where T : IEquatable<T>?
+        public static unsafe long LastIndexOfAny<T>(this ReadOnlyUnmanagedSpan<T> span, T value0, T value1, T value2) where T : IEquatable<T>?
         {
             if (RuntimeHelpers.IsBitwiseEquatable<T>())
             {
@@ -3222,7 +3222,7 @@ namespace System
         /// <param name="value2">One of the values to search for.</param>
         /// <param name="comparer">The <see cref="IEqualityComparer{T}"/> implementation to use when comparing elements, or <see langword="null"/> to use the default <see cref="IEqualityComparer{T}"/> for the type of an element.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static unsafe int LastIndexOfAny<T>(this ReadOnlyUnmanagedSpan<T> span, T value0, T value1, T value2, IEqualityComparer<T>? comparer = null)
+        public static unsafe long LastIndexOfAny<T>(this ReadOnlyUnmanagedSpan<T> span, T value0, T value1, T value2, IEqualityComparer<T>? comparer = null)
         {
             if (typeof(T).IsValueType && (comparer is null || comparer == EqualityComparer<T>.Default))
             {
@@ -3251,7 +3251,7 @@ namespace System
                 return LastIndexOfAnyDefaultComparer(span, value0, value1, value2);
                 static int LastIndexOfAnyDefaultComparer(ReadOnlyUnmanagedSpan<T> span, T value0, T value1, T value2)
                 {
-                    for (int i = span.Length - 1; i >= 0; i--)
+                    for (long i = span.Length - 1; i >= 0; i--)
                     {
                         if (EqualityComparer<T>.Default.Equals(span[i], value0) ||
                             EqualityComparer<T>.Default.Equals(span[i], value1) ||
@@ -3271,7 +3271,7 @@ namespace System
                 {
                     comparer ??= EqualityComparer<T>.Default;
 
-                    for (int i = span.Length - 1; i >= 0; i--)
+                    for (long i = span.Length - 1; i >= 0; i--)
                     {
                         if (comparer.Equals(span[i], value0) ||
                             comparer.Equals(span[i], value1) ||
@@ -3292,7 +3292,7 @@ namespace System
         /// <param name="span">The span to search.</param>
         /// <param name="values">The set of values to search for.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static unsafe int LastIndexOfAny<T>(this ReadOnlyUnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> values) where T : IEquatable<T>?
+        public static unsafe long LastIndexOfAny<T>(this ReadOnlyUnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> values) where T : IEquatable<T>?
         {
             if (RuntimeHelpers.IsBitwiseEquatable<T>())
             {
@@ -3392,7 +3392,7 @@ namespace System
         /// <param name="span">The span to search.</param>
         /// <param name="values">The set of values to search for.</param>
         /// <param name="comparer">The <see cref="IEqualityComparer{T}"/> implementation to use when comparing elements, or <see langword="null"/> to use the default <see cref="IEqualityComparer{T}"/> for the type of an element.</param>
-        public static int LastIndexOfAny<T>(this ReadOnlyUnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> values, IEqualityComparer<T>? comparer = null)
+        public static long LastIndexOfAny<T>(this ReadOnlyUnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> values, IEqualityComparer<T>? comparer = null)
         {
             switch (values.Length)
             {
@@ -3411,7 +3411,7 @@ namespace System
                 default:
                     comparer ??= EqualityComparer<T>.Default;
 
-                    for (int i = span.Length - 1; i >= 0; i--)
+                    for (long i = span.Length - 1; i >= 0; i--)
                     {
                         if (values.Contains(span[i], comparer))
                         {
@@ -3429,7 +3429,7 @@ namespace System
         /// <param name="span">The span to search.</param>
         /// <param name="values">The set of values to search for.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static int LastIndexOfAny<T>(this ReadOnlyUnmanagedSpan<T> span, SearchValues<T> values) where T : IEquatable<T>?
+        public static long LastIndexOfAny<T>(this ReadOnlyUnmanagedSpan<T> span, SearchValues<T> values) where T : IEquatable<T>?
         {
             if (values is null)
             {
@@ -3446,7 +3446,7 @@ namespace System
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static unsafe bool SequenceEqual<T>(this ReadOnlyUnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> other) where T : IEquatable<T>?
         {
-            int length = span.Length;
+            long length = span.Length;
             int otherLength = other.Length;
 
             if (RuntimeHelpers.IsBitwiseEquatable<T>())
@@ -3501,7 +3501,7 @@ namespace System
                     }
 
                     // Otherwise, compare each element using EqualityComparer<T>.Default.Equals in a way that will enable it to devirtualize.
-                    for (int i = 0; i < span.Length; i++)
+                    for (long i = 0; i < span.Length; i++)
                     {
                         if (!EqualityComparer<T>.Default.Equals(span[i], other[i]))
                         {
@@ -3515,7 +3515,7 @@ namespace System
 
             // Use the comparer to compare each element.
             comparer ??= EqualityComparer<T>.Default;
-            for (int i = 0; i < span.Length; i++)
+            for (long i = 0; i < span.Length; i++)
             {
                 if (!comparer.Equals(span[i], other[i]))
                 {
@@ -3530,7 +3530,7 @@ namespace System
         /// Determines the relative order of the sequences being compared by comparing the elements using IComparable{T}.CompareTo(T).
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static int SequenceCompareTo<T>(this ReadOnlyUnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> other) where T : IComparable<T>?
+        public static long SequenceCompareTo<T>(this ReadOnlyUnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> other) where T : IComparable<T>?
         {
             // Can't use IsBitwiseEquatable<T>() below because that only tells us about
             // equality checks, not about CompareTo checks.
@@ -3555,12 +3555,12 @@ namespace System
         /// <summary>
         /// Determines the relative order of the sequences being compared by comparing the elements using IComparable{T}.CompareTo(T).
         /// </summary>
-        public static int SequenceCompareTo<T>(this ReadOnlyUnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> other, IComparer<T>? comparer = null)
+        public static long SequenceCompareTo<T>(this ReadOnlyUnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> other, IComparer<T>? comparer = null)
         {
             int minLength = Math.Min(span.Length, other.Length);
             comparer ??= Comparer<T>.Default;
 
-            for (int i = 0; i < minLength; i++)
+            for (long i = 0; i < minLength; i++)
             {
                 int c = comparer.Compare(span[i], other[i]);
                 if (c != 0)
@@ -3742,7 +3742,7 @@ namespace System
         /// Thrown when the specified <paramref name="start"/> or end index is not in the range (&lt;0 or &gt;Length).
         /// </exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static UnmanagedSpan<T> AsUnmanagedSpan<T>(this T[]? array, int start, int length)
+        public static UnmanagedSpan<T> AsUnmanagedSpan<T>(this T[]? array, long start, long length)
         {
             return new UnmanagedSpan<T>(array, start, length);
         }
@@ -3768,7 +3768,7 @@ namespace System
         /// Thrown when the specified <paramref name="start"/> or end index is not in the range (&lt;0 or &gt;segment.Count).
         /// </exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static UnmanagedSpan<T> AsUnmanagedSpan<T>(this ArraySegment<T> segment, int start)
+        public static UnmanagedSpan<T> AsUnmanagedSpan<T>(this ArraySegment<T> segment, long start)
         {
             if (((uint)start) > (uint)segment.Count)
                 ThrowHelper.ThrowArgumentOutOfRangeException(ExceptionArgument.start);
@@ -3802,7 +3802,7 @@ namespace System
         /// Thrown when the specified <paramref name="start"/> or end index is not in the range (&lt;0 or &gt;segment.Count).
         /// </exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static UnmanagedSpan<T> AsUnmanagedSpan<T>(this ArraySegment<T> segment, int start, int length)
+        public static UnmanagedSpan<T> AsUnmanagedSpan<T>(this ArraySegment<T> segment, long start, long length)
         {
             if (((uint)start) > (uint)segment.Count)
                 ThrowHelper.ThrowArgumentOutOfRangeException(ExceptionArgument.start);
@@ -3820,7 +3820,7 @@ namespace System
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static UnmanagedSpan<T> AsUnmanagedSpan<T>(this ArraySegment<T> segment, Range range)
         {
-            (int start, int length) = range.GetOffsetAndLength(segment.Count);
+            (long start, long length) = range.GetOffsetAndLength(segment.Count);
             return new UnmanagedSpan<T>(segment.Array, segment.Offset + start, length);
         }
 
@@ -3840,7 +3840,7 @@ namespace System
         /// <exception cref="ArgumentOutOfRangeException">
         /// Thrown when the specified <paramref name="start"/> or end index is not in the range (&lt;0 or &gt;array.Length).
         /// </exception>
-        public static Memory<T> AsMemory<T>(this T[]? array, int start) => new Memory<T>(array, start);
+        public static Memory<T> AsMemory<T>(this T[]? array, long start) => new Memory<T>(array, start);
 
         /// <summary>
         /// Creates a new memory over the portion of the target array starting from
@@ -3872,7 +3872,7 @@ namespace System
         /// <exception cref="ArgumentOutOfRangeException">
         /// Thrown when the specified <paramref name="start"/> or end index is not in the range (&lt;0 or &gt;Length).
         /// </exception>
-        public static Memory<T> AsMemory<T>(this T[]? array, int start, int length) => new Memory<T>(array, start, length);
+        public static Memory<T> AsMemory<T>(this T[]? array, long start, long length) => new Memory<T>(array, start, length);
 
         /// <summary>
         /// Creates a new memory over the portion of the target array beginning at inclusive start index of the range
@@ -3890,7 +3890,7 @@ namespace System
                 return default;
             }
 
-            (int start, int length) = range.GetOffsetAndLength(array.Length);
+            (long start, long length) = range.GetOffsetAndLength(array.Length);
             return new Memory<T>(array, start, length);
         }
 
@@ -3910,7 +3910,7 @@ namespace System
         /// <exception cref="ArgumentOutOfRangeException">
         /// Thrown when the specified <paramref name="start"/> or end index is not in the range (&lt;0 or &gt;segment.Count).
         /// </exception>
-        public static Memory<T> AsMemory<T>(this ArraySegment<T> segment, int start)
+        public static Memory<T> AsMemory<T>(this ArraySegment<T> segment, long start)
         {
             if (((uint)start) > (uint)segment.Count)
                 ThrowHelper.ThrowArgumentOutOfRangeException(ExceptionArgument.start);
@@ -3930,7 +3930,7 @@ namespace System
         /// <exception cref="ArgumentOutOfRangeException">
         /// Thrown when the specified <paramref name="start"/> or end index is not in the range (&lt;0 or &gt;segment.Count).
         /// </exception>
-        public static Memory<T> AsMemory<T>(this ArraySegment<T> segment, int start, int length)
+        public static Memory<T> AsMemory<T>(this ArraySegment<T> segment, long start, long length)
         {
             if (((uint)start) > (uint)segment.Count)
                 ThrowHelper.ThrowArgumentOutOfRangeException(ExceptionArgument.start);
@@ -4183,7 +4183,7 @@ namespace System
         /// </exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         [OverloadResolutionPriority(-1)]
-        public static int BinarySearch<T>(this UnmanagedSpan<T> span, IComparable<T> comparable) =>
+        public static long BinarySearch<T>(this UnmanagedSpan<T> span, IComparable<T> comparable) =>
             BinarySearch((ReadOnlyUnmanagedSpan<T>)span, comparable);
 
         /// <summary>
@@ -4205,7 +4205,7 @@ namespace System
         /// </exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         [OverloadResolutionPriority(-1)]
-        public static int BinarySearch<T, TComparable>(
+        public static long BinarySearch<T, TComparable>(
             this UnmanagedSpan<T> span, TComparable comparable)
             where TComparable : IComparable<T>, allows ref struct =>
             BinarySearch((ReadOnlyUnmanagedSpan<T>)span, comparable);
@@ -4230,7 +4230,7 @@ namespace System
         /// </exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         [OverloadResolutionPriority(-1)]
-        public static int BinarySearch<T, TComparer>(
+        public static long BinarySearch<T, TComparer>(
             this UnmanagedSpan<T> span, T value, TComparer comparer)
             where TComparer : IComparer<T>, allows ref struct =>
             BinarySearch((ReadOnlyUnmanagedSpan<T>)span, value, comparer);
@@ -4252,7 +4252,7 @@ namespace System
         /// <paramref name = "comparable" /> is <see langword="null"/> .
         /// </exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static int BinarySearch<T>(
+        public static long BinarySearch<T>(
             this ReadOnlyUnmanagedSpan<T> span, IComparable<T> comparable) =>
             BinarySearch<T, IComparable<T>>(span, comparable);
 
@@ -4274,7 +4274,7 @@ namespace System
         /// <paramref name = "comparable" /> is <see langword="null"/> .
         /// </exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static int BinarySearch<T, TComparable>(
+        public static long BinarySearch<T, TComparable>(
             this ReadOnlyUnmanagedSpan<T> span, TComparable comparable)
             where TComparable : IComparable<T>, allows ref struct
         {
@@ -4300,7 +4300,7 @@ namespace System
         /// <paramref name = "comparer" /> is <see langword="null"/> .
         /// </exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static int BinarySearch<T, TComparer>(
+        public static long BinarySearch<T, TComparer>(
             this ReadOnlyUnmanagedSpan<T> span, T value, TComparer comparer)
             where TComparer : IComparer<T>, allows ref struct
         {
@@ -4470,7 +4470,7 @@ namespace System
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static unsafe void Replace<T>(this UnmanagedSpan<T> span, T oldValue, T newValue) where T : IEquatable<T>?
         {
-            uint length = (uint)span.Length;
+            ulong length = (uint)span.Length;
 
             if (RuntimeHelpers.IsBitwiseEquatable<T>())
             {
@@ -4590,7 +4590,7 @@ namespace System
                 ReplaceDefaultComparer(span, oldValue, newValue);
                 static void ReplaceDefaultComparer(UnmanagedSpan<T> span, T oldValue, T newValue)
                 {
-                    for (int i = 0; i < span.Length; i++)
+                    for (long i = 0; i < span.Length; i++)
                     {
                         if (EqualityComparer<T>.Default.Equals(span[i], oldValue))
                         {
@@ -4605,7 +4605,7 @@ namespace System
                 static void ReplaceComparer(UnmanagedSpan<T> span, T oldValue, T newValue, IEqualityComparer<T>? comparer)
                 {
                     comparer ??= EqualityComparer<T>.Default;
-                    for (int i = 0; i < span.Length; i++)
+                    for (long i = 0; i < span.Length; i++)
                     {
                         if (comparer.Equals(span[i], oldValue))
                         {
@@ -4629,7 +4629,7 @@ namespace System
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static unsafe void Replace<T>(this ReadOnlyUnmanagedSpan<T> source, UnmanagedSpan<T> destination, T oldValue, T newValue) where T : IEquatable<T>?
         {
-            uint length = (uint)source.Length;
+            ulong length = (uint)source.Length;
             if (length == 0)
             {
                 return;
@@ -4713,7 +4713,7 @@ namespace System
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static unsafe void Replace<T>(this ReadOnlyUnmanagedSpan<T> source, UnmanagedSpan<T> destination, T oldValue, T newValue, IEqualityComparer<T>? comparer = null)
         {
-            uint length = (uint)source.Length;
+            ulong length = (uint)source.Length;
             if (length == 0)
             {
                 return;
@@ -4787,7 +4787,7 @@ namespace System
                 {
                     destination = destination.Slice(0, source.Length);
 
-                    for (int i = 0; i < source.Length; i++)
+                    for (long i = 0; i < source.Length; i++)
                     {
                         destination[i] = EqualityComparer<T>.Default.Equals(source[i], oldValue) ? newValue : source[i];
                     }
@@ -4801,7 +4801,7 @@ namespace System
                     destination = destination.Slice(0, source.Length);
                     comparer ??= EqualityComparer<T>.Default;
 
-                    for (int i = 0; i < source.Length; i++)
+                    for (long i = 0; i < source.Length; i++)
                     {
                         destination[i] = comparer.Equals(source[i], oldValue) ? newValue : source[i];
                     }
@@ -4914,7 +4914,7 @@ namespace System
         /// <param name="other">The second sequence to compare.</param>
         /// <returns>The length of the common prefix shared by the two spans.  If there's no shared prefix, 0 is returned.</returns>
         [OverloadResolutionPriority(-1)]
-        public static int CommonPrefixLength<T>(this UnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> other) =>
+        public static long CommonPrefixLength<T>(this UnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> other) =>
             CommonPrefixLength((ReadOnlyUnmanagedSpan<T>)span, other);
 
         /// <summary>Finds the length of any common prefix shared between <paramref name="span"/> and <paramref name="other"/>.</summary>
@@ -4924,7 +4924,7 @@ namespace System
         /// <param name="comparer">The <see cref="IEqualityComparer{T}"/> implementation to use when comparing elements, or <see langword="null"/> to use the default <see cref="IEqualityComparer{T}"/> for the type of an element.</param>
         /// <returns>The length of the common prefix shared by the two spans.  If there's no shared prefix, 0 is returned.</returns>
         [OverloadResolutionPriority(-1)]
-        public static int CommonPrefixLength<T>(this UnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> other, IEqualityComparer<T>? comparer) =>
+        public static long CommonPrefixLength<T>(this UnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> other, IEqualityComparer<T>? comparer) =>
             CommonPrefixLength((ReadOnlyUnmanagedSpan<T>)span, other, comparer);
 
         /// <summary>Finds the length of any common prefix shared between <paramref name="span"/> and <paramref name="other"/>.</summary>
@@ -4936,9 +4936,9 @@ namespace System
         {
             if (RuntimeHelpers.IsBitwiseEquatable<T>())
             {
-                nuint length = Math.Min((nuint)(uint)span.Length, (nuint)(uint)other.Length);
+                nulong length = Math.Min((nuint)(uint)span.Length, (nuint)(uint)other.Length);
                 nuint size = (uint)sizeof(T);
-                nuint index = UnmanagedSpanHelpers.CommonPrefixLength(
+                nulong index = UnmanagedSpanHelpers.CommonPrefixLength(
                     ref Unsafe.As<T, byte>(ref MemoryMarshal.GetReference(span)),
                     ref Unsafe.As<T, byte>(ref MemoryMarshal.GetReference(other)),
                     length * size);
@@ -4963,7 +4963,7 @@ namespace System
 
             // Find the first element pairwise that is not equal, and return its index as the length
             // of the sequence before it that matches.
-            for (int i = 0; i < span.Length; i++)
+            for (long i = 0; i < span.Length; i++)
             {
                 if (!EqualityComparer<T>.Default.Equals(span[i], other[i]))
                 {
@@ -4980,7 +4980,7 @@ namespace System
         /// <param name="other">The second sequence to compare.</param>
         /// <param name="comparer">The <see cref="IEqualityComparer{T}"/> implementation to use when comparing elements, or <see langword="null"/> to use the default <see cref="IEqualityComparer{T}"/> for the type of an element.</param>
         /// <returns>The length of the common prefix shared by the two spans.  If there's no shared prefix, 0 is returned.</returns>
-        public static int CommonPrefixLength<T>(this ReadOnlyUnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> other, IEqualityComparer<T>? comparer)
+        public static long CommonPrefixLength<T>(this ReadOnlyUnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> other, IEqualityComparer<T>? comparer)
         {
             // If the comparer is null or the default, and T is a value type, we want to use EqualityComparer<T>.Default.Equals
             // directly to enable devirtualization.  The non-comparer overload already does so, so just use it.
@@ -4995,7 +4995,7 @@ namespace System
 
             // Ensure we have a comparer, then compare the spans.
             comparer ??= EqualityComparer<T>.Default;
-            for (int i = 0; i < span.Length; i++)
+            for (long i = 0; i < span.Length; i++)
             {
                 if (!comparer.Equals(span[i], other[i]))
                 {
@@ -5414,7 +5414,7 @@ namespace System
         /// <param name="value">The value for which to search.</param>
         /// <returns>The number of times <paramref name="value"/> was found in the <paramref name="span"/>.</returns>
         [OverloadResolutionPriority(-1)]
-        public static int Count<T>(this UnmanagedSpan<T> span, T value) where T : IEquatable<T>? =>
+        public static long Count<T>(this UnmanagedSpan<T> span, T value) where T : IEquatable<T>? =>
             Count((ReadOnlyUnmanagedSpan<T>)span, value);
 
         /// <summary>Counts the number of times the specified <paramref name="value"/> occurs in the <paramref name="span"/>.</summary>
@@ -5510,7 +5510,7 @@ namespace System
                 static int CountDefaultComparer(ReadOnlyUnmanagedSpan<T> span, T value)
                 {
                     int count = 0;
-                    for (int i = 0; i < span.Length; i++)
+                    for (long i = 0; i < span.Length; i++)
                     {
                         if (EqualityComparer<T>.Default.Equals(span[i], value))
                         {
@@ -5529,7 +5529,7 @@ namespace System
                     comparer ??= EqualityComparer<T>.Default;
 
                     int count = 0;
-                    for (int i = 0; i < span.Length; i++)
+                    for (long i = 0; i < span.Length; i++)
                     {
                         if (comparer.Equals(span[i], value))
                         {
@@ -5548,7 +5548,7 @@ namespace System
         /// <param name="value">The value for which to search.</param>
         /// <returns>The number of times <paramref name="value"/> was found in the <paramref name="span"/>.</returns>
         [OverloadResolutionPriority(-1)]
-        public static int Count<T>(this UnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> value) where T : IEquatable<T>? =>
+        public static long Count<T>(this UnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> value) where T : IEquatable<T>? =>
             Count((ReadOnlyUnmanagedSpan<T>)span, value);
 
         /// <summary>Counts the number of times the specified <paramref name="value"/> occurs in the <paramref name="span"/>.</summary>
@@ -5556,7 +5556,7 @@ namespace System
         /// <param name="span">The span to search.</param>
         /// <param name="value">The value for which to search.</param>
         /// <returns>The number of times <paramref name="value"/> was found in the <paramref name="span"/>.</returns>
-        public static int Count<T>(this ReadOnlyUnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> value) where T : IEquatable<T>?
+        public static long Count<T>(this ReadOnlyUnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> value) where T : IEquatable<T>?
         {
             switch (value.Length)
             {
@@ -5586,7 +5586,7 @@ namespace System
         /// <param name="value">The value for which to search.</param>
         /// <param name="comparer">The <see cref="IEqualityComparer{T}"/> implementation to use when comparing elements, or <see langword="null"/> to use the default <see cref="IEqualityComparer{T}"/> for the type of an element.</param>
         /// <returns>The number of times <paramref name="value"/> was found in the <paramref name="span"/>.</returns>
-        public static int Count<T>(this ReadOnlyUnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> value, IEqualityComparer<T>? comparer = null)
+        public static long Count<T>(this ReadOnlyUnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> value, IEqualityComparer<T>? comparer = null)
         {
             switch (value.Length)
             {
@@ -5617,7 +5617,7 @@ namespace System
         /// <returns>The number of times any of the <typeparamref name="T"/> elements in <paramref name="values"/> was found in the <paramref name="span"/>.</returns>
         /// <remarks>If <paramref name="values"/> is empty, 0 is returned.</remarks>
         /// <exception cref="ArgumentNullException"><paramref name="values"/> is <see langword="null"/>.</exception>
-        public static int CountAny<T>(this ReadOnlyUnmanagedSpan<T> span, SearchValues<T> values) where T : IEquatable<T>?
+        public static long CountAny<T>(this ReadOnlyUnmanagedSpan<T> span, SearchValues<T> values) where T : IEquatable<T>?
         {
             int count = 0;
 
@@ -5637,7 +5637,7 @@ namespace System
         /// <param name="values">The set of values for which to search.</param>
         /// <returns>The number of times any of the <typeparamref name="T"/> elements in <paramref name="values"/> was found in the <paramref name="span"/>.</returns>
         /// <remarks>If <paramref name="values"/> is empty, 0 is returned.</remarks>
-        public static int CountAny<T>(this ReadOnlyUnmanagedSpan<T> span, params ReadOnlyUnmanagedSpan<T> values) where T : IEquatable<T>?
+        public static long CountAny<T>(this ReadOnlyUnmanagedSpan<T> span, params ReadOnlyUnmanagedSpan<T> values) where T : IEquatable<T>?
         {
             int count = 0;
 
@@ -5661,7 +5661,7 @@ namespace System
         /// </param>
         /// <returns>The number of times any of the <typeparamref name="T"/> elements in <paramref name="values"/> was found in the <paramref name="span"/>.</returns>
         /// <remarks>If <paramref name="values"/> is empty, 0 is returned.</remarks>
-        public static int CountAny<T>(this ReadOnlyUnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> values, IEqualityComparer<T>? comparer = null)
+        public static long CountAny<T>(this ReadOnlyUnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> values, IEqualityComparer<T>? comparer = null)
         {
             int count = 0;
 
@@ -5834,7 +5834,7 @@ namespace System
                     }
                     else
                     {
-                        int index = segment.ArgIndex;
+                        long index = segment.ArgIndex;
                         switch (index)
                         {
                             case 0:

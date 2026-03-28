@@ -85,12 +85,12 @@ namespace System
             ip = default;
         }
 
-        public static void Reverse(ref int buf, nuint length)
+        public static void Reverse(ref int buf, nulong length)
         {
             Debug.Assert(length > 1);
 
             nint remainder = (nint)length;
-            nint offset = 0;
+            nlong offset = 0;
 
             if (Vector512.IsHardwareAccelerated && remainder >= Vector512<int>.Count * 2)
             {
@@ -190,12 +190,12 @@ namespace System
             }
         }
 
-        public static void Reverse(ref long buf, nuint length)
+        public static void Reverse(ref long buf, nulong length)
         {
             Debug.Assert(length > 1);
 
             nint remainder = (nint)length;
-            nint offset = 0;
+            nlong offset = 0;
 
             if (Vector512.IsHardwareAccelerated && remainder >= Vector512<long>.Count * 2)
             {
@@ -296,7 +296,7 @@ namespace System
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static unsafe void Reverse<T>(ref T elements, nuint length)
+        public static unsafe void Reverse<T>(ref T elements, nulong length)
         {
             Debug.Assert(length > 1);
 
@@ -328,7 +328,7 @@ namespace System
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static void ReverseInner<T>(ref T elements, nuint length)
+        private static void ReverseInner<T>(ref T elements, nulong length)
         {
             Debug.Assert(length > 1);
 

@@ -12,7 +12,7 @@ namespace System
 {
     internal static partial class UnmanagedSpanHelpers // .Char
     {
-        public static int IndexOf(ref char searchSpace, int searchSpaceLength, ref char value, int valueLength)
+        public static long IndexOf(ref char searchSpace, long searchSpaceLength, ref char value, long valueLength)
         {
             Debug.Assert(searchSpaceLength >= 0);
             Debug.Assert(valueLength >= 0);
@@ -27,7 +27,7 @@ namespace System
                 return IndexOfChar(ref searchSpace, value, searchSpaceLength);
             }
 
-            nint offset = 0;
+            nlong offset = 0;
             char valueHead = value;
             int searchSpaceMinusValueTailLength = searchSpaceLength - valueTailLength;
             if (Vector128.IsHardwareAccelerated && searchSpaceMinusValueTailLength >= Vector128<ushort>.Count)
@@ -42,7 +42,7 @@ namespace System
             {
                 // Do a quick search for the first element of "value".
                 // Using the non-packed variant as the input is short and would not benefit from the packed implementation.
-                int relativeIndex = NonPackedIndexOfChar(ref Unsafe.Add(ref searchSpace, offset), valueHead, remainingSearchSpaceLength);
+                long relativeIndex = NonPackedIndexOfChar(ref Unsafe.Add(ref searchSpace, offset), valueHead, remainingSearchSpaceLength);
                 if (relativeIndex < 0)
                     break;
 
@@ -262,7 +262,7 @@ namespace System
             }
         }
 
-        public static int LastIndexOf(ref char searchSpace, int searchSpaceLength, ref char value, int valueLength)
+        public static long LastIndexOf(ref char searchSpace, long searchSpaceLength, ref char value, long valueLength)
         {
             Debug.Assert(searchSpaceLength >= 0);
             Debug.Assert(valueLength >= 0);
@@ -274,7 +274,7 @@ namespace System
             if (valueTailLength == 0)
                 return LastIndexOfValueType(ref Unsafe.As<char, short>(ref searchSpace), (short)value, searchSpaceLength); // for single-char values use plain LastIndexOf
 
-            int offset = 0;
+            long offset = 0;
             char valueHead = value;
             int searchSpaceMinusValueTailLength = searchSpaceLength - valueTailLength;
             if (Vector128.IsHardwareAccelerated && searchSpaceMinusValueTailLength >= Vector128<ushort>.Count)
@@ -292,7 +292,7 @@ namespace System
                     break;  // The unsearched portion is now shorter than the sequence we're looking for. So it can't be there.
 
                 // Do a quick search for the first element of "value".
-                int relativeIndex = LastIndexOfValueType(ref Unsafe.As<char, short>(ref searchSpace), (short)valueHead, remainingSearchSpaceLength);
+                long relativeIndex = LastIndexOfValueType(ref Unsafe.As<char, short>(ref searchSpace), (short)valueHead, remainingSearchSpaceLength);
                 if (relativeIndex == -1)
                     break;
 
@@ -463,7 +463,7 @@ namespace System
             }
         }
 
-        public static unsafe int SequenceCompareTo(ref char first, int firstLength, ref char second, int secondLength)
+        public static unsafe int SequenceCompareTo(ref char first, long firstLength, ref char second, long secondLength)
         {
             Debug.Assert(firstLength >= 0);
             Debug.Assert(secondLength >= 0);
@@ -474,7 +474,7 @@ namespace System
                 goto Equal;
 
             nuint minLength = (nuint)(((uint)firstLength < (uint)secondLength) ? (uint)firstLength : (uint)secondLength);
-            nuint i = 0; // Use nuint for arithmetic to avoid unnecessary 64->32->64 truncations
+            nulong i = 0; // Use nuint for arithmetic to avoid unnecessary 64->32->64 truncations
 
             if (minLength >= (nuint)(sizeof(nuint) / sizeof(char)))
             {
@@ -533,9 +533,9 @@ namespace System
         public static unsafe int IndexOfNullCharacter(char* searchSpace)
         {
             const char value = '\0';
-            const int length = int.MaxValue;
+            const long length = int.MaxValue;
 
-            nint offset = 0;
+            nlong offset = 0;
             nint lengthToExamine = length;
 
             if (((int)searchSpace & 1) != 0)
@@ -868,15 +868,15 @@ namespace System
             => BitOperations.TrailingZeroCount(match) >> 4;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static nint GetCharVector128SpanLength(nint offset, nint length)
+        private static nint GetCharVector128SpanLength(nint offset, nlong length)
             => (length - offset) & ~(Vector128<ushort>.Count - 1);
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static nint GetCharVector256SpanLength(nint offset, nint length)
+        private static nint GetCharVector256SpanLength(nint offset, nlong length)
             => (length - offset) & ~(Vector256<ushort>.Count - 1);
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static nint GetCharVector512SpanLength(nint offset, nint length)
+        private static nint GetCharVector512SpanLength(nint offset, nlong length)
             => (length - offset) & ~(Vector512<ushort>.Count - 1);
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -886,12 +886,12 @@ namespace System
             return (nint)(uint)(-(int)searchSpace / ElementsPerByte) & (Vector128<ushort>.Count - 1);
         }
 
-        public static void Reverse(ref char buf, nuint length)
+        public static void Reverse(ref char buf, nulong length)
         {
             Debug.Assert(length > 1);
 
             nint remainder = (nint)length;
-            nint offset = 0;
+            nlong offset = 0;
 
             if (Vector512.IsHardwareAccelerated && remainder >= Vector512<ushort>.Count * 2)
             {

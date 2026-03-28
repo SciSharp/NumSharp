@@ -314,7 +314,7 @@ namespace System
 
             if ((ulong)_length <= (ulong)destination.Length)
             {
-                Buffer.Memmove(ref destination._reference, ref _reference, (ulong)_length);
+                UnmanagedBuffer.Memmove(ref destination._reference, ref _reference, (ulong)_length);
             }
             else
             {
@@ -335,7 +335,7 @@ namespace System
             bool retVal = false;
             if ((ulong)_length <= (ulong)destination.Length)
             {
-                Buffer.Memmove(ref destination._reference, ref _reference, (ulong)_length);
+                UnmanagedBuffer.Memmove(ref destination._reference, ref _reference, (ulong)_length);
                 retVal = true;
             }
             return retVal;

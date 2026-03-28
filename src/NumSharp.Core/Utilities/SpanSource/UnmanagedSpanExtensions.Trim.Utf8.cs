@@ -7,7 +7,7 @@ using System.Text;
 
 namespace System
 {
-    public static partial class MemoryExtensions
+    public static partial class UnmanagedSpanExtensions
     {
         internal static ReadOnlyUnmanagedSpan<byte> TrimUtf8(this ReadOnlyUnmanagedSpan<byte> span)
         {

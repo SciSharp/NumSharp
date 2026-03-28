@@ -60,7 +60,7 @@ namespace System.Runtime.CompilerServices
             // from the source array to the destination array, otherwise the contents
             // wouldn't have been valid for the source array in the first place.
 
-            Buffer.Memmove(
+            UnmanagedBuffer.Memmove(
                 ref MemoryMarshal.GetArrayDataReference(dest),
                 ref Unsafe.Add(ref MemoryMarshal.GetArrayDataReference(array), offset),
                 (uint)length);

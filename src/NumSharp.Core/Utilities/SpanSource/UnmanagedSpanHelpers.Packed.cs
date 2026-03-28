@@ -30,37 +30,37 @@ namespace System
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         [CompExactlyDependsOn(typeof(Sse2))]
-        public static int IndexOf(ref char searchSpace, char value, int length) =>
+        public static long IndexOf(ref char searchSpace, char value, long length) =>
             IndexOf<UnmanagedSpanHelpers.DontNegate<short>, NopTransform>(ref Unsafe.As<char, short>(ref searchSpace), (short)value, length);
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         [CompExactlyDependsOn(typeof(Sse2))]
-        public static int IndexOfAnyExcept(ref char searchSpace, char value, int length) =>
+        public static long IndexOfAnyExcept(ref char searchSpace, char value, long length) =>
             IndexOf<UnmanagedSpanHelpers.Negate<short>, NopTransform>(ref Unsafe.As<char, short>(ref searchSpace), (short)value, length);
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         [CompExactlyDependsOn(typeof(Sse2))]
-        public static int IndexOfAny(ref char searchSpace, char value0, char value1, int length) =>
+        public static long IndexOfAny(ref char searchSpace, char value0, char value1, long length) =>
             IndexOfAny<UnmanagedSpanHelpers.DontNegate<short>, NopTransform>(ref Unsafe.As<char, short>(ref searchSpace), (short)value0, (short)value1, length);
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         [CompExactlyDependsOn(typeof(Sse2))]
-        public static int IndexOfAnyExcept(ref char searchSpace, char value0, char value1, int length) =>
+        public static long IndexOfAnyExcept(ref char searchSpace, char value0, char value1, long length) =>
             IndexOfAny<UnmanagedSpanHelpers.Negate<short>, NopTransform>(ref Unsafe.As<char, short>(ref searchSpace), (short)value0, (short)value1, length);
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         [CompExactlyDependsOn(typeof(Sse2))]
-        public static int IndexOfAny(ref char searchSpace, char value0, char value1, char value2, int length) =>
+        public static long IndexOfAny(ref char searchSpace, char value0, char value1, char value2, long length) =>
             IndexOfAny<UnmanagedSpanHelpers.DontNegate<short>>(ref Unsafe.As<char, short>(ref searchSpace), (short)value0, (short)value1, (short)value2, length);
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         [CompExactlyDependsOn(typeof(Sse2))]
-        public static int IndexOfAnyExcept(ref char searchSpace, char value0, char value1, char value2, int length) =>
+        public static long IndexOfAnyExcept(ref char searchSpace, char value0, char value1, char value2, long length) =>
             IndexOfAny<UnmanagedSpanHelpers.Negate<short>>(ref Unsafe.As<char, short>(ref searchSpace), (short)value0, (short)value1, (short)value2, length);
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         [CompExactlyDependsOn(typeof(Sse2))]
-        public static int IndexOfAnyIgnoreCase(ref char searchSpace, char value, int length)
+        public static long IndexOfAnyIgnoreCase(ref char searchSpace, char value, long length)
         {
             Debug.Assert((value | 0x20) == value);
 
@@ -69,7 +69,7 @@ namespace System
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         [CompExactlyDependsOn(typeof(Sse2))]
-        public static int IndexOfAnyExceptIgnoreCase(ref char searchSpace, char value, int length)
+        public static long IndexOfAnyExceptIgnoreCase(ref char searchSpace, char value, long length)
         {
             Debug.Assert((value | 0x20) == value);
 
@@ -78,7 +78,7 @@ namespace System
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         [CompExactlyDependsOn(typeof(Sse2))]
-        public static int IndexOfAnyIgnoreCase(ref char searchSpace, char value0, char value1, int length)
+        public static long IndexOfAnyIgnoreCase(ref char searchSpace, char value0, char value1, long length)
         {
             Debug.Assert((value0 | 0x20) == value0);
             Debug.Assert((value1 | 0x20) == value1);
@@ -88,7 +88,7 @@ namespace System
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         [CompExactlyDependsOn(typeof(Sse2))]
-        public static int IndexOfAnyExceptIgnoreCase(ref char searchSpace, char value0, char value1, int length)
+        public static long IndexOfAnyExceptIgnoreCase(ref char searchSpace, char value0, char value1, long length)
         {
             Debug.Assert((value0 | 0x20) == value0);
             Debug.Assert((value1 | 0x20) == value1);
@@ -98,22 +98,22 @@ namespace System
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         [CompExactlyDependsOn(typeof(Sse2))]
-        public static int IndexOfAnyInRange(ref char searchSpace, char lowInclusive, char rangeInclusive, int length) =>
+        public static long IndexOfAnyInRange(ref char searchSpace, char lowInclusive, char rangeInclusive, long length) =>
             IndexOfAnyInRange<UnmanagedSpanHelpers.DontNegate<short>>(ref Unsafe.As<char, short>(ref searchSpace), (short)lowInclusive, (short)rangeInclusive, length);
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         [CompExactlyDependsOn(typeof(Sse2))]
-        public static int IndexOfAnyExceptInRange(ref char searchSpace, char lowInclusive, char rangeInclusive, int length) =>
+        public static long IndexOfAnyExceptInRange(ref char searchSpace, char lowInclusive, char rangeInclusive, long length) =>
             IndexOfAnyInRange<UnmanagedSpanHelpers.Negate<short>>(ref Unsafe.As<char, short>(ref searchSpace), (short)lowInclusive, (short)rangeInclusive, length);
 
         [CompExactlyDependsOn(typeof(Sse2))]
-        public static bool Contains(ref short searchSpace, short value, int length)
+        public static bool Contains(ref short searchSpace, short value, long length)
         {
             Debug.Assert(CanUsePackedIndexOf(value));
 
             if (length < Vector128<short>.Count)
             {
-                nuint offset = 0;
+                nulong offset = 0;
 
                 if (length >= 4)
                 {
@@ -309,7 +309,7 @@ namespace System
         }
 
         [CompExactlyDependsOn(typeof(Sse2))]
-        private static int IndexOf<TNegator, TTransform>(ref short searchSpace, short value, int length)
+        private static long IndexOf<TNegator, TTransform>(ref short searchSpace, short value, long length)
             where TNegator : struct, UnmanagedSpanHelpers.INegator<short>
             where TTransform : struct, ITransform
         {
@@ -317,7 +317,7 @@ namespace System
 
             if (length < Vector128<short>.Count)
             {
-                nuint offset = 0;
+                nulong offset = 0;
 
                 if (length >= 4)
                 {
@@ -512,7 +512,7 @@ namespace System
         }
 
         [CompExactlyDependsOn(typeof(Sse2))]
-        private static int IndexOfAny<TNegator, TTransform>(ref short searchSpace, short value0, short value1, int length)
+        private static long IndexOfAny<TNegator, TTransform>(ref short searchSpace, short value0, short value1, long length)
             where TNegator : struct, UnmanagedSpanHelpers.INegator<short>
             where TTransform : struct, ITransform
         {
@@ -521,7 +521,7 @@ namespace System
 
             if (length < Vector128<short>.Count)
             {
-                nuint offset = 0;
+                nulong offset = 0;
                 short lookUp;
 
                 if (length >= 4)
@@ -726,7 +726,7 @@ namespace System
         }
 
         [CompExactlyDependsOn(typeof(Sse2))]
-        private static int IndexOfAny<TNegator>(ref short searchSpace, short value0, short value1, short value2, int length)
+        private static long IndexOfAny<TNegator>(ref short searchSpace, short value0, short value1, short value2, long length)
             where TNegator : struct, UnmanagedSpanHelpers.INegator<short>
         {
             Debug.Assert(CanUsePackedIndexOf(value0));
@@ -735,7 +735,7 @@ namespace System
 
             if (length < Vector128<short>.Count)
             {
-                nuint offset = 0;
+                nulong offset = 0;
                 short lookUp;
 
                 if (length >= 4)
@@ -944,7 +944,7 @@ namespace System
         }
 
         [CompExactlyDependsOn(typeof(Sse2))]
-        private static int IndexOfAnyInRange<TNegator>(ref short searchSpace, short lowInclusive, short rangeInclusive, int length)
+        private static long IndexOfAnyInRange<TNegator>(ref short searchSpace, short lowInclusive, short rangeInclusive, long length)
             where TNegator : struct, UnmanagedSpanHelpers.INegator<short>
         {
             Debug.Assert(CanUsePackedIndexOf(lowInclusive));
@@ -955,7 +955,7 @@ namespace System
             {
                 uint lowInclusiveUint = (uint)lowInclusive;
                 uint rangeInclusiveUint = (uint)rangeInclusive;
-                for (int i = 0; i < length; i++)
+                for (long i = 0; i < length; i++)
                 {
                     uint current = (uint)Unsafe.Add(ref searchSpace, i);
                     if (TNegator.NegateIfNeeded((current - lowInclusiveUint) <= rangeInclusiveUint))
@@ -1230,7 +1230,7 @@ namespace System
         private static int ComputeFirstIndex(ref short searchSpace, ref short current, Vector128<byte> equals)
         {
             uint notEqualsElements = equals.ExtractMostSignificantBits();
-            int index = BitOperations.TrailingZeroCount(notEqualsElements);
+            long index = BitOperations.TrailingZeroCount(notEqualsElements);
             return index + (int)((nuint)Unsafe.ByteOffset(ref searchSpace, ref current) / sizeof(short));
         }
 
@@ -1239,7 +1239,7 @@ namespace System
         private static int ComputeFirstIndex(ref short searchSpace, ref short current, Vector256<byte> equals)
         {
             uint notEqualsElements = FixUpPackedVector256Result(equals).ExtractMostSignificantBits();
-            int index = BitOperations.TrailingZeroCount(notEqualsElements);
+            long index = BitOperations.TrailingZeroCount(notEqualsElements);
             return index + (int)((nuint)Unsafe.ByteOffset(ref searchSpace, ref current) / sizeof(short));
         }
 
@@ -1248,7 +1248,7 @@ namespace System
         private static int ComputeFirstIndex(ref short searchSpace, ref short current, Vector512<byte> equals)
         {
             ulong notEqualsElements = FixUpPackedVector512Result(equals).ExtractMostSignificantBits();
-            int index = BitOperations.TrailingZeroCount(notEqualsElements);
+            long index = BitOperations.TrailingZeroCount(notEqualsElements);
             return index + (int)((nuint)Unsafe.ByteOffset(ref searchSpace, ref current) / sizeof(short));
         }
 

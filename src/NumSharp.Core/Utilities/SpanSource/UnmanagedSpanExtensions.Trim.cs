@@ -6,7 +6,7 @@ using System.Runtime.CompilerServices;
 
 namespace System
 {
-    public static partial class MemoryExtensions
+    public static partial class UnmanagedSpanExtensions
     {
         /// <summary>
         /// Removes all leading and trailing occurrences of a specified element from the memory.
@@ -16,8 +16,8 @@ namespace System
         public static Memory<T> Trim<T>(this Memory<T> memory, T trimElement) where T : IEquatable<T>?
         {
             ReadOnlyUnmanagedSpan<T> span = memory.Span;
-            int start = ClampStart(span, trimElement);
-            int length = ClampEnd(span, start, trimElement);
+            long start = ClampStart(span, trimElement);
+            long length = ClampEnd(span, start, trimElement);
             return memory.Slice(start, length);
         }
 
@@ -45,8 +45,8 @@ namespace System
         public static ReadOnlyMemory<T> Trim<T>(this ReadOnlyMemory<T> memory, T trimElement) where T : IEquatable<T>?
         {
             ReadOnlyUnmanagedSpan<T> span = memory.Span;
-            int start = ClampStart(span, trimElement);
-            int length = ClampEnd(span, start, trimElement);
+            long start = ClampStart(span, trimElement);
+            long length = ClampEnd(span, start, trimElement);
             return memory.Slice(start, length);
         }
 
@@ -73,8 +73,8 @@ namespace System
         /// <param name="trimElement">The specified element to look for and remove.</param>
         public static UnmanagedSpan<T> Trim<T>(this UnmanagedSpan<T> span, T trimElement) where T : IEquatable<T>?
         {
-            int start = ClampStart(span, trimElement);
-            int length = ClampEnd(span, start, trimElement);
+            long start = ClampStart(span, trimElement);
+            long length = ClampEnd(span, start, trimElement);
             return span.Slice(start, length);
         }
 
@@ -101,8 +101,8 @@ namespace System
         /// <param name="trimElement">The specified element to look for and remove.</param>
         public static ReadOnlyUnmanagedSpan<T> Trim<T>(this ReadOnlyUnmanagedSpan<T> span, T trimElement) where T : IEquatable<T>?
         {
-            int start = ClampStart(span, trimElement);
-            int length = ClampEnd(span, start, trimElement);
+            long start = ClampStart(span, trimElement);
+            long length = ClampEnd(span, start, trimElement);
             return span.Slice(start, length);
         }
 
@@ -129,7 +129,7 @@ namespace System
         /// <param name="trimElement">The specified element to look for and remove.</param>
         private static int ClampStart<T>(ReadOnlyUnmanagedSpan<T> span, T trimElement) where T : IEquatable<T>?
         {
-            int start = 0;
+            long start = 0;
 
             if (trimElement != null)
             {
@@ -161,7 +161,7 @@ namespace System
         /// <param name="span">The source span from which the element is removed.</param>
         /// <param name="start">The start index from which to being searching.</param>
         /// <param name="trimElement">The specified element to look for and remove.</param>
-        private static int ClampEnd<T>(ReadOnlyUnmanagedSpan<T> span, int start, T trimElement) where T : IEquatable<T>?
+        private static int ClampEnd<T>(ReadOnlyUnmanagedSpan<T> span, long start, T trimElement) where T : IEquatable<T>?
         {
             // Initially, start==len==0. If ClampStart trims all, start==len
             Debug.Assert((uint)start <= span.Length);
@@ -204,8 +204,8 @@ namespace System
             if (trimElements.Length > 1)
             {
                 ReadOnlyUnmanagedSpan<T> span = memory.Span;
-                int start = ClampStart(span, trimElements);
-                int length = ClampEnd(span, start, trimElements);
+                long start = ClampStart(span, trimElements);
+                long length = ClampEnd(span, start, trimElements);
                 return memory.Slice(start, length);
             }
 
@@ -273,8 +273,8 @@ namespace System
             if (trimElements.Length > 1)
             {
                 ReadOnlyUnmanagedSpan<T> span = memory.Span;
-                int start = ClampStart(span, trimElements);
-                int length = ClampEnd(span, start, trimElements);
+                long start = ClampStart(span, trimElements);
+                long length = ClampEnd(span, start, trimElements);
                 return memory.Slice(start, length);
             }
 
@@ -341,8 +341,8 @@ namespace System
         {
             if (trimElements.Length > 1)
             {
-                int start = ClampStart(span, trimElements);
-                int length = ClampEnd(span, start, trimElements);
+                long start = ClampStart(span, trimElements);
+                long length = ClampEnd(span, start, trimElements);
                 return span.Slice(start, length);
             }
 
@@ -409,8 +409,8 @@ namespace System
         {
             if (trimElements.Length > 1)
             {
-                int start = ClampStart(span, trimElements);
-                int length = ClampEnd(span, start, trimElements);
+                long start = ClampStart(span, trimElements);
+                long length = ClampEnd(span, start, trimElements);
                 return span.Slice(start, length);
             }
 
@@ -474,7 +474,7 @@ namespace System
         /// <param name="trimElements">The span which contains the set of elements to remove.</param>
         private static int ClampStart<T>(ReadOnlyUnmanagedSpan<T> span, ReadOnlyUnmanagedSpan<T> trimElements) where T : IEquatable<T>?
         {
-            int start = 0;
+            long start = 0;
             for (; start < span.Length; start++)
             {
                 if (!trimElements.Contains(span[start]))
@@ -493,7 +493,7 @@ namespace System
         /// <param name="span">The source span from which the elements are removed.</param>
         /// <param name="start">The start index from which to being searching.</param>
         /// <param name="trimElements">The span which contains the set of elements to remove.</param>
-        private static int ClampEnd<T>(ReadOnlyUnmanagedSpan<T> span, int start, ReadOnlyUnmanagedSpan<T> trimElements) where T : IEquatable<T>?
+        private static int ClampEnd<T>(ReadOnlyUnmanagedSpan<T> span, long start, ReadOnlyUnmanagedSpan<T> trimElements) where T : IEquatable<T>?
         {
             // Initially, start==len==0. If ClampStart trims all, start==len
             Debug.Assert((uint)start <= span.Length);
@@ -517,8 +517,8 @@ namespace System
         public static Memory<char> Trim(this Memory<char> memory)
         {
             ReadOnlyUnmanagedSpan<char> span = memory.Span;
-            int start = ClampStart(span);
-            int length = ClampEnd(span, start);
+            long start = ClampStart(span);
+            long length = ClampEnd(span, start);
             return memory.Slice(start, length);
         }
 
@@ -543,8 +543,8 @@ namespace System
         public static ReadOnlyMemory<char> Trim(this ReadOnlyMemory<char> memory)
         {
             ReadOnlyUnmanagedSpan<char> span = memory.Span;
-            int start = ClampStart(span);
-            int length = ClampEnd(span, start);
+            long start = ClampStart(span);
+            long length = ClampEnd(span, start);
             return memory.Slice(start, length);
         }
 
@@ -580,7 +580,7 @@ namespace System
             [MethodImpl(MethodImplOptions.NoInlining)]
             static ReadOnlyUnmanagedSpan<char> TrimFallback(ReadOnlyUnmanagedSpan<char> span)
             {
-                int start = 0;
+                long start = 0;
                 for (; start < span.Length; start++)
                 {
                     if (!char.IsWhiteSpace(span[start]))
@@ -607,7 +607,7 @@ namespace System
         /// <param name="span">The source span from which the characters are removed.</param>
         public static ReadOnlyUnmanagedSpan<char> TrimStart(this ReadOnlyUnmanagedSpan<char> span)
         {
-            int start = 0;
+            long start = 0;
             for (; start < span.Length; start++)
             {
                 if (!char.IsWhiteSpace(span[start]))
@@ -644,7 +644,7 @@ namespace System
         /// <param name="trimChar">The specified character to look for and remove.</param>
         public static ReadOnlyUnmanagedSpan<char> Trim(this ReadOnlyUnmanagedSpan<char> span, char trimChar)
         {
-            int start = 0;
+            long start = 0;
             for (; start < span.Length; start++)
             {
                 if (span[start] != trimChar)
@@ -672,7 +672,7 @@ namespace System
         /// <param name="trimChar">The specified character to look for and remove.</param>
         public static ReadOnlyUnmanagedSpan<char> TrimStart(this ReadOnlyUnmanagedSpan<char> span, char trimChar)
         {
-            int start = 0;
+            long start = 0;
             for (; start < span.Length; start++)
             {
                 if (span[start] != trimChar)
@@ -727,10 +727,10 @@ namespace System
                 return span.TrimStart();
             }
 
-            int start = 0;
+            long start = 0;
             for (; start < span.Length; start++)
             {
-                for (int i = 0; i < trimChars.Length; i++)
+                for (long i = 0; i < trimChars.Length; i++)
                 {
                     if (span[start] == trimChars[i])
                     {
@@ -763,7 +763,7 @@ namespace System
             int end = span.Length - 1;
             for (; end >= 0; end--)
             {
-                for (int i = 0; i < trimChars.Length; i++)
+                for (long i = 0; i < trimChars.Length; i++)
                 {
                     if (span[end] == trimChars[i])
                     {
@@ -797,7 +797,7 @@ namespace System
             [MethodImpl(MethodImplOptions.NoInlining)]
             static UnmanagedSpan<char> TrimFallback(UnmanagedSpan<char> span)
             {
-                int start = 0;
+                long start = 0;
                 for (; start < span.Length; start++)
                 {
                     if (!char.IsWhiteSpace(span[start]))
@@ -838,7 +838,7 @@ namespace System
         /// <param name="span">The source span from which the characters are removed.</param>
         private static int ClampStart(ReadOnlyUnmanagedSpan<char> span)
         {
-            int start = 0;
+            long start = 0;
 
             for (; start < span.Length; start++)
             {
@@ -856,7 +856,7 @@ namespace System
         /// </summary>
         /// <param name="span">The source span from which the characters are removed.</param>
         /// <param name="start">The start index from which to being searching.</param>
-        private static int ClampEnd(ReadOnlyUnmanagedSpan<char> span, int start)
+        private static int ClampEnd(ReadOnlyUnmanagedSpan<char> span, long start)
         {
             // Initially, start==len==0. If ClampStart trims all, start==len
             Debug.Assert((uint)start <= span.Length);

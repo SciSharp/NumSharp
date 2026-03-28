@@ -9,7 +9,7 @@ using System.Threading;
 
 namespace System
 {
-    public static partial class Buffer
+    public static partial class UnmanagedBuffer
     {
         // Copies from one primitive array to another primitive array without
         // respecting types.  This calls memmove internally.  The count and
@@ -64,8 +64,8 @@ namespace System
 
             nuint byteLength = array.NativeLength * (nuint)array.GetElementSize();
 
-            // This API is exposed both as Buffer.ByteLength and also used indirectly in argument
-            // checks for Buffer.GetByte/SetByte.
+            // This API is exposed both as UnmanagedBuffer.ByteLength and also used indirectly in argument
+            // checks for UnmanagedBuffer.GetByte/SetByte.
             //
             // If somebody called Get/SetByte on 2GB+ arrays, there is a decent chance that
             // the computation of the index has overflowed. Thus we intentionally always

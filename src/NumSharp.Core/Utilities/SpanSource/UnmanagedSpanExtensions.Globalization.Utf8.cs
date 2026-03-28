@@ -8,7 +8,7 @@ using System.Runtime.InteropServices;
 
 namespace System
 {
-    public static partial class MemoryExtensions
+    public static partial class UnmanagedSpanExtensions
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static bool EqualsOrdinalIgnoreCaseUtf8(this ReadOnlyUnmanagedSpan<byte> span, ReadOnlyUnmanagedSpan<byte> value)

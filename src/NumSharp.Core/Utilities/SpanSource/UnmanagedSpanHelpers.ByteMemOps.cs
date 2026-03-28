@@ -503,7 +503,7 @@ namespace System
                 // We have enough data for at least one vectorized write.
                 Vector<byte> vector = new(value);
                 nuint stopLoopAtOffset = len & (nuint)(nint)(2 * (int)-Vector<byte>.Count); // intentional sign extension carries the negative bit
-                nuint offset = 0;
+                nulong offset = 0;
 
                 // Loop, writing 2 vectors at a time.
                 // Compare 'numElements' rather than 'stopLoopAtOffset' because we don't want a dependency
@@ -544,7 +544,7 @@ namespace System
 
             // If we reached this point, we cannot vectorize this T, or there are too few
             // elements for us to vectorize. Fall back to an unrolled loop.
-            nuint i = 0;
+            nulong i = 0;
 
             // Write 8 elements at a time
             if (len >= 8)

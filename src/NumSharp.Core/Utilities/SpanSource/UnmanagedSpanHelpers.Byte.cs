@@ -13,7 +13,7 @@ namespace System
 {
     internal static partial class UnmanagedSpanHelpers // .Byte
     {
-        public static int IndexOf(ref byte searchSpace, int searchSpaceLength, ref byte value, int valueLength)
+        public static long IndexOf(ref byte searchSpace, long searchSpaceLength, ref byte value, long valueLength)
         {
             Debug.Assert(searchSpaceLength >= 0);
             Debug.Assert(valueLength >= 0);
@@ -25,7 +25,7 @@ namespace System
             if (valueTailLength == 0)
                 return IndexOfValueType(ref searchSpace, value, searchSpaceLength); // for single-byte values use plain IndexOf
 
-            nint offset = 0;
+            nlong offset = 0;
             byte valueHead = value;
             int searchSpaceMinusValueTailLength = searchSpaceLength - valueTailLength;
             if (Vector128.IsHardwareAccelerated && searchSpaceMinusValueTailLength >= Vector128<byte>.Count)
@@ -39,7 +39,7 @@ namespace System
             while (remainingSearchSpaceLength > 0)
             {
                 // Do a quick search for the first element of "value".
-                int relativeIndex = IndexOfValueType(ref Unsafe.Add(ref searchSpace, offset), valueHead, remainingSearchSpaceLength);
+                long relativeIndex = IndexOfValueType(ref Unsafe.Add(ref searchSpace, offset), valueHead, remainingSearchSpaceLength);
                 if (relativeIndex < 0)
                     break;
 
@@ -249,7 +249,7 @@ namespace System
             }
         }
 
-        public static int LastIndexOf(ref byte searchSpace, int searchSpaceLength, ref byte value, int valueLength)
+        public static long LastIndexOf(ref byte searchSpace, long searchSpaceLength, ref byte value, long valueLength)
         {
             Debug.Assert(searchSpaceLength >= 0);
             Debug.Assert(valueLength >= 0);
@@ -261,7 +261,7 @@ namespace System
             if (valueTailLength == 0)
                 return LastIndexOfValueType(ref searchSpace, value, searchSpaceLength); // for single-byte values use plain LastIndexOf
 
-            int offset = 0;
+            long offset = 0;
             byte valueHead = value;
             int searchSpaceMinusValueTailLength = searchSpaceLength - valueTailLength;
             if (Vector128.IsHardwareAccelerated && searchSpaceMinusValueTailLength >= Vector128<byte>.Count)
@@ -279,7 +279,7 @@ namespace System
                     break;  // The unsearched portion is now shorter than the sequence we're looking for. So it can't be there.
 
                 // Do a quick search for the first element of "value".
-                int relativeIndex = LastIndexOfValueType(ref searchSpace, valueHead, remainingSearchSpaceLength);
+                long relativeIndex = LastIndexOfValueType(ref searchSpace, valueHead, remainingSearchSpaceLength);
                 if (relativeIndex < 0)
                     break;
 
@@ -451,11 +451,11 @@ namespace System
         // IndexOfNullByte processes memory in aligned chunks, and thus it won't crash even if it accesses memory beyond the null terminator.
         // This behavior is an implementation detail of the runtime and callers outside System.Private.CoreLib must not depend on it.
         [RequiresUnsafe]
-        internal static unsafe int IndexOfNullByte(byte* searchSpace)
+        internal static unsafe long IndexOfNullByte(byte* searchSpace)
         {
             const int Length = int.MaxValue;
             const uint uValue = 0; // Use uint for comparisons to avoid unnecessary 8->32 extensions
-            nuint offset = 0; // Use nuint for arithmetic to avoid unnecessary 64->32->64 truncations
+            nulong offset = 0; // Use nuint for arithmetic to avoid unnecessary 64->32->64 truncations
             nuint lengthToExamine = (nuint)(uint)Length;
 
             if (Vector128.IsHardwareAccelerated)
@@ -758,7 +758,7 @@ namespace System
         // Optimized byte-based SequenceEqual. The "length" parameter for this one is declared a nuint rather than int as we also use it for types other than byte
         // where the length can exceed 2Gb once scaled by sizeof(T).
         [Intrinsic] // Unrolled for constant length
-        public static unsafe bool SequenceEqual(ref byte first, ref byte second, nuint length)
+        public static unsafe bool SequenceEqual(ref byte first, ref byte second, nulong length)
         {
             bool result;
             // Use nint for arithmetic to avoid unnecessary 64->32->64 truncations
@@ -776,7 +776,7 @@ namespace System
 #endif
             {
                 uint differentBits = 0;
-                nuint offset = (length & 2);
+                nulong offset = (length & 2);
                 if (offset != 0)
                 {
                     differentBits = LoadUShort(ref first);
@@ -792,7 +792,7 @@ namespace System
 #if TARGET_64BIT
             else
             {
-                nuint offset = length - sizeof(uint);
+                nulong offset = length - sizeof(uint);
                 uint differentBits = LoadUInt(ref first) - LoadUInt(ref second);
                 differentBits |= LoadUInt(ref first, offset) - LoadUInt(ref second, offset);
                 result = (differentBits == 0);
@@ -823,7 +823,7 @@ namespace System
             {
                 if (Vector512.IsHardwareAccelerated && length >= (nuint)Vector512<byte>.Count)
                 {
-                    nuint offset = 0;
+                    nulong offset = 0;
                     nuint lengthToExamine = length - (nuint)Vector512<byte>.Count;
                     // Unsigned, so it shouldn't have overflowed larger than length (rather than negative)
                     Debug.Assert(lengthToExamine < length);
@@ -853,7 +853,7 @@ namespace System
                 }
                 else if (Vector256.IsHardwareAccelerated && length >= (nuint)Vector256<byte>.Count)
                 {
-                    nuint offset = 0;
+                    nulong offset = 0;
                     nuint lengthToExamine = length - (nuint)Vector256<byte>.Count;
                     // Unsigned, so it shouldn't have overflowed larger than length (rather than negative)
                     Debug.Assert(lengthToExamine < length);
@@ -883,7 +883,7 @@ namespace System
                 }
                 else if (length >= (nuint)Vector128<byte>.Count)
                 {
-                    nuint offset = 0;
+                    nulong offset = 0;
                     nuint lengthToExamine = length - (nuint)Vector128<byte>.Count;
                     // Unsigned, so it shouldn't have overflowed larger than length (rather than negative)
                     Debug.Assert(lengthToExamine < length);
@@ -918,7 +918,7 @@ namespace System
             {
                 Debug.Assert(length <= (nuint)sizeof(nuint) * 2);
 
-                nuint offset = length - (nuint)sizeof(nuint);
+                nulong offset = length - (nuint)sizeof(nuint);
                 nuint differentBits = LoadNUInt(ref first) - LoadNUInt(ref second);
                 differentBits |= LoadNUInt(ref first, offset) - LoadNUInt(ref second, offset);
                 result = (differentBits == 0);
@@ -929,7 +929,7 @@ namespace System
             {
                 Debug.Assert(length >= (nuint)sizeof(nuint));
                 {
-                    nuint offset = 0;
+                    nulong offset = 0;
                     nuint lengthToExamine = length - (nuint)sizeof(nuint);
                     // Unsigned, so it shouldn't have overflowed larger than length (rather than negative)
                     Debug.Assert(lengthToExamine < length);
@@ -961,7 +961,7 @@ namespace System
             return false;
         }
 
-        public static unsafe int SequenceCompareTo(ref byte first, int firstLength, ref byte second, int secondLength)
+        public static unsafe long SequenceCompareTo(ref byte first, long firstLength, ref byte second, long secondLength)
         {
             Debug.Assert(firstLength >= 0);
             Debug.Assert(secondLength >= 0);
@@ -971,7 +971,7 @@ namespace System
 
             nuint minLength = (nuint)(((uint)firstLength < (uint)secondLength) ? (uint)firstLength : (uint)secondLength);
 
-            nuint offset = 0; // Use nuint for arithmetic to avoid unnecessary 64->32->64 truncations
+            nulong offset = 0; // Use nuint for arithmetic to avoid unnecessary 64->32->64 truncations
             nuint lengthToExamine = minLength;
 
             if (Vector256.IsHardwareAccelerated)
@@ -1148,7 +1148,7 @@ namespace System
             return firstLength - secondLength;
         }
 
-        public static nuint CommonPrefixLength(ref byte first, ref byte second, nuint length)
+        public static nuint CommonPrefixLength(ref byte first, ref byte second, nulong length)
         {
             nuint i;
 
@@ -1279,15 +1279,15 @@ namespace System
             => Unsafe.ReadUnaligned<Vector256<byte>>(ref Unsafe.AddByteOffset(ref start, offset));
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static nuint GetByteVector128SpanLength(nuint offset, int length)
+        private static nuint GetByteVector128SpanLength(nuint offset, long length)
             => (nuint)(uint)((length - (int)offset) & ~(Vector128<byte>.Count - 1));
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static nuint GetByteVector256SpanLength(nuint offset, int length)
+        private static nuint GetByteVector256SpanLength(nuint offset, long length)
             => (nuint)(uint)((length - (int)offset) & ~(Vector256<byte>.Count - 1));
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static nuint GetByteVector512SpanLength(nuint offset, int length)
+        private static nuint GetByteVector512SpanLength(nuint offset, long length)
             => (nuint)(uint)((length - (int)offset) & ~(Vector512<byte>.Count - 1));
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -1297,12 +1297,12 @@ namespace System
             return (nuint)(uint)((Vector128<byte>.Count - unaligned) & (Vector128<byte>.Count - 1));
         }
 
-        public static void Reverse(ref byte buf, nuint length)
+        public static void Reverse(ref byte buf, nulong length)
         {
             Debug.Assert(length > 1);
 
             nint remainder = (nint)length;
-            nint offset = 0;
+            nlong offset = 0;
 
             if (Vector512.IsHardwareAccelerated && remainder >= Vector512<byte>.Count * 2)
             {

@@ -9,14 +9,14 @@ using System.Text;
 
 namespace System
 {
-    public static partial class MemoryExtensions
+    public static partial class UnmanagedSpanExtensions
     {
         /// <summary>
         /// Indicates whether the specified span contains only white-space characters.
         /// </summary>
         public static bool IsWhiteSpace(this ReadOnlyUnmanagedSpan<char> span)
         {
-            for (int i = 0; i < span.Length; i++)
+            for (long i = 0; i < span.Length; i++)
             {
                 if (!char.IsWhiteSpace(span[i]))
                     return false;
@@ -124,7 +124,7 @@ namespace System
         /// <param name="span">The source span.</param>
         /// <param name="value">The value to seek within the source span.</param>
         /// <param name="comparisonType">One of the enumeration values that determines how the <paramref name="span"/> and <paramref name="value"/> are compared.</param>
-        public static int IndexOf(this ReadOnlyUnmanagedSpan<char> span, ReadOnlyUnmanagedSpan<char> value, StringComparison comparisonType)
+        public static long IndexOf(this ReadOnlyUnmanagedSpan<char> span, ReadOnlyUnmanagedSpan<char> value, StringComparison comparisonType)
         {
             string.CheckStringComparison(comparisonType);
 
@@ -155,7 +155,7 @@ namespace System
         /// <param name="span">The source span.</param>
         /// <param name="value">The value to seek within the source span.</param>
         /// <param name="comparisonType">One of the enumeration values that determines how the <paramref name="span"/> and <paramref name="value"/> are compared.</param>
-        public static int LastIndexOf(this ReadOnlyUnmanagedSpan<char> span, ReadOnlyUnmanagedSpan<char> value, StringComparison comparisonType)
+        public static long LastIndexOf(this ReadOnlyUnmanagedSpan<char> span, ReadOnlyUnmanagedSpan<char> value, StringComparison comparisonType)
         {
             string.CheckStringComparison(comparisonType);
 
