@@ -21,7 +21,7 @@ namespace NumSharp
         ///     distribution. Each sample represents n experiments, where each experiment
         ///     results in one of k possible outcomes.
         /// </remarks>
-        public NDArray multinomial(long n, double[] pvals, Shape size)
+        public NDArray multinomial(int n, double[] pvals, Shape size)
             => multinomial(n, pvals, size.dimensions);
 
         /// <summary>
@@ -34,7 +34,7 @@ namespace NumSharp
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.multinomial.html
         /// </remarks>
-        public NDArray multinomial(long n, double[] pvals, params long[] size)
+        public NDArray multinomial(int n, double[] pvals, params long[] size)
         {
             // Parameter validation
             if (n < 0)
@@ -76,8 +76,9 @@ namespace NumSharp
                     numSamples *= size[i];
             }
 
-            var result = new NDArray(NPTypeCode.Int64, new Shape(outputShape));
-            var resultArray = result.Data<long>();
+            // NumPy returns int32 for multinomial
+            var result = new NDArray(NPTypeCode.Int32, new Shape(outputShape));
+            var resultArray = result.Data<int>();
 
             // Generate samples
             for (long sampleIdx = 0; sampleIdx < numSamples; sampleIdx++)
@@ -94,15 +95,10 @@ namespace NumSharp
         /// </summary>
         /// <param name="n">Number of experiments (>= 0).</param>
         /// <param name="pvals">Probabilities of each of the k different outcomes. Must sum to ~1.</param>
-        /// <param name="size">Output shape. Result will have shape (*size, k).</param>
-        /// <returns>Drawn samples with shape (*size, k), where each row sums to n.</returns>
-        public NDArray multinomial(int n, double[] pvals, params int[] size)
-        {
-            var longSize = new long[size.Length];
-            for (int i = 0; i < size.Length; i++)
-                longSize[i] = size[i];
-            return multinomial((long)n, pvals, longSize);
-        }
+        /// <param name="size">Number of samples to draw.</param>
+        /// <returns>Drawn samples with shape (size, k), where each row sums to n.</returns>
+        public NDArray multinomial(int n, double[] pvals, int size)
+            => multinomial(n, pvals, new long[] { size });
 
         /// <summary>
         ///     Draw a single multinomial sample.
@@ -115,10 +111,10 @@ namespace NumSharp
         ///         remaining_p -= pvals[i]
         ///     counts[k-1] = remaining
         /// </remarks>
-        private void SampleMultinomial(long n, double[] pvals, long k, ArraySlice<long> output, long offset)
+        private void SampleMultinomial(int n, double[] pvals, long k, ArraySlice<int> output, long offset)
         {
             double remainingP = 1.0;
-            long remaining = n;
+            int remaining = n;
 
             // Initialize all counts to 0
             for (long j = 0; j < k; j++)
@@ -133,7 +129,7 @@ namespace NumSharp
                 if (p > 1.0) p = 1.0;
                 if (p < 0.0) p = 0.0;
 
-                long count = SampleBinomialLong(remaining, p);
+                int count = SampleBinomial(remaining, p);
                 output[offset + j] = count;
                 remaining -= count;
                 remainingP -= pvals[j];
@@ -148,10 +144,10 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Sample a single value from the binomial distribution with long support.
+        ///     Sample a single value from the binomial distribution.
         ///     Uses the BTPE algorithm for large n*p, direct method otherwise.
         /// </summary>
-        private long SampleBinomialLong(long n, double p)
+        private int SampleBinomial(int n, double p)
         {
             if (n <= 0 || p <= 0)
                 return 0;
@@ -161,8 +157,8 @@ namespace NumSharp
             // For small n, use direct simulation
             if (n < 20)
             {
-                long count = 0;
-                for (long i = 0; i < n; i++)
+                int count = 0;
+                for (int i = 0; i < n; i++)
                 {
                     if (randomizer.NextDouble() < p)
                         count++;
@@ -178,8 +174,8 @@ namespace NumSharp
             if (np < 10 || n * q < 10)
             {
                 // Direct simulation for moderate n
-                long count = 0;
-                for (long i = 0; i < n; i++)
+                int count = 0;
+                for (int i = 0; i < n; i++)
                 {
                     if (randomizer.NextDouble() < p)
                         count++;
@@ -191,7 +187,7 @@ namespace NumSharp
             double mean = np;
             double stddev = Math.Sqrt(np * q);
             double x = mean + stddev * NextGaussian();
-            long result = (long)Math.Round(x);
+            int result = (int)Math.Round(x);
             if (result < 0) result = 0;
             if (result > n) result = n;
             return result;

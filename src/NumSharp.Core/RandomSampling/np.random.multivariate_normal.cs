@@ -22,8 +22,8 @@ namespace NumSharp
         ///     The multivariate normal distribution is a generalization of the 1D normal distribution
         ///     to higher dimensions. It is specified by its mean vector and covariance matrix.
         ///     <br/>
-        ///     Algorithm: Uses Cholesky decomposition of the covariance matrix.
-        ///     L = cholesky(cov), then X = mean + Z @ L.T where Z ~ N(0, I).
+        ///     Algorithm: Uses SVD decomposition of the covariance matrix (matching NumPy).
+        ///     Transform = U @ sqrt(S), then X = mean + Transform @ Z where Z ~ N(0, I).
         /// </remarks>
         public unsafe NDArray multivariate_normal(double[] mean, double[,] cov, Shape size = default,
             string check_valid = "warn", double tol = 1e-8)
@@ -61,26 +61,17 @@ namespace NumSharp
                     covSlice[i * n + j] = cov[i, j];
             }
 
-            // Perform Cholesky decomposition into unmanaged storage
-            var LBlock = new UnmanagedMemoryBlock<double>(n * n);
-            var L = new ArraySlice<double>(LBlock);
+            // Compute SVD transform matrix: U @ sqrt(S)
+            // For symmetric matrices, this matches NumPy's approach
+            var transformBlock = new UnmanagedMemoryBlock<double>(n * n);
+            var transform = new ArraySlice<double>(transformBlock);
 
-            bool success;
-            try
-            {
-                success = CholeskyDecompositionUnmanaged(covSlice, L, n);
-            }
-            catch (ArgumentException) when (check_valid == "ignore")
-            {
-                success = false;
-            }
-
+            bool success = ComputeSvdTransform(covSlice, transform, n, tol);
             if (!success)
             {
                 if (check_valid == "raise")
                     throw new ArgumentException("covariance is not symmetric positive-semidefinite.", nameof(cov));
-                // warn/ignore - try fallback
-                CholeskyDecompositionFallbackUnmanaged(covSlice, L, n);
+                // For warn/ignore, we still computed a fallback transform
             }
 
             // Allocate scratch space for z vector
@@ -92,13 +83,13 @@ namespace NumSharp
                 // Return single sample with shape (n,)
                 var result = new NDArray<double>(new Shape(n));
                 ArraySlice<double> data = result.Data<double>();
-                SampleMultivariateNormalUnmanaged(meanSlice, L, n, z, data, 0);
+                SampleMultivariateNormalSvd(meanSlice, transform, n, z, data, 0);
                 return result;
             }
 
             // Output shape is (*size, n)
             long[] outputDims = new long[size.NDim + 1];
-            for (int i = 0; i < size.NDim; i++)
+            for (long i = 0; i < size.NDim; i++)
                 outputDims[i] = size.dimensions[i];
             outputDims[size.NDim] = n;
 
@@ -110,7 +101,7 @@ namespace NumSharp
 
             for (long s = 0; s < numSamples; s++)
             {
-                SampleMultivariateNormalUnmanaged(meanSlice, L, n, z, retData, s * n);
+                SampleMultivariateNormalSvd(meanSlice, transform, n, z, retData, s * n);
             }
 
             return ret;
@@ -119,12 +110,6 @@ namespace NumSharp
         /// <summary>
         ///     Draw random samples from a multivariate normal distribution.
         /// </summary>
-        /// <param name="mean">Mean as NDArray (1D).</param>
-        /// <param name="cov">Covariance matrix as NDArray (2D).</param>
-        /// <param name="size">Output shape.</param>
-        /// <param name="check_valid">Behavior when cov is not positive semidefinite.</param>
-        /// <param name="tol">Tolerance for validity check.</param>
-        /// <returns>Drawn samples.</returns>
         public unsafe NDArray multivariate_normal(NDArray mean, NDArray cov, Shape size = default,
             string check_valid = "warn", double tol = 1e-8)
         {
@@ -166,26 +151,15 @@ namespace NumSharp
             if (cov.shape[0] != n)
                 throw new ArgumentException("mean and cov must have same length", nameof(cov));
 
-            // Perform Cholesky decomposition into unmanaged storage
-            var LBlock = new UnmanagedMemoryBlock<double>(n * n);
-            var L = new ArraySlice<double>(LBlock);
+            // Compute SVD transform matrix
+            var transformBlock = new UnmanagedMemoryBlock<double>(n * n);
+            var transform = new ArraySlice<double>(transformBlock);
 
-            bool success;
-            try
-            {
-                success = CholeskyDecompositionUnmanaged(covSlice, L, n);
-            }
-            catch (ArgumentException) when (check_valid == "ignore")
-            {
-                success = false;
-            }
-
+            bool success = ComputeSvdTransform(covSlice, transform, n, tol);
             if (!success)
             {
                 if (check_valid == "raise")
                     throw new ArgumentException("covariance is not symmetric positive-semidefinite.", nameof(cov));
-                // warn/ignore - try fallback
-                CholeskyDecompositionFallbackUnmanaged(covSlice, L, n);
             }
 
             // Allocate scratch space for z vector
@@ -197,7 +171,7 @@ namespace NumSharp
                 // Return single sample with shape (n,)
                 var result = new NDArray<double>(new Shape(n));
                 ArraySlice<double> data = result.Data<double>();
-                SampleMultivariateNormalUnmanaged(meanSlice, L, n, z, data, 0);
+                SampleMultivariateNormalSvd(meanSlice, transform, n, z, data, 0);
                 return result;
             }
 
@@ -215,7 +189,7 @@ namespace NumSharp
 
             for (long s = 0; s < numSamples; s++)
             {
-                SampleMultivariateNormalUnmanaged(meanSlice, L, n, z, retData, s * n);
+                SampleMultivariateNormalSvd(meanSlice, transform, n, z, retData, s * n);
             }
 
             return ret;
@@ -224,12 +198,6 @@ namespace NumSharp
         /// <summary>
         ///     Draw random samples from a multivariate normal distribution.
         /// </summary>
-        /// <param name="mean">Mean vector.</param>
-        /// <param name="cov">Covariance matrix.</param>
-        /// <param name="size">Number of samples.</param>
-        /// <param name="check_valid">Behavior when cov is not positive semidefinite.</param>
-        /// <param name="tol">Tolerance for validity check.</param>
-        /// <returns>Drawn samples.</returns>
         public NDArray multivariate_normal(double[] mean, double[,] cov, int size,
             string check_valid = "warn", double tol = 1e-8)
             => multivariate_normal(mean, cov, new Shape(size), check_valid, tol);
@@ -237,23 +205,14 @@ namespace NumSharp
         /// <summary>
         ///     Draw random samples from a multivariate normal distribution.
         /// </summary>
-        /// <param name="mean">Mean vector.</param>
-        /// <param name="cov">Covariance matrix.</param>
-        /// <param name="size">Output shape as int array.</param>
-        /// <returns>Drawn samples.</returns>
         public NDArray multivariate_normal(double[] mean, double[,] cov, params int[] size)
             => multivariate_normal(mean, cov, new Shape(size));
 
         /// <summary>
-        ///     Sample a single multivariate normal vector and store at the given offset.
-        ///     Uses unmanaged storage with row-major 2D indexing.
+        ///     Sample a single multivariate normal vector using SVD transform.
         /// </summary>
-        /// <remarks>
-        ///     Algorithm: X = mean + Z @ L.T where Z ~ N(0, I) and L = cholesky(cov).
-        ///     The transformation gives us samples with the desired covariance.
-        /// </remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void SampleMultivariateNormalUnmanaged(ArraySlice<double> mean, ArraySlice<double> L, long n,
+        private void SampleMultivariateNormalSvd(ArraySlice<double> mean, ArraySlice<double> transform, long n,
             ArraySlice<double> z, ArraySlice<double> data, long offset)
         {
             // Generate standard normal samples into z
@@ -262,112 +221,208 @@ namespace NumSharp
                 z[i] = NextGaussian();
             }
 
-            // Compute mean + L @ Z
-            // L is lower triangular, stored row-major: L[i,j] = L[i*n+j]
-            // X = mean + L @ Z
+            // Compute mean + Transform @ Z
+            // Transform is row-major: Transform[i,j] = transform[i*n+j]
             for (long i = 0; i < n; i++)
             {
                 double sum = mean[i];
-                for (long j = 0; j <= i; j++)  // L is lower triangular
+                for (long j = 0; j < n; j++)
                 {
-                    sum += L[i * n + j] * z[j];
+                    sum += transform[i * n + j] * z[j];
                 }
                 data[offset + i] = sum;
             }
         }
 
         /// <summary>
-        ///     Compute the Cholesky decomposition of a symmetric positive-definite matrix.
-        ///     Uses unmanaged storage with row-major indexing.
+        ///     Compute the SVD-based transform matrix for multivariate normal sampling.
+        ///     For a symmetric covariance matrix, computes U @ sqrt(S) where cov = U @ S @ U.T.
+        ///     Uses Jacobi eigendecomposition for symmetric matrices.
         /// </summary>
-        /// <param name="A">The input matrix (row-major, n*n elements).</param>
-        /// <param name="L">Output lower triangular matrix (row-major, n*n elements).</param>
-        /// <param name="n">The dimension of the matrix.</param>
-        /// <returns>True if successful, false if not positive-definite.</returns>
-        private static bool CholeskyDecompositionUnmanaged(ArraySlice<double> A, ArraySlice<double> L, long n)
+        /// <returns>True if successful, false if matrix has negative eigenvalues.</returns>
+        private static bool ComputeSvdTransform(ArraySlice<double> cov, ArraySlice<double> transform, long n, double tol)
         {
-            // Initialize L to zero
-            for (long i = 0; i < n * n; i++)
-                L[i] = 0;
+            // For symmetric matrices, SVD gives the same result as eigendecomposition
+            // cov = U @ S @ V.T where U = V for symmetric matrices
+            // So we use Jacobi eigendecomposition
 
+            // Allocate working arrays
+            var eigenvectorsBlock = new UnmanagedMemoryBlock<double>(n * n);
+            var eigenvectors = new ArraySlice<double>(eigenvectorsBlock);
+            var eigenvaluesBlock = new UnmanagedMemoryBlock<double>(n);
+            var eigenvalues = new ArraySlice<double>(eigenvaluesBlock);
+            var workBlock = new UnmanagedMemoryBlock<double>(n * n);
+            var work = new ArraySlice<double>(workBlock);
+
+            // Copy cov to work matrix
+            for (long i = 0; i < n * n; i++)
+                work[i] = cov[i];
+
+            // Initialize eigenvectors to identity
             for (long i = 0; i < n; i++)
             {
-                for (long j = 0; j <= i; j++)
-                {
-                    double sum = 0;
-                    for (long k = 0; k < j; k++)
-                    {
-                        sum += L[i * n + k] * L[j * n + k];
-                    }
+                for (long j = 0; j < n; j++)
+                    eigenvectors[i * n + j] = (i == j) ? 1.0 : 0.0;
+            }
 
-                    if (i == j)
-                    {
-                        double diag = A[i * n + i] - sum;
-                        if (diag < 0)
-                        {
-                            return false; // Not positive-definite
-                        }
-                        L[i * n + j] = Math.Sqrt(diag);
-                    }
-                    else
-                    {
-                        double Ljj = L[j * n + j];
-                        if (Math.Abs(Ljj) < 1e-15)
-                        {
-                            L[i * n + j] = 0;
-                        }
-                        else
-                        {
-                            L[i * n + j] = (A[i * n + j] - sum) / Ljj;
-                        }
-                    }
+            // Jacobi eigendecomposition
+            bool hasNegative = false;
+            JacobiEigendecomposition(work, eigenvectors, eigenvalues, n, 100, 1e-12);
+
+            // Check for negative eigenvalues
+            for (long i = 0; i < n; i++)
+            {
+                if (eigenvalues[i] < -tol)
+                    hasNegative = true;
+            }
+
+            // Sort eigenvalues in DESCENDING order (to match NumPy SVD)
+            // and reorder eigenvectors accordingly
+            SortEigenDescending(eigenvalues, eigenvectors, n);
+
+            // Note: We don't normalize eigenvector signs because the exact sign convention
+            // varies between SVD implementations. The samples are statistically correct
+            // but may not match NumPy 1-to-1 for correlated covariance matrices.
+            // Identity covariance matrices will still match exactly.
+
+            // Compute transform = eigenvectors @ diag(sqrt(abs(eigenvalues)))
+            // NumPy uses abs for robustness with nearly singular matrices
+            for (long i = 0; i < n; i++)
+            {
+                double sqrtEig = Math.Sqrt(Math.Abs(eigenvalues[i]));
+                for (long j = 0; j < n; j++)
+                {
+                    transform[j * n + i] = eigenvectors[j * n + i] * sqrtEig;
                 }
             }
 
-            return true;
+            return !hasNegative;
         }
 
         /// <summary>
-        ///     Fallback Cholesky decomposition for nearly positive-semidefinite matrices.
-        ///     Uses absolute value for negative diagonals to avoid failure.
-        ///     Uses unmanaged storage with row-major indexing.
+        ///     Jacobi eigendecomposition for symmetric matrices.
+        ///     Uses the classical Jacobi algorithm with Schur2 rotations.
         /// </summary>
-        private static void CholeskyDecompositionFallbackUnmanaged(ArraySlice<double> A, ArraySlice<double> L, long n)
+        private static void JacobiEigendecomposition(ArraySlice<double> A, ArraySlice<double> V,
+            ArraySlice<double> eigenvalues, long n, int maxIterations, double tolerance)
         {
-            // Initialize L to zero
-            for (long i = 0; i < n * n; i++)
-                L[i] = 0;
-
-            for (long i = 0; i < n; i++)
+            // Classical Jacobi algorithm
+            for (int iter = 0; iter < maxIterations * n * n; iter++)
             {
-                for (long j = 0; j <= i; j++)
-                {
-                    double sum = 0;
-                    for (long k = 0; k < j; k++)
-                    {
-                        sum += L[i * n + k] * L[j * n + k];
-                    }
+                // Find the largest off-diagonal element
+                double maxOffDiag = 0;
+                long p = 0, q = 1;
 
-                    if (i == j)
+                for (long i = 0; i < n; i++)
+                {
+                    for (long j = i + 1; j < n; j++)
                     {
-                        double diag = A[i * n + i] - sum;
-                        // Use absolute value to handle slightly negative values
-                        L[i * n + j] = Math.Sqrt(Math.Abs(diag));
-                    }
-                    else
-                    {
-                        double Ljj = L[j * n + j];
-                        if (Math.Abs(Ljj) < 1e-15)
+                        double absVal = Math.Abs(A[i * n + j]);
+                        if (absVal > maxOffDiag)
                         {
-                            L[i * n + j] = 0;
-                        }
-                        else
-                        {
-                            L[i * n + j] = (A[i * n + j] - sum) / Ljj;
+                            maxOffDiag = absVal;
+                            p = i;
+                            q = j;
                         }
                     }
                 }
+
+                // Check for convergence
+                if (maxOffDiag < tolerance)
+                    break;
+
+                // Compute Schur2 rotation
+                double App = A[p * n + p];
+                double Aqq = A[q * n + q];
+                double Apq = A[p * n + q];
+
+                double c, s;
+                if (Math.Abs(Apq) < tolerance)
+                {
+                    c = 1.0;
+                    s = 0.0;
+                }
+                else
+                {
+                    double tau = (Aqq - App) / (2.0 * Apq);
+                    double t;
+                    if (tau >= 0)
+                        t = 1.0 / (tau + Math.Sqrt(1.0 + tau * tau));
+                    else
+                        t = 1.0 / (tau - Math.Sqrt(1.0 + tau * tau));
+                    c = 1.0 / Math.Sqrt(1.0 + t * t);
+                    s = t * c;
+                }
+
+                // Apply rotation to A: A' = J.T @ A @ J
+                // This zeroes out A[p,q] and A[q,p]
+                double newApp = c * c * App - 2.0 * s * c * Apq + s * s * Aqq;
+                double newAqq = s * s * App + 2.0 * s * c * Apq + c * c * Aqq;
+
+                A[p * n + p] = newApp;
+                A[q * n + q] = newAqq;
+                A[p * n + q] = 0.0;
+                A[q * n + p] = 0.0;
+
+                // Update other rows/columns
+                for (long k = 0; k < n; k++)
+                {
+                    if (k != p && k != q)
+                    {
+                        double Akp = A[k * n + p];
+                        double Akq = A[k * n + q];
+                        A[k * n + p] = c * Akp - s * Akq;
+                        A[p * n + k] = A[k * n + p];
+                        A[k * n + q] = s * Akp + c * Akq;
+                        A[q * n + k] = A[k * n + q];
+                    }
+                }
+
+                // Update eigenvector matrix: V' = V @ J
+                for (long k = 0; k < n; k++)
+                {
+                    double Vkp = V[k * n + p];
+                    double Vkq = V[k * n + q];
+                    V[k * n + p] = c * Vkp - s * Vkq;
+                    V[k * n + q] = s * Vkp + c * Vkq;
+                }
+            }
+
+            // Extract eigenvalues from diagonal
+            for (long i = 0; i < n; i++)
+                eigenvalues[i] = A[i * n + i];
+        }
+
+        /// <summary>
+        ///     Sort eigenvalues in descending order and reorder eigenvectors accordingly.
+        /// </summary>
+        private static void SortEigenDescending(ArraySlice<double> eigenvalues, ArraySlice<double> eigenvectors, long n)
+        {
+            // Simple insertion sort (n is typically small for covariance matrices)
+            for (long i = 1; i < n; i++)
+            {
+                double keyVal = eigenvalues[i];
+                long j = i - 1;
+
+                // Sort descending: move larger values to front
+                while (j >= 0 && eigenvalues[j] < keyVal)
+                {
+                    // Swap eigenvalues
+                    eigenvalues[j + 1] = eigenvalues[j];
+                    eigenvalues[j] = keyVal;
+
+                    // Swap corresponding eigenvector columns
+                    for (long k = 0; k < n; k++)
+                    {
+                        double temp = eigenvectors[k * n + (j + 1)];
+                        eigenvectors[k * n + (j + 1)] = eigenvectors[k * n + j];
+                        eigenvectors[k * n + j] = temp;
+                    }
+
+                    j--;
+                }
             }
         }
+
     }
 }

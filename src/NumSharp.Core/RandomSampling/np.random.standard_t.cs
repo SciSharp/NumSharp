@@ -76,11 +76,17 @@ namespace NumSharp
 
         /// <summary>
         ///     Sample a single value from the standard gamma distribution (scale=1).
-        ///     Uses Marsaglia and Tsang's method.
+        ///     Uses NumPy's algorithm: exponential for shape=1, Marsaglia-Tsang otherwise.
         /// </summary>
         private double SampleStandardGamma(double shape)
         {
-            if (shape < 1.0)
+            if (shape == 1.0)
+            {
+                // Shape=1 is exponential distribution: -log(1 - U)
+                // This matches NumPy's rk_standard_gamma behavior
+                return -Math.Log(1.0 - randomizer.NextDouble());
+            }
+            else if (shape < 1.0)
             {
                 // For shape < 1, use: gamma(shape) = gamma(shape+1) * U^(1/shape)
                 double d = shape + 1.0 - 1.0 / 3.0;
