@@ -26,6 +26,6 @@ namespace NumSharp
         /// <param name="x1">Input array (integer types only).</param>
         /// <param name="x2">Number of bits to shift.</param>
         /// <returns>Array with bits shifted left.</returns>
-        public static NDArray left_shift(NDArray x1, int x2) => x1.TensorEngine.LeftShift(x1, x2);
+        public static NDArray left_shift(NDArray x1, int x2) => x1.TensorEngine.LeftShift(x1, (System.ValueType)x2);
     }
 }

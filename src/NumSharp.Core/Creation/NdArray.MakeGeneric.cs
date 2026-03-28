@@ -41,7 +41,6 @@ namespace NumSharp
         {
             if (typeof(T) != dtype)
             {
-                // Use .Storage to avoid implicit NDArray->long conversion triggering NDArray<T>(long size) constructor
                 var converted = this.astype(InfoOf<T>.NPTypeCode, copy: true);
                 return new NDArray<T>(converted.Storage);
             }
