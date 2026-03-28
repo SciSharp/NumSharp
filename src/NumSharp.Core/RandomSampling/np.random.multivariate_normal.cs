@@ -77,7 +77,7 @@ namespace NumSharp
             }
 
             // Output shape is (*size, n)
-            int[] outputDims = new int[size.NDim + 1];
+            long[] outputDims = new long[size.NDim + 1];
             for (int i = 0; i < size.NDim; i++)
                 outputDims[i] = size.dimensions[i];
             outputDims[size.NDim] = n;
@@ -86,9 +86,9 @@ namespace NumSharp
             ArraySlice<double> retData = ret.Data<double>();
 
             // Number of samples is product of size dimensions
-            int numSamples = size.size;
+            long numSamples = size.size;
 
-            for (int s = 0; s < numSamples; s++)
+            for (long s = 0; s < numSamples; s++)
             {
                 SampleMultivariateNormal(mean, L, n, retData, s * n);
             }
@@ -114,7 +114,9 @@ namespace NumSharp
             if (cov.ndim != 2)
                 throw new ArgumentException("cov must be 2 dimensional and square", nameof(cov));
 
-            int n = mean.size;
+            // n is dimension count of distribution, used for C# managed array allocation
+            // which requires int. Multivariate distributions with 2^31+ dimensions are not practical.
+            int n = (int)mean.size;
 
             // Convert mean to double[]
             double[] meanArray = new double[n];
@@ -168,7 +170,7 @@ namespace NumSharp
         ///     The transformation gives us samples with the desired covariance.
         /// </remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void SampleMultivariateNormal(double[] mean, double[,] L, int n, ArraySlice<double> data, int offset)
+        private void SampleMultivariateNormal(double[] mean, double[,] L, int n, ArraySlice<double> data, long offset)
         {
             // Generate standard normal samples
             double[] z = new double[n];

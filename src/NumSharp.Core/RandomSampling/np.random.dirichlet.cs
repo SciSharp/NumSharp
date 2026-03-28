@@ -49,7 +49,7 @@ namespace NumSharp
             }
 
             // Output shape is (*size, k)
-            int[] outputDims = new int[size.NDim + 1];
+            long[] outputDims = new long[size.NDim + 1];
             for (int i = 0; i < size.NDim; i++)
                 outputDims[i] = size.dimensions[i];
             outputDims[size.NDim] = k;
@@ -58,9 +58,9 @@ namespace NumSharp
             ArraySlice<double> retData = ret.Data<double>();
 
             // Number of samples is product of size dimensions
-            int numSamples = size.size;
+            long numSamples = size.size;
 
-            for (int s = 0; s < numSamples; s++)
+            for (long s = 0; s < numSamples; s++)
             {
                 SampleDirichlet(alpha, retData, s * k);
             }
@@ -111,7 +111,7 @@ namespace NumSharp
         ///     Algorithm from NumPy: Y_i ~ Gamma(alpha_i, 1), X = Y / sum(Y)
         /// </remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void SampleDirichlet(double[] alpha, ArraySlice<double> data, int offset)
+        private void SampleDirichlet(double[] alpha, ArraySlice<double> data, long offset)
         {
             int k = alpha.Length;
             double sum = 0.0;

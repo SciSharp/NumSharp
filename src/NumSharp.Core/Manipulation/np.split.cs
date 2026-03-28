@@ -28,7 +28,7 @@ namespace NumSharp
             if (axis < 0 || axis >= ndim)
                 throw new ArgumentOutOfRangeException(nameof(axis), $"axis {axis} is out of bounds for array of dimension {ndim}");
 
-            int N = ary.shape[axis];
+            long N = ary.shape[axis];
             if (N % indices_or_sections != 0)
                 throw new ArgumentException("array split does not result in an equal division");
 
@@ -48,9 +48,30 @@ namespace NumSharp
         /// <remarks>
         /// https://numpy.org/doc/stable/reference/generated/numpy.split.html
         /// </remarks>
-        public static NDArray[] split(NDArray ary, int[] indices, int axis = 0)
+        public static NDArray[] split(NDArray ary, long[] indices, int axis = 0)
         {
             return array_split(ary, indices, axis);
+        }
+
+        /// <summary>
+        /// Split an array into multiple sub-arrays as views into ary.
+        /// </summary>
+        /// <param name="ary">Array to be divided into sub-arrays.</param>
+        /// <param name="indices">
+        /// A 1-D array of sorted integers indicating where along axis the array is split.
+        /// For example, [2, 3] would result in ary[:2], ary[2:3], ary[3:].
+        /// </param>
+        /// <param name="axis">The axis along which to split, default is 0.</param>
+        /// <returns>A list of sub-arrays as views into ary.</returns>
+        /// <remarks>
+        /// https://numpy.org/doc/stable/reference/generated/numpy.split.html
+        /// </remarks>
+        public static NDArray[] split(NDArray ary, int[] indices, int axis = 0)
+        {
+            var longIndices = new long[indices.Length];
+            for (int i = 0; i < indices.Length; i++)
+                longIndices[i] = indices[i];
+            return array_split(ary, longIndices, axis);
         }
 
         /// <summary>
@@ -81,18 +102,18 @@ namespace NumSharp
             if (axis < 0 || axis >= ndim)
                 throw new ArgumentOutOfRangeException(nameof(axis), $"axis {axis} is out of bounds for array of dimension {ndim}");
 
-            int Ntotal = ary.shape[axis];
+            long Ntotal = ary.shape[axis];
             int Nsections = indices_or_sections;
 
             // Calculate division points
             // l % n sub-arrays of size l//n + 1, rest of size l//n
-            int Neach_section = Ntotal / Nsections;
-            int extras = Ntotal % Nsections;
+            long Neach_section = Ntotal / Nsections;
+            long extras = Ntotal % Nsections;
 
             // Build division points array
-            var div_points = new int[Nsections + 1];
+            var div_points = new long[Nsections + 1];
             div_points[0] = 0;
-            int cumulative = 0;
+            long cumulative = 0;
             for (int i = 0; i < Nsections; i++)
             {
                 // First 'extras' sections get size Neach_section + 1
@@ -118,7 +139,7 @@ namespace NumSharp
         /// <remarks>
         /// https://numpy.org/doc/stable/reference/generated/numpy.array_split.html
         /// </remarks>
-        public static NDArray[] array_split(NDArray ary, int[] indices, int axis = 0)
+        public static NDArray[] array_split(NDArray ary, long[] indices, int axis = 0)
         {
             // Normalize axis
             int ndim = ary.ndim;
@@ -127,11 +148,11 @@ namespace NumSharp
             if (axis < 0 || axis >= ndim)
                 throw new ArgumentOutOfRangeException(nameof(axis), $"axis {axis} is out of bounds for array of dimension {ndim}");
 
-            int Ntotal = ary.shape[axis];
+            long Ntotal = ary.shape[axis];
             int Nsections = indices.Length + 1;
 
             // Build division points: [0] + indices + [Ntotal]
-            var div_points = new int[Nsections + 1];
+            var div_points = new long[Nsections + 1];
             div_points[0] = 0;
             for (int i = 0; i < indices.Length; i++)
             {
@@ -143,10 +164,33 @@ namespace NumSharp
         }
 
         /// <summary>
+        /// Split an array into multiple sub-arrays.
+        /// </summary>
+        /// <param name="ary">Array to be divided into sub-arrays.</param>
+        /// <param name="indices">
+        /// A 1-D array of sorted integers indicating where along axis the array is split.
+        /// For example, [2, 3] would result in ary[:2], ary[2:3], ary[3:].
+        /// If an index exceeds the dimension of the array along axis, an empty sub-array
+        /// is returned correspondingly.
+        /// </param>
+        /// <param name="axis">The axis along which to split, default is 0.</param>
+        /// <returns>A list of sub-arrays.</returns>
+        /// <remarks>
+        /// https://numpy.org/doc/stable/reference/generated/numpy.array_split.html
+        /// </remarks>
+        public static NDArray[] array_split(NDArray ary, int[] indices, int axis = 0)
+        {
+            var longIndices = new long[indices.Length];
+            for (int i = 0; i < indices.Length; i++)
+                longIndices[i] = indices[i];
+            return array_split(ary, longIndices, axis);
+        }
+
+        /// <summary>
         /// Internal helper to split array at given division points along an axis.
         /// Matches NumPy's approach: swap axis to front, slice, swap back.
         /// </summary>
-        private static NDArray[] SplitByDivPoints(NDArray ary, int[] div_points, int Nsections, int axis)
+        private static NDArray[] SplitByDivPoints(NDArray ary, long[] div_points, int Nsections, int axis)
         {
             var sub_arys = new NDArray[Nsections];
 
@@ -156,8 +200,8 @@ namespace NumSharp
 
             for (int i = 0; i < Nsections; i++)
             {
-                int st = div_points[i];
-                int end = div_points[i + 1];
+                long st = div_points[i];
+                long end = div_points[i + 1];
 
                 // Build slices for axis 0 (which is the swapped target axis)
                 // We want sary[st:end, ...]
