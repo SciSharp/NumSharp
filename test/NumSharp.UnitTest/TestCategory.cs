@@ -145,6 +145,30 @@ public static class TestCategory
     /// </para>
     /// </summary>
     public const string WindowsOnly = "WindowsOnly";
+
+    /// <summary>
+    /// Tests for long indexing support (arrays with size > int.MaxValue).
+    ///
+    /// <para><b>Purpose:</b></para>
+    /// <list type="bullet">
+    ///   <item>Tests that verify operations work correctly with > 2 billion elements</item>
+    ///   <item>Requires significant memory (~2-8 GB RAM per test)</item>
+    ///   <item>Should be run manually, not in standard CI due to resource requirements</item>
+    /// </list>
+    ///
+    /// <para><b>CI Behavior:</b></para>
+    /// <para>
+    /// Excluded from CI runs via <c>--treenode-filter "/*/*/*/*[Category!=LongIndexing]"</c>.
+    /// These tests require too much memory for standard CI runners.
+    /// </para>
+    ///
+    /// <para><b>Local Development:</b></para>
+    /// <code>
+    /// # Run ONLY LongIndexing tests (requires 8GB+ RAM)
+    /// dotnet test -- --treenode-filter "/*/*/*/*[Category=LongIndexing]"
+    /// </code>
+    /// </summary>
+    public const string LongIndexing = "LongIndexing";
 }
 
 /// <summary>
@@ -214,4 +238,27 @@ public class MisalignedAttribute : CategoryAttribute
 public class WindowsOnlyAttribute : CategoryAttribute
 {
     public WindowsOnlyAttribute() : base(TestCategory.WindowsOnly) { }
+}
+
+/// <summary>
+/// Attribute for tests requiring large memory allocations (> int.MaxValue elements).
+/// Shorthand for <c>[Category("LongIndexing")]</c>.
+///
+/// <para>See <see cref="TestCategory.LongIndexing"/> for full documentation.</para>
+/// </summary>
+/// <example>
+/// <code>
+/// [Test]
+/// [LongIndexing]
+/// [Explicit("Requires 8GB+ RAM")]
+/// public async Task LargeArraySum()
+/// {
+///     using var arr = np.ones&lt;byte&gt;((long)(int.MaxValue * 1.1));
+///     var sum = np.sum(arr);
+/// }
+/// </code>
+/// </example>
+public class LongIndexingAttribute : CategoryAttribute
+{
+    public LongIndexingAttribute() : base(TestCategory.LongIndexing) { }
 }

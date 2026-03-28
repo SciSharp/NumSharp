@@ -46,13 +46,14 @@ jobs:
     #
     # Test filtering:
     #   - OpenBugs: excluded via --treenode-filter (known-failing bug reproductions)
+    #   - LongIndexing: excluded (requires 8GB+ RAM, too much for CI runners)
     #   - WindowsOnly: auto-skipped at runtime via [SkipOnNonWindows] attribute
     - name: Test (net10.0)
       shell: bash
       run: |
         dotnet run --project test/NumSharp.UnitTest/NumSharp.UnitTest.csproj \
           --configuration Release --no-build --framework net10.0 \
-          -- --treenode-filter '/*/*/*/*[Category!=OpenBugs]' --report-trx
+          -- --treenode-filter '/*/*/*/*[Category!=OpenBugs&Category!=LongIndexing]' --report-trx
 
     - name: Upload Test Results
       uses: actions/upload-artifact@v4
