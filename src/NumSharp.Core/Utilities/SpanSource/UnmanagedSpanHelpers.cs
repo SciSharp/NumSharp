@@ -5,6 +5,7 @@ using System;
 using System.Diagnostics;
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics;
 using System.Runtime.Intrinsics.X86;
 
@@ -12,6 +13,32 @@ namespace NumSharp.Utilities
 {
     internal static partial class UnmanagedSpanHelpers
     {
+        /// <summary>
+        /// Copies bytes from source to destination using native memory operations.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static unsafe void Memmove(ref byte dest, ref byte src, nuint len)
+        {
+            // Use NativeMemory.Copy which handles overlapping regions correctly
+            fixed (byte* pDest = &dest)
+            fixed (byte* pSrc = &src)
+            {
+                NativeMemory.Copy(pSrc, pDest, len);
+            }
+        }
+
+        /// <summary>
+        /// Clears memory without reference handling (for unmanaged types).
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static unsafe void ClearWithoutReferences(ref byte dest, nuint len)
+        {
+            fixed (byte* pDest = &dest)
+            {
+                NativeMemory.Clear(pDest, len);
+            }
+        }
+
         public static unsafe void ClearWithReferences(ref IntPtr ip, nuint pointerSizeLength)
         {
             // Note: Removed Unsafe.IsOpportunisticallyAligned check (.NET 9+ only)
@@ -347,131 +374,13 @@ namespace NumSharp.Utilities
         }
 
         /// <summary>
-        /// Fills a buffer with a specified value using SIMD when possible.
+        /// Helper method for address comparison - equivalent to !Unsafe.IsAddressGreaterThan
+        /// This is needed for .NET 8 compatibility as IsAddressLessThanOrEqualTo was added in .NET 9.
         /// </summary>
-        public static unsafe void Fill<T>(ref T refData, nuint numElements, T value) where T : unmanaged
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal static bool IsAddressLessThanOrEqualTo<T>(ref T left, ref T right)
         {
-            // Early checks to see if it's even possible to vectorize - JIT will turn these checks into consts.
-
-            if (!Vector.IsHardwareAccelerated)
-            {
-                goto CannotVectorize;
-            }
-
-            if (sizeof(T) > Vector<byte>.Count)
-            {
-                goto CannotVectorize;
-            }
-
-            if (!BitOperations.IsPow2(sizeof(T)))
-            {
-                goto CannotVectorize;
-            }
-
-            if (numElements >= (uint)(Vector<byte>.Count / sizeof(T)))
-            {
-                // We have enough data for at least one vectorized write.
-                Vector<byte> vector;
-
-                if (sizeof(T) == 1)
-                {
-                    vector = new Vector<byte>(Unsafe.BitCast<T, byte>(value));
-                }
-                else if (sizeof(T) == 2)
-                {
-                    vector = (Vector<byte>)new Vector<ushort>(Unsafe.BitCast<T, ushort>(value));
-                }
-                else if (sizeof(T) == 4)
-                {
-                    // special-case float since it's already passed in a SIMD reg
-                    vector = (typeof(T) == typeof(float))
-                        ? (Vector<byte>)new Vector<float>(Unsafe.BitCast<T, float>(value))
-                        : (Vector<byte>)new Vector<uint>(Unsafe.BitCast<T, uint>(value));
-                }
-                else if (sizeof(T) == 8)
-                {
-                    // special-case double since it's already passed in a SIMD reg
-                    vector = (typeof(T) == typeof(double))
-                        ? (Vector<byte>)new Vector<double>(Unsafe.BitCast<T, double>(value))
-                        : (Vector<byte>)new Vector<ulong>(Unsafe.BitCast<T, ulong>(value));
-                }
-                else
-                {
-                    goto CannotVectorize;
-                }
-
-                ref byte refDataAsBytes = ref Unsafe.As<T, byte>(ref refData);
-                nuint totalByteLength = numElements * (nuint)sizeof(T);
-                nuint stopLoopAtOffset = totalByteLength & (nuint)(nint)(2 * (int)-Vector<byte>.Count);
-                nuint offset = 0;
-
-                // Loop, writing 2 vectors at a time.
-                if (numElements >= (uint)(2 * Vector<byte>.Count / sizeof(T)))
-                {
-                    do
-                    {
-                        Unsafe.WriteUnaligned(ref Unsafe.AddByteOffset(ref refDataAsBytes, offset), vector);
-                        Unsafe.WriteUnaligned(ref Unsafe.AddByteOffset(ref refDataAsBytes, offset + (nuint)Vector<byte>.Count), vector);
-                        offset += (uint)(2 * Vector<byte>.Count);
-                    } while (offset < stopLoopAtOffset);
-                }
-
-                // Write odd vector if needed
-                if ((totalByteLength & (nuint)Vector<byte>.Count) != 0)
-                {
-                    Unsafe.WriteUnaligned(ref Unsafe.AddByteOffset(ref refDataAsBytes, offset), vector);
-                }
-
-                // Write final vector at the end
-                Unsafe.WriteUnaligned(ref Unsafe.AddByteOffset(ref refDataAsBytes, totalByteLength - (nuint)Vector<byte>.Count), vector);
-                return;
-            }
-
-        CannotVectorize:
-
-            // Fall back to an unrolled loop
-            nuint i = 0;
-
-            // Write 8 elements at a time
-            if (numElements >= 8)
-            {
-                nuint stopLoopAtOffset = numElements & ~(nuint)7;
-                do
-                {
-                    Unsafe.Add(ref refData, (nint)i + 0) = value;
-                    Unsafe.Add(ref refData, (nint)i + 1) = value;
-                    Unsafe.Add(ref refData, (nint)i + 2) = value;
-                    Unsafe.Add(ref refData, (nint)i + 3) = value;
-                    Unsafe.Add(ref refData, (nint)i + 4) = value;
-                    Unsafe.Add(ref refData, (nint)i + 5) = value;
-                    Unsafe.Add(ref refData, (nint)i + 6) = value;
-                    Unsafe.Add(ref refData, (nint)i + 7) = value;
-                } while ((i += 8) < stopLoopAtOffset);
-            }
-
-            // Write next 4 elements if needed
-            if ((numElements & 4) != 0)
-            {
-                Unsafe.Add(ref refData, (nint)i + 0) = value;
-                Unsafe.Add(ref refData, (nint)i + 1) = value;
-                Unsafe.Add(ref refData, (nint)i + 2) = value;
-                Unsafe.Add(ref refData, (nint)i + 3) = value;
-                i += 4;
-            }
-
-            // Write next 2 elements if needed
-            if ((numElements & 2) != 0)
-            {
-                Unsafe.Add(ref refData, (nint)i + 0) = value;
-                Unsafe.Add(ref refData, (nint)i + 1) = value;
-                i += 2;
-            }
-
-            // Write final element if needed
-            if ((numElements & 1) != 0)
-            {
-                Unsafe.Add(ref refData, (nint)i) = value;
-            }
+            return !Unsafe.IsAddressGreaterThan(ref left, ref right);
         }
     }
 }
