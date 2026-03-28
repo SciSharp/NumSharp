@@ -1,3 +1,4 @@
+using System;
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
@@ -12,7 +13,7 @@ using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
-namespace System
+namespace NumSharp.Utilities
 {
     internal static partial class UnmanagedSpanHelpers // .ByteMemOps
     {
@@ -34,7 +35,6 @@ namespace System
         private struct Block64 {}
 #endif // HAS_CUSTOM_BLOCKS
 
-        [Intrinsic] // Unrolled for small constant lengths
         internal static void Memmove(ref byte dest, ref byte src, nuint len)
         {
             // P/Invoke into the native version when the buffers are overlapping.
@@ -255,19 +255,13 @@ namespace System
             }
         }
 
-#if MONO
-        [MethodImpl(MethodImplOptions.InternalCall)]
-        private static extern unsafe void memmove(void* dest, void* src, nuint len);
-#else
-#pragma warning disable CS3016 // Arrays as attribute arguments is not CLS-compliant
-        [LibraryImport(RuntimeHelpers.QCall, EntryPoint = "memmove")]
-        [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
-        [RequiresUnsafe]
-        private static unsafe partial void* memmove(void* dest, void* src, nuint len);
-#pragma warning restore CS3016
-#endif
+        // Use NativeMemory.Copy from .NET 6+ instead of internal QCall
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe void memmove(void* dest, void* src, nuint len)
+        {
+            NativeMemory.Copy(src, dest, len);
+        }
 
-        [Intrinsic] // Unrolled for small sizes
         public static void ClearWithoutReferences(ref byte dest, nuint len)
         {
             if (len == 0)
@@ -479,17 +473,12 @@ namespace System
             }
         }
 
-#if MONO
-        [MethodImpl(MethodImplOptions.InternalCall)]
-        private static extern unsafe void memset(void* dest, int value, nuint len);
-#else
-#pragma warning disable CS3016 // Arrays as attribute arguments is not CLS-compliant
-        [LibraryImport(RuntimeHelpers.QCall, EntryPoint = "memset")]
-        [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
-        [RequiresUnsafe]
-        private static unsafe partial void* memset(void* dest, int value, nuint len);
-#pragma warning restore CS3016
-#endif
+        // Use NativeMemory.Fill from .NET 6+ instead of internal QCall
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe void memset(void* dest, int value, nuint len)
+        {
+            NativeMemory.Fill(dest, len, (byte)value);
+        }
 
         internal static void Fill(ref byte dest, byte value, nuint len)
         {
@@ -503,7 +492,7 @@ namespace System
                 // We have enough data for at least one vectorized write.
                 Vector<byte> vector = new(value);
                 nuint stopLoopAtOffset = len & (nuint)(nint)(2 * (int)-Vector<byte>.Count); // intentional sign extension carries the negative bit
-                nulong offset = 0;
+                nuint offset = 0;
 
                 // Loop, writing 2 vectors at a time.
                 // Compare 'numElements' rather than 'stopLoopAtOffset' because we don't want a dependency
@@ -544,7 +533,7 @@ namespace System
 
             // If we reached this point, we cannot vectorize this T, or there are too few
             // elements for us to vectorize. Fall back to an unrolled loop.
-            nulong i = 0;
+            nuint i = 0;
 
             // Write 8 elements at a time
             if (len >= 8)

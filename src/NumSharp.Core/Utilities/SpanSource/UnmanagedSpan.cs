@@ -1,3 +1,4 @@
+using System;
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
@@ -14,7 +15,7 @@ using EditorBrowsableState = System.ComponentModel.EditorBrowsableState;
 
 #pragma warning disable 0809 // Obsolete member 'UnmanagedSpan<T>.Equals(object)' overrides non-obsolete member 'object.Equals(object)'
 
-namespace System
+namespace NumSharp.Utilities
 {
     /// <summary>
     /// UnmanagedSpan represents a contiguous region of arbitrary memory. Unlike arrays, it can point to either managed
@@ -22,10 +23,7 @@ namespace System
     /// </summary>
     [DebuggerTypeProxy(typeof(UnmanagedSpanDebugView<>))]
     [DebuggerDisplay("{ToString(),raw}")]
-    [NonVersionable]
-    [NativeMarshalling(typeof(UnmanagedSpanMarshaller<,>))]
-    [Intrinsic]
-    public readonly ref struct UnmanagedSpan<T>
+    public readonly ref struct UnmanagedSpan<T> where T : unmanaged
     {
         /// <summary>A byref or a native ptr.</summary>
         internal readonly ref T _reference;
@@ -106,7 +104,6 @@ namespace System
         /// </exception>
         [CLSCompliant(false)]
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        [RequiresUnsafe]
         public unsafe UnmanagedSpan(void* pointer, long length)
         {
             if (RuntimeHelpers.IsReferenceOrContainsReferences<T>())
@@ -147,9 +144,7 @@ namespace System
         /// </exception>
         public ref T this[long index]
         {
-            [Intrinsic]
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            [NonVersionable]
             get
             {
                 if ((ulong)index >= (ulong)_length)
@@ -163,8 +158,6 @@ namespace System
         /// </summary>
         public long Length
         {
-            [Intrinsic]
-            [NonVersionable]
             get => _length;
         }
 
@@ -174,7 +167,6 @@ namespace System
         /// <value><see langword="true"/> if this span is empty; otherwise, <see langword="false"/>.</value>
         public bool IsEmpty
         {
-            [NonVersionable]
             get => _length == 0;
         }
 
@@ -295,14 +287,8 @@ namespace System
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public unsafe void Clear()
         {
-            if (RuntimeHelpers.IsReferenceOrContainsReferences<T>())
-            {
-                UnmanagedSpanHelpers.ClearWithReferences(ref Unsafe.As<T, IntPtr>(ref _reference), (ulong)_length * (nuint)(sizeof(T) / sizeof(nuint)));
-            }
-            else
-            {
-                UnmanagedSpanHelpers.ClearWithoutReferences(ref Unsafe.As<T, byte>(ref _reference), (ulong)_length * (nuint)sizeof(T));
-            }
+            // For unmanaged types, always use the non-reference path
+            UnmanagedSpanHelpers.ClearWithoutReferences(ref Unsafe.As<T, byte>(ref _reference), checked((nuint)_length) * (nuint)sizeof(T));
         }
 
         /// <summary>
@@ -311,7 +297,7 @@ namespace System
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Fill(T value)
         {
-            UnmanagedSpanHelpers.Fill(ref _reference, (ulong)_length, value);
+            UnmanagedSpanHelpers.Fill(ref _reference, checked((nuint)_length), value);
         }
 
         /// <summary>
@@ -326,13 +312,9 @@ namespace System
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void CopyTo(UnmanagedSpan<T> destination)
         {
-            // Using "if (!TryCopyTo(...))" results in two branches: one for the length
-            // check, and one for the result of TryCopyTo. Since these checks are equivalent,
-            // we can optimize by performing the check once ourselves then calling Memmove directly.
-
             if ((ulong)_length <= (ulong)destination.Length)
             {
-                UnmanagedBuffer.Memmove(ref destination._reference, ref _reference, (ulong)_length);
+                UnmanagedBuffer.Memmove(ref destination._reference, ref _reference, checked((nuint)_length));
             }
             else
             {
@@ -353,7 +335,7 @@ namespace System
             bool retVal = false;
             if ((ulong)_length <= (ulong)destination.Length)
             {
-                UnmanagedBuffer.Memmove(ref destination._reference, ref _reference, (ulong)_length);
+                UnmanagedBuffer.Memmove(ref destination._reference, ref _reference, checked((nuint)_length));
                 retVal = true;
             }
             return retVal;
@@ -377,13 +359,16 @@ namespace System
         /// For <see cref="UnmanagedSpan{Char}"/>, returns a new instance of string that represents the characters pointed to by the span.
         /// Otherwise, returns a <see cref="string"/> with the name of the type and the number of elements.
         /// </summary>
-        public override string ToString()
+        public override unsafe string ToString()
         {
             if (typeof(T) == typeof(char))
             {
-                return new string(new ReadOnlyUnmanagedSpan<char>(ref Unsafe.As<T, char>(ref _reference), _length));
+                // For char spans, create string. Need to handle long length.
+                if (_length > int.MaxValue)
+                    return $"NumSharp.Utilities.UnmanagedSpan<Char>[{_length}]";
+                return new string((char*)Unsafe.AsPointer(ref _reference), 0, (int)_length);
             }
-            return $"System.UnmanagedSpan<{typeof(T).Name}>[{_length}]";
+            return $"NumSharp.Utilities.UnmanagedSpan<{typeof(T).Name}>[{_length}]";
         }
 
         /// <summary>
