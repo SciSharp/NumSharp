@@ -291,10 +291,10 @@ namespace NumSharp
 
         protected static unsafe NDArray<T> FetchIndices<T>(NDArray<T> source, NDArray[] indices, NDArray @out, bool extraDim) where T : unmanaged
         {
-            if (source == null)
+            if (source is null)
                 throw new ArgumentNullException(nameof(source));
 
-            if (indices == null)
+            if (indices is null)
                 throw new ArgumentNullException(nameof(indices));
 
             if (indices.Length == 0)

@@ -13,7 +13,7 @@ namespace NumSharp.Backends
             if (shape.IsEmpty)
             {
                 var defaultVal = (typeCode ?? arr.typecode).GetDefaultValue();
-                if (@out != null) { @out.SetAtIndex(defaultVal, 0); return @out; }
+                if (@out is not null) { @out.SetAtIndex(defaultVal, 0); return @out; }
                 return NDArray.Scalar(defaultVal);
             }
 
@@ -38,7 +38,7 @@ namespace NumSharp.Backends
         private NDArray HandleElementWiseSum(NDArray arr, bool keepdims, NPTypeCode? typeCode, NDArray @out)
         {
             var result = sum_elementwise_il(arr, typeCode);
-            if (@out != null) { @out.SetAtIndex(result, 0); return @out; }
+            if (@out is not null) { @out.SetAtIndex(result, 0); return @out; }
             var r = NDArray.Scalar(result);
             if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(new Shape(ks)); }
             else if (!r.Shape.IsScalar && r.Shape.size == 1 && r.ndim == 1) r.Storage.Reshape(Shape.Scalar);
@@ -59,7 +59,7 @@ namespace NumSharp.Backends
 
             var outputShape = outputDims.Length > 0 ? new Shape(outputDims) : Shape.Scalar;
             NDArray result;
-            if (@out != null) { if (@out.Shape != outputShape) throw new IncorrectShapeException($"Output shape mismatch"); result = @out; }
+            if (@out is not null) { if (@out.Shape != outputShape) throw new IncorrectShapeException($"Output shape mismatch"); result = @out; }
             else result = new NDArray(outputType, outputShape, false);
 
             long axisSize = shape.dimensions[axis];
@@ -126,7 +126,7 @@ namespace NumSharp.Backends
             if (axis_ == null)
             {
                 var defaultVal = (typeCode ?? arr.typecode).GetDefaultValue();
-                if (@out != null) { @out.SetAtIndex(defaultVal, 0); return @out; }
+                if (@out is not null) { @out.SetAtIndex(defaultVal, 0); return @out; }
                 var r = NDArray.Scalar(defaultVal);
                 if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(new Shape(ks)); }
                 return r;
@@ -141,14 +141,14 @@ namespace NumSharp.Backends
                 for (int d = 0, sd = 0; d < arr.ndim; d++) ks[d] = (d == axis) ? 1 : resultShape[sd++];
                 result.Storage.Reshape(new Shape(ks));
             }
-            if (@out != null) { np.copyto(@out, result); return @out; }
+            if (@out is not null) { np.copyto(@out, result); return @out; }
             return result;
         }
 
         private NDArray HandleScalarReduction(NDArray arr, bool keepdims, NPTypeCode? typeCode, NDArray @out)
         {
             var r = typeCode.HasValue ? Cast(arr, typeCode.Value, true) : arr.Clone();
-            if (@out != null) { @out.SetAtIndex(r.GetAtIndex(0), 0); return @out; }
+            if (@out is not null) { @out.SetAtIndex(r.GetAtIndex(0), 0); return @out; }
             if (keepdims) { var ks = new long[arr.ndim]; for (int i = 0; i < arr.ndim; i++) ks[i] = 1; r.Storage.Reshape(new Shape(ks)); }
             else if (!r.Shape.IsScalar && r.Shape.size == 1 && r.ndim == 1) r.Storage.Reshape(Shape.Scalar);
             return r;
@@ -156,7 +156,7 @@ namespace NumSharp.Backends
 
         private NDArray HandleTrivialAxisReduction(NDArray arr, int axis, bool keepdims, NPTypeCode outputType, NDArray @out)
         {
-            if (@out != null) return null;
+            if (@out is not null) return null;
             var shape = arr.Shape;
             long[] resultDims;
             if (keepdims) { resultDims = (long[])shape.dimensions.Clone(); resultDims[axis] = 1; }

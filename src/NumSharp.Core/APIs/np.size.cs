@@ -13,7 +13,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ma.size.html</remarks>
         public static long size(NDArray a, int? axis = null)
         {
-            if (a == null)
+            if (a is null)
                 throw new ArgumentNullException(nameof(a));
 
             if (!axis.HasValue)

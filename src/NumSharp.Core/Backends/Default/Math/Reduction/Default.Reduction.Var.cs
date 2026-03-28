@@ -131,7 +131,7 @@ namespace NumSharp.Backends
             if (ILKernelGenerator.Enabled)
             {
                 var ilResult = ExecuteAxisVarReductionIL(arr, axis, keepdims, typeCode ?? NPTypeCode.Double, ddof ?? 0);
-                if (ilResult != null)
+                if (ilResult is not null)
                     return ilResult;
             }
 

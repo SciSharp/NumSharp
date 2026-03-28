@@ -332,10 +332,10 @@ namespace NumSharp
 
         protected static unsafe void SetIndices<T>(NDArray<T> source, NDArray[] indices, NDArray values) where T : unmanaged
         {
-            if (source == null)
+            if (source is null)
                 throw new ArgumentNullException(nameof(source));
 
-            if (indices == null)
+            if (indices is null)
                 throw new ArgumentNullException(nameof(indices));
 
             if (indices.Length == 0)

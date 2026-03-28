@@ -26,7 +26,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.all.html
         public static NDArray<bool> all(NDArray nd, int axis, bool keepdims = false)
         {
-            if (nd == null)
+            if (nd is null)
             {
                 throw new ArgumentNullException(nameof(nd), "Can't operate with null array");
             }
