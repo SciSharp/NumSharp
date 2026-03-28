@@ -9,64 +9,61 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.Marshalling;
 using System.Runtime.Versioning;
+
 using EditorBrowsableAttribute = System.ComponentModel.EditorBrowsableAttribute;
 using EditorBrowsableState = System.ComponentModel.EditorBrowsableState;
 
-#pragma warning disable 0809 // Obsolete member 'UnmanagedSpan<T>.Equals(object)' overrides non-obsolete member 'object.Equals(object)'
+#pragma warning disable 0809 // Obsolete member 'Span<T>.Equals(object)' overrides non-obsolete member 'object.Equals(object)'
 
 namespace System
 {
     /// <summary>
-    /// UnmanagedSpan represents a contiguous region of arbitrary memory. Unlike arrays, it can point to either managed
+    /// ReadOnlySpan represents a contiguous region of arbitrary memory. Unlike arrays, it can point to either managed
     /// or native memory, or to memory allocated on the stack. It is type-safe and memory-safe.
     /// </summary>
-    [DebuggerTypeProxy(typeof(UnmanagedSpanDebugView<>))]
+    [DebuggerTypeProxy(typeof(SpanDebugView<>))]
     [DebuggerDisplay("{ToString(),raw}")]
     [NonVersionable]
-    [NativeMarshalling(typeof(UnmanagedSpanMarshaller<,>))]
+    [NativeMarshalling(typeof(ReadOnlySpanMarshaller<,>))]
     [Intrinsic]
-    public readonly ref struct UnmanagedSpan<T>
+    public readonly ref struct ReadOnlySpan<T>
     {
         /// <summary>A byref or a native ptr.</summary>
         internal readonly ref T _reference;
-        /// <summary>The number of elements this UnmanagedSpan contains.</summary>
-        private readonly long _length;
+        /// <summary>The number of elements this ReadOnlySpan contains.</summary>
+        private readonly int _length;
 
         /// <summary>
-        /// Creates a new span over the entirety of the target array.
+        /// Creates a new read-only span over the entirety of the target array.
         /// </summary>
         /// <param name="array">The target array.</param>
         /// <remarks>Returns default when <paramref name="array"/> is null.</remarks>
-        /// <exception cref="ArrayTypeMismatchException">Thrown when <paramref name="array"/> is covariant and array's type is not exactly T[].</exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public UnmanagedSpan(T[]? array)
+        public ReadOnlySpan(T[]? array)
         {
             if (array == null)
             {
                 this = default;
                 return; // returns default
             }
-            if (!typeof(T).IsValueType && array.GetType() != typeof(T[]))
-                ThrowHelper.ThrowArrayTypeMismatchException();
 
             _reference = ref MemoryMarshal.GetArrayDataReference(array);
             _length = array.Length;
         }
 
         /// <summary>
-        /// Creates a new span over the portion of the target array beginning
+        /// Creates a new read-only span over the portion of the target array beginning
         /// at 'start' index and ending at 'end' index (exclusive).
         /// </summary>
         /// <param name="array">The target array.</param>
-        /// <param name="start">The zero-based index at which to begin the span.</param>
-        /// <param name="length">The number of items in the span.</param>
+        /// <param name="start">The zero-based index at which to begin the read-only span.</param>
+        /// <param name="length">The number of items in the read-only span.</param>
         /// <remarks>Returns default when <paramref name="array"/> is null.</remarks>
-        /// <exception cref="ArrayTypeMismatchException">Thrown when <paramref name="array"/> is covariant and array's type is not exactly T[].</exception>
         /// <exception cref="ArgumentOutOfRangeException">
         /// Thrown when the specified <paramref name="start"/> or end index is not in the range (&lt;0 or &gt;Length).
         /// </exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public UnmanagedSpan(T[]? array, int start, int length)
+        public ReadOnlySpan(T[]? array, int start, int length)
         {
             if (array == null)
             {
@@ -75,10 +72,8 @@ namespace System
                 this = default;
                 return; // returns default
             }
-            if (!typeof(T).IsValueType && array.GetType() != typeof(T[]))
-                ThrowHelper.ThrowArrayTypeMismatchException();
 #if TARGET_64BIT
-            // See comment in UnmanagedSpan<T>.Slice for how this works.
+            // See comment in Span<T>.Slice for how this works.
             if ((ulong)(uint)start + (ulong)(uint)length > (ulong)(uint)array.Length)
                 ThrowHelper.ThrowArgumentOutOfRangeException();
 #else
@@ -91,7 +86,7 @@ namespace System
         }
 
         /// <summary>
-        /// Creates a new span over the target unmanaged buffer.  Clearly this
+        /// Creates a new read-only span over the target unmanaged buffer.  Clearly this
         /// is quite dangerous, because we are creating arbitrarily typed T's
         /// out of a void*-typed block of memory.  And the length is not checked.
         /// But if this creation is correct, then all subsequent uses are correct.
@@ -107,7 +102,7 @@ namespace System
         [CLSCompliant(false)]
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         [RequiresUnsafe]
-        public unsafe UnmanagedSpan(void* pointer, long length)
+        public unsafe ReadOnlySpan(void* pointer, int length)
         {
             if (RuntimeHelpers.IsReferenceOrContainsReferences<T>())
                 ThrowHelper.ThrowArgument_TypeContainsReferences(typeof(T));
@@ -118,18 +113,18 @@ namespace System
             _length = length;
         }
 
-        /// <summary>Creates a new <see cref="UnmanagedSpan{T}"/> of length 1 around the specified reference.</summary>
+        /// <summary>Creates a new <see cref="ReadOnlySpan{T}"/> of length 1 around the specified reference.</summary>
         /// <param name="reference">A reference to data.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public UnmanagedSpan(ref T reference)
+        public ReadOnlySpan(ref readonly T reference)
         {
-            _reference = ref reference;
+            _reference = ref Unsafe.AsRef(in reference);
             _length = 1;
         }
 
-        // Constructor for internal use only. It is not safe to expose publicly, and is instead exposed via the unsafe MemoryMarshal.CreateSpan.
+        // Constructor for internal use only. It is not safe to expose publicly, and is instead exposed via the unsafe MemoryMarshal.CreateReadOnlySpan.
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal UnmanagedSpan(ref T reference, long length)
+        internal ReadOnlySpan(ref T reference, int length)
         {
             Debug.Assert(length >= 0);
 
@@ -138,30 +133,30 @@ namespace System
         }
 
         /// <summary>
-        /// Returns a reference to specified element of the UnmanagedSpan.
+        /// Returns the specified element of the read-only span.
         /// </summary>
         /// <param name="index">The zero-based index.</param>
         /// <returns></returns>
         /// <exception cref="IndexOutOfRangeException">
         /// Thrown when index less than 0 or index greater than or equal to Length
         /// </exception>
-        public ref T this[long index]
+        public ref readonly T this[int index]
         {
             [Intrinsic]
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             [NonVersionable]
             get
             {
-                if ((ulong)index >= (ulong)_length)
+                if ((uint)index >= (uint)_length)
                     ThrowHelper.ThrowIndexOutOfRangeException();
-                return ref Unsafe.Add(ref _reference, (nint)index);
+                return ref Unsafe.Add(ref _reference, (nint)(uint)index /* force zero-extension */);
             }
         }
 
         /// <summary>
-        /// The number of items in the span.
+        /// The number of items in the read-only span.
         /// </summary>
-        public long Length
+        public int Length
         {
             [Intrinsic]
             [NonVersionable]
@@ -169,7 +164,7 @@ namespace System
         }
 
         /// <summary>
-        /// Gets a value indicating whether this <see cref="UnmanagedSpan{T}"/> is empty.
+        /// Gets a value indicating whether this <see cref="ReadOnlySpan{T}"/> is empty.
         /// </summary>
         /// <value><see langword="true"/> if this span is empty; otherwise, <see langword="false"/>.</value>
         public bool IsEmpty
@@ -182,7 +177,7 @@ namespace System
         /// Returns false if left and right point at the same memory and have the same length.  Note that
         /// this does *not* check to see if the *contents* are equal.
         /// </summary>
-        public static bool operator !=(UnmanagedSpan<T> left, UnmanagedSpan<T> right) => !(left == right);
+        public static bool operator !=(ReadOnlySpan<T> left, ReadOnlySpan<T> right) => !(left == right);
 
         /// <summary>
         /// This method is not supported as spans cannot be boxed. To compare two spans, use operator==.
@@ -190,7 +185,7 @@ namespace System
         /// <exception cref="NotSupportedException">
         /// Always thrown by this method.
         /// </exception>
-        [Obsolete("Equals() on UnmanagedSpan will always throw an exception. Use the equality operator instead.")]
+        [Obsolete("Equals() on ReadOnlySpan will always throw an exception. Use the equality operator instead.")]
         [EditorBrowsable(EditorBrowsableState.Never)]
         public override bool Equals(object? obj) =>
             throw new NotSupportedException(SR.NotSupported_CannotCallEqualsOnSpan);
@@ -201,42 +196,54 @@ namespace System
         /// <exception cref="NotSupportedException">
         /// Always thrown by this method.
         /// </exception>
-        [Obsolete("GetHashCode() on UnmanagedSpan will always throw an exception.")]
+        [Obsolete("GetHashCode() on ReadOnlySpan will always throw an exception.")]
         [EditorBrowsable(EditorBrowsableState.Never)]
         public override int GetHashCode() =>
             throw new NotSupportedException(SR.NotSupported_CannotCallGetHashCodeOnSpan);
 
         /// <summary>
-        /// Defines an implicit conversion of an array to a <see cref="UnmanagedSpan{T}"/>
+        /// Defines an implicit conversion of an array to a <see cref="ReadOnlySpan{T}"/>
         /// </summary>
-        public static implicit operator UnmanagedSpan<T>(T[]? array) => new UnmanagedSpan<T>(array);
+        public static implicit operator ReadOnlySpan<T>(T[]? array) => new ReadOnlySpan<T>(array);
 
         /// <summary>
-        /// Defines an implicit conversion of a <see cref="ArraySegment{T}"/> to a <see cref="UnmanagedSpan{T}"/>
+        /// Defines an implicit conversion of a <see cref="ArraySegment{T}"/> to a <see cref="ReadOnlySpan{T}"/>
         /// </summary>
-        public static implicit operator UnmanagedSpan<T>(ArraySegment<T> segment) =>
-            new UnmanagedSpan<T>(segment.Array, segment.Offset, segment.Count);
+        public static implicit operator ReadOnlySpan<T>(ArraySegment<T> segment)
+            => new ReadOnlySpan<T>(segment.Array, segment.Offset, segment.Count);
 
         /// <summary>
-        /// Returns an empty <see cref="UnmanagedSpan{T}"/>
+        /// Returns a 0-length read-only span whose base is the null pointer.
         /// </summary>
-        public static UnmanagedSpan<T> Empty => default;
+        public static ReadOnlySpan<T> Empty => default;
+
+        /// <summary>
+        /// Casts a read-only span of <typeparamref name="TDerived"/> to a read-only span of <typeparamref name="T"/>.
+        /// </summary>
+        /// <typeparam name="TDerived">The element type of the source read-only span, which must be derived from <typeparamref name="T"/>.</typeparam>
+        /// <param name="items">The source read-only span. No copy is made.</param>
+        /// <returns>A read-only span with elements cast to the new type.</returns>
+        /// <remarks>This method uses a covariant cast, producing a read-only span that shares the same memory as the source. The relationships expressed in the type constraints ensure that the cast is a safe operation.</remarks>
+        public static ReadOnlySpan<T> CastUp<TDerived>(ReadOnlySpan<TDerived> items) where TDerived : class?, T
+        {
+            return new ReadOnlySpan<T>(ref Unsafe.As<TDerived, T>(ref items._reference), items.Length);
+        }
 
         /// <summary>Gets an enumerator for this span.</summary>
         public Enumerator GetEnumerator() => new Enumerator(this);
 
-        /// <summary>Enumerates the elements of a <see cref="UnmanagedSpan{T}"/>.</summary>
+        /// <summary>Enumerates the elements of a <see cref="ReadOnlySpan{T}"/>.</summary>
         public ref struct Enumerator : IEnumerator<T>
         {
             /// <summary>The span being enumerated.</summary>
-            private readonly UnmanagedSpan<T> _span;
+            private readonly ReadOnlySpan<T> _span;
             /// <summary>The next index to yield.</summary>
-            private long _index;
+            private int _index;
 
             /// <summary>Initialize the enumerator.</summary>
             /// <param name="span">The span to enumerate.</param>
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            internal Enumerator(UnmanagedSpan<T> span)
+            internal Enumerator(ReadOnlySpan<T> span)
             {
                 _span = span;
                 _index = -1;
@@ -246,7 +253,7 @@ namespace System
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public bool MoveNext()
             {
-                long index = _index + 1;
+                int index = _index + 1;
                 if (index < _span.Length)
                 {
                     _index = index;
@@ -257,7 +264,7 @@ namespace System
             }
 
             /// <summary>Gets the element at the current position of the enumerator.</summary>
-            public ref T Current
+            public ref readonly T Current
             {
                 [MethodImpl(MethodImplOptions.AggressiveInlining)]
                 get => ref _span[_index];
@@ -277,11 +284,11 @@ namespace System
         }
 
         /// <summary>
-        /// Returns a reference to the 0th element of the UnmanagedSpan. If the UnmanagedSpan is empty, returns null reference.
+        /// Returns a reference to the 0th element of the Span. If the Span is empty, returns null reference.
         /// It can be used for pinning and is required to support the use of span within a fixed statement.
         /// </summary>
         [EditorBrowsable(EditorBrowsableState.Never)]
-        public ref T GetPinnableReference()
+        public ref readonly T GetPinnableReference()
         {
             // Ensure that the native code has just one forward branch that is predicted-not-taken.
             ref T ret = ref Unsafe.NullRef<T>();
@@ -290,49 +297,24 @@ namespace System
         }
 
         /// <summary>
-        /// Clears the contents of this span.
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public unsafe void Clear()
-        {
-            if (RuntimeHelpers.IsReferenceOrContainsReferences<T>())
-            {
-                UnmanagedSpanHelpers.ClearWithReferences(ref Unsafe.As<T, IntPtr>(ref _reference), (ulong)_length * (nuint)(sizeof(T) / sizeof(nuint)));
-            }
-            else
-            {
-                UnmanagedSpanHelpers.ClearWithoutReferences(ref Unsafe.As<T, byte>(ref _reference), (ulong)_length * (nuint)sizeof(T));
-            }
-        }
-
-        /// <summary>
-        /// Fills the contents of this span with the given value.
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Fill(T value)
-        {
-            UnmanagedSpanHelpers.Fill(ref _reference, (ulong)_length, value);
-        }
-
-        /// <summary>
-        /// Copies the contents of this span into destination span. If the source
+        /// Copies the contents of this read-only span into destination span. If the source
         /// and destinations overlap, this method behaves as if the original values in
         /// a temporary location before the destination is overwritten.
         /// </summary>
         /// <param name="destination">The span to copy items into.</param>
         /// <exception cref="ArgumentException">
-        /// Thrown when the destination UnmanagedSpan is shorter than the source UnmanagedSpan.
+        /// Thrown when the destination Span is shorter than the source Span.
         /// </exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void CopyTo(UnmanagedSpan<T> destination)
+        public void CopyTo(Span<T> destination)
         {
             // Using "if (!TryCopyTo(...))" results in two branches: one for the length
             // check, and one for the result of TryCopyTo. Since these checks are equivalent,
             // we can optimize by performing the check once ourselves then calling Memmove directly.
 
-            if ((ulong)_length <= (ulong)destination.Length)
+            if ((uint)_length <= (uint)destination.Length)
             {
-                Buffer.Memmove(ref destination._reference, ref _reference, (ulong)_length);
+                Buffer.Memmove(ref destination._reference, ref _reference, (uint)_length);
             }
             else
             {
@@ -341,19 +323,19 @@ namespace System
         }
 
         /// <summary>
-        /// Copies the contents of this span into destination span. If the source
+        /// Copies the contents of this read-only span into destination span. If the source
         /// and destinations overlap, this method behaves as if the original values in
         /// a temporary location before the destination is overwritten.
         /// </summary>
-        /// <param name="destination">The span to copy items into.</param>
         /// <returns>If the destination span is shorter than the source span, this method
         /// return false and no data is written to the destination.</returns>
-        public bool TryCopyTo(UnmanagedSpan<T> destination)
+        /// <param name="destination">The span to copy items into.</param>
+        public bool TryCopyTo(Span<T> destination)
         {
             bool retVal = false;
-            if ((ulong)_length <= (ulong)destination.Length)
+            if ((uint)_length <= (uint)destination.Length)
             {
-                Buffer.Memmove(ref destination._reference, ref _reference, (ulong)_length);
+                Buffer.Memmove(ref destination._reference, ref _reference, (uint)_length);
                 retVal = true;
             }
             return retVal;
@@ -363,47 +345,41 @@ namespace System
         /// Returns true if left and right point at the same memory and have the same length.  Note that
         /// this does *not* check to see if the *contents* are equal.
         /// </summary>
-        public static bool operator ==(UnmanagedSpan<T> left, UnmanagedSpan<T> right) =>
+        public static bool operator ==(ReadOnlySpan<T> left, ReadOnlySpan<T> right) =>
             left._length == right._length &&
             Unsafe.AreSame(ref left._reference, ref right._reference);
 
         /// <summary>
-        /// Defines an implicit conversion of a <see cref="UnmanagedSpan{T}"/> to a <see cref="ReadOnlyUnmanagedSpan{T}"/>
-        /// </summary>
-        public static implicit operator ReadOnlyUnmanagedSpan<T>(UnmanagedSpan<T> span) =>
-            new ReadOnlyUnmanagedSpan<T>(ref span._reference, span._length);
-
-        /// <summary>
-        /// For <see cref="UnmanagedSpan{Char}"/>, returns a new instance of string that represents the characters pointed to by the span.
+        /// For <see cref="ReadOnlySpan{Char}"/>, returns a new instance of string that represents the characters pointed to by the span.
         /// Otherwise, returns a <see cref="string"/> with the name of the type and the number of elements.
         /// </summary>
         public override string ToString()
         {
             if (typeof(T) == typeof(char))
             {
-                return new string(new ReadOnlyUnmanagedSpan<char>(ref Unsafe.As<T, char>(ref _reference), _length));
+                return new string(new ReadOnlySpan<char>(ref Unsafe.As<T, char>(ref _reference), _length));
             }
-            return $"System.UnmanagedSpan<{typeof(T).Name}>[{_length}]";
+            return $"System.ReadOnlySpan<{typeof(T).Name}>[{_length}]";
         }
 
         /// <summary>
-        /// Forms a slice out of the given span, beginning at 'start'.
+        /// Forms a slice out of the given read-only span, beginning at 'start'.
         /// </summary>
         /// <param name="start">The zero-based index at which to begin this slice.</param>
         /// <exception cref="ArgumentOutOfRangeException">
         /// Thrown when the specified <paramref name="start"/> index is not in range (&lt;0 or &gt;Length).
         /// </exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public UnmanagedSpan<T> Slice(long start)
+        public ReadOnlySpan<T> Slice(int start)
         {
-            if ((ulong)start > (ulong)_length)
+            if ((uint)start > (uint)_length)
                 ThrowHelper.ThrowArgumentOutOfRangeException();
 
-            return new UnmanagedSpan<T>(ref Unsafe.Add(ref _reference, (nint)start), _length - start);
+            return new ReadOnlySpan<T>(ref Unsafe.Add(ref _reference, (nint)(uint)start /* force zero-extension */), _length - start);
         }
 
         /// <summary>
-        /// Forms a slice out of the given span, beginning at 'start', of given length
+        /// Forms a slice out of the given read-only span, beginning at 'start', of given length
         /// </summary>
         /// <param name="start">The zero-based index at which to begin this slice.</param>
         /// <param name="length">The desired length for the slice (exclusive).</param>
@@ -411,22 +387,25 @@ namespace System
         /// Thrown when the specified <paramref name="start"/> or end index is not in range (&lt;0 or &gt;Length).
         /// </exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public UnmanagedSpan<T> Slice(long start, long length)
+        public ReadOnlySpan<T> Slice(int start, int length)
         {
-            // For 64-bit lengths, we need to check that start + length doesn't overflow
-            // and that the result is within bounds
-            if ((ulong)start > (ulong)_length || (ulong)length > (ulong)(_length - start))
+#if TARGET_64BIT
+            // See comment in Span<T>.Slice for how this works.
+            if ((ulong)(uint)start + (ulong)(uint)length > (ulong)(uint)_length)
                 ThrowHelper.ThrowArgumentOutOfRangeException();
+#else
+            if ((uint)start > (uint)_length || (uint)length > (uint)(_length - start))
+                ThrowHelper.ThrowArgumentOutOfRangeException();
+#endif
 
-            return new UnmanagedSpan<T>(ref Unsafe.Add(ref _reference, (nint)start), length);
+            return new ReadOnlySpan<T>(ref Unsafe.Add(ref _reference, (nint)(uint)start /* force zero-extension */), length);
         }
 
         /// <summary>
-        /// Copies the contents of this span into a new array.  This heap
+        /// Copies the contents of this read-only span into a new array.  This heap
         /// allocates, so should generally be avoided, however it is sometimes
         /// necessary to bridge the gap with APIs written in terms of arrays.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public T[] ToArray()
         {
             if (IsEmpty)

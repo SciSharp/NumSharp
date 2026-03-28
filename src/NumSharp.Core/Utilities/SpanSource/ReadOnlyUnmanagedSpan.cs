@@ -31,7 +31,7 @@ namespace System
         /// <summary>A byref or a native ptr.</summary>
         internal readonly ref T _reference;
         /// <summary>The number of elements this ReadOnlyUnmanagedSpan contains.</summary>
-        private readonly int _length;
+        private readonly long _length;
 
         /// <summary>
         /// Creates a new read-only span over the entirety of the target array.
@@ -102,7 +102,7 @@ namespace System
         [CLSCompliant(false)]
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         [RequiresUnsafe]
-        public unsafe ReadOnlyUnmanagedSpan(void* pointer, int length)
+        public unsafe ReadOnlyUnmanagedSpan(void* pointer, long length)
         {
             if (RuntimeHelpers.IsReferenceOrContainsReferences<T>())
                 ThrowHelper.ThrowArgument_TypeContainsReferences(typeof(T));
@@ -124,7 +124,7 @@ namespace System
 
         // Constructor for internal use only. It is not safe to expose publicly, and is instead exposed via the unsafe MemoryMarshal.CreateReadOnlyUnmanagedSpan.
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal ReadOnlyUnmanagedSpan(ref T reference, int length)
+        internal ReadOnlyUnmanagedSpan(ref T reference, long length)
         {
             Debug.Assert(length >= 0);
 
@@ -140,23 +140,23 @@ namespace System
         /// <exception cref="IndexOutOfRangeException">
         /// Thrown when index less than 0 or index greater than or equal to Length
         /// </exception>
-        public ref readonly T this[int index]
+        public ref readonly T this[long index]
         {
             [Intrinsic]
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             [NonVersionable]
             get
             {
-                if ((uint)index >= (uint)_length)
+                if ((ulong)index >= (ulong)_length)
                     ThrowHelper.ThrowIndexOutOfRangeException();
-                return ref Unsafe.Add(ref _reference, (nint)(uint)index /* force zero-extension */);
+                return ref Unsafe.Add(ref _reference, (nint)index);
             }
         }
 
         /// <summary>
         /// The number of items in the read-only span.
         /// </summary>
-        public int Length
+        public long Length
         {
             [Intrinsic]
             [NonVersionable]
@@ -238,7 +238,7 @@ namespace System
             /// <summary>The span being enumerated.</summary>
             private readonly ReadOnlyUnmanagedSpan<T> _span;
             /// <summary>The next index to yield.</summary>
-            private int _index;
+            private long _index;
 
             /// <summary>Initialize the enumerator.</summary>
             /// <param name="span">The span to enumerate.</param>
@@ -253,7 +253,7 @@ namespace System
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public bool MoveNext()
             {
-                int index = _index + 1;
+                long index = _index + 1;
                 if (index < _span.Length)
                 {
                     _index = index;
@@ -312,9 +312,9 @@ namespace System
             // check, and one for the result of TryCopyTo. Since these checks are equivalent,
             // we can optimize by performing the check once ourselves then calling Memmove directly.
 
-            if ((uint)_length <= (uint)destination.Length)
+            if ((ulong)_length <= (ulong)destination.Length)
             {
-                Buffer.Memmove(ref destination._reference, ref _reference, (uint)_length);
+                Buffer.Memmove(ref destination._reference, ref _reference, (ulong)_length);
             }
             else
             {
@@ -333,9 +333,9 @@ namespace System
         public bool TryCopyTo(UnmanagedSpan<T> destination)
         {
             bool retVal = false;
-            if ((uint)_length <= (uint)destination.Length)
+            if ((ulong)_length <= (ulong)destination.Length)
             {
-                Buffer.Memmove(ref destination._reference, ref _reference, (uint)_length);
+                Buffer.Memmove(ref destination._reference, ref _reference, (ulong)_length);
                 retVal = true;
             }
             return retVal;
@@ -370,12 +370,12 @@ namespace System
         /// Thrown when the specified <paramref name="start"/> index is not in range (&lt;0 or &gt;Length).
         /// </exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public ReadOnlyUnmanagedSpan<T> Slice(int start)
+        public ReadOnlyUnmanagedSpan<T> Slice(long start)
         {
-            if ((uint)start > (uint)_length)
+            if ((ulong)start > (ulong)_length)
                 ThrowHelper.ThrowArgumentOutOfRangeException();
 
-            return new ReadOnlyUnmanagedSpan<T>(ref Unsafe.Add(ref _reference, (nint)(uint)start /* force zero-extension */), _length - start);
+            return new ReadOnlyUnmanagedSpan<T>(ref Unsafe.Add(ref _reference, (nint)start), _length - start);
         }
 
         /// <summary>
@@ -387,18 +387,14 @@ namespace System
         /// Thrown when the specified <paramref name="start"/> or end index is not in range (&lt;0 or &gt;Length).
         /// </exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public ReadOnlyUnmanagedSpan<T> Slice(int start, int length)
+        public ReadOnlyUnmanagedSpan<T> Slice(long start, long length)
         {
-#if TARGET_64BIT
-            // See comment in UnmanagedSpan<T>.Slice for how this works.
-            if ((ulong)(uint)start + (ulong)(uint)length > (ulong)(uint)_length)
+            // For 64-bit lengths, we need to check that start + length doesn't overflow
+            // and that the result is within bounds
+            if ((ulong)start > (ulong)_length || (ulong)length > (ulong)(_length - start))
                 ThrowHelper.ThrowArgumentOutOfRangeException();
-#else
-            if ((uint)start > (uint)_length || (uint)length > (uint)(_length - start))
-                ThrowHelper.ThrowArgumentOutOfRangeException();
-#endif
 
-            return new ReadOnlyUnmanagedSpan<T>(ref Unsafe.Add(ref _reference, (nint)(uint)start /* force zero-extension */), length);
+            return new ReadOnlyUnmanagedSpan<T>(ref Unsafe.Add(ref _reference, (nint)start), length);
         }
 
         /// <summary>
