@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics;
 using System.Runtime.Intrinsics.X86;
+using NumSharp.Utilities;
 
 namespace NumSharp.Backends.Kernels
 {
@@ -42,16 +43,8 @@ namespace NumSharp.Backends.Kernels
         public static unsafe void MatMulFloat(float* A, float* B, float* C, long M, long N, long K)
         {
 
-            // Zero output
-            long outputSize = M * N;
-            if (outputSize <= int.MaxValue)
-                new Span<float>(C, (int)outputSize).Clear();
-            else
-            {
-                // Clear in chunks for very large outputs
-                for (long i = 0; i < outputSize; i++)
-                    C[i] = 0f;
-            }
+            // Zero output using UnmanagedSpan for long indexing support
+            new UnmanagedSpan<float>(C, M * N).Clear();
 
             // Small matrices: use simple IKJ loop (blocking overhead not worth it)
             if (M <= BLOCKING_THRESHOLD && N <= BLOCKING_THRESHOLD && K <= BLOCKING_THRESHOLD)

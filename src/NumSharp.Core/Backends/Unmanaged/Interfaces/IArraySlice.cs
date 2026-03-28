@@ -53,6 +53,13 @@ namespace NumSharp.Backends.Unmanaged
         void CopyTo<T>(Span<T> destination);
 
         /// <summary>
+        /// Copies this slice's contents to an UnmanagedSpan destination.
+        /// Supports long indexing for arrays &gt; 2B elements.
+        /// </summary>
+        /// <param name="destination"></param>
+        void CopyTo<T>(UnmanagedSpan<T> destination) where T : unmanaged;
+
+        /// <summary>
         ///     Gets pinnable reference of the first item in the memory block storage.
         /// </summary>
         ref T GetPinnableReference<T>() where T : unmanaged;

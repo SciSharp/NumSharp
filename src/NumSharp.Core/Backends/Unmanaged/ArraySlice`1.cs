@@ -65,6 +65,18 @@ namespace NumSharp.Backends.Unmanaged
         }
 
         /// <summary>
+        ///     Creates a sliced <see cref="ArraySlice{T}"/> from an UnmanagedSpan.
+        ///     Supports long indexing for arrays &gt; 2B elements.
+        /// </summary>
+        public ArraySlice(UnmanagedMemoryBlock<T> memoryBlock, UnmanagedSpan<T> slice)
+        {
+            MemoryBlock = memoryBlock;
+            IsSlice = true;
+            Count = slice.Length;
+            VoidAddress = Address = (T*)Unsafe.AsPointer(ref slice.GetPinnableReference());
+        }
+
+        /// <summary>
         ///     Creates a sliced <see cref="ArraySlice{T}"/>.
         /// </summary>
         /// <param name="memoryBlock"></param>
@@ -313,6 +325,69 @@ namespace NumSharp.Backends.Unmanaged
             CopyTo(destination, sourceOffset, sourceLength);
         }
 
+        /// <summary>
+        /// Tries to copy this slice's contents to an UnmanagedSpan destination.
+        /// Supports long indexing for arrays &gt; 2B elements.
+        /// </summary>
+        /// <param name="destination">The destination span.</param>
+        /// <returns>True if the copy succeeded, false if destination is too short.</returns>
+        public bool TryCopyTo(UnmanagedSpan<T> destination)
+        {
+            if ((ulong)Count > (ulong)destination.Length)
+                return false;
+
+            Buffer.MemoryCopy(Unsafe.AsPointer(ref destination.GetPinnableReference()), Address, destination.Length * ItemLength, Count * ItemLength);
+            return true;
+        }
+
+        /// <summary>
+        /// Copies this slice's contents to an UnmanagedSpan destination.
+        /// Supports long indexing for arrays &gt; 2B elements.
+        /// </summary>
+        /// <param name="destination">The destination span.</param>
+        [MethodImpl(OptimizeAndInline)]
+        public void CopyTo(UnmanagedSpan<T> destination)
+        {
+            if ((ulong)Count <= (ulong)destination.Length)
+            {
+                Buffer.MemoryCopy(Unsafe.AsPointer(ref destination.GetPinnableReference()), Address, destination.Length * ItemLength, Count * ItemLength);
+            }
+            else
+            {
+                throw new ArgumentException("Destination was too short.");
+            }
+        }
+
+        /// <summary>
+        /// Copies a portion of this slice to an UnmanagedSpan destination.
+        /// Supports long indexing for arrays &gt; 2B elements.
+        /// </summary>
+        /// <param name="destination">The destination span.</param>
+        /// <param name="sourceOffset">Offset in source (element count, not bytes).</param>
+        [MethodImpl(OptimizeAndInline)]
+        public void CopyTo(UnmanagedSpan<T> destination, long sourceOffset)
+        {
+            CopyTo(destination, sourceOffset, Count - sourceOffset);
+        }
+
+        /// <summary>
+        /// Copies a portion of this slice to an UnmanagedSpan destination.
+        /// Supports long indexing for arrays &gt; 2B elements.
+        /// </summary>
+        /// <param name="destination">The destination span.</param>
+        /// <param name="sourceOffset">Offset in source (element count, not bytes).</param>
+        /// <param name="sourceLength">Number of elements to copy.</param>
+        [MethodImpl(OptimizeAndInline)]
+        public void CopyTo(UnmanagedSpan<T> destination, long sourceOffset, long sourceLength)
+        {
+            if ((ulong)sourceOffset > (ulong)Count || (ulong)sourceLength > (ulong)(Count - sourceOffset))
+                throw new ArgumentOutOfRangeException();
+            if ((ulong)sourceLength > (ulong)destination.Length)
+                throw new ArgumentException("Destination was too short.");
+
+            Buffer.MemoryCopy(Unsafe.AsPointer(ref destination.GetPinnableReference()), Address + sourceOffset, destination.Length * ItemLength, sourceLength * ItemLength);
+        }
+
         [EditorBrowsable(EditorBrowsableState.Never)]
         [MethodImpl(Inline)]
         public ref T GetPinnableReference() => ref Unsafe.AsRef<T>(Address);
@@ -385,6 +460,18 @@ namespace NumSharp.Backends.Unmanaged
         void IArraySlice.CopyTo<T1>(Span<T1> destination)
         {
             this.CopyTo(Unsafe.AsPointer(ref destination.GetPinnableReference()));
+        }
+
+        /// <summary>
+        /// Copies this slice's contents to an UnmanagedSpan destination.
+        /// Supports long indexing for arrays &gt; 2B elements.
+        /// </summary>
+        /// <param name="destination"></param>
+        void IArraySlice.CopyTo<T1>(UnmanagedSpan<T1> destination)
+        {
+            if ((ulong)Count > (ulong)destination.Length)
+                throw new ArgumentException("Destination was too short.");
+            Buffer.MemoryCopy(Unsafe.AsPointer(ref destination.GetPinnableReference()), VoidAddress, destination.Length * InfoOf<T1>.Size, Count * ItemLength);
         }
 
         /// <summary>
