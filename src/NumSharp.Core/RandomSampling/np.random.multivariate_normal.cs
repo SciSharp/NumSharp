@@ -25,7 +25,7 @@ namespace NumSharp
         ///     Algorithm: Uses Cholesky decomposition of the covariance matrix.
         ///     L = cholesky(cov), then X = mean + Z @ L.T where Z ~ N(0, I).
         /// </remarks>
-        public NDArray multivariate_normal(double[] mean, double[,] cov, Shape size = default,
+        public unsafe NDArray multivariate_normal(double[] mean, double[,] cov, Shape size = default,
             string check_valid = "warn", double tol = 1e-8)
         {
             // Validation
@@ -34,7 +34,7 @@ namespace NumSharp
             if (cov == null)
                 throw new ArgumentException("cov must not be null", nameof(cov));
 
-            int n = mean.Length;
+            long n = mean.Length;
 
             // Check cov is square
             if (cov.GetLength(0) != cov.GetLength(1))
@@ -46,33 +46,53 @@ namespace NumSharp
             if (check_valid != "warn" && check_valid != "raise" && check_valid != "ignore")
                 throw new ArgumentException("check_valid must equal 'warn', 'raise', or 'ignore'", nameof(check_valid));
 
-            // Perform Cholesky decomposition
-            double[,] L;
+            // Copy mean to unmanaged storage
+            var meanBlock = new UnmanagedMemoryBlock<double>(n);
+            var meanSlice = new ArraySlice<double>(meanBlock);
+            for (long i = 0; i < n; i++)
+                meanSlice[i] = mean[i];
+
+            // Copy cov to unmanaged storage (row-major: cov[i,j] -> covSlice[i*n+j])
+            var covBlock = new UnmanagedMemoryBlock<double>(n * n);
+            var covSlice = new ArraySlice<double>(covBlock);
+            for (long i = 0; i < n; i++)
+            {
+                for (long j = 0; j < n; j++)
+                    covSlice[i * n + j] = cov[i, j];
+            }
+
+            // Perform Cholesky decomposition into unmanaged storage
+            var LBlock = new UnmanagedMemoryBlock<double>(n * n);
+            var L = new ArraySlice<double>(LBlock);
+
+            bool success;
             try
             {
-                L = CholeskyDecomposition(cov, n);
+                success = CholeskyDecompositionUnmanaged(covSlice, L, n);
             }
-            catch (ArgumentException ex) when (check_valid == "ignore")
+            catch (ArgumentException) when (check_valid == "ignore")
             {
-                // If not positive definite and check_valid is "ignore", try to make it work
-                // by using the absolute values of diagonal and zeroing problematic elements
-                L = CholeskyDecompositionFallback(cov, n);
+                success = false;
             }
-            catch (ArgumentException ex)
+
+            if (!success)
             {
                 if (check_valid == "raise")
                     throw new ArgumentException("covariance is not symmetric positive-semidefinite.", nameof(cov));
-                // warn - we continue but log warning (in C# we just continue)
-                // Try fallback
-                L = CholeskyDecompositionFallback(cov, n);
+                // warn/ignore - try fallback
+                CholeskyDecompositionFallbackUnmanaged(covSlice, L, n);
             }
+
+            // Allocate scratch space for z vector
+            var zBlock = new UnmanagedMemoryBlock<double>(n);
+            var z = new ArraySlice<double>(zBlock);
 
             if (size.IsEmpty)
             {
                 // Return single sample with shape (n,)
                 var result = new NDArray<double>(new Shape(n));
                 ArraySlice<double> data = result.Data<double>();
-                SampleMultivariateNormal(mean, L, n, data, 0);
+                SampleMultivariateNormalUnmanaged(meanSlice, L, n, z, data, 0);
                 return result;
             }
 
@@ -90,7 +110,7 @@ namespace NumSharp
 
             for (long s = 0; s < numSamples; s++)
             {
-                SampleMultivariateNormal(mean, L, n, retData, s * n);
+                SampleMultivariateNormalUnmanaged(meanSlice, L, n, z, retData, s * n);
             }
 
             return ret;
@@ -105,7 +125,7 @@ namespace NumSharp
         /// <param name="check_valid">Behavior when cov is not positive semidefinite.</param>
         /// <param name="tol">Tolerance for validity check.</param>
         /// <returns>Drawn samples.</returns>
-        public NDArray multivariate_normal(NDArray mean, NDArray cov, Shape size = default,
+        public unsafe NDArray multivariate_normal(NDArray mean, NDArray cov, Shape size = default,
             string check_valid = "warn", double tol = 1e-8)
         {
             // Validate dimensions
@@ -114,29 +134,91 @@ namespace NumSharp
             if (cov.ndim != 2)
                 throw new ArgumentException("cov must be 2 dimensional and square", nameof(cov));
 
-            // n is dimension count of distribution, used for C# managed array allocation
-            // which requires int. Multivariate distributions with 2^31+ dimensions are not practical.
-            int n = (int)mean.size;
+            long n = mean.size;
 
-            // Convert mean to double[]
-            double[] meanArray = new double[n];
-            int idx = 0;
+            // Copy mean to unmanaged storage
+            var meanBlock = new UnmanagedMemoryBlock<double>(n);
+            var meanSlice = new ArraySlice<double>(meanBlock);
+            long idx = 0;
             foreach (var val in mean.AsIterator<double>())
             {
-                meanArray[idx++] = val;
+                meanSlice[idx++] = val;
             }
 
-            // Convert cov to double[,]
-            double[,] covArray = new double[cov.shape[0], cov.shape[1]];
-            for (int i = 0; i < cov.shape[0]; i++)
+            // Copy cov to unmanaged storage (row-major)
+            var covBlock = new UnmanagedMemoryBlock<double>(n * n);
+            var covSlice = new ArraySlice<double>(covBlock);
+            for (long i = 0; i < cov.shape[0]; i++)
             {
-                for (int j = 0; j < cov.shape[1]; j++)
+                for (long j = 0; j < cov.shape[1]; j++)
                 {
-                    covArray[i, j] = cov.GetDouble(i, j);
+                    covSlice[i * n + j] = cov.GetDouble(i, j);
                 }
             }
 
-            return multivariate_normal(meanArray, covArray, size, check_valid, tol);
+            // Validate check_valid parameter
+            if (check_valid != "warn" && check_valid != "raise" && check_valid != "ignore")
+                throw new ArgumentException("check_valid must equal 'warn', 'raise', or 'ignore'", nameof(check_valid));
+
+            // Check cov is square
+            if (cov.shape[0] != cov.shape[1])
+                throw new ArgumentException("cov must be 2 dimensional and square", nameof(cov));
+            if (cov.shape[0] != n)
+                throw new ArgumentException("mean and cov must have same length", nameof(cov));
+
+            // Perform Cholesky decomposition into unmanaged storage
+            var LBlock = new UnmanagedMemoryBlock<double>(n * n);
+            var L = new ArraySlice<double>(LBlock);
+
+            bool success;
+            try
+            {
+                success = CholeskyDecompositionUnmanaged(covSlice, L, n);
+            }
+            catch (ArgumentException) when (check_valid == "ignore")
+            {
+                success = false;
+            }
+
+            if (!success)
+            {
+                if (check_valid == "raise")
+                    throw new ArgumentException("covariance is not symmetric positive-semidefinite.", nameof(cov));
+                // warn/ignore - try fallback
+                CholeskyDecompositionFallbackUnmanaged(covSlice, L, n);
+            }
+
+            // Allocate scratch space for z vector
+            var zBlock = new UnmanagedMemoryBlock<double>(n);
+            var z = new ArraySlice<double>(zBlock);
+
+            if (size.IsEmpty)
+            {
+                // Return single sample with shape (n,)
+                var result = new NDArray<double>(new Shape(n));
+                ArraySlice<double> data = result.Data<double>();
+                SampleMultivariateNormalUnmanaged(meanSlice, L, n, z, data, 0);
+                return result;
+            }
+
+            // Output shape is (*size, n)
+            long[] outputDims = new long[size.NDim + 1];
+            for (long i = 0; i < size.NDim; i++)
+                outputDims[i] = size.dimensions[i];
+            outputDims[size.NDim] = n;
+
+            var ret = new NDArray<double>(outputDims);
+            ArraySlice<double> retData = ret.Data<double>();
+
+            // Number of samples is product of size dimensions
+            long numSamples = size.size;
+
+            for (long s = 0; s < numSamples; s++)
+            {
+                SampleMultivariateNormalUnmanaged(meanSlice, L, n, z, retData, s * n);
+            }
+
+            return ret;
         }
 
         /// <summary>
@@ -164,31 +246,31 @@ namespace NumSharp
 
         /// <summary>
         ///     Sample a single multivariate normal vector and store at the given offset.
+        ///     Uses unmanaged storage with row-major 2D indexing.
         /// </summary>
         /// <remarks>
         ///     Algorithm: X = mean + Z @ L.T where Z ~ N(0, I) and L = cholesky(cov).
         ///     The transformation gives us samples with the desired covariance.
         /// </remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void SampleMultivariateNormal(double[] mean, double[,] L, int n, ArraySlice<double> data, long offset)
+        private void SampleMultivariateNormalUnmanaged(ArraySlice<double> mean, ArraySlice<double> L, long n,
+            ArraySlice<double> z, ArraySlice<double> data, long offset)
         {
-            // Generate standard normal samples
-            double[] z = new double[n];
-            for (int i = 0; i < n; i++)
+            // Generate standard normal samples into z
+            for (long i = 0; i < n; i++)
             {
                 z[i] = NextGaussian();
             }
 
-            // Compute mean + Z @ L.T
-            // (Z @ L.T)[i] = sum_j Z[j] * L[i, j] (since L.T[j, i] = L[i, j])
-            // But actually L @ Z.T gives us a column vector, so we want L @ Z
+            // Compute mean + L @ Z
+            // L is lower triangular, stored row-major: L[i,j] = L[i*n+j]
             // X = mean + L @ Z
-            for (int i = 0; i < n; i++)
+            for (long i = 0; i < n; i++)
             {
                 double sum = mean[i];
-                for (int j = 0; j <= i; j++)  // L is lower triangular
+                for (long j = 0; j <= i; j++)  // L is lower triangular
                 {
-                    sum += L[i, j] * z[j];
+                    sum += L[i * n + j] * z[j];
                 }
                 data[offset + i] = sum;
             }
@@ -196,91 +278,96 @@ namespace NumSharp
 
         /// <summary>
         ///     Compute the Cholesky decomposition of a symmetric positive-definite matrix.
+        ///     Uses unmanaged storage with row-major indexing.
         /// </summary>
-        /// <param name="A">The input matrix (must be symmetric positive-definite).</param>
+        /// <param name="A">The input matrix (row-major, n*n elements).</param>
+        /// <param name="L">Output lower triangular matrix (row-major, n*n elements).</param>
         /// <param name="n">The dimension of the matrix.</param>
-        /// <returns>The lower triangular matrix L such that A = L @ L.T.</returns>
-        /// <exception cref="ArgumentException">If the matrix is not positive-definite.</exception>
-        private static double[,] CholeskyDecomposition(double[,] A, int n)
+        /// <returns>True if successful, false if not positive-definite.</returns>
+        private static bool CholeskyDecompositionUnmanaged(ArraySlice<double> A, ArraySlice<double> L, long n)
         {
-            double[,] L = new double[n, n];
+            // Initialize L to zero
+            for (long i = 0; i < n * n; i++)
+                L[i] = 0;
 
-            for (int i = 0; i < n; i++)
+            for (long i = 0; i < n; i++)
             {
-                for (int j = 0; j <= i; j++)
+                for (long j = 0; j <= i; j++)
                 {
                     double sum = 0;
-                    for (int k = 0; k < j; k++)
+                    for (long k = 0; k < j; k++)
                     {
-                        sum += L[i, k] * L[j, k];
+                        sum += L[i * n + k] * L[j * n + k];
                     }
 
                     if (i == j)
                     {
-                        double diag = A[i, i] - sum;
+                        double diag = A[i * n + i] - sum;
                         if (diag < 0)
                         {
-                            throw new ArgumentException(
-                                "Matrix is not positive-definite (negative diagonal encountered).");
+                            return false; // Not positive-definite
                         }
-                        L[i, j] = Math.Sqrt(diag);
+                        L[i * n + j] = Math.Sqrt(diag);
                     }
                     else
                     {
-                        if (Math.Abs(L[j, j]) < 1e-15)
+                        double Ljj = L[j * n + j];
+                        if (Math.Abs(Ljj) < 1e-15)
                         {
-                            L[i, j] = 0;
+                            L[i * n + j] = 0;
                         }
                         else
                         {
-                            L[i, j] = (A[i, j] - sum) / L[j, j];
+                            L[i * n + j] = (A[i * n + j] - sum) / Ljj;
                         }
                     }
                 }
             }
 
-            return L;
+            return true;
         }
 
         /// <summary>
         ///     Fallback Cholesky decomposition for nearly positive-semidefinite matrices.
         ///     Uses absolute value for negative diagonals to avoid failure.
+        ///     Uses unmanaged storage with row-major indexing.
         /// </summary>
-        private static double[,] CholeskyDecompositionFallback(double[,] A, int n)
+        private static void CholeskyDecompositionFallbackUnmanaged(ArraySlice<double> A, ArraySlice<double> L, long n)
         {
-            double[,] L = new double[n, n];
+            // Initialize L to zero
+            for (long i = 0; i < n * n; i++)
+                L[i] = 0;
 
-            for (int i = 0; i < n; i++)
+            for (long i = 0; i < n; i++)
             {
-                for (int j = 0; j <= i; j++)
+                for (long j = 0; j <= i; j++)
                 {
                     double sum = 0;
-                    for (int k = 0; k < j; k++)
+                    for (long k = 0; k < j; k++)
                     {
-                        sum += L[i, k] * L[j, k];
+                        sum += L[i * n + k] * L[j * n + k];
                     }
 
                     if (i == j)
                     {
-                        double diag = A[i, i] - sum;
+                        double diag = A[i * n + i] - sum;
                         // Use absolute value to handle slightly negative values
-                        L[i, j] = Math.Sqrt(Math.Abs(diag));
+                        L[i * n + j] = Math.Sqrt(Math.Abs(diag));
                     }
                     else
                     {
-                        if (Math.Abs(L[j, j]) < 1e-15)
+                        double Ljj = L[j * n + j];
+                        if (Math.Abs(Ljj) < 1e-15)
                         {
-                            L[i, j] = 0;
+                            L[i * n + j] = 0;
                         }
                         else
                         {
-                            L[i, j] = (A[i, j] - sum) / L[j, j];
+                            L[i * n + j] = (A[i * n + j] - sum) / Ljj;
                         }
                     }
                 }
             }
-
-            return L;
         }
     }
 }
