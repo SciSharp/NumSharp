@@ -176,7 +176,19 @@ namespace NumSharp.Backends
         /// Returns an UnmanagedSpan representing this storage's memory.
         /// </summary>
         /// <remarks>This ignores completely slicing. Supports long indexing for arrays &gt; 2B elements.</remarks>
-        public unsafe UnmanagedSpan<T> AsSpan<T>() where T : unmanaged
+        public unsafe Span<T> AsSpan<T>() where T : unmanaged
+        {
+            if (!_shape.IsContiguous)
+                throw new InvalidOperationException("Unable to span a non-contiguous storage.");
+
+            return new Span<T>(Address, (int)Count);
+        }
+        
+        /// <summary>
+        /// Returns an UnmanagedSpan representing this storage's memory.
+        /// </summary>
+        /// <remarks>This ignores completely slicing. Supports long indexing for arrays &gt; 2B elements.</remarks>
+        public unsafe UnmanagedSpan<T> AsUnmanagedSpan<T>() where T : unmanaged
         {
             if (!_shape.IsContiguous)
                 throw new InvalidOperationException("Unable to span a non-contiguous storage.");
