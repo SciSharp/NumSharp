@@ -43,8 +43,8 @@ namespace NumSharp.UnitTest.IO
             Assert.AreEqual(NPTypeCode.Double, arr.typecode);
             Assert.AreEqual(2, arr.ndim);
             Assert.IsTrue(new int[] { 3, 4 }.SequenceEqual(arr.shape));
-            Assert.AreEqual(0.0, arr.GetDouble(0));
-            Assert.AreEqual(11.0, arr.GetDouble(11));
+            Assert.AreEqual(0.0, arr.GetDouble(0, 0));
+            Assert.AreEqual(11.0, arr.GetDouble(2, 3));
         }
 
         [Test]
@@ -108,12 +108,13 @@ namespace NumSharp.UnitTest.IO
             Assert.IsTrue(new int[] { 2, 3 }.SequenceEqual(arr.shape));
 
             // Verify data is correct (F-order [0,3,1,4,2,5] should appear as C-order [[0,1,2],[3,4,5]])
-            Assert.AreEqual(0, arr.GetInt32(0, 0));
-            Assert.AreEqual(1, arr.GetInt32(0, 1));
-            Assert.AreEqual(2, arr.GetInt32(0, 2));
-            Assert.AreEqual(3, arr.GetInt32(1, 0));
-            Assert.AreEqual(4, arr.GetInt32(1, 1));
-            Assert.AreEqual(5, arr.GetInt32(1, 2));
+            // NumPy uses int64 by default
+            Assert.AreEqual(0L, arr.GetInt64(0, 0));
+            Assert.AreEqual(1L, arr.GetInt64(0, 1));
+            Assert.AreEqual(2L, arr.GetInt64(0, 2));
+            Assert.AreEqual(3L, arr.GetInt64(1, 0));
+            Assert.AreEqual(4L, arr.GetInt64(1, 1));
+            Assert.AreEqual(5L, arr.GetInt64(1, 2));
         }
 
         [Test]

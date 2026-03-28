@@ -659,11 +659,13 @@ namespace NumSharp.IO
             int[] strides = array.strides;
             long baseAddr = (long)array.Address;
             int size = array.size;
+            int sliceOffset = array.Shape.offset; // Account for sliced views
 
             for (int i = 0; i < size; i++)
             {
                 // Calculate offset from coordinates and strides
-                long offset = 0;
+                // Start with slice offset for non-contiguous sliced views
+                long offset = sliceOffset;
                 for (int d = 0; d < ndim; d++)
                     offset += coords[d] * strides[d];
 
