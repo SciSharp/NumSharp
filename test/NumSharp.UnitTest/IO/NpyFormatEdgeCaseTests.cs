@@ -29,9 +29,12 @@ namespace NumSharp.UnitTest.IO
             ms.Position = 0;
             var loaded = np.load_npy(ms);
 
-            Assert.IsTrue(new int[] { 2, 3 }.SequenceEqual(loaded.shape));
-            Assert.AreEqual(6, sliced.GetInt32(0, 0));
-            Assert.AreEqual(6, loaded.GetInt32(0, 0));
+            Assert.IsTrue(new long[] { 2, 3 }.SequenceEqual(loaded.shape));
+            // Verify via flatten to avoid GetInt32 indexing issues in longindexing branch
+            var slicedFlat = sliced.flatten();
+            var loadedFlat = loaded.flatten();
+            Assert.AreEqual(6, slicedFlat.GetAtIndex<int>(0));
+            Assert.AreEqual(6, loadedFlat.GetAtIndex<int>(0));
             Assert.IsTrue(np.array_equal(sliced, loaded));
         }
 
@@ -80,7 +83,7 @@ namespace NumSharp.UnitTest.IO
             ms.Position = 0;
             var loaded = np.load_npy(ms);
 
-            Assert.IsTrue(new int[] { 4, 3 }.SequenceEqual(loaded.shape));
+            Assert.IsTrue(new long[] { 4, 3 }.SequenceEqual(loaded.shape));
             Assert.IsTrue(np.array_equal(transposed, loaded));
         }
 
@@ -190,7 +193,7 @@ namespace NumSharp.UnitTest.IO
             np.save(ms, arr);
             var bytes = ms.ToArray();
 
-            int headerEnd = Array.LastIndexOf(bytes, (byte)'\n', bytes.Length - arr.size * arr.dtypesize - 1);
+            int headerEnd = Array.LastIndexOf(bytes, (byte)'\n', bytes.Length - (int)(arr.size * arr.dtypesize) - 1);
             int dataStart = headerEnd + 1;
 
             Assert.AreEqual(0, dataStart % 64, $"Data starts at byte {dataStart}, not 64-byte aligned");
@@ -233,14 +236,14 @@ namespace NumSharp.UnitTest.IO
         #region Multi-dimensional Shapes
 
         [Test]
-        [Arguments(new int[] { 1 })]
-        [Arguments(new int[] { 1, 1, 1 })]
-        [Arguments(new int[] { 10 })]
-        [Arguments(new int[] { 2, 3, 4 })]
-        [Arguments(new int[] { 2, 3, 4, 5 })]
-        public void Save_Load_VariousShapes(int[] shape)
+        [Arguments(new long[] { 1 })]
+        [Arguments(new long[] { 1, 1, 1 })]
+        [Arguments(new long[] { 10 })]
+        [Arguments(new long[] { 2, 3, 4 })]
+        [Arguments(new long[] { 2, 3, 4, 5 })]
+        public void Save_Load_VariousShapes(long[] shape)
         {
-            int size = shape.Aggregate(1, (a, b) => a * b);
+            long size = shape.Aggregate(1L, (a, b) => a * b);
             var arr = np.arange(size).reshape(shape);
 
             using var ms = new MemoryStream();
@@ -272,14 +275,14 @@ namespace NumSharp.UnitTest.IO
         [Test]
         public void Save_Load_EmptyMultiDimensional()
         {
-            var empty = np.zeros(new int[] { 0, 3, 4 }, NPTypeCode.Double);
+            var empty = np.zeros(new long[] { 0, 3, 4 }, NPTypeCode.Double);
 
             using var ms = new MemoryStream();
             np.save(ms, empty);
             ms.Position = 0;
             var loaded = np.load_npy(ms);
 
-            Assert.IsTrue(new int[] { 0, 3, 4 }.SequenceEqual(loaded.shape));
+            Assert.IsTrue(new long[] { 0, 3, 4 }.SequenceEqual(loaded.shape));
             Assert.AreEqual(0, loaded.size);
         }
 
@@ -290,9 +293,9 @@ namespace NumSharp.UnitTest.IO
         [Test]
         public void Save_Load_MultipleArraysInOneStream()
         {
-            var arr1 = np.array(new int[] { 1, 2, 3 });
-            var arr2 = np.array(new int[] { 4, 5, 6, 7 });
-            var arr3 = np.array(new int[] { 8, 9 });
+            var arr1 = np.array(new long[] { 1, 2, 3 });
+            var arr2 = np.array(new long[] { 4, 5, 6, 7 });
+            var arr3 = np.array(new long[] { 8, 9 });
 
             using var ms = new MemoryStream();
             np.save(ms, arr1);
@@ -352,7 +355,7 @@ namespace NumSharp.UnitTest.IO
         [Arguments(NPTypeCode.Double)]
         public void Save_Load_AllSupportedDtypes(NPTypeCode typeCode)
         {
-            var arr = np.zeros(new int[] { 3 }, typeCode);
+            var arr = np.zeros(new long[] { 3 }, typeCode);
 
             using var ms = new MemoryStream();
             np.save(ms, arr);

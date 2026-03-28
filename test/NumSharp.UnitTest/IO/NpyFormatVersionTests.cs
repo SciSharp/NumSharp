@@ -126,7 +126,7 @@ namespace NumSharp.UnitTest.IO
             var bytes = ms.ToArray();
 
             // Find where the header ends (newline before data)
-            int headerEnd = Array.LastIndexOf(bytes, (byte)'\n', bytes.Length - arr.size * arr.dtypesize - 1);
+            int headerEnd = Array.LastIndexOf(bytes, (byte)'\n', bytes.Length - (int)(arr.size * arr.dtypesize) - 1);
             int dataStart = headerEnd + 1;
 
             Console.WriteLine($"Header ends at byte {headerEnd}, data starts at byte {dataStart}");

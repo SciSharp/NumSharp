@@ -101,13 +101,13 @@ namespace NumSharp.IO
         /// </summary>
         public readonly struct HeaderData
         {
-            public readonly int[] Shape;
+            public readonly long[] Shape;
             public readonly bool FortranOrder;
             public readonly NPTypeCode TypeCode;
             public readonly int ItemSize;
             public readonly bool LittleEndian;
 
-            public HeaderData(int[] shape, bool fortranOrder, NPTypeCode typeCode, int itemSize, bool littleEndian)
+            public HeaderData(long[] shape, bool fortranOrder, NPTypeCode typeCode, int itemSize, bool littleEndian)
             {
                 Shape = shape;
                 FortranOrder = fortranOrder;
@@ -329,17 +329,31 @@ namespace NumSharp.IO
                 {
                     sb.Append(b ? "True" : "False");
                 }
-                else if (value is int[] shape)
+                else if (value is int[] intShape)
                 {
                     sb.Append('(');
-                    for (int i = 0; i < shape.Length; i++)
+                    for (int i = 0; i < intShape.Length; i++)
                     {
-                        sb.Append(shape[i]);
-                        if (i < shape.Length - 1)
+                        sb.Append(intShape[i]);
+                        if (i < intShape.Length - 1)
                             sb.Append(", ");
                     }
                     // Trailing comma for 1-element tuple
-                    if (shape.Length == 1)
+                    if (intShape.Length == 1)
+                        sb.Append(',');
+                    sb.Append(')');
+                }
+                else if (value is long[] longShape)
+                {
+                    sb.Append('(');
+                    for (int i = 0; i < longShape.Length; i++)
+                    {
+                        sb.Append(longShape[i]);
+                        if (i < longShape.Length - 1)
+                            sb.Append(", ");
+                    }
+                    // Trailing comma for 1-element tuple
+                    if (longShape.Length == 1)
                         sb.Append(',');
                     sb.Append(')');
                 }
@@ -541,23 +555,23 @@ namespace NumSharp.IO
                 throw new FormatException($"Cannot find 'shape' in header: {header}");
 
             string shapeStr = shapeMatch.Groups[1].Value.Trim();
-            int[] shape;
+            long[] shape;
             if (string.IsNullOrEmpty(shapeStr))
             {
-                shape = Array.Empty<int>(); // Scalar
+                shape = Array.Empty<long>(); // Scalar
             }
             else
             {
                 // Handle trailing comma: (3,) or (3, 4,)
                 var parts = shapeStr.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
-                shape = new int[parts.Length];
+                shape = new long[parts.Length];
                 for (int i = 0; i < parts.Length; i++)
                 {
                     string part = parts[i].Trim();
                     // Handle Python 2 'L' suffix
                     if (part.EndsWith("L", StringComparison.OrdinalIgnoreCase))
                         part = part.Substring(0, part.Length - 1);
-                    if (!int.TryParse(part, out shape[i]))
+                    if (!long.TryParse(part, out shape[i]))
                         throw new FormatException($"Invalid shape value: '{parts[i]}'");
                 }
             }
@@ -615,19 +629,19 @@ namespace NumSharp.IO
         /// </summary>
         private static unsafe void WriteContiguousData(Stream stream, NDArray array)
         {
-            int totalBytes = array.size * array.dtypesize;
+            long totalBytes = array.size * array.dtypesize;
             byte* ptr = (byte*)array.Address;
 
             // Write in chunks to avoid large buffer allocations
             const int chunkSize = 16 * 1024 * 1024; // 16 MB
             byte[] buffer = new byte[Math.Min(totalBytes, chunkSize)];
 
-            int remaining = totalBytes;
-            int offset = 0;
+            long remaining = totalBytes;
+            long offset = 0;
 
             while (remaining > 0)
             {
-                int toWrite = Math.Min(remaining, buffer.Length);
+                int toWrite = (int)Math.Min(remaining, buffer.Length);
                 Marshal.Copy((IntPtr)(ptr + offset), buffer, 0, toWrite);
                 stream.Write(buffer, 0, toWrite);
                 offset += toWrite;
@@ -642,7 +656,7 @@ namespace NumSharp.IO
         {
             int itemSize = array.dtypesize;
             byte[] buffer = new byte[itemSize];
-            int[] shape = array.shape;
+            long[] shape = array.shape;
             int ndim = shape.Length;
 
             if (ndim == 0)
@@ -655,13 +669,13 @@ namespace NumSharp.IO
             }
 
             // Iterate in C-order using coordinates
-            int[] coords = new int[ndim];
-            int[] strides = array.strides;
+            long[] coords = new long[ndim];
+            long[] strides = array.strides;
             long baseAddr = (long)array.Address;
-            int size = array.size;
-            int sliceOffset = array.Shape.offset; // Account for sliced views
+            long size = array.size;
+            long sliceOffset = array.Shape.offset; // Account for sliced views
 
-            for (int i = 0; i < size; i++)
+            for (long i = 0; i < size; i++)
             {
                 // Calculate offset from coordinates and strides
                 // Start with slice offset for non-contiguous sliced views
@@ -730,7 +744,7 @@ namespace NumSharp.IO
             {
                 // Data is in F-order, need to transpose
                 // First reshape with reversed dimensions, then transpose
-                int[] reversedShape = new int[header.Shape.Length];
+                long[] reversedShape = new long[header.Shape.Length];
                 for (int i = 0; i < header.Shape.Length; i++)
                     reversedShape[i] = header.Shape[header.Shape.Length - 1 - i];
 

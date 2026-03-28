@@ -39,7 +39,7 @@ namespace NumSharp.UnitTest
         [TestMethod]
         public void Save_Load_Int32_1D()
         {
-            var original = np.array(new int[] { 1, 2, 3, 4, 5 });
+            var original = np.array(new long[] { 1, 2, 3, 4, 5 });
             var path = TempFile("int32_1d.npy");
 
             np.save(path, original);
@@ -86,7 +86,7 @@ namespace NumSharp.UnitTest
             var loaded = np.load(path) as NDArray;
 
             Assert.IsNotNull(loaded);
-            Assert.IsTrue(new int[] { 3, 2 }.SequenceEqual(loaded!.shape));
+            Assert.IsTrue(new long[] { 3, 2 }.SequenceEqual(loaded!.shape));
             Assert.IsTrue(np.array_equal(original, loaded));
         }
 
@@ -100,7 +100,7 @@ namespace NumSharp.UnitTest
             var loaded = np.load(path) as NDArray;
 
             Assert.IsNotNull(loaded);
-            Assert.IsTrue(new int[] { 2, 3, 4 }.SequenceEqual(loaded!.shape));
+            Assert.IsTrue(new long[] { 2, 3, 4 }.SequenceEqual(loaded!.shape));
             Assert.IsTrue(np.allclose(original, loaded));
         }
 

@@ -42,7 +42,7 @@ namespace NumSharp.UnitTest.IO
 
             Assert.AreEqual(NPTypeCode.Double, arr.typecode);
             Assert.AreEqual(2, arr.ndim);
-            Assert.IsTrue(new int[] { 3, 4 }.SequenceEqual(arr.shape));
+            Assert.IsTrue(new long[] { 3, 4 }.SequenceEqual(arr.shape));
             Assert.AreEqual(0.0, arr.GetDouble(0, 0));
             Assert.AreEqual(11.0, arr.GetDouble(2, 3));
         }
@@ -105,7 +105,7 @@ namespace NumSharp.UnitTest.IO
 
             // Should be 2x3 with values 0-5 in C-order view
             Assert.AreEqual(2, arr.ndim);
-            Assert.IsTrue(new int[] { 2, 3 }.SequenceEqual(arr.shape));
+            Assert.IsTrue(new long[] { 2, 3 }.SequenceEqual(arr.shape));
 
             // Verify data is correct (F-order [0,3,1,4,2,5] should appear as C-order [[0,1,2],[3,4,5]])
             // NumPy uses int64 by default
