@@ -173,20 +173,15 @@ namespace NumSharp.Backends
         public ref Shape ShapeReference => ref _shape;
 
         /// <summary>
-        ///     Spans <see cref="Address"/> &lt;-&gt; <see cref="Count"/>
+        /// Returns an UnmanagedSpan representing this storage's memory.
         /// </summary>
-        /// <remarks>This ignores completely slicing.</remarks>
-        public Span<T> AsSpan<T>()
+        /// <remarks>This ignores completely slicing. Supports long indexing for arrays &gt; 2B elements.</remarks>
+        public unsafe UnmanagedSpan<T> AsSpan<T>() where T : unmanaged
         {
             if (!_shape.IsContiguous)
                 throw new InvalidOperationException("Unable to span a non-contiguous storage.");
 
-            unsafe
-            {
-                if (Count > int.MaxValue)
-                    throw new InvalidOperationException("Storage size exceeds Span<T> maximum capacity.");
-                return new Span<T>(Address, (int)Count);
-            }
+            return new UnmanagedSpan<T>(Address, Count);
         }
 
         /// <summary>

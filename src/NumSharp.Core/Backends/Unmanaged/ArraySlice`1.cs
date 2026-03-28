@@ -324,13 +324,13 @@ namespace NumSharp.Backends.Unmanaged
 
         #region Explicit Interfaces
 
-        /// A Span representing this slice.
-        /// <remarks>Does not perform copy.</remarks>
-        Span<T1> IArraySlice.AsSpan<T1>()
+        /// <summary>
+        /// Returns an UnmanagedSpan representing this slice's memory.
+        /// </summary>
+        /// <remarks>Does not perform copy. Supports long indexing for arrays &gt; 2B elements.</remarks>
+        unsafe UnmanagedSpan<TSpan> IArraySlice.AsSpan<TSpan>()
         {
-            if (Count > int.MaxValue)
-                throw new OverflowException($"Cannot create Span for ArraySlice with {Count} elements (exceeds int.MaxValue)");
-            return new Span<T1>(VoidAddress, (int)Count);
+            return new UnmanagedSpan<TSpan>(VoidAddress, Count);
         }
 
         [MethodImpl(OptimizeAndInline)]

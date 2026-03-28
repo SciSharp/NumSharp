@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections;
+using NumSharp.Utilities;
 
 namespace NumSharp.Backends.Unmanaged
 {
@@ -17,9 +18,11 @@ namespace NumSharp.Backends.Unmanaged
 
         new IArraySlice Clone();
 
-        /// A Span representing this slice.
-        /// <remarks>Does not perform copy.</remarks>
-        Span<T> AsSpan<T>();
+        /// <summary>
+        /// Returns an UnmanagedSpan representing this slice's memory.
+        /// </summary>
+        /// <remarks>Does not perform copy. Supports long indexing for arrays &gt; 2B elements.</remarks>
+        unsafe UnmanagedSpan<T> AsSpan<T>() where T : unmanaged;
 
         /// <param name="index"></param>
         /// <returns></returns>

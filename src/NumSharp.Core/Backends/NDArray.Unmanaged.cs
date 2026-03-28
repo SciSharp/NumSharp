@@ -2,6 +2,7 @@
 using System.Globalization;
 using NumSharp.Backends;
 using NumSharp.Backends.Unmanaged;
+using NumSharp.Utilities;
 using CompilerUnsafe = System.Runtime.CompilerServices.Unsafe;
 
 namespace NumSharp
@@ -71,9 +72,11 @@ namespace NumSharp
             /// </summary>
             public UnmanagedStorage Storage => _this.Storage;
 
-            /// A Span representing this slice.
-            /// <remarks>Does not perform copy.</remarks>
-            public Span<T> AsSpan<T>()
+            /// <summary>
+            /// Returns an UnmanagedSpan representing this NDArray's memory.
+            /// </summary>
+            /// <remarks>Does not perform copy. Supports long indexing for arrays &gt; 2B elements.</remarks>
+            public UnmanagedSpan<T> AsSpan<T>() where T : unmanaged
             {
                 return Array.AsSpan<T>();
             }
