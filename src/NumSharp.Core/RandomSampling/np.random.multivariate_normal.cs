@@ -280,10 +280,9 @@ namespace NumSharp
             // and reorder eigenvectors accordingly
             SortEigenDescending(eigenvalues, eigenvectors, n);
 
-            // Note: We don't normalize eigenvector signs because the exact sign convention
-            // varies between SVD implementations. The samples are statistically correct
-            // but may not match NumPy 1-to-1 for correlated covariance matrices.
-            // Identity covariance matrices will still match exactly.
+            // Normalize eigenvector signs to match NumPy/LAPACK SVD convention:
+            // The element with largest absolute value in each column should be NEGATIVE
+            NormalizeEigenvectorSigns(eigenvectors, n);
 
             // Compute transform = eigenvectors @ diag(sqrt(abs(eigenvalues)))
             // NumPy uses abs for robustness with nearly singular matrices
@@ -422,6 +421,148 @@ namespace NumSharp
                     j--;
                 }
             }
+        }
+
+        /// <summary>
+        ///     Normalize eigenvector signs to match NumPy/LAPACK SVD convention.
+        ///     Two-step process:
+        ///     1. Make the element with largest absolute value in each column NEGATIVE
+        ///     2. Ensure determinant matches NumPy convention: +1 for odd n, -1 for even n
+        ///        (only applies when eigenvalues are distinct)
+        /// </summary>
+        private static void NormalizeEigenvectorSigns(ArraySlice<double> eigenvectors, long n)
+        {
+            // Step 1: Make largest element in each column negative
+            // Exception: don't flip standard basis vectors (only one non-zero element)
+            long standardBasisCount = 0;
+            for (long col = 0; col < n; col++)
+            {
+                // Find the element with largest absolute value and count non-zero elements
+                long maxRow = 0;
+                double maxAbs = 0;
+                int nonZeroCount = 0;
+                for (long row = 0; row < n; row++)
+                {
+                    double absVal = Math.Abs(eigenvectors[row * n + col]);
+                    if (absVal > 1e-10)
+                        nonZeroCount++;
+                    if (absVal > maxAbs)
+                    {
+                        maxAbs = absVal;
+                        maxRow = row;
+                    }
+                }
+
+                // Skip flipping for standard basis vectors (identity matrix eigenvectors)
+                if (nonZeroCount == 1)
+                {
+                    standardBasisCount++;
+                    continue;
+                }
+
+                // If the largest element is positive, flip the entire column
+                if (eigenvectors[maxRow * n + col] > 0)
+                {
+                    for (long row = 0; row < n; row++)
+                    {
+                        eigenvectors[row * n + col] = -eigenvectors[row * n + col];
+                    }
+                }
+            }
+
+            // Step 2: Adjust determinant to match NumPy convention
+            // NumPy's SVD has det(U) = +1 for odd n, -1 for even n
+            // BUT: This only applies when eigenvalues are distinct
+            // For identity-like matrices (all standard basis vectors), skip this step
+            if (standardBasisCount == n)
+                return;
+
+            double det = ComputeDeterminant(eigenvectors, n);
+            double expectedDet = (n % 2 == 1) ? 1.0 : -1.0;
+
+            // If determinant has wrong sign, flip the last column
+            if ((det > 0 && expectedDet < 0) || (det < 0 && expectedDet > 0))
+            {
+                for (long row = 0; row < n; row++)
+                {
+                    eigenvectors[row * n + (n - 1)] = -eigenvectors[row * n + (n - 1)];
+                }
+            }
+        }
+
+        /// <summary>
+        ///     Compute determinant of an n×n matrix (stored row-major).
+        ///     Uses LU decomposition for efficiency.
+        /// </summary>
+        private static double ComputeDeterminant(ArraySlice<double> matrix, long n)
+        {
+            if (n == 1)
+                return matrix[0];
+
+            if (n == 2)
+                return matrix[0] * matrix[3] - matrix[1] * matrix[2];
+
+            if (n == 3)
+            {
+                // Sarrus rule for 3x3
+                return matrix[0] * (matrix[4] * matrix[8] - matrix[5] * matrix[7])
+                     - matrix[1] * (matrix[3] * matrix[8] - matrix[5] * matrix[6])
+                     + matrix[2] * (matrix[3] * matrix[7] - matrix[4] * matrix[6]);
+            }
+
+            // For larger matrices, use LU decomposition with partial pivoting
+            // Copy matrix to avoid modification
+            var lu = new double[n * n];
+            for (long i = 0; i < n * n; i++)
+                lu[i] = matrix[i];
+
+            double det = 1.0;
+            int swaps = 0;
+
+            for (long k = 0; k < n; k++)
+            {
+                // Find pivot
+                long maxRow = k;
+                double maxVal = Math.Abs(lu[k * n + k]);
+                for (long i = k + 1; i < n; i++)
+                {
+                    double absVal = Math.Abs(lu[i * n + k]);
+                    if (absVal > maxVal)
+                    {
+                        maxVal = absVal;
+                        maxRow = i;
+                    }
+                }
+
+                if (maxVal < 1e-15)
+                    return 0.0; // Singular matrix
+
+                // Swap rows if needed
+                if (maxRow != k)
+                {
+                    for (long j = 0; j < n; j++)
+                    {
+                        double temp = lu[k * n + j];
+                        lu[k * n + j] = lu[maxRow * n + j];
+                        lu[maxRow * n + j] = temp;
+                    }
+                    swaps++;
+                }
+
+                det *= lu[k * n + k];
+
+                // Eliminate below
+                for (long i = k + 1; i < n; i++)
+                {
+                    double factor = lu[i * n + k] / lu[k * n + k];
+                    for (long j = k + 1; j < n; j++)
+                    {
+                        lu[i * n + j] -= factor * lu[k * n + j];
+                    }
+                }
+            }
+
+            return (swaps % 2 == 0) ? det : -det;
         }
 
     }
