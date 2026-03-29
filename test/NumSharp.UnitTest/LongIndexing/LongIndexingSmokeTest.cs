@@ -896,16 +896,17 @@ public class LongIndexingSmokeTest
     // ================================================================
 
     [Test]
-    [OpenBugs] // argsort throws "index < Count, Memory corruption expected"
     public async Task NDArray_Argsort_WorksWithLargeArray()
     {
         var arr = np.array(new int[] { 3, 1, 4, 1, 5, 9, 2, 6 });
         var result = np.argsort<int>(arr);
         Assert.AreEqual(8, result.size);
-        Assert.AreEqual(1, result.GetInt32(0)); // Index of first 1
-        Assert.AreEqual(3, result.GetInt32(1)); // Index of second 1
-        Assert.AreEqual(6, result.GetInt32(2)); // Index of 2
-        Assert.AreEqual(0, result.GetInt32(3)); // Index of 3
+        // argsort returns Int64 indices (NumPy behavior)
+        Assert.AreEqual(typeof(long), result.dtype);
+        Assert.AreEqual(1L, result.GetInt64(0)); // Index of first 1
+        Assert.AreEqual(3L, result.GetInt64(1)); // Index of second 1
+        Assert.AreEqual(6L, result.GetInt64(2)); // Index of 2
+        Assert.AreEqual(0L, result.GetInt64(3)); // Index of 3
     }
 
     [Test]
