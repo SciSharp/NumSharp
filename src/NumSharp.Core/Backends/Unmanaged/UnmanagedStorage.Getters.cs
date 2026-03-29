@@ -15,7 +15,7 @@ namespace NumSharp.Backends
         /// <param name="indices">The shape's indices to get.</param>
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="IStorage.DType"/> is not <see cref="object"/></exception>
-        public unsafe ValueType GetValue(int[] indices)
+        public unsafe object GetValue(int[] indices)
         {
             switch (TypeCode)
             {
@@ -49,7 +49,7 @@ namespace NumSharp.Backends
         /// </summary>
         /// <param name="indices">The shape's indices to get (long array version).</param>
         /// <returns></returns>
-        public unsafe ValueType GetValue(params long[] indices)
+        public unsafe object GetValue(params long[] indices)
         {
             switch (TypeCode)
             {
@@ -70,7 +70,7 @@ namespace NumSharp.Backends
             }
         }
 
-        public unsafe ValueType GetAtIndex(long index)
+        public unsafe object GetAtIndex(long index)
         {
 #if _REGEN
             switch (TypeCode)

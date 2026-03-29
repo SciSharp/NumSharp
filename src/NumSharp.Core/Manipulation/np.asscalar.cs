@@ -51,7 +51,7 @@ namespace NumSharp
         /// <returns></returns>
         /// <remarks>DEPRECATED: np.asscalar was removed in NumPy 2.0.</remarks>
         [Obsolete("np.asscalar is deprecated (removed in NumPy 2.0). Use NDArray.item() instead.")]
-        public static ValueType asscalar(NDArray nd)
+        public static object asscalar(NDArray nd)
         {
             if (nd.size != 1)
                 throw new IncorrectSizeException("Unable to convert NDArray to scalar because size is not 1.");
@@ -65,11 +65,11 @@ namespace NumSharp
         /// <returns></returns>
         /// <remarks>DEPRECATED: np.asscalar was removed in NumPy 2.0.</remarks>
         [Obsolete("np.asscalar is deprecated (removed in NumPy 2.0). Use NDArray.item() instead.")]
-        public static ValueType asscalar(Array arr)
+        public static object asscalar(Array arr)
         {
             if (arr.Length != 1)
                 throw new IncorrectSizeException("Unable to convert NDArray to scalar because size is not 1.");
-            return (ValueType) arr.GetValue(0);
+            return arr.GetValue(0);
         }
 
         /// <summary>

@@ -567,12 +567,23 @@ All bitwise operators implemented:
 
 ### Phase 2.5: Remove ValueType ✅ COMPLETE
 All public APIs now use `object` instead of `ValueType`:
+
+**Parameters (accept any type):**
 - `np.power(arr, object)` - scalar or array-like exponent
 - `np.floor_divide(arr, object)` - scalar or array-like divisor
 - `np.left_shift(arr, object)` - scalar or array-like shift amount
 - `np.right_shift(arr, object)` - scalar or array-like shift amount
 - `np.full(object, ...)` - scalar fill value
 - `np.equal/less/greater/...` - object pattern overloads
+
+**Returns (scalar extraction):**
+- `NDArray.GetValue(int[])` → `object` (+ `<T>` overload)
+- `NDArray.GetValue(long[])` → `object` (+ `<T>` overload)
+- `NDArray.GetAtIndex(long)` → `object` (+ `<T>` overload)
+- `NDArray.item()` → `object` (+ `<T>` overload) - NumPy 2.x replacement
+- `np.asscalar()` → `object` (deprecated, use `item()`)
+
+**Removed:**
 - TensorEngine: removed ValueType overloads for Power, FloorDivide, Clip, LeftShift, RightShift
 - `NDArray.Scalar(ValueType)` removed (use `Scalar(object)`)
 

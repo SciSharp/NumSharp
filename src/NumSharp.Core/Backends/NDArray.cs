@@ -805,7 +805,7 @@ namespace NumSharp
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="object"/></exception>
         [MethodImpl(Inline)]
-        public ValueType GetValue(int[] indices) => Storage.GetValue(indices);
+        public object GetValue(int[] indices) => Storage.GetValue(indices);
 
         /// <summary>
         ///     Retrieves value of unspecified type (will figure using <see cref="DType"/>).
@@ -814,7 +814,7 @@ namespace NumSharp
         /// <returns></returns>
         /// <exception cref="NullReferenceException">When <see cref="DType"/> is not <see cref="object"/></exception>
         [MethodImpl(Inline)]
-        public ValueType GetValue(params long[] indices) => Storage.GetValue(indices);
+        public object GetValue(params long[] indices) => Storage.GetValue(indices);
 
         /// <summary>
         ///     Retrieves value of unspecified type (will figure using <see cref="DType"/>).
@@ -840,7 +840,7 @@ namespace NumSharp
         /// <param name="index"></param>
         /// <returns></returns>
         [MethodImpl(Inline)]
-        public ValueType GetAtIndex(long index) => Storage.GetAtIndex(index);
+        public object GetAtIndex(long index) => Storage.GetAtIndex(index);
 
         /// <summary>
         ///     Retrieves value of

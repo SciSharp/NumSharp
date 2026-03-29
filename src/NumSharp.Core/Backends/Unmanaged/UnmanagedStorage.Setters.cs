@@ -330,7 +330,7 @@ namespace NumSharp.Backends
                 if (!(valueIsScalary))
                     throw new IncorrectShapeException($"Can't SetData to a from a shape of {valueshape} to the target indices, these shapes can't be broadcasted together.");
 
-                SetValue((ValueType)Converts.ChangeType(value.GetAtIndex(0), _typecode), (indices));
+                SetValue(Converts.ChangeType(value.GetAtIndex(0), _typecode), indices);
                 return;
             }
 
