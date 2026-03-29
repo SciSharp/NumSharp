@@ -20,7 +20,7 @@ namespace NumSharp.Backends
         /// The Cast(copy: true) call ensures we have a contiguous output array,
         /// so the SIMD path is always taken for supported types.
         /// </remarks>
-        internal NDArray ClipScalar(NDArray lhs, ValueType min, ValueType max, NPTypeCode? typeCode = null)
+        internal NDArray ClipScalar(NDArray lhs, object min, object max, NPTypeCode? typeCode = null)
         {
             if (lhs.size == 0)
                 return lhs.Clone();
@@ -57,7 +57,7 @@ namespace NumSharp.Backends
         /// Uses SIMD-optimized helpers for contiguous arrays (which is guaranteed
         /// by Cast(copy: true) in the calling method).
         /// </summary>
-        private unsafe NDArray ClipCore(NDArray arr, ValueType min, ValueType max)
+        private unsafe NDArray ClipCore(NDArray arr, object min, object max)
         {
             var len = arr.size;
 

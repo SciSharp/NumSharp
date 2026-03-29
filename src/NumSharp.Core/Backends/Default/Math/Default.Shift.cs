@@ -128,7 +128,7 @@ namespace NumSharp.Backends
         /// Execute shift operation with scalar operand (uniform shift).
         /// SIMD optimized path for contiguous arrays.
         /// </summary>
-        private unsafe NDArray ExecuteShiftOpScalar(NDArray lhs, ValueType rhs, bool isLeftShift)
+        private unsafe NDArray ExecuteShiftOpScalar(NDArray lhs, object rhs, bool isLeftShift)
         {
             int shiftAmount = Convert.ToInt32(rhs);
 

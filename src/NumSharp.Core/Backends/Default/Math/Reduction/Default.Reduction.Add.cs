@@ -164,7 +164,7 @@ namespace NumSharp.Backends
             if (resultDims.Length == 0)
             {
                 var v = arr.GetAtIndex(0);
-                if (outputType != arr.GetTypeCode) v = (ValueType)Converts.ChangeType(v, outputType);
+                if (outputType != arr.GetTypeCode) v = Converts.ChangeType(v, outputType);
                 return NDArray.Scalar(v);
             }
             var result = new NDArray(outputType, new Shape(resultDims), false);
