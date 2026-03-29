@@ -24,7 +24,7 @@ namespace NumSharp.Backends
         /// <summary>
         ///     Performs a set of index without calling <see cref="Shape.TransformOffset(long)"/>.
         /// </summary>
-        public void SetAtIndexUnsafe(ValueType value, long index)
+        public void SetAtIndexUnsafe(object value, long index)
         {
             InternalArray.SetIndex(index, value);
         }

@@ -53,7 +53,7 @@
             var y_pred = np.matmul(X, @params);
             var score = 1 - ((np.power((y - y_pred), 2)).sum() / (np.power(y - y.mean(), 2)).sum());
 
-            return score;
+            return (float)score;
         }
 
         public NDArray predict(NDArray X) {

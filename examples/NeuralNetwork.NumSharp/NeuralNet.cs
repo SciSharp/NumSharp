@@ -106,7 +106,7 @@ namespace NeuralNetwork.NumSharp
                     var xtrain = x[currentIndex, currentIndex + batchSize];
                     var ytrain = y[currentIndex, currentIndex + batchSize];
 
-                    if (xtrain == null)
+                    if (xtrain is null)
                         break;
 
                     //Run forward for all the layers to predict the value for the training set

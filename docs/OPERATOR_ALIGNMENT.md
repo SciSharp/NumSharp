@@ -565,6 +565,17 @@ All bitwise operators implemented:
 - `~` → unary operator
 - `<<`, `>>` → via `np.left_shift()` / `np.right_shift()` functions
 
+### Phase 2.5: Remove ValueType ✅ COMPLETE
+All public APIs now use `object` instead of `ValueType`:
+- `np.power(arr, object)` - scalar or array-like exponent
+- `np.floor_divide(arr, object)` - scalar or array-like divisor
+- `np.left_shift(arr, object)` - scalar or array-like shift amount
+- `np.right_shift(arr, object)` - scalar or array-like shift amount
+- `np.full(object, ...)` - scalar fill value
+- `np.equal/less/greater/...` - object pattern overloads
+- TensorEngine: removed ValueType overloads for Power, FloorDivide, Clip, LeftShift, RightShift
+- `NDArray.Scalar(ValueType)` removed (use `Scalar(object)`)
+
 ### Phase 3: Float Functions (Medium Priority)
 1. `np.signbit`
 2. `np.isposinf`, `np.isneginf`

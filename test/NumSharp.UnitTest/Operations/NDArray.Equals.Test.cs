@@ -2127,7 +2127,8 @@ namespace NumSharp.UnitTest.Operations
         public void EqualsNull()
         {
             NDArray nd = null;
-            if (nd == null)
+            // Use 'is null' for null identity check (== null now returns NDArray<bool> for element-wise comparison)
+            if (nd is null)
                 Console.WriteLine("yes");
             else
                 throw new NotSupportedException();

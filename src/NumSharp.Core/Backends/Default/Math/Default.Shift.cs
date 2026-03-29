@@ -21,16 +21,6 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        /// Bitwise left shift (x1 &lt;&lt; scalar).
-        /// SIMD optimized for contiguous arrays.
-        /// </summary>
-        public override NDArray LeftShift(NDArray lhs, ValueType rhs)
-        {
-            ValidateIntegerType(lhs, "left_shift");
-            return ExecuteShiftOpScalar(lhs, rhs, isLeftShift: true);
-        }
-
-        /// <summary>
         /// Bitwise right shift (x1 &gt;&gt; x2).
         /// Uses arithmetic shift for signed types (sign bit extended).
         /// Uses logical shift for unsigned types (zeros filled).
@@ -40,16 +30,6 @@ namespace NumSharp.Backends
             ValidateIntegerType(lhs, "right_shift");
             ValidateIntegerType(rhs, "right_shift");
             return ExecuteShiftOp(lhs, rhs, isLeftShift: false);
-        }
-
-        /// <summary>
-        /// Bitwise right shift (x1 &gt;&gt; scalar).
-        /// SIMD optimized for contiguous arrays.
-        /// </summary>
-        public override NDArray RightShift(NDArray lhs, ValueType rhs)
-        {
-            ValidateIntegerType(lhs, "right_shift");
-            return ExecuteShiftOpScalar(lhs, rhs, isLeftShift: false);
         }
 
         /// <summary>

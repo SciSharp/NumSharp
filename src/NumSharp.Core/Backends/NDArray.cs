@@ -933,20 +933,6 @@ namespace NumSharp
         ///     Does not change internal storage data type.<br></br>
         ///     If <paramref name="value"/> does not match <see cref="DType"/>, <paramref name="value"/> will be converted.
         /// </remarks>
-        public void SetValue(ValueType value, int[] indices)
-        {
-            Storage.SetValue(value, indices);
-        }
-
-        /// <summary>
-        ///     Set a single value at given <see cref="indices"/>.
-        /// </summary>
-        /// <param name="value">The value to set</param>
-        /// <param name="indices">The </param>
-        /// <remarks>
-        ///     Does not change internal storage data type.<br></br>
-        ///     If <paramref name="value"/> does not match <see cref="DType"/>, <paramref name="value"/> will be converted.
-        /// </remarks>
         public void SetValue(object value, int[] indices)
         {
             Storage.SetValue(value, indices);

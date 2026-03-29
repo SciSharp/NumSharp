@@ -6,10 +6,8 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public override NDArray Clip(NDArray lhs, ValueType min, ValueType max, Type dtype) => Clip(lhs, min, max, dtype?.GetTypeCode());
-
         /// <summary>
-        /// Clips array values to a specified range [min, max].
+        /// Internal helper: Clips array values to a specified range [min, max].
         /// NumPy behavior:
         /// - NaN in data propagates through (result is NaN)
         /// - NaN in scalar min/max: entire array becomes NaN (for floating-point)
@@ -22,7 +20,7 @@ namespace NumSharp.Backends
         /// The Cast(copy: true) call ensures we have a contiguous output array,
         /// so the SIMD path is always taken for supported types.
         /// </remarks>
-        public override NDArray Clip(NDArray lhs, ValueType min, ValueType max, NPTypeCode? typeCode = null)
+        internal NDArray ClipScalar(NDArray lhs, ValueType min, ValueType max, NPTypeCode? typeCode = null)
         {
             if (lhs.size == 0)
                 return lhs.Clone();

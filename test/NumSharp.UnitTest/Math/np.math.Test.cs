@@ -43,7 +43,7 @@ namespace NumSharp.UnitTest.Maths
         {
             var data = new int[,] {{0, 1}, {0, 5}};
 
-            int s = np.sum(data);
+            int s = (int)np.sum(data);
             Assert.AreEqual(s, 6);
 
             var s0 = np.sum(data, axis: 0);

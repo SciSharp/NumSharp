@@ -217,7 +217,7 @@ namespace NumSharp
         /// <exception cref="ArgumentException">When nd.size != width*height, which means the ndarray be turned into the given bitmap size.</exception>
         public static unsafe Bitmap ToBitmap(this NDArray nd, int width, int height, PixelFormat format = PixelFormat.DontCare)
         {
-            if (nd == null)
+            if (nd is null)
                 throw new ArgumentNullException(nameof(nd));
 
             //if flat then initialize based on given format
@@ -303,7 +303,7 @@ namespace NumSharp
         /// <exception cref="ArgumentException">When nd.size != width*height, which means the ndarray be turned into the given bitmap size.</exception>
         public static Bitmap ToBitmap(this NDArray nd, PixelFormat format = PixelFormat.DontCare)
         {
-            if (nd == null)
+            if (nd is null)
                 throw new ArgumentNullException(nameof(nd));
             if (nd.ndim != 4)
                 throw new ArgumentException("ndarray was expected to be of 4-dimensions, (1, bmpData.Height, bmpData.Width, bytesPerPixel)");

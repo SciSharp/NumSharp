@@ -9,30 +9,30 @@ namespace NumSharp
         ///     First array elements raised to powers from second array, element-wise.
         /// </summary>
         /// <param name="x1">The bases.</param>
-        /// <param name="x2">The exponents.</param>
+        /// <param name="x2">The exponents (scalar or array-like).</param>
         /// <param name="dtype">The dtype of the returned NDArray</param>
         /// <returns>The bases in x1 raised to the exponents in x2. This is a scalar NDArray if both x1 and x2 are scalars.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.power.html
-        public static NDArray power(NDArray x1, ValueType x2, Type dtype) => x1.TensorEngine.Power(x1, x2, dtype);
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.power.html</remarks>
+        public static NDArray power(NDArray x1, object x2, Type dtype) => x1.TensorEngine.Power(x1, np.asanyarray(x2), dtype);
 
         /// <summary>
         ///     First array elements raised to powers from second array, element-wise.
         /// </summary>
         /// <param name="x1">The bases.</param>
-        /// <param name="x2">The exponents.</param>
+        /// <param name="x2">The exponents (scalar or array-like).</param>
         /// <param name="typeCode">The dtype of the returned NDArray</param>
         /// <returns>The bases in x1 raised to the exponents in x2. This is a scalar NDArray if both x1 and x2 are scalars.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.power.html
-        public static NDArray power(NDArray x1, ValueType x2, NPTypeCode typeCode) => x1.TensorEngine.Power(x1, x2, typeCode);
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.power.html</remarks>
+        public static NDArray power(NDArray x1, object x2, NPTypeCode typeCode) => x1.TensorEngine.Power(x1, np.asanyarray(x2), typeCode);
 
         /// <summary>
         ///     First array elements raised to powers from second array, element-wise.
         /// </summary>
         /// <param name="x1">The bases.</param>
-        /// <param name="x2">The exponents.</param>
+        /// <param name="x2">The exponents (scalar or array-like).</param>
         /// <returns>The bases in x1 raised to the exponents in x2. This is a scalar NDArray if both x1 and x2 are scalars.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.power.html
-        public static NDArray power(NDArray x1, ValueType x2) => x1.TensorEngine.Power(x1, x2);
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.power.html</remarks>
+        public static NDArray power(NDArray x1, object x2) => x1.TensorEngine.Power(x1, np.asanyarray(x2), (NPTypeCode?)null);
 
         /// <summary>
         ///     First array elements raised to powers from second array, element-wise.
@@ -103,7 +103,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="x">Input data.</param>
         /// <returns>Element-wise x*x, of the same shape and dtype as x. Returns scalar if x is a scalar.</returns>
-        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.power.html
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.power.html</remarks>
         public static NDArray square(NDArray x) => x.TensorEngine.Square(x, (NPTypeCode?)null);
     }
 }

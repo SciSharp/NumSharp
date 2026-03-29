@@ -60,7 +60,7 @@ namespace NumSharp
                 double c = (1.0 / 3.0) / Math.Sqrt(d);
 
                 NDArray u = uniform(0, 1, size);
-                return scale * Marsaglia(d, c, size) * np.power(u, (System.ValueType)(1.0 / shape));
+                return scale * Marsaglia(d, c, size) * np.power(u, 1.0 / shape);
             }
             else
             {

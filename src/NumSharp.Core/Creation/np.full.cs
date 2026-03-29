@@ -10,11 +10,11 @@ namespace NumSharp
         /// <summary>
         ///     Return a new array of given shape and type, filled with fill_value.
         /// </summary>
-        /// <param name="fill_value">Fill value.</param>
+        /// <param name="fill_value">Fill value (scalar).</param>
         /// <param name="shapes">Shape of the empty array, e.g., (2, 3) or 2.</param>
         /// <returns>Array of fill_value with the given shape, dtype, and order.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.full.html</remarks>
-        public static NDArray full(ValueType fill_value, params int[] shapes)
+        public static NDArray full(object fill_value, params int[] shapes)
         {
             return full(fill_value, System.Array.ConvertAll(shapes, i => (long)i));
         }
@@ -22,11 +22,11 @@ namespace NumSharp
         /// <summary>
         ///     Return a new array of given shape and type, filled with fill_value.
         /// </summary>
-        /// <param name="fill_value">Fill value.</param>
+        /// <param name="fill_value">Fill value (scalar).</param>
         /// <param name="shapes">Shape of the empty array, e.g., (2, 3) or 2.</param>
         /// <returns>Array of fill_value with the given shape, dtype, and order.</returns>
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.full.html</remarks>
-        public static NDArray full(ValueType fill_value, params long[] shapes)
+        public static NDArray full(object fill_value, params long[] shapes)
         {
             return full(fill_value, new Shape(shapes), (Type)null);
         }
@@ -34,11 +34,11 @@ namespace NumSharp
         /// <summary>
         ///     Return a new array of given shape and type, filled with fill_value.
         /// </summary>
-        /// <param name="fill_value">Fill value.</param>
+        /// <param name="fill_value">Fill value (scalar).</param>
         /// <param name="shapes">Shape of the empty array, e.g., (2, 3) or 2.</param>
         /// <returns>Array of fill_value with the given shape, dtype, and order.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.full.html</remarks>
-        public static NDArray full<T>(ValueType fill_value, params int[] shapes) where T : unmanaged
+        public static NDArray full<T>(object fill_value, params int[] shapes) where T : unmanaged
         {
             return full<T>(fill_value, System.Array.ConvertAll(shapes, i => (long)i));
         }
@@ -46,11 +46,11 @@ namespace NumSharp
         /// <summary>
         ///     Return a new array of given shape and type, filled with fill_value.
         /// </summary>
-        /// <param name="fill_value">Fill value.</param>
+        /// <param name="fill_value">Fill value (scalar).</param>
         /// <param name="shapes">Shape of the empty array, e.g., (2, 3) or 2.</param>
         /// <returns>Array of fill_value with the given shape, dtype, and order.</returns>
         /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.full.html</remarks>
-        public static NDArray full<T>(ValueType fill_value, params long[] shapes) where T : unmanaged
+        public static NDArray full<T>(object fill_value, params long[] shapes) where T : unmanaged
         {
             return full(fill_value, new Shape(shapes), typeof(T));
         }
@@ -58,12 +58,12 @@ namespace NumSharp
         /// <summary>
         ///     Return a new array of given shape and type, filled with fill_value.
         /// </summary>
-        /// <param name="fill_value">Fill value.</param>
+        /// <param name="fill_value">Fill value (scalar).</param>
         /// <param name="shape">Shape of the empty array, e.g., (2, 3) or 2.</param>
         /// <param name="dtype">The desired data-type for the array The default, null, means np.array(fill_value).dtype.</param>
         /// <returns>Array of fill_value with the given shape, dtype, and order.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.full.html</remarks>
-        public static NDArray full(ValueType fill_value, Shape shape, Type dtype)
+        public static NDArray full(object fill_value, Shape shape, Type dtype)
         {
             // When dtype is explicitly provided, use it
             if (dtype != null)
@@ -77,11 +77,11 @@ namespace NumSharp
         /// <summary>
         ///     Return a new array of given shape and type, filled with fill_value.
         /// </summary>
-        /// <param name="fill_value">Fill value.</param>
+        /// <param name="fill_value">Fill value (scalar).</param>
         /// <param name="shape">Shape of the empty array, e.g., (2, 3) or 2.</param>
         /// <returns>Array of fill_value with the given shape, dtype, and order.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.full.html</remarks>
-        public static NDArray full(ValueType fill_value, Shape shape)
+        public static NDArray full(object fill_value, Shape shape)
         {
             // TODO: NumPy 2.x promotes int32 to int64 for scalar integer values (NEP50)
             // Keeping original type for now to avoid breaking existing tests
@@ -92,12 +92,12 @@ namespace NumSharp
         /// <summary>
         ///     Return a new array of given shape and type, filled with fill_value.
         /// </summary>
-        /// <param name="fill_value">Fill value.</param>
+        /// <param name="fill_value">Fill value (scalar).</param>
         /// <param name="shape">Shape of the empty array, e.g., (2, 3) or 2.</param>
         /// <param name="dtype">The desired data-type for the array The default, null, means np.array(fill_value).dtype.</param>
         /// <returns>Array of fill_value with the given shape, dtype, and order.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.full.html</remarks>
-        public static NDArray full(Shape shape, ValueType fill_value, Type dtype)
+        public static NDArray full(Shape shape, object fill_value, Type dtype)
         {
             return full(fill_value, shape, dtype);
         }
@@ -105,12 +105,12 @@ namespace NumSharp
         /// <summary>
         ///     Return a new array of given shape and type, filled with fill_value.
         /// </summary>
-        /// <param name="fill_value">Fill value.</param>
+        /// <param name="fill_value">Fill value (scalar).</param>
         /// <param name="shape">Shape of the empty array, e.g., (2, 3) or 2.</param>
         /// <param name="typeCode">The desired data-type for the array The default, null, means np.array(fill_value).dtype.</param>
         /// <returns>Array of fill_value with the given shape, dtype, and order.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.full.html</remarks>
-        public static NDArray full(Shape shape, ValueType fill_value, NPTypeCode typeCode)
+        public static NDArray full(Shape shape, object fill_value, NPTypeCode typeCode)
         {
             return full(fill_value, shape, typeCode);
         }
@@ -118,11 +118,11 @@ namespace NumSharp
         /// <summary>
         ///     Return a new array of given shape and type, filled with fill_value.
         /// </summary>
-        /// <param name="fill_value">Fill value.</param>
+        /// <param name="fill_value">Fill value (scalar).</param>
         /// <param name="shape">Shape of the empty array, e.g., (2, 3) or 2.</param>
         /// <returns>Array of fill_value with the given shape, dtype, and order.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.full.html</remarks>
-        public static NDArray full(Shape shape, ValueType fill_value)
+        public static NDArray full(Shape shape, object fill_value)
         {
             return full(fill_value, shape);
         }
@@ -130,12 +130,12 @@ namespace NumSharp
         /// <summary>
         ///     Return a new array of given shape and type, filled with fill_value.
         /// </summary>
-        /// <param name="fill_value">Fill value.</param>
+        /// <param name="fill_value">Fill value (scalar).</param>
         /// <param name="shape">Shape of the empty array, e.g., (2, 3) or 2.</param>
         /// <param name="typeCode">The desired data-type for the array The default, null, means np.array(fill_value).dtype.</param>
         /// <returns>Array of fill_value with the given shape, dtype, and order.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.full.html</remarks>
-        public static NDArray full(ValueType fill_value, Shape shape, NPTypeCode typeCode)
+        public static NDArray full(object fill_value, Shape shape, NPTypeCode typeCode)
         {
             if (typeCode == NPTypeCode.Empty)
                 throw new ArgumentNullException(nameof(typeCode));
