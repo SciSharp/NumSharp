@@ -22,8 +22,15 @@ namespace NumSharp
         ///     The multivariate normal distribution is a generalization of the 1D normal distribution
         ///     to higher dimensions. It is specified by its mean vector and covariance matrix.
         ///     <br/>
-        ///     Algorithm: Uses SVD decomposition of the covariance matrix (matching NumPy).
-        ///     Transform = U @ sqrt(S), then X = mean + Transform @ Z where Z ~ N(0, I).
+        ///     Algorithm: Uses Jacobi eigendecomposition of the covariance matrix with sign normalization
+        ///     to match NumPy's SVD-based approach. Transform = U @ sqrt(S), then X = mean + Transform @ Z
+        ///     where Z ~ N(0, I).
+        ///     <br/>
+        ///     NumPy Compatibility: Produces 1-to-1 matching samples with NumPy for most common cases
+        ///     (identity, diagonal, and correlated covariance matrices up to 4x4). For some larger matrices
+        ///     (5x5+), the samples are statistically correct (same distribution) but may differ in exact
+        ///     sequence due to differences in eigenvector sign conventions between Jacobi and LAPACK's
+        ///     divide-and-conquer algorithms.
         /// </remarks>
         public unsafe NDArray multivariate_normal(double[] mean, double[,] cov, Shape size = default,
             string check_valid = "warn", double tol = 1e-8)
@@ -424,11 +431,18 @@ namespace NumSharp
         }
 
         /// <summary>
-        ///     Normalize eigenvector signs to match NumPy/LAPACK SVD convention.
+        ///     Normalize eigenvector signs to approximate NumPy/LAPACK SVD convention.
+        ///
+        ///     LAPACK's divide-and-conquer SVD (DGESDD) determines eigenvector signs based on
+        ///     internal algorithm state (specifically DLAED3), which is deterministic but not
+        ///     predictable from external matrix properties. This heuristic matches NumPy for
+        ///     most common cases (identity, diagonal, correlated matrices up to 4x4).
+        ///
         ///     Two-step process:
         ///     1. Make the element with largest absolute value in each column NEGATIVE
+        ///        (skip standard basis vectors for identity matrices)
         ///     2. Ensure determinant matches NumPy convention: +1 for odd n, -1 for even n
-        ///        (only applies when eigenvalues are distinct)
+        ///        (skip for identity-like matrices where all columns are standard basis vectors)
         /// </summary>
         private static void NormalizeEigenvectorSigns(ArraySlice<double> eigenvectors, long n)
         {
