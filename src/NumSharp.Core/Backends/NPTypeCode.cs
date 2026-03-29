@@ -628,7 +628,7 @@ namespace NumSharp
         /// <summary>
         ///     Gets the default value of <paramref name="typeCode"/>.
         /// </summary>
-        public static ValueType GetDefaultValue(this NPTypeCode typeCode)
+        public static object GetDefaultValue(this NPTypeCode typeCode)
         {
 #if _REGEN
             #region Compute
