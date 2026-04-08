@@ -305,34 +305,15 @@ namespace NumSharp.Backends.Kernels
     /// </summary>
     public static class ReductionTypeExtensions
     {
-        // GetDefaultValue is defined in NPTypeCode.cs (NumSharp.Backends namespace)
-
-        /// <summary>
-        /// Get the multiplicative identity (1) for a type.
-        /// </summary>
-        public static object GetOneValue(this NPTypeCode type)
-        {
-            return type switch
-            {
-                NPTypeCode.Boolean => true,
-                NPTypeCode.Byte => (byte)1,
-                NPTypeCode.Int16 => (short)1,
-                NPTypeCode.UInt16 => (ushort)1,
-                NPTypeCode.Int32 => 1,
-                NPTypeCode.UInt32 => 1u,
-                NPTypeCode.Int64 => 1L,
-                NPTypeCode.UInt64 => 1UL,
-                NPTypeCode.Char => (char)1,
-                NPTypeCode.Single => 1f,
-                NPTypeCode.Double => 1d,
-                NPTypeCode.Decimal => 1m,
-                _ => throw new NotSupportedException($"Type {type} not supported")
-            };
-        }
+        // GetDefaultValue and GetOneValue are defined in NPTypeCode.cs
 
         /// <summary>
         /// Get the minimum value for a type (for Max reduction identity).
         /// </summary>
+        /// <remarks>
+        /// For float types, returns negative infinity (not MinValue).
+        /// This matches NumPy's behavior for reduction identity elements.
+        /// </remarks>
         public static object GetMinValue(this NPTypeCode type)
         {
             return type switch
@@ -356,6 +337,10 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Get the maximum value for a type (for Min reduction identity).
         /// </summary>
+        /// <remarks>
+        /// For float types, returns positive infinity (not MaxValue).
+        /// This matches NumPy's behavior for reduction identity elements.
+        /// </remarks>
         public static object GetMaxValue(this NPTypeCode type)
         {
             return type switch

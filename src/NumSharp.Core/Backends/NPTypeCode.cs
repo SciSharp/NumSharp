@@ -663,5 +663,82 @@ namespace NumSharp
             #endregion
 #endif
         }
+
+        /// <summary>
+        /// Gets the multiplicative identity (1) for a type.
+        /// Used for reduction identity in Product operations.
+        /// </summary>
+        [DebuggerNonUserCode]
+        [MethodImpl(OptimizeAndInline)]
+        public static object GetOneValue(this NPTypeCode typeCode)
+        {
+            return typeCode switch
+            {
+                NPTypeCode.Boolean => true,
+                NPTypeCode.Byte => (byte)1,
+                NPTypeCode.Int16 => (short)1,
+                NPTypeCode.UInt16 => (ushort)1,
+                NPTypeCode.Int32 => 1,
+                NPTypeCode.UInt32 => 1u,
+                NPTypeCode.Int64 => 1L,
+                NPTypeCode.UInt64 => 1UL,
+                NPTypeCode.Char => (char)1,
+                NPTypeCode.Single => 1f,
+                NPTypeCode.Double => 1d,
+                NPTypeCode.Decimal => 1m,
+                _ => throw new NotSupportedException($"Type {typeCode} not supported")
+            };
+        }
+
+        /// <summary>
+        /// Is <paramref name="typeCode"/> a floating point type (float, double, or decimal)?
+        /// </summary>
+        [DebuggerNonUserCode]
+        [MethodImpl(OptimizeAndInline)]
+        public static bool IsFloatingPoint(this NPTypeCode typeCode)
+        {
+            return typeCode is NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Decimal;
+        }
+
+        /// <summary>
+        /// Is <paramref name="typeCode"/> an integer type (signed or unsigned)?
+        /// </summary>
+        /// <remarks>Excludes Boolean and Char.</remarks>
+        [DebuggerNonUserCode]
+        [MethodImpl(OptimizeAndInline)]
+        public static bool IsInteger(this NPTypeCode typeCode)
+        {
+            return typeCode switch
+            {
+                NPTypeCode.Byte => true,
+                NPTypeCode.Int16 or NPTypeCode.UInt16 => true,
+                NPTypeCode.Int32 or NPTypeCode.UInt32 => true,
+                NPTypeCode.Int64 or NPTypeCode.UInt64 => true,
+                _ => false
+            };
+        }
+
+        /// <summary>
+        /// Is <paramref name="typeCode"/> capable of SIMD operations?
+        /// </summary>
+        /// <remarks>
+        /// Returns true if the type can use SIMD when hardware support is available.
+        /// Does not check if SIMD hardware is actually available.
+        /// Boolean, Char, and Decimal cannot use SIMD.
+        /// </remarks>
+        [DebuggerNonUserCode]
+        [MethodImpl(OptimizeAndInline)]
+        public static bool IsSimdCapable(this NPTypeCode typeCode)
+        {
+            return typeCode switch
+            {
+                NPTypeCode.Byte => true,
+                NPTypeCode.Int16 or NPTypeCode.UInt16 => true,
+                NPTypeCode.Int32 or NPTypeCode.UInt32 => true,
+                NPTypeCode.Int64 or NPTypeCode.UInt64 => true,
+                NPTypeCode.Single or NPTypeCode.Double => true,
+                _ => false  // Boolean, Char, Decimal, Complex, String
+            };
+        }
     }
 }
