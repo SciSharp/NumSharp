@@ -239,91 +239,21 @@ namespace NumSharp
         /// <summary>
         /// Check if casting from one type to another preserves values (safe casting).
         /// </summary>
+        /// <remarks>
+        /// A cast is safe if and only if the target type is the common type of both types.
+        /// This leverages the type promotion tables in <see cref="_FindCommonType_Array"/>
+        /// which encode NumPy's type hierarchy.
+        ///
+        /// Mathematically: can_cast(A, B) ⟺ promote_types(A, B) == B
+        /// </remarks>
         private static bool CanCastSafe(NPTypeCode from, NPTypeCode to)
         {
-            // Same type always safe
             if (from == to)
                 return true;
 
-            // Safe casting table based on NumPy rules
-            return (from, to) switch
-            {
-                // Boolean can safely cast to any integer or float
-                (NPTypeCode.Boolean, NPTypeCode.Byte) => true,
-                (NPTypeCode.Boolean, NPTypeCode.Int16) => true,
-                (NPTypeCode.Boolean, NPTypeCode.UInt16) => true,
-                (NPTypeCode.Boolean, NPTypeCode.Int32) => true,
-                (NPTypeCode.Boolean, NPTypeCode.UInt32) => true,
-                (NPTypeCode.Boolean, NPTypeCode.Int64) => true,
-                (NPTypeCode.Boolean, NPTypeCode.UInt64) => true,
-                (NPTypeCode.Boolean, NPTypeCode.Single) => true,
-                (NPTypeCode.Boolean, NPTypeCode.Double) => true,
-                (NPTypeCode.Boolean, NPTypeCode.Decimal) => true,
-
-                // Byte (uint8) safe casts
-                (NPTypeCode.Byte, NPTypeCode.Int16) => true,
-                (NPTypeCode.Byte, NPTypeCode.UInt16) => true,
-                (NPTypeCode.Byte, NPTypeCode.Int32) => true,
-                (NPTypeCode.Byte, NPTypeCode.UInt32) => true,
-                (NPTypeCode.Byte, NPTypeCode.Int64) => true,
-                (NPTypeCode.Byte, NPTypeCode.UInt64) => true,
-                (NPTypeCode.Byte, NPTypeCode.Single) => true,
-                (NPTypeCode.Byte, NPTypeCode.Double) => true,
-                (NPTypeCode.Byte, NPTypeCode.Decimal) => true,
-
-                // Int16 safe casts
-                (NPTypeCode.Int16, NPTypeCode.Int32) => true,
-                (NPTypeCode.Int16, NPTypeCode.Int64) => true,
-                (NPTypeCode.Int16, NPTypeCode.Single) => true,
-                (NPTypeCode.Int16, NPTypeCode.Double) => true,
-                (NPTypeCode.Int16, NPTypeCode.Decimal) => true,
-
-                // UInt16 safe casts
-                (NPTypeCode.UInt16, NPTypeCode.Int32) => true,
-                (NPTypeCode.UInt16, NPTypeCode.UInt32) => true,
-                (NPTypeCode.UInt16, NPTypeCode.Int64) => true,
-                (NPTypeCode.UInt16, NPTypeCode.UInt64) => true,
-                (NPTypeCode.UInt16, NPTypeCode.Single) => true,
-                (NPTypeCode.UInt16, NPTypeCode.Double) => true,
-                (NPTypeCode.UInt16, NPTypeCode.Decimal) => true,
-
-                // Int32 safe casts
-                (NPTypeCode.Int32, NPTypeCode.Int64) => true,
-                (NPTypeCode.Int32, NPTypeCode.Double) => true,  // Float64 can represent all int32
-                (NPTypeCode.Int32, NPTypeCode.Decimal) => true,
-
-                // UInt32 safe casts
-                (NPTypeCode.UInt32, NPTypeCode.Int64) => true,
-                (NPTypeCode.UInt32, NPTypeCode.UInt64) => true,
-                (NPTypeCode.UInt32, NPTypeCode.Double) => true,  // Float64 can represent all uint32
-                (NPTypeCode.UInt32, NPTypeCode.Decimal) => true,
-
-                // Int64 safe casts
-                (NPTypeCode.Int64, NPTypeCode.Decimal) => true,
-                // Note: Int64 to Double is NOT safe (precision loss for large values)
-
-                // UInt64 safe casts
-                (NPTypeCode.UInt64, NPTypeCode.Decimal) => true,
-                // Note: UInt64 to Double is NOT safe (precision loss for large values)
-
-                // Single (float32) safe casts
-                (NPTypeCode.Single, NPTypeCode.Double) => true,
-                (NPTypeCode.Single, NPTypeCode.Decimal) => true,
-
-                // Double safe casts
-                (NPTypeCode.Double, NPTypeCode.Decimal) => true,
-
-                // Char (treated as uint16)
-                (NPTypeCode.Char, NPTypeCode.Int32) => true,
-                (NPTypeCode.Char, NPTypeCode.UInt32) => true,
-                (NPTypeCode.Char, NPTypeCode.Int64) => true,
-                (NPTypeCode.Char, NPTypeCode.UInt64) => true,
-                (NPTypeCode.Char, NPTypeCode.Single) => true,
-                (NPTypeCode.Char, NPTypeCode.Double) => true,
-                (NPTypeCode.Char, NPTypeCode.Decimal) => true,
-
-                _ => false
-            };
+            // Safe cast iff the target type is the common type of both
+            // This reuses the type promotion tables, avoiding duplicate type knowledge
+            return _FindCommonType_Array(from, to) == to;
         }
 
         /// <summary>
