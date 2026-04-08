@@ -35,22 +35,50 @@ namespace NumSharp
             if (value is null)
                 return false;
 
-            try
-            {
-                // Convert value to NDArray for comparison
-                var scalar = np.asanyarray(value);
+            // NumPy: (self == el).any()
+            // NumPy compares the raw object directly, not an array-converted version.
+            // When comparing incompatible types (e.g., int array with string),
+            // NumPy returns False for each element.
 
-                // Use element-wise comparison and check if any match
-                // This handles type promotion and broadcasting correctly
-                var comparison = this == scalar;
-                return np.any(comparison);
-            }
-            catch
+            // Check for fundamentally incompatible types that would cause shape mismatch
+            // NumSharp's asanyarray("hello") creates char[5], not a scalar like NumPy
+            // This causes broadcasting errors when comparing with e.g. int[3]
+            if (value is string s)
             {
-                // If comparison fails (incompatible types, shape mismatch, etc.)
-                // return false like NumPy does
-                return false;
+                // String in non-char array: incompatible types → return False
+                // NumPy: 'hello' in np.array([1,2,3]) returns False
+                if (typecode != NPTypeCode.Char)
+                    return false;
+
+                // For char arrays, compare with the string characters
+                // but only if shapes are compatible (string length matches or is scalar)
+                if (s.Length != 1 && ndim == 1 && shape[0] != s.Length)
+                {
+                    // Shape mismatch for non-scalar string comparison
+                    // e.g., char[3] vs "hello" (length 5)
+                    return false;
+                }
             }
+
+            // Convert value to NDArray for comparison
+            var scalar = np.asanyarray(value);
+
+            // Check for shape compatibility before comparing
+            // NumPy throws ValueError for incompatible shapes, but for Contains
+            // we want to return False for any shape that can't broadcast to a scalar-like comparison
+            if (!scalar.Shape.IsScalar && scalar.ndim > 0)
+            {
+                // Non-scalar search value - check if shapes are broadcast-compatible
+                // For Contains, we typically expect a scalar search value
+                // If shapes don't match and can't broadcast, return false
+                if (ndim == 1 && scalar.ndim == 1 && shape[0] != scalar.shape[0])
+                    return false;
+            }
+
+            // Use element-wise comparison and check if any match
+            // This handles type promotion and broadcasting correctly
+            var comparison = this == scalar;
+            return np.any(comparison);
         }
 
         /// <summary>
