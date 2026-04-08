@@ -61,7 +61,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             ret.size.Should().Be(9);
             FluentExtension.Should(ret.Shape).Be(new Shape(3, 3));
             ret.GetTypeCode.Should().Be(NPTypeCode.Int64);  // NEP50: int32 sum returns int64
-            ret.Cast<long>().Should().AllBeEquivalentTo(3);
+            ret.flat.Cast<long>().Should().AllBeEquivalentTo(3);
         }
 
         [Test]
@@ -72,7 +72,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             ret.Shape.IsScalar.Should().BeFalse();
             ret.size.Should().Be(9);
             FluentExtension.Should(ret.Shape).Be(new Shape(3, 3));
-            ret.Cast<long>().Should().AllBeEquivalentTo(3);  // NEP50: int32 sum returns int64
+            ret.flat.Cast<long>().Should().AllBeEquivalentTo(3);  // NEP50: int32 sum returns int64
         }
 
         [Test]
@@ -83,7 +83,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             ret.Shape.IsScalar.Should().BeFalse();
             ret.size.Should().Be(9);
             FluentExtension.Should(ret.Shape).Be(new Shape(3, 3));
-            ret.Cast<long>().Should().AllBeEquivalentTo(3);  // NEP50: int32 sum returns int64
+            ret.flat.Cast<long>().Should().AllBeEquivalentTo(3);  // NEP50: int32 sum returns int64
         }
 
         [Test]
@@ -94,7 +94,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             ret.Shape.IsScalar.Should().BeFalse();
             ret.size.Should().Be(9);
             FluentExtension.Should(ret.Shape).Be(new Shape(3, 3));
-            ret.Cast<long>().Should().AllBeEquivalentTo(3);  // NEP50: int32 sum returns int64
+            ret.flat.Cast<long>().Should().AllBeEquivalentTo(3);  // NEP50: int32 sum returns int64
         }
 
         [Test]
@@ -105,7 +105,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             ret.Shape.IsScalar.Should().BeFalse();
             ret.size.Should().Be(9);
             FluentExtension.Should(ret.Shape).Be(new Shape(3, 3, 1));
-            ret.Cast<long>().Should().AllBeEquivalentTo(3);  // NEP50: int32 sum returns int64
+            ret.flat.Cast<long>().Should().AllBeEquivalentTo(3);  // NEP50: int32 sum returns int64
         }
 
         [Test]
@@ -116,7 +116,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             ret.Shape.IsScalar.Should().BeFalse();
             ret.size.Should().Be(9);
             FluentExtension.Should(ret.Shape).Be(new Shape(3, 3, 1));
-            ret.Cast<long>().Should().AllBeEquivalentTo(3);  // NEP50: int32 sum returns int64
+            ret.flat.Cast<long>().Should().AllBeEquivalentTo(3);  // NEP50: int32 sum returns int64
         }
 
         [Test]
@@ -127,7 +127,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             ret.Shape.IsScalar.Should().BeFalse();
             ret.size.Should().Be(9);
             FluentExtension.Should(ret.Shape).Be(new Shape(3, 1, 3));
-            ret.Cast<long>().Should().AllBeEquivalentTo(3);  // NEP50: int32 sum returns int64
+            ret.flat.Cast<long>().Should().AllBeEquivalentTo(3);  // NEP50: int32 sum returns int64
         }
 
 
@@ -149,7 +149,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             ret.Shape.IsScalar.Should().BeFalse();
             ret.size.Should().Be(15);
             FluentExtension.Should(ret.Shape).Be(new Shape(1, 3, 5, 1));
-            ret.Cast<long>().Should().AllBeEquivalentTo(2);  // NEP50: int32 sum returns int64
+            ret.flat.Cast<long>().Should().AllBeEquivalentTo(2);  // NEP50: int32 sum returns int64
         }
 
         [Test]
@@ -161,7 +161,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             ret.Shape.IsScalar.Should().BeFalse();
             ret.size.Should().Be(30);
             FluentExtension.Should(ret.Shape).Be(new Shape(2, 3, 5, 1));
-            ret.Cast<long>().Should().AllBeEquivalentTo(1);  // NEP50: int32 sum returns int64
+            ret.flat.Cast<long>().Should().AllBeEquivalentTo(1);  // NEP50: int32 sum returns int64
         }
 
         [Test]
@@ -172,7 +172,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             ret.Shape.IsScalar.Should().BeFalse();
             ret.size.Should().Be(10);
             FluentExtension.Should(ret.Shape).Be(new Shape(2, 1, 5, 1));
-            ret.Cast<long>().Should().AllBeEquivalentTo(3);  // NEP50: int32 sum returns int64
+            ret.flat.Cast<long>().Should().AllBeEquivalentTo(3);  // NEP50: int32 sum returns int64
         }
 
         [Test]
@@ -184,7 +184,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             ret.Shape.IsScalar.Should().BeFalse();
             ret.size.Should().Be(30);
             FluentExtension.Should(ret.Shape).Be(new Shape(2, 1, 3, 5));
-            ret.Cast<long>().Should().AllBeEquivalentTo(1);  // NEP50: int32 sum returns int64
+            ret.flat.Cast<long>().Should().AllBeEquivalentTo(1);  // NEP50: int32 sum returns int64
         }
 
         [Test]
@@ -196,7 +196,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             ret.Shape.IsScalar.Should().BeFalse();
             ret.size.Should().Be(30);
             FluentExtension.Should(ret.Shape).Be(new Shape(2, 1, 3, 5));
-            ret.Cast<long>().Should().AllBeEquivalentTo(1);  // NEP50: int32 sum returns int64
+            ret.flat.Cast<long>().Should().AllBeEquivalentTo(1);  // NEP50: int32 sum returns int64
         }
 
         [Test]
@@ -207,7 +207,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             ret.Shape.IsScalar.Should().BeFalse();
             ret.size.Should().Be(10);
             FluentExtension.Should(ret.Shape).Be(new Shape(2, 1, 1, 5, 1));
-            ret.Cast<long>().Should().AllBeEquivalentTo(3);  // NEP50: int32 sum returns int64
+            ret.flat.Cast<long>().Should().AllBeEquivalentTo(3);  // NEP50: int32 sum returns int64
         }
 
         [Test]
@@ -219,7 +219,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
             ret.Shape.IsScalar.Should().BeFalse();
             ret.size.Should().Be(30);
             FluentExtension.Should(ret.Shape).Be(new Shape(2, 1, 3, 5, 1));
-            ret.Cast<long>().Should().AllBeEquivalentTo(1);  // NEP50: int32 sum returns int64
+            ret.flat.Cast<long>().Should().AllBeEquivalentTo(1);  // NEP50: int32 sum returns int64
         }
 
         [Test]

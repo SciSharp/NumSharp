@@ -20,7 +20,7 @@ namespace NumSharp.UnitTest.Manipulation
             lhs[0] = rhs;
             Console.WriteLine("\n" + (string)lhs);
 
-            lhs[0].Cast<int>().Should().AllBeEquivalentTo(1);
+            lhs[0].flat.Cast<int>().Should().AllBeEquivalentTo(1);
         }
 
         [Test]
@@ -35,7 +35,7 @@ namespace NumSharp.UnitTest.Manipulation
             lhs[0, 1] = rhs;
             Console.WriteLine("\n" + (string)lhs);
 
-            lhs[0, 1].Cast<int>().Should().AllBeEquivalentTo(1);
+            ((int)lhs[0, 1]).Should().Be(1);
         }
 
         [Test]
@@ -48,7 +48,7 @@ namespace NumSharp.UnitTest.Manipulation
             lhs.SetData(rhs, 0);
             Console.WriteLine("\n" + (string)lhs);
 
-            lhs[0].Cast<int>().Should().AllBeEquivalentTo(1);
+            lhs[0].flat.Cast<int>().Should().AllBeEquivalentTo(1);
         }
 
         [Test]
@@ -61,7 +61,7 @@ namespace NumSharp.UnitTest.Manipulation
             lhs.SetData(rhs, 0, 1);
             Console.WriteLine("\n" + (string)lhs);
 
-            lhs[0, 1].Cast<int>().Should().AllBeEquivalentTo(1);
+            ((int)lhs[0, 1]).Should().Be(1);
         }
 
         [Test]
@@ -77,7 +77,7 @@ namespace NumSharp.UnitTest.Manipulation
             lhs[0] = rhs;
             Console.WriteLine("\n" + (string)lhs);
 
-            lhs[0].Cast<int>().Should().AllBeEquivalentTo(1);
+            lhs[0].flat.Cast<int>().Should().AllBeEquivalentTo(1);
         }
 
 
@@ -92,7 +92,7 @@ namespace NumSharp.UnitTest.Manipulation
             lhs.SetData(rhs, 0);
             Console.WriteLine("\n" + (string)lhs);
 
-            lhs[0].Cast<int>().Should().AllBeEquivalentTo(1);
+            lhs[0].flat.Cast<int>().Should().AllBeEquivalentTo(1);
         }
 
         [Test]
@@ -108,7 +108,7 @@ namespace NumSharp.UnitTest.Manipulation
             lhs[0] = rhs;
             Console.WriteLine("\n" + (string)lhs);
 
-            lhs[0].Cast<int>().Should().AllBeEquivalentTo(1);
+            lhs[0].flat.Cast<int>().Should().AllBeEquivalentTo(1);
         }
 
         [Test]
@@ -122,7 +122,7 @@ namespace NumSharp.UnitTest.Manipulation
             lhs.SetData(rhs, 0);
             Console.WriteLine("\n" + (string)lhs);
 
-            lhs[0].Cast<int>().Should().AllBeEquivalentTo(1);
+            lhs[0].flat.Cast<int>().Should().AllBeEquivalentTo(1);
         }
 
         [Test]
@@ -140,7 +140,7 @@ namespace NumSharp.UnitTest.Manipulation
             lhs[0] = rhs;
             Console.WriteLine("\n" + (string)lhs);
 
-            lhs[0].Cast<int>().Should().AllBeEquivalentTo(1);
+            lhs[0].flat.Cast<int>().Should().AllBeEquivalentTo(1);
         }
 
         [Test]
@@ -158,7 +158,7 @@ namespace NumSharp.UnitTest.Manipulation
             lhs[0, 1] = rhs;
             Console.WriteLine("\n" + (string)lhs);
 
-            lhs[0, 1].Cast<int>().Should().AllBeEquivalentTo(1);
+            ((int)lhs[0, 1]).Should().Be(1);
         }
 
         [Test]
@@ -183,7 +183,7 @@ namespace NumSharp.UnitTest.Manipulation
             Console.WriteLine("-----");
             Console.WriteLine((string)slicedlhs);
 
-            slicedlhs[0].Cast<int>().Should().AllBeEquivalentTo(1);
+            slicedlhs[0].flat.Cast<int>().Should().AllBeEquivalentTo(1);
         }
 
         [Test]
@@ -201,7 +201,7 @@ namespace NumSharp.UnitTest.Manipulation
             lhs[0] = rhs;
             Console.WriteLine("\n" + (string)lhs);
 
-            lhs[0].Cast<int>().Should().AllBeEquivalentTo(1);
+            lhs[0].flat.Cast<int>().Should().AllBeEquivalentTo(1);
         }
 
         //---------------
@@ -218,7 +218,7 @@ namespace NumSharp.UnitTest.Manipulation
             lhs[0] = rhs;
             Console.WriteLine("\n" + (string)lhs);
 
-            lhs[0].Cast<double>().Should().AllBeEquivalentTo(1);
+            lhs[0].flat.Cast<double>().Should().AllBeEquivalentTo(1);
         }
 
         [Test]
@@ -233,7 +233,7 @@ namespace NumSharp.UnitTest.Manipulation
             lhs[0, 1] = rhs;
             Console.WriteLine("\n" + (string)lhs);
 
-            lhs[0, 1].Cast<double>().Should().AllBeEquivalentTo(1);
+            ((double)lhs[0, 1]).Should().Be(1);
         }
 
         [Test]
@@ -264,7 +264,7 @@ namespace NumSharp.UnitTest.Manipulation
             lhs[0] = rhs;
             Console.WriteLine("\n" + (string)lhs);
 
-            lhs[0].Cast<double>().Should().AllBeEquivalentTo(1);
+            lhs[0].flat.Cast<double>().Should().AllBeEquivalentTo(1);
         }
 
         [Test]
@@ -282,7 +282,7 @@ namespace NumSharp.UnitTest.Manipulation
             lhs[0] = rhs;
             Console.WriteLine("\n" + (string)lhs);
 
-            lhs[0].Cast<double>().Should().AllBeEquivalentTo(1);
+            lhs[0].flat.Cast<double>().Should().AllBeEquivalentTo(1);
         }
 
         [Test]
@@ -300,7 +300,7 @@ namespace NumSharp.UnitTest.Manipulation
             lhs[0, 1] = rhs;
             Console.WriteLine("\n" + (string)lhs);
 
-            lhs[0, 1].Cast<double>().Should().AllBeEquivalentTo(1);
+            ((double)lhs[0, 1]).Should().Be(1);
         }
 
         [Test]
@@ -325,7 +325,7 @@ namespace NumSharp.UnitTest.Manipulation
             Console.WriteLine("-----");
             Console.WriteLine((string)slicedlhs);
 
-            slicedlhs[0].Cast<double>().Should().AllBeEquivalentTo(1);
+            slicedlhs[0].flat.Cast<double>().Should().AllBeEquivalentTo(1);
         }
 
         [Test]
@@ -343,7 +343,7 @@ namespace NumSharp.UnitTest.Manipulation
             lhs[0] = rhs;
             Console.WriteLine("\n" + (string)lhs);
 
-            lhs[0].Cast<double>().Should().AllBeEquivalentTo(1);
+            lhs[0].flat.Cast<double>().Should().AllBeEquivalentTo(1);
         }
     }
 }

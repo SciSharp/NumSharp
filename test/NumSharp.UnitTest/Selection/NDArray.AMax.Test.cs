@@ -28,21 +28,21 @@ namespace NumSharp.UnitTest.Selection
         public void argmax_case2()
         {
             var a = np.arange(27).reshape(3, 3, 3);
-            np.argmax(a, axis: 1).Cast<long>().Should().AllBeEquivalentTo(2);
+            np.argmax(a, axis: 1).flat.Cast<long>().Should().AllBeEquivalentTo(2);
         }
 
         [Test]
         public void argmax_case3()
         {
             var a = np.arange(27).reshape(3, 3, 3);
-            np.argmax(a, axis: 0).Cast<long>().Should().AllBeEquivalentTo(2);
+            np.argmax(a, axis: 0).flat.Cast<long>().Should().AllBeEquivalentTo(2);
         }
 
         [Test]
         public void argmax_case4()
         {
             var a = np.arange(27).reshape(3, 3, 3);
-            np.argmax(a, axis: 2).Cast<long>().Should().AllBeEquivalentTo(2);
+            np.argmax(a, axis: 2).flat.Cast<long>().Should().AllBeEquivalentTo(2);
         }
 
         [Test]
@@ -93,21 +93,21 @@ namespace NumSharp.UnitTest.Selection
         public void argmin_case2()
         {
             var a = np.arange(27).reshape(3, 3, 3);
-            np.argmin(a, axis: 1).Cast<long>().Should().AllBeEquivalentTo(0);
+            np.argmin(a, axis: 1).flat.Cast<long>().Should().AllBeEquivalentTo(0);
         }
 
         [Test]
         public void argmin_case3()
         {
             var a = np.arange(27).reshape(3, 3, 3);
-            np.argmin(a, axis: 0).Cast<long>().Should().AllBeEquivalentTo(0);
+            np.argmin(a, axis: 0).flat.Cast<long>().Should().AllBeEquivalentTo(0);
         }
 
         [Test]
         public void argmin_case4()
         {
             var a = np.arange(27).reshape(3, 3, 3);
-            np.argmin(a, axis: 2).Cast<long>().Should().AllBeEquivalentTo(0);
+            np.argmin(a, axis: 2).flat.Cast<long>().Should().AllBeEquivalentTo(0);
         }
 
         [Test]

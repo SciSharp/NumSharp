@@ -15,7 +15,7 @@ namespace NumSharp.UnitTest.Creation
         [Test]
         public void Case1()
         {
-            np.eye(3, k: 1).Cast<double>().Count(i => i == 1d).Should().Be(2);
+            np.eye(3, k: 1).flat.Cast<double>().Count(i => i == 1d).Should().Be(2);
 
             np.eye(3, k: 1).Should()
                 .Be(new NDArray(new double[][] {new double[] {0.0d, 1.0d, 0.0d}, new double[] {0.0d, 0d, 1.0d}, new double[] {0d, 0d, 0d}}, Shape.Matrix(3, 3)));
@@ -24,7 +24,7 @@ namespace NumSharp.UnitTest.Creation
         [Test]
         public void Case2()
         {
-            np.eye(3).Cast<double>().Count(i => i == 1).Should().Be(3);
+            np.eye(3).flat.Cast<double>().Count(i => i == 1).Should().Be(3);
             np.eye(3).Should()
                 .Be(new NDArray(new double[][] { new double[] { 1.0d, 0.0d, 0.0d }, new double[] { 0.0d, 1d, 0d }, new double[] { 0d, 0d, 1d } }, Shape.Matrix(3, 3)));
 
@@ -32,12 +32,12 @@ namespace NumSharp.UnitTest.Creation
         [Test]
         public void Case3()
         {
-            np.eye(10, k: -6).Cast<double>().Count(i=>i==1).Should().Be(4);
+            np.eye(10, k: -6).flat.Cast<double>().Count(i=>i==1).Should().Be(4);
         }        
         [Test]
         public void Case4()
         {
-            np.eye(10, k: -6).Cast<double>().Count(i=>i==1).Should().Be(4);
+            np.eye(10, k: -6).flat.Cast<double>().Count(i=>i==1).Should().Be(4);
         }
 
 

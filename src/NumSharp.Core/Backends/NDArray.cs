@@ -493,11 +493,30 @@ namespace NumSharp
         /// <returns>Cloned NDArray</returns>
         public NDArray Clone() => new NDArray(this.Storage.Clone()) {tensorEngine = TensorEngine};
 
+        /// <summary>
+        /// Returns an enumerator that iterates along the first axis.
+        /// </summary>
+        /// <remarks>
+        /// NumPy-compatible iteration behavior:
+        /// - 0-D arrays (scalars): throws TypeError
+        /// - 1-D arrays: yields scalar elements
+        /// - N-D arrays (N > 1): yields (N-1)-D NDArray slices along first axis
+        /// </remarks>
         public IEnumerator GetEnumerator()
         {
+            // Empty array: no iterations
             if (Array == null || Shape.IsEmpty || Shape.size == 0)
                 return _empty().GetEnumerator();
 
+            // 0-D scalar: not iterable (matches NumPy)
+            if (ndim == 0)
+                throw new TypeError("iteration over a 0-d array");
+
+            // N-D arrays (N > 1): iterate over slices along first axis
+            if (ndim > 1)
+                return _iterSlices().GetEnumerator();
+
+            // 1-D arrays: iterate over scalar elements
 #if _REGEN
             #region Compute
 		    switch (GetTypeCode)
@@ -538,6 +557,17 @@ namespace NumSharp
             IEnumerable _empty()
             {
                 yield break;
+            }
+
+            IEnumerable _iterSlices()
+            {
+                // Iterate over slices along first axis
+                // For a (3, 4, 5) array, yields 3 slices of shape (4, 5)
+                var len = shape[0];
+                for (int i = 0; i < len; i++)
+                {
+                    yield return this[i];
+                }
             }
         }
 
