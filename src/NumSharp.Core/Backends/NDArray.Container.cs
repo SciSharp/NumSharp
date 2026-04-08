@@ -35,13 +35,22 @@ namespace NumSharp
             if (value is null)
                 return false;
 
-            // Convert value to NDArray for comparison
-            var scalar = np.asanyarray(value);
+            try
+            {
+                // Convert value to NDArray for comparison
+                var scalar = np.asanyarray(value);
 
-            // Use element-wise comparison and check if any match
-            // This handles type promotion and broadcasting correctly
-            var comparison = this == scalar;
-            return np.any(comparison);
+                // Use element-wise comparison and check if any match
+                // This handles type promotion and broadcasting correctly
+                var comparison = this == scalar;
+                return np.any(comparison);
+            }
+            catch
+            {
+                // If comparison fails (incompatible types, shape mismatch, etc.)
+                // return false like NumPy does
+                return false;
+            }
         }
 
         /// <summary>
