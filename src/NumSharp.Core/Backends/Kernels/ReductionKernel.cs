@@ -1,4 +1,5 @@
 using System;
+using NumSharp.Backends;
 
 namespace NumSharp.Backends.Kernels
 {
@@ -304,28 +305,7 @@ namespace NumSharp.Backends.Kernels
     /// </summary>
     public static class ReductionTypeExtensions
     {
-        /// <summary>
-        /// Get the default value (additive identity) for a type.
-        /// </summary>
-        public static object GetDefaultValue(this NPTypeCode type)
-        {
-            return type switch
-            {
-                NPTypeCode.Boolean => false,
-                NPTypeCode.Byte => (byte)0,
-                NPTypeCode.Int16 => (short)0,
-                NPTypeCode.UInt16 => (ushort)0,
-                NPTypeCode.Int32 => 0,
-                NPTypeCode.UInt32 => 0u,
-                NPTypeCode.Int64 => 0L,
-                NPTypeCode.UInt64 => 0UL,
-                NPTypeCode.Char => (char)0,
-                NPTypeCode.Single => 0f,
-                NPTypeCode.Double => 0d,
-                NPTypeCode.Decimal => 0m,
-                _ => throw new NotSupportedException($"Type {type} not supported")
-            };
-        }
+        // GetDefaultValue is defined in NPTypeCode.cs (NumSharp.Backends namespace)
 
         /// <summary>
         /// Get the multiplicative identity (1) for a type.
