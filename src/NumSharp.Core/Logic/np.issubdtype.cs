@@ -82,6 +82,31 @@ namespace NumSharp
             return issubdtype(arg1.GetTypeCode(), arg2);
         }
 
+        /// <summary>
+        /// Returns True if first argument is a typecode lower/equal in type hierarchy.
+        /// </summary>
+        /// <param name="arr">NDArray - array whose dtype to check.</param>
+        /// <param name="arg2">string - string representing a typecode category.</param>
+        /// <returns>True if array's dtype is a subtype of arg2 category.</returns>
+        /// <exception cref="ArgumentNullException">Thrown if arr is null.</exception>
+        public static bool issubdtype(NDArray arr, string arg2)
+        {
+            if (arr is null)
+                throw new ArgumentNullException(nameof(arr));
+            return issubdtype(arr.GetTypeCode, arg2);
+        }
+
+        /// <summary>
+        /// Returns True if first argument is a typecode lower/equal in type hierarchy.
+        /// </summary>
+        /// <param name="arg1">Type - first CLR type.</param>
+        /// <param name="arg2">Type - second CLR type to compare against.</param>
+        /// <returns>True if arg1 is equal to or a subtype of arg2.</returns>
+        public static bool issubdtype(Type arg1, Type arg2)
+        {
+            return issubdtype(arg1.GetTypeCode(), arg2.GetTypeCode());
+        }
+
         // Helper methods for type categorization
 
         /// <summary>

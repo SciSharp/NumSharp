@@ -138,5 +138,57 @@ namespace NumSharp
         /// <param name="type">A CLR integer type.</param>
         /// <returns>An iinfo object describing the integer type limits.</returns>
         public static iinfo iinfo(Type type) => new iinfo(type);
+
+        /// <summary>
+        /// Machine limits for integer types.
+        /// </summary>
+        /// <typeparam name="T">An integer type (bool, byte, short, ushort, int, uint, long, ulong, char).</typeparam>
+        /// <returns>An iinfo object describing the integer type limits.</returns>
+        /// <example>
+        /// <code>
+        /// var info = np.iinfo&lt;int&gt;();
+        /// Console.WriteLine(info.bits);  // 32
+        /// </code>
+        /// </example>
+        public static iinfo iinfo<T>() where T : struct => new iinfo(typeof(T));
+
+        /// <summary>
+        /// Machine limits for integer types.
+        /// </summary>
+        /// <param name="arr">An NDArray with integer dtype.</param>
+        /// <returns>An iinfo object describing the array's integer type limits.</returns>
+        /// <exception cref="ArgumentNullException">Thrown if arr is null.</exception>
+        /// <example>
+        /// <code>
+        /// var a = np.array(new int[] {1, 2, 3});
+        /// var info = np.iinfo(a);
+        /// Console.WriteLine(info.bits);  // 32
+        /// </code>
+        /// </example>
+        public static iinfo iinfo(NDArray arr)
+        {
+            if (arr is null)
+                throw new ArgumentNullException(nameof(arr));
+            return new iinfo(arr.GetTypeCode);
+        }
+
+        /// <summary>
+        /// Machine limits for integer types.
+        /// </summary>
+        /// <param name="dtypeName">A dtype string (e.g., "int32", "uint8", "bool").</param>
+        /// <returns>An iinfo object describing the integer type limits.</returns>
+        /// <exception cref="ArgumentException">Thrown if dtypeName is not a valid integer dtype.</exception>
+        /// <example>
+        /// <code>
+        /// var info = np.iinfo("int32");
+        /// Console.WriteLine(info.bits);  // 32
+        /// </code>
+        /// </example>
+        public static iinfo iinfo(string dtypeName)
+        {
+            if (string.IsNullOrEmpty(dtypeName))
+                throw new ArgumentException("dtype name cannot be null or empty", nameof(dtypeName));
+            return new iinfo(dtype(dtypeName).typecode);
+        }
     }
 }

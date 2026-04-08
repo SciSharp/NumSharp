@@ -346,6 +346,7 @@ dotnet build -v q --nologo "-clp:NoSummary;ErrorsOnly" -p:WarningLevel=0
 ### Running Tests
 
 Tests use **TUnit** framework with source-generated test discovery.
+- `dotnet_test_tunit --filter "..."`: MSTest-style filter for TUnit (Category=, Name~, ClassName~, FullyQualifiedName~)
 
 ```bash
 # Run from test directory

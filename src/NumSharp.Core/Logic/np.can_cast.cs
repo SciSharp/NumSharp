@@ -92,6 +92,107 @@ namespace NumSharp
         }
 
         /// <summary>
+        /// Returns True if the byte value can be cast to the data type according to the casting rule.
+        /// </summary>
+        public static bool can_cast(byte value, NPTypeCode to, string casting = "safe")
+        {
+            if (casting.ToLowerInvariant() == "unsafe")
+                return true;
+            return ValueFitsInType(value, to);
+        }
+
+        /// <summary>
+        /// Returns True if the short value can be cast to the data type according to the casting rule.
+        /// </summary>
+        public static bool can_cast(short value, NPTypeCode to, string casting = "safe")
+        {
+            if (casting.ToLowerInvariant() == "unsafe")
+                return true;
+            return ValueFitsInType(value, to);
+        }
+
+        /// <summary>
+        /// Returns True if the ushort value can be cast to the data type according to the casting rule.
+        /// </summary>
+        public static bool can_cast(ushort value, NPTypeCode to, string casting = "safe")
+        {
+            if (casting.ToLowerInvariant() == "unsafe")
+                return true;
+            return ValueFitsInType(value, to);
+        }
+
+        /// <summary>
+        /// Returns True if the uint value can be cast to the data type according to the casting rule.
+        /// </summary>
+        public static bool can_cast(uint value, NPTypeCode to, string casting = "safe")
+        {
+            if (casting.ToLowerInvariant() == "unsafe")
+                return true;
+            return ValueFitsInType(value, to);
+        }
+
+        /// <summary>
+        /// Returns True if the ulong value can be cast to the data type according to the casting rule.
+        /// </summary>
+        public static bool can_cast(ulong value, NPTypeCode to, string casting = "safe")
+        {
+            if (casting.ToLowerInvariant() == "unsafe")
+                return true;
+            return ValueFitsInType(value, to);
+        }
+
+        /// <summary>
+        /// Returns True if the float value can be cast to the data type according to the casting rule.
+        /// </summary>
+        public static bool can_cast(float value, NPTypeCode to, string casting = "safe")
+        {
+            if (casting.ToLowerInvariant() == "unsafe")
+                return true;
+            return ValueFitsInType(value, to);
+        }
+
+        /// <summary>
+        /// Returns True if the decimal value can be cast to the data type according to the casting rule.
+        /// </summary>
+        public static bool can_cast(decimal value, NPTypeCode to, string casting = "safe")
+        {
+            if (casting.ToLowerInvariant() == "unsafe")
+                return true;
+            return ValueFitsInType(value, to);
+        }
+
+        /// <summary>
+        /// Returns True if the bool value can be cast to the data type according to the casting rule.
+        /// </summary>
+        public static bool can_cast(bool value, NPTypeCode to, string casting = "safe")
+        {
+            if (casting.ToLowerInvariant() == "unsafe")
+                return true;
+            return ValueFitsInType(value, to);
+        }
+
+        /// <summary>
+        /// Returns True if cast between data types can occur according to the casting rule.
+        /// </summary>
+        /// <typeparam name="TFrom">Source type.</typeparam>
+        /// <typeparam name="TTo">Target type.</typeparam>
+        /// <param name="casting">Controls what kind of data casting may occur.</param>
+        /// <returns>True if cast can occur according to the casting rule.</returns>
+        /// <example>
+        /// <code>
+        /// np.can_cast&lt;int, long&gt;()           // True
+        /// np.can_cast&lt;long, int&gt;()           // False
+        /// np.can_cast&lt;int, float&gt;("safe")    // True (int to float is safe)
+        /// </code>
+        /// </example>
+        public static bool can_cast<TFrom, TTo>(string casting = "safe")
+            where TFrom : struct
+            where TTo : struct
+        {
+            return can_cast(typeof(TFrom).GetTypeCode(), typeof(TTo).GetTypeCode(), casting);
+        }
+
+        /// <summary>
         /// Returns True if the scalar value can be cast to the data type according to the casting rule.
         /// </summary>
         /// <param name="value">Scalar value to check.</param>

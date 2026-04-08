@@ -44,5 +44,25 @@ namespace NumSharp
         {
             return promote_types(type1.GetTypeCode(), type2.GetTypeCode());
         }
+
+        /// <summary>
+        /// Returns the data type with the smallest size and smallest scalar kind to which
+        /// both T1 and T2 can be safely cast.
+        /// </summary>
+        /// <typeparam name="T1">First type.</typeparam>
+        /// <typeparam name="T2">Second type.</typeparam>
+        /// <returns>The promoted type as NPTypeCode.</returns>
+        /// <example>
+        /// <code>
+        /// np.promote_types&lt;int, long&gt;()      // Int64
+        /// np.promote_types&lt;float, double&gt;()  // Double
+        /// </code>
+        /// </example>
+        public static NPTypeCode promote_types<T1, T2>()
+            where T1 : struct
+            where T2 : struct
+        {
+            return promote_types(typeof(T1).GetTypeCode(), typeof(T2).GetTypeCode());
+        }
     }
 }

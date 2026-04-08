@@ -27,9 +27,14 @@ namespace NumSharp
             return rep switch
             {
                 NPTypeCode tc => tc != NPTypeCode.Empty && tc != NPTypeCode.String,
-                Type t => t.GetTypeCode() != NPTypeCode.Empty,
+                Type t => IsValidScalarType(t.GetTypeCode()),
                 _ => false
             };
+        }
+
+        private static bool IsValidScalarType(NPTypeCode tc)
+        {
+            return tc != NPTypeCode.Empty && tc != NPTypeCode.String;
         }
 
         /// <summary>
@@ -83,6 +88,56 @@ namespace NumSharp
                     return true;
             }
             return false;
+        }
+
+        /// <summary>
+        /// Returns True if the CLR type is of a specified category.
+        /// </summary>
+        /// <param name="type">The CLR type to check.</param>
+        /// <param name="kind">The dtype category.</param>
+        /// <returns>True if type belongs to the specified category.</returns>
+        public static bool isdtype(Type type, string kind)
+        {
+            return isdtype(type.GetTypeCode(), kind);
+        }
+
+        /// <summary>
+        /// Returns True if the CLR type is of any of the specified categories.
+        /// </summary>
+        /// <param name="type">The CLR type to check.</param>
+        /// <param name="kinds">Array of dtype categories to check.</param>
+        /// <returns>True if type belongs to any of the specified categories.</returns>
+        public static bool isdtype(Type type, string[] kinds)
+        {
+            return isdtype(type.GetTypeCode(), kinds);
+        }
+
+        /// <summary>
+        /// Returns True if the array's dtype is of a specified category.
+        /// </summary>
+        /// <param name="arr">The NDArray to check.</param>
+        /// <param name="kind">The dtype category.</param>
+        /// <returns>True if array's dtype belongs to the specified category.</returns>
+        /// <exception cref="ArgumentNullException">Thrown if arr is null.</exception>
+        public static bool isdtype(NDArray arr, string kind)
+        {
+            if (arr is null)
+                throw new ArgumentNullException(nameof(arr));
+            return isdtype(arr.GetTypeCode, kind);
+        }
+
+        /// <summary>
+        /// Returns True if the array's dtype is of any of the specified categories.
+        /// </summary>
+        /// <param name="arr">The NDArray to check.</param>
+        /// <param name="kinds">Array of dtype categories to check.</param>
+        /// <returns>True if array's dtype belongs to any of the specified categories.</returns>
+        /// <exception cref="ArgumentNullException">Thrown if arr is null.</exception>
+        public static bool isdtype(NDArray arr, string[] kinds)
+        {
+            if (arr is null)
+                throw new ArgumentNullException(nameof(arr));
+            return isdtype(arr.GetTypeCode, kinds);
         }
 
         /// <summary>

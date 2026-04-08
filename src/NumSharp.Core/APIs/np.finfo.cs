@@ -94,9 +94,10 @@ namespace NumSharp
                 case NPTypeCode.Single:
                     bits = 32;
                     // float.Epsilon is the smallest subnormal
-                    // Machine epsilon for float: Math.BitIncrement(1.0f) - 1.0f ≈ 1.1920929e-07
-                    eps = Math.BitIncrement(1.0f) - 1.0f;
-                    epsneg = 1.0f - Math.BitDecrement(1.0f);
+                    // Machine epsilon for float: MathF.BitIncrement(1.0f) - 1.0f ≈ 1.1920929e-07
+                    // Note: Must use MathF, not Math (which only works on double)
+                    eps = MathF.BitIncrement(1.0f) - 1.0f;
+                    epsneg = 1.0f - MathF.BitDecrement(1.0f);
                     max = float.MaxValue;
                     min = -float.MaxValue;
                     smallest_normal = 1.175494351e-38;  // 2^-126
@@ -198,5 +199,57 @@ namespace NumSharp
         /// <param name="type">A CLR floating point type.</param>
         /// <returns>An finfo object describing the floating point type limits.</returns>
         public static finfo finfo(Type type) => new finfo(type);
+
+        /// <summary>
+        /// Machine limits for floating point types.
+        /// </summary>
+        /// <typeparam name="T">A floating point type (float, double, decimal).</typeparam>
+        /// <returns>An finfo object describing the floating point type limits.</returns>
+        /// <example>
+        /// <code>
+        /// var info = np.finfo&lt;double&gt;();
+        /// Console.WriteLine(info.bits);  // 64
+        /// </code>
+        /// </example>
+        public static finfo finfo<T>() where T : struct => new finfo(typeof(T));
+
+        /// <summary>
+        /// Machine limits for floating point types.
+        /// </summary>
+        /// <param name="arr">An NDArray with floating point dtype.</param>
+        /// <returns>An finfo object describing the array's floating point type limits.</returns>
+        /// <exception cref="ArgumentNullException">Thrown if arr is null.</exception>
+        /// <example>
+        /// <code>
+        /// var a = np.array(new double[] {1.0, 2.0, 3.0});
+        /// var info = np.finfo(a);
+        /// Console.WriteLine(info.bits);  // 64
+        /// </code>
+        /// </example>
+        public static finfo finfo(NDArray arr)
+        {
+            if (arr is null)
+                throw new ArgumentNullException(nameof(arr));
+            return new finfo(arr.GetTypeCode);
+        }
+
+        /// <summary>
+        /// Machine limits for floating point types.
+        /// </summary>
+        /// <param name="dtypeName">A dtype string (e.g., "float32", "float64", "double").</param>
+        /// <returns>An finfo object describing the floating point type limits.</returns>
+        /// <exception cref="ArgumentException">Thrown if dtypeName is not a valid floating point dtype.</exception>
+        /// <example>
+        /// <code>
+        /// var info = np.finfo("float64");
+        /// Console.WriteLine(info.bits);  // 64
+        /// </code>
+        /// </example>
+        public static finfo finfo(string dtypeName)
+        {
+            if (string.IsNullOrEmpty(dtypeName))
+                throw new ArgumentException("dtype name cannot be null or empty", nameof(dtypeName));
+            return new finfo(dtype(dtypeName).typecode);
+        }
     }
 }
