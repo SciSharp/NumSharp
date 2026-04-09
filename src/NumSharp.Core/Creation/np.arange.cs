@@ -1,6 +1,5 @@
 using System;
 using NumSharp.Backends;
-using NumSharp.Utilities;
 
 namespace NumSharp
 {
@@ -66,65 +65,196 @@ namespace NumSharp
 
             var nd = new NDArray(dtype, Shape.Vector(length), false);
 
-            // Fill the array based on dtype
-            switch (dtype)
+            // Fill the array based on dtype - inlined loops for zero delegate overhead (matches NumPy's template approach)
+            unsafe
             {
-                case NPTypeCode.Boolean:
-                    FillArange<bool>(nd, start, step, length, negativeStep, v => v != 0);
-                    break;
-                case NPTypeCode.Byte:
-                    FillArange<byte>(nd, start, step, length, negativeStep, Converts.ToByte);
-                    break;
-                case NPTypeCode.Int16:
-                    FillArange<short>(nd, start, step, length, negativeStep, Converts.ToInt16);
-                    break;
-                case NPTypeCode.UInt16:
-                    FillArange<ushort>(nd, start, step, length, negativeStep, Converts.ToUInt16);
-                    break;
-                case NPTypeCode.Int32:
-                    FillArange<int>(nd, start, step, length, negativeStep, Converts.ToInt32);
-                    break;
-                case NPTypeCode.UInt32:
-                    FillArange<uint>(nd, start, step, length, negativeStep, Converts.ToUInt32);
-                    break;
-                case NPTypeCode.Int64:
-                    FillArange<long>(nd, start, step, length, negativeStep, Converts.ToInt64);
-                    break;
-                case NPTypeCode.UInt64:
-                    FillArange<ulong>(nd, start, step, length, negativeStep, Converts.ToUInt64);
-                    break;
-                case NPTypeCode.Char:
-                    FillArange<char>(nd, start, step, length, negativeStep, Converts.ToChar);
-                    break;
-                case NPTypeCode.Single:
-                    FillArange<float>(nd, start, step, length, negativeStep, Converts.ToSingle);
-                    break;
-                case NPTypeCode.Double:
-                    FillArange<double>(nd, start, step, length, negativeStep, Converts.ToDouble);
-                    break;
-                case NPTypeCode.Decimal:
-                    FillArange<decimal>(nd, start, step, length, negativeStep, Converts.ToDecimal);
-                    break;
-                default:
-                    throw new NotSupportedException($"dtype {dtype} is not supported");
+                if (negativeStep)
+                {
+                    switch (dtype)
+                    {
+                        case NPTypeCode.Boolean:
+                        {
+                            var addr = (bool*)nd.Array.Address;
+                            for (long add = length - 1, i = 0; add >= 0; add--, i++)
+                                addr[i] = (1 + start + add * step) != 0;
+                            break;
+                        }
+                        case NPTypeCode.Byte:
+                        {
+                            var addr = (byte*)nd.Array.Address;
+                            for (long add = length - 1, i = 0; add >= 0; add--, i++)
+                                addr[i] = (byte)(1 + start + add * step);
+                            break;
+                        }
+                        case NPTypeCode.Int16:
+                        {
+                            var addr = (short*)nd.Array.Address;
+                            for (long add = length - 1, i = 0; add >= 0; add--, i++)
+                                addr[i] = (short)(1 + start + add * step);
+                            break;
+                        }
+                        case NPTypeCode.UInt16:
+                        {
+                            var addr = (ushort*)nd.Array.Address;
+                            for (long add = length - 1, i = 0; add >= 0; add--, i++)
+                                addr[i] = (ushort)(1 + start + add * step);
+                            break;
+                        }
+                        case NPTypeCode.Int32:
+                        {
+                            var addr = (int*)nd.Array.Address;
+                            for (long add = length - 1, i = 0; add >= 0; add--, i++)
+                                addr[i] = (int)(1 + start + add * step);
+                            break;
+                        }
+                        case NPTypeCode.UInt32:
+                        {
+                            var addr = (uint*)nd.Array.Address;
+                            for (long add = length - 1, i = 0; add >= 0; add--, i++)
+                                addr[i] = (uint)(1 + start + add * step);
+                            break;
+                        }
+                        case NPTypeCode.Int64:
+                        {
+                            var addr = (long*)nd.Array.Address;
+                            for (long add = length - 1, i = 0; add >= 0; add--, i++)
+                                addr[i] = (long)(1 + start + add * step);
+                            break;
+                        }
+                        case NPTypeCode.UInt64:
+                        {
+                            var addr = (ulong*)nd.Array.Address;
+                            for (long add = length - 1, i = 0; add >= 0; add--, i++)
+                                addr[i] = (ulong)(1 + start + add * step);
+                            break;
+                        }
+                        case NPTypeCode.Char:
+                        {
+                            var addr = (char*)nd.Array.Address;
+                            for (long add = length - 1, i = 0; add >= 0; add--, i++)
+                                addr[i] = (char)(1 + start + add * step);
+                            break;
+                        }
+                        case NPTypeCode.Single:
+                        {
+                            var addr = (float*)nd.Array.Address;
+                            for (long add = length - 1, i = 0; add >= 0; add--, i++)
+                                addr[i] = (float)(1 + start + add * step);
+                            break;
+                        }
+                        case NPTypeCode.Double:
+                        {
+                            var addr = (double*)nd.Array.Address;
+                            for (long add = length - 1, i = 0; add >= 0; add--, i++)
+                                addr[i] = 1 + start + add * step;
+                            break;
+                        }
+                        case NPTypeCode.Decimal:
+                        {
+                            var addr = (decimal*)nd.Array.Address;
+                            for (long add = length - 1, i = 0; add >= 0; add--, i++)
+                                addr[i] = (decimal)(1 + start + add * step);
+                            break;
+                        }
+                        default:
+                            throw new NotSupportedException($"dtype {dtype} is not supported");
+                    }
+                }
+                else
+                {
+                    switch (dtype)
+                    {
+                        case NPTypeCode.Boolean:
+                        {
+                            var addr = (bool*)nd.Array.Address;
+                            for (long i = 0; i < length; i++)
+                                addr[i] = (start + i * step) != 0;
+                            break;
+                        }
+                        case NPTypeCode.Byte:
+                        {
+                            var addr = (byte*)nd.Array.Address;
+                            for (long i = 0; i < length; i++)
+                                addr[i] = (byte)(start + i * step);
+                            break;
+                        }
+                        case NPTypeCode.Int16:
+                        {
+                            var addr = (short*)nd.Array.Address;
+                            for (long i = 0; i < length; i++)
+                                addr[i] = (short)(start + i * step);
+                            break;
+                        }
+                        case NPTypeCode.UInt16:
+                        {
+                            var addr = (ushort*)nd.Array.Address;
+                            for (long i = 0; i < length; i++)
+                                addr[i] = (ushort)(start + i * step);
+                            break;
+                        }
+                        case NPTypeCode.Int32:
+                        {
+                            var addr = (int*)nd.Array.Address;
+                            for (long i = 0; i < length; i++)
+                                addr[i] = (int)(start + i * step);
+                            break;
+                        }
+                        case NPTypeCode.UInt32:
+                        {
+                            var addr = (uint*)nd.Array.Address;
+                            for (long i = 0; i < length; i++)
+                                addr[i] = (uint)(start + i * step);
+                            break;
+                        }
+                        case NPTypeCode.Int64:
+                        {
+                            var addr = (long*)nd.Array.Address;
+                            for (long i = 0; i < length; i++)
+                                addr[i] = (long)(start + i * step);
+                            break;
+                        }
+                        case NPTypeCode.UInt64:
+                        {
+                            var addr = (ulong*)nd.Array.Address;
+                            for (long i = 0; i < length; i++)
+                                addr[i] = (ulong)(start + i * step);
+                            break;
+                        }
+                        case NPTypeCode.Char:
+                        {
+                            var addr = (char*)nd.Array.Address;
+                            for (long i = 0; i < length; i++)
+                                addr[i] = (char)(start + i * step);
+                            break;
+                        }
+                        case NPTypeCode.Single:
+                        {
+                            var addr = (float*)nd.Array.Address;
+                            for (long i = 0; i < length; i++)
+                                addr[i] = (float)(start + i * step);
+                            break;
+                        }
+                        case NPTypeCode.Double:
+                        {
+                            var addr = (double*)nd.Array.Address;
+                            for (long i = 0; i < length; i++)
+                                addr[i] = start + i * step;
+                            break;
+                        }
+                        case NPTypeCode.Decimal:
+                        {
+                            var addr = (decimal*)nd.Array.Address;
+                            for (long i = 0; i < length; i++)
+                                addr[i] = (decimal)(start + i * step);
+                            break;
+                        }
+                        default:
+                            throw new NotSupportedException($"dtype {dtype} is not supported");
+                    }
+                }
             }
 
             return nd;
-        }
-
-        private static unsafe void FillArange<T>(NDArray nd, double start, double step, long length, bool negativeStep, Func<double, T> convert) where T : unmanaged
-        {
-            var addr = (T*)nd.Array.Address;
-            if (negativeStep)
-            {
-                for (long add = length - 1, i = 0; add >= 0; add--, i++)
-                    addr[i] = convert(1 + start + add * step);
-            }
-            else
-            {
-                for (long i = 0; i < length; i++)
-                    addr[i] = convert(start + i * step);
-            }
         }
 
         #endregion
