@@ -4,6 +4,8 @@
   href: intro.md
 - name: Broadcasting
   href: broadcasting.md
+- name: Buffering & Memory
+  href: buffering.md
 - name: NumPy Compliance & Compatibility
   href: compliance.md
 - name: Array API Standard
