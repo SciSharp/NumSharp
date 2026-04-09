@@ -30,10 +30,20 @@ namespace NumSharp
             {
                 throw new ArgumentNullException(nameof(nd), "Can't operate with null array");
             }
+
+            // Handle 0D arrays specially - NumPy 2.x allows axis=0 or axis=-1 on 0D arrays
             if (nd.ndim == 0)
             {
-                throw new ArgumentException("Can't operate with zero-dimensional array");
+                if (axis == 0 || axis == -1)
+                {
+                    // Return the scalar result as a 0D boolean array
+                    bool result = nd.TensorEngine.All(nd);
+                    return np.array(result).MakeGeneric<bool>();
+                }
+                throw new ArgumentOutOfRangeException(nameof(axis),
+                    $"axis {axis} is out of bounds for array of dimension 0");
             }
+
             if (axis < 0)
                 axis = nd.ndim + axis;
             if (axis < 0 || axis >= nd.ndim)
