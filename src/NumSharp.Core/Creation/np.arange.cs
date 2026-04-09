@@ -63,8 +63,17 @@ namespace NumSharp
 
             var nd = new NDArray(dtype, Shape.Vector(length), false);
 
-            // Fill the array: values[i] = start + i * step
-            // This works for both positive and negative step (NumPy's approach)
+            // NumPy's fill algorithm:
+            // 1. Cast start to target dtype: start_t
+            // 2. Cast (start + step) to target dtype: next_t
+            // 3. Compute delta in target dtype: delta_t = next_t - start_t
+            // 4. Fill: buffer[i] = start_t + i * delta_t
+            //
+            // This is why arange(0, 5, 0.5, int32) returns [0,0,0,0,0,0,0,0,0,0]:
+            //   start_t = 0, next_t = int(0.5) = 0, delta_t = 0
+            //
+            // And arange(5, 0, -0.5, int32) returns [5,4,3,2,1,0,-1,-2,-3,-4]:
+            //   start_t = 5, next_t = int(4.5) = 4, delta_t = -1
             unsafe
             {
                 switch (dtype)
@@ -72,66 +81,86 @@ namespace NumSharp
                     case NPTypeCode.Boolean:
                     {
                         var addr = (bool*)nd.Unsafe.Address;
+                        bool start_t = start != 0;
+                        bool next_t = (start + step) != 0;
+                        // For bool, delta doesn't make sense, just alternate
                         for (long i = 0; i < length; i++)
-                            addr[i] = (start + i * step) != 0;
+                            addr[i] = (i % 2 == 0) ? start_t : next_t;
                         break;
                     }
                     case NPTypeCode.Byte:
                     {
                         var addr = (byte*)nd.Unsafe.Address;
+                        byte start_t = (byte)start;
+                        byte delta_t = (byte)((byte)(start + step) - start_t);
                         for (long i = 0; i < length; i++)
-                            addr[i] = (byte)(start + i * step);
+                            addr[i] = (byte)(start_t + i * delta_t);
                         break;
                     }
                     case NPTypeCode.Int16:
                     {
                         var addr = (short*)nd.Unsafe.Address;
+                        short start_t = (short)start;
+                        short delta_t = (short)((short)(start + step) - start_t);
                         for (long i = 0; i < length; i++)
-                            addr[i] = (short)(start + i * step);
+                            addr[i] = (short)(start_t + i * delta_t);
                         break;
                     }
                     case NPTypeCode.UInt16:
                     {
                         var addr = (ushort*)nd.Unsafe.Address;
+                        ushort start_t = (ushort)start;
+                        ushort delta_t = (ushort)((ushort)(start + step) - start_t);
                         for (long i = 0; i < length; i++)
-                            addr[i] = (ushort)(start + i * step);
+                            addr[i] = (ushort)(start_t + i * delta_t);
                         break;
                     }
                     case NPTypeCode.Int32:
                     {
                         var addr = (int*)nd.Unsafe.Address;
+                        int start_t = (int)start;
+                        int delta_t = (int)(start + step) - start_t;
                         for (long i = 0; i < length; i++)
-                            addr[i] = (int)(start + i * step);
+                            addr[i] = (int)(start_t + i * delta_t);
                         break;
                     }
                     case NPTypeCode.UInt32:
                     {
                         var addr = (uint*)nd.Unsafe.Address;
+                        uint start_t = (uint)start;
+                        uint delta_t = (uint)((uint)(start + step) - start_t);
                         for (long i = 0; i < length; i++)
-                            addr[i] = (uint)(start + i * step);
+                            addr[i] = (uint)(start_t + i * delta_t);
                         break;
                     }
                     case NPTypeCode.Int64:
                     {
                         var addr = (long*)nd.Unsafe.Address;
+                        long start_t = (long)start;
+                        long delta_t = (long)(start + step) - start_t;
                         for (long i = 0; i < length; i++)
-                            addr[i] = (long)(start + i * step);
+                            addr[i] = start_t + i * delta_t;
                         break;
                     }
                     case NPTypeCode.UInt64:
                     {
                         var addr = (ulong*)nd.Unsafe.Address;
+                        ulong start_t = (ulong)start;
+                        ulong delta_t = (ulong)(start + step) - start_t;
                         for (long i = 0; i < length; i++)
-                            addr[i] = (ulong)(start + i * step);
+                            addr[i] = start_t + (ulong)i * delta_t;
                         break;
                     }
                     case NPTypeCode.Char:
                     {
                         var addr = (char*)nd.Unsafe.Address;
+                        char start_t = (char)start;
+                        int delta_t = (char)(start + step) - start_t;
                         for (long i = 0; i < length; i++)
-                            addr[i] = (char)(start + i * step);
+                            addr[i] = (char)(start_t + i * delta_t);
                         break;
                     }
+                    // Float types use direct calculation (no integer truncation)
                     case NPTypeCode.Single:
                     {
                         var addr = (float*)nd.Unsafe.Address;

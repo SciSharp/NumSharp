@@ -611,4 +611,97 @@ public class ArangeBattleTests
     }
 
     #endregion
+
+    #region Fractional Step with Integer dtype (NumPy uses integer arithmetic)
+
+    /// <summary>
+    /// NumPy calculates delta in target dtype: delta = int(start+step) - int(start).
+    /// For arange(0, 5, 0.5, int32): delta = int(0.5) - int(0) = 0, so all values are 0.
+    /// </summary>
+    [Test]
+    public async Task Arange_FractionalStep_IntDtype_ZeroDelta()
+    {
+        // np.arange(0, 5, 0.5, dtype=np.int32) → [0,0,0,0,0,0,0,0,0,0]
+        // NumPy: int(0)=0, int(0+0.5)=0, delta=0, all values=0
+        var result = np.arange(0, 5, 0.5, typeof(int));
+
+        await Assert.That(result.dtype).IsEqualTo(typeof(int));
+        await Assert.That(result.size).IsEqualTo(10);
+        // NumPy returns all zeros because delta=0
+        result.Should().BeOfValues(0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+    }
+
+    /// <summary>
+    /// For arange(5, 0, -0.5, int32): delta = int(4.5) - int(5) = 4 - 5 = -1.
+    /// Values decrement by 1, not by 0.5.
+    /// </summary>
+    [Test]
+    public async Task Arange_FractionalNegativeStep_IntDtype_IntegerDelta()
+    {
+        // np.arange(5, 0, -0.5, dtype=np.int32) → [5,4,3,2,1,0,-1,-2,-3,-4]
+        // NumPy: int(5)=5, int(5-0.5)=4, delta=-1
+        var result = np.arange(5, 0, -0.5, typeof(int));
+
+        await Assert.That(result.dtype).IsEqualTo(typeof(int));
+        await Assert.That(result.size).IsEqualTo(10);
+        // NumPy decrements by 1 (the integer delta), not by 0.5
+        result.Should().BeOfValues(5, 4, 3, 2, 1, 0, -1, -2, -3, -4);
+    }
+
+    /// <summary>
+    /// For arange(0, 5, 0.7, int32): delta = int(0.7) - int(0) = 0.
+    /// </summary>
+    [Test]
+    public async Task Arange_FractionalStep_0_7_IntDtype()
+    {
+        // np.arange(0, 5, 0.7, dtype=np.int32) → [0,0,0,0,0,0,0,0]
+        var result = np.arange(0, 5, 0.7, typeof(int));
+
+        await Assert.That(result.dtype).IsEqualTo(typeof(int));
+        await Assert.That(result.size).IsEqualTo(8);
+        result.Should().BeOfValues(0, 0, 0, 0, 0, 0, 0, 0);
+    }
+
+    /// <summary>
+    /// For arange(5, 0, -0.7, int32): delta = int(4.3) - int(5) = 4 - 5 = -1.
+    /// </summary>
+    [Test]
+    public async Task Arange_FractionalNegativeStep_0_7_IntDtype()
+    {
+        // np.arange(5, 0, -0.7, dtype=np.int32) → [5,4,3,2,1,0,-1,-2]
+        var result = np.arange(5, 0, -0.7, typeof(int));
+
+        await Assert.That(result.dtype).IsEqualTo(typeof(int));
+        await Assert.That(result.size).IsEqualTo(8);
+        result.Should().BeOfValues(5, 4, 3, 2, 1, 0, -1, -2);
+    }
+
+    /// <summary>
+    /// Float start with integer step and int dtype works correctly.
+    /// </summary>
+    [Test]
+    public async Task Arange_FloatStart_IntStep_IntDtype()
+    {
+        // np.arange(0.5, 5.5, 1, dtype=np.int32) → [0,1,2,3,4]
+        // NumPy: int(0.5)=0, int(1.5)=1, delta=1
+        var result = np.arange(0.5, 5.5, 1, typeof(int));
+
+        await Assert.That(result.dtype).IsEqualTo(typeof(int));
+        result.Should().BeOfValues(0, 1, 2, 3, 4);
+    }
+
+    /// <summary>
+    /// Another float start case.
+    /// </summary>
+    [Test]
+    public async Task Arange_FloatStart_0_9_IntDtype()
+    {
+        // np.arange(0.9, 5.9, 1, dtype=np.int32) → [0,1,2,3,4]
+        var result = np.arange(0.9, 5.9, 1, typeof(int));
+
+        await Assert.That(result.dtype).IsEqualTo(typeof(int));
+        result.Should().BeOfValues(0, 1, 2, 3, 4);
+    }
+
+    #endregion
 }
