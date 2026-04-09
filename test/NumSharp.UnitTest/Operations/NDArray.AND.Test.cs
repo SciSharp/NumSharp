@@ -13,7 +13,6 @@ namespace NumSharp.UnitTest.Operations
     public class NDArrayAndTest
     {
         [Test]
-        [OpenBugs]
         public void BoolTwo1D_NDArrayAND()
         {
             var np1 = new NDArray(new[] {true, true, false, false}, new Shape(4));
@@ -25,7 +24,6 @@ namespace NumSharp.UnitTest.Operations
         }
 
         [Test]
-        [OpenBugs]
         public void BoolTwo2D_NDArrayAND()
         {
             var np1 = new NDArray(typeof(bool), new Shape(2, 3));
@@ -43,7 +41,6 @@ namespace NumSharp.UnitTest.Operations
         }
 
         [Test]
-        [OpenBugs]
         public void Byte1D_NDArrayAND()
         {
             var np1 = new NDArray(new[] {1, 2, 3, 4}, new Shape(4));

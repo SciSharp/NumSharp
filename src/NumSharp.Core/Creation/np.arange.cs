@@ -74,84 +74,84 @@ namespace NumSharp
                     {
                         case NPTypeCode.Boolean:
                         {
-                            var addr = (bool*)nd.Array.Address;
+                            var addr = (bool*)nd.Unsafe.Address;
                             for (long add = length - 1, i = 0; add >= 0; add--, i++)
                                 addr[i] = (1 + start + add * step) != 0;
                             break;
                         }
                         case NPTypeCode.Byte:
                         {
-                            var addr = (byte*)nd.Array.Address;
+                            var addr = (byte*)nd.Unsafe.Address;
                             for (long add = length - 1, i = 0; add >= 0; add--, i++)
                                 addr[i] = (byte)(1 + start + add * step);
                             break;
                         }
                         case NPTypeCode.Int16:
                         {
-                            var addr = (short*)nd.Array.Address;
+                            var addr = (short*)nd.Unsafe.Address;
                             for (long add = length - 1, i = 0; add >= 0; add--, i++)
                                 addr[i] = (short)(1 + start + add * step);
                             break;
                         }
                         case NPTypeCode.UInt16:
                         {
-                            var addr = (ushort*)nd.Array.Address;
+                            var addr = (ushort*)nd.Unsafe.Address;
                             for (long add = length - 1, i = 0; add >= 0; add--, i++)
                                 addr[i] = (ushort)(1 + start + add * step);
                             break;
                         }
                         case NPTypeCode.Int32:
                         {
-                            var addr = (int*)nd.Array.Address;
+                            var addr = (int*)nd.Unsafe.Address;
                             for (long add = length - 1, i = 0; add >= 0; add--, i++)
                                 addr[i] = (int)(1 + start + add * step);
                             break;
                         }
                         case NPTypeCode.UInt32:
                         {
-                            var addr = (uint*)nd.Array.Address;
+                            var addr = (uint*)nd.Unsafe.Address;
                             for (long add = length - 1, i = 0; add >= 0; add--, i++)
                                 addr[i] = (uint)(1 + start + add * step);
                             break;
                         }
                         case NPTypeCode.Int64:
                         {
-                            var addr = (long*)nd.Array.Address;
+                            var addr = (long*)nd.Unsafe.Address;
                             for (long add = length - 1, i = 0; add >= 0; add--, i++)
                                 addr[i] = (long)(1 + start + add * step);
                             break;
                         }
                         case NPTypeCode.UInt64:
                         {
-                            var addr = (ulong*)nd.Array.Address;
+                            var addr = (ulong*)nd.Unsafe.Address;
                             for (long add = length - 1, i = 0; add >= 0; add--, i++)
                                 addr[i] = (ulong)(1 + start + add * step);
                             break;
                         }
                         case NPTypeCode.Char:
                         {
-                            var addr = (char*)nd.Array.Address;
+                            var addr = (char*)nd.Unsafe.Address;
                             for (long add = length - 1, i = 0; add >= 0; add--, i++)
                                 addr[i] = (char)(1 + start + add * step);
                             break;
                         }
                         case NPTypeCode.Single:
                         {
-                            var addr = (float*)nd.Array.Address;
+                            var addr = (float*)nd.Unsafe.Address;
                             for (long add = length - 1, i = 0; add >= 0; add--, i++)
                                 addr[i] = (float)(1 + start + add * step);
                             break;
                         }
                         case NPTypeCode.Double:
                         {
-                            var addr = (double*)nd.Array.Address;
+                            var addr = (double*)nd.Unsafe.Address;
                             for (long add = length - 1, i = 0; add >= 0; add--, i++)
                                 addr[i] = 1 + start + add * step;
                             break;
                         }
                         case NPTypeCode.Decimal:
                         {
-                            var addr = (decimal*)nd.Array.Address;
+                            var addr = (decimal*)nd.Unsafe.Address;
                             for (long add = length - 1, i = 0; add >= 0; add--, i++)
                                 addr[i] = (decimal)(1 + start + add * step);
                             break;
@@ -166,84 +166,84 @@ namespace NumSharp
                     {
                         case NPTypeCode.Boolean:
                         {
-                            var addr = (bool*)nd.Array.Address;
+                            var addr = (bool*)nd.Unsafe.Address;
                             for (long i = 0; i < length; i++)
                                 addr[i] = (start + i * step) != 0;
                             break;
                         }
                         case NPTypeCode.Byte:
                         {
-                            var addr = (byte*)nd.Array.Address;
+                            var addr = (byte*)nd.Unsafe.Address;
                             for (long i = 0; i < length; i++)
                                 addr[i] = (byte)(start + i * step);
                             break;
                         }
                         case NPTypeCode.Int16:
                         {
-                            var addr = (short*)nd.Array.Address;
+                            var addr = (short*)nd.Unsafe.Address;
                             for (long i = 0; i < length; i++)
                                 addr[i] = (short)(start + i * step);
                             break;
                         }
                         case NPTypeCode.UInt16:
                         {
-                            var addr = (ushort*)nd.Array.Address;
+                            var addr = (ushort*)nd.Unsafe.Address;
                             for (long i = 0; i < length; i++)
                                 addr[i] = (ushort)(start + i * step);
                             break;
                         }
                         case NPTypeCode.Int32:
                         {
-                            var addr = (int*)nd.Array.Address;
+                            var addr = (int*)nd.Unsafe.Address;
                             for (long i = 0; i < length; i++)
                                 addr[i] = (int)(start + i * step);
                             break;
                         }
                         case NPTypeCode.UInt32:
                         {
-                            var addr = (uint*)nd.Array.Address;
+                            var addr = (uint*)nd.Unsafe.Address;
                             for (long i = 0; i < length; i++)
                                 addr[i] = (uint)(start + i * step);
                             break;
                         }
                         case NPTypeCode.Int64:
                         {
-                            var addr = (long*)nd.Array.Address;
+                            var addr = (long*)nd.Unsafe.Address;
                             for (long i = 0; i < length; i++)
                                 addr[i] = (long)(start + i * step);
                             break;
                         }
                         case NPTypeCode.UInt64:
                         {
-                            var addr = (ulong*)nd.Array.Address;
+                            var addr = (ulong*)nd.Unsafe.Address;
                             for (long i = 0; i < length; i++)
                                 addr[i] = (ulong)(start + i * step);
                             break;
                         }
                         case NPTypeCode.Char:
                         {
-                            var addr = (char*)nd.Array.Address;
+                            var addr = (char*)nd.Unsafe.Address;
                             for (long i = 0; i < length; i++)
                                 addr[i] = (char)(start + i * step);
                             break;
                         }
                         case NPTypeCode.Single:
                         {
-                            var addr = (float*)nd.Array.Address;
+                            var addr = (float*)nd.Unsafe.Address;
                             for (long i = 0; i < length; i++)
                                 addr[i] = (float)(start + i * step);
                             break;
                         }
                         case NPTypeCode.Double:
                         {
-                            var addr = (double*)nd.Array.Address;
+                            var addr = (double*)nd.Unsafe.Address;
                             for (long i = 0; i < length; i++)
                                 addr[i] = start + i * step;
                             break;
                         }
                         case NPTypeCode.Decimal:
                         {
-                            var addr = (decimal*)nd.Array.Address;
+                            var addr = (decimal*)nd.Unsafe.Address;
                             for (long i = 0; i < length; i++)
                                 addr[i] = (decimal)(start + i * step);
                             break;

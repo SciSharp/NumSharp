@@ -153,7 +153,6 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
         }
 
         [Test]
-        [OpenBugs]  // BUG: Axis reductions don't return Int64 for Int32 input yet (NEP50)
         public void Case2_Axis1()
         {
             var a = np.ones((2, 1, 3, 5, 1), np.int32);
@@ -176,7 +175,6 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
         }
 
         [Test]
-        [OpenBugs]  // BUG: Axis reductions don't return Int64 for Int32 input yet (NEP50)
         public void Case2_Axis4()
         {
             var a = np.ones((2, 1, 3, 5, 1), np.int32);
@@ -188,7 +186,6 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
         }
 
         [Test]
-        [OpenBugs]  // BUG: Axis reductions don't return Int64 for Int32 input yet (NEP50)
         public void Case2_Axis_minus1()
         {
             var a = np.ones((2, 1, 3, 5, 1), np.int32);
@@ -211,7 +208,6 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
         }
 
         [Test]
-        [OpenBugs]  // BUG: Axis reductions don't return Int64 for Int32 input yet (NEP50)
         public void Case2_Axis_minus1_keepdims()
         {
             var a = np.ones((2, 1, 3, 5, 1), np.int32);

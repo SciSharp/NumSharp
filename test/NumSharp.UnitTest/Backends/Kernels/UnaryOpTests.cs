@@ -269,7 +269,6 @@ public class UnaryOpTests
     }
 
     [Test]
-    [OpenBugs] // IL kernel bug - returns incorrect values
     public void Abs_Int32()
     {
         var input = np.array(new[] { -5, -1, 0, 1, 5 });
@@ -279,7 +278,6 @@ public class UnaryOpTests
     }
 
     [Test]
-    [OpenBugs] // IL kernel bug - returns incorrect values
     public void Negative_Float64()
     {
         // NumPy: negative([-5.5, -1, 0, 1, 2.5])
@@ -290,7 +288,6 @@ public class UnaryOpTests
     }
 
     [Test]
-    [OpenBugs] // IL kernel bug - returns incorrect values
     public void Negative_Int32()
     {
         var input = np.array(new[] { -5, -1, 0, 1, 5 });
@@ -334,7 +331,6 @@ public class UnaryOpTests
     }
 
     [Test]
-    [OpenBugs] // IL kernel bug - returns incorrect values
     public void Sign_Int32()
     {
         var input = np.array(new[] { -5, -1, 0, 1, 5 });
@@ -448,7 +444,6 @@ public class UnaryOpTests
     }
 
     [Test]
-    [OpenBugs] // .NET Math.Sign throws on NaN, NumPy returns NaN
     public void Sign_EdgeCases()
     {
         // NumPy: sign([0, -0, inf, -inf, nan]) = [0, 0, 1, -1, nan]

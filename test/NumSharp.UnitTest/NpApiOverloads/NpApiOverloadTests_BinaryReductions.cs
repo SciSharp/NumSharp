@@ -298,7 +298,6 @@ public class NpApiOverloadTests_BinaryReductions
     }
 
     [Test]
-    [OpenBugs] // @out parameter doesn't write to output array - existing bug
     public void Minimum_TwoArraysWithOut_Compiles()
     {
         var a = np.array(new double[] { 1, 5, 3 });
@@ -373,7 +372,6 @@ public class NpApiOverloadTests_BinaryReductions
     }
 
     [Test]
-    [OpenBugs] // @out parameter doesn't write to output array - existing bug
     public void Fmin_TwoArraysWithOut_Compiles()
     {
         var a = np.array(new double[] { 1, 5, 3 });

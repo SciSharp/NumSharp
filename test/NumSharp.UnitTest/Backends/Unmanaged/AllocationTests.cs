@@ -23,7 +23,6 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         }
 
         [Test]
-        [OpenBugs]
         public void Allocate_2GB()
         {
             lock (_lock)
@@ -35,7 +34,6 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         }
 
         [Test]
-        [OpenBugs]
         public void Allocate_4GB()
         {
             lock (_lock)

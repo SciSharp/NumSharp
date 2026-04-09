@@ -240,7 +240,6 @@ public class BinaryOpTests
     }
 
     [Test]
-    [OpenBugs] // NumSharp does integer division, NumPy promotes to float64
     public void Divide_Int32_ReturnsDouble()
     {
         // NumPy: int32 / int32 returns float64

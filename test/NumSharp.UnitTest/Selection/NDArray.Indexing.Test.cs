@@ -227,7 +227,6 @@ namespace NumSharp.UnitTest.Selection
         }
 
         [Test]
-        [OpenBugs] // Slice multiplication returns wrong values
         public void Slice2x2Mul()
         {
             //>>> import numpy as np
@@ -1259,7 +1258,6 @@ namespace NumSharp.UnitTest.Selection
         }
 
         [Test]
-        [OpenBugs]
         public void IndexNDArray_sliced3dreshaped_indexed_by_1d_1d()
         {
             Test(np.arange(2 * 2 * 4 * 2)["::2"].reshape(2, 4, 2));
@@ -1336,7 +1334,6 @@ namespace NumSharp.UnitTest.Selection
         }
 
         [Test]
-        [OpenBugs]
         public void IndexNDArray_Set_Case2()
         {
             var a = np.arange(8).reshape(2, 4);
@@ -1345,7 +1342,6 @@ namespace NumSharp.UnitTest.Selection
         }
 
         [Test]
-        [OpenBugs]
         public void IndexNDArray_Set_Case3()
         {
             var a = np.arange(8).reshape(2, 4);
@@ -1354,7 +1350,6 @@ namespace NumSharp.UnitTest.Selection
         }
 
         [Test]
-        [OpenBugs]
         public void IndexNDArray_Set_Case4()
         {
             var a = np.arange(8).reshape(2, 4);

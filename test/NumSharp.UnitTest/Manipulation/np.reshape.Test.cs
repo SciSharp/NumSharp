@@ -283,7 +283,6 @@ namespace NumSharp.UnitTest.Manipulation
         }
 
         [Test]
-        [OpenBugs]
         public void Reshape_1DToScalar()
         {
             // NumPy: np.array([42]).reshape(()) → scalar 42

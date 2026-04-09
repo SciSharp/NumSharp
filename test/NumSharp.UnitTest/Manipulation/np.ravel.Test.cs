@@ -329,7 +329,6 @@ namespace NumSharp.UnitTest.Manipulation
         // ================================================================
 
         [Test]
-        [OpenBugs]
         public void Ravel_ContiguousSlice1D_ShouldBeView()
         {
             // NumPy: a[2:7] is c_contiguous=True, ravel returns a VIEW
@@ -347,7 +346,6 @@ namespace NumSharp.UnitTest.Manipulation
         }
 
         [Test]
-        [OpenBugs]
         public void Ravel_ContiguousRowSlice2D_ShouldBeView()
         {
             // NumPy: c[1:3] (row slice) is c_contiguous=True, ravel returns VIEW

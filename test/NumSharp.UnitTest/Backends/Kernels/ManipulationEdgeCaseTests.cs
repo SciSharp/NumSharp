@@ -282,7 +282,6 @@ public class ManipulationEdgeCaseTests
     }
 
     [Test]
-    [OpenBugs]  // Repeat with per-element counts fails
     public void Repeat_PerElement()
     {
         // NumPy: np.repeat([1, 2, 3], [1, 2, 3]) = [1, 2, 2, 3, 3, 3]
@@ -419,7 +418,6 @@ public class ManipulationEdgeCaseTests
     #region Unique Edge Cases
 
     [Test]
-    [OpenBugs]  // Bug: np.unique doesn't return sorted array
     public void Unique_ReturnsSorted()
     {
         // NumPy: np.unique([3, 1, 2, 1, 3, 2]) = [1, 2, 3] (sorted!)
@@ -431,7 +429,6 @@ public class ManipulationEdgeCaseTests
     }
 
     [Test]
-    [OpenBugs]  // Bug: np.unique with NaN values fails
     public void Unique_Float_WithNaN()
     {
         // NumPy: np.unique([1, nan, 2, nan, 1]) = [1, 2, nan]

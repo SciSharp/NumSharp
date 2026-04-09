@@ -12,7 +12,6 @@ namespace NumSharp.UnitTest.Indexing
     public class np_nonzero_edge_cases : TestClass
     {
         [Test]
-        [OpenBugs]  // NumSharp throws Debug.Assert on empty array
         public void EmptyArray_ReturnsEmptyIndices()
         {
             // NumPy: np.nonzero(np.array([], dtype=np.int32)) returns (array([], dtype=int64),)

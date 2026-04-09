@@ -84,7 +84,6 @@ public class SlicedArrayOpTests
     }
 
     [Test]
-    [OpenBugs]  // Sliced array + scalar fails
     public void Add_SlicedWithScalar()
     {
         // NumPy: j[::2] + 5 where j=[10, 20, 30, 40, 50]
@@ -98,7 +97,6 @@ public class SlicedArrayOpTests
     }
 
     [Test]
-    [OpenBugs]  // Sliced array * scalar fails
     public void Multiply_SlicedWithScalar()
     {
         // NumPy: j[1::2] * 2 where j=[10, 20, 30, 40, 50]
@@ -271,7 +269,6 @@ public class SlicedArrayOpTests
     }
 
     [Test]
-    [OpenBugs]  // Sliced comparison with scalar fails
     public void GreaterThan_SlicedWithScalar()
     {
         // NumPy: e[::2] > 2 where e=[1, 5, 2, 6, 3, 7]

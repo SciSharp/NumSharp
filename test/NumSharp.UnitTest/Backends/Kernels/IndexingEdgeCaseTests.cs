@@ -107,7 +107,6 @@ public class IndexingEdgeCaseTests
     #region Boolean Indexing
 
     [Test]
-    [OpenBugs]  // Boolean indexing returns incorrect results
     public void BooleanIndex_Simple()
     {
         // NumPy: arr[mask] = [1, 3, 5]
@@ -155,7 +154,6 @@ public class IndexingEdgeCaseTests
     }
 
     [Test]
-    [OpenBugs]  // Boolean row selection fails
     public void BooleanIndex_RowSelection()
     {
         // NumPy: arr2d[[True, False, True]] selects rows 0 and 2
@@ -316,7 +314,6 @@ public class IndexingEdgeCaseTests
     }
 
     [Test]
-    [OpenBugs]  // Fancy index assignment silently no-ops
     public void Assignment_FancyIndex()
     {
         // NumPy: arr[[0, 2, 4]] = 99 -> [99, 2, 99, 4, 99]
@@ -329,7 +326,6 @@ public class IndexingEdgeCaseTests
     }
 
     [Test]
-    [OpenBugs]  // Boolean mask assignment silently no-ops
     public void Assignment_BooleanMask()
     {
         // NumPy: arr[arr > 3] = 0 -> [1, 2, 3, 0, 0]
