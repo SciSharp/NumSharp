@@ -75,9 +75,13 @@ namespace NumSharp
                 n_minus_one_dim_slice.PrettyPrint(s, flat);
                 if (i < size - 1)
                 {
-                    s.Append(", ");
-                    if (!flat)
+                    if (flat)
+                        s.Append(", ");
+                    else
+                    {
+                        s.Append(",");
                         s.AppendLine();
+                    }
                 }
             }
 

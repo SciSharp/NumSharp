@@ -2,6 +2,7 @@ using System;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using NumSharp.Backends;
+using NumSharp.Backends.Unmanaged;
 using NumSharp.Utilities;
 
 namespace NumSharp
@@ -19,8 +20,9 @@ namespace NumSharp
         /// <remarks>
         /// https://numpy.org/doc/stable/reference/generated/numpy.frombuffer.html
         ///
-        /// Unlike NumPy, this creates a copy of the data (NumSharp uses unmanaged memory).
-        /// NumPy creates a view that shares memory with the buffer.
+        /// Like NumPy, this creates a VIEW of the buffer (pins the array, shares memory).
+        /// Modifications to the NDArray will affect the original buffer.
+        /// The buffer must stay alive while the NDArray is in use.
         /// </remarks>
         public static NDArray frombuffer(byte[] buffer, Type dtype = null, long count = -1, long offset = 0)
         {
@@ -81,20 +83,45 @@ namespace NumSharp
             if (actualCount == 0)
                 return new NDArray(dtype, Shape.Vector(0), false);
 
-            // Create output array
-            var nd = new NDArray(dtype, Shape.Vector(actualCount), false);
+            // Create a VIEW of the buffer (pins the array, no copy)
+            var slice = CreateArraySliceView(buffer, dtype, offset, actualCount);
+            return new NDArray(new UnmanagedStorage(slice, Shape.Vector(actualCount)));
+        }
 
-            // Copy data efficiently using unsafe block copy
-            long bytesToCopy = actualCount * itemSize;
-            unsafe
+        /// <summary>
+        /// Create an ArraySlice that views into a byte buffer with offset support.
+        /// </summary>
+        private static IArraySlice CreateArraySliceView(byte[] buffer, NPTypeCode dtype, long byteOffset, long count)
+        {
+            switch (dtype)
             {
-                fixed (byte* src = &buffer[offset])
-                {
-                    Buffer.MemoryCopy(src, (void*)nd.Unsafe.Address, bytesToCopy, bytesToCopy);
-                }
+                case NPTypeCode.Boolean:
+                    return new ArraySlice<bool>(UnmanagedMemoryBlock<bool>.FromBuffer(buffer, byteOffset, count, copy: false));
+                case NPTypeCode.Byte:
+                    return new ArraySlice<byte>(UnmanagedMemoryBlock<byte>.FromBuffer(buffer, byteOffset, count, copy: false));
+                case NPTypeCode.Int16:
+                    return new ArraySlice<short>(UnmanagedMemoryBlock<short>.FromBuffer(buffer, byteOffset, count, copy: false));
+                case NPTypeCode.UInt16:
+                    return new ArraySlice<ushort>(UnmanagedMemoryBlock<ushort>.FromBuffer(buffer, byteOffset, count, copy: false));
+                case NPTypeCode.Int32:
+                    return new ArraySlice<int>(UnmanagedMemoryBlock<int>.FromBuffer(buffer, byteOffset, count, copy: false));
+                case NPTypeCode.UInt32:
+                    return new ArraySlice<uint>(UnmanagedMemoryBlock<uint>.FromBuffer(buffer, byteOffset, count, copy: false));
+                case NPTypeCode.Int64:
+                    return new ArraySlice<long>(UnmanagedMemoryBlock<long>.FromBuffer(buffer, byteOffset, count, copy: false));
+                case NPTypeCode.UInt64:
+                    return new ArraySlice<ulong>(UnmanagedMemoryBlock<ulong>.FromBuffer(buffer, byteOffset, count, copy: false));
+                case NPTypeCode.Char:
+                    return new ArraySlice<char>(UnmanagedMemoryBlock<char>.FromBuffer(buffer, byteOffset, count, copy: false));
+                case NPTypeCode.Single:
+                    return new ArraySlice<float>(UnmanagedMemoryBlock<float>.FromBuffer(buffer, byteOffset, count, copy: false));
+                case NPTypeCode.Double:
+                    return new ArraySlice<double>(UnmanagedMemoryBlock<double>.FromBuffer(buffer, byteOffset, count, copy: false));
+                case NPTypeCode.Decimal:
+                    return new ArraySlice<decimal>(UnmanagedMemoryBlock<decimal>.FromBuffer(buffer, byteOffset, count, copy: false));
+                default:
+                    throw new NotSupportedException($"dtype {dtype} is not supported");
             }
-
-            return nd;
         }
 
         /// <summary>
@@ -105,6 +132,10 @@ namespace NumSharp
         /// <param name="count">Number of items to read. -1 means all data in the buffer.</param>
         /// <param name="offset">Start reading the buffer from this offset (in bytes). Default is 0.</param>
         /// <returns>1-dimensional NDArray with data interpreted from the buffer.</returns>
+        /// <remarks>
+        /// Note: Big-endian dtype strings (">u4", ">i4", etc.) require a COPY to perform byte swapping.
+        /// Little-endian and native endian create views without copying.
+        /// </remarks>
         public static NDArray frombuffer(byte[] buffer, string dtype, long count = -1, long offset = 0)
         {
             if (buffer == null)
@@ -151,30 +182,61 @@ namespace NumSharp
             if (actualCount == 0)
                 return new NDArray(typeCode, Shape.Vector(0), false);
 
-            // Create output array
-            var nd = new NDArray(typeCode, Shape.Vector(actualCount), false);
-
-            // Copy data
-            long bytesToCopy = actualCount * itemSize;
-            unsafe
-            {
-                fixed (byte* src = &buffer[offset])
-                {
-                    Buffer.MemoryCopy(src, (void*)nd.Unsafe.Address, bytesToCopy, bytesToCopy);
-                }
-            }
-
-            // Byte swap if needed (big-endian to little-endian)
+            // If byte swap needed, we must copy
             if (needsByteSwap && itemSize > 1)
             {
+                var slice = CreateArraySliceCopy(buffer, typeCode, offset, actualCount);
+                var nd = new NDArray(new UnmanagedStorage(slice, Shape.Vector(actualCount)));
                 ByteSwapInPlace(nd, typeCode, actualCount);
+                return nd;
             }
+            else
+            {
+                // Create a VIEW (no copy needed)
+                var slice = CreateArraySliceView(buffer, typeCode, offset, actualCount);
+                return new NDArray(new UnmanagedStorage(slice, Shape.Vector(actualCount)));
+            }
+        }
 
-            return nd;
+        /// <summary>
+        /// Create an ArraySlice by copying from a byte buffer with offset support.
+        /// </summary>
+        private static IArraySlice CreateArraySliceCopy(byte[] buffer, NPTypeCode dtype, long byteOffset, long count)
+        {
+            switch (dtype)
+            {
+                case NPTypeCode.Boolean:
+                    return new ArraySlice<bool>(UnmanagedMemoryBlock<bool>.FromBuffer(buffer, byteOffset, count, copy: true));
+                case NPTypeCode.Byte:
+                    return new ArraySlice<byte>(UnmanagedMemoryBlock<byte>.FromBuffer(buffer, byteOffset, count, copy: true));
+                case NPTypeCode.Int16:
+                    return new ArraySlice<short>(UnmanagedMemoryBlock<short>.FromBuffer(buffer, byteOffset, count, copy: true));
+                case NPTypeCode.UInt16:
+                    return new ArraySlice<ushort>(UnmanagedMemoryBlock<ushort>.FromBuffer(buffer, byteOffset, count, copy: true));
+                case NPTypeCode.Int32:
+                    return new ArraySlice<int>(UnmanagedMemoryBlock<int>.FromBuffer(buffer, byteOffset, count, copy: true));
+                case NPTypeCode.UInt32:
+                    return new ArraySlice<uint>(UnmanagedMemoryBlock<uint>.FromBuffer(buffer, byteOffset, count, copy: true));
+                case NPTypeCode.Int64:
+                    return new ArraySlice<long>(UnmanagedMemoryBlock<long>.FromBuffer(buffer, byteOffset, count, copy: true));
+                case NPTypeCode.UInt64:
+                    return new ArraySlice<ulong>(UnmanagedMemoryBlock<ulong>.FromBuffer(buffer, byteOffset, count, copy: true));
+                case NPTypeCode.Char:
+                    return new ArraySlice<char>(UnmanagedMemoryBlock<char>.FromBuffer(buffer, byteOffset, count, copy: true));
+                case NPTypeCode.Single:
+                    return new ArraySlice<float>(UnmanagedMemoryBlock<float>.FromBuffer(buffer, byteOffset, count, copy: true));
+                case NPTypeCode.Double:
+                    return new ArraySlice<double>(UnmanagedMemoryBlock<double>.FromBuffer(buffer, byteOffset, count, copy: true));
+                case NPTypeCode.Decimal:
+                    return new ArraySlice<decimal>(UnmanagedMemoryBlock<decimal>.FromBuffer(buffer, byteOffset, count, copy: true));
+                default:
+                    throw new NotSupportedException($"dtype {dtype} is not supported");
+            }
         }
 
         /// <summary>
         /// Interpret a ReadOnlySpan as a 1-dimensional array.
+        /// Note: ReadOnlySpan cannot be pinned, so this always creates a copy.
         /// </summary>
         public static NDArray frombuffer(ReadOnlySpan<byte> buffer, Type dtype = null, long count = -1, long offset = 0)
         {
@@ -183,6 +245,7 @@ namespace NumSharp
 
         /// <summary>
         /// Interpret a ReadOnlySpan as a 1-dimensional array.
+        /// Note: ReadOnlySpan cannot be pinned, so this always creates a copy.
         /// </summary>
         public static NDArray frombuffer(ReadOnlySpan<byte> buffer, NPTypeCode dtype, long count = -1, long offset = 0)
         {
@@ -226,10 +289,8 @@ namespace NumSharp
             if (actualCount == 0)
                 return new NDArray(dtype, Shape.Vector(0), false);
 
-            // Create output array
+            // ReadOnlySpan cannot be pinned, must copy
             var nd = new NDArray(dtype, Shape.Vector(actualCount), false);
-
-            // Copy data
             long bytesToCopy = actualCount * itemSize;
             unsafe
             {
@@ -241,6 +302,315 @@ namespace NumSharp
 
             return nd;
         }
+
+        #region .NET-friendly overloads
+
+        /// <summary>
+        /// Interpret an ArraySegment as a 1-dimensional array.
+        /// Uses the segment's Offset and Count automatically.
+        /// </summary>
+        /// <param name="segment">The array segment to interpret.</param>
+        /// <param name="dtype">Data-type of the returned array. Default is float64.</param>
+        /// <param name="count">Number of items to read. -1 means all data in the segment.</param>
+        /// <returns>1-dimensional NDArray viewing the segment's data.</returns>
+        public static NDArray frombuffer(ArraySegment<byte> segment, Type dtype = null, long count = -1)
+        {
+            if (segment.Array == null)
+                throw new ArgumentException("ArraySegment has no underlying array", nameof(segment));
+
+            return frombuffer(segment.Array, dtype, count, segment.Offset);
+        }
+
+        /// <summary>
+        /// Interpret an ArraySegment as a 1-dimensional array.
+        /// </summary>
+        public static NDArray frombuffer(ArraySegment<byte> segment, NPTypeCode dtype, long count = -1)
+        {
+            if (segment.Array == null)
+                throw new ArgumentException("ArraySegment has no underlying array", nameof(segment));
+
+            return frombuffer(segment.Array, dtype, count, segment.Offset);
+        }
+
+        /// <summary>
+        /// Interpret a Memory&lt;byte&gt; as a 1-dimensional array.
+        /// Creates a view if backed by an array, otherwise copies.
+        /// </summary>
+        /// <param name="memory">The memory to interpret.</param>
+        /// <param name="dtype">Data-type of the returned array. Default is float64.</param>
+        /// <param name="count">Number of items to read. -1 means all data.</param>
+        /// <param name="offset">Byte offset within the memory. Default is 0.</param>
+        /// <returns>1-dimensional NDArray.</returns>
+        public static NDArray frombuffer(Memory<byte> memory, Type dtype = null, long count = -1, long offset = 0)
+        {
+            return frombuffer(memory, (dtype ?? typeof(double)).GetTypeCode(), count, offset);
+        }
+
+        /// <summary>
+        /// Interpret a Memory&lt;byte&gt; as a 1-dimensional array.
+        /// </summary>
+        public static NDArray frombuffer(Memory<byte> memory, NPTypeCode dtype, long count = -1, long offset = 0)
+        {
+            // Try to get the underlying array for view semantics
+            if (MemoryMarshal.TryGetArray<byte>(memory, out var segment))
+            {
+                return frombuffer(segment.Array!, dtype, count, segment.Offset + offset);
+            }
+
+            // Fallback to copy via span
+            return frombuffer(memory.Span, dtype, count, offset);
+        }
+
+        /// <summary>
+        /// Interpret unmanaged memory at a pointer as a 1-dimensional array.
+        /// </summary>
+        /// <param name="address">Pointer to the start of the buffer.</param>
+        /// <param name="byteLength">Total length of the buffer in bytes.</param>
+        /// <param name="dtype">Data-type of the returned array. Default is float64.</param>
+        /// <param name="count">Number of items to read. -1 means all data.</param>
+        /// <param name="offset">Byte offset into the buffer. Default is 0.</param>
+        /// <param name="dispose">
+        /// Optional cleanup action called when NDArray is disposed.
+        /// Use to transfer ownership: dispose: () => Marshal.FreeHGlobal(ptr)
+        /// If null, caller is responsible for memory lifetime (view semantics).
+        /// </param>
+        /// <returns>1-dimensional NDArray viewing/owning the memory.</returns>
+        /// <example>
+        /// // View only (caller manages lifetime):
+        /// var arr = np.frombuffer(ptr, length, typeof(float));
+        ///
+        /// // Take ownership (NumSharp frees on dispose):
+        /// var ptr = Marshal.AllocHGlobal(1024);
+        /// var arr = np.frombuffer(ptr, 1024, typeof(float), dispose: () => Marshal.FreeHGlobal(ptr));
+        /// </example>
+        public static unsafe NDArray frombuffer(IntPtr address, long byteLength, Type dtype = null, long count = -1, long offset = 0, Action dispose = null)
+        {
+            return frombuffer(address, byteLength, (dtype ?? typeof(double)).GetTypeCode(), count, offset, dispose);
+        }
+
+        /// <summary>
+        /// Interpret unmanaged memory at a pointer as a 1-dimensional array.
+        /// </summary>
+        public static unsafe NDArray frombuffer(IntPtr address, long byteLength, NPTypeCode dtype, long count = -1, long offset = 0, Action dispose = null)
+        {
+            if (address == IntPtr.Zero)
+                throw new ArgumentNullException(nameof(address));
+
+            if (dtype == NPTypeCode.Empty)
+                dtype = NPTypeCode.Double;
+
+            int itemSize = dtype.SizeOf();
+
+            // Validate offset
+            if (offset < 0 || offset > byteLength)
+                throw new ArgumentException(
+                    $"offset must be non-negative and no greater than buffer length ({byteLength})",
+                    nameof(offset));
+
+            long availableBytes = byteLength - offset;
+
+            // Validate alignment
+            if (availableBytes % itemSize != 0)
+                throw new ArgumentException(
+                    "buffer size must be a multiple of element size",
+                    nameof(byteLength));
+
+            long maxCount = availableBytes / itemSize;
+            long actualCount = count < 0 ? maxCount : Math.Min(count, maxCount);
+
+            if (actualCount == 0)
+            {
+                dispose?.Invoke(); // Clean up even for empty result
+                return new NDArray(dtype, Shape.Vector(0), false);
+            }
+
+            // Create view/owned slice depending on dispose action
+            IArraySlice slice;
+            if (dispose != null)
+            {
+                slice = CreateArraySliceWithDispose((byte*)address + offset, dtype, actualCount, dispose);
+            }
+            else
+            {
+                slice = CreateArraySliceFromPointer((byte*)address + offset, dtype, actualCount);
+            }
+            return new NDArray(new UnmanagedStorage(slice, Shape.Vector(actualCount)));
+        }
+
+        /// <summary>
+        /// Reinterpret a typed array as a different dtype.
+        /// Like NumPy's view() but via frombuffer semantics.
+        /// </summary>
+        /// <typeparam name="TSource">Source element type.</typeparam>
+        /// <param name="array">The source array to reinterpret.</param>
+        /// <param name="dtype">Target data-type. Default preserves source type.</param>
+        /// <param name="count">Number of items of target dtype. -1 for all.</param>
+        /// <param name="offset">Byte offset. Default is 0.</param>
+        /// <returns>1-dimensional NDArray viewing the array as the target dtype.</returns>
+        /// <example>
+        /// var ints = new int[] { 1, 2, 3, 4 };
+        /// var asBytes = np.frombuffer(ints, typeof(byte));  // 16 bytes
+        /// var asFloats = np.frombuffer(ints, typeof(float)); // 4 floats (same bits)
+        /// </example>
+        public static NDArray frombuffer<TSource>(TSource[] array, Type dtype = null, long count = -1, long offset = 0)
+            where TSource : unmanaged
+        {
+            return frombuffer(array, (dtype ?? typeof(TSource)).GetTypeCode(), count, offset);
+        }
+
+        /// <summary>
+        /// Reinterpret a typed array as a different dtype.
+        /// </summary>
+        public static unsafe NDArray frombuffer<TSource>(TSource[] array, NPTypeCode dtype, long count = -1, long offset = 0)
+            where TSource : unmanaged
+        {
+            if (array == null)
+                throw new ArgumentNullException(nameof(array));
+
+            if (dtype == NPTypeCode.Empty)
+                dtype = InfoOf<TSource>.NPTypeCode;
+
+            int sourceItemSize = sizeof(TSource);
+            int targetItemSize = dtype.SizeOf();
+            long byteLength = array.Length * sourceItemSize;
+
+            // Validate offset
+            if (offset < 0 || offset > byteLength)
+                throw new ArgumentException(
+                    $"offset must be non-negative and no greater than buffer length ({byteLength})",
+                    nameof(offset));
+
+            long availableBytes = byteLength - offset;
+
+            // Validate alignment
+            if (availableBytes % targetItemSize != 0)
+                throw new ArgumentException(
+                    "buffer size must be a multiple of element size",
+                    nameof(array));
+
+            long maxCount = availableBytes / targetItemSize;
+            long actualCount = count < 0 ? maxCount : Math.Min(count, maxCount);
+
+            if (actualCount == 0)
+                return new NDArray(dtype, Shape.Vector(0), false);
+
+            // Pin the array and create a view
+            var handle = GCHandle.Alloc(array, GCHandleType.Pinned);
+            var baseAddr = (byte*)handle.AddrOfPinnedObject();
+            var slice = CreateArraySliceFromPinnedPointer(baseAddr + offset, dtype, actualCount, handle);
+            return new NDArray(new UnmanagedStorage(slice, Shape.Vector(actualCount)));
+        }
+
+        /// <summary>
+        /// Create ArraySlice from raw pointer with dispose action (takes ownership).
+        /// </summary>
+        private static unsafe IArraySlice CreateArraySliceWithDispose(byte* address, NPTypeCode dtype, long count, Action dispose)
+        {
+            switch (dtype)
+            {
+                case NPTypeCode.Boolean:
+                    return new ArraySlice<bool>(new UnmanagedMemoryBlock<bool>((bool*)address, count, dispose));
+                case NPTypeCode.Byte:
+                    return new ArraySlice<byte>(new UnmanagedMemoryBlock<byte>(address, count, dispose));
+                case NPTypeCode.Int16:
+                    return new ArraySlice<short>(new UnmanagedMemoryBlock<short>((short*)address, count, dispose));
+                case NPTypeCode.UInt16:
+                    return new ArraySlice<ushort>(new UnmanagedMemoryBlock<ushort>((ushort*)address, count, dispose));
+                case NPTypeCode.Int32:
+                    return new ArraySlice<int>(new UnmanagedMemoryBlock<int>((int*)address, count, dispose));
+                case NPTypeCode.UInt32:
+                    return new ArraySlice<uint>(new UnmanagedMemoryBlock<uint>((uint*)address, count, dispose));
+                case NPTypeCode.Int64:
+                    return new ArraySlice<long>(new UnmanagedMemoryBlock<long>((long*)address, count, dispose));
+                case NPTypeCode.UInt64:
+                    return new ArraySlice<ulong>(new UnmanagedMemoryBlock<ulong>((ulong*)address, count, dispose));
+                case NPTypeCode.Char:
+                    return new ArraySlice<char>(new UnmanagedMemoryBlock<char>((char*)address, count, dispose));
+                case NPTypeCode.Single:
+                    return new ArraySlice<float>(new UnmanagedMemoryBlock<float>((float*)address, count, dispose));
+                case NPTypeCode.Double:
+                    return new ArraySlice<double>(new UnmanagedMemoryBlock<double>((double*)address, count, dispose));
+                case NPTypeCode.Decimal:
+                    return new ArraySlice<decimal>(new UnmanagedMemoryBlock<decimal>((decimal*)address, count, dispose));
+                default:
+                    throw new NotSupportedException($"dtype {dtype} is not supported");
+            }
+        }
+
+        /// <summary>
+        /// Create ArraySlice from raw pointer (no ownership - caller manages lifetime).
+        /// </summary>
+        private static unsafe IArraySlice CreateArraySliceFromPointer(byte* address, NPTypeCode dtype, long count)
+        {
+            switch (dtype)
+            {
+                case NPTypeCode.Boolean:
+                    return new ArraySlice<bool>(new UnmanagedMemoryBlock<bool>((bool*)address, count));
+                case NPTypeCode.Byte:
+                    return new ArraySlice<byte>(new UnmanagedMemoryBlock<byte>(address, count));
+                case NPTypeCode.Int16:
+                    return new ArraySlice<short>(new UnmanagedMemoryBlock<short>((short*)address, count));
+                case NPTypeCode.UInt16:
+                    return new ArraySlice<ushort>(new UnmanagedMemoryBlock<ushort>((ushort*)address, count));
+                case NPTypeCode.Int32:
+                    return new ArraySlice<int>(new UnmanagedMemoryBlock<int>((int*)address, count));
+                case NPTypeCode.UInt32:
+                    return new ArraySlice<uint>(new UnmanagedMemoryBlock<uint>((uint*)address, count));
+                case NPTypeCode.Int64:
+                    return new ArraySlice<long>(new UnmanagedMemoryBlock<long>((long*)address, count));
+                case NPTypeCode.UInt64:
+                    return new ArraySlice<ulong>(new UnmanagedMemoryBlock<ulong>((ulong*)address, count));
+                case NPTypeCode.Char:
+                    return new ArraySlice<char>(new UnmanagedMemoryBlock<char>((char*)address, count));
+                case NPTypeCode.Single:
+                    return new ArraySlice<float>(new UnmanagedMemoryBlock<float>((float*)address, count));
+                case NPTypeCode.Double:
+                    return new ArraySlice<double>(new UnmanagedMemoryBlock<double>((double*)address, count));
+                case NPTypeCode.Decimal:
+                    return new ArraySlice<decimal>(new UnmanagedMemoryBlock<decimal>((decimal*)address, count));
+                default:
+                    throw new NotSupportedException($"dtype {dtype} is not supported");
+            }
+        }
+
+        /// <summary>
+        /// Create ArraySlice from pinned pointer with GCHandle disposal.
+        /// </summary>
+        private static unsafe IArraySlice CreateArraySliceFromPinnedPointer(byte* address, NPTypeCode dtype, long count, GCHandle handle)
+        {
+            Action dispose = () => handle.Free();
+            switch (dtype)
+            {
+                case NPTypeCode.Boolean:
+                    return new ArraySlice<bool>(new UnmanagedMemoryBlock<bool>((bool*)address, count, dispose));
+                case NPTypeCode.Byte:
+                    return new ArraySlice<byte>(new UnmanagedMemoryBlock<byte>(address, count, dispose));
+                case NPTypeCode.Int16:
+                    return new ArraySlice<short>(new UnmanagedMemoryBlock<short>((short*)address, count, dispose));
+                case NPTypeCode.UInt16:
+                    return new ArraySlice<ushort>(new UnmanagedMemoryBlock<ushort>((ushort*)address, count, dispose));
+                case NPTypeCode.Int32:
+                    return new ArraySlice<int>(new UnmanagedMemoryBlock<int>((int*)address, count, dispose));
+                case NPTypeCode.UInt32:
+                    return new ArraySlice<uint>(new UnmanagedMemoryBlock<uint>((uint*)address, count, dispose));
+                case NPTypeCode.Int64:
+                    return new ArraySlice<long>(new UnmanagedMemoryBlock<long>((long*)address, count, dispose));
+                case NPTypeCode.UInt64:
+                    return new ArraySlice<ulong>(new UnmanagedMemoryBlock<ulong>((ulong*)address, count, dispose));
+                case NPTypeCode.Char:
+                    return new ArraySlice<char>(new UnmanagedMemoryBlock<char>((char*)address, count, dispose));
+                case NPTypeCode.Single:
+                    return new ArraySlice<float>(new UnmanagedMemoryBlock<float>((float*)address, count, dispose));
+                case NPTypeCode.Double:
+                    return new ArraySlice<double>(new UnmanagedMemoryBlock<double>((double*)address, count, dispose));
+                case NPTypeCode.Decimal:
+                    return new ArraySlice<decimal>(new UnmanagedMemoryBlock<decimal>((decimal*)address, count, dispose));
+                default:
+                    throw new NotSupportedException($"dtype {dtype} is not supported");
+            }
+        }
+
+        #endregion
 
         #region Helpers
 

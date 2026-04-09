@@ -462,6 +462,41 @@ namespace NumSharp.Backends.Unmanaged
             return new UnmanagedMemoryBlock<T>(GCHandle.Alloc(copy ? arr.Clone() : arr, GCHandleType.Pinned), arr.Length / InfoOf<T>.Size);
         }
 
+        /// <summary>
+        /// Create a memory block from a byte buffer with offset and count support.
+        /// </summary>
+        /// <param name="arr">The source byte array.</param>
+        /// <param name="byteOffset">Byte offset into the array.</param>
+        /// <param name="count">Number of elements of type T to include (-1 for all available).</param>
+        /// <param name="copy">If true, copies the data; if false, creates a view (pins the array).</param>
+        /// <returns>A memory block viewing or copying the specified region.</returns>
+        [MethodImpl(OptimizeAndInline)]
+        public static UnmanagedMemoryBlock<T> FromBuffer(byte[] arr, long byteOffset, long count, bool copy)
+        {
+            int itemSize = InfoOf<T>.Size;
+            long availableBytes = arr.Length - byteOffset;
+            long maxCount = availableBytes / itemSize;
+            long actualCount = count < 0 ? maxCount : count;
+
+            if (copy)
+            {
+                // Allocate new memory and copy
+                var ret = new UnmanagedMemoryBlock<T>(actualCount);
+                fixed (byte* src = &arr[byteOffset])
+                {
+                    Buffer.MemoryCopy(src, ret.Address, ret.BytesCount, actualCount * itemSize);
+                }
+                return ret;
+            }
+            else
+            {
+                // Pin the array and return a view with offset
+                var handle = GCHandle.Alloc(arr, GCHandleType.Pinned);
+                var baseAddr = (byte*)handle.AddrOfPinnedObject();
+                return new UnmanagedMemoryBlock<T>((T*)(baseAddr + byteOffset), actualCount, () => handle.Free());
+            }
+        }
+
         [MethodImpl(OptimizeAndInline)]
         public static UnmanagedMemoryBlock<T> FromPool(StackedMemoryPool manager)
         {
