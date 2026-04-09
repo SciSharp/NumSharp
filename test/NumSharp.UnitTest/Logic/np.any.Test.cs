@@ -87,14 +87,16 @@ namespace NumSharp.UnitTest.Logic
         }
 
         [Test]
-        [Misaligned]  // NumPy: np.array(5) creates 0D, NumSharp: creates 1D with shape (1,)
         public void AnyScalarArrayTest()
         {
-            // NumPy: np.array(5) creates 0D array, np.any(a, axis=0) returns True
-            // NumSharp: np.array(5) creates 1D array with shape (1,), np.any(a, axis=0) also returns True
+            // NumPy: np.array(5) creates 0D array, np.any(a) returns True
+            // NumSharp now correctly creates 0D arrays for scalars
             var arr = np.array(5);
-            var result = np.any(arr, axis: 0, keepdims: false);
-            Assert.AreEqual(true, result.GetBoolean(0));
+            Assert.AreEqual(0, arr.ndim, "np.array(5) should create 0D array");
+
+            // np.any without axis works on 0D arrays and returns bool
+            var result = np.any(arr);
+            Assert.AreEqual(true, result);
         }
 
         [Test]
