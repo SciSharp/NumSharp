@@ -139,16 +139,16 @@ namespace NumSharp.UnitTest.Selection
 
             //no axis
             n = np.arange(4).reshape(2, 2);
-            var max = np.amax<int>(n);
+            var max = np.amax<long>(n);
 
             Assert.IsTrue(max == 3);
 
             //2D with axis
-            var n1 = np.amax(n, 0).MakeGeneric<int>();
+            var n1 = np.amax(n, 0).MakeGeneric<long>();
             Assert.IsTrue(n1.GetAtIndex(0) == 2);
             Assert.IsTrue(n1.GetAtIndex(1) == 3);
 
-            n1 = np.amax(n, 1).MakeGeneric<int>();
+            n1 = np.amax(n, 1).MakeGeneric<long>();
             Assert.IsTrue(n1[0] == 1);
             Assert.IsTrue(n1[1] == 3);
 

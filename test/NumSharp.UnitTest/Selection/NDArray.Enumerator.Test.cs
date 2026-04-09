@@ -15,8 +15,8 @@ namespace NumSharp.UnitTest.Selection
         {
             // 1D arrays iterate over scalar elements
             var nd = np.arange(5);
-            var values = nd.Cast<int>().ToList();
-            values.Should().BeEquivalentTo(new[] { 0, 1, 2, 3, 4 });
+            var values = nd.Cast<long>().ToList();
+            values.Should().BeEquivalentTo(new long[] { 0, 1, 2, 3, 4 });
         }
 
         [Test]
@@ -48,10 +48,10 @@ namespace NumSharp.UnitTest.Selection
         {
             // .flat always iterates over all elements as scalars
             var nd = np.arange(12).reshape(2, 3, 2);
-            var elements = nd.flat.Cast<int>().ToList();
+            var elements = nd.flat.Cast<long>().ToList();
 
             elements.Count.Should().Be(12);
-            elements.Should().BeEquivalentTo(Enumerable.Range(0, 12));
+            elements.Should().BeEquivalentTo(Enumerable.Range(0, 12).Select(i => (long)i));
         }
     }
 }

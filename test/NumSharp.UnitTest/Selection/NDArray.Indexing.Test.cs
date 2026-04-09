@@ -20,8 +20,8 @@ namespace NumSharp.UnitTest.Selection
         {
             var nd = np.arange(12).reshape(3, 4);
 
-            Assert.IsTrue(nd.GetInt32(1, 1) == 5);
-            Assert.IsTrue(nd.GetInt32(2, 0) == 8);
+            Assert.IsTrue(nd.GetInt64(1, 1) == 5);
+            Assert.IsTrue(nd.GetInt64(2, 0) == 8);
         }
 
         [Test]
@@ -52,13 +52,13 @@ namespace NumSharp.UnitTest.Selection
         {
             var nd = np.arange(12).reshape(3, 4);
 
-            Assert.IsTrue(nd.GetInt32(0, 3) == 3);
-            Assert.IsTrue(nd.GetInt32(1, 3) == 7);
+            Assert.IsTrue(nd.GetInt64(0, 3) == 3);
+            Assert.IsTrue(nd.GetInt64(1, 3) == 7);
 
             // set value
             nd.SetValue(10, 0, 0);
-            Assert.IsTrue(nd.GetInt32(0, 0) == 10);
-            Assert.IsTrue(nd.GetInt32(1, 3) == 7);
+            Assert.IsTrue(nd.GetInt64(0, 0) == 10);
+            Assert.IsTrue(nd.GetInt64(1, 3) == 7);
         }
 
         [Test]
@@ -133,13 +133,13 @@ namespace NumSharp.UnitTest.Selection
         {
             var x = np.arange(5);
             var y1 = x["1:3"];
-            AssertAreEqual(y1.ToArray<int>(), new int[] { 1, 2 });
+            AssertAreEqual(y1.ToArray<long>(), new long[] { 1, 2 });
 
             var y2 = x["3:"];
-            AssertAreEqual(y2.ToArray<int>(), new int[] { 3, 4 });
+            AssertAreEqual(y2.ToArray<long>(), new long[] { 3, 4 });
             y2[0] = 8;
             y2[1] = 9;
-            Assert.AreEqual((int)y2[0], 8);
+            Assert.AreEqual((long)y2[0], 8L);
         }
 
 
@@ -154,29 +154,29 @@ namespace NumSharp.UnitTest.Selection
             //array([0, 1, 2, 3, 4])
             var x = np.arange(5);
             var y1 = x["0:5"];
-            AssertAreEqual(y1.ToArray<int>(), new int[] { 0, 1, 2, 3, 4 });
+            AssertAreEqual(y1.ToArray<long>(), new long[] { 0, 1, 2, 3, 4 });
             y1 = x["1:4"];
-            AssertAreEqual(y1.ToArray<int>(), new int[] { 1, 2, 3 });
+            AssertAreEqual(y1.ToArray<long>(), new long[] { 1, 2, 3 });
             //    >>> z = x[:]
             //    >>> z
             //array([0, 1, 2, 3, 4])
             var y2 = x[":"];
-            AssertAreEqual(y2.ToArray<int>(), new int[] { 0, 1, 2, 3, 4 });
+            AssertAreEqual(y2.ToArray<long>(), new long[] { 0, 1, 2, 3, 4 });
 
             // out of bounds access is handled gracefully by numpy
             //    >>> y = x[0:77]
             //    >>> y
             //array([0, 1, 2, 3, 4])
             var y3 = x["0:77"];
-            AssertAreEqual(y3.ToArray<int>(), new int[] { 0, 1, 2, 3, 4 });
+            AssertAreEqual(y3.ToArray<long>(), new long[] { 0, 1, 2, 3, 4 });
 
             //    >>> y = x[-77:]
             //    >>> y
             //array([0, 1, 2, 3, 4])
             var y4 = x["-77:"];
-            AssertAreEqual(y4.ToArray<int>(), new int[] { 0, 1, 2, 3, 4 });
+            AssertAreEqual(y4.ToArray<long>(), new long[] { 0, 1, 2, 3, 4 });
             var y = x["-77:77"];
-            AssertAreEqual(y.ToArray<int>(), new int[] { 0, 1, 2, 3, 4 });
+            AssertAreEqual(y.ToArray<long>(), new long[] { 0, 1, 2, 3, 4 });
         }
 
         [Test]
@@ -199,12 +199,12 @@ namespace NumSharp.UnitTest.Selection
             //>>>
             var x = np.arange(6);
             var y = x["1:5"];
-            AssertAreEqual(new int[] { 1, 2, 3, 4, }, y.ToArray<int>());
+            AssertAreEqual(new long[] { 1, 2, 3, 4, }, y.ToArray<long>());
             var z = y[":3"];
-            AssertAreEqual(new int[] { 1, 2, 3 }, z.ToArray<int>());
+            AssertAreEqual(new long[] { 1, 2, 3 }, z.ToArray<long>());
             z[0] = 99;
-            AssertAreEqual(new int[] { 99, 2, 3, 4 }, y.ToArray<int>());
-            AssertAreEqual(new int[] { 0, 99, 2, 3, 4, 5 }, x.ToArray<int>());
+            AssertAreEqual(new long[] { 99, 2, 3, 4 }, y.ToArray<long>());
+            AssertAreEqual(new long[] { 0, 99, 2, 3, 4, 5 }, x.ToArray<long>());
         }
 
         [Test]
@@ -265,10 +265,10 @@ namespace NumSharp.UnitTest.Selection
             var x = np.arange(4).reshape(2, 2);
             var y = x["1"]; // slice a row as 1D array
             Assert.AreEqual(new Shape(2), new Shape(y.shape));
-            AssertAreEqual(y.ToArray<int>(), new int[] { 2, 3 });
+            AssertAreEqual(y.ToArray<long>(), new long[] { 2, 3 });
             y *= 2;
-            AssertAreEqual(y.ToArray<int>(), new int[] { 4, 6 });
-            //AssertAreEqual(x.ToArray<int>(), new int[] { 0, 1, 4, 6 });
+            AssertAreEqual(y.ToArray<long>(), new long[] { 4, 6 });
+            //AssertAreEqual(x.ToArray<long>(), new long[] { 0, 1, 4, 6 });
         }
 
         [Test]
@@ -342,13 +342,13 @@ namespace NumSharp.UnitTest.Selection
         {
             var x = np.arange(6).reshape(3, 2);
             var y = x[":,0"];
-            AssertAreEqual(new int[] { 0, 2, 4, }, y.ToArray<int>());
+            AssertAreEqual(new long[] { 0, 2, 4, }, y.ToArray<long>());
             var z = x["1,:"];
-            AssertAreEqual(new int[] { 2, 3 }, z.ToArray<int>());
+            AssertAreEqual(new long[] { 2, 3 }, z.ToArray<long>());
             z[0] = 99;
-            AssertAreEqual(new int[] { 99, 3 }, z.ToArray<int>());
-            AssertAreEqual(new int[] { 0, 99, 4 }, y.ToArray<int>());
-            AssertAreEqual(new int[] { 0, 1, 99, 3, 4, 5 }, x.ToArray<int>());
+            AssertAreEqual(new long[] { 99, 3 }, z.ToArray<long>());
+            AssertAreEqual(new long[] { 0, 99, 4 }, y.ToArray<long>());
+            AssertAreEqual(new long[] { 0, 1, 99, 3, 4, 5 }, x.ToArray<long>());
         }
 
         [Test]
@@ -362,13 +362,13 @@ namespace NumSharp.UnitTest.Selection
             //>>> y
             //array([4, 3, 2, 1, 0])
             var y = x["::-1"];
-            AssertAreEqual(y.ToArray<int>(), new int[] { 4, 3, 2, 1, 0 });
+            AssertAreEqual(y.ToArray<long>(), new long[] { 4, 3, 2, 1, 0 });
 
             //>>> y = x[::2]
             //>>> y
             //array([0, 2, 4])
             y = x["::2"];
-            AssertAreEqual(y.ToArray<int>(), new int[] { 0, 2, 4 });
+            AssertAreEqual(y.ToArray<long>(), new long[] { 0, 2, 4 });
         }
 
         [Test]
@@ -391,8 +391,8 @@ namespace NumSharp.UnitTest.Selection
             var x = np.arange(6);
             var y = x["::-1"];
             y[0] = 99;
-            AssertAreEqual(new int[] { 0, 1, 2, 3, 4, 99 }, x.ToArray<int>());
-            AssertAreEqual(new int[] { 99, 4, 3, 2, 1, 0 }, y.ToArray<int>());
+            AssertAreEqual(new long[] { 0, 1, 2, 3, 4, 99 }, x.ToArray<long>());
+            AssertAreEqual(new long[] { 99, 4, 3, 2, 1, 0 }, y.ToArray<long>());
             //>>> z = y[::2]
             //>>> z
             //array([99, 3, 1])
@@ -402,11 +402,11 @@ namespace NumSharp.UnitTest.Selection
             //>>> y
             //array([99, 4, 111, 2, 1, 0])
             var z = y["::2"];
-            AssertAreEqual(new int[] { 99, 3, 1 }, z.ToArray<int>());
+            AssertAreEqual(new long[] { 99, 3, 1 }, z.ToArray<long>());
             z[1] = 111;
-            AssertAreEqual(new int[] { 99, 111, 1 }, (int[])z);
-            AssertAreEqual(new int[] { 0, 1, 2, 111, 4, 99 }, x.ToArray<int>());
-            AssertAreEqual(new int[] { 99, 4, 111, 2, 1, 0 }, y.ToArray<int>());
+            AssertAreEqual(new long[] { 99, 111, 1 }, (long[])z);
+            AssertAreEqual(new long[] { 0, 1, 2, 111, 4, 99 }, x.ToArray<long>());
+            AssertAreEqual(new long[] { 99, 4, 111, 2, 1, 0 }, y.ToArray<long>());
         }
 
         [Test]
@@ -492,21 +492,21 @@ namespace NumSharp.UnitTest.Selection
             var x = np.arange(12).reshape(3, 2, 2);
             var y1 = x["1:"];
             Assert.IsTrue(y1.shape.SequenceEqual(new long[] { 2, 2, 2 }));
-            Assert.IsTrue(Enumerable.SequenceEqual(y1.ToArray<int>(), new int[] { 4, 5, 6, 7, 8, 9, 10, 11 }));
-            Assert.IsTrue(Enumerable.SequenceEqual(y1[0, 1].ToArray<int>(), new int[] { 6, 7 }));
+            Assert.IsTrue(Enumerable.SequenceEqual(y1.ToArray<long>(), new long[] { 4, 5, 6, 7, 8, 9, 10, 11 }));
+            Assert.IsTrue(Enumerable.SequenceEqual(y1[0, 1].ToArray<long>(), new long[] { 6, 7 }));
 
             var y1_0 = y1[0];
             Assert.IsTrue(y1_0.shape.SequenceEqual(new long[] { 2, 2 }));
-            Assert.IsTrue(Enumerable.SequenceEqual(y1_0.ToArray<int>(), new int[] { 4, 5, 6, 7 }));
+            Assert.IsTrue(Enumerable.SequenceEqual(y1_0.ToArray<long>(), new long[] { 4, 5, 6, 7 }));
 
             // change view
-            y1[0, 1] = new int[] { 100, 101 };
-            Assert.IsTrue(Enumerable.SequenceEqual(x.ToArray<int>(), new int[] { 0, 1, 2, 3, 4, 5, 100, 101, 8, 9, 10, 11 }));
-            Assert.IsTrue(Enumerable.SequenceEqual(y1.ToArray<int>(), new int[] { 4, 5, 100, 101, 8, 9, 10, 11 }));
+            y1[0, 1] = new long[] { 100, 101 };
+            Assert.IsTrue(Enumerable.SequenceEqual(x.ToArray<long>(), new long[] { 0, 1, 2, 3, 4, 5, 100, 101, 8, 9, 10, 11 }));
+            Assert.IsTrue(Enumerable.SequenceEqual(y1.ToArray<long>(), new long[] { 4, 5, 100, 101, 8, 9, 10, 11 }));
 
             var y2 = x["2:"];
             Assert.IsTrue(y2.shape.SequenceEqual(new long[] { 1, 2, 2 }));
-            Assert.IsTrue(Enumerable.SequenceEqual(y2.ToArray<int>(), new int[] { 8, 9, 10, 11 }));
+            Assert.IsTrue(Enumerable.SequenceEqual(y2.ToArray<long>(), new long[] { 8, 9, 10, 11 }));
         }
 
         [Test]
@@ -541,21 +541,21 @@ namespace NumSharp.UnitTest.Selection
             var y1 = np.arange(5, 8).MakeGeneric<long>();
             var y2 = np.arange(10, 13).MakeGeneric<long>();
 
-            AssertAreEqual(new int[] { 0, 1, 2, 3, 4 }, x.ToArray<int>());
+            AssertAreEqual(new long[] { 0, 1, 2, 3, 4 }, x.ToArray<long>());
 
             var xS1 = x["1:4"];
             xS1[0] = y1[0];
             xS1[1] = y1[1];
             xS1[2] = y1[2];
 
-            AssertAreEqual(new int[] { 5, 6, 7 }, xS1.ToArray<int>());
-            AssertAreEqual(new int[] { 0, 5, 6, 7, 4 }, x.ToArray<int>());
+            AssertAreEqual(new long[] { 5, 6, 7 }, xS1.ToArray<long>());
+            AssertAreEqual(new long[] { 0, 5, 6, 7, 4 }, x.ToArray<long>());
 
             var xS2 = x[new Slice(1, -1)];
             xS2[":"] = y2;
 
-            AssertAreEqual(new int[] { 10, 11, 12 }, xS2.ToArray<int>());
-            AssertAreEqual(new int[] { 0, 10, 11, 12, 4 }, x.ToArray<int>());
+            AssertAreEqual(new long[] { 10, 11, 12 }, xS2.ToArray<long>());
+            AssertAreEqual(new long[] { 0, 10, 11, 12, 4 }, x.ToArray<long>());
         }
 
         [Test]
@@ -631,21 +631,21 @@ namespace NumSharp.UnitTest.Selection
             var y1 = np.arange(6, 9).MakeGeneric<long>();
             var y2 = np.arange(12, 15).MakeGeneric<long>();
 
-            AssertAreEqual(new int[] { 0, 1, 2, 3, 4, 5, 6, 7, 8 }, x.ToArray<int>());
+            AssertAreEqual(new long[] { 0, 1, 2, 3, 4, 5, 6, 7, 8 }, x.ToArray<long>());
 
             var xS1 = x["1"];
             xS1[0] = y1[0];
             xS1[1] = y1[1];
             xS1[2] = y1[2];
 
-            AssertAreEqual(new int[] { 6, 7, 8 }, xS1.ToArray<int>());
-            AssertAreEqual(new int[] { 0, 1, 2, 6, 7, 8, 6, 7, 8 }, x.ToArray<int>());
+            AssertAreEqual(new long[] { 6, 7, 8 }, xS1.ToArray<long>());
+            AssertAreEqual(new long[] { 0, 1, 2, 6, 7, 8, 6, 7, 8 }, x.ToArray<long>());
 
             var xS2 = x[new Slice(1, -1)];
             xS2[":"] = y2;
 
-            AssertAreEqual(new int[] { 12, 13, 14 }, xS2.ToArray<int>());
-            AssertAreEqual(new int[] { 0, 1, 2, 12, 13, 14, 6, 7, 8 }, x.ToArray<int>());
+            AssertAreEqual(new long[] { 12, 13, 14 }, xS2.ToArray<long>());
+            AssertAreEqual(new long[] { 0, 1, 2, 12, 13, 14, 6, 7, 8 }, x.ToArray<long>());
         }
 
         /// <summary>

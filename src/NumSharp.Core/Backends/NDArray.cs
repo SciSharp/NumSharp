@@ -582,13 +582,12 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ndarray.view.html</remarks>
         public NDArray view(Type dtype = null)
         {
-            //TODO! this shouldnt be a cast in case dtype != null, it should be an unsafe reinterpret (see remarks).
             if (dtype == null || dtype == this.dtype)
             {
-                return new NDArray(Storage.Alias());
+                return new NDArray(Storage.Alias()) { tensorEngine = TensorEngine };
             }
-            // Cast creates a copy, not a view - no base needed
-            return new NDArray(Storage.Cast(dtype));
+            // AliasAs reinterprets bytes without conversion (like NumPy's view)
+            return new NDArray(Storage.AliasAs(dtype)) { tensorEngine = TensorEngine };
         }
 
         /// <summary>

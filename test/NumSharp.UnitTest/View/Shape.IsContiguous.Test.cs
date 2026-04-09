@@ -654,7 +654,7 @@ namespace NumSharp.UnitTest.View
         {
             // np.copyto with contiguous slices should use fast memcpy path
             var src = np.arange(10)["2:7"]; // [2,3,4,5,6]
-            var dst = np.zeros(new Shape(5), np.int32);
+            var dst = np.zeros(new Shape(5), np.int64);
             np.copyto(dst, src);
             for (int i = 0; i < 5; i++)
                 dst.GetInt64(i).Should().Be(2 + i);

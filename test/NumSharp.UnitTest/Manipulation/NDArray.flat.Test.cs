@@ -43,7 +43,7 @@ namespace NumSharp.UnitTest.Manipulation
             Console.WriteLine((string)flat);
             flat.size.Should().Be(1);
             flat.ndim.Should().Be(0);
-            flat.Cast<int>().Should().AllBeEquivalentTo(1);
+            flat.item<int>().Should().Be(1);
         }
 
         [Test]
@@ -92,7 +92,7 @@ namespace NumSharp.UnitTest.Manipulation
             flat.size.Should().Be(1);
             flat.ndim.Should().Be(0);
             flat.Shape.Should().BeScalar();
-            flat.Cast<int>().Should().AllBeEquivalentTo(1);
+            flat.item<int>().Should().Be(1);
         }
 
         [Test]

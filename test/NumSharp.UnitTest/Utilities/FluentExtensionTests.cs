@@ -271,7 +271,7 @@ namespace NumSharp.UnitTest.Utilities
         [Test]
         public void NDArray_BeOfType_NPTypeCode_Passes()
         {
-            np.arange(3).Should().BeOfType(NPTypeCode.Int32);
+            np.arange(3).Should().BeOfType(NPTypeCode.Int64);
         }
 
         [Test]
@@ -509,11 +509,11 @@ namespace NumSharp.UnitTest.Utilities
         public void NDArray_Chaining_Values_And_Shape()
         {
             np.arange(6).reshape(2, 3).Should()
-                .BeOfValues(0, 1, 2, 3, 4, 5)
+                .BeOfValues(0L, 1L, 2L, 3L, 4L, 5L)
                 .And.BeShaped(2, 3)
                 .And.HaveNDim(2)
                 .And.NotBeScalar()
-                .And.BeOfType(NPTypeCode.Int32);
+                .And.BeOfType(NPTypeCode.Int64);
         }
 
         [Test]
@@ -685,7 +685,7 @@ namespace NumSharp.UnitTest.Utilities
         [Test]
         public void NDArray_NotBeOfType_Fails_WhenMatch()
         {
-            Action act = () => np.arange(3).Should().NotBeOfType(NPTypeCode.Int32);
+            Action act = () => np.arange(3).Should().NotBeOfType(NPTypeCode.Int64);
             act.Should().Throw<Exception>();
         }
 
