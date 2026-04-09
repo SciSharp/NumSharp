@@ -27,14 +27,9 @@ namespace NumSharp
             return rep switch
             {
                 NPTypeCode tc => tc != NPTypeCode.Empty && tc != NPTypeCode.String,
-                Type t => IsValidScalarType(t.GetTypeCode()),
+                Type t => t.GetTypeCode() is var tc && tc != NPTypeCode.Empty && tc != NPTypeCode.String,
                 _ => false
             };
-        }
-
-        private static bool IsValidScalarType(NPTypeCode tc)
-        {
-            return tc != NPTypeCode.Empty && tc != NPTypeCode.String;
         }
 
         /// <summary>
@@ -53,6 +48,8 @@ namespace NumSharp
         /// <remarks>
         /// https://numpy.org/doc/stable/reference/generated/numpy.isdtype.html
         /// This is a NumPy 2.0+ function.
+        ///
+        /// Uses NPTypeHierarchy for consistent type categorization across all typing functions.
         /// </remarks>
         /// <example>
         /// <code>
@@ -63,15 +60,8 @@ namespace NumSharp
         /// </example>
         public static bool isdtype(NPTypeCode dtype, string kind)
         {
-            return kind.ToLowerInvariant() switch
-            {
-                "bool" or "boolean" => dtype == NPTypeCode.Boolean,
-                "integral" or "integer" => dtype.IsInteger(),
-                "real floating" or "floating" or "float" => dtype.IsFloatingPoint(),
-                "complex floating" or "complex" => dtype == NPTypeCode.Complex,
-                "numeric" => dtype.IsNumerical() && dtype != NPTypeCode.Boolean,
-                _ => false
-            };
+            // Use NPTypeHierarchy for consistent behavior with issubdtype
+            return NPTypeHierarchy.IsSubType(dtype, kind);
         }
 
         /// <summary>
@@ -208,6 +198,8 @@ namespace NumSharp
         /// <returns>The highest precision type of the same kind.</returns>
         /// <remarks>
         /// https://numpy.org/doc/stable/reference/generated/numpy.maximum_sctype.html
+        ///
+        /// Uses NPTypeHierarchy for consistent type categorization across all typing functions.
         /// </remarks>
         /// <example>
         /// <code>
@@ -217,29 +209,7 @@ namespace NumSharp
         /// </example>
         public static NPTypeCode maximum_sctype(NPTypeCode t)
         {
-            return t switch
-            {
-                // Boolean stays boolean
-                NPTypeCode.Boolean => NPTypeCode.Boolean,
-
-                // All signed integers -> int64
-                NPTypeCode.Int16 or NPTypeCode.Int32 or NPTypeCode.Int64 => NPTypeCode.Int64,
-
-                // All unsigned integers -> uint64
-                NPTypeCode.Byte or NPTypeCode.UInt16 or NPTypeCode.UInt32 or NPTypeCode.UInt64 => NPTypeCode.UInt64,
-
-                // Char treated as unsigned integer
-                NPTypeCode.Char => NPTypeCode.UInt64,
-
-                // All floats -> highest precision (Decimal in NumSharp)
-                NPTypeCode.Single or NPTypeCode.Double => NPTypeCode.Double,  // or Decimal for max precision
-                NPTypeCode.Decimal => NPTypeCode.Decimal,
-
-                // Complex stays complex
-                NPTypeCode.Complex => NPTypeCode.Complex,
-
-                _ => t
-            };
+            return NPTypeHierarchy.GetMaximumType(t);
         }
     }
 }

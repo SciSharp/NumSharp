@@ -142,7 +142,14 @@ public class NpIsSubdtypeBattleTests
     [Test]
     public async Task IsSubdtype_Type_Type()
     {
-        await Assert.That(np.issubdtype(typeof(int), typeof(long))).IsTrue();
+        // Same concrete types: returns True
+        await Assert.That(np.issubdtype(typeof(int), typeof(int))).IsTrue();
+        await Assert.That(np.issubdtype(typeof(long), typeof(long))).IsTrue();
+
+        // Different concrete types: returns False (even if same kind)
+        // This matches NumPy: np.issubdtype(np.int32, np.int64) == False
+        await Assert.That(np.issubdtype(typeof(int), typeof(long))).IsFalse();
+        await Assert.That(np.issubdtype(typeof(float), typeof(double))).IsFalse();
     }
 
     #endregion

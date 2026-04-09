@@ -259,6 +259,13 @@ namespace NumSharp
         /// <summary>
         /// Check if casting is allowed within the same kind (integers to integers, floats to floats).
         /// </summary>
+        /// <remarks>
+        /// Uses NPTypeHierarchy for consistent type categorization across all typing functions.
+        /// same_kind allows downcasting within:
+        /// - integers (both signed and unsigned, e.g., int64 -> int32, uint32 -> int16)
+        /// - floating point (e.g., float64 -> float32)
+        /// - complex (e.g., complex128 -> complex64, if we had it)
+        /// </remarks>
         private static bool CanCastSameKind(NPTypeCode from, NPTypeCode to)
         {
             // Safe casts are always allowed
@@ -266,32 +273,7 @@ namespace NumSharp
                 return true;
 
             // Allow downcasting within the same kind
-            var fromKind = GetTypeKind(from);
-            var toKind = GetTypeKind(to);
-
-            return fromKind == toKind && fromKind != TypeKind.Other;
-        }
-
-        private enum TypeKind
-        {
-            SignedInteger,
-            UnsignedInteger,
-            Floating,
-            Boolean,
-            Other
-        }
-
-        private static TypeKind GetTypeKind(NPTypeCode type)
-        {
-            return type switch
-            {
-                NPTypeCode.Boolean => TypeKind.Boolean,
-                NPTypeCode.Byte or NPTypeCode.UInt16 or NPTypeCode.UInt32 or NPTypeCode.UInt64 => TypeKind.UnsignedInteger,
-                NPTypeCode.Int16 or NPTypeCode.Int32 or NPTypeCode.Int64 => TypeKind.SignedInteger,
-                NPTypeCode.Single or NPTypeCode.Double or NPTypeCode.Decimal => TypeKind.Floating,
-                NPTypeCode.Char => TypeKind.UnsignedInteger,  // Char treated as unsigned integer
-                _ => TypeKind.Other
-            };
+            return NPTypeHierarchy.IsSameKind(from, to);
         }
 
         /// <summary>
