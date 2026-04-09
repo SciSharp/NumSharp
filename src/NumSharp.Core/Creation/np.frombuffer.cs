@@ -438,6 +438,29 @@ namespace NumSharp
         }
 
         /// <summary>
+        /// Interpret unmanaged memory at a pointer as a 1-dimensional array.
+        /// </summary>
+        /// <param name="address">Pointer to the start of the buffer.</param>
+        /// <param name="byteLength">Total length of the buffer in bytes.</param>
+        /// <param name="dtype">Data-type of the returned array. Default is float64.</param>
+        /// <param name="count">Number of items to read. -1 means all data.</param>
+        /// <param name="offset">Byte offset into the buffer. Default is 0.</param>
+        /// <param name="dispose">Optional cleanup action called when NDArray is disposed.</param>
+        /// <returns>1-dimensional NDArray viewing/owning the memory.</returns>
+        public static unsafe NDArray frombuffer(void* address, long byteLength, Type dtype = null, long count = -1, long offset = 0, Action dispose = null)
+        {
+            return frombuffer((IntPtr)address, byteLength, dtype, count, offset, dispose);
+        }
+
+        /// <summary>
+        /// Interpret unmanaged memory at a pointer as a 1-dimensional array.
+        /// </summary>
+        public static unsafe NDArray frombuffer(void* address, long byteLength, NPTypeCode dtype, long count = -1, long offset = 0, Action dispose = null)
+        {
+            return frombuffer((IntPtr)address, byteLength, dtype, count, offset, dispose);
+        }
+
+        /// <summary>
         /// Reinterpret a typed array as a different dtype.
         /// Like NumPy's view() but via frombuffer semantics.
         /// </summary>

@@ -2,7 +2,7 @@
 
 NumSharp stores all array data in unmanaged memory for maximum performance. This design choice—borrowed from NumPy's architecture—enables zero-copy interop with native libraries, efficient memory-mapped file access, and predictable memory layout for SIMD operations.
 
-This page explains how memory flows through NumSharp, how to create arrays from existing buffers without copying, how to control who owns and frees the memory, and when you might want to dive into the internal APIs.
+This page explains how to create arrays from existing buffers without copying, how to control who owns and frees the memory, and how memory flows through NumSharp.
 
 ---
 
@@ -24,7 +24,7 @@ The tradeoff is complexity: you need to understand when memory is shared, who ow
 
 ## Memory Architecture
 
-NumSharp uses a layered architecture. Understanding these layers helps you choose the right API for your use case.
+NumSharp uses a layered architecture for memory management. Understanding these layers helps you reason about what happens under the hood.
 
 ```
 User Code
@@ -37,27 +37,18 @@ User Code
     │
     ▼
 ┌─────────────────────────────────────────────┐
-│  ArraySlice / ArraySlice<T>                 │
-│  Typed wrapper with factory methods         │
+│  Internal Infrastructure                    │
+│  ArraySlice, UnmanagedMemoryBlock,          │
+│  UnmanagedStorage                           │
 └─────────────────────────────────────────────┘
     │
     ▼
-┌─────────────────────────────────────────────┐
-│  UnmanagedMemoryBlock<T>                    │
-│  Raw memory: allocation, pinning, ownership │
-└─────────────────────────────────────────────┘
-    │
-    ▼
-  Native Memory (Marshal.AllocHGlobal, GCHandle.Alloc, etc.)
+  Native Memory (pinned arrays, allocated blocks, external pointers)
 ```
 
-**External APIs** are what most users interact with. They're designed to feel like NumPy: `np.frombuffer()`, `np.array()`, and the `NDArray` constructors. These APIs hide the complexity of memory management behind sensible defaults.
+**External APIs** are what you interact with: `np.frombuffer()`, `np.array()`, and the `NDArray` constructors. These APIs hide the complexity of memory management behind sensible defaults.
 
-**ArraySlice** is a typed wrapper that knows the element type at compile time. It provides factory methods like `FromArray()`, `FromBuffer()`, and `Wrap()`. Library authors building on NumSharp often work at this level.
-
-**UnmanagedMemoryBlock<T>** is the foundation. It handles raw memory allocation, pinning managed arrays so the GC won't move them, and tracking ownership so memory gets freed at the right time. When NumSharp needs a new capability (like offset support), it gets added here first.
-
-This layering means you can choose your level of abstraction. Most users never go below `np.frombuffer()`. Library authors might use `ArraySlice`. Native interop scenarios sometimes require `UnmanagedMemoryBlock<T>` directly.
+**Internal Infrastructure** handles the low-level details: pinning managed arrays so the GC won't move them, tracking ownership so memory gets freed at the right time, and managing the raw pointers. You don't need to interact with these directly—the external APIs handle it for you.
 
 ---
 
@@ -118,13 +109,13 @@ Console.WriteLine(arr[0]);   // Still 85 - arr has its own copy
 
 ```csharp
 int[] scores = { 85, 92, 78, 95, 88 };
-var arr = new NDArray(scores);  // Pins the array, creates a view
+var arr = new NDArray(scores);  // Creates a view
 
 scores[0] = 0;                  // Original changed
 Console.WriteLine(arr[0]);      // 0 - they share memory!
 ```
 
-The `NDArray` constructor creates a view by "pinning" the managed array. Pinning tells the GC not to move the array, which lets NumSharp use it directly. This is fast but couples their lifetimes: the array can't be garbage collected while the NDArray exists.
+The `NDArray` constructor creates a view. This is fast but couples their lifetimes: modifications to one affect the other.
 
 **Reinterpreting types:**
 
@@ -208,7 +199,7 @@ Memory<byte> memory = GetDataFromSomewhere();
 var arr = np.frombuffer(memory, typeof(float));
 ```
 
-If the Memory is backed by an array (the common case), NumSharp creates a view. If it's backed by something else (like native memory), NumSharp copies.
+If the Memory is backed by an array (the common case), NumSharp creates a view. If it's backed by something else, NumSharp copies.
 
 **ReadOnlySpan<byte>** always requires a copy because spans can't be pinned—they might be stack-allocated:
 
@@ -225,8 +216,8 @@ Understanding when NumSharp shares memory versus copying is crucial for correctn
 
 ### The Rule of Thumb
 
-- **Mutable, pinnable sources → View.** byte[], T[], ArraySegment, array-backed Memory
-- **Immutable or unpinnable sources → Copy.** ReadOnlySpan, non-array Memory, big-endian conversion
+- **Mutable, pinnable sources → View.** `byte[]`, `T[]`, `ArraySegment`, array-backed `Memory`
+- **Immutable or unpinnable sources → Copy.** `ReadOnlySpan`, non-array `Memory`, big-endian conversion
 
 ### Why Views Matter
 
@@ -293,7 +284,7 @@ The fix is either to copy:
 return np.frombuffer(localBuffer, typeof(float)).copy();
 ```
 
-Or to let NumSharp own the buffer by using a different approach:
+Or to let NumSharp own the memory by using a different approach:
 
 ```csharp
 var arr = np.zeros<float>(256);  // NumSharp owns this memory
@@ -309,12 +300,12 @@ Memory ownership is the most subtle aspect of NumSharp's memory model. Getting i
 
 ### Managed Arrays (byte[], T[])
 
-When you view a managed array, NumSharp "pins" it using `GCHandle`. This prevents the GC from moving the array. When the NDArray is garbage collected, NumSharp unpins the array, and normal GC takes over.
+When you view a managed array, NumSharp "pins" it internally. This prevents the GC from moving the array. When the NDArray is garbage collected, NumSharp unpins the array, and normal GC takes over.
 
 ```csharp
 var buffer = new byte[1024];
 var arr = np.frombuffer(buffer, typeof(float));
-// buffer is now pinned
+// buffer is now pinned internally
 
 arr = null;
 GC.Collect();
@@ -351,8 +342,6 @@ Now when `arr` is garbage collected, NumSharp calls your dispose action. This ha
 2. It will eventually happen (unless the process exits first)
 3. Don't rely on order between multiple finalizers
 
-For deterministic cleanup, you can manually dispose the storage, but this is rarely needed in practice.
-
 ### Common Ownership Patterns
 
 **ArrayPool integration:**
@@ -384,127 +373,6 @@ var arr = np.frombuffer(ptr, 1024, typeof(float),
 IntPtr ptr = Marshal.AllocCoTaskMem(1024);
 var arr = np.frombuffer(ptr, 1024, typeof(int),
     dispose: () => Marshal.FreeCoTaskMem(ptr));
-```
-
----
-
-## Internal APIs
-
-Most users never need the internal APIs, but library authors and advanced scenarios sometimes require direct access to the building blocks.
-
-### UnmanagedMemoryBlock<T>
-
-This is the foundation of NumSharp's memory system. It represents a contiguous block of typed memory and tracks ownership.
-
-**Allocation:**
-
-```csharp
-// Allocate 1000 floats (uninitialized memory - may contain garbage)
-var block = new UnmanagedMemoryBlock<float>(1000);
-
-// Allocate and fill with a value
-var zeros = new UnmanagedMemoryBlock<double>(1000, 0.0);
-```
-
-**Wrapping managed arrays:**
-
-```csharp
-int[] data = { 1, 2, 3, 4, 5 };
-
-// Pin the array (no copy, view semantics)
-var block = UnmanagedMemoryBlock<int>.FromArray(data, copy: false);
-
-// Copy the array (independent memory)
-var block = UnmanagedMemoryBlock<int>.FromArray(data, copy: true);
-```
-
-**Wrapping native memory:**
-
-```csharp
-unsafe
-{
-    float* ptr = (float*)Marshal.AllocHGlobal(1000 * sizeof(float));
-
-    // View only (no ownership)
-    var view = new UnmanagedMemoryBlock<float>(ptr, 1000);
-
-    // With ownership
-    var owned = new UnmanagedMemoryBlock<float>(ptr, 1000,
-        dispose: () => Marshal.FreeHGlobal((IntPtr)ptr));
-}
-```
-
-**From byte buffers:**
-
-```csharp
-byte[] bytes = GetBinaryData();
-
-// Interpret as doubles, starting at byte 16, reading 100 doubles
-var block = UnmanagedMemoryBlock<double>.FromBuffer(
-    bytes, byteOffset: 16, count: 100, copy: false);
-```
-
-### ArraySlice and ArraySlice<T>
-
-`ArraySlice<T>` wraps an `UnmanagedMemoryBlock<T>` and provides a typed interface. The non-generic `ArraySlice` class has factory methods that return the appropriate typed slice.
-
-```csharp
-// From managed array
-var slice = ArraySlice.FromArray(myIntArray, copy: false);
-// Returns ArraySlice<int>
-
-// From byte buffer (interprets bytes as T)
-var slice = ArraySlice.FromBuffer<float>(byteArray, copy: false);
-
-// Wrap raw pointer
-unsafe
-{
-    int* ptr = GetPointer();
-    var slice = ArraySlice.Wrap<int>(ptr, count: 100);
-}
-
-// Allocate new memory
-var slice = ArraySlice.Allocate<double>(1000);
-```
-
-### UnmanagedStorage
-
-`UnmanagedStorage` combines an `ArraySlice` with a `Shape`. This is what `NDArray` wraps.
-
-```csharp
-var slice = ArraySlice.Allocate<float>(1000);
-var shape = new Shape(10, 10, 10);  // 10x10x10 = 1000 elements
-var storage = new UnmanagedStorage(slice, shape);
-var arr = new NDArray(storage);
-```
-
-### Building Custom NDArrays
-
-Here's a complete example of building an NDArray from scratch:
-
-```csharp
-unsafe
-{
-    // Get data from somewhere (native library, memory-mapped file, etc.)
-    byte* rawData = GetExternalData(out long byteCount);
-    long floatCount = byteCount / sizeof(float);
-
-    // Create the memory block (no ownership - external data)
-    var block = new UnmanagedMemoryBlock<float>((float*)rawData, floatCount);
-
-    // Wrap in a slice
-    var slice = new ArraySlice<float>(block);
-
-    // Create storage with a 2D shape
-    var shape = new Shape(floatCount / 100, 100);  // Assume divisible by 100
-    var storage = new UnmanagedStorage(slice, shape);
-
-    // Finally, create the NDArray
-    var arr = new NDArray(storage);
-
-    // Use arr...
-    var mean = np.mean(arr, axis: 1);
-}
 ```
 
 ---
@@ -625,27 +493,18 @@ var outputImage = result.reshape(height, width, 3);
 // Create data on CPU
 var cpuData = np.random.rand(1000, 1000).astype(np.float32);
 
-// Pin for GPU transfer
-GCHandle handle = GCHandle.Alloc(
-    cpuData.ToArray<float>(), GCHandleType.Pinned);
-try
-{
-    IntPtr pinnedPtr = handle.AddrOfPinnedObject();
+// Get pointer for GPU transfer
+IntPtr dataPtr = cpuData.data;
 
-    // Transfer to GPU (CUDA example)
-    cudaMemcpy(devicePtr, pinnedPtr,
-        cpuData.size * sizeof(float), cudaMemcpyHostToDevice);
+// Transfer to GPU (CUDA example)
+cudaMemcpy(devicePtr, dataPtr,
+    cpuData.size * sizeof(float), cudaMemcpyHostToDevice);
 
-    // ... GPU computation ...
+// ... GPU computation ...
 
-    // Transfer back
-    cudaMemcpy(pinnedPtr, devicePtr,
-        cpuData.size * sizeof(float), cudaMemcpyDeviceToHost);
-}
-finally
-{
-    handle.Free();
-}
+// Transfer back
+cudaMemcpy(dataPtr, devicePtr,
+    cpuData.size * sizeof(float), cudaMemcpyDeviceToHost);
 ```
 
 ---
@@ -714,6 +573,29 @@ The dispose action only runs on GC. If you hold references forever, the memory l
 
 ---
 
+## API Reference
+
+### np.frombuffer Overloads
+
+| Signature | View/Copy | Notes |
+|-----------|-----------|-------|
+| `frombuffer(byte[], dtype, count, offset)` | View | Pins array |
+| `frombuffer(byte[], string dtype, count, offset)` | Copy if big-endian | Handles endianness |
+| `frombuffer(ReadOnlySpan<byte>, dtype, count, offset)` | Copy | Spans can't be pinned |
+| `frombuffer(ArraySegment<byte>, dtype, count)` | View | Uses segment's offset |
+| `frombuffer(Memory<byte>, dtype, count, offset)` | View if array-backed | Fallback to copy |
+| `frombuffer(IntPtr, byteLength, dtype, count, offset, dispose)` | View | Optional ownership |
+| `frombuffer<TSource>(TSource[], dtype, count, offset)` | View | Reinterpret typed array |
+
+### np.array vs NDArray Constructor
+
+| API | Default Behavior | Use When |
+|-----|------------------|----------|
+| `np.array(T[])` | Copy | You want independent data |
+| `new NDArray(Array)` | View | You want shared memory, better performance |
+
+---
+
 ## Summary
 
 NumSharp's memory system is designed for performance and interoperability. The key concepts are:
@@ -721,7 +603,7 @@ NumSharp's memory system is designed for performance and interoperability. The k
 1. **Views share memory** with the source. Fast but coupled.
 2. **Copies are independent** but require allocation.
 3. **Ownership determines who frees.** Managed arrays are GC'd; native memory needs explicit handling.
-4. **The dispose callback** transfers ownership to NumSharp.
-5. **Internal APIs** (UnmanagedMemoryBlock, ArraySlice) are available when you need control.
+4. **The dispose callback** transfers ownership to NumSharp for native memory.
+5. **Use `.copy()` when in doubt** to avoid lifetime bugs.
 
-For most code, `np.frombuffer()` with default settings does the right thing. When you need more control, the parameters and internal APIs are there.
+For most code, `np.frombuffer()` with default settings does the right thing. When you need more control, the parameters are there.
