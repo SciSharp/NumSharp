@@ -32,14 +32,7 @@ public class SkipOnLowMemoryAttribute : SkipAttribute
 
     public override Task<bool> ShouldSkip(TestRegisteredContext context)
     {
-        // DISABLED FOR TESTING - always run, never skip
-        // This tests if CI can pass without memory-based skipping
         var availableMemoryGB = TestMemoryTracker.GetAvailableMemoryGB();
-        Console.Error.WriteLine($"[SkipOnLowMemory] DISABLED - Running test. Available: {availableMemoryGB:F1}GB, Would need: {_requiredMemoryGB}GB");
-
-        return Task.FromResult(false); // Never skip
-
-        /* ORIGINAL CODE - re-enable after testing
         var shouldSkip = availableMemoryGB < _requiredMemoryGB;
 
         if (shouldSkip)
@@ -59,6 +52,5 @@ public class SkipOnLowMemoryAttribute : SkipAttribute
         }
 
         return Task.FromResult(shouldSkip);
-        */
     }
 }
