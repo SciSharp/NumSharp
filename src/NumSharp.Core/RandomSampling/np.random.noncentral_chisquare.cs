@@ -45,7 +45,17 @@ namespace NumSharp
         /// <param name="nonc">Non-centrality parameter, must be >= 0.</param>
         /// <param name="size">Output shape as int array.</param>
         /// <returns>Drawn samples from the parameterized noncentral chi-square distribution.</returns>
-        public NDArray noncentral_chisquare(double df, double nonc, params int[] size)
+        public NDArray noncentral_chisquare(double df, double nonc, int[] size)
+            => noncentral_chisquare(df, nonc, new Shape(size));
+
+        /// <summary>
+        ///     Draw samples from a noncentral chi-square distribution.
+        /// </summary>
+        /// <param name="df">Degrees of freedom, must be > 0.</param>
+        /// <param name="nonc">Non-centrality parameter, must be >= 0.</param>
+        /// <param name="size">Output shape.</param>
+        /// <returns>Drawn samples from the parameterized noncentral chi-square distribution.</returns>
+        public NDArray noncentral_chisquare(double df, double nonc, params long[] size)
             => noncentral_chisquare(df, nonc, new Shape(size));
 
         /// <summary>

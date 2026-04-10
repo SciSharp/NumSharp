@@ -23,7 +23,7 @@ namespace NumSharp.UnitTest.RandomSampling
         public void NoncentralF_Returns1DArray()
         {
             np.random.seed(42);
-            var result = np.random.noncentral_f(5, 10, 2, 5);
+            var result = np.random.noncentral_f(5, 10, 2, 5L);
 
             result.shape.Should().ContainInOrder(5);
             result.size.Should().Be(5);
@@ -43,7 +43,7 @@ namespace NumSharp.UnitTest.RandomSampling
         public void NoncentralF_AllValuesPositive()
         {
             np.random.seed(42);
-            var samples = np.random.noncentral_f(5, 10, 2, 10000);
+            var samples = np.random.noncentral_f(5, 10, 2, 10000L);
 
             var min = (double)np.amin(samples);
             min.Should().BeGreaterThan(0.0);
@@ -54,7 +54,7 @@ namespace NumSharp.UnitTest.RandomSampling
         {
             // When nonc=0, should behave like central F distribution
             np.random.seed(42);
-            var samples = np.random.noncentral_f(5, 10, 0, 10000);
+            var samples = np.random.noncentral_f(5, 10, 0, 10000L);
 
             // All should be positive
             var min = (double)np.amin(samples);
@@ -70,9 +70,9 @@ namespace NumSharp.UnitTest.RandomSampling
         public void NoncentralF_LargeNonc_IncreasesValues()
         {
             np.random.seed(42);
-            var samplesSmall = np.random.noncentral_f(5, 10, 1, 10000);
+            var samplesSmall = np.random.noncentral_f(5, 10, 1, 10000L);
             np.random.seed(42);
-            var samplesLarge = np.random.noncentral_f(5, 10, 10, 10000);
+            var samplesLarge = np.random.noncentral_f(5, 10, 10, 10000L);
 
             var meanSmall = (double)np.mean(samplesSmall);
             var meanLarge = (double)np.mean(samplesLarge);
@@ -85,7 +85,7 @@ namespace NumSharp.UnitTest.RandomSampling
         public void NoncentralF_DifferentDf_Works()
         {
             np.random.seed(42);
-            var samples = np.random.noncentral_f(3, 20, 3, 1000);
+            var samples = np.random.noncentral_f(3, 20, 3, 1000L);
 
             samples.size.Should().Be(1000);
             var min = (double)np.amin(samples);
@@ -140,10 +140,10 @@ namespace NumSharp.UnitTest.RandomSampling
         public void NoncentralF_Reproducibility_WithSeed()
         {
             np.random.seed(42);
-            var first = np.random.noncentral_f(5, 10, 2, 5).ToArray<double>();
+            var first = np.random.noncentral_f(5, 10, 2, 5L).ToArray<double>();
 
             np.random.seed(42);
-            var second = np.random.noncentral_f(5, 10, 2, 5).ToArray<double>();
+            var second = np.random.noncentral_f(5, 10, 2, 5L).ToArray<double>();
 
             first.Should().BeEquivalentTo(second);
         }
@@ -153,7 +153,7 @@ namespace NumSharp.UnitTest.RandomSampling
         {
             // df < 1 uses different algorithm branch in noncentral chisquare
             np.random.seed(42);
-            var samples = np.random.noncentral_f(0.5, 10, 2, 1000);
+            var samples = np.random.noncentral_f(0.5, 10, 2, 1000L);
 
             samples.size.Should().Be(1000);
             var min = (double)np.amin(samples);

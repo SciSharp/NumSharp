@@ -22,7 +22,7 @@ public class RandomPowerTests : TestClass
     public void Power_ArraySize_ReturnsCorrectShape()
     {
         np.random.seed(42);
-        var result = np.random.power(5.0, 5);
+        var result = np.random.power(5.0, 5L);
         result.Should().BeShaped(5);
         Assert.AreEqual(typeof(double), result.dtype);
     }
@@ -31,7 +31,7 @@ public class RandomPowerTests : TestClass
     public void Power_MultiDimensionalSize_ReturnsCorrectShape()
     {
         np.random.seed(42);
-        var result = np.random.power(2.0, 2, 3);
+        var result = np.random.power(2.0, 2L, 3L);
         result.Should().BeShaped(2, 3);
     }
 
@@ -48,7 +48,7 @@ public class RandomPowerTests : TestClass
     {
         // All values must be in [0, 1]
         np.random.seed(12345);
-        var samples = np.random.power(5.0, 10000);
+        var samples = np.random.power(5.0, 10000L);
 
         double min = (double)np.min(samples);
         double max = (double)np.max(samples);
@@ -62,8 +62,8 @@ public class RandomPowerTests : TestClass
     {
         // Higher 'a' skews distribution toward 1
         np.random.seed(42);
-        var samples_low = np.random.power(0.5, 10000);
-        var samples_high = np.random.power(5.0, 10000);
+        var samples_low = np.random.power(0.5, 10000L);
+        var samples_high = np.random.power(5.0, 10000L);
 
         double mean_low = (double)np.mean(samples_low);
         double mean_high = (double)np.mean(samples_high);
@@ -78,7 +78,7 @@ public class RandomPowerTests : TestClass
         // When a=1, PDF = 1 for 0<=x<=1, which is uniform
         // Mean of uniform(0,1) = 0.5
         np.random.seed(12345);
-        var samples = np.random.power(1.0, 100000);
+        var samples = np.random.power(1.0, 100000L);
         double mean = (double)np.mean(samples);
 
         Assert.IsTrue(Math.Abs(mean - 0.5) < 0.01,
@@ -94,7 +94,7 @@ public class RandomPowerTests : TestClass
         double expectedMean = a / (a + 1);
 
         np.random.seed(12345);
-        var samples = np.random.power(a, 100000);
+        var samples = np.random.power(a, 100000L);
         double mean = (double)np.mean(samples);
 
         Assert.IsTrue(Math.Abs(mean - expectedMean) < 0.01,
@@ -104,13 +104,13 @@ public class RandomPowerTests : TestClass
     [Test]
     public void Power_ZeroParameter_ThrowsArgumentException()
     {
-        Assert.ThrowsException<ArgumentException>(() => np.random.power(0.0, 5));
+        Assert.ThrowsException<ArgumentException>(() => np.random.power(0.0, 5L));
     }
 
     [Test]
     public void Power_NegativeParameter_ThrowsArgumentException()
     {
-        Assert.ThrowsException<ArgumentException>(() => np.random.power(-1.0, 5));
+        Assert.ThrowsException<ArgumentException>(() => np.random.power(-1.0, 5L));
     }
 
     [Test]
@@ -129,10 +129,10 @@ public class RandomPowerTests : TestClass
     public void Power_Reproducibility()
     {
         np.random.seed(42);
-        var result1 = np.random.power(5.0, 5);
+        var result1 = np.random.power(5.0, 5L);
 
         np.random.seed(42);
-        var result2 = np.random.power(5.0, 5);
+        var result2 = np.random.power(5.0, 5L);
 
         for (int i = 0; i < 5; i++)
         {
@@ -146,7 +146,7 @@ public class RandomPowerTests : TestClass
     {
         // Small 'a' (< 1) skews distribution toward 0
         np.random.seed(42);
-        var samples = np.random.power(0.2, 10000);
+        var samples = np.random.power(0.2, 10000L);
         double mean = (double)np.mean(samples);
 
         // For a=0.2, mean = 0.2/1.2 ≈ 0.167

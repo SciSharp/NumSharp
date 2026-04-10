@@ -28,7 +28,7 @@ namespace NumSharp
         ///     Draw samples from a standard Student's t distribution with df degrees of freedom.
         /// </summary>
         /// <param name="df">Degrees of freedom, must be > 0.</param>
-        /// <param name="size">Output shape.</param>
+        /// <param name="size">Output shape as int array.</param>
         /// <returns>Drawn samples from the parameterized standard Student's t distribution.</returns>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.standard_t.html
@@ -36,7 +36,7 @@ namespace NumSharp
         ///     A special case of the hyperbolic distribution. As df gets large, the result
         ///     resembles that of the standard normal distribution.
         /// </remarks>
-        public NDArray standard_t(double df, params int[] size)
+        public NDArray standard_t(double df, int[] size)
         {
             // Parameter validation (matches NumPy error message)
             if (df <= 0)
@@ -56,6 +56,21 @@ namespace NumSharp
             result.ReplaceData(resultArray);
             return result;
         }
+
+        /// <summary>
+        ///     Draw samples from a standard Student's t distribution with df degrees of freedom.
+        /// </summary>
+        /// <param name="df">Degrees of freedom, must be > 0.</param>
+        /// <param name="size">Output shape.</param>
+        /// <returns>Drawn samples from the parameterized standard Student's t distribution.</returns>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.standard_t.html
+        ///     <br/>
+        ///     A special case of the hyperbolic distribution. As df gets large, the result
+        ///     resembles that of the standard normal distribution.
+        /// </remarks>
+        public NDArray standard_t(double df, params long[] size)
+            => standard_t(df, new Shape(size));
 
         /// <summary>
         ///     Sample a single value from the standard Student's t distribution.

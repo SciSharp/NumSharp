@@ -36,7 +36,7 @@ namespace NumSharp
         ///     <br/>
         ///     For random samples from N(μ, σ²), use: σ * np.random.randn(...) + μ
         /// </remarks>
-        public NDArray randn(params int[] shape) => randn(Shape.ComputeLongShape(shape));
+        public NDArray randn(int[] shape) => randn(Shape.ComputeLongShape(shape));
 
         /// <summary>
         ///     Return a sample (or samples) from the "standard normal" distribution.
@@ -97,7 +97,7 @@ namespace NumSharp
         ///     by De Moivre and 200 years later by both Gauss and Laplace independently,
         ///     is often called the bell curve because of its characteristic shape.
         /// </remarks>
-        public NDArray normal(double loc, double scale, params int[] size) => normal(loc, scale, Shape.ComputeLongShape(size));
+        public NDArray normal(double loc, double scale, int[] size) => normal(loc, scale, Shape.ComputeLongShape(size));
 
         /// <summary>
         ///     Draw random samples from a normal (Gaussian) distribution.
@@ -150,7 +150,7 @@ namespace NumSharp
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.standard_normal.html
         /// </remarks>
-        public NDArray standard_normal(params int[] size) => standard_normal(Shape.ComputeLongShape(size));
+        public NDArray standard_normal(int[] size) => standard_normal(Shape.ComputeLongShape(size));
 
         /// <summary>
         ///     Draw samples from a standard Normal distribution (mean=0, stdev=1).

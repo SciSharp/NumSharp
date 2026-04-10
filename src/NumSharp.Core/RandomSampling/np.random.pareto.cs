@@ -46,7 +46,16 @@ namespace NumSharp
         /// <param name="a">Shape of the distribution. Must be positive (&gt; 0).</param>
         /// <param name="size">Output shape as int array.</param>
         /// <returns>Drawn samples from the parameterized Pareto distribution.</returns>
-        public NDArray pareto(double a, params int[] size)
+        public NDArray pareto(double a, int[] size)
+            => pareto(a, new Shape(size));
+
+        /// <summary>
+        ///     Draw samples from a Pareto II or Lomax distribution with specified shape.
+        /// </summary>
+        /// <param name="a">Shape of the distribution. Must be positive (&gt; 0).</param>
+        /// <param name="size">Output shape.</param>
+        /// <returns>Drawn samples from the parameterized Pareto distribution.</returns>
+        public NDArray pareto(double a, params long[] size)
             => pareto(a, new Shape(size));
 
         /// <summary>

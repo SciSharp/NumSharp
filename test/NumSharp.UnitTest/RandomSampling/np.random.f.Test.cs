@@ -30,7 +30,7 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void F_2DArray()
         {
-            var result = np.random.f(5, 10, 2, 3);
+            var result = np.random.f(5, 10, new Shape(2, 3));
 
             Assert.AreEqual(2, result.ndim);
             Assert.AreEqual(2, result.shape[0]);

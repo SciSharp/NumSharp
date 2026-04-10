@@ -22,7 +22,7 @@ public class RandomNoncentralChisquareTests : TestClass
     public void NoncentralChisquare_ArraySize_ReturnsCorrectShape()
     {
         np.random.seed(42);
-        var result = np.random.noncentral_chisquare(3, 2, 5);
+        var result = np.random.noncentral_chisquare(3, 2, 5L);
         result.Should().BeShaped(5);
         Assert.AreEqual(typeof(double), result.dtype);
     }
@@ -31,7 +31,7 @@ public class RandomNoncentralChisquareTests : TestClass
     public void NoncentralChisquare_MultiDimensionalSize_ReturnsCorrectShape()
     {
         np.random.seed(42);
-        var result = np.random.noncentral_chisquare(3, 2, 2, 3);
+        var result = np.random.noncentral_chisquare(3, 2, 2L, 3L);
         result.Should().BeShaped(2, 3);
     }
 
@@ -47,7 +47,7 @@ public class RandomNoncentralChisquareTests : TestClass
     public void NoncentralChisquare_AllValuesNonNegative()
     {
         np.random.seed(12345);
-        var samples = np.random.noncentral_chisquare(3, 2, 10000);
+        var samples = np.random.noncentral_chisquare(3, 2, 10000L);
 
         for (int i = 0; i < samples.size; i++)
         {
@@ -61,7 +61,7 @@ public class RandomNoncentralChisquareTests : TestClass
     {
         // Mean = df + nonc = 3 + 2 = 5
         np.random.seed(12345);
-        var samples = np.random.noncentral_chisquare(3, 2, 100000);
+        var samples = np.random.noncentral_chisquare(3, 2, 100000L);
         double mean = (double)np.mean(samples);
 
         Assert.IsTrue(Math.Abs(mean - 5.0) < 0.1,
@@ -73,7 +73,7 @@ public class RandomNoncentralChisquareTests : TestClass
     {
         // When nonc=0, it's central chi-square with mean = df
         np.random.seed(12345);
-        var samples = np.random.noncentral_chisquare(3, 0, 100000);
+        var samples = np.random.noncentral_chisquare(3, 0, 100000L);
         double mean = (double)np.mean(samples);
 
         Assert.IsTrue(Math.Abs(mean - 3.0) < 0.1,
@@ -85,7 +85,7 @@ public class RandomNoncentralChisquareTests : TestClass
     {
         // df <= 1 uses the Poisson method
         np.random.seed(42);
-        var samples = np.random.noncentral_chisquare(0.5, 2, 10000);
+        var samples = np.random.noncentral_chisquare(0.5, 2, 10000L);
 
         // All should be non-negative
         for (int i = 0; i < samples.size; i++)
@@ -105,7 +105,7 @@ public class RandomNoncentralChisquareTests : TestClass
     {
         // Large df should work correctly
         np.random.seed(42);
-        var samples = np.random.noncentral_chisquare(10, 5, 10000);
+        var samples = np.random.noncentral_chisquare(10, 5, 10000L);
         double mean = (double)np.mean(samples);
 
         // Mean = df + nonc = 10 + 5 = 15
@@ -118,7 +118,7 @@ public class RandomNoncentralChisquareTests : TestClass
     {
         // Large non-centrality
         np.random.seed(42);
-        var samples = np.random.noncentral_chisquare(3, 20, 10000);
+        var samples = np.random.noncentral_chisquare(3, 20, 10000L);
         double mean = (double)np.mean(samples);
 
         // Mean = df + nonc = 3 + 20 = 23
@@ -129,19 +129,19 @@ public class RandomNoncentralChisquareTests : TestClass
     [Test]
     public void NoncentralChisquare_ZeroDf_ThrowsArgumentException()
     {
-        Assert.ThrowsException<ArgumentException>(() => np.random.noncentral_chisquare(0, 2, 5));
+        Assert.ThrowsException<ArgumentException>(() => np.random.noncentral_chisquare(0, 2, 5L));
     }
 
     [Test]
     public void NoncentralChisquare_NegativeDf_ThrowsArgumentException()
     {
-        Assert.ThrowsException<ArgumentException>(() => np.random.noncentral_chisquare(-1, 2, 5));
+        Assert.ThrowsException<ArgumentException>(() => np.random.noncentral_chisquare(-1, 2, 5L));
     }
 
     [Test]
     public void NoncentralChisquare_NegativeNonc_ThrowsArgumentException()
     {
-        Assert.ThrowsException<ArgumentException>(() => np.random.noncentral_chisquare(3, -1, 5));
+        Assert.ThrowsException<ArgumentException>(() => np.random.noncentral_chisquare(3, -1, 5L));
     }
 
     [Test]
@@ -160,10 +160,10 @@ public class RandomNoncentralChisquareTests : TestClass
     public void NoncentralChisquare_Reproducibility()
     {
         np.random.seed(42);
-        var result1 = np.random.noncentral_chisquare(3, 2, 5);
+        var result1 = np.random.noncentral_chisquare(3, 2, 5L);
 
         np.random.seed(42);
-        var result2 = np.random.noncentral_chisquare(3, 2, 5);
+        var result2 = np.random.noncentral_chisquare(3, 2, 5L);
 
         for (int i = 0; i < 5; i++)
         {

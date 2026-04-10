@@ -11,7 +11,7 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void StandardExponential_1D_ReturnsCorrectShape()
         {
-            var rand = np.random.standard_exponential(5);
+            var rand = np.random.standard_exponential(5L);
             Assert.AreEqual(1, rand.ndim);
             Assert.AreEqual(5, rand.size);
         }
@@ -19,7 +19,7 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void StandardExponential_2D_ReturnsCorrectShape()
         {
-            var rand = np.random.standard_exponential(5, 5);
+            var rand = np.random.standard_exponential(5L, 5L);
             Assert.AreEqual(2, rand.ndim);
             Assert.AreEqual(25, rand.size);
         }
@@ -35,7 +35,7 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void StandardExponential_ReturnsFloat64()
         {
-            var result = np.random.standard_exponential(5);
+            var result = np.random.standard_exponential(5L);
             Assert.AreEqual(NPTypeCode.Double, result.typecode);
         }
 
@@ -44,7 +44,7 @@ namespace NumSharp.UnitTest.RandomSampling
         {
             // Exponential distribution produces strictly positive values
             np.random.seed(42);
-            var samples = np.random.standard_exponential(10000);
+            var samples = np.random.standard_exponential(10000L);
 
             foreach (var val in samples.AsIterator<double>())
             {
@@ -57,7 +57,7 @@ namespace NumSharp.UnitTest.RandomSampling
         {
             // mean = 1 for standard exponential
             np.random.seed(42);
-            var samples = np.random.standard_exponential(100000);
+            var samples = np.random.standard_exponential(100000L);
 
             double mean = 0;
             foreach (var val in samples.AsIterator<double>())
@@ -72,7 +72,7 @@ namespace NumSharp.UnitTest.RandomSampling
         {
             // variance = 1 for standard exponential
             np.random.seed(42);
-            var samples = np.random.standard_exponential(100000);
+            var samples = np.random.standard_exponential(100000L);
 
             double mean = 0;
             foreach (var val in samples.AsIterator<double>())
@@ -101,10 +101,10 @@ namespace NumSharp.UnitTest.RandomSampling
         public void StandardExponential_SameSeed_ProducesSameResults()
         {
             np.random.seed(42);
-            var samples1 = np.random.standard_exponential(10);
+            var samples1 = np.random.standard_exponential(10L);
 
             np.random.seed(42);
-            var samples2 = np.random.standard_exponential(10);
+            var samples2 = np.random.standard_exponential(10L);
 
             for (int i = 0; i < 10; i++)
             {
@@ -117,10 +117,10 @@ namespace NumSharp.UnitTest.RandomSampling
         {
             // standard_exponential() should be equivalent to exponential(scale=1)
             np.random.seed(42);
-            var se = np.random.standard_exponential(10);
+            var se = np.random.standard_exponential(10L);
 
             np.random.seed(42);
-            var e = np.random.exponential(1.0, 10);
+            var e = np.random.exponential(1.0, 10L);
 
             for (int i = 0; i < 10; i++)
             {
@@ -131,7 +131,7 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void StandardExponential_Size1_ReturnsShape1Array()
         {
-            var result = np.random.standard_exponential(1);
+            var result = np.random.standard_exponential(1L);
             Assert.AreEqual(1, result.ndim);
             Assert.AreEqual(1, result.size);
         }
@@ -140,7 +140,7 @@ namespace NumSharp.UnitTest.RandomSampling
         public void StandardExponential_LargeSample_NoInfinities()
         {
             np.random.seed(42);
-            var samples = np.random.standard_exponential(100000);
+            var samples = np.random.standard_exponential(100000L);
 
             foreach (var val in samples.AsIterator<double>())
             {
@@ -158,7 +158,7 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void StandardExponential_NumPy_SmokeTest()
         {
-            var vals = np.random.standard_exponential(10);
+            var vals = np.random.standard_exponential(10L);
             Assert.AreEqual(10, vals.size);
         }
 
@@ -169,7 +169,7 @@ namespace NumSharp.UnitTest.RandomSampling
         public void StandardExponential_NumPy_OutputAlwaysPositive()
         {
             np.random.seed(12345);
-            var samples = np.random.standard_exponential(1000);
+            var samples = np.random.standard_exponential(1000L);
 
             var minVal = double.MaxValue;
             foreach (var val in samples.AsIterator<double>())

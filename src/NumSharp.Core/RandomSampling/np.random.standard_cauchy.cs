@@ -49,9 +49,9 @@ namespace NumSharp
         /// <summary>
         ///     Draw samples from a standard Cauchy distribution with mode = 0.
         /// </summary>
-        /// <param name="size">Output shape.</param>
+        /// <param name="size">Output shape as int array.</param>
         /// <returns>Drawn samples from the standard Cauchy distribution.</returns>
-        public NDArray standard_cauchy(params int[] size)
+        public NDArray standard_cauchy(int[] size)
         {
             unsafe
             {
@@ -70,6 +70,14 @@ namespace NumSharp
                 return array;
             }
         }
+
+        /// <summary>
+        ///     Draw samples from a standard Cauchy distribution with mode = 0.
+        /// </summary>
+        /// <param name="size">Output shape.</param>
+        /// <returns>Drawn samples from the standard Cauchy distribution.</returns>
+        public NDArray standard_cauchy(params long[] size)
+            => standard_cauchy(new Shape(size));
 
         /// <summary>
         ///     Generate a single sample from the standard Cauchy distribution.

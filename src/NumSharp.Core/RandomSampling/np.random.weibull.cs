@@ -61,10 +61,20 @@ namespace NumSharp
         ///     Draw samples from a Weibull distribution.
         /// </summary>
         /// <param name="a">Shape parameter of the distribution. Must be non-negative.</param>
-        /// <param name="size">Output shape.</param>
+        /// <param name="size">Output shape as int array.</param>
         /// <returns>Drawn samples from the Weibull distribution.</returns>
         /// <exception cref="ArgumentException">If a is negative.</exception>
-        public NDArray weibull(double a, params int[] size)
+        public NDArray weibull(double a, int[] size)
+            => weibull(a, Shape.ComputeLongShape(size));
+
+        /// <summary>
+        ///     Draw samples from a Weibull distribution.
+        /// </summary>
+        /// <param name="a">Shape parameter of the distribution. Must be non-negative.</param>
+        /// <param name="size">Output shape as long array (for NumPy compatibility).</param>
+        /// <returns>Drawn samples from the Weibull distribution.</returns>
+        /// <exception cref="ArgumentException">If a is negative.</exception>
+        public NDArray weibull(double a, params long[] size)
         {
             if (a < 0)
                 throw new ArgumentException("a < 0", nameof(a));

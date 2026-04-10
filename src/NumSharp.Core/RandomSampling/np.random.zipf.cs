@@ -53,7 +53,16 @@ namespace NumSharp
         /// <param name="a">Distribution parameter. Must be greater than 1.</param>
         /// <param name="size">Output shape as int array.</param>
         /// <returns>Drawn samples from the parameterized Zipf distribution.</returns>
-        public NDArray zipf(double a, params int[] size)
+        public NDArray zipf(double a, int[] size)
+            => zipf(a, new Shape(size));
+
+        /// <summary>
+        ///     Draw samples from a Zipf distribution.
+        /// </summary>
+        /// <param name="a">Distribution parameter. Must be greater than 1.</param>
+        /// <param name="size">Output shape as long array (for NumPy compatibility).</param>
+        /// <returns>Drawn samples from the parameterized Zipf distribution.</returns>
+        public NDArray zipf(double a, params long[] size)
             => zipf(a, new Shape(size));
 
         /// <summary>

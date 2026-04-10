@@ -22,7 +22,7 @@ public class RandomParetoTests : TestClass
     public void Pareto_ArraySize_ReturnsCorrectShape()
     {
         np.random.seed(42);
-        var result = np.random.pareto(2.0, 5);
+        var result = np.random.pareto(2.0, 5L);
         result.Should().BeShaped(5);
         Assert.AreEqual(typeof(double), result.dtype);
     }
@@ -31,7 +31,7 @@ public class RandomParetoTests : TestClass
     public void Pareto_MultiDimensionalSize_ReturnsCorrectShape()
     {
         np.random.seed(42);
-        var result = np.random.pareto(2.5, 2, 3);
+        var result = np.random.pareto(2.5, 2L, 3L);
         result.Should().BeShaped(2, 3);
     }
 
@@ -47,7 +47,7 @@ public class RandomParetoTests : TestClass
     public void Pareto_AllValuesNonNegative()
     {
         np.random.seed(12345);
-        var samples = np.random.pareto(2.0, 1000);
+        var samples = np.random.pareto(2.0, 1000L);
 
         for (int i = 0; i < samples.size; i++)
         {
@@ -62,7 +62,7 @@ public class RandomParetoTests : TestClass
         // For Pareto II (Lomax), mean = 1/(a-1) for a > 1
         // With a=3, expected mean = 1/(3-1) = 0.5
         np.random.seed(12345);
-        var samples = np.random.pareto(3.0, 100000);
+        var samples = np.random.pareto(3.0, 100000L);
         double mean = (double)np.mean(samples);
 
         // Allow 5% tolerance for statistical test
@@ -75,8 +75,8 @@ public class RandomParetoTests : TestClass
     {
         // Higher 'a' means heavier tail
         np.random.seed(42);
-        var samples_low_a = np.random.pareto(0.5, 10000);
-        var samples_high_a = np.random.pareto(5.0, 10000);
+        var samples_low_a = np.random.pareto(0.5, 10000L);
+        var samples_high_a = np.random.pareto(5.0, 10000L);
 
         double mean_low = (double)np.mean(samples_low_a);
         double mean_high = (double)np.mean(samples_high_a);
@@ -89,13 +89,13 @@ public class RandomParetoTests : TestClass
     [Test]
     public void Pareto_ZeroParameter_ThrowsArgumentException()
     {
-        Assert.ThrowsException<ArgumentException>(() => np.random.pareto(0.0, 5));
+        Assert.ThrowsException<ArgumentException>(() => np.random.pareto(0.0, 5L));
     }
 
     [Test]
     public void Pareto_NegativeParameter_ThrowsArgumentException()
     {
-        Assert.ThrowsException<ArgumentException>(() => np.random.pareto(-1.0, 5));
+        Assert.ThrowsException<ArgumentException>(() => np.random.pareto(-1.0, 5L));
     }
 
     [Test]
@@ -115,7 +115,7 @@ public class RandomParetoTests : TestClass
     {
         // Small 'a' produces heavier tails (more extreme values)
         np.random.seed(42);
-        var samples = np.random.pareto(0.5, 1000);
+        var samples = np.random.pareto(0.5, 1000L);
         double max_val = (double)np.max(samples);
 
         // With a=0.5, should see some large values
@@ -128,7 +128,7 @@ public class RandomParetoTests : TestClass
     {
         // Large 'a' concentrates values near zero
         np.random.seed(42);
-        var samples = np.random.pareto(10.0, 1000);
+        var samples = np.random.pareto(10.0, 1000L);
         double max_val = (double)np.max(samples);
 
         // With a=10, values should be relatively small
@@ -140,10 +140,10 @@ public class RandomParetoTests : TestClass
     public void Pareto_Reproducibility()
     {
         np.random.seed(42);
-        var result1 = np.random.pareto(2.0, 5);
+        var result1 = np.random.pareto(2.0, 5L);
 
         np.random.seed(42);
-        var result2 = np.random.pareto(2.0, 5);
+        var result2 = np.random.pareto(2.0, 5L);
 
         for (int i = 0; i < 5; i++)
         {

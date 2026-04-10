@@ -23,7 +23,7 @@ namespace NumSharp.UnitTest.RandomSampling
         public void StandardGamma_Returns1DArray()
         {
             np.random.seed(42);
-            var result = np.random.standard_gamma(2, 5);
+            var result = np.random.standard_gamma(2, 5L);
 
             result.shape.Should().ContainInOrder(5);
             result.size.Should().Be(5);
@@ -43,7 +43,7 @@ namespace NumSharp.UnitTest.RandomSampling
         public void StandardGamma_AllValuesPositive()
         {
             np.random.seed(42);
-            var samples = np.random.standard_gamma(2, 10000);
+            var samples = np.random.standard_gamma(2, 10000L);
 
             var min = (double)np.amin(samples);
             min.Should().BeGreaterThan(0.0);
@@ -54,7 +54,7 @@ namespace NumSharp.UnitTest.RandomSampling
         {
             // For standard gamma: mean = shape
             np.random.seed(42);
-            var samples = np.random.standard_gamma(2, 100000);
+            var samples = np.random.standard_gamma(2, 100000L);
 
             var mean = (double)np.mean(samples);
             Math.Abs(mean - 2.0).Should().BeLessThan(0.05);
@@ -65,7 +65,7 @@ namespace NumSharp.UnitTest.RandomSampling
         {
             // For standard gamma: variance = shape, std = sqrt(shape)
             np.random.seed(42);
-            var samples = np.random.standard_gamma(2, 100000);
+            var samples = np.random.standard_gamma(2, 100000L);
 
             var std = (double)np.std(samples);
             var expectedStd = Math.Sqrt(2.0);
@@ -76,7 +76,7 @@ namespace NumSharp.UnitTest.RandomSampling
         public void StandardGamma_HasExpectedMean_Shape5()
         {
             np.random.seed(42);
-            var samples = np.random.standard_gamma(5, 100000);
+            var samples = np.random.standard_gamma(5, 100000L);
 
             var mean = (double)np.mean(samples);
             Math.Abs(mean - 5.0).Should().BeLessThan(0.1);
@@ -86,7 +86,7 @@ namespace NumSharp.UnitTest.RandomSampling
         public void StandardGamma_HasExpectedStd_Shape5()
         {
             np.random.seed(42);
-            var samples = np.random.standard_gamma(5, 100000);
+            var samples = np.random.standard_gamma(5, 100000L);
 
             var std = (double)np.std(samples);
             var expectedStd = Math.Sqrt(5.0);
@@ -98,7 +98,7 @@ namespace NumSharp.UnitTest.RandomSampling
         {
             // Shape < 1 uses different algorithm branch
             np.random.seed(42);
-            var samples = np.random.standard_gamma(0.5, 10000);
+            var samples = np.random.standard_gamma(0.5, 10000L);
 
             // All should be positive
             foreach (var val in samples.AsIterator<double>())
@@ -116,7 +116,7 @@ namespace NumSharp.UnitTest.RandomSampling
         {
             // Special case: shape=0 returns all zeros (NumPy behavior)
             np.random.seed(42);
-            var samples = np.random.standard_gamma(0, 5);
+            var samples = np.random.standard_gamma(0, 5L);
 
             foreach (var val in samples.AsIterator<double>())
             {
@@ -144,10 +144,10 @@ namespace NumSharp.UnitTest.RandomSampling
         public void StandardGamma_Reproducibility_WithSeed()
         {
             np.random.seed(42);
-            var first = np.random.standard_gamma(2, 5).ToArray<double>();
+            var first = np.random.standard_gamma(2, 5L).ToArray<double>();
 
             np.random.seed(42);
-            var second = np.random.standard_gamma(2, 5).ToArray<double>();
+            var second = np.random.standard_gamma(2, 5L).ToArray<double>();
 
             first.Should().BeEquivalentTo(second);
         }
@@ -156,7 +156,7 @@ namespace NumSharp.UnitTest.RandomSampling
         public void StandardGamma_FractionalShape_Works()
         {
             np.random.seed(42);
-            var samples = np.random.standard_gamma(2.5, 1000);
+            var samples = np.random.standard_gamma(2.5, 1000L);
 
             samples.size.Should().Be(1000);
             // Mean should be close to 2.5
@@ -168,7 +168,7 @@ namespace NumSharp.UnitTest.RandomSampling
         public void StandardGamma_VerySmallShape_AllPositive()
         {
             np.random.seed(42);
-            var samples = np.random.standard_gamma(0.1, 1000);
+            var samples = np.random.standard_gamma(0.1, 1000L);
 
             foreach (var val in samples.AsIterator<double>())
             {

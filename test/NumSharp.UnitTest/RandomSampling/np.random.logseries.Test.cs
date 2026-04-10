@@ -50,7 +50,7 @@ namespace NumSharp.UnitTest.RandomSampling
         public void Logseries_SizeNull_ReturnsScalar()
         {
             np.random.seed(42);
-            var result = np.random.logseries(0.6, size: null);
+            var result = np.random.logseries(0.6, (Shape?)null);
 
             result.ndim.Should().Be(0);
         }

@@ -29,7 +29,7 @@ namespace NumSharp
         /// <param name="left">Lower limit.</param>
         /// <param name="mode">The value where the peak of the distribution occurs (left &lt;= mode &lt;= right).</param>
         /// <param name="right">Upper limit, must be larger than left.</param>
-        /// <param name="size">Output shape.</param>
+        /// <param name="size">Output shape as int array.</param>
         /// <returns>Drawn samples from the parameterized triangular distribution.</returns>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.triangular.html
@@ -37,7 +37,24 @@ namespace NumSharp
         ///     The triangular distribution is a continuous probability distribution with lower limit left,
         ///     peak at mode, and upper limit right.
         /// </remarks>
-        public NDArray triangular(double left, double mode, double right, params int[] size)
+        public NDArray triangular(double left, double mode, double right, int[] size)
+            => triangular(left, mode, right, Shape.ComputeLongShape(size));
+
+        /// <summary>
+        ///     Draw samples from the triangular distribution over the interval [left, right].
+        /// </summary>
+        /// <param name="left">Lower limit.</param>
+        /// <param name="mode">The value where the peak of the distribution occurs (left &lt;= mode &lt;= right).</param>
+        /// <param name="right">Upper limit, must be larger than left.</param>
+        /// <param name="size">Output shape as long array (for NumPy compatibility).</param>
+        /// <returns>Drawn samples from the parameterized triangular distribution.</returns>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.triangular.html
+        ///     <br/>
+        ///     The triangular distribution is a continuous probability distribution with lower limit left,
+        ///     peak at mode, and upper limit right.
+        /// </remarks>
+        public NDArray triangular(double left, double mode, double right, params long[] size)
         {
             // Parameter validation (matches NumPy error messages exactly)
             if (left > mode)

@@ -30,7 +30,7 @@ namespace NumSharp
         ///     It describes many common situations, such as the size of raindrops measured over
         ///     many rainstorms, or the time between page requests to Wikipedia.
         /// </remarks>
-        public NDArray exponential(double scale, params int[] size) => exponential(scale, Shape.ComputeLongShape(size));
+        public NDArray exponential(double scale, int[] size) => exponential(scale, Shape.ComputeLongShape(size));
 
         /// <summary>
         ///     Draw samples from an exponential distribution.

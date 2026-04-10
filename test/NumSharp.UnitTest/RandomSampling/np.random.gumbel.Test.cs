@@ -22,7 +22,7 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void Gumbel_2D_ReturnsCorrectShape()
         {
-            var rand = np.random.gumbel(0, 1, 5, 5);
+            var rand = np.random.gumbel(0, 1, new Shape(5, 5));
             Assert.AreEqual(2, rand.ndim);
             Assert.AreEqual(25, rand.size);
         }

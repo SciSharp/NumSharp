@@ -51,7 +51,16 @@ namespace NumSharp
         /// <param name="scale">Scale parameter (also equals the mode). Must be non-negative.</param>
         /// <param name="size">Output shape as int array.</param>
         /// <returns>Drawn samples from the parameterized Rayleigh distribution.</returns>
-        public NDArray rayleigh(double scale, params int[] size)
+        public NDArray rayleigh(double scale, int[] size)
+            => rayleigh(scale, new Shape(size));
+
+        /// <summary>
+        ///     Draw samples from a Rayleigh distribution.
+        /// </summary>
+        /// <param name="scale">Scale parameter (also equals the mode). Must be non-negative.</param>
+        /// <param name="size">Output shape.</param>
+        /// <returns>Drawn samples from the parameterized Rayleigh distribution.</returns>
+        public NDArray rayleigh(double scale, params long[] size)
             => rayleigh(scale, new Shape(size));
 
         /// <summary>

@@ -67,7 +67,7 @@ namespace NumSharp
         /// <param name="size">Output shape.</param>
         /// <returns>Drawn samples from the F distribution.</returns>
         /// <exception cref="ArgumentException">If dfnum or dfden is <= 0.</exception>
-        public NDArray f(double dfnum, double dfden, params int[] size)
+        public NDArray f(double dfnum, double dfden, int[] size)
         {
             if (dfnum <= 0)
                 throw new ArgumentException("dfnum <= 0", nameof(dfnum));
@@ -82,6 +82,17 @@ namespace NumSharp
             // Element-wise: (chi2_num * dfden) / (chi2_den * dfnum)
             return (chi2_num * dfden) / (chi2_den * dfnum);
         }
+
+        /// <summary>
+        ///     Draw samples from an F distribution.
+        /// </summary>
+        /// <param name="dfnum">Degrees of freedom in numerator. Must be > 0.</param>
+        /// <param name="dfden">Degrees of freedom in denominator. Must be > 0.</param>
+        /// <param name="size">Output shape.</param>
+        /// <returns>Drawn samples from the F distribution.</returns>
+        /// <exception cref="ArgumentException">If dfnum or dfden is <= 0.</exception>
+        public NDArray f(double dfnum, double dfden, params long[] size)
+            => f(dfnum, dfden, new Shape(size));
 
         /// <summary>
         ///     Generate a single sample from the F distribution.

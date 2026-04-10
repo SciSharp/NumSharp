@@ -38,7 +38,7 @@ namespace NumSharp
         ///     n trials and p probability of success where n is an integer >= 0 and p is
         ///     in the interval [0, 1].
         /// </remarks>
-        public NDArray binomial(int n, double p, params int[] size) => binomial(n, p, Shape.ComputeLongShape(size));
+        public NDArray binomial(int n, double p, int[] size) => binomial(n, p, Shape.ComputeLongShape(size));
 
         /// <summary>
         ///     Draw samples from a binomial distribution.

@@ -55,7 +55,17 @@ namespace NumSharp
         /// <param name="scale">The exponential decay. Must be non-negative.</param>
         /// <param name="size">Output shape as int array.</param>
         /// <returns>Drawn samples from the parameterized Laplace distribution.</returns>
-        public NDArray laplace(double loc, double scale, params int[] size)
+        public NDArray laplace(double loc, double scale, int[] size)
+            => laplace(loc, scale, new Shape(size));
+
+        /// <summary>
+        ///     Draw samples from the Laplace or double exponential distribution.
+        /// </summary>
+        /// <param name="loc">The position of the distribution peak.</param>
+        /// <param name="scale">The exponential decay. Must be non-negative.</param>
+        /// <param name="size">Output shape.</param>
+        /// <returns>Drawn samples from the parameterized Laplace distribution.</returns>
+        public NDArray laplace(double loc, double scale, params long[] size)
             => laplace(loc, scale, new Shape(size));
 
         /// <summary>

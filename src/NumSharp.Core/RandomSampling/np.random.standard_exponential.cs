@@ -45,7 +45,15 @@ namespace NumSharp
         /// </summary>
         /// <param name="size">Output shape as int array.</param>
         /// <returns>Drawn samples from the standard exponential distribution.</returns>
-        public NDArray standard_exponential(params int[] size)
+        public NDArray standard_exponential(int[] size)
+            => standard_exponential(new Shape(size));
+
+        /// <summary>
+        ///     Draw samples from the standard exponential distribution.
+        /// </summary>
+        /// <param name="size">Output shape.</param>
+        /// <returns>Drawn samples from the standard exponential distribution.</returns>
+        public NDArray standard_exponential(params long[] size)
             => standard_exponential(new Shape(size));
 
         /// <summary>

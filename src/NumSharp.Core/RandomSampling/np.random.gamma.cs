@@ -36,7 +36,7 @@ namespace NumSharp
         ///     shape (sometimes designated "k") and scale (sometimes designated "theta"),
         ///     where both parameters are > 0.
         /// </remarks>
-        public NDArray gamma(double shape, double scale, params int[] size) => gamma(shape, scale, Shape.ComputeLongShape(size));
+        public NDArray gamma(double shape, double scale, int[] size) => gamma(shape, scale, Shape.ComputeLongShape(size));
 
         /// <summary>
         ///     Draw samples from a Gamma distribution.

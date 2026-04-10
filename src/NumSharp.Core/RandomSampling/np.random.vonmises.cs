@@ -51,7 +51,17 @@ namespace NumSharp
         /// <param name="kappa">Concentration parameter of the distribution. Must be >= 0.</param>
         /// <param name="size">Output shape as int array.</param>
         /// <returns>Drawn samples from the parameterized von Mises distribution.</returns>
-        public NDArray vonmises(double mu, double kappa, params int[] size)
+        public NDArray vonmises(double mu, double kappa, int[] size)
+            => vonmises(mu, kappa, new Shape(size));
+
+        /// <summary>
+        ///     Draw samples from a von Mises distribution.
+        /// </summary>
+        /// <param name="mu">Mode ("center") of the distribution in radians.</param>
+        /// <param name="kappa">Concentration parameter of the distribution. Must be >= 0.</param>
+        /// <param name="size">Output shape.</param>
+        /// <returns>Drawn samples from the parameterized von Mises distribution.</returns>
+        public NDArray vonmises(double mu, double kappa, params long[] size)
             => vonmises(mu, kappa, new Shape(size));
 
         /// <summary>

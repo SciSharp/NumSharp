@@ -34,7 +34,7 @@ namespace NumSharp
         ///     models the number of trials that must be run in order to achieve success.
         ///     It is therefore supported on the positive integers, k = 1, 2, ...
         /// </remarks>
-        public NDArray geometric(double p, params int[] size) => geometric(p, Shape.ComputeLongShape(size));
+        public NDArray geometric(double p, int[] size) => geometric(p, Shape.ComputeLongShape(size));
 
         /// <summary>
         ///     Draw samples from the geometric distribution.

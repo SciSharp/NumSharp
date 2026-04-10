@@ -11,7 +11,7 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void Rayleigh_1D_ReturnsCorrectShape()
         {
-            var rand = np.random.rayleigh(1, 5);
+            var rand = np.random.rayleigh(1, 5L);
             Assert.AreEqual(1, rand.ndim);
             Assert.AreEqual(5, rand.size);
         }
@@ -19,7 +19,7 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void Rayleigh_2D_ReturnsCorrectShape()
         {
-            var rand = np.random.rayleigh(1, 5, 5);
+            var rand = np.random.rayleigh(1, 5L, 5L);
             Assert.AreEqual(2, rand.ndim);
             Assert.AreEqual(25, rand.size);
         }
@@ -38,7 +38,7 @@ namespace NumSharp.UnitTest.RandomSampling
             // Rayleigh(scale=1) has mean = sqrt(pi/2) ≈ 1.253
             // and std ≈ 0.655
             np.random.seed(42);
-            var samples = np.random.rayleigh(1, 100000);
+            var samples = np.random.rayleigh(1, 100000L);
 
             var mean = (double)np.mean(samples);
             var std = (double)np.std(samples);
@@ -55,7 +55,7 @@ namespace NumSharp.UnitTest.RandomSampling
             // Rayleigh(scale) has mean = scale * sqrt(pi/2)
             np.random.seed(42);
             double scale = 2.0;
-            var samples = np.random.rayleigh(scale, 100000);
+            var samples = np.random.rayleigh(scale, 100000L);
 
             var mean = (double)np.mean(samples);
             double expectedMean = scale * Math.Sqrt(Math.PI / 2.0);
@@ -66,13 +66,13 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void Rayleigh_NegativeScale_ThrowsArgumentException()
         {
-            Assert.ThrowsException<ArgumentException>(() => np.random.rayleigh(-1, 5));
+            Assert.ThrowsException<ArgumentException>(() => np.random.rayleigh(-1, 5L));
         }
 
         [Test]
         public void Rayleigh_ScaleZero_ReturnsAllZeros()
         {
-            var samples = np.random.rayleigh(0.0, 5);
+            var samples = np.random.rayleigh(0.0, 5L);
 
             foreach (var val in samples.AsIterator<double>())
             {
@@ -93,7 +93,7 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void Rayleigh_ReturnsFloat64()
         {
-            var result = np.random.rayleigh(1, 5);
+            var result = np.random.rayleigh(1, 5L);
             Assert.AreEqual(NPTypeCode.Double, result.typecode);
         }
 
@@ -102,7 +102,7 @@ namespace NumSharp.UnitTest.RandomSampling
         {
             // Rayleigh distribution only produces non-negative values
             np.random.seed(42);
-            var samples = np.random.rayleigh(1, 10000);
+            var samples = np.random.rayleigh(1, 10000L);
 
             foreach (var val in samples.AsIterator<double>())
             {
@@ -114,10 +114,10 @@ namespace NumSharp.UnitTest.RandomSampling
         public void Rayleigh_SameSeed_ProducesSameResults()
         {
             np.random.seed(42);
-            var samples1 = np.random.rayleigh(1, 10);
+            var samples1 = np.random.rayleigh(1, 10L);
 
             np.random.seed(42);
-            var samples2 = np.random.rayleigh(1, 10);
+            var samples2 = np.random.rayleigh(1, 10L);
 
             for (int i = 0; i < 10; i++)
             {
@@ -129,10 +129,10 @@ namespace NumSharp.UnitTest.RandomSampling
         public void Rayleigh_DifferentSeeds_ProduceDifferentResults()
         {
             np.random.seed(42);
-            var samples1 = np.random.rayleigh(1, 10);
+            var samples1 = np.random.rayleigh(1, 10L);
 
             np.random.seed(123);
-            var samples2 = np.random.rayleigh(1, 10);
+            var samples2 = np.random.rayleigh(1, 10L);
 
             bool anyDifferent = false;
             for (int i = 0; i < 10; i++)
@@ -180,7 +180,7 @@ namespace NumSharp.UnitTest.RandomSampling
         public void Rayleigh_NumPy_SmokeTest()
         {
             // From NumPy: vals = rg.rayleigh(0.2, 10); assert_(len(vals) == 10)
-            var vals = np.random.rayleigh(0.2, 10);
+            var vals = np.random.rayleigh(0.2, 10L);
             Assert.AreEqual(10, vals.size);
         }
     }

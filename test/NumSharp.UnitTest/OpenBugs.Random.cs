@@ -37,7 +37,7 @@ namespace NumSharp.UnitTest
         public void Rand_Seed42_ShouldMatchNumPy()
         {
             np.random.seed(42);
-            var result = np.random.rand();
+            var result = np.random.rand(0L);
 
             // NumPy expected value
             const double expected = 0.3745401188473625;
@@ -56,7 +56,7 @@ namespace NumSharp.UnitTest
         public void Rand5_Seed42_ShouldMatchNumPy()
         {
             np.random.seed(42);
-            var result = np.random.rand(5);
+            var result = np.random.rand(5L);
 
             // NumPy expected values
             var expected = new double[] {
@@ -85,7 +85,7 @@ namespace NumSharp.UnitTest
         public void Randn_Seed42_ShouldMatchNumPy()
         {
             np.random.seed(42);
-            var result = np.random.randn();
+            var result = np.random.randn(0L);
 
             // NumPy expected value
             const double expected = 0.4967141530112327;
@@ -105,7 +105,7 @@ namespace NumSharp.UnitTest
         public void Randn5_Seed42_ShouldMatchNumPy()
         {
             np.random.seed(42);
-            var result = np.random.randn(5);
+            var result = np.random.randn(5L);
 
             var expected = new double[] {
                 0.4967141530112327,

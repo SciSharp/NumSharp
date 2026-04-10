@@ -34,7 +34,7 @@ namespace NumSharp
         ///     and array shape. Note that the mean and standard deviation are not the values for
         ///     the distribution itself, but of the underlying normal distribution it is derived from.
         /// </remarks>
-        public NDArray lognormal(double mean, double sigma, params int[] size) => lognormal(mean, sigma, Shape.ComputeLongShape(size));
+        public NDArray lognormal(double mean, double sigma, int[] size) => lognormal(mean, sigma, Shape.ComputeLongShape(size));
 
         /// <summary>
         ///     Draw samples from a log-normal distribution.

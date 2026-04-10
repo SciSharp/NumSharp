@@ -40,7 +40,7 @@ namespace NumSharp
         ///     (includes low, but excludes high). In other words, any value within the
         ///     given interval is equally likely to be drawn by uniform.
         /// </remarks>
-        public NDArray uniform(double low, double high, params int[] size) => uniform(low, high, Shape.ComputeLongShape(size));
+        public NDArray uniform(double low, double high, int[] size) => uniform(low, high, Shape.ComputeLongShape(size));
 
         /// <summary>
         ///     Draw samples from a uniform distribution.

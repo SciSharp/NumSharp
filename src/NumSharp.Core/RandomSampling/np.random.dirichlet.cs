@@ -135,7 +135,16 @@ namespace NumSharp
         /// <param name="alpha">Concentration parameters.</param>
         /// <param name="size">Output shape as int array.</param>
         /// <returns>Drawn samples from the Dirichlet distribution.</returns>
-        public NDArray dirichlet(double[] alpha, params int[] size)
+        public NDArray dirichlet(double[] alpha, int[] size)
+            => dirichlet(alpha, new Shape(size));
+
+        /// <summary>
+        ///     Draw samples from the Dirichlet distribution.
+        /// </summary>
+        /// <param name="alpha">Concentration parameters.</param>
+        /// <param name="size">Output shape.</param>
+        /// <returns>Drawn samples from the Dirichlet distribution.</returns>
+        public NDArray dirichlet(double[] alpha, params long[] size)
             => dirichlet(alpha, new Shape(size));
 
         /// <summary>

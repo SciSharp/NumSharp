@@ -32,7 +32,7 @@ namespace NumSharp
         ///     (mean 0, variance 1), are squared and summed, the resulting distribution is
         ///     chi-square. This distribution is often used in hypothesis testing.
         /// </remarks>
-        public NDArray chisquare(double df, params int[] size) => chisquare(df, Shape.ComputeLongShape(size));
+        public NDArray chisquare(double df, int[] size) => chisquare(df, Shape.ComputeLongShape(size));
 
         /// <summary>
         ///     Draw samples from a chi-square distribution.

@@ -23,7 +23,7 @@ public class RandomHypergeometricTests : TestClass
     public void Hypergeometric_ArraySize_ReturnsCorrectShape()
     {
         np.random.seed(42);
-        var result = np.random.hypergeometric(15, 15, 10, 5);
+        var result = np.random.hypergeometric(15, 15, 10, 5L);
         result.Should().BeShaped(5);
         Assert.AreEqual(typeof(long), result.dtype);
     }
@@ -32,7 +32,7 @@ public class RandomHypergeometricTests : TestClass
     public void Hypergeometric_MultiDimensionalSize_ReturnsCorrectShape()
     {
         np.random.seed(42);
-        var result = np.random.hypergeometric(15, 15, 10, 2, 3);
+        var result = np.random.hypergeometric(15, 15, 10, 2L, 3L);
         result.Should().BeShaped(2, 3);
     }
 
@@ -50,7 +50,7 @@ public class RandomHypergeometricTests : TestClass
         // Result must be in [max(0, nsample-nbad), min(nsample, ngood)]
         // For (15, 15, 10): [0, 10]
         np.random.seed(12345);
-        var samples = np.random.hypergeometric(15, 15, 10, 10000);
+        var samples = np.random.hypergeometric(15, 15, 10, 10000L);
 
         for (int i = 0; i < samples.size; i++)
         {
@@ -66,7 +66,7 @@ public class RandomHypergeometricTests : TestClass
         // Mean = nsample * ngood / (ngood + nbad)
         // For (15, 15, 10): mean = 10 * 15/30 = 5
         np.random.seed(12345);
-        var samples = np.random.hypergeometric(15, 15, 10, 100000);
+        var samples = np.random.hypergeometric(15, 15, 10, 100000L);
 
         // Convert to double for mean calculation
         double sum = 0;
@@ -85,7 +85,7 @@ public class RandomHypergeometricTests : TestClass
     {
         // When nbad=0, result is always nsample (all are good)
         np.random.seed(42);
-        var samples = np.random.hypergeometric(20, 0, 10, 10);
+        var samples = np.random.hypergeometric(20, 0, 10, 10L);
 
         for (int i = 0; i < samples.size; i++)
         {
@@ -99,7 +99,7 @@ public class RandomHypergeometricTests : TestClass
     {
         // When ngood=0, result is always 0 (none are good)
         np.random.seed(42);
-        var samples = np.random.hypergeometric(0, 20, 10, 10);
+        var samples = np.random.hypergeometric(0, 20, 10, 10L);
 
         for (int i = 0; i < samples.size; i++)
         {
@@ -113,7 +113,7 @@ public class RandomHypergeometricTests : TestClass
     {
         // When nsample = ngood + nbad, result is always ngood
         np.random.seed(42);
-        var samples = np.random.hypergeometric(5, 5, 10, 10);
+        var samples = np.random.hypergeometric(5, 5, 10, 10L);
 
         for (int i = 0; i < samples.size; i++)
         {
@@ -127,7 +127,7 @@ public class RandomHypergeometricTests : TestClass
     {
         // (100, 2, 10) - should get mostly ~10 good
         np.random.seed(42);
-        var samples = np.random.hypergeometric(100, 2, 10, 1000);
+        var samples = np.random.hypergeometric(100, 2, 10, 1000L);
 
         double sum = 0;
         for (int i = 0; i < samples.size; i++)
@@ -145,7 +145,7 @@ public class RandomHypergeometricTests : TestClass
     {
         // (2, 100, 10) - should get mostly ~0 good
         np.random.seed(42);
-        var samples = np.random.hypergeometric(2, 100, 10, 1000);
+        var samples = np.random.hypergeometric(2, 100, 10, 1000L);
 
         double sum = 0;
         for (int i = 0; i < samples.size; i++)
@@ -161,43 +161,43 @@ public class RandomHypergeometricTests : TestClass
     [Test]
     public void Hypergeometric_NegativeNgood_ThrowsArgumentException()
     {
-        Assert.ThrowsException<ArgumentException>(() => np.random.hypergeometric(-1, 15, 10, 5));
+        Assert.ThrowsException<ArgumentException>(() => np.random.hypergeometric(-1, 15, 10, 5L));
     }
 
     [Test]
     public void Hypergeometric_NegativeNbad_ThrowsArgumentException()
     {
-        Assert.ThrowsException<ArgumentException>(() => np.random.hypergeometric(15, -1, 10, 5));
+        Assert.ThrowsException<ArgumentException>(() => np.random.hypergeometric(15, -1, 10, 5L));
     }
 
     [Test]
     public void Hypergeometric_ZeroNsample_ThrowsArgumentException()
     {
         // NumPy requires nsample >= 1
-        Assert.ThrowsException<ArgumentException>(() => np.random.hypergeometric(15, 15, 0, 5));
+        Assert.ThrowsException<ArgumentException>(() => np.random.hypergeometric(15, 15, 0, 5L));
     }
 
     [Test]
     public void Hypergeometric_NegativeNsample_ThrowsArgumentException()
     {
-        Assert.ThrowsException<ArgumentException>(() => np.random.hypergeometric(15, 15, -1, 5));
+        Assert.ThrowsException<ArgumentException>(() => np.random.hypergeometric(15, 15, -1, 5L));
     }
 
     [Test]
     public void Hypergeometric_NsampleTooLarge_ThrowsArgumentException()
     {
         // nsample > ngood + nbad should throw
-        Assert.ThrowsException<ArgumentException>(() => np.random.hypergeometric(15, 15, 40, 5));
+        Assert.ThrowsException<ArgumentException>(() => np.random.hypergeometric(15, 15, 40, 5L));
     }
 
     [Test]
     public void Hypergeometric_Reproducibility()
     {
         np.random.seed(42);
-        var result1 = np.random.hypergeometric(15, 15, 10, 5);
+        var result1 = np.random.hypergeometric(15, 15, 10, 5L);
 
         np.random.seed(42);
-        var result2 = np.random.hypergeometric(15, 15, 10, 5);
+        var result2 = np.random.hypergeometric(15, 15, 10, 5L);
 
         for (int i = 0; i < 5; i++)
         {
@@ -211,7 +211,7 @@ public class RandomHypergeometricTests : TestClass
     {
         // With nsample=1, result is either 0 or 1
         np.random.seed(42);
-        var samples = np.random.hypergeometric(10, 10, 1, 100);
+        var samples = np.random.hypergeometric(10, 10, 1, 100L);
 
         for (int i = 0; i < samples.size; i++)
         {

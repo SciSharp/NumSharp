@@ -30,7 +30,7 @@ namespace NumSharp
         ///     The Beta distribution is a special case of the Dirichlet distribution,
         ///     and is related to the Gamma distribution.
         /// </remarks>
-        public NDArray beta(double a, double b, params int[] size) => beta(a, b, Shape.ComputeLongShape(size));
+        public NDArray beta(double a, double b, int[] size) => beta(a, b, Shape.ComputeLongShape(size));
 
         /// <summary>
         ///     Draw samples from a Beta distribution.

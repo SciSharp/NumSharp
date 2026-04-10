@@ -46,7 +46,18 @@ namespace NumSharp
         /// <param name="nsample">Number of items sampled. Must be >= 1 and &lt;= ngood + nbad.</param>
         /// <param name="size">Output shape as int array.</param>
         /// <returns>Drawn samples from the hypergeometric distribution.</returns>
-        public NDArray hypergeometric(long ngood, long nbad, long nsample, params int[] size)
+        public NDArray hypergeometric(long ngood, long nbad, long nsample, int[] size)
+            => hypergeometric(ngood, nbad, nsample, new Shape(size));
+
+        /// <summary>
+        ///     Draw samples from a Hypergeometric distribution.
+        /// </summary>
+        /// <param name="ngood">Number of ways to make a good selection. Must be non-negative.</param>
+        /// <param name="nbad">Number of ways to make a bad selection. Must be non-negative.</param>
+        /// <param name="nsample">Number of items sampled. Must be >= 1 and &lt;= ngood + nbad.</param>
+        /// <param name="size">Output shape.</param>
+        /// <returns>Drawn samples from the hypergeometric distribution.</returns>
+        public NDArray hypergeometric(long ngood, long nbad, long nsample, params long[] size)
             => hypergeometric(ngood, nbad, nsample, new Shape(size));
 
         /// <summary>

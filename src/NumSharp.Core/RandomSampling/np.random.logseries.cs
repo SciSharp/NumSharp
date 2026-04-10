@@ -42,7 +42,16 @@ namespace NumSharp
         /// <param name="p">Shape parameter for the distribution. Must be in the range [0, 1).</param>
         /// <param name="size">Output shape as int array.</param>
         /// <returns>Drawn samples from the parameterized logarithmic series distribution.</returns>
-        public NDArray logseries(double p, params int[] size)
+        public NDArray logseries(double p, int[] size)
+            => logseries(p, new Shape(size));
+
+        /// <summary>
+        ///     Draw samples from a logarithmic series distribution.
+        /// </summary>
+        /// <param name="p">Shape parameter for the distribution. Must be in the range [0, 1).</param>
+        /// <param name="size">Output shape.</param>
+        /// <returns>Drawn samples from the parameterized logarithmic series distribution.</returns>
+        public NDArray logseries(double p, params long[] size)
             => logseries(p, new Shape(size));
 
         /// <summary>

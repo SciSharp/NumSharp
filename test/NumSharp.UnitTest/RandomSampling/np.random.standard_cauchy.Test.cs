@@ -19,7 +19,7 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void StandardCauchy_1DArray()
         {
-            var result = np.random.standard_cauchy(5);
+            var result = np.random.standard_cauchy(5L);
 
             Assert.AreEqual(1, result.ndim);
             Assert.AreEqual(5, result.shape[0]);
@@ -29,7 +29,7 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void StandardCauchy_2DArray()
         {
-            var result = np.random.standard_cauchy(2, 3);
+            var result = np.random.standard_cauchy(2L, 3L);
 
             Assert.AreEqual(2, result.ndim);
             Assert.AreEqual(2, result.shape[0]);
@@ -50,7 +50,7 @@ namespace NumSharp.UnitTest.RandomSampling
         {
             // Cauchy has no mean/variance, but median = 0
             np.random.seed(42);
-            var samples = np.random.standard_cauchy(100000);
+            var samples = np.random.standard_cauchy(100000L);
 
             // Calculate median manually
             var sorted = samples.Data<double>().OrderBy(x => x).ToArray();
@@ -64,7 +64,7 @@ namespace NumSharp.UnitTest.RandomSampling
         {
             // For standard Cauchy, Q1 = -1, Q3 = 1, so IQR = 2
             np.random.seed(42);
-            var samples = np.random.standard_cauchy(100000);
+            var samples = np.random.standard_cauchy(100000L);
 
             var sorted = samples.Data<double>().OrderBy(x => x).ToArray();
             double q1 = sorted[sorted.Length / 4];
@@ -84,7 +84,7 @@ namespace NumSharp.UnitTest.RandomSampling
         {
             // Cauchy has heavy tails - should have some extreme values
             np.random.seed(42);
-            var samples = np.random.standard_cauchy(10000);
+            var samples = np.random.standard_cauchy(10000L);
 
             var max = (double)np.amax(samples);
             var min = (double)np.amin(samples);
@@ -105,7 +105,7 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void StandardCauchy_EmptySize()
         {
-            var result = np.random.standard_cauchy(0);
+            var result = np.random.standard_cauchy(0L);
 
             Assert.AreEqual(1, result.ndim);
             Assert.AreEqual(0, result.size);
@@ -115,10 +115,10 @@ namespace NumSharp.UnitTest.RandomSampling
         public void StandardCauchy_Reproducible()
         {
             np.random.seed(123);
-            var a = np.random.standard_cauchy(5);
+            var a = np.random.standard_cauchy(5L);
 
             np.random.seed(123);
-            var b = np.random.standard_cauchy(5);
+            var b = np.random.standard_cauchy(5L);
 
             var aData = a.Data<double>();
             var bData = b.Data<double>();

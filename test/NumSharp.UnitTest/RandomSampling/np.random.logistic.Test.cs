@@ -32,7 +32,7 @@ public class RandomLogisticTests : TestClass
     public void Logistic_MultiDimensionalSize_ReturnsCorrectShape()
     {
         np.random.seed(42);
-        var result = np.random.logistic(0, 1, 2, 3);
+        var result = np.random.logistic(0, 1, new Shape(2, 3));
         result.Should().BeShaped(2, 3);
     }
 
