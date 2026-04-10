@@ -2,6 +2,7 @@ using System;
 using System.Threading.Tasks;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp;
+using NumSharp.UnitTest.Utilities;
 using TUnit.Core;
 
 namespace NumSharp.UnitTest.LongIndexing;
@@ -26,6 +27,7 @@ namespace NumSharp.UnitTest.LongIndexing;
 /// OOM kills on Ubuntu CI runners.
 /// </summary>
 [HighMemory]
+[SkipOnLowMemory(12)] // Skip on CI runners with limited memory
 public class LongIndexingBroadcastTest
 {
     /// <summary>
