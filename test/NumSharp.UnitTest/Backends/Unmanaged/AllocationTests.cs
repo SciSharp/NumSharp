@@ -6,6 +6,12 @@ using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.Backends.Unmanaged
 {
+    /// <summary>
+    /// Tests for large memory allocations.
+    /// Marked as [HighMemory] because they allocate 1-4GB of memory and
+    /// can cause OOM on CI runners (especially ubuntu with limited RAM).
+    /// </summary>
+    [HighMemory]
     public class AllocationTests
     {
         private const long onegb = 1_073_741_824;
