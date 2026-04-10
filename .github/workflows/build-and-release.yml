@@ -57,9 +57,12 @@ jobs:
         echo "Starting test run..."
         echo "dotnet version: $(dotnet --version)"
         echo "Available memory: $(free -h 2>/dev/null || echo 'N/A')"
+        # Note: TUnit --treenode-filter doesn't seem to exclude class-level categories.
+        # The HighMemory filter was attempted but didn't reduce test count.
+        # Ubuntu failures are allowed via continue-on-error while investigating.
         dotnet run --project test/NumSharp.UnitTest/NumSharp.UnitTest.csproj \
           --configuration Release --no-build --framework net10.0 \
-          -- --treenode-filter '/**[Category!=OpenBugs][Category!=HighMemory]' --report-trx
+          -- --treenode-filter '/*/*/*/*[Category!=OpenBugs]' --report-trx
 
     - name: Upload Test Results
       uses: actions/upload-artifact@v4
