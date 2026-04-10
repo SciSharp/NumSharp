@@ -289,3 +289,29 @@ public class HighMemoryAttribute : CategoryAttribute
 {
     public HighMemoryAttribute() : base(TestCategory.HighMemory) { }
 }
+
+/// <summary>
+/// Attribute for tests that allocate large amounts of memory and crash CI runners.
+/// Inherits from <see cref="OpenBugsAttribute"/> so tests are automatically excluded
+/// from CI via the <c>[Category!=OpenBugs]</c> filter.
+///
+/// <para>Use this instead of [OpenBugs] for memory-intensive tests that aren't actually bugs,
+/// just too heavy for CI runners.</para>
+/// </summary>
+/// <example>
+/// <code>
+/// [Test]
+/// [LargeMemoryTest]  // Auto-excluded from CI
+/// public async Task Allocate_4GB()
+/// {
+///     var arr = np.ones&lt;int&gt;((4L * 1024 * 1024 * 1024 / 4));  // 4GB
+/// }
+/// </code>
+/// </example>
+public class LargeMemoryTestAttribute : OpenBugsAttribute
+{
+    public LargeMemoryTestAttribute()
+    {
+        // Inherits OpenBugs category for CI exclusion
+    }
+}

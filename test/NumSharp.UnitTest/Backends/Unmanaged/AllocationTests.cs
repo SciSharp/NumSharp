@@ -6,12 +6,10 @@ using NumSharp.Backends;
 namespace NumSharp.UnitTest.Backends.Unmanaged
 {
     /// <summary>
-    /// Tests for large memory allocations.
-    /// Marked as [OpenBugs] because they allocate 4-44GB of memory and
-    /// cause OOM crashes on CI runners.
+    /// Tests for large memory allocations (4-44GB).
+    /// Marked as [LargeMemoryTest] to auto-exclude from CI.
     /// </summary>
-    [HighMemory]
-    [OpenBugs]
+    [LargeMemoryTest]
     public class AllocationTests
     {
         private const long onegb = 1_073_741_824;

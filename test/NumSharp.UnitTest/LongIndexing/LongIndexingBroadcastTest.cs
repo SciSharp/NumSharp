@@ -21,12 +21,10 @@ namespace NumSharp.UnitTest.LongIndexing;
 /// - Operations that produce output (add, multiply, etc.) allocate full-size output arrays
 ///   even when input is broadcast, causing OutOfMemoryException
 ///
-/// NOTE: Marked [OpenBugs] because iterating over 2.36 billion elements causes
-/// excessive CPU/memory pressure when TUnit runs tests in parallel, leading to
-/// OOM crashes on CI runners.
+/// NOTE: Marked [LargeMemoryTest] because iterating over 2.36 billion elements causes
+/// excessive CPU/memory pressure when TUnit runs tests in parallel.
 /// </summary>
-[HighMemory]
-[OpenBugs]
+[LargeMemoryTest]
 public class LongIndexingBroadcastTest
 {
     /// <summary>
