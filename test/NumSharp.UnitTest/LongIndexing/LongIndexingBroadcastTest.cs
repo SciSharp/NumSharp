@@ -20,7 +20,12 @@ namespace NumSharp.UnitTest.LongIndexing;
 /// - SliceDef is limited to int indices (cannot slice broadcast arrays with long indices)
 /// - Operations that produce output (add, multiply, etc.) allocate full-size output arrays
 ///   even when input is broadcast, causing OutOfMemoryException
+///
+/// NOTE: Marked [HighMemory] because iterating over 2.36 billion elements causes
+/// excessive CPU/memory pressure when TUnit runs tests in parallel, leading to
+/// OOM kills on Ubuntu CI runners.
 /// </summary>
+[HighMemory]
 public class LongIndexingBroadcastTest
 {
     /// <summary>
