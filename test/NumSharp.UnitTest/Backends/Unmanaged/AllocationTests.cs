@@ -18,6 +18,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         private static readonly object _lock = new Object();
 
         [Test]
+        [HighMemory]
         public void Allocate_1GB()
         {
             lock (_lock)
@@ -29,6 +30,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         }
 
         [Test]
+        [HighMemory]
         public void Allocate_2GB()
         {
             lock (_lock)
@@ -40,6 +42,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         }
 
         [Test]
+        [HighMemory]
         public void Allocate_4GB()
         {
             lock (_lock)
@@ -51,6 +54,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         }
 
         [Test]
+        [HighMemory]
         [OpenBugs]
         public void Allocate_44GB()
         {
