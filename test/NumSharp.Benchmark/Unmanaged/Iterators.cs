@@ -3,7 +3,7 @@ using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Engines;
 using NumSharp.Backends;
 using NumSharp.Backends.Unmanaged;
-using NumSharp.Memory.Pooling;
+
 using NumSharp.Unmanaged.Memory;
 using NumSharp.Utilities;
 

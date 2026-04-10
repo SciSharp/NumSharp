@@ -125,7 +125,7 @@ This is why debugging IL generation can be tricky: the emitted code isn't the co
 
 When you need to modify or debug the IL generation code, knowing where to look is half the battle. The system is organized by operation category, so you can quickly navigate to the relevant file.
 
-### Partial Class Files (28 files, ~18K lines)
+### Partial Class Files (28 files, ~21K lines)
 
 Don't be intimidated by the file count—each file has a focused responsibility. Here's your roadmap to finding what you need:
 
@@ -488,8 +488,8 @@ If you see "-" in the SIMD column, that operation doesn't have SIMD acceleration
 |-----------|--------------|------|----------|
 | Sum | SIMD + horizontal | SIMD per slice | 0 |
 | Prod | SIMD + horizontal | SIMD per slice | 1 |
-| Min | SIMD Max + horizontal | SIMD per slice | +∞ |
-| Max | SIMD Min + horizontal | SIMD per slice | -∞ |
+| Min | SIMD Min + horizontal | SIMD per slice | +∞ |
+| Max | SIMD Max + horizontal | SIMD per slice | -∞ |
 | Mean | Sum / count | Sum / axisSize | 0 |
 | Var | Two-pass | Two-pass | - |
 | Std | sqrt(Var) | sqrt(Var) | - |
@@ -959,10 +959,10 @@ Track stack depth mentally or with comments:
 
 ```csharp
 il.Emit(OpCodes.Ldarg_0);    // Stack: [ptr]
-il.Emit(OpCodes.Ldloc, idx); // Stack: [ptr, idx]
-il.Emit(OpCodes.Conv_I);     // Stack: [ptr, idx(native)]
-il.Emit(OpCodes.Ldc_I4, 4);  // Stack: [ptr, idx, 4]
-il.Emit(OpCodes.Mul);        // Stack: [ptr, offset]
+il.Emit(OpCodes.Ldloc, idx); // Stack: [ptr, idx(long)]
+il.Emit(OpCodes.Ldc_I8, 4L); // Stack: [ptr, idx, 4]
+il.Emit(OpCodes.Mul);        // Stack: [ptr, offset(long)]
+il.Emit(OpCodes.Conv_I);     // Stack: [ptr, offset(native)]
 il.Emit(OpCodes.Add);        // Stack: [addr]
 il.Emit(OpCodes.Ldind_R4);   // Stack: [value]
 ```
@@ -999,21 +999,23 @@ Over time, contributors have encountered the same IL generation pitfalls repeate
 
 ### Pitfall 1: Forgetting Conv_I for Pointer Arithmetic
 
-When computing pointer offsets, the index is often a `long` but the element size is an `int`. You need to convert properly:
+When computing pointer offsets, the result must be a native int for the `Add` to pointer. NumSharp uses `long` indices throughout, so you must convert after multiplication:
 
 ```csharp
-// WRONG: Multiplying long by int can produce wrong results
+// WRONG: Multiplying long by int is invalid in IL
 il.Emit(OpCodes.Ldloc, locI);        // long index
 il.Emit(OpCodes.Ldc_I4, elementSize); // int size
-il.Emit(OpCodes.Mul);                 // Result type is ambiguous!
+il.Emit(OpCodes.Mul);                 // IL verification error! long * int is not valid
 
-// CORRECT: Convert index to native int for pointer arithmetic
-il.Emit(OpCodes.Ldloc, locI);        // long index
-il.Emit(OpCodes.Conv_I);             // Convert to native int
-il.Emit(OpCodes.Ldc_I4, elementSize);
-il.Emit(OpCodes.Mul);
-il.Emit(OpCodes.Add);                // Add to base pointer
+// CORRECT: Use long * long, then convert result to native int for pointer add
+il.Emit(OpCodes.Ldloc, locI);             // long index
+il.Emit(OpCodes.Ldc_I8, (long)elementSize); // long size (cast int to long)
+il.Emit(OpCodes.Mul);                     // long * long = long (preserves precision)
+il.Emit(OpCodes.Conv_I);                  // Convert to native int for pointer arithmetic
+il.Emit(OpCodes.Add);                     // Add to base pointer
 ```
+
+The key insight: keep full 64-bit precision during the multiplication, only convert to native int right before adding to the pointer.
 
 ### Pitfall 2: Stack Imbalance in Branches
 

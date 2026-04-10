@@ -4,19 +4,6 @@ using NumSharp.Backends;
 namespace NumSharp.Backends.Kernels
 {
     /// <summary>
-    /// Execution path for reduction operations.
-    /// </summary>
-    public enum ReductionPath
-    {
-        /// <summary>Reduce all elements to a single scalar value (no axis specified)</summary>
-        ElementWise,
-        /// <summary>Reduce along a specific axis, producing smaller-dimensional result</summary>
-        AxisReduction,
-        /// <summary>Cumulative reduction - same shape output, running accumulation</summary>
-        Cumulative
-    }
-
-    /// <summary>
     /// Cache key for element-wise (full array) reduction kernels.
     /// Reduces all elements to a single scalar value.
     /// </summary>

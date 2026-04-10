@@ -80,7 +80,7 @@ np                Static API class (like `import numpy as np`)
 | View semantics | Slicing returns views (shared memory), not copies |
 | Shape readonly struct | Immutable after construction (NumPy-aligned). Contains `ArrayFlags` for cached O(1) property access |
 | Broadcast write protection | Broadcast views are read-only (`IsWriteable = false`), matching NumPy behavior |
-| ILKernelGenerator | Runtime IL emission (~18K lines) with SIMD V128/V256/V512; replaces Regen templates |
+| ILKernelGenerator | Runtime IL emission (~21K lines) with SIMD V128/V256/V512; replaces Regen templates |
 
 ## ILKernelGenerator
 

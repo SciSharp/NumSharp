@@ -84,6 +84,17 @@ using System.Runtime.Intrinsics;
 namespace NumSharp.Backends.Kernels
 {
     /// <summary>
+    /// Delegate for contiguous (SimdFull) binary operations.
+    /// Simplified signature - no strides needed since both arrays are contiguous.
+    /// </summary>
+    /// <typeparam name="T">Element type (must be unmanaged).</typeparam>
+    /// <param name="lhs">Pointer to left operand data.</param>
+    /// <param name="rhs">Pointer to right operand data.</param>
+    /// <param name="result">Pointer to output data.</param>
+    /// <param name="count">Number of elements to process.</param>
+    public unsafe delegate void ContiguousKernel<T>(T* lhs, T* rhs, T* result, long count) where T : unmanaged;
+
+    /// <summary>
     /// Binary operations (same-type) - contiguous kernels and generic helpers.
     /// </summary>
     public static partial class ILKernelGenerator

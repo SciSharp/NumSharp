@@ -37,31 +37,6 @@ namespace NumSharp.Backends.Kernels
     }
 
     /// <summary>
-    /// Unified binary operation kernel signature.
-    /// All binary operations (Add, Sub, Mul, Div, Mod) use this interface.
-    /// The kernel handles pattern detection and dispatch internally.
-    /// </summary>
-    /// <typeparam name="T">Element type (byte, short, int, long, float, double, etc.)</typeparam>
-    /// <param name="lhs">Pointer to left operand data</param>
-    /// <param name="rhs">Pointer to right operand data</param>
-    /// <param name="result">Pointer to output data</param>
-    /// <param name="lhsStrides">Left operand strides (element units, not bytes)</param>
-    /// <param name="rhsStrides">Right operand strides (element units, not bytes)</param>
-    /// <param name="shape">Output shape dimensions</param>
-    /// <param name="ndim">Number of dimensions</param>
-    /// <param name="totalSize">Total number of output elements</param>
-    public unsafe delegate void BinaryKernel<T>(
-        T* lhs,
-        T* rhs,
-        T* result,
-        long* lhsStrides,
-        long* rhsStrides,
-        long* shape,
-        int ndim,
-        long totalSize
-    ) where T : unmanaged;
-
-    /// <summary>
     /// Mixed-type binary operation kernel signature using void pointers.
     /// Handles operations where LHS, RHS, and result may have different types.
     /// Type conversion is handled internally by the generated IL.

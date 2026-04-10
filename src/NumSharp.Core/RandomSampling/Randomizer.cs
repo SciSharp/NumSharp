@@ -24,7 +24,8 @@ namespace NumSharp
         /// <summary>Initializes a new instance of the <see cref="Randomizer" /> class, using a time-dependent default seed value.</summary>
         public Randomizer()
             : this(Environment.TickCount)
-        { }
+        {
+        }
 
         /// <summary>Initializes a new instance of the <see cref="T:System.Random" /> class, using the specified seed value.</summary>
         /// <param name="Seed">A number used to calculate a starting value for the pseudo-random number sequence. If a negative number is specified, the absolute value of the number is used.</param>
@@ -365,7 +366,7 @@ namespace NumSharp
             inext = locINext;
             inextp = locINextp;
 
-            return (int) (retVal * (1.0 / MBIG) * maxValue);
+            return (int)(retVal * (1.0 / MBIG) * maxValue);
         }
 
 
@@ -448,7 +449,7 @@ namespace NumSharp
         /// <returns>A new object that is a copy of this instance.</returns>
         public Randomizer Clone()
         {
-            return new Randomizer() {SeedArray = (int[])SeedArray.Clone(), inext = inext, inextp = inextp};
+            return new Randomizer() { SeedArray = (int[])SeedArray.Clone(), inext = inext, inextp = inextp };
         }
 
         public byte[] Serialize()
@@ -487,19 +488,6 @@ namespace NumSharp
                     return rnd;
                 }
             }
-        }
-    }
-
-    internal static class MemoryStreamExtensions
-    {
-        public static void Append(this MemoryStream stream, byte value)
-        {
-            stream.Append(new[] {value});
-        }
-
-        public static void Append(this MemoryStream stream, byte[] values)
-        {
-            stream.Write(values, 0, values.Length);
         }
     }
 }
