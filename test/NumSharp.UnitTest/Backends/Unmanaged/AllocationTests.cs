@@ -2,6 +2,7 @@
 using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.Backends;
+using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.Backends.Unmanaged
 {
@@ -18,6 +19,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
 
         [Test]
         [HighMemory]
+        [SkipOnLowMemory(8)] // Actually allocates 4GB (Int32 * 1B elements)
         public void Allocate_1GB()
         {
             lock (_lock)
@@ -30,6 +32,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
 
         [Test]
         [HighMemory]
+        [SkipOnLowMemory(12)] // Actually allocates 8GB (Int32 * 2B elements)
         public void Allocate_2GB()
         {
             lock (_lock)
@@ -42,6 +45,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
 
         [Test]
         [HighMemory]
+        [SkipOnLowMemory(20)] // Actually allocates 16GB (Int32 * 4B elements)
         public void Allocate_4GB()
         {
             lock (_lock)
@@ -54,6 +58,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
 
         [Test]
         [HighMemory]
+        [SkipOnLowMemory(50)] // Actually allocates 44GB+
         [OpenBugs]
         public void Allocate_44GB()
         {
