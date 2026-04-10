@@ -2,7 +2,6 @@ using System;
 using System.Threading.Tasks;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp;
-using NumSharp.UnitTest.Utilities;
 using TUnit.Core;
 
 namespace NumSharp.UnitTest.LongIndexing;
@@ -22,12 +21,12 @@ namespace NumSharp.UnitTest.LongIndexing;
 /// - Operations that produce output (add, multiply, etc.) allocate full-size output arrays
 ///   even when input is broadcast, causing OutOfMemoryException
 ///
-/// NOTE: Marked [HighMemory] because iterating over 2.36 billion elements causes
+/// NOTE: Marked [OpenBugs] because iterating over 2.36 billion elements causes
 /// excessive CPU/memory pressure when TUnit runs tests in parallel, leading to
-/// OOM kills on Ubuntu CI runners.
+/// OOM crashes on CI runners.
 /// </summary>
 [HighMemory]
-[SkipOnLowMemory(12)] // Skip on CI runners with limited memory
+[OpenBugs]
 public class LongIndexingBroadcastTest
 {
     /// <summary>

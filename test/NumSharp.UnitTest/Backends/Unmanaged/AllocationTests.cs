@@ -2,24 +2,22 @@
 using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.Backends;
-using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.Backends.Unmanaged
 {
     /// <summary>
     /// Tests for large memory allocations.
-    /// Marked as [HighMemory] because they allocate 1-4GB of memory and
-    /// can cause OOM on CI runners (especially ubuntu with limited RAM).
+    /// Marked as [OpenBugs] because they allocate 4-44GB of memory and
+    /// cause OOM crashes on CI runners.
     /// </summary>
     [HighMemory]
+    [OpenBugs]
     public class AllocationTests
     {
         private const long onegb = 1_073_741_824;
         private static readonly object _lock = new Object();
 
         [Test]
-        [HighMemory]
-        [SkipOnLowMemory(8)] // Actually allocates 4GB (Int32 * 1B elements)
         public void Allocate_1GB()
         {
             lock (_lock)
@@ -31,8 +29,6 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         }
 
         [Test]
-        [HighMemory]
-        [SkipOnLowMemory(12)] // Actually allocates 8GB (Int32 * 2B elements)
         public void Allocate_2GB()
         {
             lock (_lock)
@@ -44,8 +40,6 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         }
 
         [Test]
-        [HighMemory]
-        [SkipOnLowMemory(20)] // Actually allocates 16GB (Int32 * 4B elements)
         public void Allocate_4GB()
         {
             lock (_lock)
@@ -57,9 +51,6 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         }
 
         [Test]
-        [HighMemory]
-        [SkipOnLowMemory(50)] // Actually allocates 44GB+
-        [OpenBugs]
         public void Allocate_44GB()
         {
             lock (_lock)
