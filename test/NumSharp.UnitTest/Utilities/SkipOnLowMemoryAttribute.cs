@@ -6,6 +6,7 @@ namespace NumSharp.UnitTest.Utilities;
 
 /// <summary>
 /// Skips the test when available system memory is below the required threshold.
+/// When skipping, logs all currently running tests to help diagnose memory pressure.
 ///
 /// This is a runtime skip that works regardless of treenode-filter limitations.
 /// Use together with [HighMemory] for documentation and filtering attempts:
@@ -31,32 +32,25 @@ public class SkipOnLowMemoryAttribute : SkipAttribute
 
     public override Task<bool> ShouldSkip(TestRegisteredContext context)
     {
-        var availableMemoryGB = GetAvailableMemoryGB();
+        var availableMemoryGB = TestMemoryTracker.GetAvailableMemoryGB();
         var shouldSkip = availableMemoryGB < _requiredMemoryGB;
 
         if (shouldSkip)
         {
-            // Update skip reason with actual available memory
-            Console.WriteLine($"[SkipOnLowMemory] Skipping: {availableMemoryGB:F1}GB available, need {_requiredMemoryGB}GB");
+            // Get test name from TestRegisteredContext.TestDetails
+            var className = context.TestDetails?.Class?.ClassType?.Name ?? "Unknown";
+            var methodName = context.TestDetails?.TestName ?? context.TestName ?? "Unknown";
+            var testName = $"{className}.{methodName}";
+
+            // Log skip reason with available memory
+            Console.Error.WriteLine($"\n[SkipOnLowMemory] SKIPPING {testName}");
+            Console.Error.WriteLine($"[SkipOnLowMemory] Available: {availableMemoryGB:F1}GB, Required: {_requiredMemoryGB}GB");
+
+            // Log what tests are currently running that might be consuming memory
+            Console.Error.WriteLine(TestMemoryTracker.GetRunningTestsReport());
+            Console.Error.WriteLine();
         }
 
         return Task.FromResult(shouldSkip);
-    }
-
-    private static double GetAvailableMemoryGB()
-    {
-        try
-        {
-            // Use GC to get approximate available memory
-            // This is a rough estimate but works cross-platform
-            var gcInfo = GC.GetGCMemoryInfo();
-            var availableBytes = gcInfo.TotalAvailableMemoryBytes;
-            return availableBytes / (1024.0 * 1024.0 * 1024.0);
-        }
-        catch
-        {
-            // If we can't determine memory, assume we have enough
-            return double.MaxValue;
-        }
     }
 }
