@@ -152,23 +152,39 @@ public static class TestCategory
     /// <para><b>Purpose:</b></para>
     /// <list type="bullet">
     ///   <item>Tests that verify operations work correctly with > 2 billion elements</item>
-    ///   <item>Requires significant memory (~2-8 GB RAM per test)</item>
-    ///   <item>Should be run manually, not in standard CI due to resource requirements</item>
+    ///   <item>Most use broadcast arrays or small allocations (run in CI)</item>
+    ///   <item>High-memory tests should also use <see cref="HighMemory"/></item>
     /// </list>
     ///
     /// <para><b>CI Behavior:</b></para>
     /// <para>
-    /// Excluded from CI runs via <c>--treenode-filter "/*/*/*/*[Category!=LongIndexing]"</c>.
-    /// These tests require too much memory for standard CI runners.
+    /// Runs in CI. Only tests also marked with <see cref="HighMemory"/> are excluded.
+    /// </para>
+    /// </summary>
+    public const string LongIndexing = "LongIndexing";
+
+    /// <summary>
+    /// Tests requiring high memory allocation (8GB+ RAM).
+    ///
+    /// <para><b>Purpose:</b></para>
+    /// <list type="bullet">
+    ///   <item>Tests that allocate > 2GB arrays (e.g., int.MaxValue * 1.1 byte arrays)</item>
+    ///   <item>Requires 8GB+ RAM to run without OutOfMemoryException</item>
+    ///   <item>Too resource-intensive for standard CI runners</item>
+    /// </list>
+    ///
+    /// <para><b>CI Behavior:</b></para>
+    /// <para>
+    /// Excluded from CI runs via <c>--treenode-filter "/*/*/*/*[Category!=HighMemory]"</c>.
     /// </para>
     ///
     /// <para><b>Local Development:</b></para>
     /// <code>
-    /// # Run ONLY LongIndexing tests (requires 8GB+ RAM)
-    /// dotnet test -- --treenode-filter "/*/*/*/*[Category=LongIndexing]"
+    /// # Run ONLY HighMemory tests (requires 8GB+ RAM)
+    /// dotnet test -- --treenode-filter "/*/*/*/*[Category=HighMemory]"
     /// </code>
     /// </summary>
-    public const string LongIndexing = "LongIndexing";
+    public const string HighMemory = "HighMemory";
 }
 
 /// <summary>
@@ -241,24 +257,35 @@ public class WindowsOnlyAttribute : CategoryAttribute
 }
 
 /// <summary>
-/// Attribute for tests requiring large memory allocations (> int.MaxValue elements).
+/// Attribute for tests verifying long indexing (> int.MaxValue elements).
 /// Shorthand for <c>[Category("LongIndexing")]</c>.
 ///
 /// <para>See <see cref="TestCategory.LongIndexing"/> for full documentation.</para>
 /// </summary>
+public class LongIndexingAttribute : CategoryAttribute
+{
+    public LongIndexingAttribute() : base(TestCategory.LongIndexing) { }
+}
+
+/// <summary>
+/// Attribute for tests requiring high memory (8GB+ RAM).
+/// Shorthand for <c>[Category("HighMemory")]</c>.
+///
+/// <para>See <see cref="TestCategory.HighMemory"/> for full documentation.</para>
+/// </summary>
 /// <example>
 /// <code>
 /// [Test]
-/// [LongIndexing]
-/// [Explicit("Requires 8GB+ RAM")]
+/// [HighMemory]
 /// public async Task LargeArraySum()
 /// {
+///     // Allocates ~2.4GB
 ///     using var arr = np.ones&lt;byte&gt;((long)(int.MaxValue * 1.1));
 ///     var sum = np.sum(arr);
 /// }
 /// </code>
 /// </example>
-public class LongIndexingAttribute : CategoryAttribute
+public class HighMemoryAttribute : CategoryAttribute
 {
-    public LongIndexingAttribute() : base(TestCategory.LongIndexing) { }
+    public HighMemoryAttribute() : base(TestCategory.HighMemory) { }
 }

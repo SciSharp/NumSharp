@@ -65,25 +65,20 @@ namespace NumSharp
         /// </summary>
         private unsafe void Shuffle1DContiguous(NDArray x, long n)
         {
-            // Random.Next only supports int range
-            if (n > int.MaxValue)
-                throw new NotSupportedException($"Shuffle not supported for arrays with size {n} > int.MaxValue");
-
             var itemSize = x.dtypesize;
             var addr = (byte*)x.Address;
 
             // Allocate temp buffer for swapping
             var temp = stackalloc byte[itemSize];
 
-            // Fisher-Yates shuffle
-            int nInt = (int)n;
-            for (int i = nInt - 1; i > 0; i--)
+            // Fisher-Yates shuffle with full long range support
+            for (long i = n - 1; i > 0; i--)
             {
-                int j = randomizer.Next(i + 1);
+                long j = randomizer.NextLong(i + 1);
                 if (i != j)
                 {
-                    var ptrI = addr + (long)i * itemSize;
-                    var ptrJ = addr + (long)j * itemSize;
+                    var ptrI = addr + i * itemSize;
+                    var ptrJ = addr + j * itemSize;
 
                     // Swap elements
                     Buffer.MemoryCopy(ptrI, temp, itemSize, itemSize);

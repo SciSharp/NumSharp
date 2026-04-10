@@ -135,10 +135,10 @@ namespace NumSharp.UnitTest
             var rev = np.arange(3)["::-1"]; // [2, 1, 0]
             var brev = np.broadcast_to(rev, new Shape(2, 3));
 
-            // Coordinate access is correct
-            Assert.AreEqual(2, brev.GetInt32(0, 0));
-            Assert.AreEqual(1, brev.GetInt32(0, 1));
-            Assert.AreEqual(0, brev.GetInt32(0, 2));
+            // Coordinate access is correct (arange returns Int64)
+            Assert.AreEqual(2L, brev.GetInt64(0, 0));
+            Assert.AreEqual(1L, brev.GetInt64(0, 1));
+            Assert.AreEqual(0L, brev.GetInt64(0, 2));
 
             // NumPy: ToString must show "2, 1, 0" (reversed order)
             var str = brev.ToString(false);
@@ -171,10 +171,10 @@ namespace NumSharp.UnitTest
             var stepped = np.arange(6)["::2"]; // [0, 2, 4]
             var bstepped = np.broadcast_to(stepped, new Shape(2, 3));
 
-            // Coordinate access is correct
-            Assert.AreEqual(0, bstepped.GetInt32(0, 0));
-            Assert.AreEqual(2, bstepped.GetInt32(0, 1));
-            Assert.AreEqual(4, bstepped.GetInt32(0, 2));
+            // Coordinate access is correct (arange returns Int64)
+            Assert.AreEqual(0L, bstepped.GetInt64(0, 0));
+            Assert.AreEqual(2L, bstepped.GetInt64(0, 1));
+            Assert.AreEqual(4L, bstepped.GetInt64(0, 2));
 
             // NumPy: ToString must show "0, 2, 4" (in order)
             var str = bstepped.ToString(false);
@@ -209,9 +209,9 @@ namespace NumSharp.UnitTest
             var col = x[":, 1:2"]; // (3,1): [[1],[5],[9]]
             var bcol = np.broadcast_to(col, new Shape(3, 3));
 
-            // Coordinate access is correct
-            Assert.AreEqual(9, bcol.GetInt32(2, 0));
-            Assert.AreEqual(9, bcol.GetInt32(2, 2));
+            // Coordinate access is correct (arange returns Int64)
+            Assert.AreEqual(9L, bcol.GetInt64(2, 0));
+            Assert.AreEqual(9L, bcol.GetInt64(2, 2));
 
             // NumPy: ToString must show "9, 9, 9" in last row
             var str = bcol.ToString(false);
@@ -252,8 +252,8 @@ namespace NumSharp.UnitTest
             var dslice_col = dslice[":, 0:1"];
             var bdslice = np.broadcast_to(dslice_col, new Shape(2, 4));
 
-            // Coordinate access is correct
-            Assert.AreEqual(8, bdslice.GetInt32(1, 0));
+            // Coordinate access is correct (arange returns Int64)
+            Assert.AreEqual(8L, bdslice.GetInt64(1, 0));
 
             // NumPy: ToString must show "8, 8, 8, 8" in second row
             var str = bdslice.ToString(false);
@@ -1624,16 +1624,16 @@ namespace NumSharp.UnitTest
             var col = x[":, 1:2"]; // (3,1): [[1],[5],[9]]
             var b = np.broadcast_to(col, new Shape(3, 3));
 
-            // Coordinate access on the broadcast is correct
-            b.GetInt32(0, 0).Should().Be(1);
-            b.GetInt32(1, 0).Should().Be(5);
-            b.GetInt32(2, 0).Should().Be(9);
+            // Coordinate access on the broadcast is correct (arange returns Int64)
+            b.GetInt64(0, 0).Should().Be(1);
+            b.GetInt64(1, 0).Should().Be(5);
+            b.GetInt64(2, 0).Should().Be(9);
 
             // np.copy + slice works correctly (control path)
             var copySliced = np.copy(b)[":, 0"];
-            copySliced.GetInt32(0).Should().Be(1, "copy[:, 0][0] = 1 (control)");
-            copySliced.GetInt32(1).Should().Be(5, "copy[:, 0][1] = 5 (control)");
-            copySliced.GetInt32(2).Should().Be(9, "copy[:, 0][2] = 9 (control)");
+            copySliced.GetInt64(0).Should().Be(1, "copy[:, 0][0] = 1 (control)");
+            copySliced.GetInt64(1).Should().Be(5, "copy[:, 0][1] = 5 (control)");
+            copySliced.GetInt64(2).Should().Be(9, "copy[:, 0][2] = 9 (control)");
 
             // Direct slice should give the same result but crashes:
             // GetViewInternal clones data to 9 contiguous elements but
@@ -1647,12 +1647,12 @@ namespace NumSharp.UnitTest
             try
             {
                 var sliced = b[":, 0"];
-                // If it doesn't throw, verify values are correct
-                sliced.GetInt32(0).Should().Be(1,
+                // If it doesn't throw, verify values are correct (arange returns Int64)
+                sliced.GetInt64(0).Should().Be(1,
                     "b[:, 0][0] should be 1 (row 0 value).");
-                sliced.GetInt32(1).Should().Be(5,
+                sliced.GetInt64(1).Should().Be(5,
                     "b[:, 0][1] should be 5 (row 1 value).");
-                sliced.GetInt32(2).Should().Be(9,
+                sliced.GetInt64(2).Should().Be(9,
                     "b[:, 0][2] should be 9 (row 2 value).");
             }
             catch (Exception ex)
@@ -2359,17 +2359,17 @@ namespace NumSharp.UnitTest
 
             t.shape.Should().BeEquivalentTo(new long[] { 3, 2 });
 
-            // Verify values are correct
-            t.GetInt32(0, 0).Should().Be(0);
-            t.GetInt32(0, 1).Should().Be(3);
-            t.GetInt32(1, 0).Should().Be(1);
-            t.GetInt32(1, 1).Should().Be(4);
-            t.GetInt32(2, 0).Should().Be(2);
-            t.GetInt32(2, 1).Should().Be(5);
+            // Verify values are correct (arange returns Int64)
+            t.GetInt64(0, 0).Should().Be(0);
+            t.GetInt64(0, 1).Should().Be(3);
+            t.GetInt64(1, 0).Should().Be(1);
+            t.GetInt64(1, 1).Should().Be(4);
+            t.GetInt64(2, 0).Should().Be(2);
+            t.GetInt64(2, 1).Should().Be(5);
 
             // Mutation test: writing to transpose should modify original
-            t.SetInt32(999, 0, 0);
-            a.GetInt32(0, 0).Should().Be(999,
+            t.SetInt64(999, 0, 0);
+            a.GetInt64(0, 0).Should().Be(999,
                 "NumPy: transpose returns a view — mutating t[0,0] also mutates a[0,0]. " +
                 "NumSharp: Default.Transpose.cs always allocates new memory (line 172) " +
                 "and copies data via MultiIterator.Assign (line 173), creating an " +
@@ -2393,13 +2393,13 @@ namespace NumSharp.UnitTest
 
             s.shape.Should().BeEquivalentTo(new long[] { 4, 3, 2 });
 
-            // Verify values are correct
-            s.GetInt32(0, 0, 0).Should().Be(0);
-            s.GetInt32(1, 0, 0).Should().Be(1);
+            // Verify values are correct (arange returns Int64)
+            s.GetInt64(0, 0, 0).Should().Be(0);
+            s.GetInt64(1, 0, 0).Should().Be(1);
 
             // Mutation test: writing to swapaxes result should modify original
-            s.SetInt32(999, 0, 0, 0);
-            a.GetInt32(0, 0, 0).Should().Be(999,
+            s.SetInt64(999, 0, 0, 0);
+            a.GetInt64(0, 0, 0).Should().Be(999,
                 "NumPy: swapaxes returns a view — mutating s[0,0,0] also mutates a[0,0,0]. " +
                 "NumSharp: swapaxes delegates to Transpose which always copies data " +
                 "(Default.Transpose.cs line 172-173).");

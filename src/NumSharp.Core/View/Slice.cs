@@ -289,24 +289,18 @@ namespace NumSharp
         [MethodImpl(OptimizeAndInline)]
         public SliceDef ToSliceDef(long dim)
         {
-            // Slice indices are int, but dim can be long. Results must fit in int for SliceDef.
-            if (dim > int.MaxValue)
-                throw new OverflowException($"Dimension {dim} exceeds int.MaxValue. SliceDef indices limited to int range.");
-
-            int intDim = (int)dim;
-
             if (IsIndex)
             {
                 var index = Start ?? 0;
                 if (index < 0)
                 {
-                    if (Math.Abs(index) > intDim)
-                        throw new ArgumentException($"Index {index} is out of bounds for the axis with size {intDim}");
-                    return new SliceDef(intDim + index);
+                    if (Math.Abs(index) > dim)
+                        throw new ArgumentException($"Index {index} is out of bounds for the axis with size {dim}");
+                    return new SliceDef(dim + index);
                 }
 
-                if (index > 0 && index >= intDim)
-                    throw new ArgumentException($"Index {index} is out of bounds for the axis with size {intDim}");
+                if (index > 0 && index >= dim)
+                    throw new ArgumentException($"Index {index} is out of bounds for the axis with size {dim}");
                 return new SliceDef(index);
             }
 
@@ -316,15 +310,15 @@ namespace NumSharp
             if (Step > 0)
             {
                 var start = Start ?? 0;
-                var stop = Stop ?? intDim;
-                if (start >= intDim)
+                var stop = Stop ?? dim;
+                if (start >= dim)
                     return new SliceDef() {Count = 0, Start = 0, Step = 0};
                 if (start < 0)
-                    start = Math.Abs(start) <= intDim ? intDim + start : 0;
-                if (stop > intDim)
-                    stop = intDim;
+                    start = Math.Abs(start) <= dim ? dim + start : 0;
+                if (stop > dim)
+                    stop = dim;
                 if (stop < 0)
-                    stop = Math.Abs(stop) <= intDim ? intDim + stop : 0;
+                    stop = Math.Abs(stop) <= dim ? dim + stop : 0;
                 if (start >= stop)
                     return new SliceDef() {Count = 0, Start = 0, Step = 0};
                 var count = (Math.Abs(start - stop) + (astep - 1)) / astep;
@@ -333,14 +327,14 @@ namespace NumSharp
             else
             {
                 // negative step!
-                var start = Start ?? intDim - 1;
+                var start = Start ?? dim - 1;
                 var stop = Stop ?? -1;
                 if (start < 0)
-                    start = Math.Abs(start) <= intDim ? intDim + start : 0;
-                if (start >= intDim)
-                    start = intDim - 1;
+                    start = Math.Abs(start) <= dim ? dim + start : 0;
+                if (start >= dim)
+                    start = dim - 1;
                 if (Stop < 0)
-                    stop = Math.Abs(stop) <= intDim ? intDim + stop : -1;
+                    stop = Math.Abs(stop) <= dim ? dim + stop : -1;
                 if (start <= stop)
                     return new SliceDef() {Count = 0, Start = 0, Step = 0};
                 var count = (Math.Abs(start - stop) + (astep - 1)) / astep;

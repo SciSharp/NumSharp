@@ -349,7 +349,7 @@ public class LongIndexingBroadcastTest
 
     [Test]
     [Explicit("Allocates full 2.4GB array")]
-    [LongIndexing]
+    [HighMemory]
     public async Task Broadcast_Copy_MaterializesFullArray()
     {
         var broadcast = BroadcastScalar((byte)123);

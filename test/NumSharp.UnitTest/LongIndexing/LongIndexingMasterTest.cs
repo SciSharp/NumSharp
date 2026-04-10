@@ -28,7 +28,7 @@ namespace NumSharp.UnitTest.LongIndexing;
 /// 2. GC can reclaim memory between operations
 /// 3. We don't exceed available system memory
 /// </summary>
-[LongIndexing]
+[HighMemory]
 public class LongIndexingMasterTest
 {
     /// <summary>

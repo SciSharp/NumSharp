@@ -65,9 +65,10 @@ namespace NumSharp.UnitTest
             var result = a[mask];
 
             result.size.Should().Be(3, "Boolean mask selects 3 elements where mask is True");
-            result.GetInt32(0).Should().Be(0, "a[0] where mask[0]=True");
-            result.GetInt32(1).Should().Be(2, "a[2] where mask[2]=True");
-            result.GetInt32(2).Should().Be(4, "a[4] where mask[4]=True");
+            // arange returns Int64
+            result.GetInt64(0).Should().Be(0, "a[0] where mask[0]=True");
+            result.GetInt64(1).Should().Be(2, "a[2] where mask[2]=True");
+            result.GetInt64(2).Should().Be(4, "a[4] where mask[4]=True");
         }
 
         /// <summary>
