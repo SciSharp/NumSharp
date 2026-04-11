@@ -92,7 +92,7 @@ namespace NumSharp
         /// <returns>Drawn samples from the F distribution.</returns>
         /// <exception cref="ArgumentException">If dfnum or dfden is <= 0.</exception>
         public NDArray f(double dfnum, double dfden, params long[] size)
-            => f(dfnum, dfden, new Shape(size));
+            => f(dfnum, dfden, Array.ConvertAll(size, d => (int)d));
 
         /// <summary>
         ///     Generate a single sample from the F distribution.

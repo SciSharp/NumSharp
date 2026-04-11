@@ -21,9 +21,9 @@ namespace NumSharp.UnitTest.Manipulation
             var result = np.split(a, 3);
 
             result.Length.Should().Be(3);
-            result[0].ToArray<int>().Should().ContainInOrder(0, 1, 2);
-            result[1].ToArray<int>().Should().ContainInOrder(3, 4, 5);
-            result[2].ToArray<int>().Should().ContainInOrder(6, 7, 8);
+            result[0].ToArray<long>().Should().ContainInOrder(0, 1, 2);
+            result[1].ToArray<long>().Should().ContainInOrder(3, 4, 5);
+            result[2].ToArray<long>().Should().ContainInOrder(6, 7, 8);
         }
 
         [Test]
@@ -61,12 +61,12 @@ namespace NumSharp.UnitTest.Manipulation
             result[1].Should().BeShaped(3, 2);
 
             // First result: columns 0-1
-            result[0]["0, :"].ToArray<int>().Should().ContainInOrder(0, 1);
-            result[0]["1, :"].ToArray<int>().Should().ContainInOrder(4, 5);
+            result[0]["0, :"].ToArray<long>().Should().ContainInOrder(0, 1);
+            result[0]["1, :"].ToArray<long>().Should().ContainInOrder(4, 5);
 
             // Second result: columns 2-3
-            result[1]["0, :"].ToArray<int>().Should().ContainInOrder(2, 3);
-            result[1]["1, :"].ToArray<int>().Should().ContainInOrder(6, 7);
+            result[1]["0, :"].ToArray<long>().Should().ContainInOrder(2, 3);
+            result[1]["1, :"].ToArray<long>().Should().ContainInOrder(6, 7);
         }
 
         [Test]
@@ -96,10 +96,10 @@ namespace NumSharp.UnitTest.Manipulation
             var result = np.split(a, new[] { 3, 5, 7 });
 
             result.Length.Should().Be(4);
-            result[0].ToArray<int>().Should().ContainInOrder(0, 1, 2);
-            result[1].ToArray<int>().Should().ContainInOrder(3, 4);
-            result[2].ToArray<int>().Should().ContainInOrder(5, 6);
-            result[3].ToArray<int>().Should().ContainInOrder(7, 8);
+            result[0].ToArray<long>().Should().ContainInOrder(0, 1, 2);
+            result[1].ToArray<long>().Should().ContainInOrder(3, 4);
+            result[2].ToArray<long>().Should().ContainInOrder(5, 6);
+            result[3].ToArray<long>().Should().ContainInOrder(7, 8);
         }
 
         [Test]
@@ -295,8 +295,8 @@ namespace NumSharp.UnitTest.Manipulation
             var result = np.split(a, 3);
 
             // Modifying a view should affect the original
-            result[0].SetInt32(999, 0);
-            a.GetInt32(0).Should().Be(999);
+            result[0].SetInt64(999, 0);
+            a.GetInt64(0).Should().Be(999);
         }
 
         [Test]
