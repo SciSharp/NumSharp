@@ -22,7 +22,7 @@ namespace NumSharp
         ///     P(x, df) = Gamma((df+1)/2) / (sqrt(pi*df) * Gamma(df/2)) * (1 + x^2/df)^(-(df+1)/2)
         /// </remarks>
         public NDArray standard_t(double df, Shape size)
-            => standard_t(df, Shape.ToIntArray(size.dimensions));
+            => standard_t(df, size.dimensions);
 
         /// <summary>
         ///     Draw samples from a standard Student's t distribution with df degrees of freedom.
@@ -37,25 +37,7 @@ namespace NumSharp
         ///     resembles that of the standard normal distribution.
         /// </remarks>
         public NDArray standard_t(double df, int[] size)
-        {
-            // Parameter validation (matches NumPy error message)
-            if (df <= 0)
-                throw new ArgumentException("df <= 0", nameof(df));
-
-            if (size == null || size.Length == 0)
-            {
-                return NDArray.Scalar(SampleStandardT(df));
-            }
-
-            var result = new NDArray<double>(size);
-            ArraySlice<double> resultArray = result.Data<double>();
-
-            for (int i = 0; i < result.size; ++i)
-                resultArray[i] = SampleStandardT(df);
-
-            result.ReplaceData(resultArray);
-            return result;
-        }
+            => standard_t(df, Shape.ComputeLongShape(size));
 
         /// <summary>
         ///     Draw samples from a standard Student's t distribution with df degrees of freedom.
@@ -70,7 +52,25 @@ namespace NumSharp
         ///     resembles that of the standard normal distribution.
         /// </remarks>
         public NDArray standard_t(double df, params long[] size)
-            => standard_t(df, new Shape(size));
+        {
+            // Parameter validation (matches NumPy error message)
+            if (df <= 0)
+                throw new ArgumentException("df <= 0", nameof(df));
+
+            if (size == null || size.Length == 0)
+            {
+                return NDArray.Scalar(SampleStandardT(df));
+            }
+
+            var result = new NDArray<double>(size);
+            ArraySlice<double> resultArray = result.Data<double>();
+
+            for (long i = 0; i < result.size; ++i)
+                resultArray[i] = SampleStandardT(df);
+
+            result.ReplaceData(resultArray);
+            return result;
+        }
 
         /// <summary>
         ///     Sample a single value from the standard Student's t distribution.

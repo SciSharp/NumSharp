@@ -36,7 +36,7 @@ namespace NumSharp
                 return NDArray.Scalar(WeibullSample(a));
             }
 
-            return weibull(a, Shape.ToIntArray(size.Value.dimensions));
+            return weibull(a, size.Value.dimensions);
         }
 
         /// <summary>
@@ -46,7 +46,7 @@ namespace NumSharp
         /// <param name="size">Output shape.</param>
         /// <returns>Drawn samples from the Weibull distribution.</returns>
         /// <exception cref="ArgumentException">If a is negative.</exception>
-        public NDArray weibull(double a, Shape size) => weibull(a, Shape.ToIntArray(size.dimensions));
+        public NDArray weibull(double a, Shape size) => weibull(a, size.dimensions);
 
         /// <summary>
         ///     Draw samples from a Weibull distribution.
@@ -88,7 +88,7 @@ namespace NumSharp
                 if (a == 0)
                 {
                     // When a=0, all values are 0 (NumPy behavior)
-                    for (int i = 0; i < count; i++)
+                    for (long i = 0; i < count; i++)
                         dst[i] = 0.0;
                 }
                 else
@@ -97,7 +97,7 @@ namespace NumSharp
                     // Using 1-U or U gives same distribution since U is uniform
                     double invA = 1.0 / a;
                     Func<double> nextDouble = randomizer.NextDouble;
-                    for (int i = 0; i < count; i++)
+                    for (long i = 0; i < count; i++)
                     {
                         double u = nextDouble();
                         // Use 1-u to avoid log(0) when u=0

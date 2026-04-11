@@ -29,7 +29,7 @@ namespace NumSharp
                 return NDArray.Scalar(StandardCauchySample());
             }
 
-            return standard_cauchy(Shape.ToIntArray(size.Value.dimensions));
+            return standard_cauchy(size.Value.dimensions);
         }
 
         /// <summary>
@@ -37,21 +37,28 @@ namespace NumSharp
         /// </summary>
         /// <param name="size">Output shape.</param>
         /// <returns>Drawn samples from the standard Cauchy distribution.</returns>
-        public NDArray standard_cauchy(Shape size) => standard_cauchy(Shape.ToIntArray(size.dimensions));
+        public NDArray standard_cauchy(Shape size) => standard_cauchy(size.dimensions);
 
         /// <summary>
         ///     Draw samples from a standard Cauchy distribution with mode = 0.
         /// </summary>
         /// <param name="size">Output shape as a single dimension.</param>
         /// <returns>Drawn samples from the standard Cauchy distribution.</returns>
-        public NDArray standard_cauchy(int size) => standard_cauchy(new[] { size });
+        public NDArray standard_cauchy(int size) => standard_cauchy(new long[] { size });
 
         /// <summary>
         ///     Draw samples from a standard Cauchy distribution with mode = 0.
         /// </summary>
         /// <param name="size">Output shape as int array.</param>
         /// <returns>Drawn samples from the standard Cauchy distribution.</returns>
-        public NDArray standard_cauchy(int[] size)
+        public NDArray standard_cauchy(int[] size) => standard_cauchy(Shape.ComputeLongShape(size));
+
+        /// <summary>
+        ///     Draw samples from a standard Cauchy distribution with mode = 0.
+        /// </summary>
+        /// <param name="size">Output shape.</param>
+        /// <returns>Drawn samples from the standard Cauchy distribution.</returns>
+        public NDArray standard_cauchy(params long[] size)
         {
             unsafe
             {
@@ -61,7 +68,7 @@ namespace NumSharp
 
                 // Inverse transform: X = tan(pi * (U - 0.5))
                 Func<double> nextDouble = randomizer.NextDouble;
-                for (int i = 0; i < count; i++)
+                for (long i = 0; i < count; i++)
                 {
                     double u = nextDouble();
                     dst[i] = Math.Tan(Math.PI * (u - 0.5));
@@ -70,14 +77,6 @@ namespace NumSharp
                 return array;
             }
         }
-
-        /// <summary>
-        ///     Draw samples from a standard Cauchy distribution with mode = 0.
-        /// </summary>
-        /// <param name="size">Output shape.</param>
-        /// <returns>Drawn samples from the standard Cauchy distribution.</returns>
-        public NDArray standard_cauchy(params long[] size)
-            => standard_cauchy(new Shape(size));
 
         /// <summary>
         ///     Generate a single sample from the standard Cauchy distribution.

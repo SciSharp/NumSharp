@@ -33,7 +33,7 @@ namespace NumSharp
                 return NDArray.Scalar(SampleLogseries(p));
             }
 
-            return logseries(p, Shape.ToIntArray(size.Value.dimensions));
+            return logseries(p, size.Value.dimensions);
         }
 
         /// <summary>
@@ -75,7 +75,7 @@ namespace NumSharp
                 var ret = new NDArray<long>(size);
                 var dst = ret.Address;
 
-                for (int i = 0; i < ret.size; i++)
+                for (long i = 0; i < ret.size; i++)
                 {
                     dst[i] = SampleLogseries(p);
                 }
