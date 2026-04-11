@@ -36,7 +36,7 @@ namespace NumSharp
                 return NDArray.Scalar(WeibullSample(a));
             }
 
-            return weibull(a, size.Value.dimensions);
+            return weibull(a, Shape.ToIntArray(size.Value.dimensions));
         }
 
         /// <summary>
@@ -46,7 +46,7 @@ namespace NumSharp
         /// <param name="size">Output shape.</param>
         /// <returns>Drawn samples from the Weibull distribution.</returns>
         /// <exception cref="ArgumentException">If a is negative.</exception>
-        public NDArray weibull(double a, Shape size) => weibull(a, size.dimensions);
+        public NDArray weibull(double a, Shape size) => weibull(a, Shape.ToIntArray(size.dimensions));
 
         /// <summary>
         ///     Draw samples from a Weibull distribution.

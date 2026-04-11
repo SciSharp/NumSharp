@@ -22,7 +22,7 @@ namespace NumSharp
         ///     p(x) = x^(shape-1) * e^(-x) / Gamma(shape)
         /// </remarks>
         public NDArray standard_gamma(double shape, Shape size)
-            => standard_gamma(shape, size.dimensions);
+            => standard_gamma(shape, Shape.ToIntArray(size.dimensions));
 
         /// <summary>
         ///     Draw samples from a standard Gamma distribution (scale=1).

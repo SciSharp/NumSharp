@@ -33,7 +33,7 @@ namespace NumSharp
                 return NDArray.Scalar(SampleLogseries(p));
             }
 
-            return logseries(p, size.Value.dimensions);
+            return logseries(p, Shape.ToIntArray(size.Value.dimensions));
         }
 
         /// <summary>

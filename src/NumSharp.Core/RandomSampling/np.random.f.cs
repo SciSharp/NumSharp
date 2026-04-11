@@ -36,7 +36,7 @@ namespace NumSharp
                 return NDArray.Scalar(FSample(dfnum, dfden));
             }
 
-            return f(dfnum, dfden, size.Value.dimensions);
+            return f(dfnum, dfden, Shape.ToIntArray(size.Value.dimensions));
         }
 
         /// <summary>
@@ -47,7 +47,7 @@ namespace NumSharp
         /// <param name="size">Output shape.</param>
         /// <returns>Drawn samples from the F distribution.</returns>
         /// <exception cref="ArgumentException">If dfnum or dfden is <= 0.</exception>
-        public NDArray f(double dfnum, double dfden, Shape size) => f(dfnum, dfden, size.dimensions);
+        public NDArray f(double dfnum, double dfden, Shape size) => f(dfnum, dfden, Shape.ToIntArray(size.dimensions));
 
         /// <summary>
         ///     Draw samples from an F distribution.

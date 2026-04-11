@@ -29,7 +29,7 @@ namespace NumSharp
                 return NDArray.Scalar(StandardCauchySample());
             }
 
-            return standard_cauchy(size.Value.dimensions);
+            return standard_cauchy(Shape.ToIntArray(size.Value.dimensions));
         }
 
         /// <summary>
@@ -37,7 +37,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="size">Output shape.</param>
         /// <returns>Drawn samples from the standard Cauchy distribution.</returns>
-        public NDArray standard_cauchy(Shape size) => standard_cauchy(size.dimensions);
+        public NDArray standard_cauchy(Shape size) => standard_cauchy(Shape.ToIntArray(size.dimensions));
 
         /// <summary>
         ///     Draw samples from a standard Cauchy distribution with mode = 0.

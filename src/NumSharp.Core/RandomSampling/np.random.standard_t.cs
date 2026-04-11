@@ -22,7 +22,7 @@ namespace NumSharp
         ///     P(x, df) = Gamma((df+1)/2) / (sqrt(pi*df) * Gamma(df/2)) * (1 + x^2/df)^(-(df+1)/2)
         /// </remarks>
         public NDArray standard_t(double df, Shape size)
-            => standard_t(df, size.dimensions);
+            => standard_t(df, Shape.ToIntArray(size.dimensions));
 
         /// <summary>
         ///     Draw samples from a standard Student's t distribution with df degrees of freedom.

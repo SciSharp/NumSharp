@@ -41,7 +41,7 @@ namespace NumSharp
                 return NDArray.Scalar(SampleVonMises(mu, kappa));
             }
 
-            return vonmises(mu, kappa, size.Value.dimensions);
+            return vonmises(mu, kappa, Shape.ToIntArray(size.Value.dimensions));
         }
 
         /// <summary>
