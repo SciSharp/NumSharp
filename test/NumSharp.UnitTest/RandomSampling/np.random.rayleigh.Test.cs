@@ -6,6 +6,7 @@ namespace NumSharp.UnitTest.RandomSampling
     /// <summary>
     /// Tests for np.random.rayleigh (Rayleigh distribution)
     /// </summary>
+    [NotInParallel]
     public class NpRandomRayleighTests : TestClass
     {
         [Test]

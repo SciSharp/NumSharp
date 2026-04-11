@@ -20,6 +20,7 @@ namespace NumSharp.UnitTest
     ///     </code>
     /// </summary>
     [OpenBugs]
+    [NotInParallel]
     public class OpenBugsRandom : TestClass
     {
         // ===== CRITICAL: RNG Algorithm Mismatch =====

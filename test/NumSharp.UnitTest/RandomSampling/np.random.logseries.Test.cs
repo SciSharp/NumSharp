@@ -11,6 +11,7 @@ namespace NumSharp.UnitTest.RandomSampling
     /// Tests for np.random.logseries (logarithmic series distribution).
     /// Based on NumPy 2.4.2 behavior.
     /// </summary>
+    [NotInParallel]
     public class np_random_logseries_Tests
     {
         #region Basic Functionality

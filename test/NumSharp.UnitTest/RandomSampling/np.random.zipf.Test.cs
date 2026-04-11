@@ -6,6 +6,7 @@ namespace NumSharp.UnitTest.RandomSampling
     /// <summary>
     /// Tests for np.random.zipf (Zipf/zeta distribution)
     /// </summary>
+    [NotInParallel]
     public class NpRandomZipfTests : TestClass
     {
         [Test]

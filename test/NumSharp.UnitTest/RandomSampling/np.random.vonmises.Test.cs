@@ -9,6 +9,7 @@ namespace NumSharp.UnitTest.RandomSampling
     /// Tests for np.random.vonmises (von Mises / circular normal distribution).
     /// Based on NumPy 2.4.2 behavior.
     /// </summary>
+    [NotInParallel]
     public class np_random_vonmises_Tests : TestClass
     {
         #region Basic Functionality

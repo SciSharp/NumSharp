@@ -8,7 +8,8 @@ namespace NumSharp.UnitTest.RandomSampling;
 /// Tests for np.random.noncentral_chisquare following NumPy 2.4.2 behavior.
 /// Mean = df + nonc
 /// </summary>
-public class RandomNoncentralChisquareTests : TestClass
+[NotInParallel]
+    public class RandomNoncentralChisquareTests : TestClass
 {
     [Test]
     public void NoncentralChisquare_ScalarCall_ReturnsDouble()

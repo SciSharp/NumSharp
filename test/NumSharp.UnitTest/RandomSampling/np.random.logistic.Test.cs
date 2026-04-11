@@ -8,7 +8,8 @@ namespace NumSharp.UnitTest.RandomSampling;
 /// Tests for np.random.logistic following NumPy 2.4.2 behavior.
 /// Mean = loc, Variance = scale^2 * pi^2 / 3
 /// </summary>
-public class RandomLogisticTests : TestClass
+[NotInParallel]
+    public class RandomLogisticTests : TestClass
 {
     [Test]
     public void Logistic_DefaultParameters_ReturnsScalar()

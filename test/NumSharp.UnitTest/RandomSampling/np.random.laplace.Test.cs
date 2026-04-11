@@ -6,6 +6,7 @@ namespace NumSharp.UnitTest.RandomSampling
     /// <summary>
     /// Tests for np.random.laplace (Laplace/double exponential distribution)
     /// </summary>
+    [NotInParallel]
     public class NpRandomLaplaceTests : TestClass
     {
         [Test]

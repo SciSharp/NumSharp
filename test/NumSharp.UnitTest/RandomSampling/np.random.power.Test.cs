@@ -8,7 +8,8 @@ namespace NumSharp.UnitTest.RandomSampling;
 /// Tests for np.random.power following NumPy 2.4.2 behavior.
 /// Power distribution with PDF: P(x; a) = a * x^(a-1), 0 <= x <= 1, a > 0
 /// </summary>
-public class RandomPowerTests : TestClass
+[NotInParallel]
+    public class RandomPowerTests : TestClass
 {
     [Test]
     public void Power_ScalarCall_ReturnsDouble()

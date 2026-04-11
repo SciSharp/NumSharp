@@ -7,6 +7,7 @@ namespace NumSharp.UnitTest.RandomSampling
     /// Tests for np.random.multivariate_normal
     /// Reference: https://numpy.org/doc/stable/reference/random/generated/numpy.random.multivariate_normal.html
     /// </summary>
+    [NotInParallel]
     public class NpRandomMultivariateNormalTests : TestClass
     {
         [Test]

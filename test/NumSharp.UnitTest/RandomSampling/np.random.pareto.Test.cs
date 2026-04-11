@@ -8,7 +8,8 @@ namespace NumSharp.UnitTest.RandomSampling;
 /// Tests for np.random.pareto following NumPy 2.4.2 behavior.
 /// NumPy's pareto returns samples from Pareto II (Lomax) distribution.
 /// </summary>
-public class RandomParetoTests : TestClass
+[NotInParallel]
+    public class RandomParetoTests : TestClass
 {
     [Test]
     public void Pareto_ScalarCall_ReturnsDouble()

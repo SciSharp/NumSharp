@@ -4,6 +4,7 @@ using System.Linq;
 
 namespace NumSharp.UnitTest.RandomSampling
 {
+    [NotInParallel]
     public class NpRandomWeibullTest : TestClass
     {
         [Test]

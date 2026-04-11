@@ -12,7 +12,8 @@ namespace NumSharp.UnitTest.RandomSampling;
 /// NumPy's legacy shuffle only shuffles along axis 0 (no axis parameter).
 /// For axis support, use the Generator API (not yet implemented in NumSharp).
 /// </summary>
-public class ShuffleNumPyAlignedTests : TestClass
+[NotInParallel]
+    public class ShuffleNumPyAlignedTests : TestClass
 {
     [Test]
     public void Shuffle_1D_ShufflesElements()

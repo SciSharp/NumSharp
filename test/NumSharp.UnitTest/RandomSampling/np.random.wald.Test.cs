@@ -5,6 +5,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace NumSharp.UnitTest.RandomSampling
 {
+    [NotInParallel]
     public class WaldTests
     {
         [Test]
