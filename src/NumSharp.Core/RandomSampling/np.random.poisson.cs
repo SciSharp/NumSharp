@@ -45,6 +45,10 @@ namespace NumSharp
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private int Knuth(double lambda)
         {
+            // Special case: lambda=0 always returns 0
+            if (lambda == 0)
+                return 0;
+
             // Knuth algorithm for Poisson distribution
             double p = 1.0;
             double L = Math.Exp(-lambda);
