@@ -9,13 +9,12 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
     /// Tests for large memory allocations (4-44GB).
     /// Marked as [LargeMemoryTest] to auto-exclude from CI.
     /// </summary>
-    [LargeMemoryTest]
     public class AllocationTests
     {
         private const long onegb = 1_073_741_824;
         private static readonly object _lock = new Object();
 
-        [Test]
+        [Test, LargeMemoryTest]
         public void Allocate_1GB()
         {
             lock (_lock)
@@ -26,7 +25,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             }
         }
 
-        [Test]
+        [Test, LargeMemoryTest]
         public void Allocate_2GB()
         {
             lock (_lock)
@@ -37,7 +36,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             }
         }
 
-        [Test]
+        [Test, LargeMemoryTest]
         public void Allocate_4GB()
         {
             lock (_lock)
@@ -48,7 +47,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             }
         }
 
-        [Test]
+        [Test, LargeMemoryTest]
         public void Allocate_44GB()
         {
             lock (_lock)

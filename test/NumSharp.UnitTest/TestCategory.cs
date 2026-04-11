@@ -1,3 +1,4 @@
+using System;
 using TUnit.Core;
 
 namespace NumSharp.UnitTest;
@@ -31,12 +32,7 @@ namespace NumSharp.UnitTest;
 /// </code>
 ///
 /// <para><b>Usage:</b></para>
-/// <para>Apply at class level for entire test classes:</para>
-/// <code>
-/// [OpenBugs]  // or [Category(TestCategory.OpenBugs)]
-/// public class MyBugReproTests { ... }
-/// </code>
-/// <para>Or at individual test level:</para>
+/// <para>Apply at individual test level (class-level does not work with treenode filters):</para>
 /// <code>
 /// [Test]
 /// [OpenBugs]  // or [Category(TestCategory.OpenBugs)]
@@ -191,6 +187,9 @@ public static class TestCategory
 /// Attribute for tests documenting known bugs that are expected to fail.
 /// Shorthand for <c>[Category("OpenBugs")]</c>.
 ///
+/// <para><b>NOTE:</b> Must be applied to individual test methods, not classes.
+/// Class-level attributes do not work correctly with TUnit's treenode filters.</para>
+///
 /// <para>See <see cref="TestCategory.OpenBugs"/> for full documentation.</para>
 /// </summary>
 /// <example>
@@ -294,6 +293,9 @@ public class HighMemoryAttribute : CategoryAttribute
 /// Attribute for tests that allocate large amounts of memory and crash CI runners.
 /// Inherits from <see cref="OpenBugsAttribute"/> so tests are automatically excluded
 /// from CI via the <c>[Category!=OpenBugs]</c> filter.
+///
+/// <para><b>NOTE:</b> Must be applied to individual test methods, not classes.
+/// Class-level attributes do not work correctly with TUnit's treenode filters.</para>
 ///
 /// <para>Use this instead of [OpenBugs] for memory-intensive tests that aren't actually bugs,
 /// just too heavy for CI runners.</para>

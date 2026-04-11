@@ -24,7 +24,6 @@ namespace NumSharp.UnitTest.LongIndexing;
 /// NOTE: Marked [LargeMemoryTest] because iterating over 2.36 billion elements causes
 /// excessive CPU/memory pressure when TUnit runs tests in parallel.
 /// </summary>
-[LargeMemoryTest]
 public class LongIndexingBroadcastTest
 {
     /// <summary>
@@ -55,7 +54,7 @@ public class LongIndexingBroadcastTest
     // SHAPE AND INDEXING (all pass - no memory allocation needed)
     // ================================================================
 
-    [Test]
+    [Test, LargeMemoryTest]
     public async Task Broadcast_HasCorrectSize()
     {
         var arr = BroadcastScalar((byte)42);
@@ -64,7 +63,7 @@ public class LongIndexingBroadcastTest
         Assert.AreEqual(LargeSize, arr.shape[0]);
     }
 
-    [Test]
+    [Test, LargeMemoryTest]
     public async Task Broadcast_IsBroadcasted()
     {
         var arr = BroadcastScalar((byte)42);
@@ -72,7 +71,7 @@ public class LongIndexingBroadcastTest
         Assert.IsFalse(arr.Shape.IsContiguous);
     }
 
-    [Test]
+    [Test, LargeMemoryTest]
     public async Task Broadcast_GetAtLargeIndex()
     {
         var arr = BroadcastScalar((byte)77);
@@ -87,7 +86,7 @@ public class LongIndexingBroadcastTest
     // REDUCTIONS (these iterate over all elements logically - PASS)
     // ================================================================
 
-    [Test]
+    [Test, LargeMemoryTest]
     public async Task Broadcast_Mean()
     {
         var arr = BroadcastScalar((byte)42);
@@ -98,7 +97,7 @@ public class LongIndexingBroadcastTest
         Assert.AreEqual(42.0, result.GetDouble(0), 0.001);
     }
 
-    [Test]
+    [Test, LargeMemoryTest]
     public async Task Broadcast_Min()
     {
         var arr = BroadcastScalar((byte)7);
@@ -107,7 +106,7 @@ public class LongIndexingBroadcastTest
         Assert.AreEqual(7, result.GetByte(0));
     }
 
-    [Test]
+    [Test, LargeMemoryTest]
     public async Task Broadcast_Max()
     {
         var arr = BroadcastScalar((byte)200);
@@ -116,7 +115,7 @@ public class LongIndexingBroadcastTest
         Assert.AreEqual(200, result.GetByte(0));
     }
 
-    [Test]
+    [Test, LargeMemoryTest]
     public async Task Broadcast_ArgMax()
     {
         var arr = BroadcastScalar((byte)100);
@@ -126,7 +125,7 @@ public class LongIndexingBroadcastTest
         Assert.AreEqual(0L, result);
     }
 
-    [Test]
+    [Test, LargeMemoryTest]
     public async Task Broadcast_ArgMin()
     {
         var arr = BroadcastScalar((byte)50);
@@ -136,7 +135,7 @@ public class LongIndexingBroadcastTest
         Assert.AreEqual(0L, result);
     }
 
-    [Test]
+    [Test, LargeMemoryTest]
     public async Task Broadcast_All()
     {
         var arr = BroadcastScalar((byte)1);
@@ -145,7 +144,7 @@ public class LongIndexingBroadcastTest
         Assert.IsTrue(result);
     }
 
-    [Test]
+    [Test, LargeMemoryTest]
     public async Task Broadcast_All_Zero()
     {
         var arr = BroadcastScalar((byte)0);
@@ -154,7 +153,7 @@ public class LongIndexingBroadcastTest
         Assert.IsFalse(result);
     }
 
-    [Test]
+    [Test, LargeMemoryTest]
     public async Task Broadcast_Any()
     {
         var arr = BroadcastScalar((byte)1);
@@ -163,7 +162,7 @@ public class LongIndexingBroadcastTest
         Assert.IsTrue(result);
     }
 
-    [Test]
+    [Test, LargeMemoryTest]
     public async Task Broadcast_Any_Zero()
     {
         var arr = BroadcastScalar((byte)0);
@@ -172,7 +171,7 @@ public class LongIndexingBroadcastTest
         Assert.IsFalse(result);
     }
 
-    [Test]
+    [Test, LargeMemoryTest]
     public async Task Broadcast_CountNonzero()
     {
         var arr = BroadcastScalar((byte)1);
@@ -182,7 +181,7 @@ public class LongIndexingBroadcastTest
         Assert.AreEqual(LargeSize, result);
     }
 
-    [Test]
+    [Test, LargeMemoryTest]
     public async Task Broadcast_CountNonzero_Zero()
     {
         var arr = BroadcastScalar((byte)0);
@@ -195,7 +194,7 @@ public class LongIndexingBroadcastTest
     // SHAPE MANIPULATION (most pass - only reshape with slice fails)
     // ================================================================
 
-    [Test]
+    [Test, LargeMemoryTest]
     public async Task Broadcast_ExpandDims()
     {
         var arr = BroadcastScalar((byte)11);
@@ -207,7 +206,7 @@ public class LongIndexingBroadcastTest
         Assert.AreEqual(LargeSize, result.shape[1]);
     }
 
-    [Test]
+    [Test, LargeMemoryTest]
     public async Task Broadcast_Atleast2d()
     {
         var arr = BroadcastScalar((byte)22);
@@ -217,7 +216,7 @@ public class LongIndexingBroadcastTest
         Assert.AreEqual(2, result.ndim);
     }
 
-    [Test]
+    [Test, LargeMemoryTest]
     public async Task Broadcast_Atleast3d()
     {
         var arr = BroadcastScalar((byte)22);
@@ -231,7 +230,7 @@ public class LongIndexingBroadcastTest
     // 2D BROADCAST (tests multi-dimensional long indexing)
     // ================================================================
 
-    [Test]
+    [Test, LargeMemoryTest]
     public async Task Broadcast2D_RowBroadcast()
     {
         // Broadcast a single row to many rows
@@ -246,7 +245,7 @@ public class LongIndexingBroadcastTest
         Assert.AreEqual(77, arr.GetByte(rows - 1, cols - 1));
     }
 
-    [Test]
+    [Test, LargeMemoryTest]
     public async Task Broadcast2D_ColumnBroadcast()
     {
         // Broadcast a single column to many columns
@@ -261,7 +260,7 @@ public class LongIndexingBroadcastTest
         Assert.AreEqual(88, arr.GetByte(rows - 1, cols - 1));
     }
 
-    [Test]
+    [Test, LargeMemoryTest]
     public async Task Broadcast2D_Transpose()
     {
         // Test transpose of a broadcast array
