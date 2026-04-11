@@ -104,7 +104,7 @@ namespace NumSharp
         /// <param name="size">Output shape as single int.</param>
         /// <returns>Drawn samples from the parameterized von Mises distribution.</returns>
         public NDArray vonmises(double mu, double kappa, int size)
-            => vonmises(mu, kappa, new Shape(size));
+            => vonmises(mu, kappa, new int[] { size });
 
         /// <summary>
         ///     Sample from the von Mises distribution using the same algorithm as NumPy.

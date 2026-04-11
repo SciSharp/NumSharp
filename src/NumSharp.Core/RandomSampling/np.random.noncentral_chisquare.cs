@@ -66,7 +66,7 @@ namespace NumSharp
         /// <param name="size">Output shape as single int.</param>
         /// <returns>Drawn samples from the parameterized noncentral chi-square distribution.</returns>
         public NDArray noncentral_chisquare(double df, double nonc, int size)
-            => noncentral_chisquare(df, nonc, new Shape(size));
+            => noncentral_chisquare(df, nonc, new int[] { size });
 
         /// <summary>
         ///     Draw a single sample from a noncentral chi-square distribution.

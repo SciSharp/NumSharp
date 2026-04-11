@@ -69,7 +69,7 @@ namespace NumSharp
         /// <param name="size">Output shape as single int.</param>
         /// <returns>Drawn samples from the hypergeometric distribution.</returns>
         public NDArray hypergeometric(long ngood, long nbad, long nsample, int size)
-            => hypergeometric(ngood, nbad, nsample, new Shape(size));
+            => hypergeometric(ngood, nbad, nsample, new int[] { size });
 
         /// <summary>
         ///     Draw a single sample from a Hypergeometric distribution.

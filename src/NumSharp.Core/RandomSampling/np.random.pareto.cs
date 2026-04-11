@@ -65,7 +65,7 @@ namespace NumSharp
         /// <param name="size">Output shape as single int.</param>
         /// <returns>Drawn samples from the parameterized Pareto distribution.</returns>
         public NDArray pareto(double a, int size)
-            => pareto(a, new Shape(size));
+            => pareto(a, new int[] { size });
 
         /// <summary>
         ///     Draw a single sample from a Pareto II or Lomax distribution.

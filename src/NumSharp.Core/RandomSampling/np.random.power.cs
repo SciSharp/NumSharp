@@ -62,7 +62,7 @@ namespace NumSharp
         /// <param name="size">Output shape as single int.</param>
         /// <returns>Drawn samples from the parameterized power distribution, in range [0, 1].</returns>
         public NDArray power(double a, int size)
-            => power(a, new Shape(size));
+            => power(a, new int[] { size });
 
         /// <summary>
         ///     Draw a single sample from a power distribution.

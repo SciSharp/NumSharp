@@ -76,7 +76,7 @@ namespace NumSharp
         /// <param name="size">Output shape as single int.</param>
         /// <returns>Drawn samples from the parameterized Laplace distribution.</returns>
         public NDArray laplace(double loc, double scale, int size)
-            => laplace(loc, scale, new Shape(size));
+            => laplace(loc, scale, new int[] { size });
 
         /// <summary>
         ///     Sample from the Laplace distribution using the same algorithm as NumPy.

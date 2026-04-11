@@ -74,7 +74,7 @@ namespace NumSharp
         /// <param name="size">Output shape as single int.</param>
         /// <returns>Drawn samples from the parameterized logistic distribution.</returns>
         public NDArray logistic(double loc, double scale, int size)
-            => logistic(loc, scale, new Shape(size));
+            => logistic(loc, scale, new int[] { size });
 
         /// <summary>
         ///     Sample from the logistic distribution using inverse transform method.

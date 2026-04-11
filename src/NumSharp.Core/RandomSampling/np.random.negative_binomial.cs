@@ -77,7 +77,7 @@ namespace NumSharp
         /// <param name="size">Output shape as single int.</param>
         /// <returns>Drawn samples from the parameterized negative binomial distribution.</returns>
         public NDArray negative_binomial(double n, double p, int size)
-            => negative_binomial(n, p, new Shape(size));
+            => negative_binomial(n, p, new int[] { size });
 
         /// <summary>
         ///     Sample from the negative binomial distribution using gamma-Poisson mixture.

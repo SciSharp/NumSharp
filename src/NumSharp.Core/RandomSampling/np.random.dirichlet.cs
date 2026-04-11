@@ -154,7 +154,7 @@ namespace NumSharp
         /// <param name="size">Number of samples to draw.</param>
         /// <returns>Drawn samples from the Dirichlet distribution.</returns>
         public NDArray dirichlet(double[] alpha, int size)
-            => dirichlet(alpha, new Shape(size));
+            => dirichlet(alpha, new int[] { size });
 
         /// <summary>
         ///     Sample a single Dirichlet vector and store at the given offset.

@@ -76,7 +76,7 @@ namespace NumSharp
         /// <param name="size">Output shape as single int.</param>
         /// <returns>Drawn samples from the parameterized Gumbel distribution.</returns>
         public NDArray gumbel(double loc, double scale, int size)
-            => gumbel(loc, scale, new Shape(size));
+            => gumbel(loc, scale, new int[] { size });
 
         /// <summary>
         ///     Sample from the Gumbel distribution using the same algorithm as NumPy.

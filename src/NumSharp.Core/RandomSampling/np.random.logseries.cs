@@ -91,7 +91,7 @@ namespace NumSharp
         /// <param name="size">Output shape as single int.</param>
         /// <returns>Drawn samples from the parameterized logarithmic series distribution.</returns>
         public NDArray logseries(double p, int size)
-            => logseries(p, new Shape(size));
+            => logseries(p, new int[] { size });
 
         private static void ValidateLogseriesP(double p)
         {

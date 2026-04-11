@@ -70,7 +70,7 @@ namespace NumSharp
         /// <param name="size">Output shape as single int.</param>
         /// <returns>Drawn samples from the parameterized Rayleigh distribution.</returns>
         public NDArray rayleigh(double scale, int size)
-            => rayleigh(scale, new Shape(size));
+            => rayleigh(scale, new int[] { size });
 
         /// <summary>
         ///     Sample from the Rayleigh distribution using the same algorithm as NumPy.

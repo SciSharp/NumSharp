@@ -72,7 +72,7 @@ namespace NumSharp
         /// <param name="size">Output shape as single int.</param>
         /// <returns>Drawn samples from the parameterized Zipf distribution.</returns>
         public NDArray zipf(double a, int size)
-            => zipf(a, new Shape(size));
+            => zipf(a, new int[] { size });
 
         /// <summary>
         ///     Sample from the Zipf distribution using the same rejection algorithm as NumPy.

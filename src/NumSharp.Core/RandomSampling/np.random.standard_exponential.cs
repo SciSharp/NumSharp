@@ -62,7 +62,7 @@ namespace NumSharp
         /// <param name="size">Output shape as single int.</param>
         /// <returns>Drawn samples from the standard exponential distribution.</returns>
         public NDArray standard_exponential(int size)
-            => standard_exponential(new Shape(size));
+            => standard_exponential(new int[] { size });
 
         /// <summary>
         ///     Sample a single value from the standard exponential distribution.
