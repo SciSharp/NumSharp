@@ -31,8 +31,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void ModAllPossabilitiesBoolean(NPTypeCode ltc, NPTypeCode rtc)
         {
-            var right = np.full(2, new Shape(5, 5), rtc);
-            var left = np.full(3, new Shape(5, 5), ltc);
+            var right = np.full(new Shape(5, 5), 2, rtc);
+            var left = np.full(new Shape(5, 5), 3, ltc);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -162,8 +162,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_#1_To_#2()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.#1);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.#2);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.#1);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.#2);
             var ret = left #(mod) right;
 
             for (int i = 0; i < ret.size; i++)
@@ -180,8 +180,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Boolean_To_Byte()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Boolean);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Byte);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Boolean);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Byte);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -194,8 +194,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Boolean_To_Int16()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Boolean);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Int16);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Boolean);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Int16);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -208,8 +208,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Boolean_To_UInt16()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Boolean);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.UInt16);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Boolean);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.UInt16);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -222,8 +222,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Boolean_To_Int32()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Boolean);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Int32);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Boolean);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Int32);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -236,8 +236,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Boolean_To_UInt32()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Boolean);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.UInt32);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Boolean);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.UInt32);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -250,8 +250,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Boolean_To_Int64()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Boolean);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Int64);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Boolean);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Int64);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -264,8 +264,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Boolean_To_UInt64()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Boolean);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.UInt64);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Boolean);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.UInt64);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -278,8 +278,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Boolean_To_Double()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Boolean);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Double);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Boolean);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Double);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -292,8 +292,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Boolean_To_Single()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Boolean);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Single);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Boolean);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Single);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -306,8 +306,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Boolean_To_Decimal()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Boolean);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Decimal);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Boolean);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Decimal);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -320,8 +320,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Byte_To_Boolean()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Byte);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Boolean);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Byte);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Boolean);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -334,8 +334,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Byte_To_Int16()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Byte);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Int16);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Byte);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Int16);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -348,8 +348,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Byte_To_UInt16()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Byte);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.UInt16);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Byte);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.UInt16);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -362,8 +362,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Byte_To_Int32()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Byte);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Int32);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Byte);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Int32);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -376,8 +376,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Byte_To_UInt32()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Byte);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.UInt32);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Byte);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.UInt32);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -390,8 +390,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Byte_To_Int64()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Byte);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Int64);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Byte);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Int64);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -404,8 +404,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Byte_To_UInt64()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Byte);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.UInt64);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Byte);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.UInt64);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -418,8 +418,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Byte_To_Double()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Byte);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Double);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Byte);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Double);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -432,8 +432,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Byte_To_Single()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Byte);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Single);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Byte);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Single);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -446,8 +446,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Byte_To_Decimal()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Byte);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Decimal);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Byte);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Decimal);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -460,8 +460,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Int16_To_Boolean()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Int16);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Boolean);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Int16);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Boolean);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -474,8 +474,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Int16_To_Byte()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Int16);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Byte);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Int16);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Byte);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -488,8 +488,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Int16_To_UInt16()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Int16);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.UInt16);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Int16);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.UInt16);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -502,8 +502,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Int16_To_Int32()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Int16);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Int32);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Int16);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Int32);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -516,8 +516,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Int16_To_UInt32()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Int16);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.UInt32);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Int16);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.UInt32);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -530,8 +530,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Int16_To_Int64()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Int16);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Int64);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Int16);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Int64);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -544,8 +544,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Int16_To_UInt64()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Int16);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.UInt64);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Int16);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.UInt64);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -558,8 +558,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Int16_To_Double()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Int16);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Double);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Int16);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Double);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -572,8 +572,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Int16_To_Single()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Int16);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Single);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Int16);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Single);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -586,8 +586,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Int16_To_Decimal()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Int16);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Decimal);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Int16);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Decimal);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -600,8 +600,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_UInt16_To_Boolean()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.UInt16);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Boolean);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.UInt16);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Boolean);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -614,8 +614,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_UInt16_To_Byte()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.UInt16);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Byte);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.UInt16);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Byte);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -628,8 +628,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_UInt16_To_Int16()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.UInt16);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Int16);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.UInt16);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Int16);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -642,8 +642,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_UInt16_To_Int32()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.UInt16);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Int32);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.UInt16);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Int32);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -656,8 +656,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_UInt16_To_UInt32()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.UInt16);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.UInt32);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.UInt16);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.UInt32);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -670,8 +670,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_UInt16_To_Int64()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.UInt16);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Int64);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.UInt16);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Int64);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -684,8 +684,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_UInt16_To_UInt64()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.UInt16);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.UInt64);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.UInt16);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.UInt64);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -698,8 +698,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_UInt16_To_Double()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.UInt16);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Double);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.UInt16);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Double);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -712,8 +712,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_UInt16_To_Single()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.UInt16);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Single);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.UInt16);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Single);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -726,8 +726,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_UInt16_To_Decimal()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.UInt16);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Decimal);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.UInt16);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Decimal);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -740,8 +740,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Int32_To_Boolean()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Int32);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Boolean);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Int32);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Boolean);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -754,8 +754,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Int32_To_Byte()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Int32);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Byte);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Int32);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Byte);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -768,8 +768,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Int32_To_Int16()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Int32);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Int16);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Int32);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Int16);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -782,8 +782,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Int32_To_UInt16()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Int32);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.UInt16);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Int32);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.UInt16);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -796,8 +796,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Int32_To_UInt32()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Int32);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.UInt32);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Int32);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.UInt32);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -810,8 +810,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Int32_To_Int64()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Int32);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Int64);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Int32);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Int64);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -824,8 +824,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Int32_To_UInt64()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Int32);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.UInt64);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Int32);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.UInt64);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -838,8 +838,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Int32_To_Double()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Int32);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Double);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Int32);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Double);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -852,8 +852,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Int32_To_Single()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Int32);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Single);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Int32);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Single);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -866,8 +866,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Int32_To_Decimal()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Int32);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Decimal);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Int32);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Decimal);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -880,8 +880,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_UInt32_To_Boolean()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.UInt32);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Boolean);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.UInt32);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Boolean);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -894,8 +894,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_UInt32_To_Byte()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.UInt32);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Byte);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.UInt32);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Byte);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -908,8 +908,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_UInt32_To_Int16()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.UInt32);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Int16);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.UInt32);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Int16);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -922,8 +922,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_UInt32_To_UInt16()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.UInt32);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.UInt16);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.UInt32);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.UInt16);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -936,8 +936,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_UInt32_To_Int32()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.UInt32);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Int32);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.UInt32);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Int32);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -950,8 +950,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_UInt32_To_Int64()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.UInt32);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Int64);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.UInt32);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Int64);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -964,8 +964,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_UInt32_To_UInt64()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.UInt32);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.UInt64);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.UInt32);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.UInt64);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -978,8 +978,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_UInt32_To_Double()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.UInt32);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Double);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.UInt32);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Double);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -992,8 +992,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_UInt32_To_Single()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.UInt32);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Single);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.UInt32);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Single);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -1006,8 +1006,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_UInt32_To_Decimal()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.UInt32);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Decimal);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.UInt32);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Decimal);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -1020,8 +1020,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Int64_To_Boolean()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Int64);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Boolean);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Int64);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Boolean);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -1034,8 +1034,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Int64_To_Byte()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Int64);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Byte);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Int64);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Byte);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -1048,8 +1048,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Int64_To_Int16()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Int64);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Int16);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Int64);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Int16);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -1062,8 +1062,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Int64_To_UInt16()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Int64);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.UInt16);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Int64);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.UInt16);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -1076,8 +1076,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Int64_To_Int32()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Int64);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Int32);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Int64);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Int32);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -1090,8 +1090,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Int64_To_UInt32()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Int64);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.UInt32);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Int64);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.UInt32);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -1104,8 +1104,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Int64_To_UInt64()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Int64);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.UInt64);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Int64);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.UInt64);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -1118,8 +1118,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Int64_To_Double()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Int64);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Double);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Int64);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Double);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -1132,8 +1132,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Int64_To_Single()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Int64);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Single);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Int64);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Single);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -1146,8 +1146,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Int64_To_Decimal()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Int64);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Decimal);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Int64);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Decimal);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -1160,8 +1160,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_UInt64_To_Boolean()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.UInt64);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Boolean);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.UInt64);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Boolean);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -1174,8 +1174,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_UInt64_To_Byte()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.UInt64);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Byte);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.UInt64);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Byte);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -1188,8 +1188,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_UInt64_To_Int16()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.UInt64);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Int16);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.UInt64);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Int16);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -1202,8 +1202,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_UInt64_To_UInt16()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.UInt64);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.UInt16);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.UInt64);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.UInt16);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -1216,8 +1216,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_UInt64_To_Int32()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.UInt64);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Int32);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.UInt64);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Int32);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -1230,8 +1230,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_UInt64_To_UInt32()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.UInt64);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.UInt32);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.UInt64);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.UInt32);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -1244,8 +1244,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_UInt64_To_Int64()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.UInt64);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Int64);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.UInt64);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Int64);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -1258,8 +1258,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_UInt64_To_Double()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.UInt64);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Double);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.UInt64);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Double);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -1272,8 +1272,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_UInt64_To_Single()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.UInt64);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Single);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.UInt64);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Single);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -1286,8 +1286,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_UInt64_To_Decimal()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.UInt64);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Decimal);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.UInt64);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Decimal);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -1300,8 +1300,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Double_To_Boolean()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Double);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Boolean);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Double);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Boolean);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -1314,8 +1314,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Double_To_Byte()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Double);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Byte);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Double);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Byte);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -1328,8 +1328,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Double_To_Int16()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Double);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Int16);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Double);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Int16);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -1342,8 +1342,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Double_To_UInt16()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Double);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.UInt16);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Double);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.UInt16);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -1356,8 +1356,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Double_To_Int32()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Double);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Int32);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Double);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Int32);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -1370,8 +1370,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Double_To_UInt32()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Double);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.UInt32);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Double);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.UInt32);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -1384,8 +1384,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Double_To_Int64()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Double);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Int64);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Double);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Int64);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -1398,8 +1398,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Double_To_UInt64()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Double);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.UInt64);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Double);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.UInt64);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -1412,8 +1412,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Double_To_Single()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Double);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Single);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Double);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Single);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -1426,8 +1426,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Double_To_Decimal()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Double);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Decimal);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Double);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Decimal);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -1440,8 +1440,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Single_To_Boolean()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Single);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Boolean);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Single);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Boolean);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -1454,8 +1454,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Single_To_Byte()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Single);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Byte);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Single);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Byte);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -1468,8 +1468,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Single_To_Int16()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Single);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Int16);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Single);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Int16);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -1482,8 +1482,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Single_To_UInt16()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Single);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.UInt16);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Single);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.UInt16);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -1496,8 +1496,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Single_To_Int32()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Single);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Int32);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Single);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Int32);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -1510,8 +1510,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Single_To_UInt32()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Single);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.UInt32);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Single);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.UInt32);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -1524,8 +1524,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Single_To_Int64()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Single);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.Int64);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Single);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.Int64);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
@@ -1538,8 +1538,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         [Test]
         public void Mod_Single_To_UInt64()
         {
-            var left = np.full(4, new Shape(5, 5), NPTypeCode.Single);
-            var right = np.full(3, new Shape(5, 5), NPTypeCode.UInt64);
+            var left = np.full(new Shape(5, 5), 4, NPTypeCode.Single);
+            var right = np.full(new Shape(5, 5), 3, NPTypeCode.UInt64);
             var ret = left % right;
 
             for (int i = 0; i < ret.size; i++)
