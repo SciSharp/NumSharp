@@ -51,7 +51,7 @@ namespace NumSharp
         /// <param name="p">Shape parameter for the distribution. Must be in the range [0, 1).</param>
         /// <param name="size">Output shape.</param>
         /// <returns>Drawn samples from the parameterized logarithmic series distribution.</returns>
-        public NDArray logseries(double p, params long[] size)
+        public NDArray logseries(double p, long[] size)
             => logseries(p, new Shape(size));
 
         /// <summary>

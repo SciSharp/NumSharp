@@ -66,7 +66,7 @@ namespace NumSharp
         /// <param name="p">Parameter of the distribution, 0 &lt; p &lt;= 1.</param>
         /// <param name="size">Output shape.</param>
         /// <returns>Drawn samples from the parameterized negative binomial distribution.</returns>
-        public NDArray negative_binomial(double n, double p, params long[] size)
+        public NDArray negative_binomial(double n, double p, long[] size)
             => negative_binomial(n, p, new Shape(size));
 
         /// <summary>

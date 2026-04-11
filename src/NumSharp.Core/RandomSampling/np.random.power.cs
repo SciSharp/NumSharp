@@ -52,7 +52,7 @@ namespace NumSharp
         /// <param name="a">Shape parameter of the distribution. Must be positive (&gt; 0).</param>
         /// <param name="size">Output shape.</param>
         /// <returns>Drawn samples from the parameterized power distribution, in range [0, 1].</returns>
-        public NDArray power(double a, params long[] size)
+        public NDArray power(double a, long[] size)
             => power(a, new Shape(size));
 
         /// <summary>

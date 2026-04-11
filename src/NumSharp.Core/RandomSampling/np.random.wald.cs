@@ -57,7 +57,7 @@ namespace NumSharp
         ///     Brownian motion. As the scale approaches infinity, the distribution
         ///     becomes more like a Gaussian.
         /// </remarks>
-        public NDArray wald(double mean, double scale, params long[] size)
+        public NDArray wald(double mean, double scale, long[] size)
         {
             // Parameter validation (matches NumPy error messages)
             if (mean <= 0)

@@ -45,7 +45,7 @@ namespace NumSharp
         ///     It describes many common situations, such as the size of raindrops measured over
         ///     many rainstorms, or the time between page requests to Wikipedia.
         /// </remarks>
-        public NDArray exponential(double scale, params long[] size)
+        public NDArray exponential(double scale, long[] size)
         {
             var x = np.log(1 - uniform(0, 1, size));
             return np.negative(x) * scale;

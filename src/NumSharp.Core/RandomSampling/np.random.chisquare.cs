@@ -47,7 +47,7 @@ namespace NumSharp
         ///     (mean 0, variance 1), are squared and summed, the resulting distribution is
         ///     chi-square. This distribution is often used in hypothesis testing.
         /// </remarks>
-        public NDArray chisquare(double df, params long[] size)
+        public NDArray chisquare(double df, long[] size)
         {
             if (df <= 0)
                 throw new ArgumentException("df must be > 0", nameof(df));

@@ -58,7 +58,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="size">Output shape.</param>
         /// <returns>Drawn samples from the standard Cauchy distribution.</returns>
-        public NDArray standard_cauchy(params long[] size)
+        public NDArray standard_cauchy(long[] size)
         {
             unsafe
             {

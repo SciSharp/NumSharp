@@ -74,7 +74,7 @@ namespace NumSharp
         /// <param name="size">Output shape as long array (for NumPy compatibility).</param>
         /// <returns>Drawn samples from the Weibull distribution.</returns>
         /// <exception cref="ArgumentException">If a is negative.</exception>
-        public NDArray weibull(double a, params long[] size)
+        public NDArray weibull(double a, long[] size)
         {
             if (a < 0)
                 throw new ArgumentException("a < 0", nameof(a));

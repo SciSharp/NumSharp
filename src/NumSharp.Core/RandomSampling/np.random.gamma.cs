@@ -52,7 +52,7 @@ namespace NumSharp
         ///     shape (sometimes designated "k") and scale (sometimes designated "theta"),
         ///     where both parameters are > 0.
         /// </remarks>
-        public NDArray gamma(double shape, double scale, params long[] size)
+        public NDArray gamma(double shape, double scale, long[] size)
         {
             if (shape < 1)
             {

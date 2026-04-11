@@ -48,7 +48,7 @@ namespace NumSharp
         ///     The Bernoulli distribution is a discrete distribution having two possible
         ///     outcomes: 1 (success) with probability p, and 0 (failure) with probability 1-p.
         /// </remarks>
-        public NDArray bernoulli(double p, params long[] size)
+        public NDArray bernoulli(double p, long[] size)
         {
             if (size == null || size.Length == 0)
                 return NDArray.Scalar(randomizer.NextDouble() < p ? 1.0 : 0.0);

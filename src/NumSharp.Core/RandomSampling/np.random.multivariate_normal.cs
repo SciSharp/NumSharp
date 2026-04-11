@@ -218,7 +218,7 @@ namespace NumSharp
         /// <summary>
         ///     Draw random samples from a multivariate normal distribution.
         /// </summary>
-        public NDArray multivariate_normal(double[] mean, double[,] cov, params long[] size)
+        public NDArray multivariate_normal(double[] mean, double[,] cov, long[] size)
             => multivariate_normal(mean, cov, new Shape(size));
 
         /// <summary>

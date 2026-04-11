@@ -65,7 +65,7 @@ namespace NumSharp
         /// <param name="scale">The scale parameter of the distribution. Must be non-negative.</param>
         /// <param name="size">Output shape.</param>
         /// <returns>Drawn samples from the parameterized Gumbel distribution.</returns>
-        public NDArray gumbel(double loc, double scale, params long[] size)
+        public NDArray gumbel(double loc, double scale, long[] size)
             => gumbel(loc, scale, new Shape(size));
 
         /// <summary>

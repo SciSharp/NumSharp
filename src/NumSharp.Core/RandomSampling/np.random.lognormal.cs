@@ -50,7 +50,7 @@ namespace NumSharp
         ///     and array shape. Note that the mean and standard deviation are not the values for
         ///     the distribution itself, but of the underlying normal distribution it is derived from.
         /// </remarks>
-        public NDArray lognormal(double mean, double sigma, params long[] size)
+        public NDArray lognormal(double mean, double sigma, long[] size)
         {
             double zm = mean * mean;
             double zs = sigma * sigma;

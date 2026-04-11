@@ -78,7 +78,7 @@ namespace NumSharp
         /// <param name="size">Output shape.</param>
         /// <returns>Drawn samples from the F distribution.</returns>
         /// <exception cref="ArgumentException">If dfnum or dfden is <= 0.</exception>
-        public NDArray f(double dfnum, double dfden, params long[] size)
+        public NDArray f(double dfnum, double dfden, long[] size)
         {
             if (dfnum <= 0)
                 throw new ArgumentException("dfnum <= 0", nameof(dfnum));

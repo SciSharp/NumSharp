@@ -57,7 +57,7 @@ namespace NumSharp
         ///     n trials and p probability of success where n is an integer >= 0 and p is
         ///     in the interval [0, 1].
         /// </remarks>
-        public NDArray binomial(int n, double p, params long[] size)
+        public NDArray binomial(int n, double p, long[] size)
         {
             var x = np.zeros(size);
             for (int i = 0; i < n; i++)

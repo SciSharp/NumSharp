@@ -34,7 +34,7 @@ namespace NumSharp
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.multinomial.html
         /// </remarks>
-        public NDArray multinomial(int n, double[] pvals, params long[] size)
+        public NDArray multinomial(int n, double[] pvals, long[] size)
         {
             // Parameter validation
             if (n < 0)

@@ -56,7 +56,7 @@ namespace NumSharp
         ///     (includes low, but excludes high). In other words, any value within the
         ///     given interval is equally likely to be drawn by uniform.
         /// </remarks>
-        public NDArray uniform(double low, double high, params long[] size)
+        public NDArray uniform(double low, double high, long[] size)
         {
             if (size == null || size.Length == 0)
             {

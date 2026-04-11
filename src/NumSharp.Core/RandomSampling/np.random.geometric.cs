@@ -50,7 +50,7 @@ namespace NumSharp
         ///     models the number of trials that must be run in order to achieve success.
         ///     It is therefore supported on the positive integers, k = 1, 2, ...
         /// </remarks>
-        public NDArray geometric(double p, params long[] size)
+        public NDArray geometric(double p, long[] size)
         {
             // Validate p is in (0, 1]
             if (p <= 0 || p > 1)

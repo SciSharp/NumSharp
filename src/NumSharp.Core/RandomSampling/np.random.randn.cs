@@ -113,7 +113,7 @@ namespace NumSharp
         ///     by De Moivre and 200 years later by both Gauss and Laplace independently,
         ///     is often called the bell curve because of its characteristic shape.
         /// </remarks>
-        public NDArray normal(double loc, double scale, params long[] size)
+        public NDArray normal(double loc, double scale, long[] size)
         {
             unsafe
             {
@@ -160,7 +160,7 @@ namespace NumSharp
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.standard_normal.html
         /// </remarks>
-        public NDArray standard_normal(params long[] size)
+        public NDArray standard_normal(long[] size)
         {
             return normal(0, 1.0, size);
         }

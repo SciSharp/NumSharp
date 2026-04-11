@@ -51,7 +51,7 @@ namespace NumSharp
         ///     A special case of the hyperbolic distribution. As df gets large, the result
         ///     resembles that of the standard normal distribution.
         /// </remarks>
-        public NDArray standard_t(double df, params long[] size)
+        public NDArray standard_t(double df, long[] size)
         {
             // Parameter validation (matches NumPy error message)
             if (df <= 0)

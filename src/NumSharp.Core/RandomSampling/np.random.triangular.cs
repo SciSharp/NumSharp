@@ -54,7 +54,7 @@ namespace NumSharp
         ///     The triangular distribution is a continuous probability distribution with lower limit left,
         ///     peak at mode, and upper limit right.
         /// </remarks>
-        public NDArray triangular(double left, double mode, double right, params long[] size)
+        public NDArray triangular(double left, double mode, double right, long[] size)
         {
             // Parameter validation (matches NumPy error messages exactly)
             if (left > mode)

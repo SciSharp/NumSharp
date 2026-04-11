@@ -50,7 +50,7 @@ namespace NumSharp
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.noncentral_f.html
         /// </remarks>
-        public NDArray noncentral_f(double dfnum, double dfden, double nonc, params long[] size)
+        public NDArray noncentral_f(double dfnum, double dfden, double nonc, long[] size)
         {
             // Parameter validation (matches NumPy error messages)
             if (dfnum <= 0)

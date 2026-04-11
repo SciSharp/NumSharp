@@ -76,7 +76,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="size">Output shape.</param>
         /// <returns>Array of random floats of shape size.</returns>
-        public NDArray random_sample(params long[] size) => rand(size);
+        public NDArray random_sample(long[] size) => rand(size);
 
         /// <summary>
         ///     Return random floats in the half-open interval [0.0, 1.0).
@@ -108,7 +108,7 @@ namespace NumSharp
         /// </summary>
         /// <param name="size">Output shape.</param>
         /// <returns>Array of random floats.</returns>
-        public NDArray random(params long[] size) => random_sample(size);
+        public NDArray random(long[] size) => random_sample(size);
 
         /// <summary>
         ///     Return random floats in the half-open interval [0.0, 1.0).

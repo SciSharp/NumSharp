@@ -43,7 +43,7 @@ namespace NumSharp
         ///     <br/>
         ///     The Poisson distribution is the limit of the binomial distribution for large N.
         /// </remarks>
-        public NDArray poisson(double lam, params long[] size)
+        public NDArray poisson(double lam, long[] size)
         {
             if (lam < 0)
                 throw new ArgumentException("lam must be >= 0", nameof(lam));

@@ -51,7 +51,7 @@ namespace NumSharp
         ///     Samples are drawn from a Gamma distribution with shape parameter and scale=1.
         ///     For a different scale, multiply the result: scale * standard_gamma(shape).
         /// </remarks>
-        public NDArray standard_gamma(double shape, params long[] size)
+        public NDArray standard_gamma(double shape, long[] size)
         {
             // Parameter validation (matches NumPy error message)
             if (shape < 0)

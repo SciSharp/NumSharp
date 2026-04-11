@@ -63,7 +63,7 @@ namespace NumSharp
         /// <param name="scale">Scale parameter (must be >= 0).</param>
         /// <param name="size">Output shape.</param>
         /// <returns>Drawn samples from the parameterized logistic distribution.</returns>
-        public NDArray logistic(double loc, double scale, params long[] size)
+        public NDArray logistic(double loc, double scale, long[] size)
             => logistic(loc, scale, new Shape(size));
 
         /// <summary>
