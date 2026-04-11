@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Diagnostics;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using NumSharp.Backends.Unmanaged;
@@ -103,7 +104,11 @@ namespace NumSharp.Backends
         }
 
         [MethodImpl(OptimizeAndInline)]
-        public unsafe T GetAtIndex<T>(long index) where T : unmanaged => *((T*)Address + _shape.TransformOffset(index));
+        public unsafe T GetAtIndex<T>(long index) where T : unmanaged
+        {
+            Debug.Assert(typeof(T) == _dtype, $"GetAtIndex<{typeof(T).Name}> called on {_dtype.Name} array.");
+            return *((T*)Address + _shape.TransformOffset(index));
+        }
 
         /// <summary>
         /// Gets a sub-array based on the given indices, returning a view that shares memory.
@@ -384,6 +389,7 @@ namespace NumSharp.Backends
         /// <remarks>If you provide less indices than there are dimensions, the rest are filled with 0.</remarks> //TODO! doc this in other similar methods
         public T GetValue<T>(int[] indices) where T : unmanaged
         {
+            Debug.Assert(typeof(T) == _dtype, $"GetValue<{typeof(T).Name}> called on {_dtype.Name} array.");
             unsafe
             {
                 return *((T*)Address + _shape.GetOffset(indices));
@@ -400,6 +406,7 @@ namespace NumSharp.Backends
         /// <remarks>If you provide less indices than there are dimensions, the rest are filled with 0.</remarks>
         public T GetValue<T>(params long[] indices) where T : unmanaged
         {
+            Debug.Assert(typeof(T) == _dtype, $"GetValue<{typeof(T).Name}> called on {_dtype.Name} array.");
             unsafe
             {
                 return *((T*)Address + _shape.GetOffset(indices));

@@ -158,7 +158,6 @@ namespace NumSharp.UnitTest.View
         }
 
         [Test]
-        [OpenBugs]  // Pre-existing bug: SetData on sliced views causes memory corruption
         public void NestedView_1D()
         {
             var data = new UnmanagedStorage(new int[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 });
@@ -290,7 +289,6 @@ namespace NumSharp.UnitTest.View
         }
 
         [Test]
-        [OpenBugs]  // Pre-existing bug: SetData on sliced views causes memory corruption
         public void NestedView_2D()
         {
             var data = new UnmanagedStorage(new int[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 });
