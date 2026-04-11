@@ -523,7 +523,7 @@ namespace NumSharp.UnitTest.View
             //()
             //True
 
-            var lhs = np.full(5, (6, 3, 3), NPTypeCode.Int32);
+            var lhs = np.full(new Shape(6, 3, 3), 5, NPTypeCode.Int32);
             lhs = lhs["::2,:,:"];
             var slice = lhs.Storage.GetData(1, 1, 2);
             slice.Count.Should().Be(1);
@@ -535,7 +535,7 @@ namespace NumSharp.UnitTest.View
         [Test]
         public unsafe void SliceSelectsAll()
         {
-            var lhs = np.full(5, (6, 3, 3), NPTypeCode.Int32);
+            var lhs = np.full(new Shape(6, 3, 3), 5, NPTypeCode.Int32);
             var sliced = lhs[":"];
 
             (lhs.Storage.Address == sliced.Storage.Address).Should().BeTrue("When slice selects all values, it shouldn't return a view but a new wrapper for Storage");

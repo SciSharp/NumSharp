@@ -14,8 +14,8 @@ namespace NumSharp.UnitTest.Creation
         [Test]
         public void Case1_Axis1()
         {
-            var a = np.full(1, (3, 1, 3), NPTypeCode.Int32);
-            var b = np.full(2, (3, 2, 3), NPTypeCode.Int32);
+            var a = np.full(new Shape(3, 1, 3), 1, NPTypeCode.Int32);
+            var b = np.full(new Shape(3, 2, 3), 2, NPTypeCode.Int32);
             var c = np.concatenate((a, b), 1);
 
             c.shape.Should().HaveCount(3).And.ContainInOrder(3, 3, 3);
@@ -28,8 +28,8 @@ namespace NumSharp.UnitTest.Creation
         [Test]
         public void Case1_Axis1_Cast()
         {
-            var a = np.full(1, (3, 1, 3), NPTypeCode.Int32);
-            var b = np.full(2, (3, 2, 3), NPTypeCode.Double);
+            var a = np.full(new Shape(3, 1, 3), 1, NPTypeCode.Int32);
+            var b = np.full(new Shape(3, 2, 3), 2, NPTypeCode.Double);
             var c = np.concatenate((a, b), 1);
 
             c.dtype.Should().Be<double>();
@@ -43,8 +43,8 @@ namespace NumSharp.UnitTest.Creation
         [Test]
         public void Case1_Axis0()
         {
-            var a = np.full(1, (1, 3, 3), NPTypeCode.Int32);
-            var b = np.full(2, (2, 3, 3), NPTypeCode.Int32);
+            var a = np.full(new Shape(1, 3, 3), 1, NPTypeCode.Int32);
+            var b = np.full(new Shape(2, 3, 3), 2, NPTypeCode.Int32);
             var c = np.concatenate((a, b), 0);
 
             c.shape.Should().HaveCount(3).And.ContainInOrder(3, 3, 3);
@@ -57,8 +57,8 @@ namespace NumSharp.UnitTest.Creation
         [Test]
         public void Case1_Axis2()
         {
-            var a = np.full(1, (3, 3, 1), NPTypeCode.Int32);
-            var b = np.full(2, (3, 3, 2), NPTypeCode.Int32);
+            var a = np.full(new Shape(3, 3, 1), 1, NPTypeCode.Int32);
+            var b = np.full(new Shape(3, 3, 2), 2, NPTypeCode.Int32);
             var c = np.concatenate((a, b), 2);
 
             c.shape.Should().HaveCount(3).And.ContainInOrder(3, 3, 3);
@@ -71,8 +71,8 @@ namespace NumSharp.UnitTest.Creation
         [Test]
         public void Case1_Axis_minus1()
         {
-            var a = np.full(1, (3, 3, 1), NPTypeCode.Int32);
-            var b = np.full(2, (3, 3, 2), NPTypeCode.Int32);
+            var a = np.full(new Shape(3, 3, 1), 1, NPTypeCode.Int32);
+            var b = np.full(new Shape(3, 3, 2), 2, NPTypeCode.Int32);
             var c = np.concatenate((a, b), -1);
 
             c.shape.Should().HaveCount(3).And.ContainInOrder(3, 3, 3);
@@ -85,9 +85,9 @@ namespace NumSharp.UnitTest.Creation
         [Test]
         public void Case2_Axis1_3Arrays_Cast()
         {
-            var a = np.full(1, (3, 1, 3), NPTypeCode.Int32);
-            var b = np.full(2, (3, 2, 3), NPTypeCode.Decimal);
-            var c = np.full(2, (3, 1, 3), NPTypeCode.Byte);
+            var a = np.full(new Shape(3, 1, 3), 1, NPTypeCode.Int32);
+            var b = np.full(new Shape(3, 2, 3), 2, NPTypeCode.Decimal);
+            var c = np.full(new Shape(3, 1, 3), 2, NPTypeCode.Byte);
             var d = np.concatenate((a, b, c), 1);
             d.dtype.Should().Be<decimal>();
             d.shape.Should().HaveCount(3).And.ContainInOrder(3, 4, 3);

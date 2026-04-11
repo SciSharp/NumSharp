@@ -422,12 +422,12 @@ namespace NumSharp.UnitTest
             sliced.shape.Should().BeEquivalentTo([2, 3]);
 
             // Verify actual values (not just offsets)
-            sliced[0, 0].GetAtIndex<int>(0).Should().Be(3);
-            sliced[0, 1].GetAtIndex<int>(0).Should().Be(4);
-            sliced[0, 2].GetAtIndex<int>(0).Should().Be(5);
-            sliced[1, 0].GetAtIndex<int>(0).Should().Be(6);
-            sliced[1, 1].GetAtIndex<int>(0).Should().Be(7);
-            sliced[1, 2].GetAtIndex<int>(0).Should().Be(8);
+            sliced[0, 0].GetInt64(0).Should().Be(3);
+            sliced[0, 1].GetInt64(0).Should().Be(4);
+            sliced[0, 2].GetInt64(0).Should().Be(5);
+            sliced[1, 0].GetInt64(0).Should().Be(6);
+            sliced[1, 1].GetInt64(0).Should().Be(7);
+            sliced[1, 2].GetInt64(0).Should().Be(8);
         }
 
         [Test]
@@ -438,9 +438,9 @@ namespace NumSharp.UnitTest
             var sliced = arr["1:7:2"]; // [1, 3, 5]
             sliced.shape.Should().BeEquivalentTo([3]);
 
-            sliced[0].GetAtIndex<int>(0).Should().Be(1);
-            sliced[1].GetAtIndex<int>(0).Should().Be(3);
-            sliced[2].GetAtIndex<int>(0).Should().Be(5);
+            sliced[0].GetInt64(0).Should().Be(1);
+            sliced[1].GetInt64(0).Should().Be(3);
+            sliced[2].GetInt64(0).Should().Be(5);
         }
 
         [Test]
@@ -451,10 +451,10 @@ namespace NumSharp.UnitTest
             var col1 = arr[":, 1"]; // column 1: [1, 4, 7, 10]
             col1.shape.Should().BeEquivalentTo([4]);
 
-            col1[0].GetAtIndex<int>(0).Should().Be(1);
-            col1[1].GetAtIndex<int>(0).Should().Be(4);
-            col1[2].GetAtIndex<int>(0).Should().Be(7);
-            col1[3].GetAtIndex<int>(0).Should().Be(10);
+            col1[0].GetInt64(0).Should().Be(1);
+            col1[1].GetInt64(0).Should().Be(4);
+            col1[2].GetInt64(0).Should().Be(7);
+            col1[3].GetInt64(0).Should().Be(10);
         }
 
         [Test]
@@ -469,10 +469,10 @@ namespace NumSharp.UnitTest
             // Original: [[0,1,2], [3,4,5], [6,7,8], [9,10,11]]
             // First: [[3,4,5], [6,7,8], [9,10,11]]
             // Second: [[7,8], [10,11]]
-            second[0, 0].GetAtIndex<int>(0).Should().Be(7);
-            second[0, 1].GetAtIndex<int>(0).Should().Be(8);
-            second[1, 0].GetAtIndex<int>(0).Should().Be(10);
-            second[1, 1].GetAtIndex<int>(0).Should().Be(11);
+            second[0, 0].GetInt64(0).Should().Be(7);
+            second[0, 1].GetInt64(0).Should().Be(8);
+            second[1, 0].GetInt64(0).Should().Be(10);
+            second[1, 1].GetInt64(0).Should().Be(11);
         }
 
         // ================================================================
@@ -528,8 +528,8 @@ namespace NumSharp.UnitTest
             sliced.Shape.Offset.Should().Be(0); // Offset is in InternalArray, not Shape
 
             // Values still correct (via InternalArray offset)
-            sliced[0, 0].GetAtIndex<int>(0).Should().Be(3);
-            sliced[1, 2].GetAtIndex<int>(0).Should().Be(8);
+            sliced[0, 0].GetInt64(0).Should().Be(3);
+            sliced[1, 2].GetInt64(0).Should().Be(8);
         }
 
         [Test]
@@ -543,8 +543,8 @@ namespace NumSharp.UnitTest
             arr.Shape.Offset.Should().Be(0);
 
             // Verify element access works correctly
-            arr[2, 1].GetAtIndex<int>(0).Should().Be(7);
-            arr[3, 2].GetAtIndex<int>(0).Should().Be(11);
+            arr[2, 1].GetInt64(0).Should().Be(7);
+            arr[3, 2].GetInt64(0).Should().Be(11);
         }
     }
 }

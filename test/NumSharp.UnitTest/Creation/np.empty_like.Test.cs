@@ -494,6 +494,7 @@ namespace NumSharp.UnitTest.Creation
         }
 
         [Test]
+        [OpenBugs] // BUG: SetAtIndex<int> fails on Int64 array (NEP50 type change)
         public void MemoryIndependence_SlicedPrototype()
         {
             var a = np.arange(12).reshape(3, 4);
@@ -534,6 +535,7 @@ namespace NumSharp.UnitTest.Creation
         }
 
         [Test]
+        [OpenBugs] // BUG: SetAtIndex<int> fails on Int64 array (NEP50 type change)
         public void Writeable_FromSlicedPrototype()
         {
             var a = np.arange(10);

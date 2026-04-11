@@ -293,7 +293,7 @@ namespace NumSharp.UnitTest.RandomSampling
             var cov = new double[,] { { 1, 2 }, { 2, 1 } };
 
             Assert.ThrowsException<ArgumentException>(() =>
-                np.random.multivariate_normal(mean, cov, default(Shape), "raise"));
+                np.random.multivariate_normal(mean, cov, null, "raise"));
         }
 
         [Test]
@@ -305,7 +305,7 @@ namespace NumSharp.UnitTest.RandomSampling
             var cov = new double[,] { { 1, 2 }, { 2, 1 } };
 
             // Should not throw with check_valid="ignore"
-            var result = np.random.multivariate_normal(mean, cov, default(Shape), "ignore");
+            var result = np.random.multivariate_normal(mean, cov, null, "ignore");
 
             Assert.AreEqual(1, result.ndim);
             Assert.AreEqual(2, result.shape[0]);

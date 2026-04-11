@@ -361,7 +361,7 @@ namespace NumSharp.UnitTest.Utilities
         [Test]
         public void NDArray_AllValuesBe_Passes()
         {
-            np.full(42, new Shape(3, 3)).Should().AllValuesBe(42);
+            np.full(new Shape(3, 3), 42).Should().AllValuesBe(42);
         }
 
         [Test]
@@ -519,7 +519,7 @@ namespace NumSharp.UnitTest.Utilities
         [Test]
         public void NDArray_Chaining_AllValuesBe_And_Shape()
         {
-            np.full(7, new Shape(3, 3)).Should()
+            np.full(new Shape(3, 3), 7).Should()
                 .AllValuesBe(7)
                 .And.BeShaped(3, 3)
                 .And.BeOfSize(9);

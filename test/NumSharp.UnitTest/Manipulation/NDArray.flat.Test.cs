@@ -12,7 +12,7 @@ namespace NumSharp.UnitTest.Manipulation
         [Test]
         public void flat_3_3()
         {
-            var nd = np.full(5, (3, 3), NPTypeCode.Int32);
+            var nd = np.full(new Shape(3, 3), 5, NPTypeCode.Int32);
             var flat = nd.flat;
             Console.WriteLine((string)flat);
             flat.size.Should().Be(9);
@@ -24,7 +24,7 @@ namespace NumSharp.UnitTest.Manipulation
         [Test]
         public void flat_3_3_sliced()
         {
-            var nd = np.full(5, (3, 3), NPTypeCode.Int32);
+            var nd = np.full(new Shape(3, 3), 5, NPTypeCode.Int32);
             var sliced = nd["0,:"];
             var flat = sliced.flat;
             Console.WriteLine((string)flat);
@@ -49,7 +49,7 @@ namespace NumSharp.UnitTest.Manipulation
         [Test]
         public void flat_1_3_1_3()
         {
-            var nd = np.full(5, (1, 3, 1, 3), NPTypeCode.Int32);
+            var nd = np.full(new Shape(1, 3, 1, 3), 5, NPTypeCode.Int32);
             var flat = nd.flat;
             Console.WriteLine((string)flat);
             flat.size.Should().Be(9);
@@ -61,7 +61,7 @@ namespace NumSharp.UnitTest.Manipulation
         [Test]
         public void flat_2_3_1_3_sliced()
         {
-            var nd = np.full(5, (2, 3, 1, 3), NPTypeCode.Int32);
+            var nd = np.full(new Shape(2, 3, 1, 3), 5, NPTypeCode.Int32);
             var sliced = nd["0,:"];
             var flat = sliced.flat;
             Console.WriteLine((string)flat);
@@ -74,7 +74,7 @@ namespace NumSharp.UnitTest.Manipulation
         [Test]
         public void flat_3()
         {
-            var nd = np.full(5, Shape.Vector(3), NPTypeCode.Int32);
+            var nd = np.full(Shape.Vector(3), 5, NPTypeCode.Int32);
             var flat = nd.flat;
             Console.WriteLine((string)flat);
             flat.size.Should().Be(3);

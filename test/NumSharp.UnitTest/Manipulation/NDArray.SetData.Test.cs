@@ -11,7 +11,7 @@ namespace NumSharp.UnitTest.Manipulation
         [Test]
         public void Case1_ND_Scalar()
         {
-            var lhs = np.full(5, (3, 3));
+            var lhs = np.full(new Shape(3, 3), 5);
             var rhs = (NDArray)1;
             rhs.Shape.IsScalar.Should().BeTrue();
             rhs.Shape.size.Should().Be(1);
@@ -26,7 +26,7 @@ namespace NumSharp.UnitTest.Manipulation
         [Test]
         public void Case1_Scalar_Scalar()
         {
-            var lhs = np.full(5, (3, 3));
+            var lhs = np.full(new Shape(3, 3), 5);
             var rhs = (NDArray)1;
             rhs.Shape.IsScalar.Should().BeTrue();
             rhs.Shape.size.Should().Be(1);
@@ -41,7 +41,7 @@ namespace NumSharp.UnitTest.Manipulation
         [Test]
         public void Case1_ND_Scalar_ArraySlice()
         {
-            var lhs = np.full(5, (3, 3));
+            var lhs = np.full(new Shape(3, 3), 5);
             var rhs = ((NDArray)1).Storage.InternalArray;
 
             Console.WriteLine((string)lhs);
@@ -54,7 +54,7 @@ namespace NumSharp.UnitTest.Manipulation
         [Test]
         public void Case1_Scalar_Scalar_ArraySlice()
         {
-            var lhs = np.full(5, (3, 3));
+            var lhs = np.full(new Shape(3, 3), 5);
             var rhs = ((NDArray)1).Storage.InternalArray;
 
             Console.WriteLine((string)lhs);
@@ -67,8 +67,8 @@ namespace NumSharp.UnitTest.Manipulation
         [Test]
         public void Case1_ND_ND()
         {
-            var lhs = np.full(5, (2, 1, 3, 3));
-            var rhs = np.full((1, 1, 3, 3), 1);
+            var lhs = np.full(new Shape(2, 1, 3, 3), 5);
+            var rhs = np.full(new Shape(1, 1, 3, 3), 1);
             rhs.Shape.IsScalar.Should().BeFalse();
             lhs.Shape.size.Should().Be(9 * 2);
             rhs.Shape.size.Should().Be(9);
@@ -84,8 +84,8 @@ namespace NumSharp.UnitTest.Manipulation
         [Test]
         public void Case1_ND_ND_ArraySlice()
         {
-            var lhs = np.full(5, (2, 1, 3, 3));
-            var rhs = np.full((1, 1, 3, 3), 1).Storage.InternalArray;
+            var lhs = np.full(new Shape(2, 1, 3, 3), 5);
+            var rhs = np.full(new Shape(1, 1, 3, 3), 1).Storage.InternalArray;
             lhs.Shape.size.Should().Be(9 * 2);
 
             Console.WriteLine((string)lhs);
@@ -98,8 +98,8 @@ namespace NumSharp.UnitTest.Manipulation
         [Test]
         public void Case2_ND_ScalaryND()
         {
-            var lhs = np.full(5, (2, 1, 3, 3));
-            var rhs = np.full((1), 1);
+            var lhs = np.full(new Shape(2, 1, 3, 3), 5);
+            var rhs = np.full(new Shape(1), 1);
             rhs.Shape.IsScalar.Should().BeFalse();
             lhs.Shape.size.Should().Be(9 * 2);
             rhs.Shape.size.Should().Be(1);
@@ -114,8 +114,8 @@ namespace NumSharp.UnitTest.Manipulation
         [Test]
         public void Case2_ND_ScalaryND_ArraySlice()
         {
-            var lhs = np.full(5, (2, 1, 3, 3));
-            var rhs = np.full((1), 1).Storage.InternalArray;
+            var lhs = np.full(new Shape(2, 1, 3, 3), 5);
+            var rhs = np.full(new Shape(1), 1).Storage.InternalArray;
             lhs.Shape.size.Should().Be(9 * 2);
 
             Console.WriteLine((string)lhs);
@@ -128,7 +128,7 @@ namespace NumSharp.UnitTest.Manipulation
         [Test]
         public void Case1_ND_Scalar_Sliced()
         {
-            var lhs = np.full(5, (3, 3));
+            var lhs = np.full(new Shape(3, 3), 5);
             lhs = lhs["0:2,:"];
             var rhs = (NDArray)1;
             lhs.size.Should().Be(2 * 3);
@@ -146,7 +146,7 @@ namespace NumSharp.UnitTest.Manipulation
         [Test]
         public void Case1_Scalar_Scalar_Sliced()
         {
-            var lhs = np.full(5, (3, 3));
+            var lhs = np.full(new Shape(3, 3), 5);
             lhs = lhs["0:2,:"];
             var rhs = (NDArray)1;
             // Note: Contiguous slices may be optimized to IsSliced=false
@@ -164,10 +164,10 @@ namespace NumSharp.UnitTest.Manipulation
         [Test]
         public void Case1_ND_ND_Sliced()
         {
-            var lhs = np.full(5, (2, 1, 3, 3));
+            var lhs = np.full(new Shape(2, 1, 3, 3), 5);
             var slicedlhs = lhs;
             slicedlhs = slicedlhs[":1,:"];
-            var rhs = np.full((1, 1, 3, 3), 1);
+            var rhs = np.full(new Shape(1, 1, 3, 3), 1);
             // Note: Contiguous slices may be optimized to IsSliced=false
             rhs.Shape.IsScalar.Should().BeFalse();
             slicedlhs.Shape.size.Should().Be(9);
@@ -189,9 +189,9 @@ namespace NumSharp.UnitTest.Manipulation
         [Test]
         public void Case2_ND_ScalaryND_Sliced()
         {
-            var lhs = np.full(5, (2, 1, 3, 3));
+            var lhs = np.full(new Shape(2, 1, 3, 3), 5);
             lhs = lhs[":1,:"];
-            var rhs = np.full((1), 1);
+            var rhs = np.full(new Shape(1), 1);
             rhs.Shape.IsScalar.Should().BeFalse();
             lhs.Shape.size.Should().Be(9);
             // Note: Contiguous slices may be optimized to IsSliced=false
@@ -209,7 +209,7 @@ namespace NumSharp.UnitTest.Manipulation
         [Test]
         public void Case1_ND_Scalar_Cast()
         {
-            var lhs = np.full((3, 3), 5d);
+            var lhs = np.full(new Shape(3, 3), 5d);
             var rhs = (NDArray)1;
             rhs.Shape.IsScalar.Should().BeTrue();
             rhs.Shape.size.Should().Be(1);
@@ -224,7 +224,7 @@ namespace NumSharp.UnitTest.Manipulation
         [Test]
         public void Case1_Scalar_Scalar_Cast()
         {
-            var lhs = np.full((3, 3), 5d);
+            var lhs = np.full(new Shape(3, 3), 5d);
             var rhs = (NDArray)1;
             rhs.Shape.IsScalar.Should().BeTrue();
             rhs.Shape.size.Should().Be(1);
@@ -239,8 +239,8 @@ namespace NumSharp.UnitTest.Manipulation
         [Test]
         public void Case1_ND_ND_Cast()
         {
-            var lhs = np.full((2, 1, 3, 3), 5d);
-            var rhs = np.full((1, 1, 3, 3), 1);
+            var lhs = np.full(new Shape(2, 1, 3, 3), 5d);
+            var rhs = np.full(new Shape(1, 1, 3, 3), 1);
             rhs.Shape.IsScalar.Should().BeFalse();
             lhs.Shape.size.Should().Be(9 * 2);
             rhs.Shape.size.Should().Be(9);
@@ -254,8 +254,8 @@ namespace NumSharp.UnitTest.Manipulation
         [Test]
         public void Case2_ND_ScalaryND_Cast()
         {
-            var lhs = np.full((2, 1, 3, 3), 5d);
-            var rhs = np.full((1), 1);
+            var lhs = np.full(new Shape(2, 1, 3, 3), 5d);
+            var rhs = np.full(new Shape(1), 1);
             rhs.Shape.IsScalar.Should().BeFalse();
             lhs.Shape.size.Should().Be(9 * 2);
             rhs.Shape.size.Should().Be(1);
@@ -270,7 +270,7 @@ namespace NumSharp.UnitTest.Manipulation
         [Test]
         public void Case1_ND_Scalar_Sliced_Cast()
         {
-            var lhs = np.full((3, 3), 5d);
+            var lhs = np.full(new Shape(3, 3), 5d);
             lhs = lhs["0:2,:"];
             var rhs = (NDArray)1;
             lhs.size.Should().Be(2 * 3);
@@ -288,7 +288,7 @@ namespace NumSharp.UnitTest.Manipulation
         [Test]
         public void Case1_Scalar_Scalar_Sliced_Cast()
         {
-            var lhs = np.full((3, 3), 5d);
+            var lhs = np.full(new Shape(3, 3), 5d);
             lhs = lhs["0:2,:"];
             var rhs = (NDArray)1;
             // Note: Contiguous slices may be optimized to IsSliced=false
@@ -306,10 +306,10 @@ namespace NumSharp.UnitTest.Manipulation
         [Test]
         public void Case1_ND_ND_Sliced_Cast()
         {
-            var lhs = np.full((2, 1, 3, 3), 5d);
+            var lhs = np.full(new Shape(2, 1, 3, 3), 5d);
             var slicedlhs = lhs;
             slicedlhs = slicedlhs[":1,:"];
-            var rhs = np.full((1, 1, 3, 3), 1d);
+            var rhs = np.full(new Shape(1, 1, 3, 3), 1d);
             // Note: Contiguous slices may be optimized to IsSliced=false
             rhs.Shape.IsScalar.Should().BeFalse();
             slicedlhs.Shape.size.Should().Be(9);
@@ -331,9 +331,9 @@ namespace NumSharp.UnitTest.Manipulation
         [Test]
         public void Case2_ND_ScalaryND_Sliced_Cast()
         {
-            var lhs = np.full((2, 1, 3, 3), 5d);
+            var lhs = np.full(new Shape(2, 1, 3, 3), 5d);
             lhs = lhs[":1,:"];
-            var rhs = np.full((1), 1);
+            var rhs = np.full(new Shape(1), 1);
             rhs.Shape.IsScalar.Should().BeFalse();
             lhs.Shape.size.Should().Be(9);
             // Note: Contiguous slices may be optimized to IsSliced=false
