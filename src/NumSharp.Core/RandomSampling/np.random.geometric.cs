@@ -52,8 +52,46 @@ namespace NumSharp
         /// </remarks>
         public NDArray geometric(double p, params long[] size)
         {
-            var x = np.log(1 - uniform(0, 1, size));
-            return x / (Math.Log(p) + 1);
+            // Validate p is in (0, 1]
+            if (p <= 0 || p > 1)
+                throw new ArgumentOutOfRangeException(nameof(p), "p must be in (0, 1]");
+
+            var shape = new Shape(size);
+            NDArray ret = new NDArray(NPTypeCode.Double, shape, false);
+
+            // Handle empty arrays (any dimension is 0)
+            if (shape.size == 0)
+                return ret;
+
+            unsafe
+            {
+                var addr = (double*)ret.Address;
+                var incr = new Utilities.ValueCoordinatesIncrementor(ref shape);
+
+                // NumPy uses the search algorithm (random_geometric_search)
+                // This matches the legacy mtrand implementation exactly
+                double q = 1.0 - p;
+
+                do
+                {
+                    // Search algorithm: find smallest X such that U <= CDF(X)
+                    long X = 1;
+                    double sum = p;
+                    double prod = p;
+                    double U = randomizer.NextDouble();
+
+                    while (U > sum)
+                    {
+                        prod *= q;
+                        sum += prod;
+                        X++;
+                    }
+
+                    *(addr + shape.GetOffset(incr.Index)) = X;
+                } while (incr.Next() != null);
+            }
+
+            return ret;
         }
     }
 }

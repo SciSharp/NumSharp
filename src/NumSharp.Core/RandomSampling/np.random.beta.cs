@@ -1,3 +1,5 @@
+using System;
+
 namespace NumSharp
 {
     public partial class NumPyRandom
@@ -47,9 +49,72 @@ namespace NumSharp
         /// </remarks>
         public NDArray beta(double a, double b, params long[] size)
         {
-            var x = gamma(a, 1.0, size);
-            var y = gamma(b, 1.0, size);
-            return x / (x + y);
+            var shape = new Shape(size);
+            NDArray ret = new NDArray(NPTypeCode.Double, shape, false);
+
+            // Handle empty arrays (any dimension is 0)
+            if (shape.size == 0)
+                return ret;
+
+            unsafe
+            {
+                var addr = (double*)ret.Address;
+                var incr = new Utilities.ValueCoordinatesIncrementor(ref shape);
+
+                do
+                {
+                    *(addr + shape.GetOffset(incr.Index)) = BetaSample(a, b);
+                } while (incr.Next() != null);
+            }
+
+            return ret;
+        }
+
+        /// <summary>
+        /// Generate a single beta sample using NumPy's legacy algorithm.
+        /// </summary>
+        private double BetaSample(double a, double b)
+        {
+            // NumPy legacy_beta algorithm from legacy-distributions.c
+            if (a <= 1.0 && b <= 1.0)
+            {
+                // Johnk's algorithm for a <= 1 and b <= 1
+                double invA = 1.0 / a;
+                double invB = 1.0 / b;
+
+                while (true)
+                {
+                    double U = randomizer.NextDouble();
+                    double V = randomizer.NextDouble();
+                    double X = Math.Pow(U, invA);
+                    double Y = Math.Pow(V, invB);
+
+                    if (X + Y <= 1.0)
+                    {
+                        if (X + Y > 0)
+                        {
+                            return X / (X + Y);
+                        }
+                        else
+                        {
+                            // Handle underflow case
+                            double logX = Math.Log(U) / a;
+                            double logY = Math.Log(V) / b;
+                            double logM = logX > logY ? logX : logY;
+                            logX -= logM;
+                            logY -= logM;
+                            return Math.Exp(logX - Math.Log(Math.Exp(logX) + Math.Exp(logY)));
+                        }
+                    }
+                }
+            }
+            else
+            {
+                // Use gamma method for a > 1 or b > 1
+                double Ga = SampleStandardGamma(a);
+                double Gb = SampleStandardGamma(b);
+                return Ga / (Ga + Gb);
+            }
         }
     }
 }

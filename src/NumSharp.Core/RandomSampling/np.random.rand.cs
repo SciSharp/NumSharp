@@ -41,6 +41,10 @@ namespace NumSharp
         {
             NDArray ret = new NDArray(typeof(double), shape, false);
 
+            // Handle empty arrays (any dimension is 0)
+            if (shape.size == 0)
+                return ret;
+
             unsafe
             {
                 var addr = (double*)ret.Address;

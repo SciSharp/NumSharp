@@ -91,26 +91,46 @@ namespace NumSharp
 
         /// <summary>
         ///     Sample a single value from the standard gamma distribution (scale=1).
-        ///     Uses NumPy's algorithm: exponential for shape=1, Marsaglia-Tsang otherwise.
+        ///     Uses NumPy's legacy algorithm exactly for RNG parity.
         /// </summary>
         private double SampleStandardGamma(double shape)
         {
             if (shape == 1.0)
             {
                 // Shape=1 is exponential distribution: -log(1 - U)
-                // This matches NumPy's rk_standard_gamma behavior
                 return -Math.Log(1.0 - randomizer.NextDouble());
+            }
+            else if (shape == 0.0)
+            {
+                return 0.0;
             }
             else if (shape < 1.0)
             {
-                // For shape < 1, use: gamma(shape) = gamma(shape+1) * U^(1/shape)
-                double d = shape + 1.0 - 1.0 / 3.0;
-                double c = (1.0 / 3.0) / Math.Sqrt(d);
-                double u = randomizer.NextDouble();
-                return SampleMarsaglia(d, c) * Math.Pow(u, 1.0 / shape);
+                // NumPy legacy: Vaduva's algorithm for shape < 1
+                double invShape = 1.0 / shape;
+                while (true)
+                {
+                    double U = randomizer.NextDouble();
+                    double V = -Math.Log(1.0 - randomizer.NextDouble()); // standard_exponential
+
+                    if (U <= 1.0 - shape)
+                    {
+                        double X = Math.Pow(U, invShape);
+                        if (X <= V)
+                            return X;
+                    }
+                    else
+                    {
+                        double Y = -Math.Log((1 - U) / shape);
+                        double X = Math.Pow(1.0 - shape + shape * Y, invShape);
+                        if (X <= V + Y)
+                            return X;
+                    }
+                }
             }
             else
             {
+                // Marsaglia-Tsang for shape > 1
                 double d = shape - 1.0 / 3.0;
                 double c = (1.0 / 3.0) / Math.Sqrt(d);
                 return SampleMarsaglia(d, c);

@@ -52,7 +52,29 @@ namespace NumSharp
             if (df <= 0)
                 throw new ArgumentException("df must be > 0", nameof(df));
 
-            return gamma(df / 2, 2.0, size);
+            // NumPy: chisquare(df) = 2.0 * standard_gamma(df/2)
+            // Must use per-element SampleStandardGamma to match RNG consumption order
+            var shape = new Shape(size);
+            NDArray ret = new NDArray(NPTypeCode.Double, shape, false);
+
+            // Handle empty arrays (any dimension is 0)
+            if (shape.size == 0)
+                return ret;
+
+            double halfDf = df / 2.0;
+
+            unsafe
+            {
+                var addr = (double*)ret.Address;
+                var incr = new Utilities.ValueCoordinatesIncrementor(ref shape);
+
+                do
+                {
+                    *(addr + shape.GetOffset(incr.Index)) = 2.0 * SampleStandardGamma(halfDf);
+                } while (incr.Next() != null);
+            }
+
+            return ret;
         }
     }
 }
