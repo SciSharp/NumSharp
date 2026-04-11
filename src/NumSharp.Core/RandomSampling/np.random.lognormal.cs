@@ -25,16 +25,15 @@ namespace NumSharp
         /// </remarks>
         public NDArray lognormal(double mean, double sigma, Shape size)
         {
-            double zm = mean * mean;
-            double zs = sigma * sigma;
+            if (sigma < 0)
+                throw new ArgumentException("sigma < 0", nameof(sigma));
 
-            double lmean = Math.Log(zm / Math.Sqrt(zs + zm));
-            double lstdv = Math.Sqrt(Math.Log(zs / zm + 1));
-
+            // NumPy: lognormal = exp(normal(mean, sigma))
+            // The parameters are for the underlying normal distribution, not the lognormal
             if (size.IsScalar || size.IsEmpty)
-                return NDArray.Scalar(Math.Exp(lmean + lstdv * NextGaussian()));
+                return NDArray.Scalar(Math.Exp(mean + sigma * NextGaussian()));
 
-            var x = normal(lmean, lstdv, size);
+            var x = normal(mean, sigma, size);
             return np.exp(x);
         }
     }

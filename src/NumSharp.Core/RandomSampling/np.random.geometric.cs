@@ -33,7 +33,7 @@ namespace NumSharp
                 return NDArray.Scalar(SampleGeometric(p));
 
             var shape = size;
-            NDArray ret = new NDArray(NPTypeCode.Double, shape, false);
+            NDArray ret = new NDArray(NPTypeCode.Int64, shape, false);
 
             // Handle empty arrays (any dimension is 0)
             if (shape.size == 0)
@@ -41,13 +41,9 @@ namespace NumSharp
 
             unsafe
             {
-                var addr = (double*)ret.Address;
-                var incr = new Utilities.ValueCoordinatesIncrementor(ref shape);
-
-                do
-                {
-                    *(addr + shape.GetOffset(incr.Index)) = SampleGeometric(p);
-                } while (incr.Next() != null);
+                var addr = (long*)ret.Address;
+                for (long i = 0; i < ret.size; i++)
+                    addr[i] = SampleGeometric(p);
             }
 
             return ret;
@@ -60,7 +56,7 @@ namespace NumSharp
         ///     NumPy uses the search algorithm (random_geometric_search).
         ///     This matches the legacy mtrand implementation exactly.
         /// </remarks>
-        private double SampleGeometric(double p)
+        private long SampleGeometric(double p)
         {
             double q = 1.0 - p;
             long X = 1;

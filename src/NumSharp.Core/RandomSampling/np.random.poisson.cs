@@ -28,9 +28,9 @@ namespace NumSharp
                 throw new ArgumentException("lam must be >= 0", nameof(lam));
 
             if (size.IsScalar || size.IsEmpty)
-                return NDArray.Scalar((double)Knuth(lam));
+                return NDArray.Scalar((long)Knuth(lam));
 
-            var result = new NDArray<double>(size);
+            var result = new NDArray<long>(size);
             unsafe
             {
                 long len = result.size;

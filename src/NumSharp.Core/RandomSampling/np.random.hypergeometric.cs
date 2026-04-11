@@ -80,12 +80,9 @@ namespace NumSharp
         /// <param name="ngood">Number of ways to make a good selection. Must be non-negative.</param>
         /// <param name="nbad">Number of ways to make a bad selection. Must be non-negative.</param>
         /// <param name="nsample">Number of items sampled. Must be >= 1 and &lt;= ngood + nbad.</param>
-        /// <returns>A single sample from the hypergeometric distribution.</returns>
-        public long hypergeometric(long ngood, long nbad, long nsample)
-        {
-            ValidateHypergeometricParams(ngood, nbad, nsample);
-            return SampleHypergeometric(ngood, nbad, nsample);
-        }
+        /// <returns>A single sample from the hypergeometric distribution as 0-d array.</returns>
+        public NDArray hypergeometric(long ngood, long nbad, long nsample)
+            => hypergeometric(ngood, nbad, nsample, (Shape?)null);
 
         private void ValidateHypergeometricParams(long ngood, long nbad, long nsample)
         {

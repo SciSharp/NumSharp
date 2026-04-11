@@ -28,19 +28,25 @@ namespace NumSharp
         {
             if (size.IsScalar || size.IsEmpty)
             {
-                int count = 0;
+                long count = 0;
                 for (int i = 0; i < n; i++)
                     if (randomizer.NextDouble() < p) count++;
-                return NDArray.Scalar((double)count);
+                return NDArray.Scalar(count);
             }
 
-            var shape = size;
-            var x = np.zeros(shape);
-            for (int i = 0; i < n; i++)
+            var result = new NDArray(NPTypeCode.Int64, size, false);
+            unsafe
             {
-                x = x + bernoulli(p, shape);
+                var addr = (long*)result.Address;
+                for (long j = 0; j < result.size; j++)
+                {
+                    long count = 0;
+                    for (int i = 0; i < n; i++)
+                        if (randomizer.NextDouble() < p) count++;
+                    addr[j] = count;
+                }
             }
-            return x;
+            return result;
         }
     }
 }

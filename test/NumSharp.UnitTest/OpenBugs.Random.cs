@@ -271,8 +271,8 @@ namespace NumSharp.UnitTest
             np.random.seed(42);
             var result = np.random.poisson(5.0, 1);
 
-            const int expected = 5;
-            var actual = (int)result.GetDouble(0);
+            const long expected = 5;
+            var actual = result.GetInt64(0);
 
             actual.Should().Be(expected,
                 "poisson(5) with seed=42 should match NumPy");
@@ -289,8 +289,8 @@ namespace NumSharp.UnitTest
             np.random.seed(42);
             var result = np.random.binomial(10, 0.5, 1);
 
-            const int expected = 4;
-            var actual = (int)result.GetDouble(0);
+            const long expected = 4;
+            var actual = result.GetInt64(0);
 
             actual.Should().Be(expected,
                 "binomial(10,0.5) with seed=42 should match NumPy");

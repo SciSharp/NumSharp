@@ -13,11 +13,13 @@ namespace NumSharp.UnitTest.RandomSampling;
     public class RandomHypergeometricTests : TestClass
 {
     [Test]
-    public void Hypergeometric_ScalarCall_ReturnsLong()
+    public void Hypergeometric_ScalarCall_Returns0dArray()
     {
         np.random.seed(42);
-        long result = np.random.hypergeometric(15, 15, 10);
-        Assert.IsTrue(result >= 0 && result <= 10, $"Result {result} should be in [0, 10]");
+        var result = np.random.hypergeometric(15, 15, 10);
+        Assert.AreEqual(0, result.ndim, "Scalar call should return 0-d array");
+        long value = result.GetInt64();
+        Assert.IsTrue(value >= 0 && value <= 10, $"Result {value} should be in [0, 10]");
     }
 
     [Test]
