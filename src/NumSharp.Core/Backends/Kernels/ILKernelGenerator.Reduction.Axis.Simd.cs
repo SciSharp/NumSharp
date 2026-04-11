@@ -29,8 +29,8 @@ namespace NumSharp.Backends.Kernels
         private static unsafe AxisReductionKernel CreateAxisReductionKernelTyped<T>(AxisReductionKernelKey key)
             where T : unmanaged
         {
-            return (void* input, void* output, int* inputStrides, int* inputShape,
-                    int* outputStrides, int axis, int axisSize, int ndim, int outputSize) =>
+            return (void* input, void* output, long* inputStrides, long* inputShape,
+                    long* outputStrides, int axis, long axisSize, int ndim, long outputSize) =>
             {
                 AxisReductionSimdHelper<T>(
                     (T*)input, (T*)output,
@@ -57,12 +57,12 @@ namespace NumSharp.Backends.Kernels
         /// <param name="op">Reduction operation</param>
         internal static unsafe void AxisReductionSimdHelper<T>(
             T* input, T* output,
-            int* inputStrides, int* inputShape, int* outputStrides,
-            int axis, int axisSize, int ndim, int outputSize,
+            long* inputStrides, long* inputShape, long* outputStrides,
+            int axis, long axisSize, int ndim, long outputSize,
             ReductionOp op)
             where T : unmanaged
         {
-            int axisStride = inputStrides[axis];
+            long axisStride = inputStrides[axis];
 
             // Check if the reduction axis is contiguous (stride == 1)
             bool axisContiguous = axisStride == 1;
@@ -72,7 +72,7 @@ namespace NumSharp.Backends.Kernels
             int outputNdim = ndim - 1;
 
             // Store output dimension strides in a fixed array for parallel access
-            int[] outputDimStridesArray = new int[outputNdim > 0 ? outputNdim : 1];
+            long[] outputDimStridesArray = new long[outputNdim > 0 ? outputNdim : 1];
             if (outputNdim > 0)
             {
                 outputDimStridesArray[outputNdim - 1] = 1;
@@ -89,19 +89,19 @@ namespace NumSharp.Backends.Kernels
             bool isMean = op == ReductionOp.Mean;
 
             // Sequential loop over output elements
-            for (int outIdx = 0; outIdx < outputSize; outIdx++)
+            for (long outIdx = 0; outIdx < outputSize; outIdx++)
             {
                 // Convert linear output index to coordinates and compute input base offset
-                int remaining = outIdx;
-                int inputBaseOffset = 0;
-                int outputOffset = 0;
+                long remaining = outIdx;
+                long inputBaseOffset = 0;
+                long outputOffset = 0;
 
                 for (int d = 0; d < outputNdim; d++)
                 {
                     // Map output dimension d to input dimension
                     int inputDim = d >= axis ? d + 1 : d;
 
-                    int coord = remaining / outputDimStridesArray[d];
+                    long coord = remaining / outputDimStridesArray[d];
                     remaining = remaining % outputDimStridesArray[d];
 
                     inputBaseOffset += coord * inputStrides[inputDim];
@@ -134,7 +134,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Divide a typed value by count (for Mean operation in SIMD path).
         /// </summary>
-        private static T DivideByCountTyped<T>(T value, int count) where T : unmanaged
+        private static T DivideByCountTyped<T>(T value, long count) where T : unmanaged
         {
             if (typeof(T) == typeof(float))
             {
@@ -149,7 +149,7 @@ namespace NumSharp.Backends.Kernels
             if (typeof(T) == typeof(int))
             {
                 // Integer division
-                int result = (int)(object)value / count;
+                int result = (int)((int)(object)value / count);
                 return (T)(object)result;
             }
             if (typeof(T) == typeof(long))
@@ -190,7 +190,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Reduce a contiguous axis using SIMD.
         /// </summary>
-        private static unsafe T ReduceContiguousAxis<T>(T* data, int size, ReductionOp op)
+        private static unsafe T ReduceContiguousAxis<T>(T* data, long size, ReductionOp op)
             where T : unmanaged
         {
             if (size == 0)
@@ -222,11 +222,11 @@ namespace NumSharp.Backends.Kernels
         /// Reduce contiguous axis using Vector256 SIMD with 4x unrolling.
         /// Uses 4 independent accumulators to break dependency chains.
         /// </summary>
-        private static unsafe T ReduceContiguousAxisSimd256<T>(T* data, int size, ReductionOp op)
+        private static unsafe T ReduceContiguousAxisSimd256<T>(T* data, long size, ReductionOp op)
             where T : unmanaged
         {
             int vectorCount = Vector256<T>.Count;
-            int vectorEnd = size - vectorCount;
+            long vectorEnd = size - vectorCount;
 
             // Initialize 4 independent accumulators for loop unrolling
             var acc0 = CreateIdentityVector256<T>(op);
@@ -234,10 +234,10 @@ namespace NumSharp.Backends.Kernels
             var acc2 = CreateIdentityVector256<T>(op);
             var acc3 = CreateIdentityVector256<T>(op);
 
-            int unrollStep = vectorCount * 4;
-            int unrollEnd = size - unrollStep;
+            long unrollStep = vectorCount * 4;
+            long unrollEnd = size - unrollStep;
 
-            int i = 0;
+            long i = 0;
 
             // 4x unrolled loop - process 4 vectors per iteration
             for (; i <= unrollEnd; i += unrollStep)
@@ -280,11 +280,11 @@ namespace NumSharp.Backends.Kernels
         /// Reduce contiguous axis using Vector128 SIMD with 4x unrolling.
         /// Uses 4 independent accumulators to break dependency chains.
         /// </summary>
-        private static unsafe T ReduceContiguousAxisSimd128<T>(T* data, int size, ReductionOp op)
+        private static unsafe T ReduceContiguousAxisSimd128<T>(T* data, long size, ReductionOp op)
             where T : unmanaged
         {
             int vectorCount = Vector128<T>.Count;
-            int vectorEnd = size - vectorCount;
+            long vectorEnd = size - vectorCount;
 
             // Initialize 4 independent accumulators for loop unrolling
             var acc0 = CreateIdentityVector128<T>(op);
@@ -292,10 +292,10 @@ namespace NumSharp.Backends.Kernels
             var acc2 = CreateIdentityVector128<T>(op);
             var acc3 = CreateIdentityVector128<T>(op);
 
-            int unrollStep = vectorCount * 4;
-            int unrollEnd = size - unrollStep;
+            long unrollStep = vectorCount * 4;
+            long unrollEnd = size - unrollStep;
 
-            int i = 0;
+            long i = 0;
 
             // 4x unrolled loop - process 4 vectors per iteration
             for (; i <= unrollEnd; i += unrollStep)
@@ -337,12 +337,12 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Reduce contiguous axis using scalar loop.
         /// </summary>
-        private static unsafe T ReduceContiguousAxisScalar<T>(T* data, int size, ReductionOp op)
+        private static unsafe T ReduceContiguousAxisScalar<T>(T* data, long size, ReductionOp op)
             where T : unmanaged
         {
             T result = GetIdentityValue<T>(op);
 
-            for (int i = 0; i < size; i++)
+            for (long i = 0; i < size; i++)
             {
                 result = CombineScalars(result, data[i], op);
             }
@@ -354,7 +354,7 @@ namespace NumSharp.Backends.Kernels
         /// Reduce a strided axis (non-contiguous).
         /// Uses AVX2 gather instructions for float/double when beneficial (stride fits in int32).
         /// </summary>
-        private static unsafe T ReduceStridedAxis<T>(T* data, int size, int stride, ReductionOp op)
+        private static unsafe T ReduceStridedAxis<T>(T* data, long size, long stride, ReductionOp op)
             where T : unmanaged
         {
             if (size == 0)
@@ -365,7 +365,8 @@ namespace NumSharp.Backends.Kernels
 
             // Try AVX2 gather for float/double - provides ~2-3x speedup for strided access
             // Only beneficial when we have enough elements to amortize gather overhead
-            if (Avx2.IsSupported && size >= 8)
+            // AVX2 gather requires int32 indices, so stride must fit in int32
+            if (Avx2.IsSupported && size >= 8 && stride <= int.MaxValue)
             {
                 if (typeof(T) == typeof(float))
                 {
@@ -385,19 +386,21 @@ namespace NumSharp.Backends.Kernels
         /// Strided reduction using AVX2 gather for float.
         /// Uses Vector256 gather to load 8 floats at once from strided positions.
         /// </summary>
-        private static unsafe float ReduceStridedAxisGatherFloat(float* data, int size, int stride, ReductionOp op)
+        private static unsafe float ReduceStridedAxisGatherFloat(float* data, long size, long stride, ReductionOp op)
         {
             // Create index vector: [0, stride, 2*stride, ..., 7*stride]
+            // Note: AVX2 gather requires int32 indices, so stride must fit in int32
+            int strideInt = (int)stride;
             var indices = Vector256.Create(
-                0, stride, stride * 2, stride * 3,
-                stride * 4, stride * 5, stride * 6, stride * 7);
+                0, strideInt, strideInt * 2, strideInt * 3,
+                strideInt * 4, strideInt * 5, strideInt * 6, strideInt * 7);
 
             int vectorCount = 8; // Vector256<float>.Count
-            int vectorEnd = size - vectorCount;
+            long vectorEnd = size - vectorCount;
 
             var accum = CreateIdentityVector256<float>(op);
 
-            int i = 0;
+            long i = 0;
 
             // Main gather loop - process 8 elements per iteration
             for (; i <= vectorEnd; i += vectorCount)
@@ -424,18 +427,19 @@ namespace NumSharp.Backends.Kernels
         /// Strided reduction using AVX2 gather for double.
         /// Uses Vector256 gather to load 4 doubles at once from strided positions.
         /// </summary>
-        private static unsafe double ReduceStridedAxisGatherDouble(double* data, int size, int stride, ReductionOp op)
+        private static unsafe double ReduceStridedAxisGatherDouble(double* data, long size, long stride, ReductionOp op)
         {
             // Create index vector: [0, stride, 2*stride, 3*stride]
-            // Note: For double, we use int indices but gather doubles
-            var indices = Vector128.Create(0, stride, stride * 2, stride * 3);
+            // Note: AVX2 gather requires int32 indices, so stride must fit in int32
+            int strideInt = (int)stride;
+            var indices = Vector128.Create(0, strideInt, strideInt * 2, strideInt * 3);
 
             int vectorCount = 4; // Vector256<double>.Count
-            int vectorEnd = size - vectorCount;
+            long vectorEnd = size - vectorCount;
 
             var accum = CreateIdentityVector256<double>(op);
 
-            int i = 0;
+            long i = 0;
 
             // Main gather loop - process 4 elements per iteration
             for (; i <= vectorEnd; i += vectorCount)
@@ -461,14 +465,14 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Scalar strided reduction with 4x loop unrolling.
         /// </summary>
-        private static unsafe T ReduceStridedAxisScalar<T>(T* data, int size, int stride, ReductionOp op)
+        private static unsafe T ReduceStridedAxisScalar<T>(T* data, long size, long stride, ReductionOp op)
             where T : unmanaged
         {
             T result = GetIdentityValue<T>(op);
 
             // 4x unrolled loop for better instruction-level parallelism
-            int unrollEnd = size - 4;
-            int i = 0;
+            long unrollEnd = size - 4;
+            long i = 0;
 
             for (; i <= unrollEnd; i += 4)
             {

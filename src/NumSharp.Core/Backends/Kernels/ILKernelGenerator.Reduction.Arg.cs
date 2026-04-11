@@ -71,7 +71,7 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Ldarg_S, (byte)4); // totalSize
             il.EmitCall(OpCodes.Call, helperMethod, null);
 
-            // Result (int) is already on stack
+            // Result (long) is already on stack
         }
 
         /// <summary>
@@ -79,7 +79,7 @@ namespace NumSharp.Backends.Kernels
         /// Returns the index of the maximum element.
         /// Uses SIMD to find candidates then scalar to resolve exact index.
         /// </summary>
-        internal static unsafe int ArgMaxSimdHelper<T>(void* input, int totalSize) where T : unmanaged, IComparable<T>
+        internal static unsafe long ArgMaxSimdHelper<T>(void* input, long totalSize) where T : unmanaged, IComparable<T>
         {
             if (totalSize == 0)
                 return -1;
@@ -89,16 +89,16 @@ namespace NumSharp.Backends.Kernels
 
             T* src = (T*)input;
             T bestValue = src[0];
-            int bestIndex = 0;
+            long bestIndex = 0;
 
-            if (Vector256.IsHardwareAccelerated && Vector256<T>.IsSupported && totalSize >= Vector256<T>.Count * 2)
+            int vectorCount = Vector256<T>.Count;
+            if (Vector256.IsHardwareAccelerated && Vector256<T>.IsSupported && totalSize >= vectorCount * 2)
             {
-                int vectorCount = Vector256<T>.Count;
-                int vectorEnd = totalSize - vectorCount;
+                long vectorEnd = totalSize - vectorCount;
 
                 // First pass: find the maximum value using SIMD
                 var maxVec = Vector256.Load(src);
-                int i = vectorCount;
+                long i = vectorCount;
 
                 for (; i <= vectorEnd; i += vectorCount)
                 {
@@ -146,13 +146,13 @@ namespace NumSharp.Backends.Kernels
 
                 return 0; // Should never reach here
             }
-            else if (Vector128.IsHardwareAccelerated && Vector128<T>.IsSupported && totalSize >= Vector128<T>.Count * 2)
+            vectorCount = Vector128<T>.Count;
+            if (Vector128.IsHardwareAccelerated && Vector128<T>.IsSupported && totalSize >= vectorCount * 2)
             {
-                int vectorCount = Vector128<T>.Count;
-                int vectorEnd = totalSize - vectorCount;
+                long vectorEnd = totalSize - vectorCount;
 
                 var maxVec = Vector128.Load(src);
-                int i = vectorCount;
+                long i = vectorCount;
 
                 for (; i <= vectorEnd; i += vectorCount)
                 {
@@ -194,19 +194,16 @@ namespace NumSharp.Backends.Kernels
 
                 return 0;
             }
-            else
+            // Scalar fallback
+            for (long i = 1; i < totalSize; i++)
             {
-                // Scalar fallback
-                for (int i = 1; i < totalSize; i++)
+                if (src[i].CompareTo(bestValue) > 0)
                 {
-                    if (src[i].CompareTo(bestValue) > 0)
-                    {
-                        bestValue = src[i];
-                        bestIndex = i;
-                    }
+                    bestValue = src[i];
+                    bestIndex = i;
                 }
-                return bestIndex;
             }
+            return bestIndex;
         }
 
         /// <summary>
@@ -214,7 +211,7 @@ namespace NumSharp.Backends.Kernels
         /// Returns the index of the minimum element.
         /// Uses SIMD to find candidates then scalar to resolve exact index.
         /// </summary>
-        internal static unsafe int ArgMinSimdHelper<T>(void* input, int totalSize) where T : unmanaged, IComparable<T>
+        internal static unsafe long ArgMinSimdHelper<T>(void* input, long totalSize) where T : unmanaged, IComparable<T>
         {
             if (totalSize == 0)
                 return -1;
@@ -224,16 +221,16 @@ namespace NumSharp.Backends.Kernels
 
             T* src = (T*)input;
             T bestValue = src[0];
-            int bestIndex = 0;
+            long bestIndex = 0;
 
-            if (Vector256.IsHardwareAccelerated && Vector256<T>.IsSupported && totalSize >= Vector256<T>.Count * 2)
+            int vectorCount = Vector256<T>.Count;
+            if (Vector256.IsHardwareAccelerated && Vector256<T>.IsSupported && totalSize >= vectorCount * 2)
             {
-                int vectorCount = Vector256<T>.Count;
-                int vectorEnd = totalSize - vectorCount;
+                long vectorEnd = totalSize - vectorCount;
 
                 // First pass: find the minimum value using SIMD
                 var minVec = Vector256.Load(src);
-                int i = vectorCount;
+                long i = vectorCount;
 
                 for (; i <= vectorEnd; i += vectorCount)
                 {
@@ -278,13 +275,13 @@ namespace NumSharp.Backends.Kernels
 
                 return 0;
             }
-            else if (Vector128.IsHardwareAccelerated && Vector128<T>.IsSupported && totalSize >= Vector128<T>.Count * 2)
+            vectorCount = Vector128<T>.Count;
+            if (Vector128.IsHardwareAccelerated && Vector128<T>.IsSupported && totalSize >= vectorCount * 2)
             {
-                int vectorCount = Vector128<T>.Count;
-                int vectorEnd = totalSize - vectorCount;
+                long vectorEnd = totalSize - vectorCount;
 
                 var minVec = Vector128.Load(src);
-                int i = vectorCount;
+                long i = vectorCount;
 
                 for (; i <= vectorEnd; i += vectorCount)
                 {
@@ -326,19 +323,16 @@ namespace NumSharp.Backends.Kernels
 
                 return 0;
             }
-            else
+            // Scalar fallback
+            for (long i = 1; i < totalSize; i++)
             {
-                // Scalar fallback
-                for (int i = 1; i < totalSize; i++)
+                if (src[i].CompareTo(bestValue) < 0)
                 {
-                    if (src[i].CompareTo(bestValue) < 0)
-                    {
-                        bestValue = src[i];
-                        bestIndex = i;
-                    }
+                    bestValue = src[i];
+                    bestIndex = i;
                 }
-                return bestIndex;
             }
+            return bestIndex;
         }
 
         #endregion
@@ -349,16 +343,16 @@ namespace NumSharp.Backends.Kernels
         /// ArgMax helper for float with NaN awareness.
         /// NumPy behavior: first NaN always wins (considered "maximum").
         /// </summary>
-        internal static unsafe int ArgMaxFloatNaNHelper(void* input, int totalSize)
+        internal static unsafe long ArgMaxFloatNaNHelper(void* input, long totalSize)
         {
             if (totalSize == 0) return -1;
             if (totalSize == 1) return 0;
 
             float* src = (float*)input;
             float bestValue = src[0];
-            int bestIndex = 0;
+            long bestIndex = 0;
 
-            for (int i = 1; i < totalSize; i++)
+            for (long i = 1; i < totalSize; i++)
             {
                 float val = src[i];
                 // NumPy: first NaN always wins
@@ -375,16 +369,16 @@ namespace NumSharp.Backends.Kernels
         /// ArgMin helper for float with NaN awareness.
         /// NumPy behavior: first NaN always wins (considered "minimum").
         /// </summary>
-        internal static unsafe int ArgMinFloatNaNHelper(void* input, int totalSize)
+        internal static unsafe long ArgMinFloatNaNHelper(void* input, long totalSize)
         {
             if (totalSize == 0) return -1;
             if (totalSize == 1) return 0;
 
             float* src = (float*)input;
             float bestValue = src[0];
-            int bestIndex = 0;
+            long bestIndex = 0;
 
-            for (int i = 1; i < totalSize; i++)
+            for (long i = 1; i < totalSize; i++)
             {
                 float val = src[i];
                 // NumPy: first NaN always wins
@@ -401,16 +395,16 @@ namespace NumSharp.Backends.Kernels
         /// ArgMax helper for double with NaN awareness.
         /// NumPy behavior: first NaN always wins (considered "maximum").
         /// </summary>
-        internal static unsafe int ArgMaxDoubleNaNHelper(void* input, int totalSize)
+        internal static unsafe long ArgMaxDoubleNaNHelper(void* input, long totalSize)
         {
             if (totalSize == 0) return -1;
             if (totalSize == 1) return 0;
 
             double* src = (double*)input;
             double bestValue = src[0];
-            int bestIndex = 0;
+            long bestIndex = 0;
 
-            for (int i = 1; i < totalSize; i++)
+            for (long i = 1; i < totalSize; i++)
             {
                 double val = src[i];
                 // NumPy: first NaN always wins
@@ -427,16 +421,16 @@ namespace NumSharp.Backends.Kernels
         /// ArgMin helper for double with NaN awareness.
         /// NumPy behavior: first NaN always wins (considered "minimum").
         /// </summary>
-        internal static unsafe int ArgMinDoubleNaNHelper(void* input, int totalSize)
+        internal static unsafe long ArgMinDoubleNaNHelper(void* input, long totalSize)
         {
             if (totalSize == 0) return -1;
             if (totalSize == 1) return 0;
 
             double* src = (double*)input;
             double bestValue = src[0];
-            int bestIndex = 0;
+            long bestIndex = 0;
 
-            for (int i = 1; i < totalSize; i++)
+            for (long i = 1; i < totalSize; i++)
             {
                 double val = src[i];
                 // NumPy: first NaN always wins
@@ -457,19 +451,19 @@ namespace NumSharp.Backends.Kernels
         /// ArgMax helper for boolean arrays.
         /// Boolean: True=1, False=0, so argmax finds first True.
         /// </summary>
-        internal static unsafe int ArgMaxBoolHelper(void* input, int totalSize)
+        internal static unsafe long ArgMaxBoolHelper(void* input, long totalSize)
         {
             if (totalSize == 0) return -1;
             if (totalSize == 1) return 0;
 
             bool* src = (bool*)input;
             bool bestValue = src[0];
-            int bestIndex = 0;
+            long bestIndex = 0;
 
             // If first is already True, we can't do better
             if (bestValue) return 0;
 
-            for (int i = 1; i < totalSize; i++)
+            for (long i = 1; i < totalSize; i++)
             {
                 if (src[i]) // True > False
                 {
@@ -483,19 +477,19 @@ namespace NumSharp.Backends.Kernels
         /// ArgMin helper for boolean arrays.
         /// Boolean: True=1, False=0, so argmin finds first False.
         /// </summary>
-        internal static unsafe int ArgMinBoolHelper(void* input, int totalSize)
+        internal static unsafe long ArgMinBoolHelper(void* input, long totalSize)
         {
             if (totalSize == 0) return -1;
             if (totalSize == 1) return 0;
 
             bool* src = (bool*)input;
             bool bestValue = src[0];
-            int bestIndex = 0;
+            long bestIndex = 0;
 
             // If first is already False, we can't do better
             if (!bestValue) return 0;
 
-            for (int i = 1; i < totalSize; i++)
+            for (long i = 1; i < totalSize; i++)
             {
                 if (!src[i]) // False < True
                 {

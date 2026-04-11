@@ -115,7 +115,13 @@ namespace NumSharp.Backends.Kernels
         /// <summary>Minimum ignoring NaN values (all-NaN returns NaN)</summary>
         NanMin,
         /// <summary>Maximum ignoring NaN values (all-NaN returns NaN)</summary>
-        NanMax
+        NanMax,
+        /// <summary>Mean ignoring NaN values (all-NaN returns NaN)</summary>
+        NanMean,
+        /// <summary>Variance ignoring NaN values (all-NaN returns NaN)</summary>
+        NanVar,
+        /// <summary>Standard deviation ignoring NaN values (all-NaN returns NaN)</summary>
+        NanStd
     }
 
     /// <summary>

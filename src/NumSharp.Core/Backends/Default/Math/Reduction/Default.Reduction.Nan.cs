@@ -189,7 +189,7 @@ namespace NumSharp.Backends
                 var r = NDArray.Scalar(result);
                 if (keepdims)
                 {
-                    var keepdimsShape = new int[arr.ndim];
+                    var keepdimsShape = new long[arr.ndim];
                     for (int i = 0; i < arr.ndim; i++)
                         keepdimsShape[i] = 1;
                     r.Storage.Reshape(new Shape(keepdimsShape));
@@ -224,7 +224,7 @@ namespace NumSharp.Backends
             var r = NDArray.Scalar(result);
             if (keepdims)
             {
-                var keepdimsShape = new int[arr.ndim];
+                var keepdimsShape = new long[arr.ndim];
                 for (int i = 0; i < arr.ndim; i++)
                     keepdimsShape[i] = 1;
                 r.Storage.Reshape(new Shape(keepdimsShape));
@@ -378,27 +378,27 @@ namespace NumSharp.Backends
             }
 
             // Create output array
-            var outputDims = new int[arr.ndim - 1];
+            var outputDims = new long[arr.ndim - 1];
             for (int d = 0, od = 0; d < arr.ndim; d++)
                 if (d != axis) outputDims[od++] = shape.dimensions[d];
 
             var outputShape = outputDims.Length > 0 ? new Shape(outputDims) : Shape.Scalar;
             var result = new NDArray(inputType, outputShape, false);
 
-            int axisSize = shape.dimensions[axis];
-            int outputSize = result.size > 0 ? result.size : 1;
+            long axisSize = shape.dimensions[axis];
+            long outputSize = result.size > 0 ? result.size : 1;
             byte* inputAddr = (byte*)arr.Address + shape.offset * arr.dtypesize;
 
-            fixed (int* inputStrides = shape.strides)
-            fixed (int* inputDims = shape.dimensions)
-            fixed (int* outputStrides = result.Shape.strides)
+            fixed (long* inputStrides = shape.strides)
+            fixed (long* inputDims = shape.dimensions)
+            fixed (long* outputStrides = result.Shape.strides)
             {
                 kernel((void*)inputAddr, (void*)result.Address, inputStrides, inputDims, outputStrides, axis, axisSize, arr.ndim, outputSize);
             }
 
             if (keepdims)
             {
-                var ks = new int[arr.ndim];
+                var ks = new long[arr.ndim];
                 for (int d = 0, sd = 0; d < arr.ndim; d++)
                     ks[d] = (d == axis) ? 1 : result.shape[sd++];
                 result.Storage.Reshape(new Shape(ks));
@@ -414,17 +414,17 @@ namespace NumSharp.Backends
             var shape = arr.Shape;
             var inputType = arr.GetTypeCode;
 
-            var outputDims = new int[arr.ndim - 1];
+            var outputDims = new long[arr.ndim - 1];
             for (int d = 0, od = 0; d < arr.ndim; d++)
                 if (d != axis) outputDims[od++] = shape.dimensions[d];
 
             var outputShape = outputDims.Length > 0 ? new Shape(outputDims) : Shape.Scalar;
             var result = new NDArray(inputType, outputShape, false);
 
-            int axisSize = shape.dimensions[axis];
-            int outputSize = result.size > 0 ? result.size : 1;
+            long axisSize = shape.dimensions[axis];
+            long outputSize = result.size > 0 ? result.size : 1;
 
-            int[] outputDimStrides = new int[arr.ndim - 1 > 0 ? arr.ndim - 1 : 1];
+            long[] outputDimStrides = new long[arr.ndim - 1 > 0 ? arr.ndim - 1 : 1];
             if (arr.ndim > 1)
             {
                 outputDimStrides[arr.ndim - 2] = 1;
@@ -435,15 +435,15 @@ namespace NumSharp.Backends
                 }
             }
 
-            for (int outIdx = 0; outIdx < outputSize; outIdx++)
+            for (long outIdx = 0; outIdx < outputSize; outIdx++)
             {
-                int remaining = outIdx;
-                int inputBaseOffset = 0;
+                long remaining = outIdx;
+                long inputBaseOffset = 0;
 
                 for (int d = 0; d < arr.ndim - 1; d++)
                 {
                     int inputDim = d >= axis ? d + 1 : d;
-                    int coord = remaining / outputDimStrides[d];
+                    long coord = remaining / outputDimStrides[d];
                     remaining = remaining % outputDimStrides[d];
                     inputBaseOffset += coord * shape.strides[inputDim];
                 }
@@ -467,7 +467,7 @@ namespace NumSharp.Backends
 
             if (keepdims)
             {
-                var ks = new int[arr.ndim];
+                var ks = new long[arr.ndim];
                 for (int d = 0, sd = 0; d < arr.ndim; d++)
                     ks[d] = (d == axis) ? 1 : result.shape[sd++];
                 result.Storage.Reshape(new Shape(ks));
@@ -475,14 +475,14 @@ namespace NumSharp.Backends
             return result;
         }
 
-        private static float ReduceNanAxisScalarFloat(NDArray arr, int baseOffset, int axisSize, int axisStride, ReductionOp op)
+        private static float ReduceNanAxisScalarFloat(NDArray arr, long baseOffset, long axisSize, long axisStride, ReductionOp op)
         {
             switch (op)
             {
                 case ReductionOp.NanSum:
                 {
                     float sum = 0f;
-                    for (int i = 0; i < axisSize; i++)
+                    for (long i = 0; i < axisSize; i++)
                     {
                         float val = (float)arr.GetAtIndex(baseOffset + i * axisStride);
                         if (!float.IsNaN(val)) sum += val;
@@ -492,7 +492,7 @@ namespace NumSharp.Backends
                 case ReductionOp.NanProd:
                 {
                     float prod = 1f;
-                    for (int i = 0; i < axisSize; i++)
+                    for (long i = 0; i < axisSize; i++)
                     {
                         float val = (float)arr.GetAtIndex(baseOffset + i * axisStride);
                         if (!float.IsNaN(val)) prod *= val;
@@ -503,7 +503,7 @@ namespace NumSharp.Backends
                 {
                     float minVal = float.PositiveInfinity;
                     bool foundNonNaN = false;
-                    for (int i = 0; i < axisSize; i++)
+                    for (long i = 0; i < axisSize; i++)
                     {
                         float val = (float)arr.GetAtIndex(baseOffset + i * axisStride);
                         if (!float.IsNaN(val)) { if (val < minVal) minVal = val; foundNonNaN = true; }
@@ -514,7 +514,7 @@ namespace NumSharp.Backends
                 {
                     float maxVal = float.NegativeInfinity;
                     bool foundNonNaN = false;
-                    for (int i = 0; i < axisSize; i++)
+                    for (long i = 0; i < axisSize; i++)
                     {
                         float val = (float)arr.GetAtIndex(baseOffset + i * axisStride);
                         if (!float.IsNaN(val)) { if (val > maxVal) maxVal = val; foundNonNaN = true; }
@@ -526,14 +526,14 @@ namespace NumSharp.Backends
             }
         }
 
-        private static double ReduceNanAxisScalarDouble(NDArray arr, int baseOffset, int axisSize, int axisStride, ReductionOp op)
+        private static double ReduceNanAxisScalarDouble(NDArray arr, long baseOffset, long axisSize, long axisStride, ReductionOp op)
         {
             switch (op)
             {
                 case ReductionOp.NanSum:
                 {
                     double sum = 0.0;
-                    for (int i = 0; i < axisSize; i++)
+                    for (long i = 0; i < axisSize; i++)
                     {
                         double val = (double)arr.GetAtIndex(baseOffset + i * axisStride);
                         if (!double.IsNaN(val)) sum += val;
@@ -543,7 +543,7 @@ namespace NumSharp.Backends
                 case ReductionOp.NanProd:
                 {
                     double prod = 1.0;
-                    for (int i = 0; i < axisSize; i++)
+                    for (long i = 0; i < axisSize; i++)
                     {
                         double val = (double)arr.GetAtIndex(baseOffset + i * axisStride);
                         if (!double.IsNaN(val)) prod *= val;
@@ -554,7 +554,7 @@ namespace NumSharp.Backends
                 {
                     double minVal = double.PositiveInfinity;
                     bool foundNonNaN = false;
-                    for (int i = 0; i < axisSize; i++)
+                    for (long i = 0; i < axisSize; i++)
                     {
                         double val = (double)arr.GetAtIndex(baseOffset + i * axisStride);
                         if (!double.IsNaN(val)) { if (val < minVal) minVal = val; foundNonNaN = true; }
@@ -565,7 +565,7 @@ namespace NumSharp.Backends
                 {
                     double maxVal = double.NegativeInfinity;
                     bool foundNonNaN = false;
-                    for (int i = 0; i < axisSize; i++)
+                    for (long i = 0; i < axisSize; i++)
                     {
                         double val = (double)arr.GetAtIndex(baseOffset + i * axisStride);
                         if (!double.IsNaN(val)) { if (val > maxVal) maxVal = val; foundNonNaN = true; }

@@ -123,9 +123,9 @@ public class LinearAlgebraTests
 
         Assert.AreEqual(1, result.ndim);
         Assert.AreEqual(3, result.size);
-        Assert.AreEqual(120, result.GetInt32(0));
-        Assert.AreEqual(135, result.GetInt32(1));
-        Assert.AreEqual(150, result.GetInt32(2));
+        Assert.AreEqual(120L, result.GetInt64(0));
+        Assert.AreEqual(135L, result.GetInt64(1));
+        Assert.AreEqual(150L, result.GetInt64(2));
     }
 
     [Test]
@@ -346,7 +346,6 @@ public class LinearAlgebraTests
     }
 
     [Test]
-    [OpenBugs]  // std with ddof parameter fails
     public void Std_WithDdof()
     {
         // NumPy: np.std([1, 2, 3, 4, 5], ddof=1) = 1.5811... (sample std)
@@ -469,7 +468,6 @@ public class LinearAlgebraTests
     #region Searchsorted
 
     [Test]
-    [OpenBugs]  // searchsorted returns NDArray not int
     public void Searchsorted_Simple()
     {
         // NumPy: np.searchsorted([1,2,3,4,5], 3) = 2
@@ -481,7 +479,6 @@ public class LinearAlgebraTests
     }
 
     [Test]
-    [OpenBugs]  // searchsorted returns NDArray not int
     public void Searchsorted_BeforeAll()
     {
         // NumPy: np.searchsorted([1,2,3,4,5], 0) = 0
@@ -493,7 +490,6 @@ public class LinearAlgebraTests
     }
 
     [Test]
-    [OpenBugs]  // searchsorted returns NDArray not int
     public void Searchsorted_AfterAll()
     {
         // NumPy: np.searchsorted([1,2,3,4,5], 10) = 5

@@ -125,7 +125,7 @@ namespace NumSharp.UnitTest.Backends
 
             // View should still work
             view.size.Should().Be(5);
-            view.GetInt32(0).Should().Be(2);
+            view.GetInt64(0).Should().Be(2);
 
             // And base should still be accessible (points to storage that's kept alive)
             view.@base.Should().NotBeNull();
@@ -206,8 +206,8 @@ namespace NumSharp.UnitTest.Backends
             view3.@base!.Storage.Should().BeSameAs(large.Storage);
 
             // Values should be correct
-            view1.GetInt32(0).Should().Be(0);
-            view2.GetInt32(0).Should().Be(5_000_000);
+            view1.GetInt64(0).Should().Be(0);
+            view2.GetInt64(0).Should().Be(5_000_000);
         }
 
         #endregion
@@ -298,7 +298,7 @@ namespace NumSharp.UnitTest.Backends
 
             // View should still work
             view.size.Should().Be(5);
-            view.GetInt32(0).Should().Be(2);
+            view.GetInt64(0).Should().Be(2);
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]

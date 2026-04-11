@@ -41,7 +41,7 @@ namespace NumSharp.Backends.Kernels
         /// Modifies the array in-place: data[i] = Min(Max(data[i], minVal), maxVal)
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static unsafe void ClipHelper<T>(T* data, int size, T minVal, T maxVal) where T : unmanaged, IComparable<T>
+        public static unsafe void ClipHelper<T>(T* data, long size, T minVal, T maxVal) where T : unmanaged, IComparable<T>
         {
             if (size == 0) return;
 
@@ -121,7 +121,7 @@ namespace NumSharp.Backends.Kernels
         /// SIMD-optimized Min-only Clip operation (no upper bound).
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static unsafe void ClipMinHelper<T>(T* data, int size, T minVal) where T : unmanaged, IComparable<T>
+        public static unsafe void ClipMinHelper<T>(T* data, long size, T minVal) where T : unmanaged, IComparable<T>
         {
             if (size == 0) return;
 
@@ -181,7 +181,7 @@ namespace NumSharp.Backends.Kernels
         /// SIMD-optimized Max-only Clip operation (no lower bound).
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static unsafe void ClipMaxHelper<T>(T* data, int size, T maxVal) where T : unmanaged, IComparable<T>
+        public static unsafe void ClipMaxHelper<T>(T* data, long size, T maxVal) where T : unmanaged, IComparable<T>
         {
             if (size == 0) return;
 
@@ -242,7 +242,7 @@ namespace NumSharp.Backends.Kernels
         #region Scalar Fallback Implementations
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe void ClipScalar<T>(T* data, int size, T minVal, T maxVal) where T : unmanaged, IComparable<T>
+        private static unsafe void ClipScalar<T>(T* data, long size, T minVal, T maxVal) where T : unmanaged, IComparable<T>
         {
             // Use specialized implementations for float/double to handle NaN correctly
             if (typeof(T) == typeof(float))
@@ -256,7 +256,7 @@ namespace NumSharp.Backends.Kernels
                 return;
             }
 
-            for (int i = 0; i < size; i++)
+            for (long i = 0; i < size; i++)
             {
                 var val = data[i];
                 if (val.CompareTo(maxVal) > 0)
@@ -268,7 +268,7 @@ namespace NumSharp.Backends.Kernels
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe void ClipMinScalar<T>(T* data, int size, T minVal) where T : unmanaged, IComparable<T>
+        private static unsafe void ClipMinScalar<T>(T* data, long size, T minVal) where T : unmanaged, IComparable<T>
         {
             // Use specialized implementations for float/double to handle NaN correctly
             if (typeof(T) == typeof(float))
@@ -282,7 +282,7 @@ namespace NumSharp.Backends.Kernels
                 return;
             }
 
-            for (int i = 0; i < size; i++)
+            for (long i = 0; i < size; i++)
             {
                 if (data[i].CompareTo(minVal) < 0)
                     data[i] = minVal;
@@ -290,7 +290,7 @@ namespace NumSharp.Backends.Kernels
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe void ClipMaxScalar<T>(T* data, int size, T maxVal) where T : unmanaged, IComparable<T>
+        private static unsafe void ClipMaxScalar<T>(T* data, long size, T maxVal) where T : unmanaged, IComparable<T>
         {
             // Use specialized implementations for float/double to handle NaN correctly
             if (typeof(T) == typeof(float))
@@ -304,7 +304,7 @@ namespace NumSharp.Backends.Kernels
                 return;
             }
 
-            for (int i = 0; i < size; i++)
+            for (long i = 0; i < size; i++)
             {
                 if (data[i].CompareTo(maxVal) > 0)
                     data[i] = maxVal;
@@ -316,9 +316,9 @@ namespace NumSharp.Backends.Kernels
         // These use Math.Max/Min which properly propagate NaN per IEEE semantics
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe void ClipScalarFloat(float* data, int size, float minVal, float maxVal)
+        private static unsafe void ClipScalarFloat(float* data, long size, float minVal, float maxVal)
         {
-            for (int i = 0; i < size; i++)
+            for (long i = 0; i < size; i++)
             {
                 // Math.Max/Min propagate NaN: if either operand is NaN, result is NaN
                 data[i] = Math.Min(Math.Max(data[i], minVal), maxVal);
@@ -326,45 +326,45 @@ namespace NumSharp.Backends.Kernels
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe void ClipScalarDouble(double* data, int size, double minVal, double maxVal)
+        private static unsafe void ClipScalarDouble(double* data, long size, double minVal, double maxVal)
         {
-            for (int i = 0; i < size; i++)
+            for (long i = 0; i < size; i++)
             {
                 data[i] = Math.Min(Math.Max(data[i], minVal), maxVal);
             }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe void ClipMinScalarFloat(float* data, int size, float minVal)
+        private static unsafe void ClipMinScalarFloat(float* data, long size, float minVal)
         {
-            for (int i = 0; i < size; i++)
+            for (long i = 0; i < size; i++)
             {
                 data[i] = Math.Max(data[i], minVal);
             }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe void ClipMinScalarDouble(double* data, int size, double minVal)
+        private static unsafe void ClipMinScalarDouble(double* data, long size, double minVal)
         {
-            for (int i = 0; i < size; i++)
+            for (long i = 0; i < size; i++)
             {
                 data[i] = Math.Max(data[i], minVal);
             }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe void ClipMaxScalarFloat(float* data, int size, float maxVal)
+        private static unsafe void ClipMaxScalarFloat(float* data, long size, float maxVal)
         {
-            for (int i = 0; i < size; i++)
+            for (long i = 0; i < size; i++)
             {
                 data[i] = Math.Min(data[i], maxVal);
             }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe void ClipMaxScalarDouble(double* data, int size, double maxVal)
+        private static unsafe void ClipMaxScalarDouble(double* data, long size, double maxVal)
         {
-            for (int i = 0; i < size; i++)
+            for (long i = 0; i < size; i++)
             {
                 data[i] = Math.Min(data[i], maxVal);
             }
@@ -377,14 +377,14 @@ namespace NumSharp.Backends.Kernels
         #region Vector256 SIMD Implementations
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe void ClipSimd256<T>(T* data, int size, T minVal, T maxVal) where T : unmanaged
+        private static unsafe void ClipSimd256<T>(T* data, long size, T minVal, T maxVal) where T : unmanaged
         {
             int vectorCount = Vector256<T>.Count;
-            int vectorEnd = size - vectorCount;
+            long vectorEnd = size - vectorCount;
             var minVec = Vector256.Create(minVal);
             var maxVec = Vector256.Create(maxVal);
 
-            int i = 0;
+            long i = 0;
             for (; i <= vectorEnd; i += vectorCount)
             {
                 var vec = Vector256.Load(data + i);
@@ -398,13 +398,13 @@ namespace NumSharp.Backends.Kernels
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe void ClipMinSimd256<T>(T* data, int size, T minVal) where T : unmanaged
+        private static unsafe void ClipMinSimd256<T>(T* data, long size, T minVal) where T : unmanaged
         {
             int vectorCount = Vector256<T>.Count;
-            int vectorEnd = size - vectorCount;
+            long vectorEnd = size - vectorCount;
             var minVec = Vector256.Create(minVal);
 
-            int i = 0;
+            long i = 0;
             for (; i <= vectorEnd; i += vectorCount)
             {
                 var vec = Vector256.Load(data + i);
@@ -417,13 +417,13 @@ namespace NumSharp.Backends.Kernels
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe void ClipMaxSimd256<T>(T* data, int size, T maxVal) where T : unmanaged
+        private static unsafe void ClipMaxSimd256<T>(T* data, long size, T maxVal) where T : unmanaged
         {
             int vectorCount = Vector256<T>.Count;
-            int vectorEnd = size - vectorCount;
+            long vectorEnd = size - vectorCount;
             var maxVec = Vector256.Create(maxVal);
 
-            int i = 0;
+            long i = 0;
             for (; i <= vectorEnd; i += vectorCount)
             {
                 var vec = Vector256.Load(data + i);
@@ -440,7 +440,7 @@ namespace NumSharp.Backends.Kernels
         #region Scalar Tail Helpers (NaN-aware for float/double)
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe void ClipScalarTail<T>(T* data, int size, T minVal, T maxVal) where T : unmanaged
+        private static unsafe void ClipScalarTail<T>(T* data, long size, T minVal, T maxVal) where T : unmanaged
         {
             if (size <= 0) return;
 
@@ -449,7 +449,7 @@ namespace NumSharp.Backends.Kernels
                 var fMin = Unsafe.As<T, float>(ref minVal);
                 var fMax = Unsafe.As<T, float>(ref maxVal);
                 var fData = (float*)data;
-                for (int i = 0; i < size; i++)
+                for (long i = 0; i < size; i++)
                     fData[i] = Math.Min(Math.Max(fData[i], fMin), fMax);
             }
             else if (typeof(T) == typeof(double))
@@ -457,12 +457,12 @@ namespace NumSharp.Backends.Kernels
                 var dMin = Unsafe.As<T, double>(ref minVal);
                 var dMax = Unsafe.As<T, double>(ref maxVal);
                 var dData = (double*)data;
-                for (int i = 0; i < size; i++)
+                for (long i = 0; i < size; i++)
                     dData[i] = Math.Min(Math.Max(dData[i], dMin), dMax);
             }
             else
             {
-                for (int i = 0; i < size; i++)
+                for (long i = 0; i < size; i++)
                 {
                     var val = data[i];
                     if (Comparer<T>.Default.Compare(val, maxVal) > 0)
@@ -475,7 +475,7 @@ namespace NumSharp.Backends.Kernels
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe void ClipMinScalarTail<T>(T* data, int size, T minVal) where T : unmanaged
+        private static unsafe void ClipMinScalarTail<T>(T* data, long size, T minVal) where T : unmanaged
         {
             if (size <= 0) return;
 
@@ -483,19 +483,19 @@ namespace NumSharp.Backends.Kernels
             {
                 var fMin = Unsafe.As<T, float>(ref minVal);
                 var fData = (float*)data;
-                for (int i = 0; i < size; i++)
+                for (long i = 0; i < size; i++)
                     fData[i] = Math.Max(fData[i], fMin);
             }
             else if (typeof(T) == typeof(double))
             {
                 var dMin = Unsafe.As<T, double>(ref minVal);
                 var dData = (double*)data;
-                for (int i = 0; i < size; i++)
+                for (long i = 0; i < size; i++)
                     dData[i] = Math.Max(dData[i], dMin);
             }
             else
             {
-                for (int i = 0; i < size; i++)
+                for (long i = 0; i < size; i++)
                 {
                     if (Comparer<T>.Default.Compare(data[i], minVal) < 0)
                         data[i] = minVal;
@@ -504,7 +504,7 @@ namespace NumSharp.Backends.Kernels
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe void ClipMaxScalarTail<T>(T* data, int size, T maxVal) where T : unmanaged
+        private static unsafe void ClipMaxScalarTail<T>(T* data, long size, T maxVal) where T : unmanaged
         {
             if (size <= 0) return;
 
@@ -512,19 +512,19 @@ namespace NumSharp.Backends.Kernels
             {
                 var fMax = Unsafe.As<T, float>(ref maxVal);
                 var fData = (float*)data;
-                for (int i = 0; i < size; i++)
+                for (long i = 0; i < size; i++)
                     fData[i] = Math.Min(fData[i], fMax);
             }
             else if (typeof(T) == typeof(double))
             {
                 var dMax = Unsafe.As<T, double>(ref maxVal);
                 var dData = (double*)data;
-                for (int i = 0; i < size; i++)
+                for (long i = 0; i < size; i++)
                     dData[i] = Math.Min(dData[i], dMax);
             }
             else
             {
-                for (int i = 0; i < size; i++)
+                for (long i = 0; i < size; i++)
                 {
                     if (Comparer<T>.Default.Compare(data[i], maxVal) > 0)
                         data[i] = maxVal;
@@ -537,14 +537,14 @@ namespace NumSharp.Backends.Kernels
         #region Vector128 SIMD Implementations
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe void ClipSimd128<T>(T* data, int size, T minVal, T maxVal) where T : unmanaged
+        private static unsafe void ClipSimd128<T>(T* data, long size, T minVal, T maxVal) where T : unmanaged
         {
             int vectorCount = Vector128<T>.Count;
-            int vectorEnd = size - vectorCount;
+            long vectorEnd = size - vectorCount;
             var minVec = Vector128.Create(minVal);
             var maxVec = Vector128.Create(maxVal);
 
-            int i = 0;
+            long i = 0;
             for (; i <= vectorEnd; i += vectorCount)
             {
                 var vec = Vector128.Load(data + i);
@@ -558,13 +558,13 @@ namespace NumSharp.Backends.Kernels
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe void ClipMinSimd128<T>(T* data, int size, T minVal) where T : unmanaged
+        private static unsafe void ClipMinSimd128<T>(T* data, long size, T minVal) where T : unmanaged
         {
             int vectorCount = Vector128<T>.Count;
-            int vectorEnd = size - vectorCount;
+            long vectorEnd = size - vectorCount;
             var minVec = Vector128.Create(minVal);
 
-            int i = 0;
+            long i = 0;
             for (; i <= vectorEnd; i += vectorCount)
             {
                 var vec = Vector128.Load(data + i);
@@ -577,13 +577,13 @@ namespace NumSharp.Backends.Kernels
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe void ClipMaxSimd128<T>(T* data, int size, T maxVal) where T : unmanaged
+        private static unsafe void ClipMaxSimd128<T>(T* data, long size, T maxVal) where T : unmanaged
         {
             int vectorCount = Vector128<T>.Count;
-            int vectorEnd = size - vectorCount;
+            long vectorEnd = size - vectorCount;
             var maxVec = Vector128.Create(maxVal);
 
-            int i = 0;
+            long i = 0;
             for (; i <= vectorEnd; i += vectorCount)
             {
                 var vec = Vector128.Load(data + i);
@@ -613,7 +613,7 @@ namespace NumSharp.Backends.Kernels
         /// For contiguous arrays, use ClipHelper instead.
         /// </remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static unsafe void ClipStrided<T>(T* data, int size, T minVal, T maxVal, Shape shape) where T : unmanaged, IComparable<T>
+        public static unsafe void ClipStrided<T>(T* data, long size, T minVal, T maxVal, Shape shape) where T : unmanaged, IComparable<T>
         {
             if (size == 0) return;
 
@@ -625,9 +625,9 @@ namespace NumSharp.Backends.Kernels
             }
 
             // Strided iteration using coordinate transformation
-            for (int i = 0; i < size; i++)
+            for (long i = 0; i < size; i++)
             {
-                int offset = shape.TransformOffset(i);
+                long offset = shape.TransformOffset(i);
                 var val = data[offset];
                 if (val.CompareTo(maxVal) > 0)
                     val = maxVal;
@@ -641,7 +641,7 @@ namespace NumSharp.Backends.Kernels
         /// Min-only Clip operation for strided arrays.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static unsafe void ClipMinStrided<T>(T* data, int size, T minVal, Shape shape) where T : unmanaged, IComparable<T>
+        public static unsafe void ClipMinStrided<T>(T* data, long size, T minVal, Shape shape) where T : unmanaged, IComparable<T>
         {
             if (size == 0) return;
 
@@ -651,9 +651,9 @@ namespace NumSharp.Backends.Kernels
                 return;
             }
 
-            for (int i = 0; i < size; i++)
+            for (long i = 0; i < size; i++)
             {
-                int offset = shape.TransformOffset(i);
+                long offset = shape.TransformOffset(i);
                 if (data[offset].CompareTo(minVal) < 0)
                     data[offset] = minVal;
             }
@@ -663,7 +663,7 @@ namespace NumSharp.Backends.Kernels
         /// Max-only Clip operation for strided arrays.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static unsafe void ClipMaxStrided<T>(T* data, int size, T maxVal, Shape shape) where T : unmanaged, IComparable<T>
+        public static unsafe void ClipMaxStrided<T>(T* data, long size, T maxVal, Shape shape) where T : unmanaged, IComparable<T>
         {
             if (size == 0) return;
 
@@ -673,9 +673,9 @@ namespace NumSharp.Backends.Kernels
                 return;
             }
 
-            for (int i = 0; i < size; i++)
+            for (long i = 0; i < size; i++)
             {
-                int offset = shape.TransformOffset(i);
+                long offset = shape.TransformOffset(i);
                 if (data[offset].CompareTo(maxVal) > 0)
                     data[offset] = maxVal;
             }
@@ -695,7 +695,7 @@ namespace NumSharp.Backends.Kernels
         /// <param name="maxVal">Maximum value to clip to</param>
         /// <param name="shape">Shape describing the memory layout</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static unsafe void ClipUnified<T>(T* data, int size, T minVal, T maxVal, Shape shape) where T : unmanaged, IComparable<T>
+        public static unsafe void ClipUnified<T>(T* data, long size, T minVal, T maxVal, Shape shape) where T : unmanaged, IComparable<T>
         {
             if (shape.IsContiguous)
                 ClipHelper(data + shape.Offset, size, minVal, maxVal);
@@ -707,7 +707,7 @@ namespace NumSharp.Backends.Kernels
         /// Unified Min-only Clip operation.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static unsafe void ClipMinUnified<T>(T* data, int size, T minVal, Shape shape) where T : unmanaged, IComparable<T>
+        public static unsafe void ClipMinUnified<T>(T* data, long size, T minVal, Shape shape) where T : unmanaged, IComparable<T>
         {
             if (shape.IsContiguous)
                 ClipMinHelper(data + shape.Offset, size, minVal);
@@ -719,7 +719,7 @@ namespace NumSharp.Backends.Kernels
         /// Unified Max-only Clip operation.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static unsafe void ClipMaxUnified<T>(T* data, int size, T maxVal, Shape shape) where T : unmanaged, IComparable<T>
+        public static unsafe void ClipMaxUnified<T>(T* data, long size, T maxVal, Shape shape) where T : unmanaged, IComparable<T>
         {
             if (shape.IsContiguous)
                 ClipMaxHelper(data + shape.Offset, size, maxVal);
@@ -759,7 +759,7 @@ namespace NumSharp.Backends.Kernels
         /// When min[i] > max[i], result is max[i] (per NumPy behavior).
         /// </remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static unsafe void ClipArrayBounds<T>(T* output, T* minArr, T* maxArr, int size)
+        public static unsafe void ClipArrayBounds<T>(T* output, T* minArr, T* maxArr, long size)
             where T : unmanaged, IComparable<T>
         {
             if (size == 0) return;
@@ -843,7 +843,7 @@ namespace NumSharp.Backends.Kernels
         /// Clip with element-wise min array bounds only (no max).
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static unsafe void ClipArrayMin<T>(T* output, T* minArr, int size)
+        public static unsafe void ClipArrayMin<T>(T* output, T* minArr, long size)
             where T : unmanaged, IComparable<T>
         {
             if (size == 0) return;
@@ -926,7 +926,7 @@ namespace NumSharp.Backends.Kernels
         /// Clip with element-wise max array bounds only (no min).
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static unsafe void ClipArrayMax<T>(T* output, T* maxArr, int size)
+        public static unsafe void ClipArrayMax<T>(T* output, T* maxArr, long size)
             where T : unmanaged, IComparable<T>
         {
             if (size == 0) return;
@@ -1008,7 +1008,7 @@ namespace NumSharp.Backends.Kernels
         #region Array Bounds - Scalar Implementations
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe void ClipArrayBoundsScalar<T>(T* output, T* minArr, T* maxArr, int size)
+        private static unsafe void ClipArrayBoundsScalar<T>(T* output, T* minArr, T* maxArr, long size)
             where T : unmanaged, IComparable<T>
         {
             // Use specialized implementations for float/double to handle NaN correctly
@@ -1023,7 +1023,7 @@ namespace NumSharp.Backends.Kernels
                 return;
             }
 
-            for (int i = 0; i < size; i++)
+            for (long i = 0; i < size; i++)
             {
                 var val = output[i];
                 var minVal = minArr[i];
@@ -1038,7 +1038,7 @@ namespace NumSharp.Backends.Kernels
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe void ClipArrayMinScalar<T>(T* output, T* minArr, int size)
+        private static unsafe void ClipArrayMinScalar<T>(T* output, T* minArr, long size)
             where T : unmanaged, IComparable<T>
         {
             // Use specialized implementations for float/double to handle NaN correctly
@@ -1053,7 +1053,7 @@ namespace NumSharp.Backends.Kernels
                 return;
             }
 
-            for (int i = 0; i < size; i++)
+            for (long i = 0; i < size; i++)
             {
                 if (output[i].CompareTo(minArr[i]) < 0)
                     output[i] = minArr[i];
@@ -1061,7 +1061,7 @@ namespace NumSharp.Backends.Kernels
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe void ClipArrayMaxScalar<T>(T* output, T* maxArr, int size)
+        private static unsafe void ClipArrayMaxScalar<T>(T* output, T* maxArr, long size)
             where T : unmanaged, IComparable<T>
         {
             // Use specialized implementations for float/double to handle NaN correctly
@@ -1076,7 +1076,7 @@ namespace NumSharp.Backends.Kernels
                 return;
             }
 
-            for (int i = 0; i < size; i++)
+            for (long i = 0; i < size; i++)
             {
                 if (output[i].CompareTo(maxArr[i]) > 0)
                     output[i] = maxArr[i];
@@ -1086,44 +1086,44 @@ namespace NumSharp.Backends.Kernels
         #region Array Bounds - Float/Double Scalar (NaN-aware)
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe void ClipArrayBoundsScalarFloat(float* output, float* minArr, float* maxArr, int size)
+        private static unsafe void ClipArrayBoundsScalarFloat(float* output, float* minArr, float* maxArr, long size)
         {
-            for (int i = 0; i < size; i++)
+            for (long i = 0; i < size; i++)
                 output[i] = Math.Min(Math.Max(output[i], minArr[i]), maxArr[i]);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe void ClipArrayBoundsScalarDouble(double* output, double* minArr, double* maxArr, int size)
+        private static unsafe void ClipArrayBoundsScalarDouble(double* output, double* minArr, double* maxArr, long size)
         {
-            for (int i = 0; i < size; i++)
+            for (long i = 0; i < size; i++)
                 output[i] = Math.Min(Math.Max(output[i], minArr[i]), maxArr[i]);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe void ClipArrayMinScalarFloat(float* output, float* minArr, int size)
+        private static unsafe void ClipArrayMinScalarFloat(float* output, float* minArr, long size)
         {
-            for (int i = 0; i < size; i++)
+            for (long i = 0; i < size; i++)
                 output[i] = Math.Max(output[i], minArr[i]);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe void ClipArrayMinScalarDouble(double* output, double* minArr, int size)
+        private static unsafe void ClipArrayMinScalarDouble(double* output, double* minArr, long size)
         {
-            for (int i = 0; i < size; i++)
+            for (long i = 0; i < size; i++)
                 output[i] = Math.Max(output[i], minArr[i]);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe void ClipArrayMaxScalarFloat(float* output, float* maxArr, int size)
+        private static unsafe void ClipArrayMaxScalarFloat(float* output, float* maxArr, long size)
         {
-            for (int i = 0; i < size; i++)
+            for (long i = 0; i < size; i++)
                 output[i] = Math.Min(output[i], maxArr[i]);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe void ClipArrayMaxScalarDouble(double* output, double* maxArr, int size)
+        private static unsafe void ClipArrayMaxScalarDouble(double* output, double* maxArr, long size)
         {
-            for (int i = 0; i < size; i++)
+            for (long i = 0; i < size; i++)
                 output[i] = Math.Min(output[i], maxArr[i]);
         }
 
@@ -1132,7 +1132,7 @@ namespace NumSharp.Backends.Kernels
         #region Array Bounds - Scalar Tail Helpers (NaN-aware)
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe void ClipArrayBoundsScalarTail<T>(T* output, T* minArr, T* maxArr, int size)
+        private static unsafe void ClipArrayBoundsScalarTail<T>(T* output, T* minArr, T* maxArr, long size)
             where T : unmanaged
         {
             if (size <= 0) return;
@@ -1147,7 +1147,7 @@ namespace NumSharp.Backends.Kernels
             }
             else
             {
-                for (int i = 0; i < size; i++)
+                for (long i = 0; i < size; i++)
                 {
                     var val = output[i];
                     var minVal = minArr[i];
@@ -1162,7 +1162,7 @@ namespace NumSharp.Backends.Kernels
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe void ClipArrayMinScalarTail<T>(T* output, T* minArr, int size)
+        private static unsafe void ClipArrayMinScalarTail<T>(T* output, T* minArr, long size)
             where T : unmanaged
         {
             if (size <= 0) return;
@@ -1177,7 +1177,7 @@ namespace NumSharp.Backends.Kernels
             }
             else
             {
-                for (int i = 0; i < size; i++)
+                for (long i = 0; i < size; i++)
                 {
                     if (Comparer<T>.Default.Compare(output[i], minArr[i]) < 0)
                         output[i] = minArr[i];
@@ -1186,7 +1186,7 @@ namespace NumSharp.Backends.Kernels
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe void ClipArrayMaxScalarTail<T>(T* output, T* maxArr, int size)
+        private static unsafe void ClipArrayMaxScalarTail<T>(T* output, T* maxArr, long size)
             where T : unmanaged
         {
             if (size <= 0) return;
@@ -1201,7 +1201,7 @@ namespace NumSharp.Backends.Kernels
             }
             else
             {
-                for (int i = 0; i < size; i++)
+                for (long i = 0; i < size; i++)
                 {
                     if (Comparer<T>.Default.Compare(output[i], maxArr[i]) > 0)
                         output[i] = maxArr[i];
@@ -1216,13 +1216,13 @@ namespace NumSharp.Backends.Kernels
         #region Array Bounds - Vector512 SIMD Implementations
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe void ClipArrayBoundsSimd512<T>(T* output, T* minArr, T* maxArr, int size)
+        private static unsafe void ClipArrayBoundsSimd512<T>(T* output, T* minArr, T* maxArr, long size)
             where T : unmanaged
         {
             int vectorCount = Vector512<T>.Count;
-            int vectorEnd = size - vectorCount;
+            long vectorEnd = size - vectorCount;
 
-            int i = 0;
+            long i = 0;
             for (; i <= vectorEnd; i += vectorCount)
             {
                 var vec = Vector512.Load(output + i);
@@ -1238,13 +1238,13 @@ namespace NumSharp.Backends.Kernels
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe void ClipArrayMinSimd512<T>(T* output, T* minArr, int size)
+        private static unsafe void ClipArrayMinSimd512<T>(T* output, T* minArr, long size)
             where T : unmanaged
         {
             int vectorCount = Vector512<T>.Count;
-            int vectorEnd = size - vectorCount;
+            long vectorEnd = size - vectorCount;
 
-            int i = 0;
+            long i = 0;
             for (; i <= vectorEnd; i += vectorCount)
             {
                 var vec = Vector512.Load(output + i);
@@ -1258,13 +1258,13 @@ namespace NumSharp.Backends.Kernels
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe void ClipArrayMaxSimd512<T>(T* output, T* maxArr, int size)
+        private static unsafe void ClipArrayMaxSimd512<T>(T* output, T* maxArr, long size)
             where T : unmanaged
         {
             int vectorCount = Vector512<T>.Count;
-            int vectorEnd = size - vectorCount;
+            long vectorEnd = size - vectorCount;
 
-            int i = 0;
+            long i = 0;
             for (; i <= vectorEnd; i += vectorCount)
             {
                 var vec = Vector512.Load(output + i);
@@ -1282,13 +1282,13 @@ namespace NumSharp.Backends.Kernels
         #region Array Bounds - Vector256 SIMD Implementations
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe void ClipArrayBoundsSimd256<T>(T* output, T* minArr, T* maxArr, int size)
+        private static unsafe void ClipArrayBoundsSimd256<T>(T* output, T* minArr, T* maxArr, long size)
             where T : unmanaged
         {
             int vectorCount = Vector256<T>.Count;
-            int vectorEnd = size - vectorCount;
+            long vectorEnd = size - vectorCount;
 
-            int i = 0;
+            long i = 0;
             for (; i <= vectorEnd; i += vectorCount)
             {
                 var vec = Vector256.Load(output + i);
@@ -1304,13 +1304,13 @@ namespace NumSharp.Backends.Kernels
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe void ClipArrayMinSimd256<T>(T* output, T* minArr, int size)
+        private static unsafe void ClipArrayMinSimd256<T>(T* output, T* minArr, long size)
             where T : unmanaged
         {
             int vectorCount = Vector256<T>.Count;
-            int vectorEnd = size - vectorCount;
+            long vectorEnd = size - vectorCount;
 
-            int i = 0;
+            long i = 0;
             for (; i <= vectorEnd; i += vectorCount)
             {
                 var vec = Vector256.Load(output + i);
@@ -1324,13 +1324,13 @@ namespace NumSharp.Backends.Kernels
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe void ClipArrayMaxSimd256<T>(T* output, T* maxArr, int size)
+        private static unsafe void ClipArrayMaxSimd256<T>(T* output, T* maxArr, long size)
             where T : unmanaged
         {
             int vectorCount = Vector256<T>.Count;
-            int vectorEnd = size - vectorCount;
+            long vectorEnd = size - vectorCount;
 
-            int i = 0;
+            long i = 0;
             for (; i <= vectorEnd; i += vectorCount)
             {
                 var vec = Vector256.Load(output + i);
@@ -1348,13 +1348,13 @@ namespace NumSharp.Backends.Kernels
         #region Array Bounds - Vector128 SIMD Implementations
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe void ClipArrayBoundsSimd128<T>(T* output, T* minArr, T* maxArr, int size)
+        private static unsafe void ClipArrayBoundsSimd128<T>(T* output, T* minArr, T* maxArr, long size)
             where T : unmanaged
         {
             int vectorCount = Vector128<T>.Count;
-            int vectorEnd = size - vectorCount;
+            long vectorEnd = size - vectorCount;
 
-            int i = 0;
+            long i = 0;
             for (; i <= vectorEnd; i += vectorCount)
             {
                 var vec = Vector128.Load(output + i);
@@ -1370,13 +1370,13 @@ namespace NumSharp.Backends.Kernels
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe void ClipArrayMinSimd128<T>(T* output, T* minArr, int size)
+        private static unsafe void ClipArrayMinSimd128<T>(T* output, T* minArr, long size)
             where T : unmanaged
         {
             int vectorCount = Vector128<T>.Count;
-            int vectorEnd = size - vectorCount;
+            long vectorEnd = size - vectorCount;
 
-            int i = 0;
+            long i = 0;
             for (; i <= vectorEnd; i += vectorCount)
             {
                 var vec = Vector128.Load(output + i);
@@ -1390,13 +1390,13 @@ namespace NumSharp.Backends.Kernels
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe void ClipArrayMaxSimd128<T>(T* output, T* maxArr, int size)
+        private static unsafe void ClipArrayMaxSimd128<T>(T* output, T* maxArr, long size)
             where T : unmanaged
         {
             int vectorCount = Vector128<T>.Count;
-            int vectorEnd = size - vectorCount;
+            long vectorEnd = size - vectorCount;
 
-            int i = 0;
+            long i = 0;
             for (; i <= vectorEnd; i += vectorCount)
             {
                 var vec = Vector128.Load(output + i);

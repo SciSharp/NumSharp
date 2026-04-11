@@ -39,18 +39,6 @@ namespace NumSharp
         /// <returns></returns>
         /// <remarks>In case when <see cref="value"/> is not <see cref="dtype"/>, <see cref="Converts.ChangeType(object,System.Type)"/> will be called.</remarks>
         [MethodImpl(Inline)]
-        public static NDArray Scalar(ValueType value)
-        {
-            return new NDArray(UnmanagedStorage.Scalar(value));
-        }
-
-        /// <summary>
-        ///     Creates a scalar <see cref="NDArray"/> of <see cref="value"/> and <see cref="dtype"/>.
-        /// </summary>
-        /// <param name="value">The value of the scalar</param>
-        /// <returns></returns>
-        /// <remarks>In case when <see cref="value"/> is not <see cref="dtype"/>, <see cref="Converts.ChangeType(object,System.Type)"/> will be called.</remarks>
-        [MethodImpl(Inline)]
         public static NDArray Scalar<T>(T value) where T : unmanaged
         {
             return new NDArray(UnmanagedStorage.Scalar(value));

@@ -69,15 +69,19 @@ namespace NumSharp
             var size = shape[0];
             s.Append("[");
 
-            for (int i = 0; i < size; i++)
+            for (long i = 0; i < size; i++)
             {
                 var n_minus_one_dim_slice = this[i];
                 n_minus_one_dim_slice.PrettyPrint(s, flat);
                 if (i < size - 1)
                 {
-                    s.Append(", ");
-                    if (!flat)
+                    if (flat)
+                        s.Append(", ");
+                    else
+                    {
+                        s.Append(",");
                         s.AppendLine();
+                    }
                 }
             }
 

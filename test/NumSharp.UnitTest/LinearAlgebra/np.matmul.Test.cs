@@ -19,7 +19,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
 
             var ret = np.matmul(a, b);
             Console.WriteLine(ret.typecode);
-            ret.flat.AsIterator<int>().ToArray().Should().BeEquivalentTo(new[] { 15, 18, 21, 42, 54, 66, 69, 90, 111 });
+            ret.flat.AsIterator<int>().ToArray().Should().BeEquivalentTo(new long[] { 15, 18, 21, 42, 54, 66, 69, 90, 111 });
         }
 
         [Test]
@@ -40,7 +40,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
 
             var ret = np.matmul(a, b);
             Console.WriteLine(ret.typecode);
-            ret.flat.AsIterator<int>().ToArray().Should().BeEquivalentTo(new[] { 5, 14, 23 });
+            ret.flat.AsIterator<int>().ToArray().Should().BeEquivalentTo(new long[] { 5, 14, 23 });
         }
 
         [Test]
@@ -88,7 +88,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
 
             var ret = np.matmul(a, b);
             Console.WriteLine(ret.typecode);
-            ret.flat.AsIterator<int>().ToArray().Should().BeEquivalentTo(new[] { 0, 0, 0, 0, 1, 2, 0, 2, 4 });
+            ret.flat.AsIterator<int>().ToArray().Should().BeEquivalentTo(new long[] { 0, 0, 0, 0, 1, 2, 0, 2, 4 });
         }
 
         [Test]

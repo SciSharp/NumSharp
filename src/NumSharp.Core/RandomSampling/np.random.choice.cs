@@ -1,3 +1,5 @@
+using System;
+
 namespace NumSharp
 {
     public partial class NumPyRandom
@@ -15,7 +17,7 @@ namespace NumSharp
         /// </remarks>
         public NDArray choice(NDArray a, Shape size = default, bool replace = true, double[] p = null)
         {
-            int arrSize = a.size;
+            long arrSize = a.size;
             NDArray mask = choice(arrSize, size, replace, p);
             return a[mask];
         }
@@ -32,22 +34,38 @@ namespace NumSharp
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.choice.html
         /// </remarks>
         public NDArray choice(int a, Shape size = default, bool replace = true, double[] p = null)
+            => choice((long)a, size, replace, p);
+
+        /// <summary>
+        ///     Generates a random sample from np.arange(a).
+        /// </summary>
+        /// <param name="a">If a long, the random sample is generated from np.arange(a).</param>
+        /// <param name="size">Output shape. Default is None, in which case a single value is returned.</param>
+        /// <param name="replace">Whether the sample is with or without replacement. Default is True.</param>
+        /// <param name="p">The probabilities associated with each entry. If not given, the sample assumes a uniform distribution.</param>
+        /// <returns>The generated random samples.</returns>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.choice.html
+        /// </remarks>
+        public NDArray choice(long a, Shape size = default, bool replace = true, double[] p = null)
         {
             if (size.IsEmpty)
                 size = Shape.Scalar;
 
-            NDArray arr = np.arange(a);
+            // For large populations (>int.MaxValue), use int64 dtype for indices
+            Type indexDtype = a > int.MaxValue ? typeof(long) : typeof(int);
+
             NDArray idx;
 
             if (p == null)
             {
-                idx = randint(0, arr.size, size);
+                idx = randint(0, a, size, indexDtype);
             }
             else
             {
                 NDArray cdf = np.cumsum(p);
                 cdf /= cdf[cdf.size - 1];
-                NDArray uniformSamples = uniform(0, 1, (int[])size);
+                NDArray uniformSamples = uniform(0, 1, size.dimensions);
                 idx = np.searchsorted(cdf, uniformSamples);
             }
 

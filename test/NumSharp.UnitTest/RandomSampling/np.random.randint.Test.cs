@@ -43,7 +43,7 @@ namespace NumSharp.UnitTest.RandomSampling
                 result_4.Array.As<ArraySlice<int>>().All(v => v >= 0 && v < 5).Should().BeTrue();
                 result_4.Array.As<ArraySlice<int>>().Should().HaveCount(1);
 
-                var result_5 = np.random.randint(0, 5, null); // throws System.NullReferenceException (equivalent to result_4)
+                var result_5 = np.random.randint(0, 5, default(Shape)); // throws System.NullReferenceException (equivalent to result_4)
                 result_5.Array.As<ArraySlice<int>>().All(v => v >= 0 && v < 5).Should().BeTrue();
                 result_5.Array.As<ArraySlice<int>>().Should().HaveCount(1);
 

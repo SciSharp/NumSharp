@@ -105,55 +105,52 @@ namespace NumSharp
                 if (Shape.IsContiguous)
                 {
                     var src = (T*)this.Address;
-                    int len = this.size;
-                    for (int i = 0; i < len; i++)
+                    long len = this.size;
+                    for (long i = 0; i < len; i++)
                         hashset.Add(src[i]);
-
-                    var dst = new NDArray(InfoOf<T>.NPTypeCode, Shape.Vector(hashset.Count));
-                    Hashset<T>.CopyTo(hashset, (ArraySlice<T>)dst.Array);
-                    // NumPy returns sorted unique values with NaN at end
-                    SortUniqueSpan<T>((T*)dst.Address, hashset.Count);
-                    return dst;
                 }
                 else
                 {
-                    int len = this.size;
+                    long len = this.size;
                     var flat = this.flat;
                     var src = (T*)flat.Address;
-                    Func<int, int> getOffset = flat.Shape.GetOffset_1D;
-                    for (int i = 0; i < len; i++)
+                    Func<long, long> getOffset = flat.Shape.GetOffset_1D;
+                    for (long i = 0; i < len; i++)
                         hashset.Add(src[getOffset(i)]);
-
-                    var dst = new NDArray(InfoOf<T>.NPTypeCode, Shape.Vector(hashset.Count));
-                    Hashset<T>.CopyTo(hashset, (ArraySlice<T>)dst.Array);
-                    // NumPy returns sorted unique values with NaN at end
-                    SortUniqueSpan<T>((T*)dst.Address, hashset.Count);
-                    return dst;
                 }
+
+                // Allocate memory directly, copy, sort, then wrap in NDArray
+                var count = hashset.LongCount;
+                var memoryBlock = new UnmanagedMemoryBlock<T>(count);
+                var arraySlice = new ArraySlice<T>(memoryBlock);
+                Hashset<T>.CopyTo(hashset, arraySlice);
+
+                // NumPy returns sorted unique values with NaN at end
+                SortUnique<T>(memoryBlock.Address, count);
+
+                // Create NDArray directly from ArraySlice (no additional allocation)
+                return new NDArray(arraySlice, Shape.Vector(count));
             }
         }
 
         /// <summary>
-        /// Sorts the unique values span. For float/double, uses NaN-aware comparison
+        /// Sorts the unique values using LongIntroSort. For float/double, uses NaN-aware comparison
         /// that places NaN at the end (matching NumPy behavior).
+        /// Supports long indexing for arrays exceeding int.MaxValue elements.
         /// </summary>
-        private static unsafe void SortUniqueSpan<T>(T* ptr, int count) where T : unmanaged, IComparable<T>
+        private static unsafe void SortUnique<T>(T* ptr, long count) where T : unmanaged, IComparable<T>
         {
-            var span = new Span<T>(ptr, count);
-
             if (typeof(T) == typeof(double))
             {
-                var doubleSpan = System.Runtime.InteropServices.MemoryMarshal.Cast<T, double>(span);
-                doubleSpan.Sort(NaNAwareDoubleComparer.Instance.Compare);
+                Utilities.LongIntroSort.Sort((double*)ptr, count, NaNAwareDoubleComparer.Instance.Compare);
             }
             else if (typeof(T) == typeof(float))
             {
-                var floatSpan = System.Runtime.InteropServices.MemoryMarshal.Cast<T, float>(span);
-                floatSpan.Sort(NaNAwareSingleComparer.Instance.Compare);
+                Utilities.LongIntroSort.Sort((float*)ptr, count, NaNAwareSingleComparer.Instance.Compare);
             }
             else
             {
-                span.Sort();
+                Utilities.LongIntroSort.Sort(ptr, count);
             }
         }
     }

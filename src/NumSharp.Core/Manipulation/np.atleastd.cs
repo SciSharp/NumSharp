@@ -36,7 +36,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.atleast_3d.html</remarks>
         public static NDArray atleast_3d(NDArray arr)
         {
-            if (arr == null)
+            if (arr is null)
                 throw new ArgumentNullException(nameof(arr));
 
             switch (arr.ndim)
@@ -159,7 +159,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.atleast_2d.html</remarks>
         public static NDArray atleast_2d(NDArray arr)
         {
-            if (arr == null)
+            if (arr is null)
                 throw new ArgumentNullException(nameof(arr));
 
             switch (arr.ndim)
@@ -272,7 +272,7 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.atleast_1d.html</remarks>
         public static NDArray atleast_1d(NDArray arr)
         {
-            if (arr == null)
+            if (arr is null)
                 throw new ArgumentNullException(nameof(arr));
 
             switch (arr.ndim)

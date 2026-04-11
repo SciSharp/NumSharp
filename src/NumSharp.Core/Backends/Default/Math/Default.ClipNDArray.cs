@@ -45,8 +45,12 @@ namespace NumSharp.Backends
             var boundsToCheck = new NDArray[] { lhs, min, max }.Where(nd => !(nd is null)).ToArray();
             var broadcasted = np.broadcast_arrays(boundsToCheck);
 
-            var _min = min is null ? null : np.broadcast_to(min, lhs.Shape);
-            var _max = max is null ? null : np.broadcast_to(max, lhs.Shape);
+            // Determine output dtype
+            var outType = typeCode ?? lhs.typecode;
+
+            // Broadcast and cast min/max to output dtype to avoid mixed-type kernel bugs
+            var _min = min is null ? null : np.broadcast_to(min, lhs.Shape).astype(outType);
+            var _max = max is null ? null : np.broadcast_to(max, lhs.Shape).astype(outType);
 
             // Create or validate output array
             if (@out is null)
@@ -79,7 +83,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// Fast path for contiguous arrays - uses IL kernel with SIMD support.
         /// </summary>
-        private unsafe NDArray ClipNDArrayContiguous(NDArray @out, NDArray min, NDArray max, int len)
+        private unsafe NDArray ClipNDArrayContiguous(NDArray @out, NDArray min, NDArray max, long len)
         {
             if (!(min is null) && !(max is null))
             {
@@ -212,7 +216,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// General path for non-contiguous/broadcast arrays - uses GetAtIndex for element access.
         /// </summary>
-        private unsafe NDArray ClipNDArrayGeneral(NDArray @out, NDArray min, NDArray max, int len)
+        private unsafe NDArray ClipNDArrayGeneral(NDArray @out, NDArray min, NDArray max, long len)
         {
             if (!(min is null) && !(max is null))
             {
@@ -341,7 +345,7 @@ namespace NumSharp.Backends
 
         #region General Path Core Methods
 
-        private static unsafe void ClipNDArrayGeneralCore<T>(NDArray @out, NDArray min, NDArray max, int len)
+        private static unsafe void ClipNDArrayGeneralCore<T>(NDArray @out, NDArray min, NDArray max, long len)
             where T : unmanaged, IComparable<T>
         {
             // Use specialized implementations for float/double to handle NaN correctly
@@ -357,9 +361,9 @@ namespace NumSharp.Backends
             }
 
             var outAddr = (T*)@out.Address;
-            for (int i = 0; i < len; i++)
+            for (long i = 0; i < len; i++)
             {
-                int outOffset = @out.Shape.TransformOffset(i);
+                long outOffset = @out.Shape.TransformOffset(i);
                 var val = outAddr[outOffset];
                 var minVal = Converts.ChangeType<T>(min.GetAtIndex(i));
                 var maxVal = Converts.ChangeType<T>(max.GetAtIndex(i));
@@ -373,7 +377,7 @@ namespace NumSharp.Backends
             }
         }
 
-        private static unsafe void ClipNDArrayMinGeneralCore<T>(NDArray @out, NDArray min, int len)
+        private static unsafe void ClipNDArrayMinGeneralCore<T>(NDArray @out, NDArray min, long len)
             where T : unmanaged, IComparable<T>
         {
             // Use specialized implementations for float/double to handle NaN correctly
@@ -389,9 +393,9 @@ namespace NumSharp.Backends
             }
 
             var outAddr = (T*)@out.Address;
-            for (int i = 0; i < len; i++)
+            for (long i = 0; i < len; i++)
             {
-                int outOffset = @out.Shape.TransformOffset(i);
+                long outOffset = @out.Shape.TransformOffset(i);
                 var val = outAddr[outOffset];
                 var minVal = Converts.ChangeType<T>(min.GetAtIndex(i));
 
@@ -400,7 +404,7 @@ namespace NumSharp.Backends
             }
         }
 
-        private static unsafe void ClipNDArrayMaxGeneralCore<T>(NDArray @out, NDArray max, int len)
+        private static unsafe void ClipNDArrayMaxGeneralCore<T>(NDArray @out, NDArray max, long len)
             where T : unmanaged, IComparable<T>
         {
             // Use specialized implementations for float/double to handle NaN correctly
@@ -416,9 +420,9 @@ namespace NumSharp.Backends
             }
 
             var outAddr = (T*)@out.Address;
-            for (int i = 0; i < len; i++)
+            for (long i = 0; i < len; i++)
             {
-                int outOffset = @out.Shape.TransformOffset(i);
+                long outOffset = @out.Shape.TransformOffset(i);
                 var val = outAddr[outOffset];
                 var maxVal = Converts.ChangeType<T>(max.GetAtIndex(i));
 
@@ -431,12 +435,12 @@ namespace NumSharp.Backends
 
         // These use Math.Max/Min which properly propagate NaN per IEEE semantics
 
-        private static unsafe void ClipNDArrayGeneralCoreFloat(NDArray @out, NDArray min, NDArray max, int len)
+        private static unsafe void ClipNDArrayGeneralCoreFloat(NDArray @out, NDArray min, NDArray max, long len)
         {
             var outAddr = (float*)@out.Address;
-            for (int i = 0; i < len; i++)
+            for (long i = 0; i < len; i++)
             {
-                int outOffset = @out.Shape.TransformOffset(i);
+                long outOffset = @out.Shape.TransformOffset(i);
                 var val = outAddr[outOffset];
                 var minVal = Converts.ToSingle(min.GetAtIndex(i));
                 var maxVal = Converts.ToSingle(max.GetAtIndex(i));
@@ -444,12 +448,12 @@ namespace NumSharp.Backends
             }
         }
 
-        private static unsafe void ClipNDArrayGeneralCoreDouble(NDArray @out, NDArray min, NDArray max, int len)
+        private static unsafe void ClipNDArrayGeneralCoreDouble(NDArray @out, NDArray min, NDArray max, long len)
         {
             var outAddr = (double*)@out.Address;
-            for (int i = 0; i < len; i++)
+            for (long i = 0; i < len; i++)
             {
-                int outOffset = @out.Shape.TransformOffset(i);
+                long outOffset = @out.Shape.TransformOffset(i);
                 var val = outAddr[outOffset];
                 var minVal = Converts.ToDouble(min.GetAtIndex(i));
                 var maxVal = Converts.ToDouble(max.GetAtIndex(i));
@@ -457,48 +461,48 @@ namespace NumSharp.Backends
             }
         }
 
-        private static unsafe void ClipNDArrayMinGeneralCoreFloat(NDArray @out, NDArray min, int len)
+        private static unsafe void ClipNDArrayMinGeneralCoreFloat(NDArray @out, NDArray min, long len)
         {
             var outAddr = (float*)@out.Address;
-            for (int i = 0; i < len; i++)
+            for (long i = 0; i < len; i++)
             {
-                int outOffset = @out.Shape.TransformOffset(i);
+                long outOffset = @out.Shape.TransformOffset(i);
                 var val = outAddr[outOffset];
                 var minVal = Converts.ToSingle(min.GetAtIndex(i));
                 outAddr[outOffset] = Math.Max(val, minVal);
             }
         }
 
-        private static unsafe void ClipNDArrayMinGeneralCoreDouble(NDArray @out, NDArray min, int len)
+        private static unsafe void ClipNDArrayMinGeneralCoreDouble(NDArray @out, NDArray min, long len)
         {
             var outAddr = (double*)@out.Address;
-            for (int i = 0; i < len; i++)
+            for (long i = 0; i < len; i++)
             {
-                int outOffset = @out.Shape.TransformOffset(i);
+                long outOffset = @out.Shape.TransformOffset(i);
                 var val = outAddr[outOffset];
                 var minVal = Converts.ToDouble(min.GetAtIndex(i));
                 outAddr[outOffset] = Math.Max(val, minVal);
             }
         }
 
-        private static unsafe void ClipNDArrayMaxGeneralCoreFloat(NDArray @out, NDArray max, int len)
+        private static unsafe void ClipNDArrayMaxGeneralCoreFloat(NDArray @out, NDArray max, long len)
         {
             var outAddr = (float*)@out.Address;
-            for (int i = 0; i < len; i++)
+            for (long i = 0; i < len; i++)
             {
-                int outOffset = @out.Shape.TransformOffset(i);
+                long outOffset = @out.Shape.TransformOffset(i);
                 var val = outAddr[outOffset];
                 var maxVal = Converts.ToSingle(max.GetAtIndex(i));
                 outAddr[outOffset] = Math.Min(val, maxVal);
             }
         }
 
-        private static unsafe void ClipNDArrayMaxGeneralCoreDouble(NDArray @out, NDArray max, int len)
+        private static unsafe void ClipNDArrayMaxGeneralCoreDouble(NDArray @out, NDArray max, long len)
         {
             var outAddr = (double*)@out.Address;
-            for (int i = 0; i < len; i++)
+            for (long i = 0; i < len; i++)
             {
-                int outOffset = @out.Shape.TransformOffset(i);
+                long outOffset = @out.Shape.TransformOffset(i);
                 var val = outAddr[outOffset];
                 var maxVal = Converts.ToDouble(max.GetAtIndex(i));
                 outAddr[outOffset] = Math.Min(val, maxVal);
@@ -511,9 +515,9 @@ namespace NumSharp.Backends
 
         #region Scalar Fallbacks for Non-SIMD Types (Decimal, Char) - Array Bounds
 
-        private static unsafe void ClipArrayBoundsDecimal(decimal* output, decimal* minArr, decimal* maxArr, int size)
+        private static unsafe void ClipArrayBoundsDecimal(decimal* output, decimal* minArr, decimal* maxArr, long size)
         {
-            for (int i = 0; i < size; i++)
+            for (long i = 0; i < size; i++)
             {
                 var val = output[i];
                 if (val < minArr[i]) val = minArr[i];
@@ -522,21 +526,21 @@ namespace NumSharp.Backends
             }
         }
 
-        private static unsafe void ClipArrayMinDecimal(decimal* output, decimal* minArr, int size)
+        private static unsafe void ClipArrayMinDecimal(decimal* output, decimal* minArr, long size)
         {
-            for (int i = 0; i < size; i++)
+            for (long i = 0; i < size; i++)
                 if (output[i] < minArr[i]) output[i] = minArr[i];
         }
 
-        private static unsafe void ClipArrayMaxDecimal(decimal* output, decimal* maxArr, int size)
+        private static unsafe void ClipArrayMaxDecimal(decimal* output, decimal* maxArr, long size)
         {
-            for (int i = 0; i < size; i++)
+            for (long i = 0; i < size; i++)
                 if (output[i] > maxArr[i]) output[i] = maxArr[i];
         }
 
-        private static unsafe void ClipArrayBoundsChar(char* output, char* minArr, char* maxArr, int size)
+        private static unsafe void ClipArrayBoundsChar(char* output, char* minArr, char* maxArr, long size)
         {
-            for (int i = 0; i < size; i++)
+            for (long i = 0; i < size; i++)
             {
                 var val = output[i];
                 if (val < minArr[i]) val = minArr[i];
@@ -545,15 +549,15 @@ namespace NumSharp.Backends
             }
         }
 
-        private static unsafe void ClipArrayMinChar(char* output, char* minArr, int size)
+        private static unsafe void ClipArrayMinChar(char* output, char* minArr, long size)
         {
-            for (int i = 0; i < size; i++)
+            for (long i = 0; i < size; i++)
                 if (output[i] < minArr[i]) output[i] = minArr[i];
         }
 
-        private static unsafe void ClipArrayMaxChar(char* output, char* maxArr, int size)
+        private static unsafe void ClipArrayMaxChar(char* output, char* maxArr, long size)
         {
-            for (int i = 0; i < size; i++)
+            for (long i = 0; i < size; i++)
                 if (output[i] > maxArr[i]) output[i] = maxArr[i];
         }
 

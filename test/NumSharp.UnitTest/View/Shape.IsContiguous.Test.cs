@@ -32,12 +32,12 @@ namespace NumSharp.UnitTest.View
             // np.arange(10)[2:7] = [2, 3, 4, 5, 6]
             var a = np.arange(10);
             var s = a["2:7"];
-            s.shape.Should().BeEquivalentTo(new[] { 5 });
-            s.GetInt32(0).Should().Be(2);
-            s.GetInt32(1).Should().Be(3);
-            s.GetInt32(2).Should().Be(4);
-            s.GetInt32(3).Should().Be(5);
-            s.GetInt32(4).Should().Be(6);
+            s.shape.Should().BeEquivalentTo(new long[] { 5 });
+            s.GetInt64(0).Should().Be(2);
+            s.GetInt64(1).Should().Be(3);
+            s.GetInt64(2).Should().Be(4);
+            s.GetInt64(3).Should().Be(5);
+            s.GetInt64(4).Should().Be(6);
         }
 
         [Test]
@@ -46,12 +46,12 @@ namespace NumSharp.UnitTest.View
             // np.arange(10)[::2] = [0, 2, 4, 6, 8]
             var a = np.arange(10);
             var s = a["::2"];
-            s.shape.Should().BeEquivalentTo(new[] { 5 });
-            s.GetInt32(0).Should().Be(0);
-            s.GetInt32(1).Should().Be(2);
-            s.GetInt32(2).Should().Be(4);
-            s.GetInt32(3).Should().Be(6);
-            s.GetInt32(4).Should().Be(8);
+            s.shape.Should().BeEquivalentTo(new long[] { 5 });
+            s.GetInt64(0).Should().Be(0);
+            s.GetInt64(1).Should().Be(2);
+            s.GetInt64(2).Should().Be(4);
+            s.GetInt64(3).Should().Be(6);
+            s.GetInt64(4).Should().Be(8);
         }
 
         [Test]
@@ -60,12 +60,12 @@ namespace NumSharp.UnitTest.View
             // np.arange(5)[::-1] = [4, 3, 2, 1, 0]
             var a = np.arange(5);
             var s = a["::-1"];
-            s.shape.Should().BeEquivalentTo(new[] { 5 });
-            s.GetInt32(0).Should().Be(4);
-            s.GetInt32(1).Should().Be(3);
-            s.GetInt32(2).Should().Be(2);
-            s.GetInt32(3).Should().Be(1);
-            s.GetInt32(4).Should().Be(0);
+            s.shape.Should().BeEquivalentTo(new long[] { 5 });
+            s.GetInt64(0).Should().Be(4);
+            s.GetInt64(1).Should().Be(3);
+            s.GetInt64(2).Should().Be(2);
+            s.GetInt64(3).Should().Be(1);
+            s.GetInt64(4).Should().Be(0);
         }
 
         [Test]
@@ -74,8 +74,8 @@ namespace NumSharp.UnitTest.View
             // np.arange(10)[3:4] = [3]
             var a = np.arange(10);
             var s = a["3:4"];
-            s.shape.Should().BeEquivalentTo(new[] { 1 });
-            s.GetInt32(0).Should().Be(3);
+            s.shape.Should().BeEquivalentTo(new long[] { 1 });
+            s.GetInt64(0).Should().Be(3);
         }
 
         #endregion
@@ -88,15 +88,15 @@ namespace NumSharp.UnitTest.View
             // np.arange(12).reshape(3,4)[1:3] = [[4,5,6,7],[8,9,10,11]]
             var a = np.arange(12).reshape(3, 4);
             var s = a["1:3"];
-            s.shape.Should().BeEquivalentTo(new[] { 2, 4 });
-            s.GetInt32(0, 0).Should().Be(4);
-            s.GetInt32(0, 1).Should().Be(5);
-            s.GetInt32(0, 2).Should().Be(6);
-            s.GetInt32(0, 3).Should().Be(7);
-            s.GetInt32(1, 0).Should().Be(8);
-            s.GetInt32(1, 1).Should().Be(9);
-            s.GetInt32(1, 2).Should().Be(10);
-            s.GetInt32(1, 3).Should().Be(11);
+            s.shape.Should().BeEquivalentTo(new long[] { 2, 4 });
+            s.GetInt64(0, 0).Should().Be(4);
+            s.GetInt64(0, 1).Should().Be(5);
+            s.GetInt64(0, 2).Should().Be(6);
+            s.GetInt64(0, 3).Should().Be(7);
+            s.GetInt64(1, 0).Should().Be(8);
+            s.GetInt64(1, 1).Should().Be(9);
+            s.GetInt64(1, 2).Should().Be(10);
+            s.GetInt64(1, 3).Should().Be(11);
         }
 
         [Test]
@@ -105,13 +105,13 @@ namespace NumSharp.UnitTest.View
             // np.arange(12).reshape(3,4)[:,1:3] = [[1,2],[5,6],[9,10]]
             var a = np.arange(12).reshape(3, 4);
             var s = a[":,1:3"];
-            s.shape.Should().BeEquivalentTo(new[] { 3, 2 });
-            s.GetInt32(0, 0).Should().Be(1);
-            s.GetInt32(0, 1).Should().Be(2);
-            s.GetInt32(1, 0).Should().Be(5);
-            s.GetInt32(1, 1).Should().Be(6);
-            s.GetInt32(2, 0).Should().Be(9);
-            s.GetInt32(2, 1).Should().Be(10);
+            s.shape.Should().BeEquivalentTo(new long[] { 3, 2 });
+            s.GetInt64(0, 0).Should().Be(1);
+            s.GetInt64(0, 1).Should().Be(2);
+            s.GetInt64(1, 0).Should().Be(5);
+            s.GetInt64(1, 1).Should().Be(6);
+            s.GetInt64(2, 0).Should().Be(9);
+            s.GetInt64(2, 1).Should().Be(10);
         }
 
         [Test]
@@ -120,11 +120,11 @@ namespace NumSharp.UnitTest.View
             // np.arange(12).reshape(3,4)[1:2] = [[4,5,6,7]]
             var a = np.arange(12).reshape(3, 4);
             var s = a["1:2"];
-            s.shape.Should().BeEquivalentTo(new[] { 1, 4 });
-            s.GetInt32(0, 0).Should().Be(4);
-            s.GetInt32(0, 1).Should().Be(5);
-            s.GetInt32(0, 2).Should().Be(6);
-            s.GetInt32(0, 3).Should().Be(7);
+            s.shape.Should().BeEquivalentTo(new long[] { 1, 4 });
+            s.GetInt64(0, 0).Should().Be(4);
+            s.GetInt64(0, 1).Should().Be(5);
+            s.GetInt64(0, 2).Should().Be(6);
+            s.GetInt64(0, 3).Should().Be(7);
         }
 
         [Test]
@@ -133,9 +133,9 @@ namespace NumSharp.UnitTest.View
             // np.arange(12).reshape(3,4)[1:2,1:3] = [[5,6]]
             var a = np.arange(12).reshape(3, 4);
             var s = a["1:2,1:3"];
-            s.shape.Should().BeEquivalentTo(new[] { 1, 2 });
-            s.GetInt32(0, 0).Should().Be(5);
-            s.GetInt32(0, 1).Should().Be(6);
+            s.shape.Should().BeEquivalentTo(new long[] { 1, 2 });
+            s.GetInt64(0, 0).Should().Be(5);
+            s.GetInt64(0, 1).Should().Be(6);
         }
 
         #endregion
@@ -148,7 +148,7 @@ namespace NumSharp.UnitTest.View
             // np.arange(24).reshape(2,3,4)[0:1] — shape (1,3,4), values 0..11
             var a = np.arange(24).reshape(2, 3, 4);
             var s = a["0:1"];
-            s.shape.Should().BeEquivalentTo(new[] { 1, 3, 4 });
+            s.shape.Should().BeEquivalentTo(new long[] { 1, 3, 4 });
             for (int i = 0; i < 12; i++)
                 s.GetAtIndex(i).Should().Be(i);
         }
@@ -159,15 +159,15 @@ namespace NumSharp.UnitTest.View
             // np.arange(24).reshape(2,3,4)[0:1,1:3,:] = [[4..11]]
             var a = np.arange(24).reshape(2, 3, 4);
             var s = a["0:1,1:3,:"];
-            s.shape.Should().BeEquivalentTo(new[] { 1, 2, 4 });
-            s.GetInt32(0, 0, 0).Should().Be(4);
-            s.GetInt32(0, 0, 1).Should().Be(5);
-            s.GetInt32(0, 0, 2).Should().Be(6);
-            s.GetInt32(0, 0, 3).Should().Be(7);
-            s.GetInt32(0, 1, 0).Should().Be(8);
-            s.GetInt32(0, 1, 1).Should().Be(9);
-            s.GetInt32(0, 1, 2).Should().Be(10);
-            s.GetInt32(0, 1, 3).Should().Be(11);
+            s.shape.Should().BeEquivalentTo(new long[] { 1, 2, 4 });
+            s.GetInt64(0, 0, 0).Should().Be(4);
+            s.GetInt64(0, 0, 1).Should().Be(5);
+            s.GetInt64(0, 0, 2).Should().Be(6);
+            s.GetInt64(0, 0, 3).Should().Be(7);
+            s.GetInt64(0, 1, 0).Should().Be(8);
+            s.GetInt64(0, 1, 1).Should().Be(9);
+            s.GetInt64(0, 1, 2).Should().Be(10);
+            s.GetInt64(0, 1, 3).Should().Be(11);
         }
 
         [Test]
@@ -177,11 +177,11 @@ namespace NumSharp.UnitTest.View
             // Row 0: [4,5,6,7], Row 1: [16,17,18,19]
             var a = np.arange(24).reshape(2, 3, 4);
             var s = a[":,1:2,:"];
-            s.shape.Should().BeEquivalentTo(new[] { 2, 1, 4 });
-            s.GetInt32(0, 0, 0).Should().Be(4);
-            s.GetInt32(0, 0, 3).Should().Be(7);
-            s.GetInt32(1, 0, 0).Should().Be(16);
-            s.GetInt32(1, 0, 3).Should().Be(19);
+            s.shape.Should().BeEquivalentTo(new long[] { 2, 1, 4 });
+            s.GetInt64(0, 0, 0).Should().Be(4);
+            s.GetInt64(0, 0, 3).Should().Be(7);
+            s.GetInt64(1, 0, 0).Should().Be(16);
+            s.GetInt64(1, 0, 3).Should().Be(19);
         }
 
         #endregion
@@ -195,10 +195,10 @@ namespace NumSharp.UnitTest.View
             var a = np.arange(10);
             var s1 = a["2:8"]; // [2,3,4,5,6,7]
             var s2 = s1["1:4"]; // [3,4,5]
-            s2.shape.Should().BeEquivalentTo(new[] { 3 });
-            s2.GetInt32(0).Should().Be(3);
-            s2.GetInt32(1).Should().Be(4);
-            s2.GetInt32(2).Should().Be(5);
+            s2.shape.Should().BeEquivalentTo(new long[] { 3 });
+            s2.GetInt64(0).Should().Be(3);
+            s2.GetInt64(1).Should().Be(4);
+            s2.GetInt64(2).Should().Be(5);
         }
 
         [Test]
@@ -208,8 +208,8 @@ namespace NumSharp.UnitTest.View
             var a = np.arange(10);
             var stepped = a["::2"]; // [0,2,4,6,8]
             var s = stepped["0:1"];
-            s.shape.Should().BeEquivalentTo(new[] { 1 });
-            s.GetInt32(0).Should().Be(0);
+            s.shape.Should().BeEquivalentTo(new long[] { 1 });
+            s.GetInt64(0).Should().Be(0);
         }
 
         [Test]
@@ -219,9 +219,9 @@ namespace NumSharp.UnitTest.View
             var a = np.arange(10);
             var stepped = a["::2"]; // [0,2,4,6,8]
             var s = stepped["1:3"];
-            s.shape.Should().BeEquivalentTo(new[] { 2 });
-            s.GetInt32(0).Should().Be(2);
-            s.GetInt32(1).Should().Be(4);
+            s.shape.Should().BeEquivalentTo(new long[] { 2 });
+            s.GetInt64(0).Should().Be(2);
+            s.GetInt64(1).Should().Be(4);
         }
 
         #endregion
@@ -235,12 +235,12 @@ namespace NumSharp.UnitTest.View
             var a = np.arange(10);
             var s = a["2:7"];
             var r = np.ravel(s);
-            r.shape.Should().BeEquivalentTo(new[] { 5 });
-            r.GetInt32(0).Should().Be(2);
-            r.GetInt32(1).Should().Be(3);
-            r.GetInt32(2).Should().Be(4);
-            r.GetInt32(3).Should().Be(5);
-            r.GetInt32(4).Should().Be(6);
+            r.shape.Should().BeEquivalentTo(new long[] { 5 });
+            r.GetInt64(0).Should().Be(2);
+            r.GetInt64(1).Should().Be(3);
+            r.GetInt64(2).Should().Be(4);
+            r.GetInt64(3).Should().Be(5);
+            r.GetInt64(4).Should().Be(6);
         }
 
         [Test]
@@ -250,9 +250,9 @@ namespace NumSharp.UnitTest.View
             var a = np.arange(12).reshape(3, 4);
             var s = a["1:3"];
             var r = np.ravel(s);
-            r.shape.Should().BeEquivalentTo(new[] { 8 });
+            r.shape.Should().BeEquivalentTo(new long[] { 8 });
             for (int i = 0; i < 8; i++)
-                r.GetInt32(i).Should().Be(4 + i);
+                r.GetInt64(i).Should().Be(4 + i);
         }
 
         [Test]
@@ -262,13 +262,13 @@ namespace NumSharp.UnitTest.View
             var a = np.arange(12).reshape(3, 4);
             var s = a[":,1:3"];
             var r = np.ravel(s);
-            r.shape.Should().BeEquivalentTo(new[] { 6 });
-            r.GetInt32(0).Should().Be(1);
-            r.GetInt32(1).Should().Be(2);
-            r.GetInt32(2).Should().Be(5);
-            r.GetInt32(3).Should().Be(6);
-            r.GetInt32(4).Should().Be(9);
-            r.GetInt32(5).Should().Be(10);
+            r.shape.Should().BeEquivalentTo(new long[] { 6 });
+            r.GetInt64(0).Should().Be(1);
+            r.GetInt64(1).Should().Be(2);
+            r.GetInt64(2).Should().Be(5);
+            r.GetInt64(3).Should().Be(6);
+            r.GetInt64(4).Should().Be(9);
+            r.GetInt64(5).Should().Be(10);
         }
 
         [Test]
@@ -278,12 +278,12 @@ namespace NumSharp.UnitTest.View
             var a = np.arange(10);
             var s = a["::2"];
             var r = np.ravel(s);
-            r.shape.Should().BeEquivalentTo(new[] { 5 });
-            r.GetInt32(0).Should().Be(0);
-            r.GetInt32(1).Should().Be(2);
-            r.GetInt32(2).Should().Be(4);
-            r.GetInt32(3).Should().Be(6);
-            r.GetInt32(4).Should().Be(8);
+            r.shape.Should().BeEquivalentTo(new long[] { 5 });
+            r.GetInt64(0).Should().Be(0);
+            r.GetInt64(1).Should().Be(2);
+            r.GetInt64(2).Should().Be(4);
+            r.GetInt64(3).Should().Be(6);
+            r.GetInt64(4).Should().Be(8);
         }
 
         #endregion
@@ -306,7 +306,7 @@ namespace NumSharp.UnitTest.View
         {
             var a = np.arange(20).reshape(4, 5);
             var s = a["1:3"]; // rows 1-2
-            s.shape.Should().BeEquivalentTo(new[] { 2, 5 });
+            s.shape.Should().BeEquivalentTo(new long[] { 2, 5 });
             for (int i = 0; i < 10; i++)
                 s.GetAtIndex(i).Should().Be(5 + i, $"index {i}");
         }
@@ -343,12 +343,12 @@ namespace NumSharp.UnitTest.View
             var a = np.arange(10);
             var s = a["2:7"]; // [2,3,4,5,6]
             var r = np.roll(s, 2);
-            r.shape.Should().BeEquivalentTo(new[] { 5 });
-            r.GetInt32(0).Should().Be(5);
-            r.GetInt32(1).Should().Be(6);
-            r.GetInt32(2).Should().Be(2);
-            r.GetInt32(3).Should().Be(3);
-            r.GetInt32(4).Should().Be(4);
+            r.shape.Should().BeEquivalentTo(new long[] { 5 });
+            r.GetInt64(0).Should().Be(5);
+            r.GetInt64(1).Should().Be(6);
+            r.GetInt64(2).Should().Be(2);
+            r.GetInt64(3).Should().Be(3);
+            r.GetInt64(4).Should().Be(4);
         }
 
         [Test]
@@ -359,14 +359,14 @@ namespace NumSharp.UnitTest.View
             var a = np.arange(12).reshape(3, 4);
             var s = a["1:3"];
             var r = np.roll(s, 1, 1);
-            r.GetInt32(0, 0).Should().Be(7);
-            r.GetInt32(0, 1).Should().Be(4);
-            r.GetInt32(0, 2).Should().Be(5);
-            r.GetInt32(0, 3).Should().Be(6);
-            r.GetInt32(1, 0).Should().Be(11);
-            r.GetInt32(1, 1).Should().Be(8);
-            r.GetInt32(1, 2).Should().Be(9);
-            r.GetInt32(1, 3).Should().Be(10);
+            r.GetInt64(0, 0).Should().Be(7);
+            r.GetInt64(0, 1).Should().Be(4);
+            r.GetInt64(0, 2).Should().Be(5);
+            r.GetInt64(0, 3).Should().Be(6);
+            r.GetInt64(1, 0).Should().Be(11);
+            r.GetInt64(1, 1).Should().Be(8);
+            r.GetInt64(1, 2).Should().Be(9);
+            r.GetInt64(1, 3).Should().Be(10);
         }
 
         #endregion
@@ -537,7 +537,7 @@ namespace NumSharp.UnitTest.View
         public void IsContiguous_Broadcast_False()
         {
             // Broadcast is never contiguous
-            var a = np.broadcast_to(np.array(new[] { 1, 2, 3 }), new Shape(3, 3));
+            var a = np.broadcast_to(np.array(new long[] { 1, 2, 3 }), new Shape(3, 3));
             a.Shape.IsContiguous.Should().BeFalse(
                 "broadcast arrays have stride=0 dims");
         }
@@ -552,8 +552,8 @@ namespace NumSharp.UnitTest.View
             // NumPy: s = a[2:7]; s[0] = 999; a[2] == 999
             var a = np.arange(10);
             var s = a["2:7"];
-            s.SetInt32(999, 0);
-            a.GetInt32(2).Should().Be(999,
+            s.SetInt64(999, 0);
+            a.GetInt64(2).Should().Be(999,
                 "contiguous slice should share memory with original");
         }
 
@@ -563,8 +563,8 @@ namespace NumSharp.UnitTest.View
             // NumPy: s = a[1:3]; s[0,0] = 999; a[1,0] == 999
             var a = np.arange(12).reshape(3, 4);
             var s = a["1:3"];
-            s.SetInt32(999, 0, 0);
-            a.GetInt32(1, 0).Should().Be(999,
+            s.SetInt64(999, 0, 0);
+            a.GetInt64(1, 0).Should().Be(999,
                 "contiguous row slice should share memory with original");
         }
 
@@ -574,8 +574,8 @@ namespace NumSharp.UnitTest.View
             // NumPy: s = a[1:2,1:3]; s[0,0] = 999; a[1,1] == 999
             var a = np.arange(12).reshape(3, 4);
             var s = a["1:2,1:3"];
-            s.SetInt32(999, 0, 0);
-            a.GetInt32(1, 1).Should().Be(999,
+            s.SetInt64(999, 0, 0);
+            a.GetInt64(1, 1).Should().Be(999,
                 "contiguous single-row partial-col slice should share memory");
         }
 
@@ -585,8 +585,8 @@ namespace NumSharp.UnitTest.View
             // NumPy: s = a[2:8][1:4]; s[0] = 999; a[3] == 999
             var a = np.arange(10);
             var s = a["2:8"]["1:4"];
-            s.SetInt32(999, 0);
-            a.GetInt32(3).Should().Be(999,
+            s.SetInt64(999, 0);
+            a.GetInt64(3).Should().Be(999,
                 "slice of contiguous slice should share memory with root");
         }
 
@@ -601,8 +601,8 @@ namespace NumSharp.UnitTest.View
             var a = np.arange(10);
             var s = a["::2"];
             var r = np.ravel(s);
-            r.SetInt32(999, 0);
-            a.GetInt32(0).Should().Be(0,
+            r.SetInt64(999, 0);
+            a.GetInt64(0).Should().Be(0,
                 "ravel of stepped slice should be a copy");
         }
 
@@ -612,8 +612,8 @@ namespace NumSharp.UnitTest.View
             var a = np.arange(12).reshape(3, 4);
             var s = a[":,1:3"];
             var r = np.ravel(s);
-            r.SetInt32(999, 0);
-            a.GetInt32(0, 1).Should().Be(1,
+            r.SetInt64(999, 0);
+            a.GetInt64(0, 1).Should().Be(1,
                 "ravel of column slice should be a copy");
         }
 
@@ -628,8 +628,8 @@ namespace NumSharp.UnitTest.View
             var a = np.arange(10);
             var s = a["2:7"];
             var r = np.ravel(s);
-            r.SetInt32(999, 0);
-            a.GetInt32(2).Should().Be(999,
+            r.SetInt64(999, 0);
+            a.GetInt64(2).Should().Be(999,
                 "ravel of contiguous slice should return a view");
         }
 
@@ -640,8 +640,8 @@ namespace NumSharp.UnitTest.View
             var a = np.arange(12).reshape(3, 4);
             var s = a["1:3"];
             var r = np.ravel(s);
-            r.SetInt32(999, 0);
-            a.GetInt32(1, 0).Should().Be(999,
+            r.SetInt64(999, 0);
+            a.GetInt64(1, 0).Should().Be(999,
                 "ravel of contiguous row slice should return a view");
         }
 
@@ -654,10 +654,10 @@ namespace NumSharp.UnitTest.View
         {
             // np.copyto with contiguous slices should use fast memcpy path
             var src = np.arange(10)["2:7"]; // [2,3,4,5,6]
-            var dst = np.zeros(new Shape(5), np.int32);
+            var dst = np.zeros(new Shape(5), np.int64);
             np.copyto(dst, src);
             for (int i = 0; i < 5; i++)
-                dst.GetInt32(i).Should().Be(2 + i);
+                dst.GetInt64(i).Should().Be(2 + i);
         }
 
         #endregion
@@ -735,11 +735,11 @@ namespace NumSharp.UnitTest.View
             var a = np.arange(12);
             var s = a["2:10"]; // [2,3,4,5,6,7,8,9]
             var r = s.reshape(2, 4);
-            r.shape.Should().BeEquivalentTo(new[] { 2, 4 });
-            r.GetInt32(0, 0).Should().Be(2);
-            r.GetInt32(0, 3).Should().Be(5);
-            r.GetInt32(1, 0).Should().Be(6);
-            r.GetInt32(1, 3).Should().Be(9);
+            r.shape.Should().BeEquivalentTo(new long[] { 2, 4 });
+            r.GetInt64(0, 0).Should().Be(2);
+            r.GetInt64(0, 3).Should().Be(5);
+            r.GetInt64(1, 0).Should().Be(6);
+            r.GetInt64(1, 3).Should().Be(9);
         }
 
         #endregion

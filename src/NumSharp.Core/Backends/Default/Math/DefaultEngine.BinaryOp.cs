@@ -74,9 +74,9 @@ namespace NumSharp.Backends
 
             // Classify execution path using strides
             ExecutionPath path;
-            fixed (int* lhsStrides = leftShape.strides)
-            fixed (int* rhsStrides = rightShape.strides)
-            fixed (int* shape = resultShape.dimensions)
+            fixed (long* lhsStrides = leftShape.strides)
+            fixed (long* rhsStrides = rightShape.strides)
+            fixed (long* shape = resultShape.dimensions)
             {
                 path = ClassifyPath(lhsStrides, rhsStrides, shape, resultShape.NDim, resultType);
             }
@@ -114,18 +114,18 @@ namespace NumSharp.Backends
             // Dispatch based on lhs type first
             return lhsType switch
             {
-                NPTypeCode.Boolean => InvokeBinaryScalarLhs(func, lhs.GetBoolean(), rhs, rhsType, resultType),
-                NPTypeCode.Byte => InvokeBinaryScalarLhs(func, lhs.GetByte(), rhs, rhsType, resultType),
-                NPTypeCode.Int16 => InvokeBinaryScalarLhs(func, lhs.GetInt16(), rhs, rhsType, resultType),
-                NPTypeCode.UInt16 => InvokeBinaryScalarLhs(func, lhs.GetUInt16(), rhs, rhsType, resultType),
-                NPTypeCode.Int32 => InvokeBinaryScalarLhs(func, lhs.GetInt32(), rhs, rhsType, resultType),
-                NPTypeCode.UInt32 => InvokeBinaryScalarLhs(func, lhs.GetUInt32(), rhs, rhsType, resultType),
-                NPTypeCode.Int64 => InvokeBinaryScalarLhs(func, lhs.GetInt64(), rhs, rhsType, resultType),
-                NPTypeCode.UInt64 => InvokeBinaryScalarLhs(func, lhs.GetUInt64(), rhs, rhsType, resultType),
-                NPTypeCode.Char => InvokeBinaryScalarLhs(func, lhs.GetChar(), rhs, rhsType, resultType),
-                NPTypeCode.Single => InvokeBinaryScalarLhs(func, lhs.GetSingle(), rhs, rhsType, resultType),
-                NPTypeCode.Double => InvokeBinaryScalarLhs(func, lhs.GetDouble(), rhs, rhsType, resultType),
-                NPTypeCode.Decimal => InvokeBinaryScalarLhs(func, lhs.GetDecimal(), rhs, rhsType, resultType),
+                NPTypeCode.Boolean => InvokeBinaryScalarLhs(func, lhs.GetBoolean(Array.Empty<long>()), rhs, rhsType, resultType),
+                NPTypeCode.Byte => InvokeBinaryScalarLhs(func, lhs.GetByte(Array.Empty<long>()), rhs, rhsType, resultType),
+                NPTypeCode.Int16 => InvokeBinaryScalarLhs(func, lhs.GetInt16(Array.Empty<long>()), rhs, rhsType, resultType),
+                NPTypeCode.UInt16 => InvokeBinaryScalarLhs(func, lhs.GetUInt16(Array.Empty<long>()), rhs, rhsType, resultType),
+                NPTypeCode.Int32 => InvokeBinaryScalarLhs(func, lhs.GetInt32(Array.Empty<long>()), rhs, rhsType, resultType),
+                NPTypeCode.UInt32 => InvokeBinaryScalarLhs(func, lhs.GetUInt32(Array.Empty<long>()), rhs, rhsType, resultType),
+                NPTypeCode.Int64 => InvokeBinaryScalarLhs(func, lhs.GetInt64(Array.Empty<long>()), rhs, rhsType, resultType),
+                NPTypeCode.UInt64 => InvokeBinaryScalarLhs(func, lhs.GetUInt64(Array.Empty<long>()), rhs, rhsType, resultType),
+                NPTypeCode.Char => InvokeBinaryScalarLhs(func, lhs.GetChar(Array.Empty<long>()), rhs, rhsType, resultType),
+                NPTypeCode.Single => InvokeBinaryScalarLhs(func, lhs.GetSingle(Array.Empty<long>()), rhs, rhsType, resultType),
+                NPTypeCode.Double => InvokeBinaryScalarLhs(func, lhs.GetDouble(Array.Empty<long>()), rhs, rhsType, resultType),
+                NPTypeCode.Decimal => InvokeBinaryScalarLhs(func, lhs.GetDecimal(Array.Empty<long>()), rhs, rhsType, resultType),
                 _ => throw new NotSupportedException($"LHS type {lhsType} not supported")
             };
         }
@@ -140,18 +140,18 @@ namespace NumSharp.Backends
             // Dispatch based on rhs type
             return rhsType switch
             {
-                NPTypeCode.Boolean => InvokeBinaryScalarRhs(func, lhsVal, rhs.GetBoolean(), resultType),
-                NPTypeCode.Byte => InvokeBinaryScalarRhs(func, lhsVal, rhs.GetByte(), resultType),
-                NPTypeCode.Int16 => InvokeBinaryScalarRhs(func, lhsVal, rhs.GetInt16(), resultType),
-                NPTypeCode.UInt16 => InvokeBinaryScalarRhs(func, lhsVal, rhs.GetUInt16(), resultType),
-                NPTypeCode.Int32 => InvokeBinaryScalarRhs(func, lhsVal, rhs.GetInt32(), resultType),
-                NPTypeCode.UInt32 => InvokeBinaryScalarRhs(func, lhsVal, rhs.GetUInt32(), resultType),
-                NPTypeCode.Int64 => InvokeBinaryScalarRhs(func, lhsVal, rhs.GetInt64(), resultType),
-                NPTypeCode.UInt64 => InvokeBinaryScalarRhs(func, lhsVal, rhs.GetUInt64(), resultType),
-                NPTypeCode.Char => InvokeBinaryScalarRhs(func, lhsVal, rhs.GetChar(), resultType),
-                NPTypeCode.Single => InvokeBinaryScalarRhs(func, lhsVal, rhs.GetSingle(), resultType),
-                NPTypeCode.Double => InvokeBinaryScalarRhs(func, lhsVal, rhs.GetDouble(), resultType),
-                NPTypeCode.Decimal => InvokeBinaryScalarRhs(func, lhsVal, rhs.GetDecimal(), resultType),
+                NPTypeCode.Boolean => InvokeBinaryScalarRhs(func, lhsVal, rhs.GetBoolean(Array.Empty<long>()), resultType),
+                NPTypeCode.Byte => InvokeBinaryScalarRhs(func, lhsVal, rhs.GetByte(Array.Empty<long>()), resultType),
+                NPTypeCode.Int16 => InvokeBinaryScalarRhs(func, lhsVal, rhs.GetInt16(Array.Empty<long>()), resultType),
+                NPTypeCode.UInt16 => InvokeBinaryScalarRhs(func, lhsVal, rhs.GetUInt16(Array.Empty<long>()), resultType),
+                NPTypeCode.Int32 => InvokeBinaryScalarRhs(func, lhsVal, rhs.GetInt32(Array.Empty<long>()), resultType),
+                NPTypeCode.UInt32 => InvokeBinaryScalarRhs(func, lhsVal, rhs.GetUInt32(Array.Empty<long>()), resultType),
+                NPTypeCode.Int64 => InvokeBinaryScalarRhs(func, lhsVal, rhs.GetInt64(Array.Empty<long>()), resultType),
+                NPTypeCode.UInt64 => InvokeBinaryScalarRhs(func, lhsVal, rhs.GetUInt64(Array.Empty<long>()), resultType),
+                NPTypeCode.Char => InvokeBinaryScalarRhs(func, lhsVal, rhs.GetChar(Array.Empty<long>()), resultType),
+                NPTypeCode.Single => InvokeBinaryScalarRhs(func, lhsVal, rhs.GetSingle(Array.Empty<long>()), resultType),
+                NPTypeCode.Double => InvokeBinaryScalarRhs(func, lhsVal, rhs.GetDouble(Array.Empty<long>()), resultType),
+                NPTypeCode.Decimal => InvokeBinaryScalarRhs(func, lhsVal, rhs.GetDecimal(Array.Empty<long>()), resultType),
                 _ => throw new NotSupportedException($"RHS type {rhsType} not supported")
             };
         }
@@ -187,7 +187,7 @@ namespace NumSharp.Backends
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static unsafe ExecutionPath ClassifyPath(
-            int* lhsStrides, int* rhsStrides, int* shape, int ndim, NPTypeCode resultType)
+            long* lhsStrides, long* rhsStrides, long* shape, int ndim, NPTypeCode resultType)
         {
             if (ndim == 0)
                 return ExecutionPath.SimdFull;
@@ -209,8 +209,8 @@ namespace NumSharp.Backends
                 return ExecutionPath.SimdScalarLeft;
 
             // Check for inner-contiguous (chunk-able)
-            int lhsInner = lhsStrides[ndim - 1];
-            int rhsInner = rhsStrides[ndim - 1];
+            long lhsInner = lhsStrides[ndim - 1];
+            long rhsInner = rhsStrides[ndim - 1];
             if ((lhsInner == 1 || lhsInner == 0) && (rhsInner == 1 || rhsInner == 0))
                 return ExecutionPath.SimdChunk;
 
@@ -235,9 +235,9 @@ namespace NumSharp.Backends
             byte* lhsAddr = (byte*)lhs.Address + lhsShape.offset * lhsElemSize;
             byte* rhsAddr = (byte*)rhs.Address + rhsShape.offset * rhsElemSize;
 
-            fixed (int* lhsStrides = lhsShape.strides)
-            fixed (int* rhsStrides = rhsShape.strides)
-            fixed (int* shape = result.shape)
+            fixed (long* lhsStrides = lhsShape.strides)
+            fixed (long* rhsStrides = rhsShape.strides)
+            fixed (long* shape = result.shape)
             {
                 kernel(
                     (void*)lhsAddr,

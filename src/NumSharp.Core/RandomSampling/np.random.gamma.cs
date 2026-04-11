@@ -36,7 +36,23 @@ namespace NumSharp
         ///     shape (sometimes designated "k") and scale (sometimes designated "theta"),
         ///     where both parameters are > 0.
         /// </remarks>
-        public NDArray gamma(double shape, double scale, params int[] size)
+        public NDArray gamma(double shape, double scale, params int[] size) => gamma(shape, scale, Shape.ComputeLongShape(size));
+
+        /// <summary>
+        ///     Draw samples from a Gamma distribution.
+        /// </summary>
+        /// <param name="shape">The shape of the gamma distribution. Must be non-negative.</param>
+        /// <param name="scale">The scale of the gamma distribution. Must be non-negative. Default is 1.0.</param>
+        /// <param name="size">Output shape.</param>
+        /// <returns>Drawn samples from the parameterized gamma distribution.</returns>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.gamma.html
+        ///     <br/>
+        ///     Samples are drawn from a Gamma distribution with specified parameters,
+        ///     shape (sometimes designated "k") and scale (sometimes designated "theta"),
+        ///     where both parameters are > 0.
+        /// </remarks>
+        public NDArray gamma(double shape, double scale, params long[] size)
         {
             if (shape < 1)
             {
@@ -44,7 +60,7 @@ namespace NumSharp
                 double c = (1.0 / 3.0) / Math.Sqrt(d);
 
                 NDArray u = uniform(0, 1, size);
-                return scale * Marsaglia(d, c, size) * Math.Pow(u, 1.0 / shape);
+                return scale * Marsaglia(d, c, size) * np.power(u, 1.0 / shape);
             }
             else
             {
@@ -56,7 +72,7 @@ namespace NumSharp
         }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        private NDArray Marsaglia(double d, double c, int[] size)
+        private NDArray Marsaglia(double d, double c, long[] size)
         {
             var result = new NDArray<double>(size);
             unsafe
@@ -64,7 +80,7 @@ namespace NumSharp
                 var dst = result.Address;
                 var len = result.size;
                 Func<double> nextDouble = randomizer.NextDouble;
-                for (int i = 0; i < len; i++)
+                for (long i = 0; i < len; i++)
                 {
                     while (true)
                     {

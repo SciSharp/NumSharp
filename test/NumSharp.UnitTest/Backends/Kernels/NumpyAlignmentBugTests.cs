@@ -37,14 +37,13 @@ namespace NumSharp.UnitTest.Backends.Kernels;
 /// - BUG-25: np.power(int, float) returns int instead of float64 (MEDIUM) - FIXED
 /// - BUG-32: np.random.choice replace=False parameter ignored (HIGH)
 /// </summary>
-[OpenBugs]
 public class NumpyAlignmentBugTests
 {
     private const double Tolerance = 1e-10;
 
     #region BUG-1: Boolean Indexing Setter Throws NotImplementedException (CRITICAL)
 
-    [Test]
+    [Test, OpenBugs]
     public void Bug1_BooleanMask_ReturnsCorrectValues()
     {
         // NUMPY 2.4.2:
@@ -64,7 +63,7 @@ public class NumpyAlignmentBugTests
         Assert.AreEqual(50, result.GetInt32(2));
     }
 
-    [Test]
+    [Test, OpenBugs]
     public void Bug1_BooleanMask_AllFalse_ReturnsEmpty()
     {
         var arr = np.array(new[] { 1, 2, 3 });
@@ -75,7 +74,7 @@ public class NumpyAlignmentBugTests
         Assert.AreEqual(0, result.size, "all False mask should return empty array");
     }
 
-    [Test]
+    [Test, OpenBugs]
     public void Bug1_BooleanMask_AllTrue_ReturnsAll()
     {
         var arr = np.array(new[] { 1, 2, 3 });
@@ -89,7 +88,7 @@ public class NumpyAlignmentBugTests
         Assert.AreEqual(3, result.GetInt32(2));
     }
 
-    [Test]
+    [Test, OpenBugs]
     public void BooleanMask_FromComparison_Works()
     {
         // Using comparison result directly as mask
@@ -105,7 +104,7 @@ public class NumpyAlignmentBugTests
         Assert.AreEqual(5, result.GetInt32(2));
     }
 
-    [Test]
+    [Test, OpenBugs]
     public void Bug1_BooleanMask_Assignment_ThrowsNotImplementedException()
     {
         // This is the actual bug - setter throws NotImplementedException
@@ -127,7 +126,7 @@ public class NumpyAlignmentBugTests
 
     #region BUG-2: np.nonzero 1-D Shape Wrong (HIGH)
 
-    [Test]
+    [Test, OpenBugs]
     public void Bug2_Nonzero_1D_ReturnsCorrectShape()
     {
         // NUMPY 2.4.2:
@@ -140,10 +139,10 @@ public class NumpyAlignmentBugTests
 
         Assert.AreEqual(1, result.Length, "1D input should return tuple of 1 array");
         Assert.AreEqual(3, result[0].size, "3 nonzero elements");
-        CollectionAssert.AreEqual(new[] { 0, 2, 4 }, result[0].ToArray<int>());
+        CollectionAssert.AreEqual(new long[] { 0, 2, 4 }, result[0].ToArray<long>());
     }
 
-    [Test]
+    [Test, OpenBugs]
     public void Bug2_Nonzero_EmptyArray()
     {
         var empty = np.array(Array.Empty<double>());
@@ -159,7 +158,7 @@ public class NumpyAlignmentBugTests
 
     #region BUG-3: np.all/np.any with axis Throws (HIGH)
 
-    [Test]
+    [Test, OpenBugs]
     public void Bug3_All_Axis0()
     {
         // NUMPY 2.4.2:
@@ -176,7 +175,7 @@ public class NumpyAlignmentBugTests
         Assert.IsTrue(result.GetBoolean(2));
     }
 
-    [Test]
+    [Test, OpenBugs]
     public void Bug3_All_Axis1()
     {
         var arr = np.array(new[,] { { true, false, true }, { true, true, true } });
@@ -189,7 +188,7 @@ public class NumpyAlignmentBugTests
         Assert.IsTrue(result.GetBoolean(1));  // second row all True
     }
 
-    [Test]
+    [Test, OpenBugs]
     public void Bug3_Any_Axis0()
     {
         // NUMPY 2.4.2:
@@ -206,7 +205,7 @@ public class NumpyAlignmentBugTests
         Assert.IsTrue(result.GetBoolean(2));
     }
 
-    [Test]
+    [Test, OpenBugs]
     public void Bug3_Any_Axis1()
     {
         var arr = np.array(new[,] { { false, false, false }, { false, true, false } });
@@ -223,7 +222,7 @@ public class NumpyAlignmentBugTests
 
     #region BUG-4: np.std/np.var ddof Ignored (MEDIUM)
 
-    [Test]
+    [Test, OpenBugs]
     public void Bug4_Std_Ddof1()
     {
         // NUMPY 2.4.2:
@@ -241,7 +240,7 @@ public class NumpyAlignmentBugTests
             "ddof=1 should give sample std dev, not population");
     }
 
-    [Test]
+    [Test, OpenBugs]
     public void Bug4_Var_Ddof1()
     {
         // NUMPY 2.4.2:
@@ -260,7 +259,7 @@ public class NumpyAlignmentBugTests
 
     #region BUG-5: np.std/np.var Empty Array Returns NaN (MEDIUM)
 
-    [Test]
+    [Test, OpenBugs]
     public void Bug5_Std_EmptyArray_ReturnsNaN()
     {
         // NUMPY 2.4.2 returns nan for empty array (with RuntimeWarning)
@@ -272,7 +271,7 @@ public class NumpyAlignmentBugTests
         Assert.IsTrue(double.IsNaN(result.GetDouble(0)), "empty array should return NaN");
     }
 
-    [Test]
+    [Test, OpenBugs]
     public void Bug5_Var_EmptyArray_ReturnsNaN()
     {
         var empty = np.array(Array.Empty<double>());
@@ -287,7 +286,7 @@ public class NumpyAlignmentBugTests
 
     #region BUG-6: np.sum Empty 2D Returns Scalar (MEDIUM)
 
-    [Test]
+    [Test, OpenBugs]
     public void Bug6_Sum_Empty2D_Axis0_ReturnsArray()
     {
         // NUMPY 2.4.2:
@@ -325,7 +324,7 @@ public class NumpyAlignmentBugTests
 
     #region BUG-9: np.unique Returns Unsorted (MEDIUM)
 
-    [Test]
+    [Test, OpenBugs]
     public void Bug9_Unique_ReturnsSorted()
     {
         // NUMPY 2.4.2:
@@ -345,7 +344,7 @@ public class NumpyAlignmentBugTests
         Assert.AreEqual(4, result.GetInt32(3));
     }
 
-    [Test]
+    [Test, OpenBugs]
     public void Bug9_Unique_Float64_Sorted()
     {
         // NUMPY: np.unique([3.5, 1.5, 2.5]) = [1.5, 2.5, 3.5]
@@ -359,7 +358,7 @@ public class NumpyAlignmentBugTests
         Assert.AreEqual(3.5, result.GetDouble(2), Tolerance);
     }
 
-    [Test]
+    [Test, OpenBugs]
     public void Bug9_Unique_WithDuplicates()
     {
         // NUMPY: np.unique([5, 5, 5, 1, 1, 3]) = [1, 3, 5]
@@ -377,7 +376,7 @@ public class NumpyAlignmentBugTests
 
     #region BUG-10: np.repeat with Array Repeats Fails (MEDIUM)
 
-    [Test]
+    [Test, OpenBugs]
     public void Bug10_Repeat_ArrayRepeats()
     {
         // NUMPY 2.4.2:
@@ -396,7 +395,7 @@ public class NumpyAlignmentBugTests
             result.ToArray<int>());
     }
 
-    [Test]
+    [Test, OpenBugs]
     public void Bug10_Repeat_ArrayRepeats_DifferentCounts()
     {
         // NUMPY: np.repeat([10, 20], [1, 3]) = [10, 20, 20, 20]
@@ -410,7 +409,7 @@ public class NumpyAlignmentBugTests
             result.ToArray<int>());
     }
 
-    [Test]
+    [Test, OpenBugs]
     public void Bug10_Repeat_ArrayRepeats_WithZero()
     {
         // NUMPY: np.repeat([1, 2, 3], [0, 2, 0]) = [2, 2]
@@ -431,7 +430,7 @@ public class NumpyAlignmentBugTests
     // Commenting out until the parameter is added
 
     /*
-    [Test]
+    [Test, OpenBugs]
     public void Bug11_Repeat_2D_Axis0()
     {
         // NUMPY 2.4.2:
@@ -453,7 +452,7 @@ public class NumpyAlignmentBugTests
         Assert.AreEqual(3, result.GetInt32(3, 0));  // repeated
     }
 
-    [Test]
+    [Test, OpenBugs]
     public void Bug11_Repeat_2D_Axis1()
     {
         // NUMPY 2.4.2:
@@ -473,7 +472,7 @@ public class NumpyAlignmentBugTests
         Assert.AreEqual(2, result.GetInt32(0, 3));  // repeated
     }
 
-    [Test]
+    [Test, OpenBugs]
     public void Bug11_Repeat_2D_Axis_NegativeAxis()
     {
         // NUMPY: np.repeat(arr, 3, axis=-1) same as axis=1 for 2D
@@ -491,7 +490,7 @@ public class NumpyAlignmentBugTests
 
     #region BUG-12: np.searchsorted Scalar Input Throws (MEDIUM)
 
-    [Test]
+    [Test, OpenBugs]
     public void Bug12_Searchsorted_ScalarInput()
     {
         // NUMPY 2.4.2:
@@ -506,7 +505,7 @@ public class NumpyAlignmentBugTests
         Assert.AreEqual(2, result);
     }
 
-    [Test]
+    [Test, OpenBugs]
     public void Bug12_Searchsorted_ScalarInput_NotFound()
     {
         // NUMPY: np.searchsorted([1, 3, 5], 4) = 2
@@ -517,7 +516,7 @@ public class NumpyAlignmentBugTests
         Assert.AreEqual(2, result);
     }
 
-    [Test]
+    [Test, OpenBugs]
     public void Bug12_Searchsorted_ArrayInput_WrongResults()
     {
         // NUMPY 2.4.2:
@@ -538,7 +537,7 @@ public class NumpyAlignmentBugTests
 
     #region BUG-13: np.linspace Returns float32 Instead of float64 (LOW)
 
-    [Test]
+    [Test, OpenBugs]
     public void Bug13_Linspace_ReturnsDtype()
     {
         // NUMPY 2.4.2:
@@ -551,7 +550,7 @@ public class NumpyAlignmentBugTests
             "np.linspace should return float64, not float32");
     }
 
-    [Test]
+    [Test, OpenBugs]
     public void Bug13_Linspace_Values()
     {
         // NUMPY: np.linspace(0, 10, 5) = [0, 2.5, 5, 7.5, 10]
@@ -569,7 +568,7 @@ public class NumpyAlignmentBugTests
 
     #region BUG-14: np.abs Changes int dtype to Double (MEDIUM)
 
-    [Test]
+    [Test, OpenBugs]
     public void Bug14_Abs_PreservesIntDtype()
     {
         // NUMPY 2.4.2:
@@ -587,7 +586,7 @@ public class NumpyAlignmentBugTests
             absArr.ToArray<int>());
     }
 
-    [Test]
+    [Test, OpenBugs]
     public void Bug14_Abs_Float64_PreservesDtype()
     {
         // NUMPY: np.abs([-3.5, 2.5]).dtype = float64
@@ -604,7 +603,7 @@ public class NumpyAlignmentBugTests
 
     #region BUG-15: np.moveaxis Returns Wrong Shape (MEDIUM)
 
-    [Test]
+    [Test, OpenBugs]
     public void Bug15_Moveaxis_3D()
     {
         // NUMPY 2.4.2:
@@ -622,7 +621,7 @@ public class NumpyAlignmentBugTests
         Assert.AreEqual(3, moved.shape[2], "axis 2 should become 3 (original axis 0)");
     }
 
-    [Test]
+    [Test, OpenBugs]
     public void Bug15_Moveaxis_ToFirst()
     {
         // NUMPY: np.moveaxis(arr, -1, 0).shape on (3,4,5) -> (5,3,4)
@@ -639,7 +638,7 @@ public class NumpyAlignmentBugTests
 
     #region BUG-16: nd.astype(int) Uses Rounding Instead of Truncation (MEDIUM)
 
-    [Test]
+    [Test, OpenBugs]
     public void Bug16_Astype_FloatToInt_ShouldTruncate()
     {
         // NUMPY 2.4.2:
@@ -657,7 +656,7 @@ public class NumpyAlignmentBugTests
             "astype(int) should truncate, not round");
     }
 
-    [Test]
+    [Test, OpenBugs]
     public void Bug16_Astype_NegativeFloatToInt()
     {
         // NUMPY: np.array([-1.7, -2.3, -3.9]).astype(int) = [-1, -2, -3]
@@ -675,7 +674,7 @@ public class NumpyAlignmentBugTests
 
     #region BUG-17: np.convolve Throws NullReferenceException (HIGH)
 
-    [Test]
+    [Test, OpenBugs]
     public void Bug17_Convolve_Basic()
     {
         // NUMPY 2.4.2:
@@ -696,7 +695,7 @@ public class NumpyAlignmentBugTests
         Assert.AreEqual(1.5, result.GetDouble(4), 1e-10);
     }
 
-    [Test]
+    [Test, OpenBugs]
     public void Bug17_Convolve_IntArrays()
     {
         // NUMPY: np.convolve([1, 2, 3], [1, 1]) = [1, 3, 5, 3]
@@ -713,7 +712,7 @@ public class NumpyAlignmentBugTests
 
     #region BUG-18: np.negative Applies abs() Then Negates (HIGH)
 
-    [Test]
+    [Test, OpenBugs]
     public void Bug18_Negative_ShouldJustNegate()
     {
         // NUMPY 2.4.2:
@@ -732,7 +731,7 @@ public class NumpyAlignmentBugTests
         Assert.AreEqual(4, neg.GetInt32(3), "negative of -4 should be 4");
     }
 
-    [Test]
+    [Test, OpenBugs]
     public void Bug18_Negative_Float64()
     {
         // NUMPY: np.negative([-1.5, 2.5]) = [1.5, -2.5]
@@ -744,7 +743,7 @@ public class NumpyAlignmentBugTests
         Assert.AreEqual(-2.5, neg.GetDouble(1), 1e-10);
     }
 
-    [Test]
+    [Test, OpenBugs]
     public void Bug18_Negative_Zero()
     {
         // NUMPY: np.negative([0]) = [0] (or -0.0 for float)
@@ -759,7 +758,7 @@ public class NumpyAlignmentBugTests
 
     #region BUG-19: np.positive Applies abs() Instead of Identity (HIGH)
 
-    [Test]
+    [Test, OpenBugs]
     public void Bug19_Positive_ShouldBeIdentity()
     {
         // NUMPY 2.4.2:
@@ -778,7 +777,7 @@ public class NumpyAlignmentBugTests
         Assert.AreEqual(-4, pos.GetInt32(3), "positive should preserve -4");
     }
 
-    [Test]
+    [Test, OpenBugs]
     public void Bug19_Positive_Float64()
     {
         // NUMPY: np.positive([-1.5, 2.5]) = [-1.5, 2.5]
@@ -797,7 +796,7 @@ public class NumpyAlignmentBugTests
     // A) np.arange returns int32 instead of int64 on 64-bit systems
     // B) np.sum doesn't auto-promote to int64 to prevent overflow
 
-    [Test]
+    [Test, OpenBugs]
     public void Bug20_Arange_ShouldReturnInt64()
     {
         // NUMPY 2.4.2:
@@ -813,7 +812,7 @@ public class NumpyAlignmentBugTests
             "np.arange should return int64 on 64-bit systems, not int32");
     }
 
-    [Test]
+    [Test, OpenBugs]
     public void Bug20_Sum_ShouldAutoPromoteToPreventOverflow()
     {
         // NUMPY 2.4.2:
@@ -835,7 +834,7 @@ public class NumpyAlignmentBugTests
             $"Sum should be {expected}, got {actual}. NumPy auto-promotes to int64.");
     }
 
-    [Test]
+    [Test, OpenBugs]
     public void Bug20_Sum_SmallArray_NoOverflow()
     {
         // Verify small arrays work correctly (no overflow)
@@ -848,7 +847,7 @@ public class NumpyAlignmentBugTests
             "Sum of arange(50000) should be 1,249,975,000");
     }
 
-    [Test]
+    [Test, OpenBugs]
     public void Bug20_Sum_LargeArray_Overflow()
     {
         // 100000 * 99999 / 2 = 4,999,950,000 (exceeds int32)
@@ -863,7 +862,7 @@ public class NumpyAlignmentBugTests
             $"Sum should be {expected}, got {actual}.");
     }
 
-    [Test]
+    [Test, OpenBugs]
     public void Bug20_Sum_Float64_Workaround()
     {
         // Workaround: convert to float64 to avoid overflow
@@ -880,7 +879,7 @@ public class NumpyAlignmentBugTests
 
     #region BUG-21: np.amax Empty Array Returns -Inf (MEDIUM)
 
-    [Test]
+    [Test, OpenBugs]
     public void Bug21_Amax_EmptyArray_ShouldThrow()
     {
         // NUMPY 2.4.2:
@@ -910,7 +909,7 @@ public class NumpyAlignmentBugTests
 
     #region BUG-22: np.amin Empty Array Returns +Inf (MEDIUM)
 
-    [Test]
+    [Test, OpenBugs]
     public void Bug22_Amin_EmptyArray_ShouldThrow()
     {
         // NUMPY 2.4.2:
@@ -991,7 +990,7 @@ public class NumpyAlignmentBugTests
         }
     }
 
-    [Test]
+    [Test, OpenBugs]
     public void Bug32_Choice_ReplaceTrue_AllowsDuplicates()
     {
         // NUMPY: replace=True (default) allows duplicates
@@ -1036,7 +1035,7 @@ public class NumpyAlignmentBugTests
 
     #region Verified Working: np.modf
 
-    [Test]
+    [Test, OpenBugs]
     public void Modf_Works()
     {
         // NUMPY: np.modf([1.5, 2.7, -3.2]) = ([0.5, 0.7, -0.2], [1.0, 2.0, -3.0])
@@ -1058,7 +1057,7 @@ public class NumpyAlignmentBugTests
 
     #region Verified Working: Negative Axis
 
-    [Test]
+    [Test, OpenBugs]
     public void Sum_NegativeAxis_Works()
     {
         // NUMPY: np.sum([[1,2],[3,4]], axis=-1) = [3, 7]
@@ -1077,7 +1076,7 @@ public class NumpyAlignmentBugTests
 
     #region Verified Working: 3D Sum with Axis
 
-    [Test]
+    [Test, OpenBugs]
     public void Sum_3D_Axis1_Works()
     {
         // NUMPY: np.sum(arr, axis=1) on (2,3,4) -> (2,4)
@@ -1094,7 +1093,7 @@ public class NumpyAlignmentBugTests
 
     #region Verified Working: np.repeat with Scalar
 
-    [Test]
+    [Test, OpenBugs]
     public void Repeat_Scalar_Works()
     {
         // This works correctly
@@ -1110,7 +1109,7 @@ public class NumpyAlignmentBugTests
 
     #region Verified Working: np.clip
 
-    [Test]
+    [Test, OpenBugs]
     public void Clip_Works()
     {
         // np.clip verified working
@@ -1126,7 +1125,7 @@ public class NumpyAlignmentBugTests
 
     #region Verified Working: np.roll
 
-    [Test]
+    [Test, OpenBugs]
     public void Roll_1D_Positive()
     {
         // NUMPY: np.roll([1,2,3,4,5], 2) = [4,5,1,2,3]
@@ -1138,7 +1137,7 @@ public class NumpyAlignmentBugTests
             result.ToArray<int>());
     }
 
-    [Test]
+    [Test, OpenBugs]
     public void Roll_1D_Negative()
     {
         // NUMPY: np.roll([1,2,3,4,5], -2) = [3,4,5,1,2]
@@ -1154,7 +1153,7 @@ public class NumpyAlignmentBugTests
 
     #region Verified Working: np.argsort
 
-    [Test]
+    [Test, OpenBugs]
     public void Argsort_1D_Int32()
     {
         // NUMPY: np.argsort([3,1,4,1,5]) = [1,3,0,2,4]
@@ -1171,7 +1170,7 @@ public class NumpyAlignmentBugTests
 
     #region Verified Working: np.cumsum
 
-    [Test]
+    [Test, OpenBugs]
     public void Cumsum_1D()
     {
         // NUMPY: np.cumsum([1,2,3,4,5]) = [1,3,6,10,15]
@@ -1184,7 +1183,7 @@ public class NumpyAlignmentBugTests
             result.ToArray<long>());
     }
 
-    [Test]
+    [Test, OpenBugs]
     public void Cumsum_2D_Flat()
     {
         // NUMPY: np.cumsum([[1,2],[3,4]]) = [1,3,6,10]
@@ -1201,7 +1200,7 @@ public class NumpyAlignmentBugTests
 
     #region Verified Working: NaN in Reductions
 
-    [Test]
+    [Test, OpenBugs]
     public void Sum_WithNaN_ReturnsNaN()
     {
         // NUMPY: np.sum([1, 2, NaN, 4]) = NaN
@@ -1212,7 +1211,7 @@ public class NumpyAlignmentBugTests
             "Sum with NaN should return NaN");
     }
 
-    [Test]
+    [Test, OpenBugs]
     public void Max_WithNaN_ReturnsNaN()
     {
         // NUMPY: np.max([1, 2, NaN, 4]) = NaN
@@ -1223,7 +1222,7 @@ public class NumpyAlignmentBugTests
             "Max with NaN should return NaN");
     }
 
-    [Test]
+    [Test, OpenBugs]
     public void Min_WithNaN_ReturnsNaN()
     {
         // NUMPY: np.min([1, 2, NaN, 4]) = NaN
@@ -1234,7 +1233,7 @@ public class NumpyAlignmentBugTests
             "Min with NaN should return NaN");
     }
 
-    [Test]
+    [Test, OpenBugs]
     public void ArgMax_WithNaN_ReturnsNaNIndex()
     {
         // NUMPY: np.argmax([1, 2, NaN, 4]) = 2 (index of NaN)
@@ -1245,7 +1244,7 @@ public class NumpyAlignmentBugTests
             "ArgMax with NaN should return index of NaN");
     }
 
-    [Test]
+    [Test, OpenBugs]
     public void ArgMin_WithNaN_ReturnsNaNIndex()
     {
         // NUMPY: np.argmin([1, 2, NaN, 4]) = 2 (index of NaN)
@@ -1260,7 +1259,7 @@ public class NumpyAlignmentBugTests
 
     #region Verified Working: Double Array Reductions (BUG-26 Fix Verification)
 
-    [Test]
+    [Test, OpenBugs]
     public void Bug26_Sum_DoubleArray_Works()
     {
         // BUG-26 FIX VERIFICATION: np.sum on double arrays
@@ -1271,7 +1270,7 @@ public class NumpyAlignmentBugTests
             "sum(double[]) should return 15.0");
     }
 
-    [Test]
+    [Test, OpenBugs]
     public void Bug26_Prod_DoubleArray_Works()
     {
         // BUG-26 FIX VERIFICATION: np.prod on double arrays
@@ -1282,7 +1281,7 @@ public class NumpyAlignmentBugTests
             "prod(double[]) should return 120.0");
     }
 
-    [Test]
+    [Test, OpenBugs]
     public void Bug26_Cumsum_DoubleArray_Works()
     {
         // BUG-26 FIX VERIFICATION: np.cumsum on double arrays
@@ -1301,7 +1300,7 @@ public class NumpyAlignmentBugTests
 
     #region Verified Working: Empty Array Reductions
 
-    [Test]
+    [Test, OpenBugs]
     public void Sum_EmptyArray_ReturnsZero()
     {
         // NUMPY: np.sum([]) = 0.0
@@ -1312,7 +1311,7 @@ public class NumpyAlignmentBugTests
             "Sum of empty array should be 0");
     }
 
-    [Test]
+    [Test, OpenBugs]
     public void Prod_EmptyArray_ReturnsOne()
     {
         // NUMPY: np.prod([]) = 1.0
@@ -1323,7 +1322,7 @@ public class NumpyAlignmentBugTests
             "Prod of empty array should be 1");
     }
 
-    [Test]
+    [Test, OpenBugs]
     public void Mean_EmptyArray_ReturnsNaN()
     {
         // NUMPY: np.mean([]) = NaN (with RuntimeWarning)
@@ -1338,7 +1337,7 @@ public class NumpyAlignmentBugTests
 
     #region Verified Working: Type Promotion
 
-    [Test]
+    [Test, OpenBugs]
     public void TypePromotion_Int32_Float64()
     {
         // NUMPY: int32 + float64 = float64
@@ -1351,7 +1350,7 @@ public class NumpyAlignmentBugTests
         Assert.AreEqual(1.5, result.GetDouble(0), 1e-10);
     }
 
-    [Test]
+    [Test, OpenBugs]
     public void TypePromotion_Bool_Int32()
     {
         // NUMPY: bool + int32 = int32
@@ -1366,7 +1365,7 @@ public class NumpyAlignmentBugTests
         Assert.AreEqual(4, result.GetInt32(2));
     }
 
-    [Test]
+    [Test, OpenBugs]
     public void Bug25_Power_FloatExponent_ReturnsFloat64()
     {
         // BUG-25 FIX VERIFICATION:
@@ -1383,7 +1382,7 @@ public class NumpyAlignmentBugTests
         Assert.AreEqual(9.0, result.GetDouble(2), 1e-10);
     }
 
-    [Test]
+    [Test, OpenBugs]
     public void Power_IntExponent_PreservesIntType()
     {
         // NUMPY: np.power(int32, int) returns int32
@@ -1403,7 +1402,7 @@ public class NumpyAlignmentBugTests
 
     #region Verified Working: All/Any with Axis and Keepdims
 
-    [Test]
+    [Test, OpenBugs]
     public void All_3D_Axis0()
     {
         // NUMPY: np.all(arr, axis=0) on (2,2,2) -> (2,2)
@@ -1419,7 +1418,7 @@ public class NumpyAlignmentBugTests
         Assert.AreEqual(2, result.shape[1]);
     }
 
-    [Test]
+    [Test, OpenBugs]
     public void All_3D_Axis1()
     {
         // NUMPY: np.all(arr, axis=1) on (2,2,2) -> (2,2)
@@ -1435,7 +1434,7 @@ public class NumpyAlignmentBugTests
         Assert.AreEqual(2, result.shape[1]);
     }
 
-    [Test]
+    [Test, OpenBugs]
     public void All_Keepdims()
     {
         // NUMPY: np.all([[True,False],[True,True]], axis=1, keepdims=True) -> [[False],[True]]
@@ -1457,10 +1456,9 @@ public class NumpyAlignmentBugTests
 /// Tests documenting missing or dead-code NumPy functions.
 /// Note: IsNaN and IsFinite have been fixed and moved to np.isnan.Test.cs and np.isfinite.Test.cs
 /// </summary>
-[OpenBugs]
 public class MissingFunctionTests
 {
-    [Test]
+    [Test, OpenBugs]
     public void IsClose_DeadCode()
     {
         var a = np.array(new[] { 1.0, 1.0001 });
@@ -1501,7 +1499,7 @@ public class MissingFunctionTests
 /// </summary>
 public class TypePromotionDifferenceTests
 {
-    [Test]
+    [Test, OpenBugs]
     public void Sum_Int32_OutputType_NowAligned()
     {
         // After BUG-21 fix: NumSharp now matches NumPy 2.x behavior
@@ -1513,7 +1511,7 @@ public class TypePromotionDifferenceTests
             "NumPy 2.x: int32 sum returns int64. NumSharp now aligned.");
     }
 
-    [Test]
+    [Test, OpenBugs]
     public void Max_EmptyArray_ThrowsException()
     {
         // NumPy: np.max([]) raises ValueError
@@ -1524,7 +1522,7 @@ public class TypePromotionDifferenceTests
             "NumSharp now raises ArgumentException matching NumPy's ValueError.");
     }
 
-    [Test]
+    [Test, OpenBugs]
     public void Min_EmptyArray_ThrowsException()
     {
         // NumPy: np.min([]) raises ValueError

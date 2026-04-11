@@ -12,7 +12,7 @@
 ## Description
 
 Add a buffer or padding around a numpy array: 
-https://numpy.org/doc/stable/reference/generated/numpy.pad.html 
+https://docs.scipy.org/doc/numpy/reference/generated/numpy.pad.html 
 
 ## Comments
 

@@ -44,8 +44,8 @@ namespace NumSharp
                 v = temp;
             }
 
-            int na = a.size;
-            int nv = v.size;
+            long na = a.size;
+            long nv = v.size;
 
             // Determine output type using NumPy's type promotion rules
             var retType = np._FindCommonType(a, v);
@@ -80,14 +80,12 @@ namespace NumSharp
         /// </summary>
         private static NDArray ConvolveFull(NDArray a, NDArray v, NPTypeCode retType)
         {
-            int na = a.size;
-            int nv = v.size;
-            int outLen = na + nv - 1;
+            long na = a.size;
+            long nv = v.size;
+            long outLen = na + nv - 1;
 
             var result = new NDArray(retType, Shape.Vector(outLen), true);
 
-            // Convolution: result[k] = sum over j of a[j] * v[k-j]
-            // where j ranges over valid indices
             switch (retType)
             {
                 case NPTypeCode.Double:
@@ -127,21 +125,21 @@ namespace NumSharp
             return result;
         }
 
-        private static unsafe void ConvolveFullTyped<T>(NDArray a, NDArray v, NDArray result, int na, int nv, int outLen)
+        private static unsafe void ConvolveFullTyped<T>(NDArray a, NDArray v, NDArray result, long na, long nv, long outLen)
             where T : unmanaged
         {
             T* aPtr = (T*)a.Address;
             T* vPtr = (T*)v.Address;
             T* rPtr = (T*)result.Address;
 
-            for (int k = 0; k < outLen; k++)
+            for (long k = 0; k < outLen; k++)
             {
                 // j ranges from max(0, k-nv+1) to min(na-1, k)
-                int jMin = Math.Max(0, k - nv + 1);
-                int jMax = Math.Min(na - 1, k);
+                long jMin = Math.Max(0, k - nv + 1);
+                long jMax = Math.Min(na - 1, k);
 
                 double sum = 0;
-                for (int j = jMin; j <= jMax; j++)
+                for (long j = jMin; j <= jMax; j++)
                 {
                     // v index is k - j, which is in range [0, nv-1] when j is in [jMin, jMax]
                     double aVal = Convert.ToDouble(aPtr[j]);
@@ -182,13 +180,13 @@ namespace NumSharp
             // Compute full convolution first
             var full = ConvolveFull(a, v, retType);
 
-            int na = a.size;
-            int nv = v.size;
-            int outLen = Math.Max(na, nv);
+            long na = a.size;
+            long nv = v.size;
+            long outLen = Math.Max(na, nv);
 
             // For 'same' mode, we return the center portion of length max(na, nv)
             // Start index: (nv - 1) / 2  (integer division, floor)
-            int startIdx = (nv - 1) / 2;
+            long startIdx = (nv - 1) / 2;
 
             // Slice from startIdx to startIdx + outLen
             return full[$"{startIdx}:{startIdx + outLen}"].copy();
@@ -203,12 +201,12 @@ namespace NumSharp
             // Compute full convolution first
             var full = ConvolveFull(a, v, retType);
 
-            int na = a.size;
-            int nv = v.size;
-            int outLen = Math.Max(na, nv) - Math.Min(na, nv) + 1;
+            long na = a.size;
+            long nv = v.size;
+            long outLen = Math.Max(na, nv) - Math.Min(na, nv) + 1;
 
             // For 'valid' mode, we skip (min(na, nv) - 1) elements from start
-            int startIdx = Math.Min(na, nv) - 1;
+            long startIdx = Math.Min(na, nv) - 1;
 
             // Slice from startIdx to startIdx + outLen
             return full[$"{startIdx}:{startIdx + outLen}"].copy();

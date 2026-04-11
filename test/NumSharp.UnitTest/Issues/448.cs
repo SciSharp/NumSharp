@@ -5,10 +5,9 @@ using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.Issues
 {
-    [OpenBugs]
     public class Issue448
     {
-        [Test]
+        [Test, OpenBugs]
         public void ReproducingTest1()
         {
             NDArray nd = new double[,] {{1, 2, 3}, {4, 5, 6}};
@@ -18,7 +17,7 @@ namespace NumSharp.UnitTest.Issues
             nd.Should().BeOfValues(-2, -2, 3, 4, 5, 6);
         }
 
-        [Test]
+        [Test, OpenBugs]
         public void ReproducingTest2()
         {
             NDArray nd = new double[,] {{1, 2, 3}, {4, 5, 6}};

@@ -33,10 +33,10 @@ namespace NumSharp.Backends
         /// </summary>
         private unsafe NDArray BooleanMaskSimd(NDArray arr, NDArray<bool> mask)
         {
-            int size = arr.size;
+            long size = arr.size;
 
             // Count true values using SIMD
-            int trueCount = ILKernelGenerator.CountTrueSimdHelper((bool*)mask.Address, size);
+            long trueCount = ILKernelGenerator.CountTrueSimdHelper((bool*)mask.Address, size);
 
             if (trueCount == 0)
                 return new NDArray(arr.dtype, Shape.Empty(1)); // Empty 1D result
@@ -96,7 +96,7 @@ namespace NumSharp.Backends
         private unsafe NDArray BooleanMaskFallback(NDArray arr, NDArray<bool> mask)
         {
             // Count true values
-            int trueCount = 0;
+            long trueCount = 0;
             var maskIter = mask.AsIterator<bool>();
             while (maskIter.HasNext())
             {
@@ -111,8 +111,8 @@ namespace NumSharp.Backends
 
             // Copy elements where mask is true
             maskIter.Reset();
-            int destIdx = 0;
-            int srcIdx = 0;
+            long destIdx = 0;
+            long srcIdx = 0;
             while (maskIter.HasNext())
             {
                 bool m = maskIter.MoveNext();

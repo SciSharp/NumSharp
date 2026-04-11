@@ -14,10 +14,10 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.copyto.html</remarks>
         public static void copyto(NDArray dst, NDArray src) //todo! add where argument
         {
-            if (dst == null)
+            if (dst is null)
                 throw new ArgumentNullException(nameof(dst));
 
-            if (src == null)
+            if (src is null)
                 throw new ArgumentNullException(nameof(src));
 
             NumSharpException.ThrowIfNotWriteable(dst.Shape);

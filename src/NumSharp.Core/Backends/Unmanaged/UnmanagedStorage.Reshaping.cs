@@ -13,7 +13,7 @@ namespace NumSharp.Backends
         ///     Changes the shape representing this storage.
         /// </summary>
         /// <exception cref="IncorrectShapeException">If shape's size mismatches current shape size.</exception>
-        public void Reshape(params int[] dimensions)
+        public void Reshape(params long[] dimensions)
         {
             if (dimensions == null || dimensions.Length == 0)
                 throw new ArgumentException(nameof(dimensions));
@@ -26,7 +26,7 @@ namespace NumSharp.Backends
         /// </summary>
         /// <exception cref="IncorrectShapeException">If shape's size mismatches current shape size.</exception>
         /// <exception cref="ArgumentException">If <paramref name="dimensions"/>'s size == 0</exception>
-        public void Reshape(int[] dimensions, bool @unsafe)
+        public void Reshape(long[] dimensions, bool @unsafe)
         {
             if (dimensions == null)
                 throw new ArgumentNullException(nameof(dimensions));
@@ -92,11 +92,15 @@ namespace NumSharp.Backends
         /// <summary>
         ///     Set the shape of this storage without checking if sizes match.
         /// </summary>
-        /// <remarks>Used during broadcasting</remarks>
+        /// <remarks>Used during broadcasting. Uses bufferSize (not size) because
+        /// broadcast shapes have logical size != physical buffer size.</remarks>
         protected internal void SetShapeUnsafe(ref Shape shape)
         {
             _shape = shape;
-            Count = _shape.size;
+            // Use bufferSize for Count because broadcast shapes have stride=0 dimensions
+            // where logical size (e.g., 5x5=25) exceeds physical buffer (e.g., 5 elements).
+            // This ensures ArraySlice bounds checks use the actual buffer capacity.
+            Count = _shape.bufferSize;
         }
 
         protected internal void ExpandDimension(int axis)

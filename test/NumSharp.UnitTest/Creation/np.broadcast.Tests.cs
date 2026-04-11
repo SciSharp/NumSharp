@@ -207,16 +207,17 @@ namespace NumSharp.UnitTest.Creation
         [Test]
         public void broadcast_accessing()
         {
+            // np.arange returns int64 by default (NumPy 2.x)
             var left = _create_arange(5, 5);
             var right = _create_arange(5, 1);
             var x = DefaultEngine.Broadcast(left.Shape, right.Shape);
             left.Storage.SetShapeUnsafe(x.LeftShape);
             right.Storage.SetShapeUnsafe(x.RightShape);
-            var ret = new NDArray(typeof(int), x.LeftShape);
+            var ret = new NDArray(typeof(long), x.LeftShape);
             foreach ((int i1, int i2) in indexes2(5, 5))
             {
-                ret.SetValue(left.GetInt32(i1, i2) + right.GetInt32(i1, i2), i1, i2);
-                Console.WriteLine($"{ret.GetInt32(i1, i2)} = {left.GetInt32(i1, i2)} {right.GetInt32(i1, i2)}");
+                ret.SetValue(left.GetInt64(i1, i2) + right.GetInt64(i1, i2), i1, i2);
+                Console.WriteLine($"{ret.GetInt64(i1, i2)} = {left.GetInt64(i1, i2)} {right.GetInt64(i1, i2)}");
             }
 
             Console.WriteLine(ret.ToString(false));
@@ -226,11 +227,11 @@ namespace NumSharp.UnitTest.Creation
             x = DefaultEngine.Broadcast(left.Shape, right.Shape);
             left.Storage.SetShapeUnsafe(x.LeftShape);
             right.Storage.SetShapeUnsafe(x.RightShape);
-            ret = new NDArray(typeof(int), x.LeftShape);
+            ret = new NDArray(typeof(long), x.LeftShape);
             foreach ((int i1, int i2, int i3) in indexes3(2, 5, 5))
             {
-                ret.SetValue(left.GetInt32(i1, i2, i3) + right.GetInt32(i1, i2, i3), i1, i2, i3);
-                Console.WriteLine($"{ret.GetInt32(i1, i2, i3)} = {left.GetInt32(i1, i2)} {right.GetInt32(i1, i2, i3)}");
+                ret.SetValue(left.GetInt64(i1, i2, i3) + right.GetInt64(i1, i2, i3), i1, i2, i3);
+                Console.WriteLine($"{ret.GetInt64(i1, i2, i3)} = {left.GetInt64(i1, i2)} {right.GetInt64(i1, i2, i3)}");
             }
 
             Console.WriteLine(ret.ToString(false));
@@ -238,12 +239,14 @@ namespace NumSharp.UnitTest.Creation
 
         NDArray _create_arange(Shape shape)
         {
+            // np.arange returns int64 by default (NumPy 2.x)
             return np.arange(shape.size).reshape(ref shape);
         }
 
         NDArray _create_arange(params int[] dims)
         {
             var rshape = new Shape(dims);
+            // np.arange returns int64 by default (NumPy 2.x)
             return np.arange(rshape.size).reshape(rshape);
         }
 

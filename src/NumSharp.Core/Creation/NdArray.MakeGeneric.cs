@@ -40,7 +40,10 @@ namespace NumSharp
         public NDArray<T> AsOrMakeGeneric<T>() where T : unmanaged
         {
             if (typeof(T) != dtype)
-                return new NDArray<T>(this.astype(InfoOf<T>.NPTypeCode, copy: true));
+            {
+                var converted = this.astype(InfoOf<T>.NPTypeCode, copy: true);
+                return new NDArray<T>(converted.Storage);
+            }
 
             return new NDArray<T>(Storage);
         }

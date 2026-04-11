@@ -368,7 +368,7 @@ namespace NumSharp.UnitTest.Manipulation
             });
             var result = arr.astype(np.int32);
 
-            result.shape.Should().BeEquivalentTo(new[] { 2, 3 });
+            result.shape.Should().BeEquivalentTo(new long[] { 2, 3 });
             result.GetTypeCode.Should().Be(NPTypeCode.Int32);
 
             // Row 0
@@ -390,7 +390,7 @@ namespace NumSharp.UnitTest.Manipulation
 
             var result = arr.astype(np.int32);
 
-            result.shape.Should().BeEquivalentTo(new[] { 2, 3, 4 });
+            result.shape.Should().BeEquivalentTo(new long[] { 2, 3, 4 });
 
             // First element should be 0 (0.9 truncated)
             result[0, 0, 0].GetInt32().Should().Be(0);

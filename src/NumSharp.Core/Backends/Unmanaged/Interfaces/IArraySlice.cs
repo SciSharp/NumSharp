@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections;
+using NumSharp.Utilities;
 
 namespace NumSharp.Backends.Unmanaged
 {
@@ -7,23 +8,25 @@ namespace NumSharp.Backends.Unmanaged
     {
         IMemoryBlock MemoryBlock { get; }
 
-        T GetIndex<T>(int index) where T : unmanaged;
+        T GetIndex<T>(long index) where T : unmanaged;
 
-        object GetIndex(int index);
+        object GetIndex(long index);
 
-        void SetIndex<T>(int index, T value) where T : unmanaged;
+        void SetIndex<T>(long index, T value) where T : unmanaged;
 
-        void SetIndex(int index, object value);
+        void SetIndex(long index, object value);
 
         new IArraySlice Clone();
 
-        /// A Span representing this slice.
-        /// <remarks>Does not perform copy.</remarks>
-        Span<T> AsSpan<T>();
+        /// <summary>
+        /// Returns an UnmanagedSpan representing this slice's memory.
+        /// </summary>
+        /// <remarks>Does not perform copy. Supports long indexing for arrays &gt; 2B elements.</remarks>
+        unsafe UnmanagedSpan<T> AsSpan<T>() where T : unmanaged;
 
         /// <param name="index"></param>
         /// <returns></returns>
-        unsafe object this[int index] {  get;  set; }
+        unsafe object this[long index] {  get;  set; }
 
         /// <summary>
         ///     Fills all indexes with <paramref name="value"/>.
@@ -36,7 +39,7 @@ namespace NumSharp.Backends.Unmanaged
         /// </summary>
         /// <param name="start">The index to start from</param>
         /// <remarks>Creates a slice without copying.</remarks>
-        IArraySlice Slice(int start);
+        IArraySlice Slice(long start);
 
         /// <summary>
         ///     Perform a slicing on this <see cref="IMemoryBlock"/> without copying data.
@@ -44,10 +47,17 @@ namespace NumSharp.Backends.Unmanaged
         /// <param name="start">The index to start from</param>
         /// <param name="count">The number of items to slice (not bytes)</param>
         /// <remarks>Creates a slice without copying.</remarks>
-        IArraySlice Slice(int start, int count);
+        IArraySlice Slice(long start, long count);
 
         /// <param name="destination"></param>
         void CopyTo<T>(Span<T> destination);
+
+        /// <summary>
+        /// Copies this slice's contents to an UnmanagedSpan destination.
+        /// Supports long indexing for arrays &gt; 2B elements.
+        /// </summary>
+        /// <param name="destination"></param>
+        void CopyTo<T>(UnmanagedSpan<T> destination) where T : unmanaged;
 
         /// <summary>
         ///     Gets pinnable reference of the first item in the memory block storage.

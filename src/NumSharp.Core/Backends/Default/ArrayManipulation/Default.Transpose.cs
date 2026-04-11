@@ -82,7 +82,7 @@ namespace NumSharp.Backends
         public override NDArray SwapAxes(NDArray nd, int axis1, int axis2)
         {
             var ndims = nd.ndim;
-            var dims = new int[ndims];
+            var dims = new long[ndims];
             for (int i = 0; i < ndims; i++)
                 dims[i] = i;
 
@@ -92,7 +92,11 @@ namespace NumSharp.Backends
             dims[axis1] = axis2;
             dims[axis2] = axis1;
 
-            return Transpose(nd, dims);
+            // Convert long[] to int[] for Transpose (axes are limited to int range)
+            var intDims = new int[ndims];
+            for (int i = 0; i < ndims; i++)
+                intDims[i] = (int)dims[i];
+            return Transpose(nd, intDims);
         }
 
         public override NDArray RollAxis(NDArray nd, int axis, int start = 0)
@@ -157,7 +161,7 @@ namespace NumSharp.Backends
             // Handle empty arrays: just create a new array with permuted dimensions, no data copy needed
             if (nd.Shape.size == 0)
             {
-                var emptyDims = new int[n];
+                var emptyDims = new long[n];
                 for (i = 0; i < n; i++)
                     emptyDims[i] = nd.Shape.dimensions[permutation[i]];
                 return new NDArray(nd.dtype, emptyDims);
@@ -175,8 +179,8 @@ namespace NumSharp.Backends
             var srcStrides = shape.strides;
 
             // Permute dimensions and strides
-            var permutedDims = new int[n];
-            var permutedStrides = new int[n];
+            var permutedDims = new long[n];
+            var permutedStrides = new long[n];
             for (i = 0; i < n; i++)
             {
                 permutedDims[i] = srcDims[permutation[i]];
@@ -185,7 +189,7 @@ namespace NumSharp.Backends
 
             // Create the transposed shape via constructor (immutable)
             // IsContiguous is computed from strides and will be false for transposed arrays
-            int bufSize = shape.bufferSize > 0 ? shape.bufferSize : shape.size;
+            long bufSize = shape.bufferSize > 0 ? shape.bufferSize : shape.size;
             var newShape = new Shape(permutedDims, permutedStrides, shape.offset, bufSize);
 
             // Return an alias (view) with the permuted shape

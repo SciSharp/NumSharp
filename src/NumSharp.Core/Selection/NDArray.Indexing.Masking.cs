@@ -125,7 +125,7 @@ namespace NumSharp
         private NDArray BooleanScalarIndex(bool value)
         {
             // Build new shape: (1 or 0,) + this.shape
-            var newShape = new int[this.ndim + 1];
+            var newShape = new long[this.ndim + 1];
             newShape[0] = value ? 1 : 0;
             for (int i = 0; i < this.ndim; i++)
                 newShape[i + 1] = this.shape[i];
@@ -154,12 +154,12 @@ namespace NumSharp
             var indices = np.nonzero(mask);
 
             // Count true values
-            int trueCount = indices[0].size;
+            long trueCount = indices[0].size;
 
             if (trueCount == 0)
             {
                 // Empty result with shape (0,) + arr.shape[mask.ndim:]
-                var emptyShape = new int[1 + this.ndim - mask.ndim];
+                var emptyShape = new long[1 + this.ndim - mask.ndim];
                 emptyShape[0] = 0;
                 for (int i = 0; i < this.ndim - mask.ndim; i++)
                     emptyShape[i + 1] = this.shape[mask.ndim + i];
@@ -167,7 +167,7 @@ namespace NumSharp
             }
 
             // Build result shape: (trueCount,) + arr.shape[mask.ndim:]
-            var resultShape = new int[1 + this.ndim - mask.ndim];
+            var resultShape = new long[1 + this.ndim - mask.ndim];
             resultShape[0] = trueCount;
             for (int i = 0; i < this.ndim - mask.ndim; i++)
                 resultShape[i + 1] = this.shape[mask.ndim + i];
@@ -175,13 +175,13 @@ namespace NumSharp
             var result = new NDArray(this.dtype, new Shape(resultShape));
 
             // Copy selected slices using the nonzero indices
-            for (int idx = 0; idx < trueCount; idx++)
+            for (long idx = 0; idx < trueCount; idx++)
             {
                 // Build the index tuple from nonzero results
                 var srcSlice = this;
                 for (int dim = 0; dim < mask.ndim; dim++)
                 {
-                    srcSlice = srcSlice[indices[dim].GetInt32(idx)];
+                    srcSlice = srcSlice[indices[dim].GetInt64(idx)];
                 }
                 np.copyto(result[idx], srcSlice);
             }
@@ -195,20 +195,20 @@ namespace NumSharp
         private void SetBooleanMaskPartialShape(NDArray<bool> mask, NDArray value)
         {
             var indices = np.nonzero(mask);
-            int trueCount = indices[0].size;
+            long trueCount = indices[0].size;
 
             if (trueCount == 0)
                 return;
 
             bool isScalarValue = value.size == 1;
 
-            for (int idx = 0; idx < trueCount; idx++)
+            for (long idx = 0; idx < trueCount; idx++)
             {
                 // Navigate to the target slice using nonzero indices
                 var destSlice = this;
                 for (int dim = 0; dim < mask.ndim; dim++)
                 {
-                    destSlice = destSlice[indices[dim].GetInt32(idx)];
+                    destSlice = destSlice[indices[dim].GetInt64(idx)];
                 }
 
                 if (isScalarValue)
@@ -232,8 +232,8 @@ namespace NumSharp
         private NDArray BooleanMaskAxis0(NDArray<bool> mask)
         {
             // Count true values
-            int trueCount = 0;
-            for (int i = 0; i < mask.size; i++)
+            long trueCount = 0;
+            for (long i = 0; i < mask.size; i++)
             {
                 if (mask.GetBoolean(i))
                     trueCount++;
@@ -243,7 +243,7 @@ namespace NumSharp
             {
                 // Return empty array with appropriate shape
                 // For 2D array with shape (n, m), result should be shape (0, m)
-                var emptyShape = new int[this.ndim];
+                var emptyShape = new long[this.ndim];
                 emptyShape[0] = 0;
                 for (int i = 1; i < this.ndim; i++)
                     emptyShape[i] = this.shape[i];
@@ -251,7 +251,7 @@ namespace NumSharp
             }
 
             // Build result shape: [trueCount, shape[1], shape[2], ...]
-            var resultShape = new int[this.ndim];
+            var resultShape = new long[this.ndim];
             resultShape[0] = trueCount;
             for (int i = 1; i < this.ndim; i++)
                 resultShape[i] = this.shape[i];
@@ -259,8 +259,8 @@ namespace NumSharp
             var result = new NDArray(this.dtype, new Shape(resultShape));
 
             // Copy selected slices
-            int destIdx = 0;
-            for (int srcIdx = 0; srcIdx < mask.size; srcIdx++)
+            long destIdx = 0;
+            for (long srcIdx = 0; srcIdx < mask.size; srcIdx++)
             {
                 if (mask.GetBoolean(srcIdx))
                 {
@@ -284,8 +284,8 @@ namespace NumSharp
             // NumSharp represents scalars as shape [1], not shape []
             bool isScalarValue = value.size == 1;
 
-            int valueIdx = 0;
-            for (int i = 0; i < mask.size; i++)
+            long valueIdx = 0;
+            for (long i = 0; i < mask.size; i++)
             {
                 if (mask.GetBoolean(i))
                 {

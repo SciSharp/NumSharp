@@ -6,10 +6,8 @@ namespace NumSharp.Backends
 {
     public partial class DefaultEngine
     {
-        public override NDArray Clip(NDArray lhs, ValueType min, ValueType max, Type dtype) => Clip(lhs, min, max, dtype?.GetTypeCode());
-
         /// <summary>
-        /// Clips array values to a specified range [min, max].
+        /// Internal helper: Clips array values to a specified range [min, max].
         /// NumPy behavior:
         /// - NaN in data propagates through (result is NaN)
         /// - NaN in scalar min/max: entire array becomes NaN (for floating-point)
@@ -22,7 +20,7 @@ namespace NumSharp.Backends
         /// The Cast(copy: true) call ensures we have a contiguous output array,
         /// so the SIMD path is always taken for supported types.
         /// </remarks>
-        public override NDArray Clip(NDArray lhs, ValueType min, ValueType max, NPTypeCode? typeCode = null)
+        internal NDArray ClipScalar(NDArray lhs, object min, object max, NPTypeCode? typeCode = null)
         {
             if (lhs.size == 0)
                 return lhs.Clone();
@@ -59,7 +57,7 @@ namespace NumSharp.Backends
         /// Uses SIMD-optimized helpers for contiguous arrays (which is guaranteed
         /// by Cast(copy: true) in the calling method).
         /// </summary>
-        private unsafe NDArray ClipCore(NDArray arr, ValueType min, ValueType max)
+        private unsafe NDArray ClipCore(NDArray arr, object min, object max)
         {
             var len = arr.size;
 
@@ -193,9 +191,9 @@ namespace NumSharp.Backends
 
         #region Scalar Fallbacks for Non-SIMD Types (Decimal, Char)
 
-        private static unsafe void ClipDecimal(decimal* data, int size, decimal minVal, decimal maxVal)
+        private static unsafe void ClipDecimal(decimal* data, long size, decimal minVal, decimal maxVal)
         {
-            for (int i = 0; i < size; i++)
+            for (long i = 0; i < size; i++)
             {
                 var val = data[i];
                 if (val > maxVal) val = maxVal;
@@ -204,21 +202,21 @@ namespace NumSharp.Backends
             }
         }
 
-        private static unsafe void ClipMinDecimal(decimal* data, int size, decimal minVal)
+        private static unsafe void ClipMinDecimal(decimal* data, long size, decimal minVal)
         {
-            for (int i = 0; i < size; i++)
+            for (long i = 0; i < size; i++)
                 if (data[i] < minVal) data[i] = minVal;
         }
 
-        private static unsafe void ClipMaxDecimal(decimal* data, int size, decimal maxVal)
+        private static unsafe void ClipMaxDecimal(decimal* data, long size, decimal maxVal)
         {
-            for (int i = 0; i < size; i++)
+            for (long i = 0; i < size; i++)
                 if (data[i] > maxVal) data[i] = maxVal;
         }
 
-        private static unsafe void ClipChar(char* data, int size, char minVal, char maxVal)
+        private static unsafe void ClipChar(char* data, long size, char minVal, char maxVal)
         {
-            for (int i = 0; i < size; i++)
+            for (long i = 0; i < size; i++)
             {
                 var val = data[i];
                 if (val > maxVal) val = maxVal;
@@ -227,15 +225,15 @@ namespace NumSharp.Backends
             }
         }
 
-        private static unsafe void ClipMinChar(char* data, int size, char minVal)
+        private static unsafe void ClipMinChar(char* data, long size, char minVal)
         {
-            for (int i = 0; i < size; i++)
+            for (long i = 0; i < size; i++)
                 if (data[i] < minVal) data[i] = minVal;
         }
 
-        private static unsafe void ClipMaxChar(char* data, int size, char maxVal)
+        private static unsafe void ClipMaxChar(char* data, long size, char maxVal)
         {
-            for (int i = 0; i < size; i++)
+            for (long i = 0; i < size; i++)
                 if (data[i] > maxVal) data[i] = maxVal;
         }
 

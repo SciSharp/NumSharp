@@ -158,10 +158,7 @@ namespace NumSharp
                 }
 
 
-                int dim0 = splitted.Length;
-                int dim1 = splitted[0].Length;
-
-                var shape = new Shape(new int[] {dim0, dim1});
+                var shape = Shape.Matrix(splitted.Length, splitted[0].Length);
 
                 nd = new NDArray(typeof(double), shape);
 

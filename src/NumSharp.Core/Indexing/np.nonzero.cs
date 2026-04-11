@@ -20,7 +20,7 @@ namespace NumSharp
         /// <param name="a">Input array.</param>
         /// <returns>Indices of elements that are non-zero.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.nonzero.html</remarks>
-        public static NDArray<int>[] nonzero(NDArray a)
+        public static NDArray<long>[] nonzero(NDArray a)
             => a.TensorEngine.NonZero(a);
     }
 }

@@ -46,14 +46,10 @@ namespace NumSharp
 
         public abstract NDArray Mean(NDArray nd, int? axis = null, NPTypeCode? typeCode = null, bool keepdims = false);
         public abstract NDArray Mean(NDArray nd, int axis, Type dtype, bool keepdims = false);
-        public abstract NDArray Power(NDArray lhs, ValueType rhs, Type type);
-        public abstract NDArray Power(NDArray lhs, ValueType rhs, NPTypeCode? typeCode = null);
         public abstract NDArray Power(NDArray lhs, NDArray rhs, Type type);
         public abstract NDArray Power(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null);
         public abstract NDArray FloorDivide(NDArray lhs, NDArray rhs, Type dtype);
         public abstract NDArray FloorDivide(NDArray lhs, NDArray rhs, NPTypeCode? typeCode = null);
-        public abstract NDArray FloorDivide(NDArray lhs, ValueType rhs, Type dtype);
-        public abstract NDArray FloorDivide(NDArray lhs, ValueType rhs, NPTypeCode? typeCode = null);
         public abstract NDArray Sum(NDArray nd, int? axis = null, NPTypeCode? typeCode = null, bool keepdims = false);
         public abstract NDArray Sum(NDArray nd, int axis, Type dtype, bool keepdims = false);
         public abstract NDArray Negate(NDArray nd);
@@ -128,10 +124,8 @@ namespace NumSharp
         public abstract NDArray ASin(NDArray nd, Type dtype);
         public abstract NDArray ASin(NDArray nd, NPTypeCode? typeCode = null);
 
-        public abstract NDArray Clip(NDArray lhs, ValueType min, ValueType max, Type dtype);
-        public abstract NDArray Clip(NDArray lhs, ValueType min, ValueType max, NPTypeCode? typeCode = null);
         public abstract NDArray ClipNDArray(NDArray lhs, NDArray min, NDArray max, Type dtype, NDArray @out = null);
-        public abstract NDArray ClipNDArray(NDArray lhs, NDArray min, NDArray max, NPTypeCode ? typeCode = null, NDArray @out = null);
+        public abstract NDArray ClipNDArray(NDArray lhs, NDArray min, NDArray max, NPTypeCode? typeCode = null, NDArray @out = null);
 
         #endregion
 
@@ -152,9 +146,7 @@ namespace NumSharp
 
         // Bit shift operations (integer types only)
         public abstract NDArray LeftShift(NDArray lhs, NDArray rhs);
-        public abstract NDArray LeftShift(NDArray lhs, ValueType rhs);
         public abstract NDArray RightShift(NDArray lhs, NDArray rhs);
-        public abstract NDArray RightShift(NDArray lhs, ValueType rhs);
 
         public abstract bool All(NDArray nd);
         public abstract NDArray<bool> All(NDArray nd, int axis);
@@ -212,9 +204,9 @@ namespace NumSharp
 
         #region Indexing
 
-        public abstract NDArray<int>[] NonZero(NDArray a);
+        public abstract NDArray<long>[] NonZero(NDArray a);
 
-        public abstract int CountNonZero(NDArray a);
+        public abstract long CountNonZero(NDArray a);
 
         public abstract NDArray CountNonZero(NDArray a, int axis, bool keepdims = false);
 

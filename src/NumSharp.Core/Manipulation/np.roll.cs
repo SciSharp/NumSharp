@@ -18,7 +18,7 @@ namespace NumSharp
         /// Matches NumPy's algorithm: empty_like + slice-copy pairs.
         /// https://numpy.org/doc/stable/reference/generated/numpy.roll.html
         /// </remarks>
-        public static NDArray roll(NDArray a, int shift, int? axis = null)
+        public static NDArray roll(NDArray a, long shift, int? axis = null)
         {
             if (axis == null)
                 return roll(a.ravel(), shift, 0).reshape(a.shape);
@@ -29,11 +29,11 @@ namespace NumSharp
                 throw new ArgumentException(
                     $"axis {axis.Value} is out of bounds for array of dimension {a.ndim}");
 
-            int n = a.shape[ax];
+            long n = a.shape[ax];
 
             // Python-style modulo: always non-negative when n > 0.
             // If n == 0 (empty axis), offset stays 0 — nothing to roll.
-            int offset = n == 0 ? 0 : ((shift % n) + n) % n;
+            long offset = n == 0 ? 0 : ((shift % n) + n) % n;
 
             if (offset == 0)
                 return a.copy();
@@ -55,7 +55,7 @@ namespace NumSharp
             {
                 if (i == ax)
                 {
-                    srcBody[i] = new Slice(null, -offset);  // :-offset
+                    srcBody[i] = new Slice(null, -offset);   // :-offset
                     dstBody[i] = new Slice(offset, null);    // offset:
                     srcTail[i] = new Slice(-offset, null);   // -offset:
                     dstTail[i] = new Slice(null, offset);    // :offset
@@ -71,5 +71,9 @@ namespace NumSharp
 
             return result;
         }
+
+        /// <inheritdoc cref="roll(NDArray, long, int?)"/>
+        public static NDArray roll(NDArray a, int shift, int? axis = null)
+            => roll(a, (long)shift, axis);
     }
 }

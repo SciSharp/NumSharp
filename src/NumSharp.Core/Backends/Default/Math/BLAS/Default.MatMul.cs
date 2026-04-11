@@ -37,7 +37,7 @@ namespace NumSharp.Backends
             var incr = new ValueCoordinatesIncrementor(ref iterShape);
             var index = incr.Index;
 
-            for (int i = 0; i < len; i++, incr.Next())
+            for (long i = 0; i < len; i++, incr.Next())
             {
                 MultiplyMatrix(l[index], r[index], ret[index]);
             }

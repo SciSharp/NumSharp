@@ -102,7 +102,6 @@ public class SimdOptimizationTests
     }
 
     [Test]
-    [OpenBugs]  // NumSharp throws "size > 0" for empty arrays
     public void NonZero_Empty()
     {
         // NumPy: np.nonzero([]) = [[]]
@@ -430,7 +429,6 @@ public class SimdOptimizationTests
     }
 
     [Test]
-    [OpenBugs]  // ArgMax not supported for Boolean type
     public void ArgMax_Boolean()
     {
         // NumPy: np.argmax([False, True, False, True]) = 1
@@ -440,7 +438,6 @@ public class SimdOptimizationTests
     }
 
     [Test]
-    [OpenBugs]  // ArgMin not supported for Boolean type
     public void ArgMin_Boolean()
     {
         // NumPy: np.argmin([False, True, False, True]) = 0
@@ -566,7 +563,6 @@ public class SimdOptimizationTests
     #region Boolean Masking Tests (from NumPy test_indexing.py, test_multiarray.py)
 
     [Test]
-    [OpenBugs]  // Boolean masking with explicit mask array fails - returns all elements
     public void BooleanMask_1D_Basic()
     {
         // NumPy: a[[T,F,T,F,T,F]] = [1, 3, 5]
@@ -590,7 +586,6 @@ public class SimdOptimizationTests
     }
 
     [Test]
-    [OpenBugs]  // Boolean masking with explicit mask array returns wrong values
     public void BooleanMask_AllTrue()
     {
         // NumPy: a[[T, T, T]] = [1, 2, 3]
@@ -603,7 +598,6 @@ public class SimdOptimizationTests
     }
 
     [Test]
-    [OpenBugs]  // Boolean masking ignores mask, returns all elements
     public void BooleanMask_AllFalse()
     {
         // NumPy: a[[F, F, F]] = []
@@ -616,7 +610,6 @@ public class SimdOptimizationTests
     }
 
     [Test]
-    [OpenBugs]  // Boolean masking ignores mask, returns all elements
     public void BooleanMask_EmptyResult_Shape()
     {
         // NumPy: Empty result has shape (0,) and preserves dtype
@@ -630,7 +623,6 @@ public class SimdOptimizationTests
     }
 
     [Test]
-    [OpenBugs]  // Boolean row selection may fail
     public void BooleanMask_2D_RowSelection()
     {
         // NumPy: arr2d[[T, F, T]] selects rows 0 and 2 -> [[1,2,3], [7,8,9]]
@@ -646,7 +638,6 @@ public class SimdOptimizationTests
     }
 
     [Test]
-    [OpenBugs]  // 2D boolean masking doesn't flatten correctly
     public void BooleanMask_2D_Flattens()
     {
         // NumPy: 2D mask flattens result: [[T,F],[F,T]] on [[1,2],[3,4]] -> [1, 4]
@@ -684,7 +675,6 @@ public class SimdOptimizationTests
     }
 
     [Test]
-    [OpenBugs]  // Boolean masking with explicit mask array returns all elements
     public void BooleanMask_Int16_PreservesDtype()
     {
         // NumPy: Result preserves dtype
@@ -710,7 +700,6 @@ public class SimdOptimizationTests
     }
 
     [Test]
-    [OpenBugs]  // Boolean masking with explicit mask array returns all elements
     public void BooleanMask_FromNumPyTest_Basic()
     {
         // From NumPy test_mask: x = [1, 2, 3, 4], m = [F, T, F, F] -> [2]
@@ -723,7 +712,6 @@ public class SimdOptimizationTests
     }
 
     [Test]
-    [OpenBugs]  // 2D row mask may fail
     public void BooleanMask_FromNumPyTest_2D_RowMask()
     {
         // From NumPy test_mask2: x = [[1,2,3,4],[5,6,7,8]], m = [F, T] -> [[5,6,7,8]]
@@ -738,7 +726,6 @@ public class SimdOptimizationTests
     }
 
     [Test]
-    [OpenBugs]  // 2D element mask doesn't flatten correctly
     public void BooleanMask_FromNumPyTest_2D_ElementMask()
     {
         // From NumPy test_mask2: 2D element mask flattens
@@ -752,7 +739,6 @@ public class SimdOptimizationTests
     }
 
     [Test]
-    [OpenBugs]  // Boolean masking with explicit mask array returns all elements
     public void BooleanMask_UInt8()
     {
         // NumPy: uint8 dtype preserved

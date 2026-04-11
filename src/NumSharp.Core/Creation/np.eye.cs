@@ -45,7 +45,7 @@ namespace NumSharp
             var flat = m.flat;
             var one = dtype != null ? Converts.ChangeType(1d, dtype.GetTypeCode()) : 1d;
             int skips = k < 0 ? Math.Abs(k)-1 : 0;
-            for (int j = k; j < flat.size; j+=N+1)
+            for (long j = k; j < flat.size; j+=N+1)
             {
                 if (j < 0 || skips-- > 0)
                     continue;

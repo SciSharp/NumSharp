@@ -24,7 +24,7 @@ namespace NumSharp
             IArraySlice nd1Data = lhs.Storage.GetData();
             IArraySlice nd2Data = rhs.Storage.GetData();
 
-            int[] resultDims = new int[] { lhs.Storage.Shape.Dimensions[0], rhs.Storage.Shape.Dimensions[0] };
+            long[] resultDims = new long[] { lhs.Storage.Shape.Dimensions[0], rhs.Storage.Shape.Dimensions[0] };
 
             NDArray res1 = new NDArray(lhs.dtype, resultDims);
             NDArray res2 = new NDArray(lhs.dtype, resultDims);
@@ -32,11 +32,11 @@ namespace NumSharp
             IArraySlice res1Arr = res1.Storage.GetData();
             IArraySlice res2Arr = res2.Storage.GetData();
 
-            int counter = 0;
+            long counter = 0;
 
-            for (int row = 0; row < nd1Data.Count; row++)
+            for (long row = 0; row < nd1Data.Count; row++)
             {
-                for (int col = 0; col < nd2Data.Count; col++)
+                for (long col = 0; col < nd2Data.Count; col++)
                 {
                     res1Arr[counter] = nd1Data[row];
                     res2Arr[counter] = nd2Data[col];

@@ -13,7 +13,16 @@ namespace NumSharp
         /// <param name="repeats">The number of repetitions for each element.</param>
         /// <returns>Output array which has the same shape as a, except along the given axis.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.repeat.html
-        public static NDArray repeat(NDArray a, int repeats)
+        public static NDArray repeat(NDArray a, int repeats) => repeat(a, (long)repeats);
+
+        /// <summary>
+        ///     Repeat elements of an array.
+        /// </summary>
+        /// <param name="a">Input array.</param>
+        /// <param name="repeats">The number of repetitions for each element.</param>
+        /// <returns>Output array which has the same shape as a, except along the given axis.</returns>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.repeat.html
+        public static NDArray repeat(NDArray a, long repeats)
         {
             if (repeats < 0)
                 throw new ArgumentException("repeats may not contain negative values");
@@ -22,7 +31,7 @@ namespace NumSharp
             if (a.size == 0 || repeats == 0)
                 return new NDArray(a.GetTypeCode, Shape.Vector(0));
 
-            int totalSize = a.size * repeats;
+            long totalSize = a.size * repeats;
             a = a.ravel(); // After ravel(), array is guaranteed contiguous
 
             return a.GetTypeCode switch
@@ -59,10 +68,11 @@ namespace NumSharp
                 throw new ArgumentException($"repeats array size ({repeatsFlat.size}) must match input array size ({a.size})");
 
             // Calculate total output size and validate repeat counts
-            int totalSize = 0;
-            for (int i = 0; i < repeatsFlat.size; i++)
+            long totalSize = 0;
+            for (long i = 0; i < repeatsFlat.size; i++)
             {
-                int count = repeatsFlat.GetInt32(i);
+                // Use Convert.ToInt64 to handle any integer dtype (int32, int64, etc.)
+                long count = Convert.ToInt64(repeatsFlat.GetAtIndex(i));
                 if (count < 0)
                     throw new ArgumentException("repeats may not contain negative values");
                 totalSize += count;
@@ -98,6 +108,16 @@ namespace NumSharp
         /// <returns>A 1-D array with the scalar repeated.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.repeat.html
         public static unsafe NDArray repeat<T>(T a, int repeats) where T : unmanaged
+            => repeat(a, (long)repeats);
+
+        /// <summary>
+        ///     Repeat a scalar value.
+        /// </summary>
+        /// <param name="a">Input scalar.</param>
+        /// <param name="repeats">The number of repetitions.</param>
+        /// <returns>A 1-D array with the scalar repeated.</returns>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.repeat.html
+        public static unsafe NDArray repeat<T>(T a, long repeats) where T : unmanaged
         {
             if (repeats < 0)
                 throw new ArgumentException("repeats may not contain negative values");
@@ -107,7 +127,7 @@ namespace NumSharp
 
             var ret = new NDArray(InfoOf<T>.NPTypeCode, Shape.Vector(repeats));
             var dst = (T*)ret.Address;
-            for (int j = 0; j < repeats; j++)
+            for (long j = 0; j < repeats; j++)
                 dst[j] = a;
             return ret;
         }
@@ -116,18 +136,18 @@ namespace NumSharp
         ///     Generic implementation for repeating with scalar repeat count.
         ///     Uses direct pointer access for performance (no allocations per element).
         /// </summary>
-        private static unsafe NDArray RepeatScalarTyped<T>(NDArray a, int repeats, int totalSize) where T : unmanaged
+        private static unsafe NDArray RepeatScalarTyped<T>(NDArray a, long repeats, long totalSize) where T : unmanaged
         {
             var ret = new NDArray(a.GetTypeCode, Shape.Vector(totalSize));
             var src = (T*)a.Address;
             var dst = (T*)ret.Address;
-            int srcSize = a.size;
+            long srcSize = a.size;
 
-            int outIdx = 0;
-            for (int i = 0; i < srcSize; i++)
+            long outIdx = 0;
+            for (long i = 0; i < srcSize; i++)
             {
                 T val = src[i];
-                for (int j = 0; j < repeats; j++)
+                for (long j = 0; j < repeats; j++)
                     dst[outIdx++] = val;
             }
 
@@ -138,19 +158,20 @@ namespace NumSharp
         ///     Generic implementation for repeating with per-element repeat counts.
         ///     Uses direct pointer access for performance (no allocations per element).
         /// </summary>
-        private static unsafe NDArray RepeatArrayTyped<T>(NDArray a, NDArray repeatsFlat, int totalSize) where T : unmanaged
+        private static unsafe NDArray RepeatArrayTyped<T>(NDArray a, NDArray repeatsFlat, long totalSize) where T : unmanaged
         {
             var ret = new NDArray(a.GetTypeCode, Shape.Vector(totalSize));
             var src = (T*)a.Address;
             var dst = (T*)ret.Address;
-            int srcSize = a.size;
+            long srcSize = a.size;
 
-            int outIdx = 0;
-            for (int i = 0; i < srcSize; i++)
+            long outIdx = 0;
+            for (long i = 0; i < srcSize; i++)
             {
-                int count = repeatsFlat.GetInt32(i);
+                // Use Convert.ToInt64 to handle any integer dtype (int32, int64, etc.)
+                long count = Convert.ToInt64(repeatsFlat.GetAtIndex(i));
                 T val = src[i];
-                for (int j = 0; j < count; j++)
+                for (long j = 0; j < count; j++)
                     dst[outIdx++] = val;
             }
 

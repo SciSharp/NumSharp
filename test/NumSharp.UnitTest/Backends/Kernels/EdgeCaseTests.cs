@@ -121,7 +121,6 @@ public class EdgeCaseTests
     #region Sign Edge Cases
 
     [Test]
-    [OpenBugs]  // .NET Math.Sign(NaN) throws ArithmeticException
     public void Sign_NaN_ReturnsNaN()
     {
         // NumPy: np.sign(nan) = nan
@@ -723,7 +722,6 @@ public class EdgeCaseTests
     }
 
     [Test]
-    [OpenBugs]  // Mean of empty array fails (should return NaN)
     public void Mean_EmptyArray()
     {
         // NumPy: np.mean([]) = nan

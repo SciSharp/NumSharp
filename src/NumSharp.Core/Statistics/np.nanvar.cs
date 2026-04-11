@@ -65,7 +65,7 @@ namespace NumSharp
                     // Two-pass algorithm: first compute mean, then variance
                     var iter = arr.AsIterator<float>();
                     double sum = 0.0;
-                    int count = 0;
+                    long count = 0;
                     while (iter.HasNext())
                     {
                         float val = iter.MoveNext();
@@ -102,7 +102,7 @@ namespace NumSharp
                 {
                     var iter = arr.AsIterator<double>();
                     double sum = 0.0;
-                    int count = 0;
+                    long count = 0;
                     while (iter.HasNext())
                     {
                         double val = iter.MoveNext();
@@ -143,7 +143,7 @@ namespace NumSharp
             var r = NDArray.Scalar(result);
             if (keepdims)
             {
-                var keepdimsShape = new int[arr.ndim];
+                var keepdimsShape = new long[arr.ndim];
                 for (int i = 0; i < arr.ndim; i++)
                     keepdimsShape[i] = 1;
                 r.Storage.Reshape(new Shape(keepdimsShape));
@@ -171,7 +171,7 @@ namespace NumSharp
 
             // Build output shape
             var inputShape = arr.shape;
-            var outputShapeList = new System.Collections.Generic.List<int>();
+            var outputShapeList = new System.Collections.Generic.List<long>();
             for (int i = 0; i < inputShape.Length; i++)
             {
                 if (i != axis)
@@ -181,23 +181,20 @@ namespace NumSharp
                 outputShapeList.Add(1);
 
             var outputShape = outputShapeList.ToArray();
-            var outputSize = 1;
-            foreach (var dim in outputShape)
-                outputSize *= dim;
+            long axisLen = inputShape[axis];
 
-            var axisLen = inputShape[axis];
-
-            // Create output array
+            // Create output array using unmanaged allocation (supports >2GB)
             NDArray result;
             if (arr.GetTypeCode == NPTypeCode.Single)
             {
-                var outputData = new float[outputSize];
+                result = new NDArray(NPTypeCode.Single, new Shape(outputShape));
+                long outputSize = result.size;
 
-                for (int outIdx = 0; outIdx < outputSize; outIdx++)
+                for (long outIdx = 0; outIdx < outputSize; outIdx++)
                 {
                     // Convert flat index to coordinates in output shape
-                    var outCoords = new int[outputShape.Length];
-                    int temp = outIdx;
+                    var outCoords = new long[outputShape.Length];
+                    long temp = outIdx;
                     for (int i = outputShape.Length - 1; i >= 0; i--)
                     {
                         outCoords[i] = temp % outputShape[i];
@@ -206,10 +203,10 @@ namespace NumSharp
 
                     // First pass: compute mean
                     double sum = 0.0;
-                    int count = 0;
-                    for (int k = 0; k < axisLen; k++)
+                    long count = 0;
+                    for (long k = 0; k < axisLen; k++)
                     {
-                        var inCoords = new int[inputShape.Length];
+                        var inCoords = new long[inputShape.Length];
                         int outCoordIdx = 0;
                         for (int i = 0; i < inputShape.Length; i++)
                         {
@@ -229,7 +226,7 @@ namespace NumSharp
 
                     if (count <= ddof)
                     {
-                        outputData[outIdx] = float.NaN;
+                        result.SetSingle(float.NaN, outCoords);
                     }
                     else
                     {
@@ -237,9 +234,9 @@ namespace NumSharp
 
                         // Second pass: compute variance
                         double sumSq = 0.0;
-                        for (int k = 0; k < axisLen; k++)
+                        for (long k = 0; k < axisLen; k++)
                         {
-                            var inCoords = new int[inputShape.Length];
+                            var inCoords = new long[inputShape.Length];
                             int outCoordIdx = 0;
                             for (int i = 0; i < inputShape.Length; i++)
                             {
@@ -257,20 +254,19 @@ namespace NumSharp
                             }
                         }
 
-                        outputData[outIdx] = (float)(sumSq / (count - ddof));
+                        result.SetSingle((float)(sumSq / (count - ddof)), outCoords);
                     }
                 }
-
-                result = new NDArray(outputData).reshape(outputShape);
             }
             else // Double
             {
-                var outputData = new double[outputSize];
+                result = new NDArray(NPTypeCode.Double, new Shape(outputShape));
+                long outputSize = result.size;
 
-                for (int outIdx = 0; outIdx < outputSize; outIdx++)
+                for (long outIdx = 0; outIdx < outputSize; outIdx++)
                 {
-                    var outCoords = new int[outputShape.Length];
-                    int temp = outIdx;
+                    var outCoords = new long[outputShape.Length];
+                    long temp = outIdx;
                     for (int i = outputShape.Length - 1; i >= 0; i--)
                     {
                         outCoords[i] = temp % outputShape[i];
@@ -279,10 +275,10 @@ namespace NumSharp
 
                     // First pass: compute mean
                     double sum = 0.0;
-                    int count = 0;
-                    for (int k = 0; k < axisLen; k++)
+                    long count = 0;
+                    for (long k = 0; k < axisLen; k++)
                     {
-                        var inCoords = new int[inputShape.Length];
+                        var inCoords = new long[inputShape.Length];
                         int outCoordIdx = 0;
                         for (int i = 0; i < inputShape.Length; i++)
                         {
@@ -302,7 +298,7 @@ namespace NumSharp
 
                     if (count <= ddof)
                     {
-                        outputData[outIdx] = double.NaN;
+                        result.SetDouble(double.NaN, outCoords);
                     }
                     else
                     {
@@ -310,9 +306,9 @@ namespace NumSharp
 
                         // Second pass: compute variance
                         double sumSq = 0.0;
-                        for (int k = 0; k < axisLen; k++)
+                        for (long k = 0; k < axisLen; k++)
                         {
-                            var inCoords = new int[inputShape.Length];
+                            var inCoords = new long[inputShape.Length];
                             int outCoordIdx = 0;
                             for (int i = 0; i < inputShape.Length; i++)
                             {
@@ -330,17 +326,15 @@ namespace NumSharp
                             }
                         }
 
-                        outputData[outIdx] = sumSq / (count - ddof);
+                        result.SetDouble(sumSq / (count - ddof), outCoords);
                     }
                 }
-
-                result = new NDArray(outputData).reshape(outputShape);
             }
 
             // Handle keepdims
             if (keepdims)
             {
-                var keepdimsShapeDims = new int[arr.ndim];
+                var keepdimsShapeDims = new long[arr.ndim];
                 int srcIdx = 0;
                 for (int i = 0; i < arr.ndim; i++)
                 {

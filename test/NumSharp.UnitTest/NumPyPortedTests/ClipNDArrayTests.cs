@@ -208,7 +208,8 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         [Test]
         public void ClipNDArray_Int32Array_PreservesDtype()
         {
-            var a = np.arange(10);
+            // Explicit int32 array for testing dtype preservation
+            var a = np.array(new int[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 });
             var min_arr = np.array(new int[] { 2, 2, 2, 2, 2, 2, 2, 2, 2, 2 });
             var max_arr = np.array(new int[] { 7, 7, 7, 7, 7, 7, 7, 7, 7, 7 });
 

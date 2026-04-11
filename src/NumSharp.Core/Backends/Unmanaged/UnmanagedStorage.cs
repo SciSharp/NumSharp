@@ -44,7 +44,7 @@ namespace NumSharp.Backends
 #endif
         public IArraySlice InternalArray;
         public unsafe byte* Address;
-        public int Count;
+        public long Count;
 
         protected Type _dtype;
         protected NPTypeCode _typecode;
@@ -173,18 +173,27 @@ namespace NumSharp.Backends
         public ref Shape ShapeReference => ref _shape;
 
         /// <summary>
-        ///     Spans <see cref="Address"/> &lt;-&gt; <see cref="Count"/>
+        /// Returns an UnmanagedSpan representing this storage's memory.
         /// </summary>
-        /// <remarks>This ignores completely slicing.</remarks>
-        public Span<T> AsSpan<T>()
+        /// <remarks>This ignores completely slicing. Supports long indexing for arrays &gt; 2B elements.</remarks>
+        public unsafe Span<T> AsSpan<T>() where T : unmanaged
         {
             if (!_shape.IsContiguous)
                 throw new InvalidOperationException("Unable to span a non-contiguous storage.");
 
-            unsafe
-            {
-                return new Span<T>(Address, Count);
-            }
+            return new Span<T>(Address, (int)Count);
+        }
+        
+        /// <summary>
+        /// Returns an UnmanagedSpan representing this storage's memory.
+        /// </summary>
+        /// <remarks>This ignores completely slicing. Supports long indexing for arrays &gt; 2B elements.</remarks>
+        public unsafe UnmanagedSpan<T> AsUnmanagedSpan<T>() where T : unmanaged
+        {
+            if (!_shape.IsContiguous)
+                throw new InvalidOperationException("Unable to span a non-contiguous storage.");
+
+            return new UnmanagedSpan<T>(Address, Count);
         }
 
         /// <summary>
@@ -1462,7 +1471,12 @@ namespace NumSharp.Backends
                 throw new ArrayTypeMismatchException($"The given type argument '{typeof(T).Name}' doesn't match the type of the internal data '{InternalArray.TypeCode}'");
 
             var src = (T*)Address;
-            var ret = new T[Shape.Size];
+
+            // .NET arrays are limited to int32 indexing
+            if (Shape.Size > int.MaxValue)
+                throw new InvalidOperationException($"Array size {Shape.Size} exceeds int.MaxValue. Use ToArraySlice() for large arrays.");
+
+            var ret = new T[(int)Shape.Size];
 
             // NumPy-aligned: For contiguous shapes, use fast memory copy.
             // Must account for shape.offset which indicates the starting position in the buffer.
@@ -1479,7 +1493,7 @@ namespace NumSharp.Backends
             else
             {
                 var incr = new ValueCoordinatesIncrementor(Shape.dimensions);
-                int[] current = incr.Index;
+                long[] current = incr.Index;
                 int i = 0;
                 ref Shape shape = ref ShapeReference;
                 do ret[i++] = src[shape.GetOffset(current)];

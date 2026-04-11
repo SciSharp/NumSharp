@@ -12,7 +12,7 @@
 
 Generates a random sample from a given (possible weighted) 1-D array.
 
-NumPy docs: https://numpy.org/doc/stable/reference/random/generated/numpy.random.choice.html
+NumPy docs: https://docs.scipy.org/doc/numpy/reference/generated/numpy.random.choice.html
 
 ## Comments
 
@@ -40,7 +40,7 @@ Sorry it took so long, it should be placed in `NumSharp.Core/Random/np.random.ch
 /// <param name="arr">If an ndarray, a random sample is generated from its elements. If an int, the random sample is generated as if a were np.arange(a)</param>
 /// <param name="shape"></param>
 /// <param name="probabilities">The probabilities associated with each entry in a. If not given the sample assumes a uniform distribution over all entries in a.</param>
-/// <remarks>https://numpy.org/doc/stable/reference/random/generated/numpy.random.choice.html</remarks>
+/// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.random.choice.html</remarks>
 public NDArray choice(NDArray arr, Shape shape, double[] probabilities = null) {
     throw new NotImplementedException();
 }        
@@ -51,7 +51,7 @@ public NDArray choice(NDArray arr, Shape shape, double[] probabilities = null) {
 /// <param name="a">If an ndarray, a random sample is generated from its elements. If an int, the random sample is generated as if a were np.arange(a)</param>
 /// <param name="shape"></param>
 /// <param name="probabilities">The probabilities associated with each entry in a. If not given the sample assumes a uniform distribution over all entries in a.</param>
-/// <remarks>https://numpy.org/doc/stable/reference/random/generated/numpy.random.choice.html</remarks>
+/// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.random.choice.html</remarks>
 public NDArray choice(int a, Shape shape, double[] probabilities = null) {
     throw new NotImplementedException();
 }

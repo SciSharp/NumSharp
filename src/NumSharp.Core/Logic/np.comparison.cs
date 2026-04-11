@@ -1,4 +1,3 @@
-using System;
 using NumSharp.Generic;
 
 namespace NumSharp
@@ -20,17 +19,17 @@ namespace NumSharp
         /// Return (x1 == x2) element-wise with scalar.
         /// </summary>
         /// <param name="x1">Input array.</param>
-        /// <param name="x2">Scalar value.</param>
+        /// <param name="x2">Scalar or array-like value.</param>
         /// <returns>Output array of bools.</returns>
-        public static NDArray<bool> equal(NDArray x1, ValueType x2) => x1 == x2;
+        public static NDArray<bool> equal(NDArray x1, object x2) => x1 == x2;
 
         /// <summary>
         /// Return (x1 == x2) element-wise with scalar on left.
         /// </summary>
-        /// <param name="x1">Scalar value.</param>
+        /// <param name="x1">Scalar or array-like value.</param>
         /// <param name="x2">Input array.</param>
         /// <returns>Output array of bools.</returns>
-        public static NDArray<bool> equal(ValueType x1, NDArray x2) => x1 == x2;
+        public static NDArray<bool> equal(object x1, NDArray x2) => x1 == x2;
 
         #endregion
 
@@ -49,17 +48,17 @@ namespace NumSharp
         /// Return (x1 != x2) element-wise with scalar.
         /// </summary>
         /// <param name="x1">Input array.</param>
-        /// <param name="x2">Scalar value.</param>
+        /// <param name="x2">Scalar or array-like value.</param>
         /// <returns>Output array of bools.</returns>
-        public static NDArray<bool> not_equal(NDArray x1, ValueType x2) => x1 != x2;
+        public static NDArray<bool> not_equal(NDArray x1, object x2) => x1 != x2;
 
         /// <summary>
         /// Return (x1 != x2) element-wise with scalar on left.
         /// </summary>
-        /// <param name="x1">Scalar value.</param>
+        /// <param name="x1">Scalar or array-like value.</param>
         /// <param name="x2">Input array.</param>
         /// <returns>Output array of bools.</returns>
-        public static NDArray<bool> not_equal(ValueType x1, NDArray x2) => x1 != x2;
+        public static NDArray<bool> not_equal(object x1, NDArray x2) => x1 != x2;
 
         #endregion
 
@@ -78,17 +77,17 @@ namespace NumSharp
         /// Return (x1 &lt; x2) element-wise with scalar.
         /// </summary>
         /// <param name="x1">Input array.</param>
-        /// <param name="x2">Scalar value.</param>
+        /// <param name="x2">Scalar or array-like value.</param>
         /// <returns>Output array of bools.</returns>
-        public static NDArray<bool> less(NDArray x1, ValueType x2) => x1 < x2;
+        public static NDArray<bool> less(NDArray x1, object x2) => x1 < x2;
 
         /// <summary>
         /// Return (x1 &lt; x2) element-wise with scalar on left.
         /// </summary>
-        /// <param name="x1">Scalar value.</param>
+        /// <param name="x1">Scalar or array-like value.</param>
         /// <param name="x2">Input array.</param>
         /// <returns>Output array of bools.</returns>
-        public static NDArray<bool> less(ValueType x1, NDArray x2) => x1 < x2;
+        public static NDArray<bool> less(object x1, NDArray x2) => x1 < x2;
 
         #endregion
 
@@ -107,17 +106,17 @@ namespace NumSharp
         /// Return (x1 &gt; x2) element-wise with scalar.
         /// </summary>
         /// <param name="x1">Input array.</param>
-        /// <param name="x2">Scalar value.</param>
+        /// <param name="x2">Scalar or array-like value.</param>
         /// <returns>Output array of bools.</returns>
-        public static NDArray<bool> greater(NDArray x1, ValueType x2) => x1 > x2;
+        public static NDArray<bool> greater(NDArray x1, object x2) => x1 > x2;
 
         /// <summary>
         /// Return (x1 &gt; x2) element-wise with scalar on left.
         /// </summary>
-        /// <param name="x1">Scalar value.</param>
+        /// <param name="x1">Scalar or array-like value.</param>
         /// <param name="x2">Input array.</param>
         /// <returns>Output array of bools.</returns>
-        public static NDArray<bool> greater(ValueType x1, NDArray x2) => x1 > x2;
+        public static NDArray<bool> greater(object x1, NDArray x2) => x1 > x2;
 
         #endregion
 
@@ -136,17 +135,17 @@ namespace NumSharp
         /// Return (x1 &lt;= x2) element-wise with scalar.
         /// </summary>
         /// <param name="x1">Input array.</param>
-        /// <param name="x2">Scalar value.</param>
+        /// <param name="x2">Scalar or array-like value.</param>
         /// <returns>Output array of bools.</returns>
-        public static NDArray<bool> less_equal(NDArray x1, ValueType x2) => x1 <= x2;
+        public static NDArray<bool> less_equal(NDArray x1, object x2) => x1 <= x2;
 
         /// <summary>
         /// Return (x1 &lt;= x2) element-wise with scalar on left.
         /// </summary>
-        /// <param name="x1">Scalar value.</param>
+        /// <param name="x1">Scalar or array-like value.</param>
         /// <param name="x2">Input array.</param>
         /// <returns>Output array of bools.</returns>
-        public static NDArray<bool> less_equal(ValueType x1, NDArray x2) => x1 <= x2;
+        public static NDArray<bool> less_equal(object x1, NDArray x2) => x1 <= x2;
 
         #endregion
 
@@ -165,17 +164,17 @@ namespace NumSharp
         /// Return (x1 &gt;= x2) element-wise with scalar.
         /// </summary>
         /// <param name="x1">Input array.</param>
-        /// <param name="x2">Scalar value.</param>
+        /// <param name="x2">Scalar or array-like value.</param>
         /// <returns>Output array of bools.</returns>
-        public static NDArray<bool> greater_equal(NDArray x1, ValueType x2) => x1 >= x2;
+        public static NDArray<bool> greater_equal(NDArray x1, object x2) => x1 >= x2;
 
         /// <summary>
         /// Return (x1 &gt;= x2) element-wise with scalar on left.
         /// </summary>
-        /// <param name="x1">Scalar value.</param>
+        /// <param name="x1">Scalar or array-like value.</param>
         /// <param name="x2">Input array.</param>
         /// <returns>Output array of bools.</returns>
-        public static NDArray<bool> greater_equal(ValueType x1, NDArray x2) => x1 >= x2;
+        public static NDArray<bool> greater_equal(object x1, NDArray x2) => x1 >= x2;
 
         #endregion
     }

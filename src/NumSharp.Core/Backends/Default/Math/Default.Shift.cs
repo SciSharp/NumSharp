@@ -21,16 +21,6 @@ namespace NumSharp.Backends
         }
 
         /// <summary>
-        /// Bitwise left shift (x1 &lt;&lt; scalar).
-        /// SIMD optimized for contiguous arrays.
-        /// </summary>
-        public override NDArray LeftShift(NDArray lhs, ValueType rhs)
-        {
-            ValidateIntegerType(lhs, "left_shift");
-            return ExecuteShiftOpScalar(lhs, rhs, isLeftShift: true);
-        }
-
-        /// <summary>
         /// Bitwise right shift (x1 &gt;&gt; x2).
         /// Uses arithmetic shift for signed types (sign bit extended).
         /// Uses logical shift for unsigned types (zeros filled).
@@ -40,16 +30,6 @@ namespace NumSharp.Backends
             ValidateIntegerType(lhs, "right_shift");
             ValidateIntegerType(rhs, "right_shift");
             return ExecuteShiftOp(lhs, rhs, isLeftShift: false);
-        }
-
-        /// <summary>
-        /// Bitwise right shift (x1 &gt;&gt; scalar).
-        /// SIMD optimized for contiguous arrays.
-        /// </summary>
-        public override NDArray RightShift(NDArray lhs, ValueType rhs)
-        {
-            ValidateIntegerType(lhs, "right_shift");
-            return ExecuteShiftOpScalar(lhs, rhs, isLeftShift: false);
         }
 
         /// <summary>
@@ -125,7 +105,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// Execute element-wise shift using IL kernel.
         /// </summary>
-        private static unsafe void ExecuteShiftArray<T>(NDArray input, int* shifts, NDArray output, int count, bool isLeftShift) where T : unmanaged
+        private static unsafe void ExecuteShiftArray<T>(NDArray input, int* shifts, NDArray output, long count, bool isLeftShift) where T : unmanaged
         {
             var kernel = ILKernelGenerator.GetShiftArrayKernel<T>(isLeftShift);
             if (kernel != null)
@@ -137,7 +117,7 @@ namespace NumSharp.Backends
                 // Fallback: scalar loop (should not happen if IL generation is enabled)
                 var inPtr = (T*)input.Address;
                 var outPtr = (T*)output.Address;
-                for (int i = 0; i < count; i++)
+                for (long i = 0; i < count; i++)
                 {
                     outPtr[i] = ShiftScalar(inPtr[i], shifts[i], isLeftShift);
                 }
@@ -148,7 +128,7 @@ namespace NumSharp.Backends
         /// Execute shift operation with scalar operand (uniform shift).
         /// SIMD optimized path for contiguous arrays.
         /// </summary>
-        private unsafe NDArray ExecuteShiftOpScalar(NDArray lhs, ValueType rhs, bool isLeftShift)
+        private unsafe NDArray ExecuteShiftOpScalar(NDArray lhs, object rhs, bool isLeftShift)
         {
             int shiftAmount = Convert.ToInt32(rhs);
 
@@ -203,7 +183,7 @@ namespace NumSharp.Backends
         /// <summary>
         /// Execute scalar shift using IL kernel (SIMD optimized).
         /// </summary>
-        private static unsafe void ExecuteShiftScalar<T>(NDArray input, NDArray output, int shiftAmount, int count, bool isLeftShift) where T : unmanaged
+        private static unsafe void ExecuteShiftScalar<T>(NDArray input, NDArray output, int shiftAmount, long count, bool isLeftShift) where T : unmanaged
         {
             var kernel = ILKernelGenerator.GetShiftScalarKernel<T>(isLeftShift);
             if (kernel != null)
@@ -215,7 +195,7 @@ namespace NumSharp.Backends
                 // Fallback: scalar loop (should not happen if IL generation is enabled)
                 var inPtr = (T*)input.Address;
                 var outPtr = (T*)output.Address;
-                for (int i = 0; i < count; i++)
+                for (long i = 0; i < count; i++)
                 {
                     outPtr[i] = ShiftScalar(inPtr[i], shiftAmount, isLeftShift);
                 }

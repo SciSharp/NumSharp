@@ -462,6 +462,41 @@ namespace NumSharp.Backends.Unmanaged
             return new UnmanagedMemoryBlock<T>(GCHandle.Alloc(copy ? arr.Clone() : arr, GCHandleType.Pinned), arr.Length / InfoOf<T>.Size);
         }
 
+        /// <summary>
+        /// Create a memory block from a byte buffer with offset and count support.
+        /// </summary>
+        /// <param name="arr">The source byte array.</param>
+        /// <param name="byteOffset">Byte offset into the array.</param>
+        /// <param name="count">Number of elements of type T to include (-1 for all available).</param>
+        /// <param name="copy">If true, copies the data; if false, creates a view (pins the array).</param>
+        /// <returns>A memory block viewing or copying the specified region.</returns>
+        [MethodImpl(OptimizeAndInline)]
+        public static UnmanagedMemoryBlock<T> FromBuffer(byte[] arr, long byteOffset, long count, bool copy)
+        {
+            int itemSize = InfoOf<T>.Size;
+            long availableBytes = arr.Length - byteOffset;
+            long maxCount = availableBytes / itemSize;
+            long actualCount = count < 0 ? maxCount : count;
+
+            if (copy)
+            {
+                // Allocate new memory and copy
+                var ret = new UnmanagedMemoryBlock<T>(actualCount);
+                fixed (byte* src = &arr[byteOffset])
+                {
+                    Buffer.MemoryCopy(src, ret.Address, ret.BytesCount, actualCount * itemSize);
+                }
+                return ret;
+            }
+            else
+            {
+                // Pin the array and return a view with offset
+                var handle = GCHandle.Alloc(arr, GCHandleType.Pinned);
+                var baseAddr = (byte*)handle.AddrOfPinnedObject();
+                return new UnmanagedMemoryBlock<T>((T*)(baseAddr + byteOffset), actualCount, () => handle.Free());
+            }
+        }
+
         [MethodImpl(OptimizeAndInline)]
         public static UnmanagedMemoryBlock<T> FromPool(StackedMemoryPool manager)
         {
@@ -488,9 +523,8 @@ namespace NumSharp.Backends.Unmanaged
         /// <param name="count">How many <typeparamref name="T"/> to copy, not how many bytes.</param>
         /// <returns></returns>
         [MethodImpl(OptimizeAndInline)]
-        public static UnmanagedMemoryBlock<T> Copy(void* address, int count)
+        public static UnmanagedMemoryBlock<T> Copy(void* address, long count)
         {
-            var len = count * InfoOf<T>.Size;
             var ret = new UnmanagedMemoryBlock<T>(count);
             new UnmanagedMemoryBlock<T>((T*)address, count).CopyTo(ret);
             //source.AsSpan().CopyTo(ret.AsSpan()); //TODO! Benchmark at netcore 3.0, it should be faster than buffer.memorycopy.
@@ -498,35 +532,44 @@ namespace NumSharp.Backends.Unmanaged
         }
 
         /// <summary>
-        ///     
+        ///
         /// </summary>
         /// <param name="address"></param>
         /// <param name="count">How many <typeparamref name="T"/> to copy, not how many bytes.</param>
         /// <returns></returns>
         [MethodImpl(OptimizeAndInline)]
-        public static UnmanagedMemoryBlock<T> Copy(IntPtr address, int count)
+        public static UnmanagedMemoryBlock<T> Copy(IntPtr address, long count)
         {
             return Copy((void*)address, count);
         }
 
         /// <summary>
-        ///     
+        ///
         /// </summary>
         /// <param name="address">The address of the first <typeparamref name="T"/></param>
         /// <param name="count">How many <typeparamref name="T"/> to copy, not how many bytes.</param>
         /// <returns></returns>
         [MethodImpl(OptimizeAndInline)]
-        public static UnmanagedMemoryBlock<T> Copy(T* address, int count)
+        public static UnmanagedMemoryBlock<T> Copy(T* address, long count)
         {
             return Copy((void*)address, count);
         }
 
         #endregion
 
-        public T this[int index]
+        public T this[long index]
         {
             [MethodImpl(OptimizeAndInline)] get => *(Address + index);
             [MethodImpl(OptimizeAndInline)] set => *(Address + index) = value;
+        }
+
+        /// <summary>
+        /// Backwards-compatible indexer accepting int index.
+        /// </summary>
+        public T this[int index]
+        {
+            [MethodImpl(OptimizeAndInline)] get => this[(long)index];
+            [MethodImpl(OptimizeAndInline)] set => this[(long)index] = value;
         }
 
         [MethodImpl(Optimize)]
@@ -686,29 +729,29 @@ namespace NumSharp.Backends.Unmanaged
             }
         }
 
+        /// <summary>
+        /// Backwards-compatible overload accepting int index.
+        /// </summary>
         [MethodImpl(OptimizeAndInline)]
-        public T GetIndex(int index)
-        {
-            return *(Address + index);
-        }
+        public T GetIndex(int index) => GetIndex((long)index);
 
+        /// <summary>
+        /// Backwards-compatible overload accepting int index.
+        /// </summary>
         [MethodImpl(OptimizeAndInline)]
-        public ref T GetRefTo(int index)
-        {
-            return ref *(Address + index);
-        }
+        public ref T GetRefTo(int index) => ref GetRefTo((long)index);
 
+        /// <summary>
+        /// Backwards-compatible overload accepting int index.
+        /// </summary>
         [MethodImpl(OptimizeAndInline)]
-        public void SetIndex(int index, ref T value)
-        {
-            *(Address + index) = value;
-        }
+        public void SetIndex(int index, ref T value) => SetIndex((long)index, ref value);
 
+        /// <summary>
+        /// Backwards-compatible overload accepting int index.
+        /// </summary>
         [MethodImpl(OptimizeAndInline)]
-        public void SetIndex(int index, T value)
-        {
-            *(Address + index) = value;
-        }
+        public void SetIndex(int index, T value) => SetIndex((long)index, value);
 
 
         [MethodImpl(OptimizeAndInline)]
@@ -744,7 +787,7 @@ namespace NumSharp.Backends.Unmanaged
         [MethodImpl(OptimizeAndInline)]
         public IEnumerator<T> GetEnumerator()
         {
-            for (var i = 0; i < Count; i++) yield return GetIndex(i);
+            for (long i = 0; i < Count; i++) yield return GetIndex(i);
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -757,7 +800,7 @@ namespace NumSharp.Backends.Unmanaged
         public bool Contains(T item)
         {
             long len = Count;
-            for (var i = 0; i < len; i++)
+            for (long i = 0; i < len; i++)
             {
                 if ((*(Address + i)).Equals(item)) return true;
             }
@@ -769,7 +812,7 @@ namespace NumSharp.Backends.Unmanaged
         public void CopyTo(T[] array, int arrayIndex)
         {
             long len = Count;
-            for (var i = 0; i < len; i++)
+            for (long i = 0; i < len; i++)
             {
                 array[i + arrayIndex] = *(Address + i);
             }

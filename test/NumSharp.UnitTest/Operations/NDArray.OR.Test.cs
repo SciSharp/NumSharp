@@ -7,7 +7,6 @@ namespace NumSharp.UnitTest.Operations
     public class NDArrayOrTest
     {
         [Test]
-        [OpenBugs]
         public void BoolTwo1D_NDArrayOR()
         {
             var np1 = new NDArray(new[] {true, true, false, false}, new Shape(4));

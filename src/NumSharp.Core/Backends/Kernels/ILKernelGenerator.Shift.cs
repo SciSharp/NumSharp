@@ -48,7 +48,7 @@ namespace NumSharp.Backends.Kernels
         /// <param name="output">Pointer to output data</param>
         /// <param name="shiftAmount">Number of bits to shift</param>
         /// <param name="count">Number of elements to process</param>
-        public unsafe delegate void ShiftScalarKernel<T>(T* input, T* output, int shiftAmount, int count) where T : unmanaged;
+        public unsafe delegate void ShiftScalarKernel<T>(T* input, T* output, int shiftAmount, long count) where T : unmanaged;
 
         /// <summary>
         /// Delegate for shift operation with per-element shift amounts.
@@ -59,7 +59,7 @@ namespace NumSharp.Backends.Kernels
         /// <param name="shifts">Pointer to shift amounts (as int32)</param>
         /// <param name="output">Pointer to output data</param>
         /// <param name="count">Number of elements to process</param>
-        public unsafe delegate void ShiftArrayKernel<T>(T* input, int* shifts, T* output, int count) where T : unmanaged;
+        public unsafe delegate void ShiftArrayKernel<T>(T* input, int* shifts, T* output, long count) where T : unmanaged;
 
         #endregion
 
@@ -146,7 +146,7 @@ namespace NumSharp.Backends.Kernels
             var dm = new DynamicMethod(
                 name: $"IL_Shift{(isLeftShift ? "Left" : "Right")}_Scalar_{typeof(T).Name}",
                 returnType: typeof(void),
-                parameterTypes: new[] { typeof(T*), typeof(T*), typeof(int), typeof(int) },
+                parameterTypes: new[] { typeof(T*), typeof(T*), typeof(int), typeof(long) },
                 owner: typeof(ILKernelGenerator),
                 skipVisibility: true
             );
@@ -154,9 +154,9 @@ namespace NumSharp.Backends.Kernels
             var il = dm.GetILGenerator();
 
             // Locals
-            var locI = il.DeclareLocal(typeof(int));           // loop counter
-            var locVectorEnd = il.DeclareLocal(typeof(int));   // count - vectorCount
-            var locUnrollEnd = il.DeclareLocal(typeof(int));   // count - vectorCount*4
+            var locI = il.DeclareLocal(typeof(long));           // loop counter
+            var locVectorEnd = il.DeclareLocal(typeof(long));   // count - vectorCount
+            var locUnrollEnd = il.DeclareLocal(typeof(long));   // count - vectorCount*4
 
             int elementSize = Unsafe.SizeOf<T>();
             int bitWidth = GetBitWidth<T>();
@@ -193,9 +193,9 @@ namespace NumSharp.Backends.Kernels
                 il.Emit(OpCodes.Ldarg_1);                  // output
                 il.Emit(OpCodes.Ldc_I4_0);                 // value = 0
                 il.Emit(OpCodes.Ldarg_3);                  // count
-                il.Emit(OpCodes.Ldc_I4, elementSize);
+                il.Emit(OpCodes.Ldc_I8, (long)elementSize);
                 il.Emit(OpCodes.Mul);
-                il.Emit(OpCodes.Conv_U4);                  // size as uint
+                il.Emit(OpCodes.Conv_U4);                  // size as uint (InitBlockUnaligned limit)
                 il.EmitCall(OpCodes.Call, CachedMethods.UnsafeInitBlockUnaligned, null);
                 il.Emit(OpCodes.Ret);
             }
@@ -211,18 +211,18 @@ namespace NumSharp.Backends.Kernels
             il.MarkLabel(lblNormalShift);
 
             // i = 0
-            il.Emit(OpCodes.Ldc_I4_0);
+            il.Emit(OpCodes.Ldc_I8, 0L);
             il.Emit(OpCodes.Stloc, locI);
 
             // vectorEnd = count - vectorCount
-            il.Emit(OpCodes.Ldarg_3);                      // count
-            il.Emit(OpCodes.Ldc_I4, vectorCount);
+            il.Emit(OpCodes.Ldarg_3);                      // count (now long)
+            il.Emit(OpCodes.Ldc_I8, (long)vectorCount);
             il.Emit(OpCodes.Sub);
             il.Emit(OpCodes.Stloc, locVectorEnd);
 
             // unrollEnd = count - vectorCount*4
-            il.Emit(OpCodes.Ldarg_3);                      // count
-            il.Emit(OpCodes.Ldc_I4, unrollStep);
+            il.Emit(OpCodes.Ldarg_3);                      // count (now long)
+            il.Emit(OpCodes.Ldc_I8, (long)unrollStep);
             il.Emit(OpCodes.Sub);
             il.Emit(OpCodes.Stloc, locUnrollEnd);
 
@@ -244,12 +244,12 @@ namespace NumSharp.Backends.Kernels
                 il.Emit(OpCodes.Ldloc, locI);
                 if (offset > 0)
                 {
-                    il.Emit(OpCodes.Ldc_I4, offset);
+                    il.Emit(OpCodes.Ldc_I8, (long)offset);
                     il.Emit(OpCodes.Add);
                 }
-                il.Emit(OpCodes.Conv_I);
-                il.Emit(OpCodes.Ldc_I4, elementSize);
+                il.Emit(OpCodes.Ldc_I8, (long)elementSize);
                 il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Conv_I);
                 il.Emit(OpCodes.Add);
                 EmitVectorLoad<T>(il);
 
@@ -264,19 +264,19 @@ namespace NumSharp.Backends.Kernels
                 il.Emit(OpCodes.Ldloc, locI);
                 if (offset > 0)
                 {
-                    il.Emit(OpCodes.Ldc_I4, offset);
+                    il.Emit(OpCodes.Ldc_I8, (long)offset);
                     il.Emit(OpCodes.Add);
                 }
-                il.Emit(OpCodes.Conv_I);
-                il.Emit(OpCodes.Ldc_I4, elementSize);
+                il.Emit(OpCodes.Ldc_I8, (long)elementSize);
                 il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Conv_I);
                 il.Emit(OpCodes.Add);
                 EmitVectorStore<T>(il);
             }
 
             // i += vectorCount * 4
             il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Ldc_I4, unrollStep);
+            il.Emit(OpCodes.Ldc_I8, (long)unrollStep);
             il.Emit(OpCodes.Add);
             il.Emit(OpCodes.Stloc, locI);
 
@@ -294,9 +294,9 @@ namespace NumSharp.Backends.Kernels
             // Load input vector
             il.Emit(OpCodes.Ldarg_0);                      // input
             il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Conv_I);
-            il.Emit(OpCodes.Ldc_I4, elementSize);
+            il.Emit(OpCodes.Ldc_I8, (long)elementSize);
             il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
             il.Emit(OpCodes.Add);
             EmitVectorLoad<T>(il);
 
@@ -309,15 +309,15 @@ namespace NumSharp.Backends.Kernels
             // Store result
             il.Emit(OpCodes.Ldarg_1);                      // output
             il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Conv_I);
-            il.Emit(OpCodes.Ldc_I4, elementSize);
+            il.Emit(OpCodes.Ldc_I8, (long)elementSize);
             il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
             il.Emit(OpCodes.Add);
             EmitVectorStore<T>(il);
 
             // i += vectorCount
             il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Ldc_I4, vectorCount);
+            il.Emit(OpCodes.Ldc_I8, (long)vectorCount);
             il.Emit(OpCodes.Add);
             il.Emit(OpCodes.Stloc, locI);
 
@@ -329,7 +329,7 @@ namespace NumSharp.Backends.Kernels
 
             // if (i >= count) goto TailLoopEnd
             il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Ldarg_3);                      // count
+            il.Emit(OpCodes.Ldarg_3);                      // count (now long)
             il.Emit(OpCodes.Bge, lblTailLoopEnd);
 
             // output[i] = input[i] << shiftAmount (or >>)
@@ -337,7 +337,7 @@ namespace NumSharp.Backends.Kernels
 
             // i++
             il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Ldc_I4_1);
+            il.Emit(OpCodes.Ldc_I8, 1L);
             il.Emit(OpCodes.Add);
             il.Emit(OpCodes.Stloc, locI);
 
@@ -362,7 +362,7 @@ namespace NumSharp.Backends.Kernels
             var dm = new DynamicMethod(
                 name: $"IL_Shift{(isLeftShift ? "Left" : "Right")}_Array_{typeof(T).Name}",
                 returnType: typeof(void),
-                parameterTypes: new[] { typeof(T*), typeof(int*), typeof(T*), typeof(int) },
+                parameterTypes: new[] { typeof(T*), typeof(int*), typeof(T*), typeof(long) },
                 owner: typeof(ILKernelGenerator),
                 skipVisibility: true
             );
@@ -370,7 +370,7 @@ namespace NumSharp.Backends.Kernels
             var il = dm.GetILGenerator();
 
             // Locals
-            var locI = il.DeclareLocal(typeof(int));           // loop counter
+            var locI = il.DeclareLocal(typeof(long));           // loop counter
 
             int elementSize = Unsafe.SizeOf<T>();
 
@@ -379,7 +379,7 @@ namespace NumSharp.Backends.Kernels
             var lblLoopEnd = il.DefineLabel();
 
             // i = 0
-            il.Emit(OpCodes.Ldc_I4_0);
+            il.Emit(OpCodes.Ldc_I8, 0L);
             il.Emit(OpCodes.Stloc, locI);
 
             // ========== SCALAR LOOP ==========
@@ -387,7 +387,7 @@ namespace NumSharp.Backends.Kernels
 
             // if (i >= count) goto LoopEnd
             il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Ldarg_3);                      // count
+            il.Emit(OpCodes.Ldarg_3);                      // count (now long)
             il.Emit(OpCodes.Bge, lblLoopEnd);
 
             // output[i] = input[i] << shifts[i]
@@ -395,7 +395,7 @@ namespace NumSharp.Backends.Kernels
 
             // i++
             il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Ldc_I4_1);
+            il.Emit(OpCodes.Ldc_I8, 1L);
             il.Emit(OpCodes.Add);
             il.Emit(OpCodes.Stloc, locI);
 
@@ -453,14 +453,14 @@ namespace NumSharp.Backends.Kernels
         {
             // Simple loop: for (i = 0; i < count; i++)
             //   output[i] = input[i] < 0 ? -1 : 0
-            var locI = il.DeclareLocal(typeof(int));
+            var locI = il.DeclareLocal(typeof(long));
             var lblLoop = il.DefineLabel();
             var lblLoopEnd = il.DefineLabel();
             var lblNegative = il.DefineLabel();
             var lblStoreResult = il.DefineLabel();
 
             // i = 0
-            il.Emit(OpCodes.Ldc_I4_0);
+            il.Emit(OpCodes.Ldc_I8, 0L);
             il.Emit(OpCodes.Stloc, locI);
 
             il.MarkLabel(lblLoop);
@@ -473,17 +473,17 @@ namespace NumSharp.Backends.Kernels
             // Load output address for store
             il.Emit(OpCodes.Ldarg_1);                      // output
             il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Conv_I);
-            il.Emit(OpCodes.Ldc_I4, elementSize);
+            il.Emit(OpCodes.Ldc_I8, (long)elementSize);
             il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
             il.Emit(OpCodes.Add);
 
             // Load input[i] and check if negative
             il.Emit(OpCodes.Ldarg_0);                      // input
             il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Conv_I);
-            il.Emit(OpCodes.Ldc_I4, elementSize);
+            il.Emit(OpCodes.Ldc_I8, (long)elementSize);
             il.Emit(OpCodes.Mul);
+            il.Emit(OpCodes.Conv_I);
             il.Emit(OpCodes.Add);
             EmitLoadIndirect<T>(il);
 
@@ -530,7 +530,7 @@ namespace NumSharp.Backends.Kernels
 
             // i++
             il.Emit(OpCodes.Ldloc, locI);
-            il.Emit(OpCodes.Ldc_I4_1);
+            il.Emit(OpCodes.Ldc_I8, 1L);
             il.Emit(OpCodes.Add);
             il.Emit(OpCodes.Stloc, locI);
 
@@ -632,9 +632,9 @@ namespace NumSharp.Backends.Kernels
                 // Load output address for overflow store
                 il.Emit(OpCodes.Ldarg_2);                      // output (arg2 for array shift)
                 il.Emit(OpCodes.Ldloc, locI);
-                il.Emit(OpCodes.Conv_I);
-                il.Emit(OpCodes.Ldc_I4, elementSize);
+                il.Emit(OpCodes.Ldc_I8, (long)elementSize);
                 il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Conv_I);
                 il.Emit(OpCodes.Add);
 
                 if (isLeftShift || IsUnsignedType<T>())
@@ -653,9 +653,9 @@ namespace NumSharp.Backends.Kernels
                     // Load input[i] to check sign
                     il.Emit(OpCodes.Ldarg_0);                      // input
                     il.Emit(OpCodes.Ldloc, locI);
-                    il.Emit(OpCodes.Conv_I);
-                    il.Emit(OpCodes.Ldc_I4, elementSize);
+                    il.Emit(OpCodes.Ldc_I8, (long)elementSize);
                     il.Emit(OpCodes.Mul);
+                    il.Emit(OpCodes.Conv_I);
                     il.Emit(OpCodes.Add);
                     EmitLoadIndirect<T>(il);
 
@@ -699,17 +699,17 @@ namespace NumSharp.Backends.Kernels
                 // Address: output + i * elementSize
                 il.Emit(OpCodes.Ldarg_2);                      // output (arg2 for array shift)
                 il.Emit(OpCodes.Ldloc, locI);
-                il.Emit(OpCodes.Conv_I);
-                il.Emit(OpCodes.Ldc_I4, elementSize);
+                il.Emit(OpCodes.Ldc_I8, (long)elementSize);
                 il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Conv_I);
                 il.Emit(OpCodes.Add);
 
                 // Load input[i]
                 il.Emit(OpCodes.Ldarg_0);                      // input
                 il.Emit(OpCodes.Ldloc, locI);
-                il.Emit(OpCodes.Conv_I);
-                il.Emit(OpCodes.Ldc_I4, elementSize);
+                il.Emit(OpCodes.Ldc_I8, (long)elementSize);
                 il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Conv_I);
                 il.Emit(OpCodes.Add);
                 EmitLoadIndirect<T>(il);
 
@@ -730,17 +730,17 @@ namespace NumSharp.Backends.Kernels
                 // Address: output + i * elementSize
                 il.Emit(OpCodes.Ldarg_1);                      // output (arg1 for scalar shift)
                 il.Emit(OpCodes.Ldloc, locI);
-                il.Emit(OpCodes.Conv_I);
-                il.Emit(OpCodes.Ldc_I4, elementSize);
+                il.Emit(OpCodes.Ldc_I8, (long)elementSize);
                 il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Conv_I);
                 il.Emit(OpCodes.Add);
 
                 // Load input[i]
                 il.Emit(OpCodes.Ldarg_0);                      // input
                 il.Emit(OpCodes.Ldloc, locI);
-                il.Emit(OpCodes.Conv_I);
-                il.Emit(OpCodes.Ldc_I4, elementSize);
+                il.Emit(OpCodes.Ldc_I8, (long)elementSize);
                 il.Emit(OpCodes.Mul);
+                il.Emit(OpCodes.Conv_I);
                 il.Emit(OpCodes.Add);
                 EmitLoadIndirect<T>(il);
 

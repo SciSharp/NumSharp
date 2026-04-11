@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics;
 using System.Runtime.Intrinsics.X86;
+using NumSharp.Utilities;
 
 namespace NumSharp.Backends.Kernels
 {
@@ -33,11 +34,17 @@ namespace NumSharp.Backends.Kernels
         /// A is [M x K], B is [K x N], C is [M x N]
         /// All matrices must be row-major contiguous.
         /// </summary>
+        /// <remarks>
+        /// Supports long dimensions for arrays > 2B elements.
+        /// Cache blocking (MC, KC, MR, NR) keeps inner loops within int range.
+        /// Outer loops and index calculations use long arithmetic.
+        /// </remarks>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        public static unsafe void MatMulFloat(float* A, float* B, float* C, int M, int N, int K)
+        public static unsafe void MatMulFloat(float* A, float* B, float* C, long M, long N, long K)
         {
-            // Zero output
-            new Span<float>(C, M * N).Clear();
+
+            // Zero output using UnmanagedSpan for long indexing support
+            new UnmanagedSpan<float>(C, M * N).Clear();
 
             // Small matrices: use simple IKJ loop (blocking overhead not worth it)
             if (M <= BLOCKING_THRESHOLD && N <= BLOCKING_THRESHOLD && K <= BLOCKING_THRESHOLD)
@@ -52,22 +59,24 @@ namespace NumSharp.Backends.Kernels
 
         /// <summary>
         /// Simple IKJ loop for small matrices.
+        /// Outer loops use long to support dimensions > int.MaxValue.
+        /// Inner SIMD loop uses long for j to support large N dimension.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        private static unsafe void MatMulFloatSimple(float* A, float* B, float* C, int M, int N, int K)
+        private static unsafe void MatMulFloatSimple(float* A, float* B, float* C, long M, long N, long K)
         {
-            for (int i = 0; i < M; i++)
+            for (long i = 0; i < M; i++)
             {
                 float* cRow = C + i * N;
                 float* aRow = A + i * K;
 
-                for (int k = 0; k < K; k++)
+                for (long k = 0; k < K; k++)
                 {
                     float aik = aRow[k];
                     var aikVec = Vector256.Create(aik);
                     float* bRow = B + k * N;
 
-                    int j = 0;
+                    long j = 0;
                     // SIMD loop
                     for (; j <= N - 8; j += 8)
                     {
@@ -90,12 +99,13 @@ namespace NumSharp.Backends.Kernels
         /// Both A and B are packed into micro-kernel-friendly layouts:
         /// - A: [kc][MR] panels - MR rows interleaved per k value
         /// - B: [kc][NR] panels - NR columns contiguous per k value
+        /// Outer loops use long to support dimensions > int.MaxValue.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        private static unsafe void MatMulFloatBlocked(float* A, float* B, float* C, int M, int N, int K)
+        private static unsafe void MatMulFloatBlocked(float* A, float* B, float* C, long M, long N, long K)
         {
             int numMPanels = (MC + MR - 1) / MR;
-            int numNPanels = (N + NR - 1) / NR;
+            long numNPanels = (N + NR - 1) / NR;
 
             // Allocate packing buffers with 64-byte alignment for cache line efficiency
             // Pack A as MR-row panels: [numMPanels][kc][MR]
@@ -106,17 +116,17 @@ namespace NumSharp.Backends.Kernels
             try
             {
                 // Loop over K blocks (outermost for B panel reuse)
-                for (int k0 = 0; k0 < K; k0 += KC)
+                for (long k0 = 0; k0 < K; k0 += KC)
                 {
-                    int kc = Math.Min(KC, K - k0);
+                    int kc = (int)Math.Min(KC, K - k0);
 
                     // Pack B into NR-column panels: each panel has kc rows of NR contiguous elements
-                    PackBPanels(B, packB, N, k0, kc, N);
+                    PackBPanels(B, packB, N, k0, kc);
 
                     // Loop over M blocks
-                    for (int i0 = 0; i0 < M; i0 += MC)
+                    for (long i0 = 0; i0 < M; i0 += MC)
                     {
-                        int mc = Math.Min(MC, M - i0);
+                        int mc = (int)Math.Min(MC, M - i0);
 
                         // Pack A into MR-row panels: each panel has kc columns with MR interleaved rows
                         PackAPanels(A, packA, K, i0, k0, mc, kc);
@@ -127,9 +137,9 @@ namespace NumSharp.Backends.Kernels
                             int mr = Math.Min(MR, mc - ip);
                             float* aPanel = packA + (ip / MR) * kc * MR;
 
-                            for (int jp = 0; jp < N; jp += NR)
+                            for (long jp = 0; jp < N; jp += NR)
                             {
-                                int nr = Math.Min(NR, N - jp);
+                                int nr = (int)Math.Min(NR, N - jp);
                                 float* bPanel = packB + (jp / NR) * kc * NR;
 
                                 if (mr == MR && nr == NR)
@@ -158,9 +168,10 @@ namespace NumSharp.Backends.Kernels
         /// Pack A into MR-row panels with interleaved layout.
         /// Layout: for each MR-row panel, store [k0][row0..row7], [k1][row0..row7], ...
         /// This gives contiguous access pattern: aPanel[k * MR + row]
+        /// Uses long for i0, k0, lda to support large matrices.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe void PackAPanels(float* A, float* packA, int lda, int i0, int k0, int mc, int kc)
+        private static unsafe void PackAPanels(float* A, float* packA, long lda, long i0, long k0, int mc, int kc)
         {
             for (int ip = 0; ip < mc; ip += MR)
             {
@@ -173,6 +184,7 @@ namespace NumSharp.Backends.Kernels
                     for (int k = 0; k < kc; k++)
                     {
                         float* dst = aPanel + k * MR;
+                        // Use long arithmetic for index calculation
                         dst[0] = A[(i0 + ip + 0) * lda + k0 + k];
                         dst[1] = A[(i0 + ip + 1) * lda + k0 + k];
                         dst[2] = A[(i0 + ip + 2) * lda + k0 + k];
@@ -200,13 +212,15 @@ namespace NumSharp.Backends.Kernels
         /// Pack B into NR-column panels with contiguous layout.
         /// Layout: for each NR-column panel, store [k0][col0..col15], [k1][col0..col15], ...
         /// This gives contiguous access pattern: bPanel[k * NR + col]
+        /// Uses long for n, k0, ldb to support large matrices.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe void PackBPanels(float* B, float* packB, int ldb, int k0, int kc, int n)
+        private static unsafe void PackBPanels(float* B, float* packB, long ldb, long k0, int kc)
         {
-            for (int jp = 0; jp < n; jp += NR)
+            long n = ldb; // N == ldb for row-major B
+            for (long jp = 0; jp < n; jp += NR)
             {
-                int nr = Math.Min(NR, n - jp);
+                int nr = (int)Math.Min(NR, n - jp);
                 float* bPanel = packB + (jp / NR) * kc * NR;
 
                 if (nr == NR)
@@ -214,6 +228,7 @@ namespace NumSharp.Backends.Kernels
                     // Full panel - vectorized copy of 16 contiguous floats per k
                     for (int k = 0; k < kc; k++)
                     {
+                        // Use long arithmetic for index calculation
                         float* src = B + (k0 + k) * ldb + jp;
                         float* dst = bPanel + k * NR;
                         Vector256.Store(Vector256.Load(src), dst);
@@ -239,11 +254,13 @@ namespace NumSharp.Backends.Kernels
         /// Both A and B are in packed panel format for optimal cache access:
         /// - A panel: aPanel[k * MR + row] - 8 floats contiguous per k
         /// - B panel: bPanel[k * NR + col] - 16 floats contiguous per k
+        /// Uses long for i, j, ldc to support large matrices.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe void Microkernel8x16Packed(float* aPanel, float* bPanel, float* C, int ldc, int i, int j, int kc)
+        private static unsafe void Microkernel8x16Packed(float* aPanel, float* bPanel, float* C, long ldc, long i, long j, int kc)
         {
             // Load C accumulators (8 rows x 2 vectors = 16 accumulators)
+            // Use long arithmetic for index calculation
             var c00 = Vector256.Load(C + (i + 0) * ldc + j);
             var c01 = Vector256.Load(C + (i + 0) * ldc + j + 8);
             var c10 = Vector256.Load(C + (i + 1) * ldc + j);
@@ -425,12 +442,14 @@ namespace NumSharp.Backends.Kernels
 
         /// <summary>
         /// Generic micro-kernel for edge cases (partial rows/cols) with packed panels.
+        /// Uses long for i, j, ldc to support large matrices.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        private static unsafe void MicrokernelGenericPacked(float* aPanel, float* bPanel, float* C, int ldc, int i, int j, int kc, int mr, int nr)
+        private static unsafe void MicrokernelGenericPacked(float* aPanel, float* bPanel, float* C, long ldc, long i, long j, int kc, int mr, int nr)
         {
             for (int ii = 0; ii < mr; ii++)
             {
+                // Use long arithmetic for index calculation
                 float* cRow = C + (i + ii) * ldc + j;
 
                 // Use SIMD for full vectors, scalar for remainder

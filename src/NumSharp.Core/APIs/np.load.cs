@@ -176,7 +176,7 @@ namespace NumSharp
 
         private static Array readValueMatrix(BinaryReader reader, Array matrix, int bytes, Type type, int[] shape)
         {
-            int total = 1;
+            long total = 1;
             for (int i = 0; i < shape.Length; i++)
                 total *= shape[i];
             var buffer = new byte[bytes * total];

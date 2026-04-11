@@ -28,21 +28,21 @@ namespace NumSharp.UnitTest.Selection
         public void argmax_case2()
         {
             var a = np.arange(27).reshape(3, 3, 3);
-            np.argmax(a, axis: 1).Cast<long>().Should().AllBeEquivalentTo(2);
+            np.argmax(a, axis: 1).flat.Cast<long>().Should().AllBeEquivalentTo(2);
         }
 
         [Test]
         public void argmax_case3()
         {
             var a = np.arange(27).reshape(3, 3, 3);
-            np.argmax(a, axis: 0).Cast<long>().Should().AllBeEquivalentTo(2);
+            np.argmax(a, axis: 0).flat.Cast<long>().Should().AllBeEquivalentTo(2);
         }
 
         [Test]
         public void argmax_case4()
         {
             var a = np.arange(27).reshape(3, 3, 3);
-            np.argmax(a, axis: 2).Cast<long>().Should().AllBeEquivalentTo(2);
+            np.argmax(a, axis: 2).flat.Cast<long>().Should().AllBeEquivalentTo(2);
         }
 
         [Test]
@@ -93,21 +93,21 @@ namespace NumSharp.UnitTest.Selection
         public void argmin_case2()
         {
             var a = np.arange(27).reshape(3, 3, 3);
-            np.argmin(a, axis: 1).Cast<long>().Should().AllBeEquivalentTo(0);
+            np.argmin(a, axis: 1).flat.Cast<long>().Should().AllBeEquivalentTo(0);
         }
 
         [Test]
         public void argmin_case3()
         {
             var a = np.arange(27).reshape(3, 3, 3);
-            np.argmin(a, axis: 0).Cast<long>().Should().AllBeEquivalentTo(0);
+            np.argmin(a, axis: 0).flat.Cast<long>().Should().AllBeEquivalentTo(0);
         }
 
         [Test]
         public void argmin_case4()
         {
             var a = np.arange(27).reshape(3, 3, 3);
-            np.argmin(a, axis: 2).Cast<long>().Should().AllBeEquivalentTo(0);
+            np.argmin(a, axis: 2).flat.Cast<long>().Should().AllBeEquivalentTo(0);
         }
 
         [Test]
@@ -139,16 +139,16 @@ namespace NumSharp.UnitTest.Selection
 
             //no axis
             n = np.arange(4).reshape(2, 2);
-            var max = np.amax<int>(n);
+            var max = np.amax<long>(n);
 
             Assert.IsTrue(max == 3);
 
             //2D with axis
-            var n1 = np.amax(n, 0).MakeGeneric<int>();
+            var n1 = np.amax(n, 0).MakeGeneric<long>();
             Assert.IsTrue(n1.GetAtIndex(0) == 2);
             Assert.IsTrue(n1.GetAtIndex(1) == 3);
 
-            n1 = np.amax(n, 1).MakeGeneric<int>();
+            n1 = np.amax(n, 1).MakeGeneric<long>();
             Assert.IsTrue(n1[0] == 1);
             Assert.IsTrue(n1[1] == 3);
 

@@ -23,7 +23,7 @@ namespace NumSharp.Backends
                     var r = NDArray.Scalar(double.NaN);
                     if (keepdims)
                     {
-                        var keepdimsShape = new int[arr.ndim];
+                        var keepdimsShape = new long[arr.ndim];
                         for (int i = 0; i < arr.ndim; i++)
                             keepdimsShape[i] = 1;
                         r.Storage.Reshape(new Shape(keepdimsShape));
@@ -46,7 +46,7 @@ namespace NumSharp.Backends
                 {
                     // Reducing along a zero-size axis - return NaN filled array
                     result = np.empty(new Shape(resultShape), emptyOutputType);
-                    for (int i = 0; i < result.size; i++)
+                    for (long i = 0; i < result.size; i++)
                         result.SetAtIndex(double.NaN, i);
                 }
                 else
@@ -57,7 +57,7 @@ namespace NumSharp.Backends
 
                 if (keepdims)
                 {
-                    var keepdimsShape = new int[arr.ndim];
+                    var keepdimsShape = new long[arr.ndim];
                     for (int d = 0, sd = 0; d < arr.ndim; d++)
                     {
                         if (d == emptyAxis)
@@ -81,7 +81,7 @@ namespace NumSharp.Backends
                 if (keepdims)
                 {
                     // NumPy: keepdims preserves the number of dimensions, all set to 1
-                    var keepdimsShape = new int[arr.ndim];
+                    var keepdimsShape = new long[arr.ndim];
                     for (int i = 0; i < arr.ndim; i++)
                         keepdimsShape[i] = 1;
                     r.Storage.Reshape(new Shape(keepdimsShape));
@@ -97,7 +97,7 @@ namespace NumSharp.Backends
                 if (keepdims)
                 {
                     // NumPy: keepdims preserves the number of dimensions, all set to 1
-                    var keepdimsShape = new int[arr.ndim];
+                    var keepdimsShape = new long[arr.ndim];
                     for (int i = 0; i < arr.ndim; i++)
                         keepdimsShape[i] = 1;
                     r.Storage.Reshape(new Shape(keepdimsShape));
@@ -119,7 +119,7 @@ namespace NumSharp.Backends
                 //Return zeros with the appropriate shape (NumPy behavior)
                 if (keepdims)
                 {
-                    var keepdimsShapeDims = new int[arr.ndim];
+                    var keepdimsShapeDims = new long[arr.ndim];
                     for (int i = 0; i < arr.ndim; i++)
                         keepdimsShapeDims[i] = (i == axis) ? 1 : shape[i];
                     return np.zeros(keepdimsShapeDims, typeCode ?? arr.GetTypeCode.GetComputingType());
@@ -131,7 +131,7 @@ namespace NumSharp.Backends
             if (ILKernelGenerator.Enabled)
             {
                 var ilResult = ExecuteAxisStdReductionIL(arr, axis, keepdims, typeCode ?? NPTypeCode.Double, ddof ?? 0);
-                if (ilResult != null)
+                if (ilResult is not null)
                     return ilResult;
             }
 
@@ -311,20 +311,20 @@ namespace NumSharp.Backends
             if (kernel == null)
                 return null;
 
-            var outputDims = new int[arr.ndim - 1];
+            var outputDims = new long[arr.ndim - 1];
             for (int d = 0, od = 0; d < arr.ndim; d++)
                 if (d != axis) outputDims[od++] = shape.dimensions[d];
 
             var outputShape = outputDims.Length > 0 ? new Shape(outputDims) : Shape.Scalar;
             var result = new NDArray(NPTypeCode.Double, outputShape, false);
 
-            int axisSize = shape.dimensions[axis];
-            int outputSize = result.size > 0 ? result.size : 1;
+            long axisSize = shape.dimensions[axis];
+            long outputSize = result.size > 0 ? result.size : 1;
             byte* inputAddr = (byte*)arr.Address + shape.offset * arr.dtypesize;
 
-            fixed (int* inputStrides = shape.strides)
-            fixed (int* inputDims = shape.dimensions)
-            fixed (int* outputStrides = result.Shape.strides)
+            fixed (long* inputStrides = shape.strides)
+            fixed (long* inputDims = shape.dimensions)
+            fixed (long* outputStrides = result.Shape.strides)
             {
                 // The kernel computes std with ddof=0 by default
                 kernel((void*)inputAddr, (void*)result.Address, inputStrides, inputDims, outputStrides, axis, axisSize, arr.ndim, outputSize);
@@ -334,7 +334,7 @@ namespace NumSharp.Backends
                 {
                     double* resultPtr = (double*)result.Address;
                     double adjustment = Math.Sqrt((double)axisSize / (axisSize - ddof));
-                    for (int i = 0; i < outputSize; i++)
+                    for (long i = 0; i < outputSize; i++)
                         resultPtr[i] *= adjustment;
                 }
             }
@@ -347,7 +347,7 @@ namespace NumSharp.Backends
 
             if (keepdims)
             {
-                var ks = new int[arr.ndim];
+                var ks = new long[arr.ndim];
                 for (int d = 0, sd = 0; d < arr.ndim; d++)
                     ks[d] = (d == axis) ? 1 : (sd < outputDims.Length ? outputDims[sd++] : 1);
                 result.Storage.Reshape(new Shape(ks));

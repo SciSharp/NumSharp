@@ -93,8 +93,8 @@ namespace NumSharp.Backends
             // Calculate base address accounting for shape offset (for sliced views)
             byte* inputAddr = (byte*)input.Address + inputShape.offset * inputElemSize;
 
-            fixed (int* strides = inputShape.strides)
-            fixed (int* shape = inputShape.dimensions)
+            fixed (long* strides = inputShape.strides)
+            fixed (long* shape = inputShape.dimensions)
             {
                 return kernel(
                     (void*)inputAddr,
@@ -230,21 +230,21 @@ namespace NumSharp.Backends
             var inputType = arr.GetTypeCode;
 
             // ArgMax returns long (int64) to match NumPy 2.x behavior
-            // Internally uses int kernels (arrays rarely exceed 2^31 elements), widens to long for API
+            // IL kernel tracks index as long internally, supports arrays >2GB elements
             // All types use IL kernels - NaN-aware helpers for float/double, bool-aware for boolean
             return inputType switch
             {
-                NPTypeCode.Boolean => ExecuteElementReduction<int>(arr, ReductionOp.ArgMax, NPTypeCode.Boolean),
-                NPTypeCode.Byte => ExecuteElementReduction<int>(arr, ReductionOp.ArgMax, NPTypeCode.Byte),
-                NPTypeCode.Int16 => ExecuteElementReduction<int>(arr, ReductionOp.ArgMax, NPTypeCode.Int16),
-                NPTypeCode.UInt16 => ExecuteElementReduction<int>(arr, ReductionOp.ArgMax, NPTypeCode.UInt16),
-                NPTypeCode.Int32 => ExecuteElementReduction<int>(arr, ReductionOp.ArgMax, NPTypeCode.Int32),
-                NPTypeCode.UInt32 => ExecuteElementReduction<int>(arr, ReductionOp.ArgMax, NPTypeCode.UInt32),
-                NPTypeCode.Int64 => ExecuteElementReduction<int>(arr, ReductionOp.ArgMax, NPTypeCode.Int64),
-                NPTypeCode.UInt64 => ExecuteElementReduction<int>(arr, ReductionOp.ArgMax, NPTypeCode.UInt64),
-                NPTypeCode.Single => ExecuteElementReduction<int>(arr, ReductionOp.ArgMax, NPTypeCode.Single),
-                NPTypeCode.Double => ExecuteElementReduction<int>(arr, ReductionOp.ArgMax, NPTypeCode.Double),
-                NPTypeCode.Decimal => ExecuteElementReduction<int>(arr, ReductionOp.ArgMax, NPTypeCode.Decimal),
+                NPTypeCode.Boolean => ExecuteElementReduction<long>(arr, ReductionOp.ArgMax, NPTypeCode.Boolean),
+                NPTypeCode.Byte => ExecuteElementReduction<long>(arr, ReductionOp.ArgMax, NPTypeCode.Byte),
+                NPTypeCode.Int16 => ExecuteElementReduction<long>(arr, ReductionOp.ArgMax, NPTypeCode.Int16),
+                NPTypeCode.UInt16 => ExecuteElementReduction<long>(arr, ReductionOp.ArgMax, NPTypeCode.UInt16),
+                NPTypeCode.Int32 => ExecuteElementReduction<long>(arr, ReductionOp.ArgMax, NPTypeCode.Int32),
+                NPTypeCode.UInt32 => ExecuteElementReduction<long>(arr, ReductionOp.ArgMax, NPTypeCode.UInt32),
+                NPTypeCode.Int64 => ExecuteElementReduction<long>(arr, ReductionOp.ArgMax, NPTypeCode.Int64),
+                NPTypeCode.UInt64 => ExecuteElementReduction<long>(arr, ReductionOp.ArgMax, NPTypeCode.UInt64),
+                NPTypeCode.Single => ExecuteElementReduction<long>(arr, ReductionOp.ArgMax, NPTypeCode.Single),
+                NPTypeCode.Double => ExecuteElementReduction<long>(arr, ReductionOp.ArgMax, NPTypeCode.Double),
+                NPTypeCode.Decimal => ExecuteElementReduction<long>(arr, ReductionOp.ArgMax, NPTypeCode.Decimal),
                 _ => throw new NotSupportedException($"ArgMax not supported for type {inputType}")
             };
         }
@@ -263,21 +263,21 @@ namespace NumSharp.Backends
             var inputType = arr.GetTypeCode;
 
             // ArgMin returns long (int64) to match NumPy 2.x behavior
-            // Internally uses int kernels (arrays rarely exceed 2^31 elements), widens to long for API
+            // IL kernel tracks index as long internally, supports arrays >2GB elements
             // All types use IL kernels - NaN-aware helpers for float/double, bool-aware for boolean
             return inputType switch
             {
-                NPTypeCode.Boolean => ExecuteElementReduction<int>(arr, ReductionOp.ArgMin, NPTypeCode.Boolean),
-                NPTypeCode.Byte => ExecuteElementReduction<int>(arr, ReductionOp.ArgMin, NPTypeCode.Byte),
-                NPTypeCode.Int16 => ExecuteElementReduction<int>(arr, ReductionOp.ArgMin, NPTypeCode.Int16),
-                NPTypeCode.UInt16 => ExecuteElementReduction<int>(arr, ReductionOp.ArgMin, NPTypeCode.UInt16),
-                NPTypeCode.Int32 => ExecuteElementReduction<int>(arr, ReductionOp.ArgMin, NPTypeCode.Int32),
-                NPTypeCode.UInt32 => ExecuteElementReduction<int>(arr, ReductionOp.ArgMin, NPTypeCode.UInt32),
-                NPTypeCode.Int64 => ExecuteElementReduction<int>(arr, ReductionOp.ArgMin, NPTypeCode.Int64),
-                NPTypeCode.UInt64 => ExecuteElementReduction<int>(arr, ReductionOp.ArgMin, NPTypeCode.UInt64),
-                NPTypeCode.Single => ExecuteElementReduction<int>(arr, ReductionOp.ArgMin, NPTypeCode.Single),
-                NPTypeCode.Double => ExecuteElementReduction<int>(arr, ReductionOp.ArgMin, NPTypeCode.Double),
-                NPTypeCode.Decimal => ExecuteElementReduction<int>(arr, ReductionOp.ArgMin, NPTypeCode.Decimal),
+                NPTypeCode.Boolean => ExecuteElementReduction<long>(arr, ReductionOp.ArgMin, NPTypeCode.Boolean),
+                NPTypeCode.Byte => ExecuteElementReduction<long>(arr, ReductionOp.ArgMin, NPTypeCode.Byte),
+                NPTypeCode.Int16 => ExecuteElementReduction<long>(arr, ReductionOp.ArgMin, NPTypeCode.Int16),
+                NPTypeCode.UInt16 => ExecuteElementReduction<long>(arr, ReductionOp.ArgMin, NPTypeCode.UInt16),
+                NPTypeCode.Int32 => ExecuteElementReduction<long>(arr, ReductionOp.ArgMin, NPTypeCode.Int32),
+                NPTypeCode.UInt32 => ExecuteElementReduction<long>(arr, ReductionOp.ArgMin, NPTypeCode.UInt32),
+                NPTypeCode.Int64 => ExecuteElementReduction<long>(arr, ReductionOp.ArgMin, NPTypeCode.Int64),
+                NPTypeCode.UInt64 => ExecuteElementReduction<long>(arr, ReductionOp.ArgMin, NPTypeCode.UInt64),
+                NPTypeCode.Single => ExecuteElementReduction<long>(arr, ReductionOp.ArgMin, NPTypeCode.Single),
+                NPTypeCode.Double => ExecuteElementReduction<long>(arr, ReductionOp.ArgMin, NPTypeCode.Double),
+                NPTypeCode.Decimal => ExecuteElementReduction<long>(arr, ReductionOp.ArgMin, NPTypeCode.Decimal),
                 _ => throw new NotSupportedException($"ArgMin not supported for type {inputType}")
             };
         }
@@ -297,7 +297,7 @@ namespace NumSharp.Backends
 
             // Mean always computes in double for precision
             var retType = typeCode ?? NPTypeCode.Double;
-            int count = arr.size;
+            long count = arr.size;
 
             // Sum in accumulating type, then divide
             var sumType = arr.GetTypeCode.GetAccumulatingType();
@@ -364,7 +364,7 @@ namespace NumSharp.Backends
                 return null;
 
             // Compute output shape (remove the axis dimension)
-            var outputDims = new int[arr.ndim - 1];
+            var outputDims = new long[arr.ndim - 1];
             for (int d = 0, od = 0; d < arr.ndim; d++)
             {
                 if (d != axis)
@@ -376,8 +376,8 @@ namespace NumSharp.Backends
             var output = new NDArray(outputTypeCode, outputShape, false);
 
             // Execute the kernel
-            int axisSize = inputShape.dimensions[axis];
-            int outputSize = output.size > 0 ? output.size : 1;
+            long axisSize = inputShape.dimensions[axis];
+            long outputSize = output.size > 0 ? output.size : 1;
 
             // Get element size
             int elemSize = arr.dtypesize;
@@ -385,9 +385,9 @@ namespace NumSharp.Backends
             // Calculate base address accounting for shape offset (for sliced views)
             byte* inputAddr = (byte*)arr.Address + inputShape.offset * elemSize;
 
-            fixed (int* inputStrides = inputShape.strides)
-            fixed (int* inputDims = inputShape.dimensions)
-            fixed (int* outputStrides = output.Shape.strides)
+            fixed (long* inputStrides = inputShape.strides)
+            fixed (long* inputDims = inputShape.dimensions)
+            fixed (long* outputStrides = output.Shape.strides)
             {
                 kernel(
                     (void*)inputAddr,

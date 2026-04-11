@@ -1,20 +1,8 @@
 using System;
+using NumSharp.Backends;
 
 namespace NumSharp.Backends.Kernels
 {
-    /// <summary>
-    /// Execution path for reduction operations.
-    /// </summary>
-    public enum ReductionPath
-    {
-        /// <summary>Reduce all elements to a single scalar value (no axis specified)</summary>
-        ElementWise,
-        /// <summary>Reduce along a specific axis, producing smaller-dimensional result</summary>
-        AxisReduction,
-        /// <summary>Cumulative reduction - same shape output, running accumulation</summary>
-        Cumulative
-    }
-
     /// <summary>
     /// Cache key for element-wise (full array) reduction kernels.
     /// Reduces all elements to a single scalar value.
@@ -36,15 +24,15 @@ namespace NumSharp.Backends.Kernels
 
         /// <summary>
         /// Result type depends on operation:
-        /// - ArgMax/ArgMin: always Int32
+        /// - ArgMax/ArgMin: always Int64 (supports >2B element arrays)
         /// - All/Any: always Boolean
         /// - Mean: always Double (or accumulator type if specified)
         /// - Others: same as accumulator type
         /// </summary>
         public NPTypeCode ResultType => Op switch
         {
-            ReductionOp.ArgMax => NPTypeCode.Int32,
-            ReductionOp.ArgMin => NPTypeCode.Int32,
+            ReductionOp.ArgMax => NPTypeCode.Int64,
+            ReductionOp.ArgMin => NPTypeCode.Int64,
             ReductionOp.All => NPTypeCode.Boolean,
             ReductionOp.Any => NPTypeCode.Boolean,
             _ => AccumulatorType
@@ -76,11 +64,13 @@ namespace NumSharp.Backends.Kernels
 
         /// <summary>
         /// Result type depends on operation.
+        /// - ArgMax/ArgMin: always Int64 (supports >2B element arrays)
+        /// - Others: same as accumulator type
         /// </summary>
         public NPTypeCode ResultType => Op switch
         {
-            ReductionOp.ArgMax => NPTypeCode.Int32,
-            ReductionOp.ArgMin => NPTypeCode.Int32,
+            ReductionOp.ArgMax => NPTypeCode.Int64,
+            ReductionOp.ArgMin => NPTypeCode.Int64,
             _ => AccumulatorType
         };
 
@@ -139,10 +129,10 @@ namespace NumSharp.Backends.Kernels
     /// </remarks>
     public unsafe delegate object ElementReductionKernel(
         void* input,
-        int* strides,
-        int* shape,
+        long* strides,
+        long* shape,
         int ndim,
-        int totalSize
+        long totalSize
     );
 
     /// <summary>
@@ -152,10 +142,10 @@ namespace NumSharp.Backends.Kernels
     /// <typeparam name="TResult">Accumulator/result type</typeparam>
     public unsafe delegate TResult TypedElementReductionKernel<TResult>(
         void* input,
-        int* strides,
-        int* shape,
+        long* strides,
+        long* shape,
         int ndim,
-        int totalSize
+        long totalSize
     ) where TResult : unmanaged;
 
     /// <summary>
@@ -174,13 +164,13 @@ namespace NumSharp.Backends.Kernels
     public unsafe delegate void AxisReductionKernel(
         void* input,
         void* output,
-        int* inputStrides,
-        int* inputShape,
-        int* outputStrides,
+        long* inputStrides,
+        long* inputShape,
+        long* outputStrides,
         int axis,
-        int axisSize,
+        long axisSize,
         int ndim,
-        int outputSize
+        long outputSize
     );
 
     /// <summary>
@@ -196,10 +186,10 @@ namespace NumSharp.Backends.Kernels
     public unsafe delegate void CumulativeKernel(
         void* input,
         void* output,
-        int* strides,
-        int* shape,
+        long* strides,
+        long* shape,
         int ndim,
-        int totalSize
+        long totalSize
     );
 
     /// <summary>
@@ -216,11 +206,11 @@ namespace NumSharp.Backends.Kernels
     public unsafe delegate void CumulativeAxisKernel(
         void* input,
         void* output,
-        int* inputStrides,
-        int* shape,
+        long* inputStrides,
+        long* shape,
         int axis,
         int ndim,
-        int totalSize
+        long totalSize
     );
 
     /// <summary>
@@ -302,55 +292,15 @@ namespace NumSharp.Backends.Kernels
     /// </summary>
     public static class ReductionTypeExtensions
     {
-        /// <summary>
-        /// Get the default value (additive identity) for a type.
-        /// </summary>
-        public static object GetDefaultValue(this NPTypeCode type)
-        {
-            return type switch
-            {
-                NPTypeCode.Boolean => false,
-                NPTypeCode.Byte => (byte)0,
-                NPTypeCode.Int16 => (short)0,
-                NPTypeCode.UInt16 => (ushort)0,
-                NPTypeCode.Int32 => 0,
-                NPTypeCode.UInt32 => 0u,
-                NPTypeCode.Int64 => 0L,
-                NPTypeCode.UInt64 => 0UL,
-                NPTypeCode.Char => (char)0,
-                NPTypeCode.Single => 0f,
-                NPTypeCode.Double => 0d,
-                NPTypeCode.Decimal => 0m,
-                _ => throw new NotSupportedException($"Type {type} not supported")
-            };
-        }
-
-        /// <summary>
-        /// Get the multiplicative identity (1) for a type.
-        /// </summary>
-        public static object GetOneValue(this NPTypeCode type)
-        {
-            return type switch
-            {
-                NPTypeCode.Boolean => true,
-                NPTypeCode.Byte => (byte)1,
-                NPTypeCode.Int16 => (short)1,
-                NPTypeCode.UInt16 => (ushort)1,
-                NPTypeCode.Int32 => 1,
-                NPTypeCode.UInt32 => 1u,
-                NPTypeCode.Int64 => 1L,
-                NPTypeCode.UInt64 => 1UL,
-                NPTypeCode.Char => (char)1,
-                NPTypeCode.Single => 1f,
-                NPTypeCode.Double => 1d,
-                NPTypeCode.Decimal => 1m,
-                _ => throw new NotSupportedException($"Type {type} not supported")
-            };
-        }
+        // GetDefaultValue and GetOneValue are defined in NPTypeCode.cs
 
         /// <summary>
         /// Get the minimum value for a type (for Max reduction identity).
         /// </summary>
+        /// <remarks>
+        /// For float types, returns negative infinity (not MinValue).
+        /// This matches NumPy's behavior for reduction identity elements.
+        /// </remarks>
         public static object GetMinValue(this NPTypeCode type)
         {
             return type switch
@@ -374,6 +324,10 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Get the maximum value for a type (for Min reduction identity).
         /// </summary>
+        /// <remarks>
+        /// For float types, returns positive infinity (not MaxValue).
+        /// This matches NumPy's behavior for reduction identity elements.
+        /// </remarks>
         public static object GetMaxValue(this NPTypeCode type)
         {
             return type switch

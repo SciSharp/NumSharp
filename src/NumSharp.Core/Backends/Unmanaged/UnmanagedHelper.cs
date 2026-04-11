@@ -39,7 +39,8 @@ namespace NumSharp.Backends.Unmanaged
         ///     Copies the entire contents of this storage to given address (using <see cref="Count"/>).
         /// </summary>
         /// <param name="dst">The block to copy to.</param>
-        public static unsafe void CopyTo(this IMemoryBlock src, IMemoryBlock dst, int countOffsetDesitinion)
+        /// <param name="countOffsetDestination">The element offset in the destination where copying begins.</param>
+        public static unsafe void CopyTo(this IMemoryBlock src, IMemoryBlock dst, long countOffsetDestination)
         {
             if (dst.TypeCode != src.TypeCode)
                 throw new InvalidCastException("Unable to perform CopyTo when T does not match dtype, use non-generic overload instead.");
@@ -48,20 +49,21 @@ namespace NumSharp.Backends.Unmanaged
                 throw new ArgumentOutOfRangeException(nameof(dst), $"Unable to copy from this storage to given array because this storage count is larger than the given array length.");
 
             var bytesCount = src.BytesLength;
-            Buffer.MemoryCopy(src.Address, (byte*)dst.Address + countOffsetDesitinion * dst.ItemLength, bytesCount, bytesCount);
+            Buffer.MemoryCopy(src.Address, (byte*)dst.Address + countOffsetDestination * dst.ItemLength, bytesCount, bytesCount);
         }
 
         /// <summary>
         ///     Copies the entire contents of this storage to given address (using <see cref="Count"/>).
         /// </summary>
-        /// <param name="dst">The block to copy to.</param>
-        public static unsafe void CopyTo(this IMemoryBlock src, void* dstAddress, int countOffsetDesitinion)
+        /// <param name="dstAddress">The address to copy to.</param>
+        /// <param name="countOffsetDestination">The element offset in the destination where copying begins.</param>
+        public static unsafe void CopyTo(this IMemoryBlock src, void* dstAddress, long countOffsetDestination)
         {
             if (dstAddress == null)
                 throw new ArgumentNullException(nameof(dstAddress));
 
             var bytesCount = src.BytesLength;
-            Buffer.MemoryCopy(src.Address, (byte*)dstAddress + countOffsetDesitinion * src.ItemLength, bytesCount, bytesCount);
+            Buffer.MemoryCopy(src.Address, (byte*)dstAddress + countOffsetDestination * src.ItemLength, bytesCount, bytesCount);
         }
 
         /// <summary>

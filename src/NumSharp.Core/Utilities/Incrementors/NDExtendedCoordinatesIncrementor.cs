@@ -8,9 +8,9 @@ namespace NumSharp.Utilities
         private readonly Action<NDExtendedCoordinatesIncrementor> endCallback;
         private readonly int _extendBy;
         private readonly int nonExtendedLength;
-        private readonly int[] dimensions;
+        private readonly long[] dimensions;
         private readonly int resetto;
-        public int[] Index;
+        public long[] Index;
         private int subcursor;
         public bool ResetEntireArray { get; set; }
 
@@ -21,16 +21,16 @@ namespace NumSharp.Utilities
                 throw new InvalidOperationException("Can't construct NDExtendedCoordinatesIncrementor with an empty shape.");
 
             _extendBy = extendBy;
-            dimensions = shape.IsScalar ? new int[] {1} : shape.dimensions;
+            dimensions = shape.IsScalar ? new long[] {1} : shape.dimensions;
             nonExtendedLength = dimensions.Length;
-            Index = new int[nonExtendedLength + extendBy];
+            Index = new long[nonExtendedLength + extendBy];
             resetto = subcursor = dimensions.Length - 1;
             this.endCallback = endCallback;
         }
 
         /// <param name="dims">The dims has to be not extended, use <see cref="Array.Resize{T}"/> if it already extended</param>
         /// <param name="extendBy">By how many items should <see cref="Index"/> be extended</param>
-        public NDExtendedCoordinatesIncrementor(int[] dims, int extendBy, Action<NDExtendedCoordinatesIncrementor> endCallback = null) : this(new Shape(dims), extendBy, endCallback) { }
+        public NDExtendedCoordinatesIncrementor(long[] dims, int extendBy, Action<NDExtendedCoordinatesIncrementor> endCallback = null) : this(new Shape(dims), extendBy, endCallback) { }
 
         public void Reset()
         {
@@ -43,7 +43,7 @@ namespace NumSharp.Utilities
         }
 
         [MethodImpl(Optimize)]
-        public int[] Next()
+        public long[] Next()
         {
             if (subcursor <= -1)
                 return null;
@@ -76,7 +76,7 @@ namespace NumSharp.Utilities
         }
 
         [MethodImpl(Optimize)]
-        public int[] Next(params int[] extendedIndices)
+        public long[] Next(params long[] extendedIndices)
         {
             if (subcursor <= -1)
                 return null;
@@ -95,7 +95,7 @@ namespace NumSharp.Utilities
                         if (subcursor >= 0)
                         {
                             //if callback has resetted it
-                            for (int i = 0; i < extendedIndices.Length; i++) 
+                            for (int i = 0; i < extendedIndices.Length; i++)
                                 Index[nonExtendedLength + i] = extendedIndices[i];
                             return Index;
                         }

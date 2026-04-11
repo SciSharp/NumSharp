@@ -284,7 +284,6 @@ public class NonContiguousTests
     #region ATan2 on Non-Contiguous Arrays (Task #73 fix verification)
 
     [Test]
-    [OpenBugs]  // Remove when Task #73 is fixed
     public void ATan2_SlicedArrays()
     {
         // NumPy: np.arctan2(y[::2], x[::2])
@@ -302,7 +301,6 @@ public class NonContiguousTests
     }
 
     [Test]
-    [OpenBugs]  // Remove when Task #73 is fixed
     public void ATan2_TransposedArrays()
     {
         // NumPy: np.arctan2(y.T, x.T)
@@ -320,7 +318,6 @@ public class NonContiguousTests
     }
 
     [Test]
-    [OpenBugs]  // Remove when Task #73 is fixed
     public void ATan2_ReversedArrays()
     {
         // NumPy: np.arctan2(y[::-1], x[::-1])

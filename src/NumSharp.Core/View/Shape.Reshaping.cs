@@ -53,15 +53,15 @@ namespace NumSharp
             }
 
             // NumPy-aligned: Create new shape with preserved offset and bufferSize
-            int bufSize = bufferSize > 0 ? bufferSize : size;
+            long bufSize = bufferSize > 0 ? bufferSize : size;
 
             // Handle scalar shape (null/empty dimensions from default constructor)
-            var newDims = newShape.dimensions ?? Array.Empty<int>();
-            var newStrides = newShape.strides ?? Array.Empty<int>();
+            var newDims = newShape.dimensions ?? Array.Empty<long>();
+            var newStrides = newShape.strides ?? Array.Empty<long>();
 
             return new Shape(
-                newDims.Length > 0 ? (int[])newDims.Clone() : newDims,
-                newStrides.Length > 0 ? (int[])newStrides.Clone() : newStrides,
+                newDims.Length > 0 ? (long[])newDims.Clone() : newDims,
+                newStrides.Length > 0 ? (long[])newStrides.Clone() : newStrides,
                 offset,
                 bufSize
             );
@@ -99,15 +99,15 @@ namespace NumSharp
             }
 
             // NumPy-aligned: preserve bufferSize from original shape for broadcast tracking
-            int bufSize = bufferSize > 0 ? bufferSize : size;
+            long bufSize = bufferSize > 0 ? bufferSize : size;
 
             // Handle scalar shape (null/empty dimensions from default constructor)
-            var newDims = newShape.dimensions ?? Array.Empty<int>();
-            var newStrides = newShape.strides ?? Array.Empty<int>();
+            var newDims = newShape.dimensions ?? Array.Empty<long>();
+            var newStrides = newShape.strides ?? Array.Empty<long>();
 
             return new Shape(
-                newDims.Length > 0 ? (int[])newDims.Clone() : newDims,
-                newStrides.Length > 0 ? (int[])newStrides.Clone() : newStrides,
+                newDims.Length > 0 ? (long[])newDims.Clone() : newDims,
+                newStrides.Length > 0 ? (long[])newStrides.Clone() : newStrides,
                 0,
                 bufSize
             );
@@ -124,7 +124,7 @@ namespace NumSharp
                 return shape;
 
             var indexOfNegOne = -1;
-            int product = 1;
+            long product = 1;
             for (int i = 0; i < shape.NDim; i++)
             {
                 if (shape[i] == -1)
@@ -147,14 +147,14 @@ namespace NumSharp
                 throw new NotSupportedException("Reshaping a broadcasted array with a -1 (unknown) dimension is not supported.");
             }
 
-            int missingValue = this.size / product;
+            long missingValue = this.size / product;
             if (missingValue * product != this.size)
             {
                 throw new ArgumentException("Bad shape: missing dimension would have to be non-integer");
             }
 
             // Create new dimensions array with inferred value
-            var newDims = (int[])shape.dimensions.Clone();
+            var newDims = (long[])shape.dimensions.Clone();
             newDims[indexOfNegOne] = missingValue;
 
             // Compute new strides for the corrected dimensions
@@ -171,18 +171,18 @@ namespace NumSharp
         [SuppressMessage("ReSharper", "LocalVariableHidesMember")]
         public readonly Shape ExpandDimension(int axis)
         {
-            int[] newDims;
-            int[] newStrides;
+            long[] newDims;
+            long[] newStrides;
 
             if (IsScalar)
             {
-                newDims = new int[] { 1 };
-                newStrides = new int[] { 0 };
+                newDims = new long[] { 1 };
+                newStrides = new long[] { 0 };
             }
             else
             {
-                newDims = (int[])dimensions.Clone();
-                newStrides = (int[])strides.Clone();
+                newDims = (long[])dimensions.Clone();
+                newStrides = (long[])strides.Clone();
 
                 // Allow negative axis specification
                 if (axis < 0)
@@ -192,10 +192,10 @@ namespace NumSharp
                         throw new ArgumentException($"Effective axis {axis} is less than 0");
                 }
 
-                Arrays.Insert(ref newDims, axis, 1);
+                Arrays.Insert(ref newDims, axis, 1L);
 
                 // Calculate proper stride for C-contiguous layout
-                int newStride;
+                long newStride;
                 if (axis >= dimensions.Length)
                 {
                     // Appending at the end - use 1 (innermost stride)
@@ -210,7 +210,7 @@ namespace NumSharp
             }
 
             // Create new shape with preserved bufferSize
-            int bufSize = bufferSize > 0 ? bufferSize : size;
+            long bufSize = bufferSize > 0 ? bufferSize : size;
             return new Shape(newDims, newStrides, offset, bufSize);
         }
     }

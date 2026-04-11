@@ -24,6 +24,19 @@ namespace NumSharp
         public static NDArray array(NDArray nd, bool copy = false) => copy ? new NDArray(nd.Storage.Clone()) : new NDArray(nd.Storage);
 
         /// <summary>
+        ///     Creates a scalar (0-dimensional) <see cref="NDArray"/> from a single value.
+        /// </summary>
+        /// <typeparam name="T">The type of the value, must be compliant to numpy's supported dtypes.</typeparam>
+        /// <param name="scalar">The scalar value.</param>
+        /// <returns>A 0-dimensional <see cref="NDArray"/> containing the scalar value.</returns>
+        /// <remarks>
+        ///     NumPy: np.array(42) creates a 0-dimensional array with shape ().
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.array.html
+        /// </remarks>
+        [MethodImpl(OptimizeAndInline)]
+        public static NDArray array<T>(T scalar) where T : unmanaged => NDArray.Scalar(scalar);
+
+        /// <summary>
         ///     Creates an <see cref="NDArray"/> from an array with an unknown size or dtype.
         /// </summary>
         /// <param name="ndmin">Specifies the minimum number of dimensions that the resulting array should have. Ones will be pre-pended to the shape as needed to meet this requirement.</param>
@@ -79,6 +92,38 @@ namespace NumSharp
         public static NDArray array<T>(params T[] data) where T : unmanaged => new NDArray(ArraySlice.FromArray(data, true), Shape.Vector(data.Length));
 
         /// <summary>
+        ///     Creates a Vector <see cref="NDArray"/> from given <paramref name="data"/> with specified dtype.
+        /// </summary>
+        /// <typeparam name="T">The type of given array, must be compliant to numpy's supported dtypes.</typeparam>
+        /// <param name="data">The array to create <see cref="NDArray"/> from.</param>
+        /// <param name="dtype">The desired data type for the array. If different from T, the data will be cast.</param>
+        /// <returns>An <see cref="NDArray"/> with the data cast to the specified dtype.</returns>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.array.html</remarks>
+        public static NDArray array<T>(T[] data, Type dtype) where T : unmanaged
+        {
+            var arr = new NDArray(ArraySlice.FromArray(data, true), Shape.Vector(data.Length));
+            if (dtype != null && dtype != typeof(T))
+                return arr.astype(dtype);
+            return arr;
+        }
+
+        /// <summary>
+        ///     Creates a Vector <see cref="NDArray"/> from given <paramref name="data"/> with specified dtype.
+        /// </summary>
+        /// <typeparam name="T">The type of given array, must be compliant to numpy's supported dtypes.</typeparam>
+        /// <param name="data">The array to create <see cref="NDArray"/> from.</param>
+        /// <param name="dtype">The desired data type code for the array. If different from T, the data will be cast.</param>
+        /// <returns>An <see cref="NDArray"/> with the data cast to the specified dtype.</returns>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.array.html</remarks>
+        public static NDArray array<T>(T[] data, NPTypeCode dtype) where T : unmanaged
+        {
+            var arr = new NDArray(ArraySlice.FromArray(data, true), Shape.Vector(data.Length));
+            if (dtype != NPTypeCode.Empty && dtype != InfoOf<T>.NPTypeCode)
+                return arr.astype(dtype);
+            return arr;
+        }
+
+        /// <summary>
         ///     Creates a Vector <see cref="NDArray"/> from given <paramref name="data"/>.
         /// </summary>
         /// <typeparam name="T">The type of given array, must be compliant to numpy's supported dtypes.</typeparam>
@@ -96,6 +141,7 @@ namespace NumSharp
         /// </summary>
         /// <typeparam name="T">The type of given array, must be compliant to numpy's supported dtypes.</typeparam>
         /// <param name="data">The enumeration of data to create <see cref="NDArray"/> from.</param>
+        /// <param name="size">Maximum number of items to read from <paramref name="data"/>.</param>
         /// <returns>An <see cref="NDArray"/> with the data and shape of the given array.</returns>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/generated/numpy.array.html <br></br>
@@ -103,6 +149,21 @@ namespace NumSharp
         ///     <paramref name="size"/> can be used to limit the amount of items to read form <paramref name="data"/>. Reading stops on either size or <paramref name="data"/> ends.
         /// </remarks>
         public static NDArray array<T>(IEnumerable<T> data, int size) where T : unmanaged
+            => array(data, (long)size);
+
+        /// <summary>
+        ///     Creates a Vector <see cref="NDArray"/> from given <paramref name="data"/>.
+        /// </summary>
+        /// <typeparam name="T">The type of given array, must be compliant to numpy's supported dtypes.</typeparam>
+        /// <param name="data">The enumeration of data to create <see cref="NDArray"/> from.</param>
+        /// <param name="size">Maximum number of items to read from <paramref name="data"/>.</param>
+        /// <returns>An <see cref="NDArray"/> with the data and shape of the given array.</returns>
+        /// <remarks>
+        ///     https://numpy.org/doc/stable/reference/generated/numpy.array.html <br></br>
+        ///     Always performs a copy.<br></br>
+        ///     <paramref name="size"/> can be used to limit the amount of items to read form <paramref name="data"/>. Reading stops on either size or <paramref name="data"/> ends.
+        /// </remarks>
+        public static NDArray array<T>(IEnumerable<T> data, long size) where T : unmanaged
         {
             var slice = new ArraySlice<T>(new UnmanagedMemoryBlock<T>(size));
             unsafe
@@ -112,7 +173,7 @@ namespace NumSharp
                     Func<bool> next = enumerator.MoveNext;
 
                     var addr = slice.Address;
-                    for (int i = 0; i < size && next(); i++)
+                    for (long i = 0; i < size && next(); i++)
                     {
                         addr[i] = enumerator.Current;
                     }
@@ -170,7 +231,7 @@ namespace NumSharp
                 NDArray @out = new NDArray(InfoOf<T>.NPTypeCode, new Shape(len1, len2));
 
                 var strides = @out.strides;
-                int stride1 = strides[0];
+                long stride1 = strides[0];
                 Debug.Assert(strides[1] == 1);
 
                 T* addr = (T*)@out.Address;
@@ -209,8 +270,8 @@ namespace NumSharp
                 NDArray @out = new NDArray(InfoOf<T>.NPTypeCode, new Shape(len1, len2, len3));
 
                 var strides = @out.strides;
-                int stride1 = strides[0];
-                int stride2 = strides[1];
+                long stride1 = strides[0];
+                long stride2 = strides[1];
                 Debug.Assert(strides[2] == 1);
 
                 T* addr = (T*)@out.Address;
@@ -255,9 +316,9 @@ namespace NumSharp
                 NDArray @out = new NDArray(InfoOf<T>.NPTypeCode, new Shape(len1, len2, len3, len4));
 
                 var strides = @out.strides;
-                int stride1 = strides[0];
-                int stride2 = strides[1];
-                int stride3 = strides[2];
+                long stride1 = strides[0];
+                long stride2 = strides[1];
+                long stride3 = strides[2];
                 Debug.Assert(strides[3] == 1);
 
                 T* addr = (T*)@out.Address;
@@ -308,10 +369,10 @@ namespace NumSharp
                 NDArray @out = new NDArray(InfoOf<T>.NPTypeCode, new Shape(len1, len2, len3, len4, len5));
 
                 var strides = @out.strides;
-                int stride1 = strides[0];
-                int stride2 = strides[1];
-                int stride3 = strides[2];
-                int stride4 = strides[3];
+                long stride1 = strides[0];
+                long stride2 = strides[1];
+                long stride3 = strides[2];
+                long stride4 = strides[3];
                 Debug.Assert(strides[4] == 1);
 
                 T* addr = (T*)@out.Address;
@@ -406,6 +467,44 @@ namespace NumSharp
                 throw new ArgumentNullException(nameof(data));
 
             return new NDArray(ArraySlice.FromArray(data, copy), new Shape(data.GetLength(0), data.GetLength(1)));
+        }
+
+        /// <summary>
+        ///     Creates an <see cref="NDArray"/> from given <paramref name="data"/> with specified dtype.
+        /// </summary>
+        /// <typeparam name="T">The type of given array, must be compliant to numpy's supported dtypes.</typeparam>
+        /// <param name="data">The array to create <see cref="NDArray"/> from.</param>
+        /// <param name="dtype">The desired data type for the array. If different from T, the data will be cast.</param>
+        /// <returns>An <see cref="NDArray"/> with the data cast to the specified dtype.</returns>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.array.html</remarks>
+        public static NDArray array<T>(T[,] data, Type dtype) where T : unmanaged
+        {
+            if (data == null)
+                throw new ArgumentNullException(nameof(data));
+
+            var arr = new NDArray(ArraySlice.FromArray(data, true), new Shape(data.GetLength(0), data.GetLength(1)));
+            if (dtype != null && dtype != typeof(T))
+                return arr.astype(dtype);
+            return arr;
+        }
+
+        /// <summary>
+        ///     Creates an <see cref="NDArray"/> from given <paramref name="data"/> with specified dtype.
+        /// </summary>
+        /// <typeparam name="T">The type of given array, must be compliant to numpy's supported dtypes.</typeparam>
+        /// <param name="data">The array to create <see cref="NDArray"/> from.</param>
+        /// <param name="dtype">The desired data type code for the array. If different from T, the data will be cast.</param>
+        /// <returns>An <see cref="NDArray"/> with the data cast to the specified dtype.</returns>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.array.html</remarks>
+        public static NDArray array<T>(T[,] data, NPTypeCode dtype) where T : unmanaged
+        {
+            if (data == null)
+                throw new ArgumentNullException(nameof(data));
+
+            var arr = new NDArray(ArraySlice.FromArray(data, true), new Shape(data.GetLength(0), data.GetLength(1)));
+            if (dtype != NPTypeCode.Empty && dtype != InfoOf<T>.NPTypeCode)
+                return arr.astype(dtype);
+            return arr;
         }
 
         /// <summary>

@@ -86,8 +86,8 @@ public class IndexingEdgeCaseTests
 
         Assert.AreEqual(2, result.shape[0]);
         Assert.AreEqual(2, result.shape[1]);
-        Assert.AreEqual(6, result.GetInt32(0, 0));
-        Assert.AreEqual(11, result.GetInt32(1, 1));
+        Assert.AreEqual(6L, result.GetInt64(0, 0));
+        Assert.AreEqual(11L, result.GetInt64(1, 1));
     }
 
     [Test]
@@ -98,8 +98,8 @@ public class IndexingEdgeCaseTests
 
         var result = arr["::-1, ::-1"];
 
-        Assert.AreEqual(11, result.GetInt32(0, 0));
-        Assert.AreEqual(0, result.GetInt32(2, 3));
+        Assert.AreEqual(11L, result.GetInt64(0, 0));
+        Assert.AreEqual(0L, result.GetInt64(2, 3));
     }
 
     #endregion
@@ -107,7 +107,6 @@ public class IndexingEdgeCaseTests
     #region Boolean Indexing
 
     [Test]
-    [OpenBugs]  // Boolean indexing returns incorrect results
     public void BooleanIndex_Simple()
     {
         // NumPy: arr[mask] = [1, 3, 5]
@@ -151,11 +150,10 @@ public class IndexingEdgeCaseTests
 
         Assert.AreEqual(1, result.ndim);  // Flattened to 1D
         Assert.AreEqual(6, result.size);
-        Assert.AreEqual(6, result.GetInt32(0));
+        Assert.AreEqual(6L, result.GetInt64(0));
     }
 
     [Test]
-    [OpenBugs]  // Boolean row selection fails
     public void BooleanIndex_RowSelection()
     {
         // NumPy: arr2d[[True, False, True]] selects rows 0 and 2
@@ -166,8 +164,8 @@ public class IndexingEdgeCaseTests
 
         Assert.AreEqual(2, result.shape[0]);
         Assert.AreEqual(4, result.shape[1]);
-        Assert.AreEqual(0, result.GetInt32(0, 0));
-        Assert.AreEqual(8, result.GetInt32(1, 0));
+        Assert.AreEqual(0L, result.GetInt64(0, 0));
+        Assert.AreEqual(8L, result.GetInt64(1, 0));
     }
 
     #endregion
@@ -316,7 +314,6 @@ public class IndexingEdgeCaseTests
     }
 
     [Test]
-    [OpenBugs]  // Fancy index assignment silently no-ops
     public void Assignment_FancyIndex()
     {
         // NumPy: arr[[0, 2, 4]] = 99 -> [99, 2, 99, 4, 99]
@@ -329,7 +326,6 @@ public class IndexingEdgeCaseTests
     }
 
     [Test]
-    [OpenBugs]  // Boolean mask assignment silently no-ops
     public void Assignment_BooleanMask()
     {
         // NumPy: arr[arr > 3] = 0 -> [1, 2, 3, 0, 0]

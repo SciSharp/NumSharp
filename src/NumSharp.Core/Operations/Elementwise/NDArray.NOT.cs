@@ -41,134 +41,134 @@ namespace NumSharp
 #else
 
 
-                case NPTypeCode.Boolean: 
+                case NPTypeCode.Boolean:
                 {
                     var from = (bool*)self.Address;
                     var to = (bool*)result.Address;
                     var len = result.size;
 
-                    for (int i = 0; i < len; i++)
+                    for (long i = 0; i < len; i++)
                         *(to + i) = !*(from + i); //if val is 0 then write true
 
                     return result.MakeGeneric<bool>();
                 }
-	            case NPTypeCode.Byte: 
+	            case NPTypeCode.Byte:
                 {
                     var from = (byte*)self.Address;
                     var to = (bool*)result.Address;
 
                     var len = result.size;
-                    for (int i = 0; i < len; i++)
+                    for (long i = 0; i < len; i++)
                         *(to + i) = *(from + i) == 0; //if val is 0 then write true
 
                     return result.MakeGeneric<bool>();
                 }
-	            case NPTypeCode.Int16: 
+	            case NPTypeCode.Int16:
                 {
                     var from = (short*)self.Address;
                     var to = (bool*)result.Address;
 
                     var len = result.size;
-                    for (int i = 0; i < len; i++)
+                    for (long i = 0; i < len; i++)
                         *(to + i) = *(from + i) == 0; //if val is 0 then write true
 
                     return result.MakeGeneric<bool>();
                 }
-	            case NPTypeCode.UInt16: 
+	            case NPTypeCode.UInt16:
                 {
                     var from = (ushort*)self.Address;
                     var to = (bool*)result.Address;
 
                     var len = result.size;
-                    for (int i = 0; i < len; i++)
+                    for (long i = 0; i < len; i++)
                         *(to + i) = *(from + i) == 0; //if val is 0 then write true
 
                     return result.MakeGeneric<bool>();
                 }
-	            case NPTypeCode.Int32: 
+	            case NPTypeCode.Int32:
                 {
                     var from = (int*)self.Address;
                     var to = (bool*)result.Address;
 
                     var len = result.size;
-                    for (int i = 0; i < len; i++)
+                    for (long i = 0; i < len; i++)
                         *(to + i) = *(from + i) == 0; //if val is 0 then write true
 
                     return result.MakeGeneric<bool>();
                 }
-	            case NPTypeCode.UInt32: 
+	            case NPTypeCode.UInt32:
                 {
                     var from = (uint*)self.Address;
                     var to = (bool*)result.Address;
 
                     var len = result.size;
-                    for (int i = 0; i < len; i++)
+                    for (long i = 0; i < len; i++)
                         *(to + i) = *(from + i) == 0; //if val is 0 then write true
 
                     return result.MakeGeneric<bool>();
                 }
-	            case NPTypeCode.Int64: 
+	            case NPTypeCode.Int64:
                 {
                     var from = (long*)self.Address;
                     var to = (bool*)result.Address;
 
                     var len = result.size;
-                    for (int i = 0; i < len; i++)
+                    for (long i = 0; i < len; i++)
                         *(to + i) = *(from + i) == 0; //if val is 0 then write true
 
                     return result.MakeGeneric<bool>();
                 }
-	            case NPTypeCode.UInt64: 
+	            case NPTypeCode.UInt64:
                 {
                     var from = (ulong*)self.Address;
                     var to = (bool*)result.Address;
 
                     var len = result.size;
-                    for (int i = 0; i < len; i++)
+                    for (long i = 0; i < len; i++)
                         *(to + i) = *(from + i) == 0; //if val is 0 then write true
 
                     return result.MakeGeneric<bool>();
                 }
-	            case NPTypeCode.Char: 
+	            case NPTypeCode.Char:
                 {
                     var from = (char*)self.Address;
                     var to = (bool*)result.Address;
 
                     var len = result.size;
-                    for (int i = 0; i < len; i++)
+                    for (long i = 0; i < len; i++)
                         *(to + i) = *(from + i) == 0; //if val is 0 then write true
 
                     return result.MakeGeneric<bool>();
                 }
-	            case NPTypeCode.Double: 
+	            case NPTypeCode.Double:
                 {
                     var from = (double*)self.Address;
                     var to = (bool*)result.Address;
 
                     var len = result.size;
-                    for (int i = 0; i < len; i++)
+                    for (long i = 0; i < len; i++)
                         *(to + i) = *(from + i) == 0; //if val is 0 then write true
 
                     return result.MakeGeneric<bool>();
                 }
-	            case NPTypeCode.Single: 
+	            case NPTypeCode.Single:
                 {
                     var from = (float*)self.Address;
                     var to = (bool*)result.Address;
 
                     var len = result.size;
-                    for (int i = 0; i < len; i++)
+                    for (long i = 0; i < len; i++)
                         *(to + i) = *(from + i) == 0; //if val is 0 then write true
 
                     return result.MakeGeneric<bool>();
                 }
-	            case NPTypeCode.Decimal: 
+	            case NPTypeCode.Decimal:
                 {
                     var from = (decimal*)self.Address;
                     var to = (bool*)result.Address;
 
                     var len = result.size;
-                    for (int i = 0; i < len; i++)
+                    for (long i = 0; i < len; i++)
                         *(to + i) = *(from + i) == 0; //if val is 0 then write true
 
                     return result.MakeGeneric<bool>();

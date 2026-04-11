@@ -52,7 +52,7 @@ namespace NumSharp
                 {
                     var iter = arr.AsIterator<float>();
                     double sum = 0.0;
-                    int count = 0;
+                    long count = 0;
                     while (iter.HasNext())
                     {
                         float val = iter.MoveNext();
@@ -69,7 +69,7 @@ namespace NumSharp
                 {
                     var iter = arr.AsIterator<double>();
                     double sum = 0.0;
-                    int count = 0;
+                    long count = 0;
                     while (iter.HasNext())
                     {
                         double val = iter.MoveNext();
@@ -90,7 +90,7 @@ namespace NumSharp
             var r = NDArray.Scalar(result);
             if (keepdims)
             {
-                var keepdimsShape = new int[arr.ndim];
+                var keepdimsShape = new long[arr.ndim];
                 for (int i = 0; i < arr.ndim; i++)
                     keepdimsShape[i] = 1;
                 r.Storage.Reshape(new Shape(keepdimsShape));
@@ -118,7 +118,7 @@ namespace NumSharp
 
             // Build output shape
             var inputShape = arr.shape;
-            var outputShapeList = new System.Collections.Generic.List<int>();
+            var outputShapeList = new System.Collections.Generic.List<long>();
             for (int i = 0; i < inputShape.Length; i++)
             {
                 if (i != axis)
@@ -128,27 +128,24 @@ namespace NumSharp
                 outputShapeList.Add(1);
 
             var outputShape = outputShapeList.ToArray();
-            var outputSize = 1;
-            foreach (var dim in outputShape)
-                outputSize *= dim;
+            long axisLen = inputShape[axis];
 
-            var axisLen = inputShape[axis];
-
-            // Create output array
+            // Create output array using unmanaged allocation (supports >2GB)
             NDArray result;
             if (arr.GetTypeCode == NPTypeCode.Single)
             {
-                var outputData = new float[outputSize];
+                result = new NDArray(NPTypeCode.Single, new Shape(outputShape));
+                long outputSize = result.size;
 
                 // Iterate over output positions
-                for (int outIdx = 0; outIdx < outputSize; outIdx++)
+                for (long outIdx = 0; outIdx < outputSize; outIdx++)
                 {
                     double sum = 0.0;
-                    int count = 0;
+                    long count = 0;
 
                     // Convert flat index to coordinates in output shape
-                    var outCoords = new int[outputShape.Length];
-                    int temp = outIdx;
+                    var outCoords = new long[outputShape.Length];
+                    long temp = outIdx;
                     for (int i = outputShape.Length - 1; i >= 0; i--)
                     {
                         outCoords[i] = temp % outputShape[i];
@@ -156,10 +153,10 @@ namespace NumSharp
                     }
 
                     // Iterate along the axis
-                    for (int k = 0; k < axisLen; k++)
+                    for (long k = 0; k < axisLen; k++)
                     {
                         // Build input coordinates
-                        var inCoords = new int[inputShape.Length];
+                        var inCoords = new long[inputShape.Length];
                         int outCoordIdx = 0;
                         for (int i = 0; i < inputShape.Length; i++)
                         {
@@ -177,31 +174,30 @@ namespace NumSharp
                         }
                     }
 
-                    outputData[outIdx] = count > 0 ? (float)(sum / count) : float.NaN;
+                    result.SetSingle(count > 0 ? (float)(sum / count) : float.NaN, outCoords);
                 }
-
-                result = new NDArray(outputData).reshape(outputShape);
             }
             else // Double
             {
-                var outputData = new double[outputSize];
+                result = new NDArray(NPTypeCode.Double, new Shape(outputShape));
+                long outputSize = result.size;
 
-                for (int outIdx = 0; outIdx < outputSize; outIdx++)
+                for (long outIdx = 0; outIdx < outputSize; outIdx++)
                 {
                     double sum = 0.0;
-                    int count = 0;
+                    long count = 0;
 
-                    var outCoords = new int[outputShape.Length];
-                    int temp = outIdx;
+                    var outCoords = new long[outputShape.Length];
+                    long temp = outIdx;
                     for (int i = outputShape.Length - 1; i >= 0; i--)
                     {
                         outCoords[i] = temp % outputShape[i];
                         temp /= outputShape[i];
                     }
 
-                    for (int k = 0; k < axisLen; k++)
+                    for (long k = 0; k < axisLen; k++)
                     {
-                        var inCoords = new int[inputShape.Length];
+                        var inCoords = new long[inputShape.Length];
                         int outCoordIdx = 0;
                         for (int i = 0; i < inputShape.Length; i++)
                         {
@@ -219,16 +215,14 @@ namespace NumSharp
                         }
                     }
 
-                    outputData[outIdx] = count > 0 ? sum / count : double.NaN;
+                    result.SetDouble(count > 0 ? sum / count : double.NaN, outCoords);
                 }
-
-                result = new NDArray(outputData).reshape(outputShape);
             }
 
             // Handle keepdims
             if (keepdims)
             {
-                var keepdimsShapeDims = new int[arr.ndim];
+                var keepdimsShapeDims = new long[arr.ndim];
                 int srcIdx = 0;
                 for (int i = 0; i < arr.ndim; i++)
                 {

@@ -18,7 +18,7 @@ namespace NumSharp
         /// <param name="endpoint">If True, stop is the last sample. Otherwise, it is not included. Default is True.</param>
         /// <param name="dtype">The type of the output array. If dtype is not given, infer the data type from the other input arguments.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linspace.html
-        public static NDArray linspace(double start, double stop, int num, bool endpoint, Type dtype)
+        public static NDArray linspace(double start, double stop, long num, bool endpoint, Type dtype)
         {
             return linspace(start, stop, num, endpoint, (dtype ?? typeof(double)).GetTypeCode());
         }
@@ -34,7 +34,21 @@ namespace NumSharp
         /// <param name="endpoint">If True, stop is the last sample. Otherwise, it is not included. Default is True.</param>
         /// <param name="dtype">The type of the output array. If dtype is not given, infer the data type from the other input arguments.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linspace.html
-        public static NDArray linspace(float start, float stop, int num, bool endpoint, Type dtype)
+        public static NDArray linspace(double start, double stop, int num, bool endpoint, Type dtype)
+            => linspace(start, stop, (long)num, endpoint, dtype);
+
+        /// <summary>
+        ///     Return evenly spaced numbers over a specified interval.<br></br>
+        ///     Returns num evenly spaced samples, calculated over the interval[start, stop].<br></br>
+        ///     The endpoint of the interval can optionally be excluded.
+        /// </summary>
+        /// <param name="start">The starting value of the sequence.</param>
+        /// <param name="stop">The end value of the sequence, unless endpoint is set to False. In that case, the sequence consists of all but the last of num + 1 evenly spaced samples, so that stop is excluded. Note that the step size changes when endpoint is False.</param>
+        /// <param name="num">Number of samples to generate. Default is 50. Must be non-negative.</param>
+        /// <param name="endpoint">If True, stop is the last sample. Otherwise, it is not included. Default is True.</param>
+        /// <param name="dtype">The type of the output array. If dtype is not given, infer the data type from the other input arguments.</param>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linspace.html
+        public static NDArray linspace(float start, float stop, long num, bool endpoint, Type dtype)
         {
             // NumPy: linspace always returns float64 by default, regardless of input types
             return linspace(start, stop, num, endpoint, (dtype ?? typeof(double)).GetTypeCode());
@@ -49,9 +63,23 @@ namespace NumSharp
         /// <param name="stop">The end value of the sequence, unless endpoint is set to False. In that case, the sequence consists of all but the last of num + 1 evenly spaced samples, so that stop is excluded. Note that the step size changes when endpoint is False.</param>
         /// <param name="num">Number of samples to generate. Default is 50. Must be non-negative.</param>
         /// <param name="endpoint">If True, stop is the last sample. Otherwise, it is not included. Default is True.</param>
+        /// <param name="dtype">The type of the output array. If dtype is not given, infer the data type from the other input arguments.</param>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linspace.html
+        public static NDArray linspace(float start, float stop, int num, bool endpoint, Type dtype)
+            => linspace(start, stop, (long)num, endpoint, dtype);
+
+        /// <summary>
+        ///     Return evenly spaced numbers over a specified interval.<br></br>
+        ///     Returns num evenly spaced samples, calculated over the interval[start, stop].<br></br>
+        ///     The endpoint of the interval can optionally be excluded.
+        /// </summary>
+        /// <param name="start">The starting value of the sequence.</param>
+        /// <param name="stop">The end value of the sequence, unless endpoint is set to False. In that case, the sequence consists of all but the last of num + 1 evenly spaced samples, so that stop is excluded. Note that the step size changes when endpoint is False.</param>
+        /// <param name="num">Number of samples to generate. Default is 50. Must be non-negative.</param>
+        /// <param name="endpoint">If True, stop is the last sample. Otherwise, it is not included. Default is True.</param>
         /// <param name="typeCode">The type of the output array. If dtype is not given, infer the data type from the other input arguments.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linspace.html
-        public static NDArray linspace(float start, float stop, int num, bool endpoint = true, NPTypeCode typeCode = NPTypeCode.Double)
+        public static NDArray linspace(float start, float stop, long num, bool endpoint = true, NPTypeCode typeCode = NPTypeCode.Double)
         {
             // NumPy: linspace always returns float64 by default, regardless of input types
             return linspace((double)start, (double)stop, num, endpoint, typeCode);
@@ -68,7 +96,21 @@ namespace NumSharp
         /// <param name="endpoint">If True, stop is the last sample. Otherwise, it is not included. Default is True.</param>
         /// <param name="typeCode">The type of the output array. If dtype is not given, infer the data type from the other input arguments.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linspace.html
-        public static NDArray linspace(double start, double stop, int num, bool endpoint = true, NPTypeCode typeCode = NPTypeCode.Double)
+        public static NDArray linspace(float start, float stop, int num, bool endpoint = true, NPTypeCode typeCode = NPTypeCode.Double)
+            => linspace(start, stop, (long)num, endpoint, typeCode);
+
+        /// <summary>
+        ///     Return evenly spaced numbers over a specified interval.<br></br>
+        ///     Returns num evenly spaced samples, calculated over the interval[start, stop].<br></br>
+        ///     The endpoint of the interval can optionally be excluded.
+        /// </summary>
+        /// <param name="start">The starting value of the sequence.</param>
+        /// <param name="stop">The end value of the sequence, unless endpoint is set to False. In that case, the sequence consists of all but the last of num + 1 evenly spaced samples, so that stop is excluded. Note that the step size changes when endpoint is False.</param>
+        /// <param name="num">Number of samples to generate. Default is 50. Must be non-negative.</param>
+        /// <param name="endpoint">If True, stop is the last sample. Otherwise, it is not included. Default is True.</param>
+        /// <param name="typeCode">The type of the output array. If dtype is not given, infer the data type from the other input arguments.</param>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linspace.html
+        public static NDArray linspace(double start, double stop, long num, bool endpoint = true, NPTypeCode typeCode = NPTypeCode.Double)
         {
             if (typeCode == NPTypeCode.Empty)
                 throw new ArgumentException("Invalid typeCode", nameof(typeCode));
@@ -95,7 +137,7 @@ namespace NumSharp
                     unsafe
                     {
                         var addr = (bool*)ret.Address;
-                        for (int i = 0; i < num; i++) addr[i] = (start + i * step) != 0;
+                        for (long i = 0; i < num; i++) addr[i] = (start + i * step) != 0;
                     }
 
                     return ret;
@@ -106,7 +148,7 @@ namespace NumSharp
                     unsafe
                     {
                         var addr = (#2*)ret.Address;
-                         for (int i = 0; i < num; i++) addr[i] = Converts.To#1(start + i * step);
+                         for (long i = 0; i < num; i++) addr[i] = Converts.To#1(start + i * step);
                     }
 
                     return ret;
@@ -120,7 +162,7 @@ namespace NumSharp
                     unsafe
                     {
                         var addr = (bool*)ret.Address;
-                        for (int i = 0; i < num; i++) addr[i] = (start + i * step) != 0;
+                        for (long i = 0; i < num; i++) addr[i] = (start + i * step) != 0;
                     }
 
                     return ret;
@@ -130,7 +172,7 @@ namespace NumSharp
                     unsafe
                     {
                         var addr = (byte*)ret.Address;
-                         for (int i = 0; i < num; i++) addr[i] = Converts.ToByte(start + i * step);
+                         for (long i = 0; i < num; i++) addr[i] = Converts.ToByte(start + i * step);
                     }
 
                     return ret;
@@ -140,7 +182,7 @@ namespace NumSharp
                     unsafe
                     {
                         var addr = (short*)ret.Address;
-                         for (int i = 0; i < num; i++) addr[i] = Converts.ToInt16(start + i * step);
+                         for (long i = 0; i < num; i++) addr[i] = Converts.ToInt16(start + i * step);
                     }
 
                     return ret;
@@ -150,7 +192,7 @@ namespace NumSharp
                     unsafe
                     {
                         var addr = (ushort*)ret.Address;
-                         for (int i = 0; i < num; i++) addr[i] = Converts.ToUInt16(start + i * step);
+                         for (long i = 0; i < num; i++) addr[i] = Converts.ToUInt16(start + i * step);
                     }
 
                     return ret;
@@ -160,7 +202,7 @@ namespace NumSharp
                     unsafe
                     {
                         var addr = (int*)ret.Address;
-                         for (int i = 0; i < num; i++) addr[i] = Converts.ToInt32(start + i * step);
+                         for (long i = 0; i < num; i++) addr[i] = Converts.ToInt32(start + i * step);
                     }
 
                     return ret;
@@ -170,7 +212,7 @@ namespace NumSharp
                     unsafe
                     {
                         var addr = (uint*)ret.Address;
-                         for (int i = 0; i < num; i++) addr[i] = Converts.ToUInt32(start + i * step);
+                         for (long i = 0; i < num; i++) addr[i] = Converts.ToUInt32(start + i * step);
                     }
 
                     return ret;
@@ -180,7 +222,7 @@ namespace NumSharp
                     unsafe
                     {
                         var addr = (long*)ret.Address;
-                         for (int i = 0; i < num; i++) addr[i] = Converts.ToInt64(start + i * step);
+                         for (long i = 0; i < num; i++) addr[i] = Converts.ToInt64(start + i * step);
                     }
 
                     return ret;
@@ -190,7 +232,7 @@ namespace NumSharp
                     unsafe
                     {
                         var addr = (ulong*)ret.Address;
-                         for (int i = 0; i < num; i++) addr[i] = Converts.ToUInt64(start + i * step);
+                         for (long i = 0; i < num; i++) addr[i] = Converts.ToUInt64(start + i * step);
                     }
 
                     return ret;
@@ -200,7 +242,7 @@ namespace NumSharp
                     unsafe
                     {
                         var addr = (char*)ret.Address;
-                         for (int i = 0; i < num; i++) addr[i] = Converts.ToChar(start + i * step);
+                         for (long i = 0; i < num; i++) addr[i] = Converts.ToChar(start + i * step);
                     }
 
                     return ret;
@@ -210,7 +252,7 @@ namespace NumSharp
                     unsafe
                     {
                         var addr = (double*)ret.Address;
-                         for (int i = 0; i < num; i++) addr[i] = Converts.ToDouble(start + i * step);
+                         for (long i = 0; i < num; i++) addr[i] = Converts.ToDouble(start + i * step);
                     }
 
                     return ret;
@@ -220,7 +262,7 @@ namespace NumSharp
                     unsafe
                     {
                         var addr = (float*)ret.Address;
-                         for (int i = 0; i < num; i++) addr[i] = Converts.ToSingle(start + i * step);
+                         for (long i = 0; i < num; i++) addr[i] = Converts.ToSingle(start + i * step);
                     }
 
                     return ret;
@@ -230,7 +272,7 @@ namespace NumSharp
                     unsafe
                     {
                         var addr = (decimal*)ret.Address;
-                         for (int i = 0; i < num; i++) addr[i] = Converts.ToDecimal(start + i * step);
+                         for (long i = 0; i < num; i++) addr[i] = Converts.ToDecimal(start + i * step);
                     }
 
                     return ret;
@@ -240,5 +282,19 @@ namespace NumSharp
 #endif
             }
         }
+
+        /// <summary>
+        ///     Return evenly spaced numbers over a specified interval.<br></br>
+        ///     Returns num evenly spaced samples, calculated over the interval[start, stop].<br></br>
+        ///     The endpoint of the interval can optionally be excluded.
+        /// </summary>
+        /// <param name="start">The starting value of the sequence.</param>
+        /// <param name="stop">The end value of the sequence, unless endpoint is set to False. In that case, the sequence consists of all but the last of num + 1 evenly spaced samples, so that stop is excluded. Note that the step size changes when endpoint is False.</param>
+        /// <param name="num">Number of samples to generate. Default is 50. Must be non-negative.</param>
+        /// <param name="endpoint">If True, stop is the last sample. Otherwise, it is not included. Default is True.</param>
+        /// <param name="typeCode">The type of the output array. If dtype is not given, infer the data type from the other input arguments.</param>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.linspace.html
+        public static NDArray linspace(double start, double stop, int num, bool endpoint = true, NPTypeCode typeCode = NPTypeCode.Double)
+            => linspace(start, stop, (long)num, endpoint, typeCode);
     }
 }

@@ -61,7 +61,6 @@ namespace NumSharp.UnitTest
     ///     Bug 68:           swapaxes on empty arrays crashes (NDIterator limitation)
     ///     Bug 69:           Out-of-bounds axis error is IndexOutOfRangeException, not AxisError
     /// </summary>
-    [OpenBugs]
     public partial class OpenBugs : TestClass
     {
         // ================================================================
@@ -129,16 +128,16 @@ namespace NumSharp.UnitTest
         ///     means the logical element order is reversed from the physical
         ///     memory layout.
         /// </summary>
-        [Test]
+        [Test, OpenBugs]
         public void Bug_ToString_ReversedSliceBroadcast()
         {
             var rev = np.arange(3)["::-1"]; // [2, 1, 0]
             var brev = np.broadcast_to(rev, new Shape(2, 3));
 
-            // Coordinate access is correct
-            Assert.AreEqual(2, brev.GetInt32(0, 0));
-            Assert.AreEqual(1, brev.GetInt32(0, 1));
-            Assert.AreEqual(0, brev.GetInt32(0, 2));
+            // Coordinate access is correct (arange returns Int64)
+            Assert.AreEqual(2L, brev.GetInt64(0, 0));
+            Assert.AreEqual(1L, brev.GetInt64(0, 1));
+            Assert.AreEqual(0L, brev.GetInt64(0, 2));
 
             // NumPy: ToString must show "2, 1, 0" (reversed order)
             var str = brev.ToString(false);
@@ -165,16 +164,16 @@ namespace NumSharp.UnitTest
         ///     the broadcast stride and the view stride are being multiplied
         ///     or combined incorrectly.
         /// </summary>
-        [Test]
+        [Test, OpenBugs]
         public void Bug_ToString_StepSliceBroadcast()
         {
             var stepped = np.arange(6)["::2"]; // [0, 2, 4]
             var bstepped = np.broadcast_to(stepped, new Shape(2, 3));
 
-            // Coordinate access is correct
-            Assert.AreEqual(0, bstepped.GetInt32(0, 0));
-            Assert.AreEqual(2, bstepped.GetInt32(0, 1));
-            Assert.AreEqual(4, bstepped.GetInt32(0, 2));
+            // Coordinate access is correct (arange returns Int64)
+            Assert.AreEqual(0L, bstepped.GetInt64(0, 0));
+            Assert.AreEqual(2L, bstepped.GetInt64(0, 1));
+            Assert.AreEqual(4L, bstepped.GetInt64(0, 2));
 
             // NumPy: ToString must show "0, 2, 4" (in order)
             var str = bstepped.ToString(false);
@@ -202,16 +201,16 @@ namespace NumSharp.UnitTest
         ///     appears to walk linearly with some stride that misses offset 36
         ///     and lands in zeroed/garbage memory beyond the allocation.
         /// </summary>
-        [Test]
+        [Test, OpenBugs]
         public void Bug_ToString_SlicedColumnBroadcast()
         {
             var x = np.arange(12).reshape(3, 4);
             var col = x[":, 1:2"]; // (3,1): [[1],[5],[9]]
             var bcol = np.broadcast_to(col, new Shape(3, 3));
 
-            // Coordinate access is correct
-            Assert.AreEqual(9, bcol.GetInt32(2, 0));
-            Assert.AreEqual(9, bcol.GetInt32(2, 2));
+            // Coordinate access is correct (arange returns Int64)
+            Assert.AreEqual(9L, bcol.GetInt64(2, 0));
+            Assert.AreEqual(9L, bcol.GetInt64(2, 2));
 
             // NumPy: ToString must show "9, 9, 9" in last row
             var str = bcol.ToString(false);
@@ -244,7 +243,7 @@ namespace NumSharp.UnitTest
         ///     creates a compound stride that the ToString iterator fails
         ///     to resolve correctly.
         /// </summary>
-        [Test]
+        [Test, OpenBugs]
         public void Bug_ToString_DoubleSlicedBroadcast()
         {
             var x = np.arange(12).reshape(3, 4);
@@ -252,8 +251,8 @@ namespace NumSharp.UnitTest
             var dslice_col = dslice[":, 0:1"];
             var bdslice = np.broadcast_to(dslice_col, new Shape(2, 4));
 
-            // Coordinate access is correct
-            Assert.AreEqual(8, bdslice.GetInt32(1, 0));
+            // Coordinate access is correct (arange returns Int64)
+            Assert.AreEqual(8L, bdslice.GetInt64(1, 0));
 
             // NumPy: ToString must show "8, 8, 8, 8" in second row
             var str = bdslice.ToString(false);
@@ -304,7 +303,7 @@ namespace NumSharp.UnitTest
         ///     NumPy: y[0,0] = 999 raises ValueError.
         ///     NumSharp: SetInt32(999, 0, 0) succeeds silently.
         /// </summary>
-        [Test]
+        [Test, OpenBugs]
         public void Bug_BroadcastTo_NoReadOnlyProtection()
         {
             var x = np.array(new int[] { 1, 2, 3, 4 });
@@ -365,7 +364,7 @@ namespace NumSharp.UnitTest
         ///     NumPy: broadcast_to(ones(1,2), (2,1)) raises ValueError.
         ///     NumSharp: Returns shape (2,2) — stretched both.
         /// </summary>
-        [Test]
+        [Test, OpenBugs]
         public void Bug_BroadcastTo_BilateralSemantics()
         {
             // NumPy: broadcast_to(ones(3), (1,)) must throw
@@ -427,7 +426,7 @@ namespace NumSharp.UnitTest
         ///     new leading dimension with stride=0, but the IsBroadcasted
         ///     guard blocks it.
         /// </summary>
-        [Test]
+        [Test, OpenBugs]
         public void Bug_ReBroadcast_Inconsistency()
         {
             var x = np.ones(new Shape(1, 3));
@@ -446,7 +445,7 @@ namespace NumSharp.UnitTest
                     "an inconsistency where broadcast_arrays succeeds but broadcast_to throws.");
 
             result.Should().NotBeNull();
-            result.shape.Should().BeEquivalentTo(new[] { 2, 3, 3 });
+            result.shape.Should().BeEquivalentTo(new long[] { 2, 3, 3 });
         }
 
         // ================================================================
@@ -496,7 +495,7 @@ namespace NumSharp.UnitTest
         ///     NumPy: Returns (3,3) bool with False on diagonal.
         ///     NumSharp: InvalidCastException: Unable to cast 'NDArray' to 'IConvertible'.
         /// </summary>
-        [Test]
+        [Test, OpenBugs]
         public void Bug_NotEquals_NDArrayBroadcast_Throws()
         {
             var a = np.array(new int[] { 1, 2, 3 });
@@ -511,7 +510,7 @@ namespace NumSharp.UnitTest
                     "to element-wise broadcast comparison.");
 
             result.Should().NotBeNull();
-            result.shape.Should().BeEquivalentTo(new[] { 3, 3 });
+            result.shape.Should().BeEquivalentTo(new long[] { 3, 3 });
 
             // Diagonal = False (equal), off-diagonal = True (not equal)
             result.GetBoolean(0, 0).Should().BeFalse("1 == 1");
@@ -564,7 +563,7 @@ namespace NumSharp.UnitTest
         ///     NumPy: allclose(a, a) returns True.
         ///     NumSharp: NullReferenceException at np.all.cs:line 29.
         /// </summary>
-        [Test]
+        [Test, OpenBugs]
         public void Bug_Allclose_AlwaysThrows()
         {
             var a = np.array(new double[] { 1.0, 2.0, 3.0 });
@@ -587,7 +586,7 @@ namespace NumSharp.UnitTest
         ///     NumPy: allclose(shape(3,), shape(2,3)) returns True when all elements match.
         ///     NumSharp: NullReferenceException.
         /// </summary>
-        [Test]
+        [Test, OpenBugs]
         public void Bug_Allclose_BroadcastThrows()
         {
             var a = np.array(new double[] { 1.0, 2.0, 3.0 });         // shape (3,)
@@ -653,7 +652,7 @@ namespace NumSharp.UnitTest
         ///     NumPy: array([1,5,3]) > array([2,4,3]) = [False,True,False]
         ///     NumSharp: IncorrectShapeException
         /// </summary>
-        [Test]
+        [Test, OpenBugs]
         public void Bug_GreaterThan_NDArrayVsNDArray_SameShape()
         {
             var a = np.array(new int[] { 1, 5, 3 });
@@ -678,7 +677,7 @@ namespace NumSharp.UnitTest
         ///     NumPy: array([1,5,3]) &lt; array([2,4,3]) = [True,False,False]
         ///     NumSharp: IncorrectShapeException
         /// </summary>
-        [Test]
+        [Test, OpenBugs]
         public void Bug_LessThan_NDArrayVsNDArray_SameShape()
         {
             var a = np.array(new int[] { 1, 5, 3 });
@@ -704,7 +703,7 @@ namespace NumSharp.UnitTest
         ///     NumPy: array([1,5,3]) > array([[2],[4]]) = [[F,T,T],[F,T,F]]
         ///     NumSharp: IncorrectShapeException
         /// </summary>
-        [Test]
+        [Test, OpenBugs]
         public void Bug_GreaterThan_NDArrayVsNDArray_Broadcast()
         {
             var a = np.array(new int[] { 1, 5, 3 });        // (3,)
@@ -717,7 +716,7 @@ namespace NumSharp.UnitTest
                     "[[F,T,T],[F,T,F]]. NumSharp throws IncorrectShapeException.");
 
             result.Should().NotBeNull();
-            result.shape.Should().BeEquivalentTo(new[] { 2, 3 });
+            result.shape.Should().BeEquivalentTo(new long[] { 2, 3 });
             result.GetBoolean(0, 0).Should().BeFalse("1 > 2 is False");
             result.GetBoolean(0, 1).Should().BeTrue("5 > 2 is True");
             result.GetBoolean(0, 2).Should().BeTrue("3 > 2 is True");
@@ -830,7 +829,7 @@ namespace NumSharp.UnitTest
         ///     Note: ravel() returns correct results for the same input,
         ///     suggesting it uses a different iteration path than flatten().
         /// </summary>
-        [Test]
+        [Test, OpenBugs]
         public void Bug_Flatten_ColumnBroadcast_WrongOrder()
         {
             var a = np.array(new int[,] { { 1 }, { 2 }, { 3 } }); // (3,1)
@@ -903,13 +902,13 @@ namespace NumSharp.UnitTest
         ///     NumPy:   [[1,2,3], [2,4,6], [3,6,9]]
         ///     NumSharp: [[garbage, garbage, garbage], ...] (uninitialized memory)
         /// </summary>
-        [Test]
+        [Test, OpenBugs]
         public void Bug_Cumsum_Axis0_RowBroadcast_Garbage()
         {
             var a = np.broadcast_to(np.array(new int[] { 1, 2, 3 }), new Shape(3, 3));
             var result = np.cumsum(a, 0);
 
-            result.shape.Should().BeEquivalentTo(new[] { 3, 3 });
+            result.shape.Should().BeEquivalentTo(new long[] { 3, 3 });
             // cumsum promotes Int32 to Int64 per NumPy 2.x (GetAccumulatingType)
             result.dtype.Should().Be(typeof(long), "cumsum promotes int32 to int64");
 
@@ -942,14 +941,14 @@ namespace NumSharp.UnitTest
         ///     NumPy:   [[1,1,1], [3,3,3], [6,6,6]]
         ///     NumSharp: [[garbage, garbage, garbage], ...]
         /// </summary>
-        [Test]
+        [Test, OpenBugs]
         public void Bug_Cumsum_Axis0_ColBroadcast_Garbage()
         {
             var col = np.array(new int[,] { { 1 }, { 2 }, { 3 } });
             var a = np.broadcast_to(col, new Shape(3, 3));
             var result = np.cumsum(a, 0);
 
-            result.shape.Should().BeEquivalentTo(new[] { 3, 3 });
+            result.shape.Should().BeEquivalentTo(new long[] { 3, 3 });
             // cumsum promotes Int32 to Int64 per NumPy 2.x (GetAccumulatingType)
             result.dtype.Should().Be(typeof(long), "cumsum promotes int32 to int64");
 
@@ -984,14 +983,14 @@ namespace NumSharp.UnitTest
         ///     The values suggest cumsum reads with wrong strides — it appears
         ///     to be accumulating along axis=0 instead of axis=1.
         /// </summary>
-        [Test]
+        [Test, OpenBugs]
         public void Bug_Cumsum_Axis1_ColBroadcast_Wrong()
         {
             var col = np.array(new int[,] { { 1 }, { 2 }, { 3 } });
             var a = np.broadcast_to(col, new Shape(3, 3));
             var result = np.cumsum(a, 1);
 
-            result.shape.Should().BeEquivalentTo(new[] { 3, 3 });
+            result.shape.Should().BeEquivalentTo(new long[] { 3, 3 });
             // cumsum promotes Int32 to Int64 per NumPy 2.x (GetAccumulatingType)
             result.dtype.Should().Be(typeof(long), "cumsum promotes int32 to int64");
 
@@ -1056,13 +1055,13 @@ namespace NumSharp.UnitTest
         ///     NumPy:   [[3,1,2], [3,1,2]]
         ///     NumSharp: [[3,1,2], [0,0,0]]
         /// </summary>
-        [Test]
+        [Test, OpenBugs]
         public void Bug_Roll_RowBroadcast_ZerosInSecondRow()
         {
             var a = np.broadcast_to(np.array(new int[] { 1, 2, 3 }), new Shape(2, 3));
             var result = a.roll(1, 1);
 
-            result.shape.Should().BeEquivalentTo(new[] { 2, 3 });
+            result.shape.Should().BeEquivalentTo(new long[] { 2, 3 });
 
             // Row 0 happens to be correct
             result.GetInt32(0, 0).Should().Be(3, "roll shift=1: last element wraps to front");
@@ -1088,14 +1087,14 @@ namespace NumSharp.UnitTest
         ///     NumPy:   [[30,30,30], [10,10,10], [20,20,20]]
         ///     NumSharp: [[30,30,30], [0,0,0], [0,0,0]]
         /// </summary>
-        [Test]
+        [Test, OpenBugs]
         public void Bug_Roll_ColBroadcast_ZerosAfterFirstRow()
         {
             var col = np.array(new int[,] { { 10 }, { 20 }, { 30 } });
             var a = np.broadcast_to(col, new Shape(3, 3));
             var result = a.roll(1, 0);
 
-            result.shape.Should().BeEquivalentTo(new[] { 3, 3 });
+            result.shape.Should().BeEquivalentTo(new long[] { 3, 3 });
 
             // Row 0 = last original row (30) shifted to front
             result.GetInt32(0, 0).Should().Be(30, "roll shift=1 axis=0: last row wraps to front");
@@ -1176,14 +1175,14 @@ namespace NumSharp.UnitTest
         ///     NumPy:   [600, 600, 600]
         ///     NumSharp: [300, 300, 300]  (under-counts, appears to miss row 2)
         /// </summary>
-        [Test]
+        [Test, OpenBugs]
         public void Bug_Sum_Axis0_ColBroadcast_WrongValues()
         {
             var col = np.array(new int[,] { { 100 }, { 200 }, { 300 } });
             var a = np.broadcast_to(col, new Shape(3, 3));
             var result = np.sum(a, 0);
 
-            result.shape.Should().BeEquivalentTo(new[] { 3 });
+            result.shape.Should().BeEquivalentTo(new long[] { 3 });
 
             // np.sum promotes int32 to int64 for accumulation (NEP50)
             result.GetInt64(0).Should().Be(600L,
@@ -1202,14 +1201,14 @@ namespace NumSharp.UnitTest
         ///     NumPy:   mean = [2.0, 2.0, 2.0]
         ///     NumSharp: mean = [1.0, 1.0, 1.0]
         /// </summary>
-        [Test]
+        [Test, OpenBugs]
         public void Bug_Mean_Axis0_ColBroadcast_WrongValues()
         {
             var col = np.array(new double[,] { { 1.0 }, { 2.0 }, { 3.0 } });
             var a = np.broadcast_to(col, new Shape(3, 3));
             var result = np.mean(a, 0);
 
-            result.shape.Should().BeEquivalentTo(new[] { 3 });
+            result.shape.Should().BeEquivalentTo(new long[] { 3 });
 
             result.GetDouble(0).Should().BeApproximately(2.0, 1e-10,
                 "NumPy: mean(broadcast_to([[1],[2],[3]],(3,3)), axis=0) = [2,2,2]. " +
@@ -1225,14 +1224,14 @@ namespace NumSharp.UnitTest
         ///     NumPy:   var = [0.6667, 0.6667, 0.6667]
         ///     NumSharp: var = [0.0, 0.0, 0.0]
         /// </summary>
-        [Test]
+        [Test, OpenBugs]
         public void Bug_Var_Axis0_ColBroadcast_WrongValues()
         {
             var col = np.array(new double[,] { { 1.0 }, { 2.0 }, { 3.0 } });
             var a = np.broadcast_to(col, new Shape(3, 3));
             var result = np.var(a, 0);
 
-            result.shape.Should().BeEquivalentTo(new[] { 3 });
+            result.shape.Should().BeEquivalentTo(new long[] { 3 });
 
             result.GetDouble(0).Should().BeApproximately(2.0 / 3.0, 1e-10,
                 "NumPy: var(broadcast_to([[1],[2],[3]],(3,3)), axis=0) = [0.667,0.667,0.667]. " +
@@ -1248,14 +1247,14 @@ namespace NumSharp.UnitTest
         ///     NumPy:   std = [0.8165, 0.8165, 0.8165]
         ///     NumSharp: std = [0.0, 0.0, 0.0]
         /// </summary>
-        [Test]
+        [Test, OpenBugs]
         public void Bug_Std_Axis0_ColBroadcast_WrongValues()
         {
             var col = np.array(new double[,] { { 1.0 }, { 2.0 }, { 3.0 } });
             var a = np.broadcast_to(col, new Shape(3, 3));
             var result = np.std(a, 0);
 
-            result.shape.Should().BeEquivalentTo(new[] { 3 });
+            result.shape.Should().BeEquivalentTo(new long[] { 3 });
 
             var expected_std = Math.Sqrt(2.0 / 3.0);
             result.GetDouble(0).Should().BeApproximately(expected_std, 1e-10,
@@ -1273,14 +1272,14 @@ namespace NumSharp.UnitTest
         ///     NumPy:   sum(axis=0) = [15, 15, 15]  (1+2+3+4+5)
         ///     NumSharp: sum(axis=0) = [7, 7, 7]
         /// </summary>
-        [Test]
+        [Test, OpenBugs]
         public void Bug_Sum_Axis0_ColBroadcast_5x3_WrongValues()
         {
             var col = np.array(new int[,] { { 1 }, { 2 }, { 3 }, { 4 }, { 5 } });
             var a = np.broadcast_to(col, new Shape(5, 3));
             var result = np.sum(a, 0);
 
-            result.shape.Should().BeEquivalentTo(new[] { 3 });
+            result.shape.Should().BeEquivalentTo(new long[] { 3 });
 
             // np.sum promotes int32 to int64 for accumulation (NEP50)
             result.GetInt64(0).Should().Be(15L,
@@ -1322,7 +1321,7 @@ namespace NumSharp.UnitTest
         ///     NumPy:   argsort([[3,1,2],[6,4,5]]) = [[1,2,0],[1,2,0]]
         ///     NumSharp: InvalidOperationException: Failed to compare two elements
         /// </summary>
-        [Test]
+        [Test, OpenBugs]
         public void Bug_Argsort_2D_Crashes()
         {
             var a = np.array(new int[,] { { 3, 1, 2 }, { 6, 4, 5 } });
@@ -1336,7 +1335,7 @@ namespace NumSharp.UnitTest
                     "used in the internal sort doesn't handle multi-dimensional indexing.");
 
             result.Should().NotBeNull();
-            result.shape.Should().BeEquivalentTo(new[] { 2, 3 });
+            result.shape.Should().BeEquivalentTo(new long[] { 2, 3 });
             result.dtype.Should().Be(typeof(long), "NumPy argsort always returns int64 indices");
 
             // Row 0: argsort of [3,1,2] = [1,2,0]
@@ -1357,7 +1356,7 @@ namespace NumSharp.UnitTest
         ///     NumPy:   argsort([[3.0,1.0,2.0]]) = [[1,2,0]]
         ///     NumSharp: InvalidOperationException
         /// </summary>
-        [Test]
+        [Test, OpenBugs]
         public void Bug_Argsort_2D_Double_Crashes()
         {
             var a = np.array(new double[,] { { 3.0, 1.0, 2.0 } });
@@ -1399,7 +1398,7 @@ namespace NumSharp.UnitTest
         ///     NumPy:   clip(broadcast, 2, 7) = [[2,5,7],[2,5,7]]
         ///     NumSharp: NotSupportedException: Unable to broadcast already broadcasted shape.
         /// </summary>
-        [Test]
+        [Test, OpenBugs]
         public void Bug_Clip_Broadcast_ThrowsNotSupported()
         {
             var a = np.broadcast_to(np.array(new double[] { 1.0, 5.0, 9.0 }), new Shape(2, 3));
@@ -1413,7 +1412,7 @@ namespace NumSharp.UnitTest
                     "broadcasts the input to apply min/max, hitting the guard.");
 
             result.Should().NotBeNull();
-            result.shape.Should().BeEquivalentTo(new[] { 2, 3 });
+            result.shape.Should().BeEquivalentTo(new long[] { 2, 3 });
             result.GetDouble(0, 0).Should().Be(2.0);
             result.GetDouble(0, 1).Should().Be(5.0);
             result.GetDouble(0, 2).Should().Be(7.0);
@@ -1517,7 +1516,7 @@ namespace NumSharp.UnitTest
         ///     of 0, 3, 6 (using stride 3), so it reads data[0..2] which
         ///     are all 100 (row 0 repeated 3 times in the contiguous clone).
         /// </summary>
-        [Test]
+        [Test, OpenBugs]
         public void Bug_SliceBroadcast_StrideMismatch_ColumnBroadcast_SliceColumn()
         {
             // Setup: column vector [[100],[200],[300]] broadcast to (3,3)
@@ -1531,7 +1530,7 @@ namespace NumSharp.UnitTest
 
             // Slice a[:, 0] — should extract column 0: [100, 200, 300]
             var sliced = a[":, 0"];
-            sliced.shape.Should().BeEquivalentTo(new[] { 3 });
+            sliced.shape.Should().BeEquivalentTo(new long[] { 3 });
 
             // These assertions reproduce the bug:
             // NumPy returns [100, 200, 300]. NumSharp returns [100, 100, 100].
@@ -1558,7 +1557,7 @@ namespace NumSharp.UnitTest
         ///     correctly materializes the data; the bug is purely that
         ///     _shape.Slice(slices) attaches broadcast strides to the clone.
         /// </summary>
-        [Test]
+        [Test, OpenBugs]
         public void Bug_SliceBroadcast_CopyWorkaround_Proves_StrideMismatch()
         {
             var col = np.array(new int[,] { { 100 }, { 200 }, { 300 } });
@@ -1566,7 +1565,7 @@ namespace NumSharp.UnitTest
 
             // np.copy materializes with clean contiguous shape [3, 1]
             var copy = np.copy(a);
-            copy.strides.Should().BeEquivalentTo(new[] { 3, 1 },
+            copy.strides.Should().BeEquivalentTo(new long[] { 3, 1 },
                 "np.copy produces contiguous strides [3,1]");
             copy.Shape.IsBroadcasted.Should().BeFalse(
                 "np.copy clears broadcast flag");
@@ -1612,7 +1611,7 @@ namespace NumSharp.UnitTest
         ///     We use np.copy as the control path: copy materializes with
         ///     clean strides, then slicing works correctly.
         /// </summary>
-        [Test]
+        [Test, OpenBugs]
         public void Bug_SliceBroadcast_StrideMismatch_SlicedSourceRows()
         {
             // arange(12).reshape(3,4) = [[ 0, 1, 2, 3],
@@ -1624,16 +1623,16 @@ namespace NumSharp.UnitTest
             var col = x[":, 1:2"]; // (3,1): [[1],[5],[9]]
             var b = np.broadcast_to(col, new Shape(3, 3));
 
-            // Coordinate access on the broadcast is correct
-            b.GetInt32(0, 0).Should().Be(1);
-            b.GetInt32(1, 0).Should().Be(5);
-            b.GetInt32(2, 0).Should().Be(9);
+            // Coordinate access on the broadcast is correct (arange returns Int64)
+            b.GetInt64(0, 0).Should().Be(1);
+            b.GetInt64(1, 0).Should().Be(5);
+            b.GetInt64(2, 0).Should().Be(9);
 
             // np.copy + slice works correctly (control path)
             var copySliced = np.copy(b)[":, 0"];
-            copySliced.GetInt32(0).Should().Be(1, "copy[:, 0][0] = 1 (control)");
-            copySliced.GetInt32(1).Should().Be(5, "copy[:, 0][1] = 5 (control)");
-            copySliced.GetInt32(2).Should().Be(9, "copy[:, 0][2] = 9 (control)");
+            copySliced.GetInt64(0).Should().Be(1, "copy[:, 0][0] = 1 (control)");
+            copySliced.GetInt64(1).Should().Be(5, "copy[:, 0][1] = 5 (control)");
+            copySliced.GetInt64(2).Should().Be(9, "copy[:, 0][2] = 9 (control)");
 
             // Direct slice should give the same result but crashes:
             // GetViewInternal clones data to 9 contiguous elements but
@@ -1647,12 +1646,12 @@ namespace NumSharp.UnitTest
             try
             {
                 var sliced = b[":, 0"];
-                // If it doesn't throw, verify values are correct
-                sliced.GetInt32(0).Should().Be(1,
+                // If it doesn't throw, verify values are correct (arange returns Int64)
+                sliced.GetInt64(0).Should().Be(1,
                     "b[:, 0][0] should be 1 (row 0 value).");
-                sliced.GetInt32(1).Should().Be(5,
+                sliced.GetInt64(1).Should().Be(5,
                     "b[:, 0][1] should be 5 (row 1 value).");
-                sliced.GetInt32(2).Should().Be(9,
+                sliced.GetInt64(2).Should().Be(9,
                     "b[:, 0][2] should be 9 (row 2 value).");
             }
             catch (Exception ex)
@@ -1681,7 +1680,7 @@ namespace NumSharp.UnitTest
         ///     the same slice that the reduction code does, proving that the
         ///     slice itself returns wrong values.
         /// </summary>
-        [Test]
+        [Test, OpenBugs]
         public void Bug_SliceBroadcast_StrideMismatch_Causes_Sum_Axis0_Bug()
         {
             var col = np.array(new int[,] { { 100 }, { 200 }, { 300 } });
@@ -1766,13 +1765,13 @@ namespace NumSharp.UnitTest
         ///     NumPy:    cumsum(broadcast_to([1,2,3],(3,3)), axis=0) = [[1,2,3],[2,4,6],[3,6,9]]
         ///     NumSharp: uninitialized memory (e.g. [43060696, 32766, 0])
         /// </summary>
-        [Test]
+        [Test, OpenBugs]
         public void Bug_Cumsum_OutputBroadcastShape_RowBroadcast_Axis0()
         {
             var a = np.broadcast_to(np.array(new int[] { 1, 2, 3 }), new Shape(3, 3));
             var result = np.cumsum(a, 0);
 
-            result.shape.Should().BeEquivalentTo(new[] { 3, 3 });
+            result.shape.Should().BeEquivalentTo(new long[] { 3, 3 });
             // cumsum promotes Int32 to Int64 per NumPy 2.x (GetAccumulatingType)
             result.dtype.Should().Be(typeof(long), "cumsum promotes int32 to int64");
 
@@ -1801,14 +1800,14 @@ namespace NumSharp.UnitTest
         ///     NumPy:    cumsum(broadcast_to([[1],[2],[3]],(3,3)), axis=1) = [[1,2,3],[2,4,6],[3,6,9]]
         ///     NumSharp: garbage
         /// </summary>
-        [Test]
+        [Test, OpenBugs]
         public void Bug_Cumsum_OutputBroadcastShape_ColBroadcast_Axis1()
         {
             var col = np.array(new int[,] { { 1 }, { 2 }, { 3 } });
             var a = np.broadcast_to(col, new Shape(3, 3));
             var result = np.cumsum(a, 1);
 
-            result.shape.Should().BeEquivalentTo(new[] { 3, 3 });
+            result.shape.Should().BeEquivalentTo(new long[] { 3, 3 });
             // cumsum promotes Int32 to Int64 per NumPy 2.x (GetAccumulatingType)
             result.dtype.Should().Be(typeof(long), "cumsum promotes int32 to int64");
 
@@ -1873,13 +1872,13 @@ namespace NumSharp.UnitTest
         ///     NumPy:    roll(broadcast_to([1,2,3],(2,3)), 1, axis=1) = [[3,1,2],[3,1,2]]
         ///     NumSharp: row 0 may be correct, row 1 contains zeros/garbage
         /// </summary>
-        [Test]
+        [Test, OpenBugs]
         public void Bug_Roll_DataT_RowBroadcast()
         {
             var a = np.broadcast_to(np.array(new int[] { 1, 2, 3 }), new Shape(2, 3));
             var result = a.roll(1, 1);
 
-            result.shape.Should().BeEquivalentTo(new[] { 2, 3 });
+            result.shape.Should().BeEquivalentTo(new long[] { 2, 3 });
 
             result.GetInt32(0, 0).Should().Be(3,
                 "roll(axis=1, shift=1) should rotate [1,2,3] → [3,1,2]. " +
@@ -1899,14 +1898,14 @@ namespace NumSharp.UnitTest
         ///     NumPy:    roll(broadcast_to([[1],[2],[3]],(3,3)), 1, axis=0) = [[3,3,3],[1,1,1],[2,2,2]]
         ///     NumSharp: garbage values
         /// </summary>
-        [Test]
+        [Test, OpenBugs]
         public void Bug_Roll_DataT_ColBroadcast()
         {
             var col = np.array(new int[,] { { 1 }, { 2 }, { 3 } });
             var a = np.broadcast_to(col, new Shape(3, 3));
             var result = a.roll(1, 0);
 
-            result.shape.Should().BeEquivalentTo(new[] { 3, 3 });
+            result.shape.Should().BeEquivalentTo(new long[] { 3, 3 });
 
             // After rolling axis=0 by 1: row 2 → row 0, row 0 → row 1, row 1 → row 2
             result.GetInt32(0, 0).Should().Be(3,
@@ -1973,7 +1972,7 @@ namespace NumSharp.UnitTest
         ///     This is a root cause contributing to Bug 19 (roll) and
         ///     Bug 5/9 (np.minimum via TransformOffset → GetAtIndex).
         /// </summary>
-        [Test]
+        [Test, OpenBugs]
         public void Bug_GetCoordinates_BroadcastStrides_RowBroadcast()
         {
             // Row broadcast: [1,2,3] → (3,3), strides [0, 1]
@@ -1982,7 +1981,7 @@ namespace NumSharp.UnitTest
 
             // Flat index 0 → should be [0, 0]
             var coords0 = shape.GetCoordinates(0);
-            coords0.Should().BeEquivalentTo(new[] { 0, 0 },
+            coords0.Should().BeEquivalentTo(new long[] { 0, 0 },
                 "Flat index 0 in (3,3) should map to [0,0]");
 
             // Flat index 1 → should be [0, 1] for row-major order
@@ -2009,7 +2008,7 @@ namespace NumSharp.UnitTest
         ///     BUG 20b: GetCoordinates for col-broadcast (3,3) strides [1, 0].
         ///     Flat index 1 maps to [1, 0] instead of [0, 1].
         /// </summary>
-        [Test]
+        [Test, OpenBugs]
         public void Bug_GetCoordinates_BroadcastStrides_ColBroadcast()
         {
             var col = np.array(new int[,] { { 1 }, { 2 }, { 3 } });
@@ -2062,7 +2061,7 @@ namespace NumSharp.UnitTest
         ///     NumPy:    arr[mask] where mask has 3 True values → shape (3,)
         ///     NumSharp: returns shape (3, ...) — treats True as row selector
         /// </summary>
-        [Test]
+        [Test, OpenBugs]
         public void Bug_BooleanMask_2D_WrongShape()
         {
             var a = np.array(new int[,] { { 1, 2, 3 }, { 4, 5, 6 }, { 7, 8, 9 } });
@@ -2114,7 +2113,7 @@ namespace NumSharp.UnitTest
         ///     NumPy:    np.any([[T,F],[F,T]], axis=0) = [True, True]
         ///     NumSharp: InvalidCastException: Unable to cast NDArray to NDArray&lt;Boolean&gt;
         /// </summary>
-        [Test]
+        [Test, OpenBugs]
         public void Bug_Any_WithAxis_AlwaysThrows()
         {
             var a = np.array(new bool[,] { { true, false }, { false, true } });
@@ -2127,7 +2126,7 @@ namespace NumSharp.UnitTest
                     "NDArray to NDArray<Boolean> in the axis reduction path.");
 
             result.Should().NotBeNull();
-            result.shape.Should().BeEquivalentTo(new[] { 2 });
+            result.shape.Should().BeEquivalentTo(new long[] { 2 });
             result.GetBoolean(0).Should().BeTrue("any along axis 0: [T,F] → T");
             result.GetBoolean(1).Should().BeTrue("any along axis 0: [F,T] → T");
         }
@@ -2135,7 +2134,7 @@ namespace NumSharp.UnitTest
         /// <summary>
         ///     BUG 22b: np.any with axis=1 also throws.
         /// </summary>
-        [Test]
+        [Test, OpenBugs]
         public void Bug_Any_WithAxis1_AlwaysThrows()
         {
             var a = np.array(new bool[,] { { true, false }, { false, false } });
@@ -2146,7 +2145,7 @@ namespace NumSharp.UnitTest
                     "NumPy: np.any([[T,F],[F,F]], axis=1) = [True, False].");
 
             result.Should().NotBeNull();
-            result.shape.Should().BeEquivalentTo(new[] { 2 });
+            result.shape.Should().BeEquivalentTo(new long[] { 2 });
             result.GetBoolean(0).Should().BeTrue("any of [T,F] is True");
             result.GetBoolean(1).Should().BeFalse("any of [F,F] is False");
         }
@@ -2186,7 +2185,7 @@ namespace NumSharp.UnitTest
         ///     NumPy:    [10,10,10,20,20,20,30,30,30]
         ///     NumSharp: [10,20,30,10,20,30,10,20,30]
         /// </summary>
-        [Test]
+        [Test, OpenBugs]
         public void Bug_Reshape_ColBroadcast_WrongOrder()
         {
             var col = np.array(new int[,] { { 10 }, { 20 }, { 30 } });
@@ -2220,7 +2219,7 @@ namespace NumSharp.UnitTest
         ///     NumPy:    abs(broadcast_to([-1,2,-3], (2,3))) = [[1,2,3],[1,2,3]]
         ///     NumSharp: IncorrectShapeException
         /// </summary>
-        [Test]
+        [Test, OpenBugs]
         public void Bug_Abs_Broadcast_Throws()
         {
             var a = np.broadcast_to(np.array(new int[] { -1, 2, -3 }), new Shape(2, 3));
@@ -2233,7 +2232,7 @@ namespace NumSharp.UnitTest
                     "storage size doesn't match the broadcast shape size.");
 
             result.Should().NotBeNull();
-            result.shape.Should().BeEquivalentTo(new[] { 2, 3 });
+            result.shape.Should().BeEquivalentTo(new long[] { 2, 3 });
             result.GetInt32(0, 0).Should().Be(1);
             result.GetInt32(0, 1).Should().Be(2);
             result.GetInt32(1, 2).Should().Be(3);
@@ -2286,7 +2285,7 @@ namespace NumSharp.UnitTest
         ///     contiguous [10,10,10,20,20,20,30,30,30] then creates a plain
         ///     shape with strides [3,1], losing the broadcast semantics.
         /// </summary>
-        [Test]
+        [Test, OpenBugs]
         public void Bug_Transpose_ColBroadcast_WrongValues()
         {
             var col = np.array(new int[,] { { 10 }, { 20 }, { 30 } });
@@ -2298,7 +2297,7 @@ namespace NumSharp.UnitTest
             a.GetInt32(2, 0).Should().Be(30);
 
             var t = a.T;
-            t.shape.Should().BeEquivalentTo(new[] { 3, 3 });
+            t.shape.Should().BeEquivalentTo(new long[] { 3, 3 });
 
             // After transpose, each ROW should be [10,20,30]
             // (the column dimension, which varied, becomes the row dimension)
@@ -2351,25 +2350,25 @@ namespace NumSharp.UnitTest
         ///     NumPy:    t[0,0] = 999 → a[0,0] == 999 (shared memory)
         ///     NumSharp: t[0,0] = 999 → a[0,0] == 0   (independent copy)
         /// </summary>
-        [Test]
+        [Test, OpenBugs]
         public void Bug_Transpose_ReturnsPhysicalCopy_ShouldBeView()
         {
             var a = np.arange(6).reshape(2, 3);
             var t = np.transpose(a);
 
-            t.shape.Should().BeEquivalentTo(new[] { 3, 2 });
+            t.shape.Should().BeEquivalentTo(new long[] { 3, 2 });
 
-            // Verify values are correct
-            t.GetInt32(0, 0).Should().Be(0);
-            t.GetInt32(0, 1).Should().Be(3);
-            t.GetInt32(1, 0).Should().Be(1);
-            t.GetInt32(1, 1).Should().Be(4);
-            t.GetInt32(2, 0).Should().Be(2);
-            t.GetInt32(2, 1).Should().Be(5);
+            // Verify values are correct (arange returns Int64)
+            t.GetInt64(0, 0).Should().Be(0);
+            t.GetInt64(0, 1).Should().Be(3);
+            t.GetInt64(1, 0).Should().Be(1);
+            t.GetInt64(1, 1).Should().Be(4);
+            t.GetInt64(2, 0).Should().Be(2);
+            t.GetInt64(2, 1).Should().Be(5);
 
             // Mutation test: writing to transpose should modify original
-            t.SetInt32(999, 0, 0);
-            a.GetInt32(0, 0).Should().Be(999,
+            t.SetInt64(999, 0, 0);
+            a.GetInt64(0, 0).Should().Be(999,
                 "NumPy: transpose returns a view — mutating t[0,0] also mutates a[0,0]. " +
                 "NumSharp: Default.Transpose.cs always allocates new memory (line 172) " +
                 "and copies data via MultiIterator.Assign (line 173), creating an " +
@@ -2385,21 +2384,21 @@ namespace NumSharp.UnitTest
         ///     NumPy:    s[0,0,0] = 999 → a[0,0,0] == 999 (shared memory)
         ///     NumSharp: s[0,0,0] = 999 → a[0,0,0] == 0   (independent copy)
         /// </summary>
-        [Test]
+        [Test, OpenBugs]
         public void Bug_SwapAxes_ReturnsPhysicalCopy_ShouldBeView()
         {
             var a = np.arange(24).reshape(2, 3, 4);
             var s = np.swapaxes(a, 0, 2);
 
-            s.shape.Should().BeEquivalentTo(new[] { 4, 3, 2 });
+            s.shape.Should().BeEquivalentTo(new long[] { 4, 3, 2 });
 
-            // Verify values are correct
-            s.GetInt32(0, 0, 0).Should().Be(0);
-            s.GetInt32(1, 0, 0).Should().Be(1);
+            // Verify values are correct (arange returns Int64)
+            s.GetInt64(0, 0, 0).Should().Be(0);
+            s.GetInt64(1, 0, 0).Should().Be(1);
 
             // Mutation test: writing to swapaxes result should modify original
-            s.SetInt32(999, 0, 0, 0);
-            a.GetInt32(0, 0, 0).Should().Be(999,
+            s.SetInt64(999, 0, 0, 0);
+            a.GetInt64(0, 0, 0).Should().Be(999,
                 "NumPy: swapaxes returns a view — mutating s[0,0,0] also mutates a[0,0,0]. " +
                 "NumSharp: swapaxes delegates to Transpose which always copies data " +
                 "(Default.Transpose.cs line 172-173).");
@@ -2443,7 +2442,7 @@ namespace NumSharp.UnitTest
         ///     NumPy reports c_contiguous=True. NumSharp now correctly optimizes this
         ///     by slicing the InternalArray and creating a fresh shape with offset=0.
         /// </summary>
-        [Test]
+        [Test, OpenBugs]
         public void Bug_IsContiguous_FalseForContiguousSlice1D()
         {
             var a = np.arange(10);
@@ -2462,7 +2461,7 @@ namespace NumSharp.UnitTest
         ///     row-major array — the data is contiguous in memory.
         ///     NumPy reports c_contiguous=True. NumSharp now correctly optimizes this.
         /// </summary>
-        [Test]
+        [Test, OpenBugs]
         public void Bug_IsContiguous_FalseForContiguousRowSlice2D()
         {
             var a = np.arange(12).reshape(3, 4);
@@ -2515,17 +2514,17 @@ namespace NumSharp.UnitTest
         ///       NumPy swapaxes(0,2):    strides = [1, 4, 12]  (swap strides[0] and strides[2])
         ///       NumSharp swapaxes(0,2): strides = [6, 2, 1]   (C-contiguous for shape (4,3,2))
         /// </summary>
-        [Test]
+        [Test, OpenBugs]
         public void Bug_SwapAxes_Strides_WrongForAxis02()
         {
             var a = np.arange(24).reshape(2, 3, 4);
-            a.strides.Should().BeEquivalentTo(new[] { 12, 4, 1 });
+            a.strides.Should().BeEquivalentTo(new long[] { 12, 4, 1 });
 
             var b = np.swapaxes(a, 0, 2);
-            b.shape.Should().BeEquivalentTo(new[] { 4, 3, 2 });
+            b.shape.Should().BeEquivalentTo(new long[] { 4, 3, 2 });
 
             // NumPy: strides are permuted, not recomputed
-            b.strides.Should().BeEquivalentTo(new[] { 1, 4, 12 },
+            b.strides.Should().BeEquivalentTo(new long[] { 1, 4, 12 },
                 "NumPy: swapaxes(0,2) swaps strides[0] and strides[2]: [12,4,1] → [1,4,12]. " +
                 "The result is non-contiguous (strides not in descending order). " +
                 "NumSharp returns [6,2,1] — standard C-contiguous strides for shape (4,3,2) — " +
@@ -2540,14 +2539,14 @@ namespace NumSharp.UnitTest
         ///       NumPy swapaxes(0,1):    strides = [4, 12, 1]  (swap strides[0] and strides[1])
         ///       NumSharp swapaxes(0,1): strides = [8, 4, 1]   (C-contiguous for shape (3,2,4))
         /// </summary>
-        [Test]
+        [Test, OpenBugs]
         public void Bug_SwapAxes_Strides_WrongForAxis01()
         {
             var a = np.arange(24).reshape(2, 3, 4);
             var b = np.swapaxes(a, 0, 1);
-            b.shape.Should().BeEquivalentTo(new[] { 3, 2, 4 });
+            b.shape.Should().BeEquivalentTo(new long[] { 3, 2, 4 });
 
-            b.strides.Should().BeEquivalentTo(new[] { 4, 12, 1 },
+            b.strides.Should().BeEquivalentTo(new long[] { 4, 12, 1 },
                 "NumPy: swapaxes(0,1) swaps strides[0] and strides[1]: [12,4,1] → [4,12,1]. " +
                 "NumSharp returns [8,4,1] — C-contiguous strides for shape (3,2,4).");
         }
@@ -2560,14 +2559,14 @@ namespace NumSharp.UnitTest
         ///       NumPy swapaxes(1,2):    strides = [12, 1, 4]  (swap strides[1] and strides[2])
         ///       NumSharp swapaxes(1,2): strides = [12, 3, 1]  (C-contiguous for shape (2,4,3))
         /// </summary>
-        [Test]
+        [Test, OpenBugs]
         public void Bug_SwapAxes_Strides_WrongForAxis12()
         {
             var a = np.arange(24).reshape(2, 3, 4);
             var b = np.swapaxes(a, 1, 2);
-            b.shape.Should().BeEquivalentTo(new[] { 2, 4, 3 });
+            b.shape.Should().BeEquivalentTo(new long[] { 2, 4, 3 });
 
-            b.strides.Should().BeEquivalentTo(new[] { 12, 1, 4 },
+            b.strides.Should().BeEquivalentTo(new long[] { 12, 1, 4 },
                 "NumPy: swapaxes(1,2) swaps strides[1] and strides[2]: [12,4,1] → [12,1,4]. " +
                 "NumSharp returns [12,3,1] — C-contiguous strides for shape (2,4,3).");
         }
@@ -2602,7 +2601,7 @@ namespace NumSharp.UnitTest
         ///     NumPy:    np.swapaxes(np.array(42), 0, 0) → AxisError
         ///     NumSharp: np.swapaxes(np.array(42), 0, 0) → shape=[1], no error
         /// </summary>
-        [Test]
+        [Test, OpenBugs]
         public void Bug_SwapAxes_0DScalar_ShouldThrow()
         {
             var s = np.array(42);
@@ -2649,7 +2648,7 @@ namespace NumSharp.UnitTest
         ///     NumPy: Returns empty array with shape (4,3,0).
         ///     NumSharp: InvalidOperationException — NDIterator can't handle empty shape.
         /// </summary>
-        [Test]
+        [Test, OpenBugs]
         public void Bug_SwapAxes_EmptyArray_Crashes()
         {
             var empty = np.empty(new Shape(0, 3, 4));
@@ -2663,7 +2662,7 @@ namespace NumSharp.UnitTest
                     "via MultiIterator.Assign (Default.Transpose.cs line 173).");
 
             result.Should().NotBeNull();
-            result.shape.Should().BeEquivalentTo(new[] { 4, 3, 0 });
+            result.shape.Should().BeEquivalentTo(new long[] { 4, 3, 0 });
         }
 
         /// <summary>
@@ -2672,7 +2671,7 @@ namespace NumSharp.UnitTest
         ///     NumPy: Returns empty array with shape (4,0,2).
         ///     NumSharp: InvalidOperationException — same root cause.
         /// </summary>
-        [Test]
+        [Test, OpenBugs]
         public void Bug_SwapAxes_EmptyArray_MiddleDimZero_Crashes()
         {
             var empty = np.empty(new Shape(2, 0, 4));
@@ -2684,7 +2683,7 @@ namespace NumSharp.UnitTest
                     "NumSharp throws InvalidOperationException — same NDIterator limitation.");
 
             result.Should().NotBeNull();
-            result.shape.Should().BeEquivalentTo(new[] { 4, 0, 2 });
+            result.shape.Should().BeEquivalentTo(new long[] { 4, 0, 2 });
         }
 
         // ================================================================
@@ -2725,7 +2724,7 @@ namespace NumSharp.UnitTest
         ///     NumPy:    AxisError: axis2: axis 3 is out of bounds for array of dimension 3
         ///     NumSharp: IndexOutOfRangeException: Index was outside the bounds of the array.
         /// </summary>
-        [Test]
+        [Test, OpenBugs]
         public void Bug_SwapAxes_OutOfBoundsAxis_BadErrorMessage()
         {
             var a = np.arange(24).reshape(2, 3, 4);
@@ -2753,7 +2752,7 @@ namespace NumSharp.UnitTest
         ///     NumPy:    AxisError: axis1: axis -4 is out of bounds for array of dimension 3
         ///     NumSharp: IndexOutOfRangeException (from array access with negative index)
         /// </summary>
-        [Test]
+        [Test, OpenBugs]
         public void Bug_SwapAxes_NegativeOutOfBoundsAxis_BadErrorMessage()
         {
             var a = np.arange(24).reshape(2, 3, 4);

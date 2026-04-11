@@ -29,7 +29,7 @@ public class EmptyArrayComparisonTests
         var emptyInt = np.array(Array.Empty<int>());
         var result = emptyInt == 0;
 
-        await Assert.That(result.shape.SequenceEqual(new[] { 0 })).IsTrue();
+        await Assert.That(result.shape.SequenceEqual(new long[] { 0 })).IsTrue();
         await Assert.That(result.size).IsEqualTo(0);
         await Assert.That(result.dtype).IsEqualTo(typeof(bool));
     }
@@ -41,7 +41,7 @@ public class EmptyArrayComparisonTests
         var emptyInt = np.array(Array.Empty<int>());
         var result = emptyInt != 0;
 
-        await Assert.That(result.shape.SequenceEqual(new[] { 0 })).IsTrue();
+        await Assert.That(result.shape.SequenceEqual(new long[] { 0 })).IsTrue();
         await Assert.That(result.size).IsEqualTo(0);
         await Assert.That(result.dtype).IsEqualTo(typeof(bool));
     }
@@ -53,7 +53,7 @@ public class EmptyArrayComparisonTests
         var emptyInt = np.array(Array.Empty<int>());
         var result = emptyInt > 0;
 
-        await Assert.That(result.shape.SequenceEqual(new[] { 0 })).IsTrue();
+        await Assert.That(result.shape.SequenceEqual(new long[] { 0 })).IsTrue();
         await Assert.That(result.size).IsEqualTo(0);
         await Assert.That(result.dtype).IsEqualTo(typeof(bool));
     }
@@ -65,7 +65,7 @@ public class EmptyArrayComparisonTests
         var emptyInt = np.array(Array.Empty<int>());
         var result = emptyInt >= 0;
 
-        await Assert.That(result.shape.SequenceEqual(new[] { 0 })).IsTrue();
+        await Assert.That(result.shape.SequenceEqual(new long[] { 0 })).IsTrue();
         await Assert.That(result.size).IsEqualTo(0);
         await Assert.That(result.dtype).IsEqualTo(typeof(bool));
     }
@@ -77,7 +77,7 @@ public class EmptyArrayComparisonTests
         var emptyInt = np.array(Array.Empty<int>());
         var result = emptyInt < 0;
 
-        await Assert.That(result.shape.SequenceEqual(new[] { 0 })).IsTrue();
+        await Assert.That(result.shape.SequenceEqual(new long[] { 0 })).IsTrue();
         await Assert.That(result.size).IsEqualTo(0);
         await Assert.That(result.dtype).IsEqualTo(typeof(bool));
     }
@@ -89,7 +89,7 @@ public class EmptyArrayComparisonTests
         var emptyInt = np.array(Array.Empty<int>());
         var result = emptyInt <= 0;
 
-        await Assert.That(result.shape.SequenceEqual(new[] { 0 })).IsTrue();
+        await Assert.That(result.shape.SequenceEqual(new long[] { 0 })).IsTrue();
         await Assert.That(result.size).IsEqualTo(0);
         await Assert.That(result.dtype).IsEqualTo(typeof(bool));
     }
@@ -101,7 +101,7 @@ public class EmptyArrayComparisonTests
         var empty2D = np.zeros(new Shape(0, 3), NPTypeCode.Int32);
         var result = empty2D == 0;
 
-        await Assert.That(result.shape.SequenceEqual(new[] { 0, 3 })).IsTrue();
+        await Assert.That(result.shape.SequenceEqual(new long[] { 0, 3 })).IsTrue();
         await Assert.That(result.size).IsEqualTo(0);
         await Assert.That(result.dtype).IsEqualTo(typeof(bool));
     }
@@ -113,7 +113,7 @@ public class EmptyArrayComparisonTests
         var empty2D = np.zeros(new Shape(3, 0), NPTypeCode.Int32);
         var result = empty2D == 0;
 
-        await Assert.That(result.shape.SequenceEqual(new[] { 3, 0 })).IsTrue();
+        await Assert.That(result.shape.SequenceEqual(new long[] { 3, 0 })).IsTrue();
         await Assert.That(result.size).IsEqualTo(0);
         await Assert.That(result.dtype).IsEqualTo(typeof(bool));
     }
@@ -125,7 +125,7 @@ public class EmptyArrayComparisonTests
         var emptyFloat = np.array(Array.Empty<double>());
         var result = emptyFloat == 0.0;
 
-        await Assert.That(result.shape.SequenceEqual(new[] { 0 })).IsTrue();
+        await Assert.That(result.shape.SequenceEqual(new long[] { 0 })).IsTrue();
         await Assert.That(result.size).IsEqualTo(0);
         await Assert.That(result.dtype).IsEqualTo(typeof(bool));
     }
@@ -138,7 +138,7 @@ public class EmptyArrayComparisonTests
         var empty2 = np.array(Array.Empty<int>());
         var result = empty1 == empty2;
 
-        await Assert.That(result.shape.SequenceEqual(new[] { 0 })).IsTrue();
+        await Assert.That(result.shape.SequenceEqual(new long[] { 0 })).IsTrue();
         await Assert.That(result.size).IsEqualTo(0);
         await Assert.That(result.dtype).IsEqualTo(typeof(bool));
     }

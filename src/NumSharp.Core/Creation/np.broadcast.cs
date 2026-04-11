@@ -28,7 +28,7 @@ namespace NumSharp
             }
 
             public int ndim => shape.NDim;
-            public int size => shape.size;
+            public long size => shape.size;
 
             void reset()
             {

@@ -33,7 +33,7 @@ namespace NumSharp.Backends.Kernels
         /// <param name="size">Number of elements</param>
         /// <param name="ddof">Delta degrees of freedom (0 for population variance, 1 for sample variance)</param>
         /// <returns>The variance as double</returns>
-        internal static unsafe double VarSimdHelper<T>(T* src, int size, int ddof = 0)
+        internal static unsafe double VarSimdHelper<T>(T* src, long size, int ddof = 0)
             where T : unmanaged
         {
             if (size == 0)
@@ -53,9 +53,9 @@ namespace NumSharp.Backends.Kernels
                 if (Vector512.IsHardwareAccelerated && Vector512<double>.IsSupported && size >= Vector512<double>.Count)
                 {
                     int vectorCount = Vector512<double>.Count;
-                    int vectorEnd = size - vectorCount;
+                    long vectorEnd = size - vectorCount;
                     var sumVec = Vector512<double>.Zero;
-                    int i = 0;
+                    long i = 0;
 
                     for (; i <= vectorEnd; i += vectorCount)
                     {
@@ -72,9 +72,9 @@ namespace NumSharp.Backends.Kernels
                 else if (Vector256.IsHardwareAccelerated && Vector256<double>.IsSupported && size >= Vector256<double>.Count)
                 {
                     int vectorCount = Vector256<double>.Count;
-                    int vectorEnd = size - vectorCount;
+                    long vectorEnd = size - vectorCount;
                     var sumVec = Vector256<double>.Zero;
-                    int i = 0;
+                    long i = 0;
 
                     for (; i <= vectorEnd; i += vectorCount)
                     {
@@ -91,9 +91,9 @@ namespace NumSharp.Backends.Kernels
                 else if (Vector128.IsHardwareAccelerated && Vector128<double>.IsSupported && size >= Vector128<double>.Count)
                 {
                     int vectorCount = Vector128<double>.Count;
-                    int vectorEnd = size - vectorCount;
+                    long vectorEnd = size - vectorCount;
                     var sumVec = Vector128<double>.Zero;
-                    int i = 0;
+                    long i = 0;
 
                     for (; i <= vectorEnd; i += vectorCount)
                     {
@@ -107,7 +107,7 @@ namespace NumSharp.Backends.Kernels
                 }
                 else
                 {
-                    for (int i = 0; i < size; i++)
+                    for (long i = 0; i < size; i++)
                         sum += p[i];
                 }
 
@@ -119,10 +119,10 @@ namespace NumSharp.Backends.Kernels
                 if (Vector512.IsHardwareAccelerated && Vector512<double>.IsSupported && size >= Vector512<double>.Count)
                 {
                     int vectorCount = Vector512<double>.Count;
-                    int vectorEnd = size - vectorCount;
+                    long vectorEnd = size - vectorCount;
                     var meanVec = Vector512.Create(mean);
                     var sqDiffVec = Vector512<double>.Zero;
-                    int i = 0;
+                    long i = 0;
 
                     for (; i <= vectorEnd; i += vectorCount)
                     {
@@ -142,10 +142,10 @@ namespace NumSharp.Backends.Kernels
                 else if (Vector256.IsHardwareAccelerated && Vector256<double>.IsSupported && size >= Vector256<double>.Count)
                 {
                     int vectorCount = Vector256<double>.Count;
-                    int vectorEnd = size - vectorCount;
+                    long vectorEnd = size - vectorCount;
                     var meanVec = Vector256.Create(mean);
                     var sqDiffVec = Vector256<double>.Zero;
-                    int i = 0;
+                    long i = 0;
 
                     for (; i <= vectorEnd; i += vectorCount)
                     {
@@ -165,10 +165,10 @@ namespace NumSharp.Backends.Kernels
                 else if (Vector128.IsHardwareAccelerated && Vector128<double>.IsSupported && size >= Vector128<double>.Count)
                 {
                     int vectorCount = Vector128<double>.Count;
-                    int vectorEnd = size - vectorCount;
+                    long vectorEnd = size - vectorCount;
                     var meanVec = Vector128.Create(mean);
                     var sqDiffVec = Vector128<double>.Zero;
-                    int i = 0;
+                    long i = 0;
 
                     for (; i <= vectorEnd; i += vectorCount)
                     {
@@ -187,7 +187,7 @@ namespace NumSharp.Backends.Kernels
                 }
                 else
                 {
-                    for (int i = 0; i < size; i++)
+                    for (long i = 0; i < size; i++)
                     {
                         double diff = p[i] - mean;
                         sqDiffSum += diff * diff;
@@ -204,9 +204,9 @@ namespace NumSharp.Backends.Kernels
                 if (Vector512.IsHardwareAccelerated && Vector512<float>.IsSupported && size >= Vector512<float>.Count)
                 {
                     int vectorCount = Vector512<float>.Count;
-                    int vectorEnd = size - vectorCount;
+                    long vectorEnd = size - vectorCount;
                     var sumVec = Vector512<float>.Zero;
-                    int i = 0;
+                    long i = 0;
 
                     for (; i <= vectorEnd; i += vectorCount)
                     {
@@ -221,9 +221,9 @@ namespace NumSharp.Backends.Kernels
                 else if (Vector256.IsHardwareAccelerated && Vector256<float>.IsSupported && size >= Vector256<float>.Count)
                 {
                     int vectorCount = Vector256<float>.Count;
-                    int vectorEnd = size - vectorCount;
+                    long vectorEnd = size - vectorCount;
                     var sumVec = Vector256<float>.Zero;
-                    int i = 0;
+                    long i = 0;
 
                     for (; i <= vectorEnd; i += vectorCount)
                     {
@@ -238,9 +238,9 @@ namespace NumSharp.Backends.Kernels
                 else if (Vector128.IsHardwareAccelerated && Vector128<float>.IsSupported && size >= Vector128<float>.Count)
                 {
                     int vectorCount = Vector128<float>.Count;
-                    int vectorEnd = size - vectorCount;
+                    long vectorEnd = size - vectorCount;
                     var sumVec = Vector128<float>.Zero;
-                    int i = 0;
+                    long i = 0;
 
                     for (; i <= vectorEnd; i += vectorCount)
                     {
@@ -254,7 +254,7 @@ namespace NumSharp.Backends.Kernels
                 }
                 else
                 {
-                    for (int i = 0; i < size; i++)
+                    for (long i = 0; i < size; i++)
                         sum += p[i];
                 }
 
@@ -266,10 +266,10 @@ namespace NumSharp.Backends.Kernels
                 if (Vector512.IsHardwareAccelerated && Vector512<float>.IsSupported && size >= Vector512<float>.Count)
                 {
                     int vectorCount = Vector512<float>.Count;
-                    int vectorEnd = size - vectorCount;
+                    long vectorEnd = size - vectorCount;
                     var meanVec = Vector512.Create((float)mean);
                     var sqDiffVec = Vector512<float>.Zero;
-                    int i = 0;
+                    long i = 0;
 
                     for (; i <= vectorEnd; i += vectorCount)
                     {
@@ -289,10 +289,10 @@ namespace NumSharp.Backends.Kernels
                 else if (Vector256.IsHardwareAccelerated && Vector256<float>.IsSupported && size >= Vector256<float>.Count)
                 {
                     int vectorCount = Vector256<float>.Count;
-                    int vectorEnd = size - vectorCount;
+                    long vectorEnd = size - vectorCount;
                     var meanVec = Vector256.Create((float)mean);
                     var sqDiffVec = Vector256<float>.Zero;
-                    int i = 0;
+                    long i = 0;
 
                     for (; i <= vectorEnd; i += vectorCount)
                     {
@@ -312,10 +312,10 @@ namespace NumSharp.Backends.Kernels
                 else if (Vector128.IsHardwareAccelerated && Vector128<float>.IsSupported && size >= Vector128<float>.Count)
                 {
                     int vectorCount = Vector128<float>.Count;
-                    int vectorEnd = size - vectorCount;
+                    long vectorEnd = size - vectorCount;
                     var meanVec = Vector128.Create((float)mean);
                     var sqDiffVec = Vector128<float>.Zero;
-                    int i = 0;
+                    long i = 0;
 
                     for (; i <= vectorEnd; i += vectorCount)
                     {
@@ -334,7 +334,7 @@ namespace NumSharp.Backends.Kernels
                 }
                 else
                 {
-                    for (int i = 0; i < size; i++)
+                    for (long i = 0; i < size; i++)
                     {
                         double diff = p[i] - mean;
                         sqDiffSum += diff * diff;
@@ -347,14 +347,14 @@ namespace NumSharp.Backends.Kernels
             {
                 // For integer types, convert to double and compute
                 double doubleSum = 0;
-                for (int i = 0; i < size; i++)
+                for (long i = 0; i < size; i++)
                 {
                     doubleSum += Convert.ToDouble(src[i]);
                 }
                 double mean = doubleSum / size;
 
                 double sqDiffSum = 0;
-                for (int i = 0; i < size; i++)
+                for (long i = 0; i < size; i++)
                 {
                     double diff = Convert.ToDouble(src[i]) - mean;
                     sqDiffSum += diff * diff;
@@ -373,7 +373,7 @@ namespace NumSharp.Backends.Kernels
         /// <param name="size">Number of elements</param>
         /// <param name="ddof">Delta degrees of freedom (0 for population std, 1 for sample std)</param>
         /// <returns>The standard deviation as double</returns>
-        internal static unsafe double StdSimdHelper<T>(T* src, int size, int ddof = 0)
+        internal static unsafe double StdSimdHelper<T>(T* src, long size, int ddof = 0)
             where T : unmanaged
         {
             double variance = VarSimdHelper(src, size, ddof);

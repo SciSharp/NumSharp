@@ -10,7 +10,9 @@ namespace NumSharp
         /// <summary>
         /// Returns the indices that would sort an array.
         ///
-        /// Perform an indirect sort along the given axis using the algorithm specified by the kind keyword.It returns an array of indices of the same shape as a that index data along the given axis in sorted order.
+        /// Perform an indirect sort along the given axis using the algorithm specified by the kind keyword.
+        /// It returns an array of indices of the same shape as a that index data along the given axis in sorted order.
+        /// Supports arrays with >2B elements using long indexing.
         /// </summary>
         public NDArray argsort<T>(int axis = -1) where T : unmanaged
         {
@@ -23,15 +25,16 @@ namespace NumSharp
                 axis = ndim-1;
             }
 
-            // Example: If shape is 3x2x3 and we are soritng w.r.t axis = 2 required size is 3x2
+            // Example: If shape is 3x2x3 and we are sorting w.r.t axis = 2 required size is 3x2
             var requiredSize = shape.Take(axis).Concat(shape.Skip(axis + 1)).ToArray();
 
             if (requiredSize.Length == 0)
             {
                 // NumPy argsort always returns int64 (long) indices
                 // Use NumPy-compatible comparison that puts NaN at the end
-                var sorted = Enumerable.Range(0, size)
-                    .Select(i => new {Data = GetAtIndex<T>(i), Index = (long)i})
+                // Use LongRange for indices > int.MaxValue
+                var sorted = LongRange(size)
+                    .Select(i => new {Data = GetAtIndex<T>(i), Index = i})
                     .OrderBy(item => item.Data, NumPyComparer<T>.Instance)
                     .Select(item => item.Index)
                     .ToArray();
@@ -41,15 +44,16 @@ namespace NumSharp
             // Sorted arguments array - NumPy argsort always returns int64 (long) indices
             var resultArray = new NDArray(typeof(long), shape);
 
-            var accessingIndices = AccessorCreator(requiredSize, Enumerable.Empty<int>(), 0);
+            var accessingIndices = AccessorCreatorLong(requiredSize, Enumerable.Empty<long>(), 0);
 
             // Append the previous indices the sorting accessors
-            var append = Enumerable.Range(0, shape[axis]);
-            var argSort = accessingIndices.Aggregate(Enumerable.Empty<SortedData>(), (allSortedData, seq) =>
+            // Use LongRange for axis sizes > int.MaxValue
+            var append = LongRange(shape[axis]);
+            var argSort = accessingIndices.Aggregate(Enumerable.Empty<SortedDataLong>(), (allSortedData, seq) =>
             {
-                var sortMe = append.Select(value => Appendor(value, axis, seq));
-                var sortedIndex = Sort<T>(sortMe);
-                return allSortedData.Concat(sortMe.Zip(sortedIndex, (a, b) => new SortedData(a.ToArray(), b)));
+                var sortMe = append.Select(value => AppendorLong(value, axis, seq));
+                var sortedIndex = SortLong<T>(sortMe);
+                return allSortedData.Concat(sortMe.Zip(sortedIndex, (a, b) => new SortedDataLong(a.ToArray(), b)));
             });
 
             foreach (var arg in argSort)
@@ -61,52 +65,54 @@ namespace NumSharp
         }
 
         /// <summary>
-        /// Appends the given value to the sequences
+        /// Generates a sequence of long values from 0 to count-1.
+        /// Replaces Enumerable.Range for long indexing support.
         /// </summary>
-        /// <param name="value"></param>
-        /// <param name="axis"></param>
-        /// <param name="sequences"></param>
-        /// <returns></returns>
-        private static IEnumerable<int> Appendor(int value, int axis, IEnumerable<int> sequences)
+        private static IEnumerable<long> LongRange(long count)
         {
-            return sequences.Take(axis).Concat((value).Yield()).Concat(sequences.Skip(axis));
+            for (long i = 0; i < count; i++)
+                yield return i;
         }
 
         /// <summary>
-        /// Creates the indices with which we need to access to the array
-        /// If shape is 3x2x3 and we are soritng w.r.t axis = 2
-        /// Return value is[0,0], [0,1], [1,0], [1,1], [2,0], [2,1]
+        /// Appends the given value to the sequences (long version)
         /// </summary>
-        /// <param name="originalIndices"></param>
-        /// <param name="previousStep"></param>
-        /// <param name="currentStep"></param>
-        /// <returns></returns>
-        private static IEnumerable<IEnumerable<int>> AccessorCreator(int[] originalIndices, IEnumerable<int> previousStep, int currentStep)
+        private static IEnumerable<long> AppendorLong(long value, int axis, IEnumerable<long> sequences)
+        {
+            return sequences.Take(axis).Concat(value.Yield()).Concat(sequences.Skip(axis));
+        }
+
+        /// <summary>
+        /// Creates the indices with which we need to access to the array (long version)
+        /// If shape is 3x2x3 and we are sorting w.r.t axis = 2
+        /// Return value is [0,0], [0,1], [1,0], [1,1], [2,0], [2,1]
+        /// </summary>
+        private static IEnumerable<IEnumerable<long>> AccessorCreatorLong(long[] originalIndices, IEnumerable<long> previousStep, int currentStep)
         {
             if (originalIndices.Length == currentStep + 1)
             {
                 var iterateUntil = originalIndices[currentStep];
-                var result = Enumerable.Range(0, iterateUntil).Select(_ => previousStep.Concat((_).Yield()));
+                var result = LongRange(iterateUntil).Select(idx => previousStep.Concat(idx.Yield()));
                 return result;
             }
 
-            var finalResult = Enumerable.Empty<IEnumerable<int>>();
-            return Enumerable.Range(0, originalIndices[currentStep]).Aggregate(finalResult, (current, val) => current.Concat(AccessorCreator(originalIndices, previousStep.Concat((val).Yield()), currentStep + 1)));
+            var finalResult = Enumerable.Empty<IEnumerable<long>>();
+            return LongRange(originalIndices[currentStep]).Aggregate(finalResult, (current, val) =>
+                current.Concat(AccessorCreatorLong(originalIndices, previousStep.Concat(val.Yield()), currentStep + 1)));
         }
 
         /// <summary>
-        /// Sorts the given data. This method should implement quick sort etc...
+        /// Sorts the given data (long version).
         /// NumPy sort order: -Inf &lt; normal values &lt; +Inf &lt; NaN
         /// </summary>
-        /// <typeparam name="T">Type of parameters</typeparam>
-        /// <param name="accessIndex">Indexes to access the data</param>
-        /// <returns>Sorted Data</returns>
-        private IEnumerable<int> Sort<T>(IEnumerable<IEnumerable<int>> accessIndex) where T : unmanaged
+        private IEnumerable<long> SortLong<T>(IEnumerable<IEnumerable<long>> accessIndex) where T : unmanaged
         {
             // Extract the scalar value from the NDArray for proper comparison.
             // this[indices] returns an NDArray even for scalar results, and NDArray
             // doesn't implement IComparable, so we must extract the underlying value.
-            var sort = accessIndex.Select((x, index) => new {Data = this[x.ToArray()].GetAtIndex<T>(0), Index = index});
+            // Use long index for result
+            long idx = 0;
+            var sort = accessIndex.Select(x => new {Data = this[x.ToArray()].GetAtIndex<T>(0), Index = idx++});
 
             // Use NumPy-compatible comparison that puts NaN at the end
             return sort.OrderBy(a => a.Data, NumPyComparer<T>.Instance).Select(a => a.Index);
@@ -171,23 +177,26 @@ namespace NumSharp
             }
         }
 
-        private class SortedData
+        /// <summary>
+        /// Data class representing a single sorted element with long indices.
+        /// </summary>
+        private class SortedDataLong
         {
             /// <summary>
             /// Indexes to access this sorted data. Example: If Array being sorted is shape of 3x2x3
             /// DataAccessor is of the form AxBxC
             /// </summary>
-            public int[] DataAccessor { get; }
+            public long[] DataAccessor { get; }
 
             /// <summary>
             /// Index of Sorted Element.
             /// </summary>
-            public int Index { get; }
+            public long Index { get; }
 
             /// <summary>
             /// Data Class Which Represents a Single Sorted Data
             /// </summary>
-            public SortedData(int[] dataAccessor, int index)
+            public SortedDataLong(long[] dataAccessor, long index)
             {
                 DataAccessor = dataAccessor;
                 Index = index;

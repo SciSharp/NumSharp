@@ -49,10 +49,10 @@ namespace NumSharp
             }
 
             // For multi-dimensional arrays, shuffle along axis 0
-            // Fisher-Yates shuffle
-            for (int i = n - 1; i > 0; i--)
+            // Fisher-Yates shuffle using NextInt64 for full long range support
+            for (long i = n - 1; i > 0; i--)
             {
-                int j = randomizer.Next(i + 1);
+                long j = randomizer.NextLong(i + 1);
                 if (i != j)
                 {
                     SwapSlicesAxis0(x, i, j);
@@ -63,7 +63,7 @@ namespace NumSharp
         /// <summary>
         ///     Optimized shuffle for 1D contiguous arrays.
         /// </summary>
-        private unsafe void Shuffle1DContiguous(NDArray x, int n)
+        private unsafe void Shuffle1DContiguous(NDArray x, long n)
         {
             var itemSize = x.dtypesize;
             var addr = (byte*)x.Address;
@@ -71,14 +71,14 @@ namespace NumSharp
             // Allocate temp buffer for swapping
             var temp = stackalloc byte[itemSize];
 
-            // Fisher-Yates shuffle
-            for (int i = n - 1; i > 0; i--)
+            // Fisher-Yates shuffle with full long range support
+            for (long i = n - 1; i > 0; i--)
             {
-                int j = randomizer.Next(i + 1);
+                long j = randomizer.NextLong(i + 1);
                 if (i != j)
                 {
-                    var ptrI = addr + (long)i * itemSize;
-                    var ptrJ = addr + (long)j * itemSize;
+                    var ptrI = addr + i * itemSize;
+                    var ptrJ = addr + j * itemSize;
 
                     // Swap elements
                     Buffer.MemoryCopy(ptrI, temp, itemSize, itemSize);
@@ -91,7 +91,7 @@ namespace NumSharp
         /// <summary>
         ///     Swap two slices along axis 0.
         /// </summary>
-        private static void SwapSlicesAxis0(NDArray x, int i, int j)
+        private static void SwapSlicesAxis0(NDArray x, long i, long j)
         {
             // Get slices at indices i and j along axis 0
             var sliceI = x[i];

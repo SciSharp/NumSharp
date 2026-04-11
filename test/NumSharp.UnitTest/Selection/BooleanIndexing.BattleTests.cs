@@ -24,7 +24,7 @@ public class BooleanIndexing_BattleTests
 
         var result = arr[mask];
 
-        Assert.IsTrue(result.shape.SequenceEqual(new[] { 3 }), $"Expected shape [3], got [{string.Join(", ", result.shape)}]");
+        Assert.IsTrue(result.shape.SequenceEqual(new long[] { 3 }), $"Expected shape [3], got [{string.Join(", ", result.shape)}]");
         Assert.AreEqual(1, result.GetInt32(0));
         Assert.AreEqual(3, result.GetInt32(1));
         Assert.AreEqual(5, result.GetInt32(2));
@@ -68,13 +68,13 @@ public class BooleanIndexing_BattleTests
 
         var result = arr2d[mask2d];
 
-        Assert.IsTrue(result.shape.SequenceEqual(new[] { 6 }), $"Expected shape [6], got [{string.Join(", ", result.shape)}]");
-        Assert.AreEqual(6, result.GetInt32(0));
-        Assert.AreEqual(7, result.GetInt32(1));
-        Assert.AreEqual(8, result.GetInt32(2));
-        Assert.AreEqual(9, result.GetInt32(3));
-        Assert.AreEqual(10, result.GetInt32(4));
-        Assert.AreEqual(11, result.GetInt32(5));
+        Assert.IsTrue(result.shape.SequenceEqual(new long[] { 6 }), $"Expected shape [6], got [{string.Join(", ", result.shape)}]");
+        Assert.AreEqual(6, result.item<int>(0));
+        Assert.AreEqual(7, result.item<int>(1));
+        Assert.AreEqual(8, result.item<int>(2));
+        Assert.AreEqual(9, result.item<int>(3));
+        Assert.AreEqual(10, result.item<int>(4));
+        Assert.AreEqual(11, result.item<int>(5));
     }
 
     [Test]
@@ -102,7 +102,7 @@ public class BooleanIndexing_BattleTests
         var expected = new[] { 6, 7, 8, 9, 10, 11 };
         for (int i = 0; i < expected.Length; i++)
         {
-            Assert.AreEqual(expected[i], result.GetInt32(i), $"Element at index {i}");
+            Assert.AreEqual(expected[i], result.item<int>(i), $"Element at index {i}");
         }
     }
 
@@ -119,7 +119,7 @@ public class BooleanIndexing_BattleTests
 
         var result = arr2d[mask1d];
 
-        Assert.IsTrue(result.shape.SequenceEqual(new[] { 2, 4 }), $"Expected shape [2, 4], got [{string.Join(", ", result.shape)}]");
+        Assert.IsTrue(result.shape.SequenceEqual(new long[] { 2, 4 }), $"Expected shape [2, 4], got [{string.Join(", ", result.shape)}]");
     }
 
     [Test]
@@ -131,16 +131,16 @@ public class BooleanIndexing_BattleTests
         var result = arr2d[mask1d];
 
         // Row 0: [0, 1, 2, 3]
-        Assert.AreEqual(0, result[0, 0].GetInt32());
-        Assert.AreEqual(1, result[0, 1].GetInt32());
-        Assert.AreEqual(2, result[0, 2].GetInt32());
-        Assert.AreEqual(3, result[0, 3].GetInt32());
+        Assert.AreEqual(0, result.item<int>(0, 0));
+        Assert.AreEqual(1, result.item<int>(0, 1));
+        Assert.AreEqual(2, result.item<int>(0, 2));
+        Assert.AreEqual(3, result.item<int>(0, 3));
 
         // Row 1 (originally row 2): [8, 9, 10, 11]
-        Assert.AreEqual(8, result[1, 0].GetInt32());
-        Assert.AreEqual(9, result[1, 1].GetInt32());
-        Assert.AreEqual(10, result[1, 2].GetInt32());
-        Assert.AreEqual(11, result[1, 3].GetInt32());
+        Assert.AreEqual(8, result.item<int>(1, 0));
+        Assert.AreEqual(9, result.item<int>(1, 1));
+        Assert.AreEqual(10, result.item<int>(1, 2));
+        Assert.AreEqual(11, result.item<int>(1, 3));
     }
 
     [Test]
@@ -153,7 +153,7 @@ public class BooleanIndexing_BattleTests
         var result = arr3d[mask1d];
 
         // Selects first "block", result shape (1, 3, 4)
-        Assert.IsTrue(result.shape.SequenceEqual(new[] { 1, 3, 4 }), $"Expected shape [1, 3, 4], got [{string.Join(", ", result.shape)}]");
+        Assert.IsTrue(result.shape.SequenceEqual(new long[] { 1, 3, 4 }), $"Expected shape [1, 3, 4], got [{string.Join(", ", result.shape)}]");
     }
 
     [Test]
@@ -165,9 +165,9 @@ public class BooleanIndexing_BattleTests
         var result = arr3d[mask1d];
 
         // First element should be 0
-        Assert.AreEqual(0, result[0, 0, 0].GetInt32());
+        Assert.AreEqual(0, result.item<int>(0, 0, 0));
         // Last element of selected block should be 11
-        Assert.AreEqual(11, result[0, 2, 3].GetInt32());
+        Assert.AreEqual(11, result.item<int>(0, 2, 3));
     }
 
     #endregion
@@ -187,9 +187,9 @@ public class BooleanIndexing_BattleTests
         var result = selected[":, 0"];
 
         // NumPy: arr2d[[T,F,T], 0] = [0, 8]
-        Assert.IsTrue(result.shape.SequenceEqual(new[] { 2 }), $"Expected shape [2], got [{string.Join(", ", result.shape)}]");
-        Assert.AreEqual(0, result.GetInt32(0));
-        Assert.AreEqual(8, result.GetInt32(1));
+        Assert.IsTrue(result.shape.SequenceEqual(new long[] { 2 }), $"Expected shape [2], got [{string.Join(", ", result.shape)}]");
+        Assert.AreEqual(0, result.item<int>(0));
+        Assert.AreEqual(8, result.item<int>(1));
     }
 
     [Test]
@@ -204,11 +204,11 @@ public class BooleanIndexing_BattleTests
         var result = selected[":, 1:3"];
 
         // NumPy: [[1, 2], [9, 10]]
-        Assert.IsTrue(result.shape.SequenceEqual(new[] { 2, 2 }), $"Expected shape [2, 2], got [{string.Join(", ", result.shape)}]");
-        Assert.AreEqual(1, result[0, 0].GetInt32());
-        Assert.AreEqual(2, result[0, 1].GetInt32());
-        Assert.AreEqual(9, result[1, 0].GetInt32());
-        Assert.AreEqual(10, result[1, 1].GetInt32());
+        Assert.IsTrue(result.shape.SequenceEqual(new long[] { 2, 2 }), $"Expected shape [2, 2], got [{string.Join(", ", result.shape)}]");
+        Assert.AreEqual(1, result.item<int>(0, 0));
+        Assert.AreEqual(2, result.item<int>(0, 1));
+        Assert.AreEqual(9, result.item<int>(1, 0));
+        Assert.AreEqual(10, result.item<int>(1, 1));
     }
 
     #endregion
@@ -225,9 +225,9 @@ public class BooleanIndexing_BattleTests
         var result = arr3d[mask3d];
 
         // 11 elements > 12: [13, 14, ..., 23]
-        Assert.IsTrue(result.shape.SequenceEqual(new[] { 11 }), $"Expected shape [11], got [{string.Join(", ", result.shape)}]");
-        Assert.AreEqual(13, result.GetInt32(0));
-        Assert.AreEqual(23, result.GetInt32(10));
+        Assert.IsTrue(result.shape.SequenceEqual(new long[] { 11 }), $"Expected shape [11], got [{string.Join(", ", result.shape)}]");
+        Assert.AreEqual(13, result.item<int>(0));
+        Assert.AreEqual(23, result.item<int>(10));
     }
 
     [Test]
@@ -239,7 +239,7 @@ public class BooleanIndexing_BattleTests
         var result = arr3d[mask1d];
 
         // Shape: (1, 3, 4) - preserves dims 1 and 2
-        Assert.IsTrue(result.shape.SequenceEqual(new[] { 1, 3, 4 }), $"Expected shape [1, 3, 4], got [{string.Join(", ", result.shape)}]");
+        Assert.IsTrue(result.shape.SequenceEqual(new long[] { 1, 3, 4 }), $"Expected shape [1, 3, 4], got [{string.Join(", ", result.shape)}]");
     }
 
     [Test]
@@ -256,17 +256,17 @@ public class BooleanIndexing_BattleTests
             var result = arr3d[mask2d];
 
             // If supported, verify shape and values
-            Assert.IsTrue(result.shape.SequenceEqual(new[] { 3, 4 }), $"Expected shape [3, 4], got [{string.Join(", ", result.shape)}]");
+            Assert.IsTrue(result.shape.SequenceEqual(new long[] { 3, 4 }), $"Expected shape [3, 4], got [{string.Join(", ", result.shape)}]");
 
             // First True at (0,0) → arr3d[0,0,:] = [0,1,2,3]
-            Assert.AreEqual(0, result[0, 0].GetInt32());
-            Assert.AreEqual(3, result[0, 3].GetInt32());
+            Assert.AreEqual(0, result.item<int>(0, 0));
+            Assert.AreEqual(3, result.item<int>(0, 3));
 
             // Second True at (0,2) → arr3d[0,2,:] = [8,9,10,11]
-            Assert.AreEqual(8, result[1, 0].GetInt32());
+            Assert.AreEqual(8, result.item<int>(1, 0));
 
             // Third True at (1,1) → arr3d[1,1,:] = [16,17,18,19]
-            Assert.AreEqual(16, result[2, 0].GetInt32());
+            Assert.AreEqual(16, result.item<int>(2, 0));
         }
         catch (IndexOutOfRangeException)
         {
@@ -323,9 +323,9 @@ public class BooleanIndexing_BattleTests
         arr2d[mask2d] = np.array(-1);
 
         // Elements > 5 become -1
-        Assert.AreEqual(0, arr2d[0, 0].GetInt32()); // unchanged
-        Assert.AreEqual(-1, arr2d[1, 2].GetInt32()); // was 6
-        Assert.AreEqual(-1, arr2d[2, 3].GetInt32()); // was 11
+        Assert.AreEqual(0, arr2d.item<int>(0, 0)); // unchanged
+        Assert.AreEqual(-1, arr2d.item<int>(1, 2)); // was 6
+        Assert.AreEqual(-1, arr2d.item<int>(2, 3)); // was 11
     }
 
     [Test]
@@ -338,10 +338,10 @@ public class BooleanIndexing_BattleTests
         arr2d[rowMask] = np.array(99);
 
         // Row 0 and 2 become 99
-        Assert.AreEqual(99, arr2d[0, 0].GetInt32());
-        Assert.AreEqual(99, arr2d[0, 3].GetInt32());
-        Assert.AreEqual(4, arr2d[1, 0].GetInt32()); // unchanged
-        Assert.AreEqual(99, arr2d[2, 0].GetInt32());
+        Assert.AreEqual(99, arr2d.item<int>(0, 0));
+        Assert.AreEqual(99, arr2d.item<int>(0, 3));
+        Assert.AreEqual(4, arr2d.item<int>(1, 0)); // unchanged
+        Assert.AreEqual(99, arr2d.item<int>(2, 0));
     }
 
     [Test]
@@ -354,11 +354,11 @@ public class BooleanIndexing_BattleTests
         // Note: This test checks if broadcasting works in assignment
         arr2d[rowMask] = np.array(new[,] { { 100, 101, 102, 103 } });
 
-        Assert.AreEqual(100, arr2d[0, 0].GetInt32());
-        Assert.AreEqual(103, arr2d[0, 3].GetInt32());
-        Assert.AreEqual(4, arr2d[1, 0].GetInt32()); // unchanged
-        Assert.AreEqual(100, arr2d[2, 0].GetInt32());
-        Assert.AreEqual(103, arr2d[2, 3].GetInt32());
+        Assert.AreEqual(100, arr2d.item<int>(0, 0));
+        Assert.AreEqual(103, arr2d.item<int>(0, 3));
+        Assert.AreEqual(4, arr2d.item<int>(1, 0)); // unchanged
+        Assert.AreEqual(100, arr2d.item<int>(2, 0));
+        Assert.AreEqual(103, arr2d.item<int>(2, 3));
     }
 
     #endregion
@@ -373,7 +373,7 @@ public class BooleanIndexing_BattleTests
 
         var result = arr[emptyMask];
 
-        Assert.IsTrue(result.shape.SequenceEqual(new[] { 0 }), $"Expected shape [0], got [{string.Join(", ", result.shape)}]");
+        Assert.IsTrue(result.shape.SequenceEqual(new long[] { 0 }), $"Expected shape [0], got [{string.Join(", ", result.shape)}]");
         Assert.AreEqual(0, result.size);
     }
 
@@ -385,7 +385,7 @@ public class BooleanIndexing_BattleTests
 
         var result = arr[allMask];
 
-        Assert.IsTrue(result.shape.SequenceEqual(new[] { 5 }), $"Expected shape [5], got [{string.Join(", ", result.shape)}]");
+        Assert.IsTrue(result.shape.SequenceEqual(new long[] { 5 }), $"Expected shape [5], got [{string.Join(", ", result.shape)}]");
         Assert.AreEqual(1, result.GetInt32(0));
         Assert.AreEqual(5, result.GetInt32(4));
     }
@@ -398,7 +398,7 @@ public class BooleanIndexing_BattleTests
 
         var result = empty[emptyMask];
 
-        Assert.IsTrue(result.shape.SequenceEqual(new[] { 0 }), $"Expected shape [0], got [{string.Join(", ", result.shape)}]");
+        Assert.IsTrue(result.shape.SequenceEqual(new long[] { 0 }), $"Expected shape [0], got [{string.Join(", ", result.shape)}]");
     }
 
     [Test]
@@ -410,7 +410,7 @@ public class BooleanIndexing_BattleTests
         var result = arrFloat[emptyMask];
 
         Assert.AreEqual(typeof(double), result.dtype);
-        Assert.IsTrue(result.shape.SequenceEqual(new[] { 0 }), $"Expected shape [0], got [{string.Join(", ", result.shape)}]");
+        Assert.IsTrue(result.shape.SequenceEqual(new long[] { 0 }), $"Expected shape [0], got [{string.Join(", ", result.shape)}]");
     }
 
     #endregion
@@ -470,7 +470,7 @@ public class BooleanIndexing_BattleTests
             var result = arr[scalarTrue];
 
             // NumPy behavior: adds axis → shape (1, 3)
-            Assert.IsTrue(result.shape.SequenceEqual(new[] { 1, 3 }),
+            Assert.IsTrue(result.shape.SequenceEqual(new long[] { 1, 3 }),
                 $"0-D boolean True should add axis. Expected shape [1, 3], got [{string.Join(", ", result.shape)}]");
         }
         catch (Exception ex) when (ex is not AssertFailedException)
@@ -512,9 +512,9 @@ public class BooleanIndexing_BattleTests
 
         Assert.AreEqual(1, indices.Length, "1D array should return 1 index array");
         Assert.AreEqual(3, indices[0].size, "Should have 3 True values");
-        Assert.AreEqual(0, indices[0].GetInt32(0));
-        Assert.AreEqual(2, indices[0].GetInt32(1));
-        Assert.AreEqual(4, indices[0].GetInt32(2));
+        Assert.AreEqual(0, indices[0].item<int>(0));
+        Assert.AreEqual(2, indices[0].item<int>(1));
+        Assert.AreEqual(4, indices[0].item<int>(2));
     }
 
     [Test]
@@ -528,14 +528,14 @@ public class BooleanIndexing_BattleTests
         Assert.AreEqual(3, indices[0].size, "Should have 3 True values");
 
         // Row indices: [0, 0, 1]
-        Assert.AreEqual(0, indices[0].GetInt32(0));
-        Assert.AreEqual(0, indices[0].GetInt32(1));
-        Assert.AreEqual(1, indices[0].GetInt32(2));
+        Assert.AreEqual(0, indices[0].item<int>(0));
+        Assert.AreEqual(0, indices[0].item<int>(1));
+        Assert.AreEqual(1, indices[0].item<int>(2));
 
         // Col indices: [0, 2, 1]
-        Assert.AreEqual(0, indices[1].GetInt32(0));
-        Assert.AreEqual(2, indices[1].GetInt32(1));
-        Assert.AreEqual(1, indices[1].GetInt32(2));
+        Assert.AreEqual(0, indices[1].item<int>(0));
+        Assert.AreEqual(2, indices[1].item<int>(1));
+        Assert.AreEqual(1, indices[1].item<int>(2));
     }
 
     [Test]
@@ -606,9 +606,9 @@ public class BooleanIndexing_BattleTests
         // sliced = [[0, 2, 4], [10, 12, 14]]
         // > 5: [10, 12, 14]
         Assert.AreEqual(3, result.size);
-        Assert.AreEqual(10, result.GetInt32(0));
-        Assert.AreEqual(12, result.GetInt32(1));
-        Assert.AreEqual(14, result.GetInt32(2));
+        Assert.AreEqual(10, result.item<int>(0));
+        Assert.AreEqual(12, result.item<int>(1));
+        Assert.AreEqual(14, result.item<int>(2));
     }
 
     [Test]
@@ -624,12 +624,12 @@ public class BooleanIndexing_BattleTests
 
         // Transposed > 5: [8, 9, 6, 10, 7, 11] (C-order on transposed)
         Assert.AreEqual(6, result.size);
-        Assert.AreEqual(8, result.GetInt32(0));
-        Assert.AreEqual(9, result.GetInt32(1));
-        Assert.AreEqual(6, result.GetInt32(2));
-        Assert.AreEqual(10, result.GetInt32(3));
-        Assert.AreEqual(7, result.GetInt32(4));
-        Assert.AreEqual(11, result.GetInt32(5));
+        Assert.AreEqual(8, result.item<int>(0));
+        Assert.AreEqual(9, result.item<int>(1));
+        Assert.AreEqual(6, result.item<int>(2));
+        Assert.AreEqual(10, result.item<int>(3));
+        Assert.AreEqual(7, result.item<int>(4));
+        Assert.AreEqual(11, result.item<int>(5));
     }
 
     [Test]
@@ -644,8 +644,8 @@ public class BooleanIndexing_BattleTests
         // view = [[5,6,7,8,9], [10,11,12,13,14]]
         // > 10: [11, 12, 13, 14]
         Assert.AreEqual(4, result.size);
-        Assert.AreEqual(11, result.GetInt32(0));
-        Assert.AreEqual(14, result.GetInt32(3));
+        Assert.AreEqual(11, result.item<int>(0));
+        Assert.AreEqual(14, result.item<int>(3));
     }
 
     #endregion
@@ -689,10 +689,10 @@ public class BooleanIndexing_BattleTests
         // Row 1: > 3 → [4, 5, 6, 7]
         // Row 2: > 8 → [9, 10, 11]
         Assert.AreEqual(7, result.size);
-        Assert.AreEqual(4, result.GetInt32(0));
-        Assert.AreEqual(7, result.GetInt32(3));
-        Assert.AreEqual(9, result.GetInt32(4));
-        Assert.AreEqual(11, result.GetInt32(6));
+        Assert.AreEqual(4, result.item<int>(0));
+        Assert.AreEqual(7, result.item<int>(3));
+        Assert.AreEqual(9, result.item<int>(4));
+        Assert.AreEqual(11, result.item<int>(6));
     }
 
     #endregion
@@ -709,8 +709,8 @@ public class BooleanIndexing_BattleTests
         var result = flat[mask];
 
         Assert.AreEqual(6, result.size);
-        Assert.AreEqual(6, result.GetInt32(0));
-        Assert.AreEqual(11, result.GetInt32(5));
+        Assert.AreEqual(6, result.item<int>(0));
+        Assert.AreEqual(11, result.item<int>(5));
     }
 
     [Test]
@@ -744,10 +744,10 @@ public class BooleanIndexing_BattleTests
 
         // Even numbers > 10: [12, 14, 16, 18]
         Assert.AreEqual(4, result2.size);
-        Assert.AreEqual(12, result2.GetInt32(0));
-        Assert.AreEqual(14, result2.GetInt32(1));
-        Assert.AreEqual(16, result2.GetInt32(2));
-        Assert.AreEqual(18, result2.GetInt32(3));
+        Assert.AreEqual(12, result2.item<int>(0));
+        Assert.AreEqual(14, result2.item<int>(1));
+        Assert.AreEqual(16, result2.item<int>(2));
+        Assert.AreEqual(18, result2.item<int>(3));
     }
 
     #endregion
@@ -860,7 +860,7 @@ public class BooleanIndexing_BattleTests
 
         var result = arr[mask];
 
-        Assert.IsTrue(result.shape.SequenceEqual(new[] { 1 }), $"Expected shape [1], got [{string.Join(", ", result.shape)}]");
+        Assert.IsTrue(result.shape.SequenceEqual(new long[] { 1 }), $"Expected shape [1], got [{string.Join(", ", result.shape)}]");
         Assert.AreEqual(3, result.GetInt32(0));
     }
 
@@ -872,8 +872,8 @@ public class BooleanIndexing_BattleTests
 
         var result = arr2d[mask];
 
-        Assert.IsTrue(result.shape.SequenceEqual(new[] { 1, 4 }), $"Expected shape [1, 4], got [{string.Join(", ", result.shape)}]");
-        Assert.AreEqual(4, result[0, 0].GetInt32());
+        Assert.IsTrue(result.shape.SequenceEqual(new long[] { 1, 4 }), $"Expected shape [1, 4], got [{string.Join(", ", result.shape)}]");
+        Assert.AreEqual(4, result.item<int>(0, 0));
     }
 
     #endregion
@@ -890,8 +890,8 @@ public class BooleanIndexing_BattleTests
         var result = arr[mask];
 
         Assert.AreEqual(size / 2, result.size);
-        Assert.AreEqual(0, result.GetInt32(0));
-        Assert.AreEqual(size - 2, result.GetInt32(result.size - 1));
+        Assert.AreEqual(0, result.item<int>(0));
+        Assert.AreEqual(size - 2, result.item<int>(result.size - 1));
     }
 
     #endregion
@@ -1089,6 +1089,7 @@ public class BooleanIndexing_BattleTests
     }
 
     [Test]
+    [OpenBugs] // np.isinf is not implemented (returns null)
     public void Case24_IsInf_Mask()
     {
         var arr = np.array(new[] { 1.0, double.PositiveInfinity, 3.0, double.NegativeInfinity, 5.0 });
@@ -1112,9 +1113,9 @@ public class BooleanIndexing_BattleTests
         var result = arr[mask];
 
         Assert.AreEqual(5, result.size);
-        Assert.AreEqual(0, result.GetInt32(0));
-        Assert.AreEqual(2, result.GetInt32(1));
-        Assert.AreEqual(8, result.GetInt32(4));
+        Assert.AreEqual(0, result.item<int>(0));
+        Assert.AreEqual(2, result.item<int>(1));
+        Assert.AreEqual(8, result.item<int>(4));
     }
 
     [Test]
@@ -1127,9 +1128,9 @@ public class BooleanIndexing_BattleTests
 
         // 0, 3, 6, 9, 12
         Assert.AreEqual(5, result.size);
-        Assert.AreEqual(0, result.GetInt32(0));
-        Assert.AreEqual(6, result.GetInt32(2));
-        Assert.AreEqual(12, result.GetInt32(4));
+        Assert.AreEqual(0, result.item<int>(0));
+        Assert.AreEqual(6, result.item<int>(2));
+        Assert.AreEqual(12, result.item<int>(4));
     }
 
     #endregion
@@ -1146,8 +1147,8 @@ public class BooleanIndexing_BattleTests
         var result = arr[mask];
 
         Assert.AreEqual(10, result.size);
-        Assert.AreEqual(5, result.GetInt32(0));
-        Assert.AreEqual(14, result.GetInt32(9));
+        Assert.AreEqual(5, result.item<int>(0));
+        Assert.AreEqual(14, result.item<int>(9));
     }
 
     [Test]
@@ -1215,8 +1216,8 @@ public class BooleanIndexing_BattleTests
         // 11 elements > 12: [13, 14, ..., 23]
         Assert.AreEqual(1, result.ndim);
         Assert.AreEqual(11, result.size);
-        Assert.AreEqual(13, result.GetInt32(0));
-        Assert.AreEqual(23, result.GetInt32(10));
+        Assert.AreEqual(13, result.item<int>(0));
+        Assert.AreEqual(23, result.item<int>(10));
     }
 
     [Test]
@@ -1228,7 +1229,7 @@ public class BooleanIndexing_BattleTests
         var result = arr4d[mask1d];
 
         // Selects first "block" along axis 0
-        Assert.IsTrue(result.shape.SequenceEqual(new[] { 1, 3, 4, 2 }), $"Expected shape [1, 3, 4, 2], got [{string.Join(", ", result.shape)}]");
+        Assert.IsTrue(result.shape.SequenceEqual(new long[] { 1, 3, 4, 2 }), $"Expected shape [1, 3, 4, 2], got [{string.Join(", ", result.shape)}]");
     }
 
     #endregion

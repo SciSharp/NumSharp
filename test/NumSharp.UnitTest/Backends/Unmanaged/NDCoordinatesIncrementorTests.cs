@@ -261,7 +261,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         [Test]
         public void Case11_Scalar()
         {
-            var sh = new ValueCoordinatesIncrementor(new int[0]);
+            var sh = new ValueCoordinatesIncrementor(new long[0]);
             sh.Index.Should().ContainInOrder(0);
             sh.Next().Should().BeNull();
         }

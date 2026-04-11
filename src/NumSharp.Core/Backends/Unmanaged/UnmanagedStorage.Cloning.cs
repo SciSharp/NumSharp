@@ -116,6 +116,145 @@ namespace NumSharp.Backends
             return r;
         }
 
+        /// <summary>
+        /// Creates an alias (view) of this storage with a different dtype, reinterpreting bytes.
+        /// </summary>
+        /// <typeparam name="T">The new dtype to interpret the bytes as.</typeparam>
+        /// <returns>
+        /// A new <see cref="UnmanagedStorage"/> that shares memory with this storage but
+        /// interprets the bytes as a different type. Shape is adjusted if type sizes differ.
+        /// </returns>
+        /// <remarks>
+        /// <para>
+        /// <b>Byte Reinterpretation:</b> This does NOT convert values. It reinterprets the raw
+        /// bytes as a different type, like NumPy's view(). For example, viewing float64 as int64
+        /// will show the IEEE 754 bit patterns, not converted values.
+        /// </para>
+        /// <para>
+        /// <b>Shape Adjustment:</b> If the new type has a different size, the last dimension
+        /// is adjusted. E.g., float64[3] viewed as float32 becomes float32[6].
+        /// </para>
+        /// <para>
+        /// <b>Contiguous Requirement:</b> Only contiguous arrays can be viewed with different
+        /// dtype when sizes differ.
+        /// </para>
+        /// </remarks>
+        /// <exception cref="InvalidOperationException">
+        /// If the array is not contiguous and type sizes differ.
+        /// </exception>
+        /// <exception cref="ArgumentException">
+        /// If the total byte size is not divisible by the new type size.
+        /// </exception>
+        public unsafe UnmanagedStorage AliasAs<T>() where T : unmanaged
+        {
+            if (_dtype == typeof(T))
+                return Alias();
+
+            int oldSize = DTypeSize;
+            int newSize = sizeof(T);
+            long totalBytes = _shape.size * oldSize;
+
+            // Check byte alignment
+            if (totalBytes % newSize != 0)
+                throw new ArgumentException(
+                    $"Cannot view {_dtype.Name}[{_shape.size}] ({totalBytes} bytes) as {typeof(T).Name} " +
+                    $"because {totalBytes} is not divisible by {newSize}.");
+
+            // For different sizes, array must be contiguous
+            if (oldSize != newSize && !_shape.IsContiguous)
+                throw new InvalidOperationException(
+                    "Cannot view non-contiguous array with different dtype size. " +
+                    "Use copy() first to make it contiguous.");
+
+            long newCount = totalBytes / newSize;
+
+            // Compute new shape - adjust last dimension if sizes differ
+            Shape newShape;
+            if (oldSize == newSize)
+            {
+                newShape = _shape;
+            }
+            else
+            {
+                // NumPy adjusts the last dimension
+                var dims = _shape.dimensions;
+                if (dims.Length == 0)
+                {
+                    // Scalar - can only view as same size type
+                    throw new ArgumentException("Cannot view scalar array as different-sized type.");
+                }
+
+                var newDims = new long[dims.Length];
+                Array.Copy(dims, newDims, dims.Length);
+
+                // Last dimension gets adjusted by the size ratio
+                long lastDimBytes = dims[dims.Length - 1] * oldSize;
+                if (lastDimBytes % newSize != 0)
+                    throw new ArgumentException(
+                        $"Cannot view: last axis size ({dims[dims.Length - 1]}) * itemsize ({oldSize}) " +
+                        $"= {lastDimBytes} bytes is not divisible by new itemsize ({newSize}).");
+
+                newDims[dims.Length - 1] = lastDimBytes / newSize;
+                newShape = new Shape(newDims);
+            }
+
+            // Create a wrapped ArraySlice pointing to the same memory
+            var newSlice = ArraySlice.Wrap<T>((T*)InternalArray.Address, newCount);
+
+            var r = new UnmanagedStorage();
+            r._shape = newShape;
+            r._typecode = InfoOf<T>.NPTypeCode;
+            r._dtype = typeof(T);
+            r.SetInternalArray(newSlice);
+            r.Count = newCount;
+            r._baseStorage = _baseStorage ?? this;
+            return r;
+        }
+
+        /// <summary>
+        /// Creates an alias (view) of this storage with a different dtype, reinterpreting bytes.
+        /// </summary>
+        /// <param name="dtype">The new dtype to interpret the bytes as.</param>
+        /// <returns>A view with reinterpreted bytes.</returns>
+        public unsafe UnmanagedStorage AliasAs(Type dtype)
+        {
+            if (dtype == _dtype)
+                return Alias();
+
+            var typeCode = dtype.GetTypeCode();
+            return AliasAs(typeCode);
+        }
+
+        /// <summary>
+        /// Creates an alias (view) of this storage with a different dtype, reinterpreting bytes.
+        /// </summary>
+        /// <param name="typeCode">The new dtype to interpret the bytes as.</param>
+        /// <returns>A view with reinterpreted bytes.</returns>
+        public unsafe UnmanagedStorage AliasAs(NPTypeCode typeCode)
+        {
+            if (typeCode == _typecode)
+                return Alias();
+
+            // Type switch to call the generic version
+            switch (typeCode)
+            {
+                case NPTypeCode.Boolean: return AliasAs<bool>();
+                case NPTypeCode.Byte: return AliasAs<byte>();
+                case NPTypeCode.Int16: return AliasAs<short>();
+                case NPTypeCode.UInt16: return AliasAs<ushort>();
+                case NPTypeCode.Int32: return AliasAs<int>();
+                case NPTypeCode.UInt32: return AliasAs<uint>();
+                case NPTypeCode.Int64: return AliasAs<long>();
+                case NPTypeCode.UInt64: return AliasAs<ulong>();
+                case NPTypeCode.Char: return AliasAs<char>();
+                case NPTypeCode.Single: return AliasAs<float>();
+                case NPTypeCode.Double: return AliasAs<double>();
+                case NPTypeCode.Decimal: return AliasAs<decimal>();
+                default:
+                    throw new NotSupportedException($"Type code {typeCode} is not supported.");
+            }
+        }
+
         #endregion
 
         #region Casting
@@ -232,7 +371,6 @@ namespace NumSharp.Backends
                 return ArraySlice.Scalar(GetValue(0), _typecode);
 
             //Linear copy of all the sliced items (non-contiguous: broadcast, stepped, transposed).
-
             var ret = ArraySlice.Allocate(InternalArray.TypeCode, _shape.size, false);
             MultiIterator.Assign(new UnmanagedStorage(ret, _shape.Clean()), this);
 

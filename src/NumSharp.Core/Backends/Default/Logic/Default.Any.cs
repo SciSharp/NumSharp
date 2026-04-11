@@ -54,8 +54,8 @@ namespace NumSharp.Backends
 
                 // Scalar fallback for contiguous arrays
                 var addr = (T*)nd.Address;
-                var len = nd.size;
-                for (int i = 0; i < len; i++)
+                long len = nd.size;
+                for (long i = 0; i < len; i++)
                 {
                     if (!addr[i].Equals(default(T)))
                         return true;

@@ -76,7 +76,7 @@ namespace NumSharp.UnitTest.Utilities
             if (dimensions.Length == 0)
                 throw new ArgumentException("Value cannot be an empty collection.", nameof(dimensions));
 
-            Subject.dimensions.Should().Equal(dimensions);
+            Subject.dimensions.Should().Equal(dimensions.Select(d => (long)d));
             return new AndConstraint<ShapeAssertions>(this);
         }
 
@@ -201,7 +201,7 @@ namespace NumSharp.UnitTest.Utilities
             if (strides == null)
                 throw new ArgumentNullException(nameof(strides));
 
-            Subject.strides.Should().Equal(strides);
+            Subject.strides.Should().Equal(strides.Select(s => (long)s));
             return new AndConstraint<ShapeAssertions>(this);
         }
 
@@ -246,7 +246,7 @@ namespace NumSharp.UnitTest.Utilities
             if (dimensions.Length == 0)
                 throw new ArgumentException("Value cannot be an empty collection.", nameof(dimensions));
 
-            Subject.Shape.dimensions.Should().Equal(dimensions);
+            Subject.Shape.dimensions.Should().Equal(dimensions.Select(d => (long)d));
             return new AndConstraint<NDArrayAssertions>(this);
         }
 
@@ -316,7 +316,7 @@ namespace NumSharp.UnitTest.Utilities
         public AndConstraint<NDArrayAssertions> BeScalar(object value)
         {
             Subject.Shape.IsScalar.Should().BeTrue();
-            Subject.GetValue().Should().Be(value);
+            Subject.GetValue(new long[0]).Should().Be(value);
             return new AndConstraint<NDArrayAssertions>(this);
         }
 
@@ -390,7 +390,7 @@ namespace NumSharp.UnitTest.Utilities
             if (strides == null)
                 throw new ArgumentNullException(nameof(strides));
 
-            Subject.Shape.strides.Should().Equal(strides);
+            Subject.Shape.strides.Should().Equal(strides.Select(s => (long)s));
             return new AndConstraint<NDArrayAssertions>(this);
         }
 

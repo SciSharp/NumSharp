@@ -1,7 +1,9 @@
 using System;
 using System.Linq;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
-using NumSharp;
+using TUnit.Core;
+using TUnit.Assertions;
+using TUnit.Assertions.Extensions;
+using Assert = Microsoft.VisualStudio.TestTools.UnitTesting.Assert;
 
 namespace NumSharp.UnitTest.Logic
 {
@@ -87,14 +89,58 @@ namespace NumSharp.UnitTest.Logic
         }
 
         [Test]
-        [Misaligned]  // NumPy: np.array(5) creates 0D, NumSharp: creates 1D with shape (1,)
         public void AnyScalarArrayTest()
         {
-            // NumPy: np.array(5) creates 0D array, np.any(a, axis=0) returns True
-            // NumSharp: np.array(5) creates 1D array with shape (1,), np.any(a, axis=0) also returns True
+            // NumPy: np.array(5) creates 0D array, np.any(a) returns True
+            // NumSharp now correctly creates 0D arrays for scalars
             var arr = np.array(5);
-            var result = np.any(arr, axis: 0, keepdims: false);
-            Assert.AreEqual(true, result.GetBoolean(0));
+            Assert.AreEqual(0, arr.ndim, "np.array(5) should create 0D array");
+
+            // np.any without axis works on 0D arrays and returns bool
+            var result = np.any(arr);
+            Assert.AreEqual(true, result);
+        }
+
+        [Test]
+        public void Any0DArray_WithAxis0_ReturnsScalar()
+        {
+            // NumPy 2.x: np.any(0D_array, axis=0) returns 0D boolean scalar
+            var arr = np.array(5);
+            Assert.AreEqual(0, arr.ndim);
+
+            var result = np.any(arr, axis: 0);
+            Assert.AreEqual(0, result.ndim, "Result should be 0D");
+            Assert.AreEqual(true, (bool)result);
+        }
+
+        [Test]
+        public void Any0DArray_WithAxisNeg1_ReturnsScalar()
+        {
+            // NumPy 2.x: np.any(0D_array, axis=-1) is equivalent to axis=0
+            var arr = np.array(0);  // falsy value
+            var result = np.any(arr, axis: -1);
+            Assert.AreEqual(0, result.ndim);
+            Assert.AreEqual(false, (bool)result);
+        }
+
+        [Test]
+        public void Any0DArray_WithInvalidAxis_Throws()
+        {
+            // NumPy 2.x: np.any(0D_array, axis=1) raises AxisError
+            var arr = np.array(5);
+            Assert.ThrowsException<ArgumentOutOfRangeException>(() => np.any(arr, axis: 1));
+            Assert.ThrowsException<ArgumentOutOfRangeException>(() => np.any(arr, axis: 2));
+            Assert.ThrowsException<ArgumentOutOfRangeException>(() => np.any(arr, axis: -2));
+        }
+
+        [Test]
+        public void Any0DArray_WithKeepdims_Returns0D()
+        {
+            // NumPy 2.x: keepdims=True on 0D still returns 0D (no axes to keep)
+            var arr = np.array(5);
+            var result = np.any(arr, axis: 0, keepdims: true);
+            Assert.AreEqual(0, result.ndim, "keepdims on 0D should still be 0D");
+            Assert.AreEqual(true, (bool)result);
         }
 
         [Test]

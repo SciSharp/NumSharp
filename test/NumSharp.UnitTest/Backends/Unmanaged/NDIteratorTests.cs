@@ -12,8 +12,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         [Test]
         public void Case1()
         {
-            var sh = new NDIterator<int>(np.arange(10), false);
-            var acc = 0;
+            var sh = new NDIterator<long>(np.arange(10), false);
+            long acc = 0;
             var next = sh.HasNext;
             var move = sh.MoveNext;
             while (next())
@@ -27,8 +27,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         {
             Console.WriteLine();
             var nd = np.arange(10);
-            var sh = new NDIterator<int>(nd, true);
-            int acc = 0;
+            var sh = new NDIterator<long>(nd, true);
+            long acc = 0;
             for (int i = 0; i < nd.size * 10; i++, sh.HasNext())
             {
                 var val = sh.MoveNext();
@@ -41,8 +41,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         [Test]
         public void Case3_Sliced()
         {
-            var sh = new NDIterator<int>(np.arange(15).reshape((3, 5))["0:2,:"], false);
-            var acc = 0;
+            var sh = new NDIterator<long>(np.arange(15).reshape((3, 5))["0:2,:"], false);
+            long acc = 0;
             var next = sh.HasNext;
             var move = sh.MoveNext;
             while (next())
@@ -56,8 +56,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         {
             Console.WriteLine();
             var nd = np.arange(15).reshape((3, 5))["0:2,:"];
-            var sh = new NDIterator<int>(nd, true);
-            int acc = 0;
+            var sh = new NDIterator<long>(nd, true);
+            long acc = 0;
 
             for (int i = 0; i < nd.size * 10; i++, sh.HasNext())
                 Console.WriteLine(acc += sh.MoveNext());
@@ -68,8 +68,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         [Test]
         public void Case5_Autoreset()
         {
-            var sh = new NDIterator<int>(np.arange(10), true);
-            var acc = 0;
+            var sh = new NDIterator<long>(np.arange(10), true);
+            long acc = 0;
             var next = sh.HasNext;
             var move = sh.MoveNext;
             int i = 0;
@@ -84,8 +84,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         {
             Console.WriteLine();
             var nd = np.arange(10);
-            var sh = new NDIterator<int>(nd, true);
-            int acc = 0;
+            var sh = new NDIterator<long>(nd, true);
+            long acc = 0;
             for (int i = 0; i < nd.size * 10; i++, sh.HasNext())
                 Console.WriteLine(acc += sh.MoveNext());
 
@@ -95,8 +95,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         [Test]
         public void Case7_Sliced_Autoreset()
         {
-            var sh = new NDIterator<int>(np.arange(15).reshape((3, 5))["0:2,:"], false);
-            var acc = 0;
+            var sh = new NDIterator<long>(np.arange(15).reshape((3, 5))["0:2,:"], false);
+            long acc = 0;
             var next = sh.HasNext;
             var move = sh.MoveNext;
             while (next())
@@ -110,8 +110,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         {
             Console.WriteLine();
             var nd = np.arange(15).reshape((3, 5))["0:2,:"];
-            var sh = new NDIterator<int>(nd, true);
-            int acc = 0;
+            var sh = new NDIterator<long>(nd, true);
+            long acc = 0;
 
             for (int i = 0; i < nd.size * 10; i++, sh.HasNext())
                 Console.WriteLine(acc += sh.MoveNext());
@@ -125,8 +125,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         {
             Console.WriteLine();
             var nd = np.arange(10);
-            var sh = new NDIterator<int>(nd, false);
-            int acc = 0;
+            var sh = new NDIterator<long>(nd, false);
+            long acc = 0;
             for (int i = 0; i < nd.size; i++, sh.HasNext())
                 Console.WriteLine(acc += sh.MoveNextReference());
 
@@ -138,8 +138,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         {
             Console.WriteLine();
             var nd = np.arange(10);
-            var sh = new NDIterator<int>(nd, false);
-            int acc = 0;
+            var sh = new NDIterator<long>(nd, false);
+            long acc = 0;
             for (int i = 0; i < nd.size; i++, sh.HasNext())
                 sh.MoveNextReference() = 1;
 
@@ -148,7 +148,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             for (int i = 0; i < nd.size; i++, sh.HasNext())
                 Console.WriteLine(acc += sh.MoveNext());
 
-            acc.Should().Be(nd.size);
+            acc.Should().Be((int)nd.size);
         }
 
         [Test]
@@ -156,22 +156,22 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         {
             Console.WriteLine();
             var nd = np.arange(10);
-            var sh = new NDIterator<int>(nd, true);
-            int acc = 0;
+            var sh = new NDIterator<long>(nd, true);
+            long acc = 0;
             for (int i = 0; i < nd.size; i++, sh.HasNext())
                 sh.MoveNextReference() = 1;
 
             for (int i = 0; i < nd.size; i++, sh.HasNext())
                 Console.WriteLine(acc += sh.MoveNext());
 
-            acc.Should().Be(nd.size);
+            acc.Should().Be((int)nd.size);
         }
 
         [Test]
         public void Case20_Sliced_Autoreset_Reference()
         {
-            var sh = new NDIterator<int>(np.arange(15).reshape((3, 5))["0:2,:"], true);
-            var acc = 0;
+            var sh = new NDIterator<long>(np.arange(15).reshape((3, 5))["0:2,:"], true);
+            long acc = 0;
             var next = sh.HasNext;
             var move = sh.MoveNextReference;
             int i = 0;
@@ -186,8 +186,8 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         {
             Console.WriteLine();
             var nd = np.arange(15).reshape((3, 5))["0:2,:"];
-            var sh = new NDIterator<int>(nd, true);
-            int acc = 0;
+            var sh = new NDIterator<long>(nd, true);
+            long acc = 0;
 
             for (int i = 0; i < nd.size * 10; i++, sh.HasNext())
                 Console.WriteLine(acc += (sh.MoveNextReference() = 1));

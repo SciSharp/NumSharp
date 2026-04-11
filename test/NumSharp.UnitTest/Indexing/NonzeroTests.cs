@@ -25,8 +25,8 @@ public class NonzeroTests
 
         await Assert.That(result.Length).IsEqualTo(1);
         await Assert.That(result[0].size).IsEqualTo(2);
-        await Assert.That(result[0].GetInt32(0)).IsEqualTo(1);
-        await Assert.That(result[0].GetInt32(1)).IsEqualTo(3);
+        await Assert.That(result[0].GetInt64(0)).IsEqualTo(1);
+        await Assert.That(result[0].GetInt64(1)).IsEqualTo(3);
     }
 
     [Test]
@@ -49,9 +49,9 @@ public class NonzeroTests
 
         await Assert.That(result.Length).IsEqualTo(1);
         await Assert.That(result[0].size).IsEqualTo(3);
-        await Assert.That(result[0].GetInt32(0)).IsEqualTo(0);
-        await Assert.That(result[0].GetInt32(1)).IsEqualTo(1);
-        await Assert.That(result[0].GetInt32(2)).IsEqualTo(2);
+        await Assert.That(result[0].GetInt64(0)).IsEqualTo(0);
+        await Assert.That(result[0].GetInt64(1)).IsEqualTo(1);
+        await Assert.That(result[0].GetInt64(2)).IsEqualTo(2);
     }
 
     #endregion
@@ -70,13 +70,13 @@ public class NonzeroTests
 
         // Row indices
         await Assert.That(result[0].size).IsEqualTo(2);
-        await Assert.That(result[0].GetInt32(0)).IsEqualTo(0);
-        await Assert.That(result[0].GetInt32(1)).IsEqualTo(1);
+        await Assert.That(result[0].GetInt64(0)).IsEqualTo(0);
+        await Assert.That(result[0].GetInt64(1)).IsEqualTo(1);
 
         // Column indices
         await Assert.That(result[1].size).IsEqualTo(2);
-        await Assert.That(result[1].GetInt32(0)).IsEqualTo(1);
-        await Assert.That(result[1].GetInt32(1)).IsEqualTo(0);
+        await Assert.That(result[1].GetInt64(0)).IsEqualTo(1);
+        await Assert.That(result[1].GetInt64(1)).IsEqualTo(0);
     }
 
     [Test]
@@ -90,15 +90,15 @@ public class NonzeroTests
 
         // Row indices
         await Assert.That(result[0].size).IsEqualTo(3);
-        await Assert.That(result[0].GetInt32(0)).IsEqualTo(0);
-        await Assert.That(result[0].GetInt32(1)).IsEqualTo(1);
-        await Assert.That(result[0].GetInt32(2)).IsEqualTo(2);
+        await Assert.That(result[0].GetInt64(0)).IsEqualTo(0);
+        await Assert.That(result[0].GetInt64(1)).IsEqualTo(1);
+        await Assert.That(result[0].GetInt64(2)).IsEqualTo(2);
 
         // Column indices
         await Assert.That(result[1].size).IsEqualTo(3);
-        await Assert.That(result[1].GetInt32(0)).IsEqualTo(0);
-        await Assert.That(result[1].GetInt32(1)).IsEqualTo(1);
-        await Assert.That(result[1].GetInt32(2)).IsEqualTo(0);
+        await Assert.That(result[1].GetInt64(0)).IsEqualTo(0);
+        await Assert.That(result[1].GetInt64(1)).IsEqualTo(1);
+        await Assert.That(result[1].GetInt64(2)).IsEqualTo(0);
     }
 
     [Test]
@@ -135,14 +135,14 @@ public class NonzeroTests
         await Assert.That(result[2].size).IsEqualTo(2);
 
         // First nonzero at [0,0,0]
-        await Assert.That(result[0].GetInt32(0)).IsEqualTo(0);
-        await Assert.That(result[1].GetInt32(0)).IsEqualTo(0);
-        await Assert.That(result[2].GetInt32(0)).IsEqualTo(0);
+        await Assert.That(result[0].GetInt64(0)).IsEqualTo(0);
+        await Assert.That(result[1].GetInt64(0)).IsEqualTo(0);
+        await Assert.That(result[2].GetInt64(0)).IsEqualTo(0);
 
         // Second nonzero at [1,1,1]
-        await Assert.That(result[0].GetInt32(1)).IsEqualTo(1);
-        await Assert.That(result[1].GetInt32(1)).IsEqualTo(1);
-        await Assert.That(result[2].GetInt32(1)).IsEqualTo(1);
+        await Assert.That(result[0].GetInt64(1)).IsEqualTo(1);
+        await Assert.That(result[1].GetInt64(1)).IsEqualTo(1);
+        await Assert.That(result[2].GetInt64(1)).IsEqualTo(1);
     }
 
     #endregion
@@ -158,8 +158,8 @@ public class NonzeroTests
 
         await Assert.That(result.Length).IsEqualTo(1);
         await Assert.That(result[0].size).IsEqualTo(2);
-        await Assert.That(result[0].GetInt32(0)).IsEqualTo(1);
-        await Assert.That(result[0].GetInt32(1)).IsEqualTo(3);
+        await Assert.That(result[0].GetInt64(0)).IsEqualTo(1);
+        await Assert.That(result[0].GetInt64(1)).IsEqualTo(3);
     }
 
     #endregion
@@ -175,8 +175,8 @@ public class NonzeroTests
 
         await Assert.That(result.Length).IsEqualTo(1);
         await Assert.That(result[0].size).IsEqualTo(2);
-        await Assert.That(result[0].GetInt32(0)).IsEqualTo(1);
-        await Assert.That(result[0].GetInt32(1)).IsEqualTo(3);
+        await Assert.That(result[0].GetInt64(0)).IsEqualTo(1);
+        await Assert.That(result[0].GetInt64(1)).IsEqualTo(3);
     }
 
     [Test]
@@ -188,7 +188,7 @@ public class NonzeroTests
 
         await Assert.That(result.Length).IsEqualTo(1);
         await Assert.That(result[0].size).IsEqualTo(1);
-        await Assert.That(result[0].GetInt32(0)).IsEqualTo(1);
+        await Assert.That(result[0].GetInt64(0)).IsEqualTo(1);
     }
 
     #endregion

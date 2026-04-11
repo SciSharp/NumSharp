@@ -172,7 +172,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             var left = np.zeros(new Shape(5, 5), np.float64) + 5d;
             var right = NDArray.Scalar(1d);
             var ret = left - right;
-            ret.Cast<double>().All(d => d == 4).Should().BeTrue();
+            ret.flat.Cast<double>().All(d => d == 4).Should().BeTrue();
 
             for (int i = 0; i < ret.size; i++)
             {
@@ -186,7 +186,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             var left = NDArray.Scalar(1d);
             var right = np.zeros(new Shape(5, 5), np.float64) + 5d;
             var ret = left - right;
-            ret.Cast<double>().All(d => d == -4).Should().BeTrue();
+            ret.flat.Cast<double>().All(d => d == -4).Should().BeTrue();
 
             for (int i = 0; i < ret.size; i++)
             {

@@ -27,7 +27,7 @@ namespace NumSharp
                     {
                         // For booleans, negative is logical NOT (same as NumPy)
                         var out_addr = (bool*)@out.Address;
-                        for (int i = 0; i < len; i++)
+                        for (long i = 0; i < len; i++)
                             out_addr[i] = !out_addr[i];
                         return @out;
                     }
@@ -49,42 +49,42 @@ namespace NumSharp
 	                case NPTypeCode.Int16:
 	                {
                         var out_addr = (short*)@out.Address;
-                        for (int i = 0; i < len; i++)
+                        for (long i = 0; i < len; i++)
                             out_addr[i] = (short)(-out_addr[i]);
                         return @out;
 	                }
 	                case NPTypeCode.Int32:
 	                {
                         var out_addr = (int*)@out.Address;
-                        for (int i = 0; i < len; i++)
+                        for (long i = 0; i < len; i++)
                             out_addr[i] = -out_addr[i];
                         return @out;
 	                }
 	                case NPTypeCode.Int64:
 	                {
                         var out_addr = (long*)@out.Address;
-                        for (int i = 0; i < len; i++)
+                        for (long i = 0; i < len; i++)
                             out_addr[i] = -out_addr[i];
                         return @out;
 	                }
 	                case NPTypeCode.Double:
 	                {
                         var out_addr = (double*)@out.Address;
-                        for (int i = 0; i < len; i++)
+                        for (long i = 0; i < len; i++)
                             out_addr[i] = -out_addr[i];
                         return @out;
 	                }
 	                case NPTypeCode.Single:
 	                {
                         var out_addr = (float*)@out.Address;
-                        for (int i = 0; i < len; i++)
+                        for (long i = 0; i < len; i++)
                             out_addr[i] = -out_addr[i];
                         return @out;
 	                }
 	                case NPTypeCode.Decimal:
 	                {
                         var out_addr = (decimal*)@out.Address;
-                        for (int i = 0; i < len; i++)
+                        for (long i = 0; i < len; i++)
                             out_addr[i] = -out_addr[i];
                         return @out;
 	                }

@@ -530,7 +530,7 @@ public class NpApiOverloadTests_LogicManipulation
     {
         // NumPy: np.count_nonzero([0, 1, 0, 2, 0, 3]) -> 3
         var a = np.array(new int[] { 0, 1, 0, 2, 0, 3 });
-        int result = np.count_nonzero(a);
+        long result = np.count_nonzero(a);
 
         await Assert.That(result).IsEqualTo(3);
     }
@@ -543,7 +543,7 @@ public class NpApiOverloadTests_LogicManipulation
         var result = np.count_nonzero(a, axis: 0);
 
         await Assert.That(result).IsNotNull();
-        await Assert.That(result.shape).IsEquivalentTo(new int[] { 3 });
+        await Assert.That(result.shape).IsEquivalentTo(new long[] { 3 });
         await Assert.That(result.GetInt64(0)).IsEqualTo(1L);
         await Assert.That(result.GetInt64(1)).IsEqualTo(1L);
         await Assert.That(result.GetInt64(2)).IsEqualTo(2L);
@@ -557,7 +557,7 @@ public class NpApiOverloadTests_LogicManipulation
         var result = np.count_nonzero(a, axis: 1, keepdims: true);
 
         await Assert.That(result).IsNotNull();
-        await Assert.That(result.shape).IsEquivalentTo(new int[] { 2, 1 });
+        await Assert.That(result.shape).IsEquivalentTo(new long[] { 2, 1 });
     }
 
     #endregion
@@ -569,13 +569,13 @@ public class NpApiOverloadTests_LogicManipulation
     {
         // NumPy: np.nonzero([0, 1, 0, 2]) -> (array([1, 3]),)
         var a = np.array(new int[] { 0, 1, 0, 2 });
-        NDArray<int>[] result = np.nonzero(a);
+        NDArray<long>[] result = np.nonzero(a);
 
         await Assert.That(result).IsNotNull();
         await Assert.That(result.Length).IsEqualTo(1);
         await Assert.That(result[0].size).IsEqualTo(2);
-        await Assert.That(result[0].GetInt32(0)).IsEqualTo(1);
-        await Assert.That(result[0].GetInt32(1)).IsEqualTo(3);
+        await Assert.That(result[0].GetInt64(0)).IsEqualTo(1L);
+        await Assert.That(result[0].GetInt64(1)).IsEqualTo(3L);
     }
 
     [Test]
@@ -583,7 +583,7 @@ public class NpApiOverloadTests_LogicManipulation
     {
         // NumPy: np.nonzero([[0, 1], [2, 0]]) -> (array([0, 1]), array([1, 0]))
         var a = np.array(new int[,] { { 0, 1 }, { 2, 0 } });
-        NDArray<int>[] result = np.nonzero(a);
+        NDArray<long>[] result = np.nonzero(a);
 
         await Assert.That(result).IsNotNull();
         await Assert.That(result.Length).IsEqualTo(2);
@@ -606,7 +606,7 @@ public class NpApiOverloadTests_LogicManipulation
         var result = np.dot(a, b);
 
         await Assert.That(result).IsNotNull();
-        await Assert.That(result.shape).IsEquivalentTo(new int[] { 2, 2 });
+        await Assert.That(result.shape).IsEquivalentTo(new long[] { 2, 2 });
         await Assert.That(result.GetInt32(0, 0)).IsEqualTo(19);
         await Assert.That(result.GetInt32(0, 1)).IsEqualTo(22);
         await Assert.That(result.GetInt32(1, 0)).IsEqualTo(43);
@@ -639,7 +639,7 @@ public class NpApiOverloadTests_LogicManipulation
         var result = np.matmul(a, b);
 
         await Assert.That(result).IsNotNull();
-        await Assert.That(result.shape).IsEquivalentTo(new int[] { 2, 2 });
+        await Assert.That(result.shape).IsEquivalentTo(new long[] { 2, 2 });
         await Assert.That(result.GetInt32(0, 0)).IsEqualTo(19);
         await Assert.That(result.GetInt32(0, 1)).IsEqualTo(22);
         await Assert.That(result.GetInt32(1, 0)).IsEqualTo(43);
@@ -662,7 +662,7 @@ public class NpApiOverloadTests_LogicManipulation
         var result = np.outer(a, b);
 
         await Assert.That(result).IsNotNull();
-        await Assert.That(result.shape).IsEquivalentTo(new int[] { 3, 3 });
+        await Assert.That(result.shape).IsEquivalentTo(new long[] { 3, 3 });
         await Assert.That(result.GetInt32(0, 0)).IsEqualTo(4);
         await Assert.That(result.GetInt32(0, 1)).IsEqualTo(5);
         await Assert.That(result.GetInt32(0, 2)).IsEqualTo(6);
@@ -706,7 +706,7 @@ public class NpApiOverloadTests_LogicManipulation
         var result = np.amin(a, axis: 0);
 
         await Assert.That(result).IsNotNull();
-        await Assert.That(result.shape).IsEquivalentTo(new int[] { 3 });
+        await Assert.That(result.shape).IsEquivalentTo(new long[] { 3 });
         await Assert.That(result.GetInt32(0)).IsEqualTo(0);
         await Assert.That(result.GetInt32(1)).IsEqualTo(0);
         await Assert.That(result.GetInt32(2)).IsEqualTo(2);
@@ -720,7 +720,7 @@ public class NpApiOverloadTests_LogicManipulation
         var result = np.amin(a, axis: 1, keepdims: true);
 
         await Assert.That(result).IsNotNull();
-        await Assert.That(result.shape).IsEquivalentTo(new int[] { 2, 1 });
+        await Assert.That(result.shape).IsEquivalentTo(new long[] { 2, 1 });
     }
 
     [Test]
@@ -745,7 +745,7 @@ public class NpApiOverloadTests_LogicManipulation
         var result = np.min(a, axis: 0);
 
         await Assert.That(result).IsNotNull();
-        await Assert.That(result.shape).IsEquivalentTo(new int[] { 3 });
+        await Assert.That(result.shape).IsEquivalentTo(new long[] { 3 });
         await Assert.That(result.GetInt32(0)).IsEqualTo(0);
         await Assert.That(result.GetInt32(1)).IsEqualTo(0);
         await Assert.That(result.GetInt32(2)).IsEqualTo(2);
@@ -769,7 +769,7 @@ public class NpApiOverloadTests_LogicManipulation
         var result = np.min(a, axis: 1, keepdims: true, dtype: null);
 
         await Assert.That(result).IsNotNull();
-        await Assert.That(result.shape).IsEquivalentTo(new int[] { 2, 1 });
+        await Assert.That(result.shape).IsEquivalentTo(new long[] { 2, 1 });
     }
 
     #endregion
@@ -813,7 +813,7 @@ public class NpApiOverloadTests_LogicManipulation
         var result = np.transpose(a);
 
         await Assert.That(result).IsNotNull();
-        await Assert.That(result.shape).IsEquivalentTo(new int[] { 3 });
+        await Assert.That(result.shape).IsEquivalentTo(new long[] { 3 });
     }
 
     [Test]
@@ -839,7 +839,7 @@ public class NpApiOverloadTests_LogicManipulation
         var result = np.dot(a, b);
 
         await Assert.That(result).IsNotNull();
-        await Assert.That(result.shape).IsEquivalentTo(new int[] { 2 });
+        await Assert.That(result.shape).IsEquivalentTo(new long[] { 2 });
         await Assert.That(result.GetInt32(0)).IsEqualTo(3);
         await Assert.That(result.GetInt32(1)).IsEqualTo(7);
     }

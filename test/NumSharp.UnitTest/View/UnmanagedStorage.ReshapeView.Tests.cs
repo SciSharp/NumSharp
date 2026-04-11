@@ -20,10 +20,10 @@ namespace NumSharp.UnitTest.View
             var t = new UnmanagedStorage(np.arange(20).GetData(), new Shape(2, 10));
             var view = t.GetView(":, 5:");
             Assert.AreEqual(new Shape(2, 5), view.Shape);
-            AssertAreEqual(new int[] { 5, 6, 7, 8, 9, 15, 16, 17, 18, 19 }, view.ToArray<int>());
+            AssertAreEqual(new long[] { 5, 6, 7, 8, 9, 15, 16, 17, 18, 19 }, view.ToArray<long>());
             view.Reshape(10);
             Assert.AreEqual(new Shape(10), view.Shape);
-            new int[] { 5, 6, 7, 8, 9, 15, 16, 17, 18, 19 }.Should().BeEquivalentTo( view.ToArray<int>());
+            new long[] { 5, 6, 7, 8, 9, 15, 16, 17, 18, 19 }.Should().BeEquivalentTo(view.ToArray<long>());
             new NDArray(view).ToString(flat: true).Should().Be("array([5, 6, 7, 8, 9, 15, 16, 17, 18, 19])");
         }
 
@@ -57,21 +57,21 @@ namespace NumSharp.UnitTest.View
             // Reshape makes a copy for non-contiguous arrays (NumPy behavior)
             view.Reshape(2, 1, 2, 1);
             // After reshape with copy, IsSliced is false but values are correct
-            AssertAreEqual(new int[] { 1, 2, 4, 5 }, view.ToArray<int>());
+            AssertAreEqual(new long[] { 1, 2, 4, 5 }, view.ToArray<long>());
 
             // doing the same disecting with slicing which ToString would do
-            view.GetView("0").ToArray<int>().Should().BeEquivalentTo(new int[] { 1, 2, });
-            view.GetView("1").ToArray<int>().Should().BeEquivalentTo(new int[] { 4, 5, });
-            view.GetView("0").GetView("0").ToArray<int>().Should().BeEquivalentTo(new int[] { 1, 2 });
-            view.GetView("0").GetView("0").GetView("0").ToArray<int>().Should().BeEquivalentTo(new int[] { 1, });
-            view.GetView("0").GetView("0").GetView("1").ToArray<int>().Should().BeEquivalentTo(new int[] { 2, });
-            view.GetView("0").GetView("0").GetView("0").GetView("0").ToArray<int>().Should().BeEquivalentTo(new int[] { 1, });
-            view.GetView("0").GetView("0").GetView("1").GetView("0").ToArray<int>().Should().BeEquivalentTo(new int[] { 2, });
-            view.GetView("1").GetView("0").ToArray<int>().Should().BeEquivalentTo(new int[] { 4, 5 });
-            view.GetView("1").GetView("0").GetView("0").ToArray<int>().Should().BeEquivalentTo(new int[] { 4, });
-            view.GetView("1").GetView("0").GetView("1").ToArray<int>().Should().BeEquivalentTo(new int[] { 5, });
-            view.GetView("1").GetView("0").GetView("0").GetView("0").ToArray<int>().Should().BeEquivalentTo(new int[] { 4, });
-            view.GetView("1").GetView("0").GetView("1").GetView("0").ToArray<int>().Should().BeEquivalentTo(new int[] { 5, });
+            view.GetView("0").ToArray<long>().Should().BeEquivalentTo(new long[] { 1, 2, });
+            view.GetView("1").ToArray<long>().Should().BeEquivalentTo(new long[] { 4, 5, });
+            view.GetView("0").GetView("0").ToArray<long>().Should().BeEquivalentTo(new long[] { 1, 2 });
+            view.GetView("0").GetView("0").GetView("0").ToArray<long>().Should().BeEquivalentTo(new long[] { 1, });
+            view.GetView("0").GetView("0").GetView("1").ToArray<long>().Should().BeEquivalentTo(new long[] { 2, });
+            view.GetView("0").GetView("0").GetView("0").GetView("0").ToArray<long>().Should().BeEquivalentTo(new long[] { 1, });
+            view.GetView("0").GetView("0").GetView("1").GetView("0").ToArray<long>().Should().BeEquivalentTo(new long[] { 2, });
+            view.GetView("1").GetView("0").ToArray<long>().Should().BeEquivalentTo(new long[] { 4, 5 });
+            view.GetView("1").GetView("0").GetView("0").ToArray<long>().Should().BeEquivalentTo(new long[] { 4, });
+            view.GetView("1").GetView("0").GetView("1").ToArray<long>().Should().BeEquivalentTo(new long[] { 5, });
+            view.GetView("1").GetView("0").GetView("0").GetView("0").ToArray<long>().Should().BeEquivalentTo(new long[] { 4, });
+            view.GetView("1").GetView("0").GetView("1").GetView("0").ToArray<long>().Should().BeEquivalentTo(new long[] { 5, });
 
             // this is to show that ToString works in principle:
             np.arange(4).reshape(2, 1, 2, 1).ToString(flat: true).Should().Be("array([[[[0], [1]]], [[[2], [3]]]])");
@@ -88,9 +88,9 @@ namespace NumSharp.UnitTest.View
             var view = t.GetView(":, 5:");
             view.Reshape(10);
             Assert.AreEqual(new Shape(10), view.Shape);
-            AssertAreEqual(new int[] { 5, 6, 7, 8, 9, 15, 16, 17, 18, 19 }, view.ToArray<int>());
+            AssertAreEqual(new long[] { 5, 6, 7, 8, 9, 15, 16, 17, 18, 19 }, view.ToArray<long>());
             var v1 = view.GetView("1::2");
-            AssertAreEqual(new int[] { 6, 8, 15, 17, 19 }, v1.ToArray<int>());
+            AssertAreEqual(new long[] { 6, 8, 15, 17, 19 }, v1.ToArray<long>());
             new NDArray(v1).ToString(flat: true).Should().Be("array([6, 8, 15, 17, 19])");
         }
 
@@ -116,7 +116,7 @@ namespace NumSharp.UnitTest.View
 
             // Modify v3 - changes propagate to v2 (shared memory via slicing)
             // but NOT to v1 or t (reshape created copies)
-            v3.SetData(ArraySlice.FromArray(new int[] { 99, 11, -18, -10 }));
+            v3.SetData(ArraySlice.FromArray(new int[] { 99, 11, -18, -10 }), new int[0]);
             new NDArray(v3).ToString(flat: true).Should().Be("array([[99, 11], [-18, -10]])");
             new NDArray(v2).ToString(flat: true).Should().Be("array([[[11], [5], [99]], [[-10], [14], [-18]]])");
             // v1 unchanged (reshape made a copy)

@@ -77,11 +77,19 @@ namespace NumSharp.Generic
         /// <summary>
         ///     Constructor which initialize elements with length of <paramref name="size"/>
         /// </summary>
-        /// <param name="dtype">Internal data type</param>
         /// <param name="size">The size as a single dimension shape</param>
         /// <param name="fillZeros">Should set the values of the new allocation to default(dtype)? otherwise - old memory noise</param>
         /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
         public NDArray(int size, bool fillZeros) : base(InfoOf<TDType>.NPTypeCode, size, fillZeros)
+        { }
+
+        /// <summary>
+        ///     Constructor which initialize elements with length of <paramref name="size"/>
+        /// </summary>
+        /// <param name="size">The size as a single dimension shape</param>
+        /// <param name="fillZeros">Should set the values of the new allocation to default(dtype)? otherwise - old memory noise</param>
+        /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
+        public NDArray(long size, bool fillZeros) : base(InfoOf<TDType>.NPTypeCode, size, fillZeros)
         { }
 
         /// <summary>
@@ -131,6 +139,13 @@ namespace NumSharp.Generic
         public NDArray(int size) : base(InfoOf<TDType>.NPTypeCode, size) { }
 
         /// <summary>
+        ///     Constructor which initialize elements with length of <paramref name="size"/>
+        /// </summary>
+        /// <param name="size">The size as a single dimension shape</param>
+        /// <remarks>This constructor calls <see cref="IStorage.Allocate(NumSharp.Shape,System.Type)"/></remarks>
+        public NDArray(long size) : base(InfoOf<TDType>.NPTypeCode, size) { }
+
+        /// <summary>
         /// Constructor which initialize elements with 0
         /// type and shape are given.
         /// </summary>
@@ -161,7 +176,27 @@ namespace NumSharp.Generic
             get => (TDType*)Storage.Address;
         }
 
-        public new TDType this[params int[] indices]
+        public new TDType this[int[] indices]
+        {
+            [MethodImpl(Inline)]
+            get
+            {
+                if (Shape.IsScalar && indices.Length != 1 || !Shape.IsScalar && indices.Length != ndim)
+                    throw new ArgumentException($"Unable to set an NDArray<{typeof(TDType).Name}> to a non-scalar indices", nameof(indices));
+
+                return Storage.GetValue<TDType>(indices);
+            }
+            [MethodImpl(Inline)]
+            set
+            {
+                if (Shape.IsScalar && indices.Length != 1 || !Shape.IsScalar && indices.Length != ndim)
+                    throw new ArgumentException($"Unable to set an NDArray<{typeof(TDType).Name}> to a non-scalar indices", nameof(indices));
+
+                Storage.SetValue<TDType>(value, indices);
+            }
+        }
+
+        public new TDType this[params long[] indices]
         {
             [MethodImpl(Inline)]
             get
@@ -213,7 +248,7 @@ namespace NumSharp.Generic
             set => base[slices] = value;
         }
 
-        public new TDType GetAtIndex(int index)
+        public new TDType GetAtIndex(long index)
         {
             unsafe
             {

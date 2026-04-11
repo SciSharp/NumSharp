@@ -45,7 +45,7 @@ namespace NumSharp.Utilities
             // Return new array.
             var res = new T[len];
             if (len > 700_000)
-                for (int i = 0; i < len; i++) res[i] = source[i + start];
+                for (long i = 0; i < len; i++) res[i] = source[i + start];
             else
                 for (long i = 0; i < len; i++)
                     res[i] = source[i + start];
@@ -391,6 +391,21 @@ namespace NumSharp.Utilities
         }
 
         /// <summary>
+        ///     Creates an array of 1D of type <paramref name="type"/>.
+        /// </summary>
+        /// <param name="type">The type to create this array.</param>
+        /// <param name="length">The length of the array</param>
+        /// <remarks>Do not use this if you are trying to create jagged or multidimensional array.</remarks>
+        /// <exception cref="OverflowException">Thrown when length exceeds int.MaxValue (managed array limit).</exception>
+        [MethodImpl(Inline)]
+        public static Array Create(Type type, long length)
+        {
+            if (length > int.MaxValue)
+                throw new OverflowException($"Cannot create managed array with {length} elements. Maximum is {int.MaxValue}.");
+            return Create(type, (int)length);
+        }
+
+        /// <summary>
         ///     Creates an array of specific <paramref name="length"/> of type <paramref name="type"/>.
         /// </summary>
         /// <param name="type">The type to create this array.</param>
@@ -414,6 +429,20 @@ namespace NumSharp.Utilities
         public static T[] Create<T>(int length)
         {
             return new T[length];
+        }
+
+        /// <summary>
+        ///     Creates an array 1D of type <typeparamref name="T"/>.
+        /// </summary>
+        /// <typeparam name="T">The type of the array</typeparam>
+        /// <param name="length">The length of the array</param>
+        /// <exception cref="OverflowException">Thrown when length exceeds int.MaxValue (managed array limit).</exception>
+        [MethodImpl(Inline)]
+        public static T[] Create<T>(long length)
+        {
+            if (length > int.MaxValue)
+                throw new OverflowException($"Cannot create managed array with {length} elements. Maximum is {int.MaxValue}.");
+            return new T[(int)length];
         }
 
         /// <summary>
@@ -510,6 +539,20 @@ namespace NumSharp.Utilities
                     throw new NotImplementedException();
 #endif
             }
+        }
+
+        /// <summary>
+        ///     Creates an array of 1D of type <paramref name="typeCode"/>.
+        /// </summary>
+        /// <param name="typeCode">The type to create this array.</param>
+        /// <param name="length">The length of the array</param>
+        /// <exception cref="OverflowException">Thrown when length exceeds int.MaxValue (managed array limit).</exception>
+        /// <remarks>Do not use this if you are trying to create jagged or multidimensional array.</remarks>
+        public static Array Create(NPTypeCode typeCode, long length)
+        {
+            if (length > int.MaxValue)
+                throw new OverflowException($"Cannot create managed array with {length} elements. Maximum is {int.MaxValue}.");
+            return Create(typeCode, (int)length);
         }
 
         /// <summary>

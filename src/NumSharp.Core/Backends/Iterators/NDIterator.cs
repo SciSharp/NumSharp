@@ -10,7 +10,7 @@ namespace NumSharp
 {
     public unsafe partial class NDIterator<TOut> : NDIterator, IEnumerable<TOut>, IDisposable where TOut : unmanaged
     {
-        private int index;
+        private long index;
         public readonly IMemoryBlock Block;
         public readonly IteratorType Type;
 
@@ -34,7 +34,7 @@ namespace NumSharp
         /// <summary>
         ///     The size of this iterator.
         /// </summary>
-        public int size;
+        public long size;
 
         /// <summary>
         ///     Returns a function that when called, moves to next iteration and return the next value.
@@ -210,7 +210,7 @@ namespace NumSharp
                     {
                         var hasNext = new Reference<bool>(true);
                         var iterator = new ValueCoordinatesIncrementor(ref shape, delegate(ref ValueCoordinatesIncrementor _) { hasNext.Value = false; });
-                        Func<int[], int> getOffset = shape.GetOffset;
+                        Func<long[], long> getOffset = shape.GetOffset;
                         var index = iterator.Index;
 
                         MoveNext = () =>
@@ -333,7 +333,7 @@ namespace NumSharp
                     {
                         var iterator = new ValueCoordinatesIncrementor(ref shape, delegate(ref ValueCoordinatesIncrementor incr) { incr.Reset(); });
                         var index = iterator.Index;
-                        Func<int[], int> getOffset = shape.GetOffset;
+                        Func<long[], long> getOffset = shape.GetOffset;
                         MoveNext = () =>
                         {
                             var ret = *((TOut*)localBlock.Address + getOffset(index));

@@ -22,7 +22,7 @@ namespace NumSharp.UnitTest.APIs
         {
             var x = np.ndarray((2, 3), dtype: np.int32, order: 'C');
             Console.WriteLine(x.Shape);
-            x.Cast<int>().Should().AllBeEquivalentTo(0);
+            x.flat.Cast<int>().Should().AllBeEquivalentTo(0);
         }
 
         [Test]

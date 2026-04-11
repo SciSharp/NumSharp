@@ -33,7 +33,7 @@ namespace NumSharp.Backends.Unmanaged
         public readonly T* Address;
         public readonly void* VoidAddress;
 
-        public readonly int Count;
+        public readonly long Count;
 
         /// <summary>
         ///     Is this <see cref="ArraySlice{T}"/> a smaller part/slice of an unmanaged allocation?
@@ -53,7 +53,7 @@ namespace NumSharp.Backends.Unmanaged
             MemoryBlock = memoryBlock;
             IsSlice = false;
             VoidAddress = Address = MemoryBlock.Address;
-            Count = (int)MemoryBlock.Count; //TODO! when long index, remove cast int
+            Count = MemoryBlock.Count;
         }
 
         public ArraySlice(UnmanagedMemoryBlock<T> memoryBlock, Span<T> slice)
@@ -65,31 +65,28 @@ namespace NumSharp.Backends.Unmanaged
         }
 
         /// <summary>
-        ///     Creates a sliced <see cref="ArraySlice{T}"/>.
+        ///     Creates a sliced <see cref="ArraySlice{T}"/> from an UnmanagedSpan.
+        ///     Supports long indexing for arrays &gt; 2B elements.
         /// </summary>
-        /// <param name="memoryBlock"></param>
-        /// <param name="start">The offset in <typeparamref name="T"/> and not bytes - relative to the <paramref name="memoryBlock"/>.</param>
-        /// <param name="count">The number of <typeparamref name="T"/> this slice should contain - relative to the <paramref name="memoryBlock"/></param>
-        public ArraySlice(UnmanagedMemoryBlock<T> memoryBlock, T* address, int count)
+        public ArraySlice(UnmanagedMemoryBlock<T> memoryBlock, UnmanagedSpan<T> slice)
         {
             MemoryBlock = memoryBlock;
             IsSlice = true;
-            Count = count;
-            VoidAddress = Address = (T*)address;
-            //TODO! we should check that is does not exceed bounds.
+            Count = slice.Length;
+            VoidAddress = Address = (T*)Unsafe.AsPointer(ref slice.GetPinnableReference());
         }
 
         /// <summary>
         ///     Creates a sliced <see cref="ArraySlice{T}"/>.
         /// </summary>
         /// <param name="memoryBlock"></param>
-        /// <param name="start">The offset in <typeparamref name="T"/> and not bytes - relative to the <paramref name="memoryBlock"/>.</param>
-        /// <param name="count">The number of <typeparamref name="T"/> this slice should contain - relative to the <paramref name="memoryBlock"/></param>
+        /// <param name="address">The address of the first element</param>
+        /// <param name="count">The number of <typeparamref name="T"/> this slice should contain</param>
         public ArraySlice(UnmanagedMemoryBlock<T> memoryBlock, T* address, long count)
         {
             MemoryBlock = memoryBlock;
             IsSlice = true;
-            Count = (int)count; //TODO! When index long, this should not cast.
+            Count = count;
             VoidAddress = Address = address;
 #if DEBUG
             if (address + count > memoryBlock.Address + memoryBlock.Count)
@@ -106,7 +103,7 @@ namespace NumSharp.Backends.Unmanaged
 
         /// <param name="index"></param>
         /// <returns></returns>
-        object IArraySlice.this[int index]
+        object IArraySlice.this[long index]
         {
             get
             {
@@ -122,7 +119,7 @@ namespace NumSharp.Backends.Unmanaged
 
         /// <param name="index"></param>
         /// <returns></returns>
-        public T this[int index]
+        public T this[long index]
         {
             [MethodImpl(OptimizeAndInline)]
             get
@@ -139,24 +136,23 @@ namespace NumSharp.Backends.Unmanaged
         }
 
         [MethodImpl(OptimizeAndInline)]
-        public T GetIndex(int index)
+        public T GetIndex(long index)
         {
             return *(Address + index);
         }
 
         [MethodImpl(OptimizeAndInline)]
-        public void SetIndex(int index, object value)
+        public void SetIndex(long index, object value)
         {
             Debug.Assert(index < Count, "index < Count, Memory corruption expected.");
             *(Address + index) = (T)value;
         }
 
+        /// <summary>
+        /// Backwards-compatible overload accepting int index.
+        /// </summary>
         [MethodImpl(OptimizeAndInline)]
-        public void SetIndex(int index, T value)
-        {
-            Debug.Assert(index < Count, "index < Count, Memory corruption expected.");
-            *(Address + index) = value;
-        }
+        public void SetIndex(int index, T value) => SetIndex((long)index, value);
 
         #endregion
 
@@ -167,7 +163,7 @@ namespace NumSharp.Backends.Unmanaged
             var addr = Address;
             var len = Count;
             var eq = EqualityComparer<T>.Default;
-            for (int i = 0; i < len; i++)
+            for (long i = 0; i < len; i++)
             {
                 if (eq.Equals(addr[i], item))
                 {
@@ -184,59 +180,64 @@ namespace NumSharp.Backends.Unmanaged
         {
             if (Unsafe.SizeOf<T>() == 1)
             {
-                uint length = (uint)Count;
-                if (length == 0)
-                    return;
+                // For single-byte types, we can use InitBlockUnaligned but need to handle large counts
+                if (Count > uint.MaxValue)
+                {
+                    // Fall through to the loop below for very large arrays
+                }
+                else
+                {
+                    uint byteLen = (uint)Count;
+                    if (byteLen == 0)
+                        return;
 
-                T tmp = value; // Avoid taking address of the "value" argument. It would regress performance of the loop below.
-                Unsafe.InitBlockUnaligned(Address, Unsafe.As<T, byte>(ref tmp), length);
+                    T tmp = value; // Avoid taking address of the "value" argument. It would regress performance of the loop below.
+                    Unsafe.InitBlockUnaligned(Address, Unsafe.As<T, byte>(ref tmp), byteLen);
+                    return;
+                }
             }
-            else
+
+            // Use long for loop variable to handle large arrays
+            long length = Count;
+            if (length == 0)
+                return;
+
+            T* addr = Address;
+
+            long i = 0;
+            for (; i < (length & ~7L); i += 8)
             {
-                // Do all math as nuint to avoid unnecessary 64->32->64 bit integer truncations
-                nuint length = (uint)Count;
-                if (length == 0)
-                    return;
+                *(addr + i) = value;
+                *(addr + (i + 1)) = value;
+                *(addr + (i + 2)) = value;
+                *(addr + (i + 3)) = value;
+                *(addr + (i + 4)) = value;
+                *(addr + (i + 5)) = value;
+                *(addr + (i + 6)) = value;
+                *(addr + (i + 7)) = value;
+            }
 
-                T* addr = Address;
+            if (i < (length & ~3L))
+            {
+                *(addr + i) = value;
+                *(addr + (i + 1)) = value;
+                *(addr + (i + 2)) = value;
+                *(addr + (i + 3)) = value;
+                i += 4;
+            }
 
-                // TODO: Create block fill for value types of power of two sizes e.g. 2,4,8,16
-
-                nuint i = 0;
-                for (; i < (length & ~(nuint)7); i += 8)
-                {
-                    *(addr + (i)) = value;
-                    *(addr + (i + 1)) = value;
-                    *(addr + (i + 2)) = value;
-                    *(addr + (i + 3)) = value;
-                    *(addr + (i + 4)) = value;
-                    *(addr + (i + 5)) = value;
-                    *(addr + (i + 6)) = value;
-                    *(addr + (i + 7)) = value;
-                }
-
-                if (i < (length & ~(nuint)3))
-                {
-                    *(addr + (i)) = value;
-                    *(addr + (i + 1)) = value;
-                    *(addr + (i + 2)) = value;
-                    *(addr + (i + 3)) = value;
-                    i += 4;
-                }
-
-                for (; i < length; i++)
-                {
-                    addr[i] = value;
-                }
+            for (; i < length; i++)
+            {
+                addr[i] = value;
             }
         }
 
         /// <param name="start"></param>
         /// <returns></returns>
         [MethodImpl(OptimizeAndInline)]
-        public ArraySlice<T> Slice(int start)
+        public ArraySlice<T> Slice(long start)
         {
-            if ((uint)start > (uint)Count)
+            if ((ulong)start > (ulong)Count)
                 throw new ArgumentOutOfRangeException(nameof(start));
 
             return new ArraySlice<T>(MemoryBlock, Address + start, Count - start);
@@ -246,21 +247,10 @@ namespace NumSharp.Backends.Unmanaged
         /// <param name="length"></param>
         /// <returns></returns>
         [MethodImpl(OptimizeAndInline)]
-        public ArraySlice<T> Slice(int start, int length)
+        public ArraySlice<T> Slice(long start, long length)
         {
-#if BIT64
-            // Since start and length are both 32-bit, their sum can be computed across a 64-bit domain
-            // without loss of fidelity. The cast to uint before the cast to ulong ensures that the
-            // extension from 32- to 64-bit is zero-extending rather than sign-extending. The end result
-            // of this is that if either input is negative or if the input sum overflows past Int32.MaxValue,
-            // that information is captured correctly in the comparison against the backing _length field.
-            // We don't use this same mechanism in a 32-bit process due to the overhead of 64-bit arithmetic.
-            if ((ulong)(uint)start + (ulong)(uint)length > (ulong)(uint)Count)
+            if ((ulong)start > (ulong)Count || (ulong)length > (ulong)(Count - start))
                 throw new ArgumentOutOfRangeException(nameof(length));
-#else
-            if ((uint)start > (uint)Count || (uint)length > (uint)(Count - start))
-                throw new ArgumentOutOfRangeException(nameof(length));
-#endif
             return new ArraySlice<T>(MemoryBlock, Address + start, length);
         }
 
@@ -321,7 +311,7 @@ namespace NumSharp.Backends.Unmanaged
         /// <param name="destination"></param>
         /// <param name="sourceOffset">offset of source via count (not bytes)</param>
         [MethodImpl(OptimizeAndInline)]
-        public void CopyTo(Span<T> destination, int sourceOffset)
+        public void CopyTo(Span<T> destination, long sourceOffset)
         {
             CopyTo(destination, sourceOffset, Count - sourceOffset);
         }
@@ -330,9 +320,72 @@ namespace NumSharp.Backends.Unmanaged
         /// <param name="sourceOffset">offset of source via count (not bytes)</param>
         /// <param name="sourceLength">How many items to copy</param>
         [MethodImpl(OptimizeAndInline)]
-        public void CopyTo(Span<T> destination, int sourceOffset, int sourceLength)
+        public void CopyTo(Span<T> destination, long sourceOffset, long sourceLength)
         {
             CopyTo(destination, sourceOffset, sourceLength);
+        }
+
+        /// <summary>
+        /// Tries to copy this slice's contents to an UnmanagedSpan destination.
+        /// Supports long indexing for arrays &gt; 2B elements.
+        /// </summary>
+        /// <param name="destination">The destination span.</param>
+        /// <returns>True if the copy succeeded, false if destination is too short.</returns>
+        public bool TryCopyTo(UnmanagedSpan<T> destination)
+        {
+            if ((ulong)Count > (ulong)destination.Length)
+                return false;
+
+            Buffer.MemoryCopy(Unsafe.AsPointer(ref destination.GetPinnableReference()), Address, destination.Length * ItemLength, Count * ItemLength);
+            return true;
+        }
+
+        /// <summary>
+        /// Copies this slice's contents to an UnmanagedSpan destination.
+        /// Supports long indexing for arrays &gt; 2B elements.
+        /// </summary>
+        /// <param name="destination">The destination span.</param>
+        [MethodImpl(OptimizeAndInline)]
+        public void CopyTo(UnmanagedSpan<T> destination)
+        {
+            if ((ulong)Count <= (ulong)destination.Length)
+            {
+                Buffer.MemoryCopy(Unsafe.AsPointer(ref destination.GetPinnableReference()), Address, destination.Length * ItemLength, Count * ItemLength);
+            }
+            else
+            {
+                throw new ArgumentException("Destination was too short.");
+            }
+        }
+
+        /// <summary>
+        /// Copies a portion of this slice to an UnmanagedSpan destination.
+        /// Supports long indexing for arrays &gt; 2B elements.
+        /// </summary>
+        /// <param name="destination">The destination span.</param>
+        /// <param name="sourceOffset">Offset in source (element count, not bytes).</param>
+        [MethodImpl(OptimizeAndInline)]
+        public void CopyTo(UnmanagedSpan<T> destination, long sourceOffset)
+        {
+            CopyTo(destination, sourceOffset, Count - sourceOffset);
+        }
+
+        /// <summary>
+        /// Copies a portion of this slice to an UnmanagedSpan destination.
+        /// Supports long indexing for arrays &gt; 2B elements.
+        /// </summary>
+        /// <param name="destination">The destination span.</param>
+        /// <param name="sourceOffset">Offset in source (element count, not bytes).</param>
+        /// <param name="sourceLength">Number of elements to copy.</param>
+        [MethodImpl(OptimizeAndInline)]
+        public void CopyTo(UnmanagedSpan<T> destination, long sourceOffset, long sourceLength)
+        {
+            if ((ulong)sourceOffset > (ulong)Count || (ulong)sourceLength > (ulong)(Count - sourceOffset))
+                throw new ArgumentOutOfRangeException();
+            if ((ulong)sourceLength > (ulong)destination.Length)
+                throw new ArgumentException("Destination was too short.");
+
+            Buffer.MemoryCopy(Unsafe.AsPointer(ref destination.GetPinnableReference()), Address + sourceOffset, destination.Length * ItemLength, sourceLength * ItemLength);
         }
 
         [EditorBrowsable(EditorBrowsableState.Never)]
@@ -346,22 +399,24 @@ namespace NumSharp.Backends.Unmanaged
 
         #region Explicit Interfaces
 
-        /// A Span representing this slice.
-        /// <remarks>Does not perform copy.</remarks>
-        Span<T1> IArraySlice.AsSpan<T1>()
+        /// <summary>
+        /// Returns an UnmanagedSpan representing this slice's memory.
+        /// </summary>
+        /// <remarks>Does not perform copy. Supports long indexing for arrays &gt; 2B elements.</remarks>
+        unsafe UnmanagedSpan<TSpan> IArraySlice.AsSpan<TSpan>()
         {
-            return new Span<T1>(VoidAddress, Count);
+            return new UnmanagedSpan<TSpan>(VoidAddress, Count);
         }
 
         [MethodImpl(OptimizeAndInline)]
-        TRet IArraySlice.GetIndex<TRet>(int index)
+        TRet IArraySlice.GetIndex<TRet>(long index)
         {
             Debug.Assert(InfoOf<TRet>.Size == InfoOf<T>.Size);
             return *((TRet*)VoidAddress + index);
         }
 
         [MethodImpl(OptimizeAndInline)]
-        void IArraySlice.SetIndex<TVal>(int index, TVal value)
+        void IArraySlice.SetIndex<TVal>(long index, TVal value)
         {
             Debug.Assert(InfoOf<TVal>.Size == InfoOf<T>.Size);
             Debug.Assert(index < Count, "index < Count, Memory corruption expected.");
@@ -369,7 +424,7 @@ namespace NumSharp.Backends.Unmanaged
         }
 
         [MethodImpl(OptimizeAndInline)]
-        object IArraySlice.GetIndex(int index)
+        object IArraySlice.GetIndex(long index)
         {
             Debug.Assert(index < Count, "index < Count, Memory corruption expected.");
             return *(Address + index);
@@ -391,7 +446,7 @@ namespace NumSharp.Backends.Unmanaged
         /// </summary>
         /// <param name="start">The index to start from</param>
         /// <remarks>Creates a slice without copying.</remarks>
-        IArraySlice IArraySlice.Slice(int start) => Slice(start);
+        IArraySlice IArraySlice.Slice(long start) => Slice(start);
 
         /// <summary>
         ///     Perform a slicing on this <see cref="IMemoryBlock"/> without copying data.
@@ -399,12 +454,24 @@ namespace NumSharp.Backends.Unmanaged
         /// <param name="start">The index to start from</param>
         /// <param name="count">The number of items to slice (not bytes)</param>
         /// <remarks>Creates a slice without copying.</remarks>
-        IArraySlice IArraySlice.Slice(int start, int count) => Slice(start, count);
+        IArraySlice IArraySlice.Slice(long start, long count) => Slice(start, count);
 
         /// <param name="destination"></param>
         void IArraySlice.CopyTo<T1>(Span<T1> destination)
         {
             this.CopyTo(Unsafe.AsPointer(ref destination.GetPinnableReference()));
+        }
+
+        /// <summary>
+        /// Copies this slice's contents to an UnmanagedSpan destination.
+        /// Supports long indexing for arrays &gt; 2B elements.
+        /// </summary>
+        /// <param name="destination"></param>
+        void IArraySlice.CopyTo<T1>(UnmanagedSpan<T1> destination)
+        {
+            if ((ulong)Count > (ulong)destination.Length)
+                throw new ArgumentException("Destination was too short.");
+            Buffer.MemoryCopy(Unsafe.AsPointer(ref destination.GetPinnableReference()), VoidAddress, destination.Length * InfoOf<T1>.Size, Count * ItemLength);
         }
 
         /// <summary>
@@ -507,7 +574,7 @@ namespace NumSharp.Backends.Unmanaged
         /// <param name="count">How many items this array will have (aka Count).</param>
         /// <param name="fill">The item to fill the newly allocated memory with.</param>
         /// <returns>A newly allocated array.</returns>
-        public static ArraySlice<T> Allocate(int count, T fill)
+        public static ArraySlice<T> Allocate(long count, T fill)
             => new ArraySlice<T>(new UnmanagedMemoryBlock<T>(count, fill));
 
         /// <summary>
@@ -516,7 +583,7 @@ namespace NumSharp.Backends.Unmanaged
         /// <param name="count">How many items this array will have (aka Count).</param>
         /// <param name="fillDefault">Should the newly allocated memory be filled with the default of <typeparamref name="T"/></param>
         /// <returns>A newly allocated array.</returns>
-        public static ArraySlice<T> Allocate(int count, bool fillDefault)
+        public static ArraySlice<T> Allocate(long count, bool fillDefault)
             => !fillDefault ? Allocate(count) : new ArraySlice<T>(new UnmanagedMemoryBlock<T>(count, default(T)));
 
         /// <summary>
@@ -524,7 +591,7 @@ namespace NumSharp.Backends.Unmanaged
         /// </summary>
         /// <param name="count">How many items this array will have (aka Count).</param>
         /// <returns>A newly allocated array.</returns>
-        public static ArraySlice<T> Allocate(int count)
+        public static ArraySlice<T> Allocate(long count)
             => new ArraySlice<T>(new UnmanagedMemoryBlock<T>(count));
 
         #endregion
@@ -541,7 +608,7 @@ namespace NumSharp.Backends.Unmanaged
         private IEnumerable<T> _enumerate()
         {
             var len = this.Count;
-            for (int i = 0; i < len; i++)
+            for (long i = 0; i < len; i++)
             {
                 yield return this[i];
             }

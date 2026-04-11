@@ -68,7 +68,7 @@ namespace NumSharp.Backends
             // must go through the full slice path to create a proper view.
             if (_shape.IsContiguous)
             {
-                var indices = new int[slices.Length];
+                var indices = new long[slices.Length];
                 for (var i = 0; i < slices.Length; i++)
                 {
                     var inputSlice = slices[i];

@@ -148,7 +148,6 @@ public class AxisReductionEdgeCaseTests
     #region Empty array along axis tests
 
     [Test]
-    [OpenBugs] // BUG: Empty dimension axis reduction returns scalar instead of reduced-dimension array
     public void Sum_EmptyAlongAxis0()
     {
         // NumPy: np.sum(np.zeros((0, 3)), axis=0) = [0., 0., 0.]
@@ -163,7 +162,6 @@ public class AxisReductionEdgeCaseTests
     }
 
     [Test]
-    [OpenBugs] // BUG: Empty dimension axis reduction returns scalar instead of reduced-dimension array
     public void Sum_EmptyAlongAxis1()
     {
         // NumPy: np.sum(np.zeros((2, 0)), axis=1) = [0., 0.]
@@ -177,7 +175,6 @@ public class AxisReductionEdgeCaseTests
     }
 
     [Test]
-    [OpenBugs] // BUG: Empty dimension axis reduction returns scalar instead of reduced-dimension array
     public void Prod_EmptyAlongAxis()
     {
         // NumPy: np.prod(np.ones((0, 3)), axis=0) = [1., 1., 1.]
@@ -488,7 +485,6 @@ public class AxisReductionEdgeCaseTests
     #region Single element axis tests
 
     [Test]
-    [OpenBugs] // BUG: When axis has size 1, np.squeeze_fast returns view with incorrect data access
     public void Sum_SingleRowMatrix_Axis0()
     {
         // NumPy: np.sum([[1, 2, 3]], axis=0) = [1, 2, 3]
@@ -504,7 +500,6 @@ public class AxisReductionEdgeCaseTests
     }
 
     [Test]
-    [OpenBugs] // BUG: When axis has size 1, np.squeeze_fast returns view with incorrect data access
     public void Sum_SingleColumnMatrix_Axis1()
     {
         // NumPy: np.sum([[1], [2], [3]], axis=1) = [1, 2, 3]

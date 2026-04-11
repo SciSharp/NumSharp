@@ -16,12 +16,12 @@ namespace NumSharp
 
             if (ndim == 2)
             {
-                for (int col = 0; col < shape[1]; col++)
+                for (long col = 0; col < shape[1]; col++)
                 {
-                    double der = max.Storage.GetValue<double>(col) - min.Storage.GetValue<double>(col);
-                    for (int row = 0; row < shape[0]; row++)
+                    double der = max.Storage.GetValue<double>(new long[] { col }) - min.Storage.GetValue<double>(new long[] { col });
+                    for (long row = 0; row < shape[0]; row++)
                     {
-                        this[row, col] = (NDArray) (Storage.GetValue<double>(row, col) - min.Storage.GetValue<double>(col)) / der;
+                        this[row, col] = (NDArray) (Storage.GetValue<double>(new long[] { row, col }) - min.Storage.GetValue<double>(new long[] { col })) / der;
                     }
                 }
             }

@@ -50,5 +50,17 @@ namespace NumSharp
         {
             return Shape.AreBroadcastable(lhs.Shape, rhs.Shape);
         }
+
+        /// <summary>
+        ///     Tests if these two shapes are broadcastable against each other.
+        /// </summary>
+        /// <param name="shape1">First shape to test.</param>
+        /// <param name="shape2">Second shape to test.</param>
+        /// <returns>True if these can be broadcasted against each other.</returns>
+        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.broadcast_arrays.html</remarks>
+        public static bool are_broadcastable(long[] shape1, long[] shape2)
+        {
+            return Shape.AreBroadcastable(new Shape(shape1), new Shape(shape2));
+        }
     }
 }

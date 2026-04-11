@@ -1,5 +1,9 @@
 namespace NumSharp
 {
+    /// <summary>
+    ///     Bitwise OR operator for NDArray.
+    ///     Uses the object pattern matching NumPy's PyArray_FromAny behavior.
+    /// </summary>
     public partial class NDArray
     {
         /// <summary>
@@ -14,67 +18,19 @@ namespace NumSharp
         }
 
         /// <summary>
-        /// Element-wise bitwise OR with scalar.
+        /// Element-wise bitwise OR with any scalar or array-like.
         /// </summary>
-        public static NDArray operator |(NDArray lhs, byte rhs)
+        public static NDArray operator |(NDArray lhs, object rhs)
         {
-            return lhs.TensorEngine.BitwiseOr(lhs, Scalar(rhs));
+            return lhs | np.asanyarray(rhs);
         }
 
         /// <summary>
-        /// Element-wise bitwise OR with scalar.
+        /// Element-wise bitwise OR with any scalar or array-like on left.
         /// </summary>
-        public static NDArray operator |(byte lhs, NDArray rhs)
+        public static NDArray operator |(object lhs, NDArray rhs)
         {
-            return rhs.TensorEngine.BitwiseOr(Scalar(lhs), rhs);
-        }
-
-        /// <summary>
-        /// Element-wise bitwise OR with scalar.
-        /// </summary>
-        public static NDArray operator |(NDArray lhs, int rhs)
-        {
-            return lhs.TensorEngine.BitwiseOr(lhs, Scalar(rhs));
-        }
-
-        /// <summary>
-        /// Element-wise bitwise OR with scalar.
-        /// </summary>
-        public static NDArray operator |(int lhs, NDArray rhs)
-        {
-            return rhs.TensorEngine.BitwiseOr(Scalar(lhs), rhs);
-        }
-
-        /// <summary>
-        /// Element-wise bitwise OR with scalar.
-        /// </summary>
-        public static NDArray operator |(NDArray lhs, long rhs)
-        {
-            return lhs.TensorEngine.BitwiseOr(lhs, Scalar(rhs));
-        }
-
-        /// <summary>
-        /// Element-wise bitwise OR with scalar.
-        /// </summary>
-        public static NDArray operator |(long lhs, NDArray rhs)
-        {
-            return rhs.TensorEngine.BitwiseOr(Scalar(lhs), rhs);
-        }
-
-        /// <summary>
-        /// Element-wise bitwise OR with boolean scalar.
-        /// </summary>
-        public static NDArray operator |(NDArray lhs, bool rhs)
-        {
-            return lhs.TensorEngine.BitwiseOr(lhs, Scalar(rhs));
-        }
-
-        /// <summary>
-        /// Element-wise bitwise OR with boolean scalar.
-        /// </summary>
-        public static NDArray operator |(bool lhs, NDArray rhs)
-        {
-            return rhs.TensorEngine.BitwiseOr(Scalar(lhs), rhs);
+            return np.asanyarray(lhs) | rhs;
         }
     }
 }

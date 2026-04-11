@@ -240,7 +240,6 @@ public class BinaryOpTests
     }
 
     [Test]
-    [OpenBugs] // NumSharp does integer division, NumPy promotes to float64
     public void Divide_Int32_ReturnsDouble()
     {
         // NumPy: int32 / int32 returns float64
@@ -732,7 +731,7 @@ public class BinaryOpTests
         var result = np.arctan2(y, x);
 
         // Result shape should be (3, 2)
-        Assert.IsTrue(System.Linq.Enumerable.SequenceEqual(result.shape, new[] { 3, 2 }));
+        Assert.IsTrue(result.shape.SequenceEqual(new long[] { 3, 2 }));
 
         // Row 0: arctan2(1, 1) = π/4, arctan2(1, -1) = 3π/4
         Assert.IsTrue(Math.Abs(result.GetDouble(0, 0) - Math.PI / 4) < 1e-10);

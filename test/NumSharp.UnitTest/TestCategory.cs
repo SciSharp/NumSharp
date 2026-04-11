@@ -1,3 +1,4 @@
+using System;
 using TUnit.Core;
 
 namespace NumSharp.UnitTest;
@@ -31,12 +32,7 @@ namespace NumSharp.UnitTest;
 /// </code>
 ///
 /// <para><b>Usage:</b></para>
-/// <para>Apply at class level for entire test classes:</para>
-/// <code>
-/// [OpenBugs]  // or [Category(TestCategory.OpenBugs)]
-/// public class MyBugReproTests { ... }
-/// </code>
-/// <para>Or at individual test level:</para>
+/// <para>Apply at individual test level (class-level does not work with treenode filters):</para>
 /// <code>
 /// [Test]
 /// [OpenBugs]  // or [Category(TestCategory.OpenBugs)]
@@ -145,11 +141,54 @@ public static class TestCategory
     /// </para>
     /// </summary>
     public const string WindowsOnly = "WindowsOnly";
+
+    /// <summary>
+    /// Tests for long indexing support (arrays with size > int.MaxValue).
+    ///
+    /// <para><b>Purpose:</b></para>
+    /// <list type="bullet">
+    ///   <item>Tests that verify operations work correctly with > 2 billion elements</item>
+    ///   <item>Most use broadcast arrays or small allocations (run in CI)</item>
+    ///   <item>High-memory tests should also use <see cref="HighMemory"/></item>
+    /// </list>
+    ///
+    /// <para><b>CI Behavior:</b></para>
+    /// <para>
+    /// Runs in CI. Only tests also marked with <see cref="HighMemory"/> are excluded.
+    /// </para>
+    /// </summary>
+    public const string LongIndexing = "LongIndexing";
+
+    /// <summary>
+    /// Tests requiring high memory allocation (8GB+ RAM).
+    ///
+    /// <para><b>Purpose:</b></para>
+    /// <list type="bullet">
+    ///   <item>Tests that allocate > 2GB arrays (e.g., int.MaxValue * 1.1 byte arrays)</item>
+    ///   <item>Requires 8GB+ RAM to run without OutOfMemoryException</item>
+    ///   <item>Too resource-intensive for standard CI runners</item>
+    /// </list>
+    ///
+    /// <para><b>CI Behavior:</b></para>
+    /// <para>
+    /// Excluded from CI runs via <c>--treenode-filter "/*/*/*/*[Category!=HighMemory]"</c>.
+    /// </para>
+    ///
+    /// <para><b>Local Development:</b></para>
+    /// <code>
+    /// # Run ONLY HighMemory tests (requires 8GB+ RAM)
+    /// dotnet test -- --treenode-filter "/*/*/*/*[Category=HighMemory]"
+    /// </code>
+    /// </summary>
+    public const string HighMemory = "HighMemory";
 }
 
 /// <summary>
 /// Attribute for tests documenting known bugs that are expected to fail.
 /// Shorthand for <c>[Category("OpenBugs")]</c>.
+///
+/// <para><b>NOTE:</b> Must be applied to individual test methods, not classes.
+/// Class-level attributes do not work correctly with TUnit's treenode filters.</para>
 ///
 /// <para>See <see cref="TestCategory.OpenBugs"/> for full documentation.</para>
 /// </summary>
@@ -214,4 +253,67 @@ public class MisalignedAttribute : CategoryAttribute
 public class WindowsOnlyAttribute : CategoryAttribute
 {
     public WindowsOnlyAttribute() : base(TestCategory.WindowsOnly) { }
+}
+
+/// <summary>
+/// Attribute for tests verifying long indexing (> int.MaxValue elements).
+/// Shorthand for <c>[Category("LongIndexing")]</c>.
+///
+/// <para>See <see cref="TestCategory.LongIndexing"/> for full documentation.</para>
+/// </summary>
+public class LongIndexingAttribute : CategoryAttribute
+{
+    public LongIndexingAttribute() : base(TestCategory.LongIndexing) { }
+}
+
+/// <summary>
+/// Attribute for tests requiring high memory (8GB+ RAM).
+/// Shorthand for <c>[Category("HighMemory")]</c>.
+///
+/// <para>See <see cref="TestCategory.HighMemory"/> for full documentation.</para>
+/// </summary>
+/// <example>
+/// <code>
+/// [Test]
+/// [HighMemory]
+/// public async Task LargeArraySum()
+/// {
+///     // Allocates ~2.4GB
+///     using var arr = np.ones&lt;byte&gt;((long)(int.MaxValue * 1.1));
+///     var sum = np.sum(arr);
+/// }
+/// </code>
+/// </example>
+public class HighMemoryAttribute : CategoryAttribute
+{
+    public HighMemoryAttribute() : base(TestCategory.HighMemory) { }
+}
+
+/// <summary>
+/// Attribute for tests that allocate large amounts of memory and crash CI runners.
+/// Inherits from <see cref="OpenBugsAttribute"/> so tests are automatically excluded
+/// from CI via the <c>[Category!=OpenBugs]</c> filter.
+///
+/// <para><b>NOTE:</b> Must be applied to individual test methods, not classes.
+/// Class-level attributes do not work correctly with TUnit's treenode filters.</para>
+///
+/// <para>Use this instead of [OpenBugs] for memory-intensive tests that aren't actually bugs,
+/// just too heavy for CI runners.</para>
+/// </summary>
+/// <example>
+/// <code>
+/// [Test]
+/// [LargeMemoryTest]  // Auto-excluded from CI
+/// public async Task Allocate_4GB()
+/// {
+///     var arr = np.ones&lt;int&gt;((4L * 1024 * 1024 * 1024 / 4));  // 4GB
+/// }
+/// </code>
+/// </example>
+public class LargeMemoryTestAttribute : OpenBugsAttribute
+{
+    public LargeMemoryTestAttribute()
+    {
+        // Inherits OpenBugs category for CI exclusion
+    }
 }

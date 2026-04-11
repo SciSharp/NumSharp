@@ -7,10 +7,10 @@ namespace NumSharp.Utilities
     {
         public int Axis;
         private readonly Action<NDCoordinatesAxisIncrementor> endCallback;
-        private readonly int[] dimensions;
+        private readonly long[] dimensions;
         private readonly int resetto;
         public readonly Slice[] Slices;
-        public readonly int[] Index;
+        public readonly long[] Index;
         private int subcursor;
 
         public NDCoordinatesAxisIncrementor(ref Shape shape, int axis)
@@ -30,7 +30,7 @@ namespace NumSharp.Utilities
             Axis = axis;
 
             dimensions = shape.dimensions;
-            Index = new int[dimensions.Length];
+            Index = new long[dimensions.Length];
             if (axis == dimensions.Length - 1)
                 resetto = subcursor = dimensions.Length - 2;
             else
@@ -47,7 +47,7 @@ namespace NumSharp.Utilities
             this.endCallback = endCallback;
         }
 
-        public NDCoordinatesAxisIncrementor(int[] dims, int axis)
+        public NDCoordinatesAxisIncrementor(long[] dims, int axis)
         {
             if (dims == null)
                 throw new InvalidOperationException("Can't construct NDCoordinatesAxisIncrementor with an empty shape.");
@@ -59,11 +59,11 @@ namespace NumSharp.Utilities
                 throw new ArgumentOutOfRangeException(nameof(axis));
 
             if (dims.Length == 0)
-                dims = new int[] {1};
+                dims = new long[] {1};
 
             dimensions = dims;
             Axis = axis;
-            Index = new int[dims.Length];
+            Index = new long[dims.Length];
             if (axis == dimensions.Length - 1)
                 resetto = subcursor = dimensions.Length - 2;
             else
@@ -75,7 +75,7 @@ namespace NumSharp.Utilities
             Slices[Axis] = Slice.All;
         }
 
-        public NDCoordinatesAxisIncrementor(int[] dims, int axis, Action<NDCoordinatesAxisIncrementor> endCallback) : this(dims, axis)
+        public NDCoordinatesAxisIncrementor(long[] dims, int axis, Action<NDCoordinatesAxisIncrementor> endCallback) : this(dims, axis)
         {
             this.endCallback = endCallback;
         }

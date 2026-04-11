@@ -263,13 +263,13 @@ namespace NumSharp.UnitTest.Backends
         public void Base_ViewKeepsDataAlive()
         {
             NDArray view;
-            int expectedValue;
+            long expectedValue;
 
             // Create original in inner scope
             {
                 var original = np.arange(10);
                 view = original["2:5"];
-                expectedValue = (int)original.GetInt32(2);
+                expectedValue = original.GetInt64(2);
             }
 
             // Force GC
@@ -278,7 +278,7 @@ namespace NumSharp.UnitTest.Backends
             GC.Collect();
 
             // View should still have valid data
-            view.GetInt32(0).Should().Be(expectedValue);
+            view.GetInt64(0).Should().Be(expectedValue);
         }
 
         /// <summary>
@@ -302,7 +302,7 @@ namespace NumSharp.UnitTest.Backends
 
             // deepView should still be valid
             deepView.size.Should().Be(40);
-            deepView.GetInt32(0).Should().Be(30); // a[30]
+            deepView.GetInt64(0).Should().Be(30L); // a[30]
         }
 
         /// <summary>
@@ -357,7 +357,7 @@ namespace NumSharp.UnitTest.Backends
             {
                 for (int j = 0; j < 4; j++)
                 {
-                    reshaped.GetInt32(i, j).Should().Be(expected++);
+                    reshaped.GetInt64(i, j).Should().Be(expected++);
                 }
             }
         }
@@ -380,11 +380,11 @@ namespace NumSharp.UnitTest.Backends
             GC.Collect();
 
             // Verify transposed data
-            transposed.Shape.dimensions.Should().BeEquivalentTo(new[] { 3, 2 });
-            transposed.GetInt32(0, 0).Should().Be(0);
-            transposed.GetInt32(0, 1).Should().Be(3);
-            transposed.GetInt32(1, 0).Should().Be(1);
-            transposed.GetInt32(1, 1).Should().Be(4);
+            transposed.Shape.dimensions.Should().BeEquivalentTo(new long[] { 3, 2 });
+            transposed.GetInt64(0, 0).Should().Be(0);
+            transposed.GetInt64(0, 1).Should().Be(3);
+            transposed.GetInt64(1, 0).Should().Be(1);
+            transposed.GetInt64(1, 1).Should().Be(4);
         }
 
         #endregion

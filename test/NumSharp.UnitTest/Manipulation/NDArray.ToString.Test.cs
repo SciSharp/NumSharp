@@ -14,26 +14,26 @@ namespace NumSharp.UnitTest.Manipulation
         {
             var nd = np.arange(6);
             var n1 = np.reshape(nd, 3, 2);
-            var n = n1.MakeGeneric<int>();
+            var n = n1.MakeGeneric<long>();
 
             Assert.IsTrue(n[0, 0] == 0);
             Assert.IsTrue(n[1, 1] == 3);
             Assert.IsTrue(n[2, 1] == 5);
 
-            n = np.reshape(np.arange(6), 2, 3, 1).MakeGeneric<int>();
+            n = np.reshape(np.arange(6), 2, 3, 1).MakeGeneric<long>();
             Assert.IsTrue(n[1, 1, 0] == 4);
             Assert.IsTrue(n[1, 2, 0] == 5);
 
-            n = np.reshape(np.arange(12), 2, 3, 2).MakeGeneric<int>();
+            n = np.reshape(np.arange(12), 2, 3, 2).MakeGeneric<long>();
             Assert.IsTrue(n[0, 0, 1] == 1);
             Assert.IsTrue(n[1, 0, 1] == 7);
             Assert.IsTrue(n[1, 1, 0] == 8);
 
-            n = np.reshape(np.arange(12), 3, 4).MakeGeneric<int>();
+            n = np.reshape(np.arange(12), 3, 4).MakeGeneric<long>();
             Assert.IsTrue(n[1, 1] == 5);
             Assert.IsTrue(n[2, 0] == 8);
 
-            n = np.reshape(n, 2, 6).MakeGeneric<int>();
+            n = np.reshape(n, 2, 6).MakeGeneric<long>();
 
             Assert.IsTrue(n[1, 0] == 6);
         }

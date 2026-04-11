@@ -55,18 +55,12 @@ namespace NumSharp.Backends.Unmanaged
             }
         }
 
-        public static IMemoryBlock Allocate(Type elementType, int count)
+        public static IMemoryBlock Allocate(Type elementType, long count)
         {
             switch (elementType.GetTypeCode())
             {
-#if _REGEN
-	            %foreach supported_dtypes,supported_dtypes_lowercase%
-	            case NPTypeCode.#1:
-                    return new UnmanagedMemoryBlock<#2>(count);
-	            %
-	            default:
-		            throw new NotSupportedException();
-#else
+                case NPTypeCode.Boolean:
+                    return new UnmanagedMemoryBlock<bool>(count);
                 case NPTypeCode.Byte:
                     return new UnmanagedMemoryBlock<byte>(count);
                 case NPTypeCode.Int16:
@@ -91,22 +85,21 @@ namespace NumSharp.Backends.Unmanaged
                     return new UnmanagedMemoryBlock<decimal>(count);
                 default:
                     throw new NotSupportedException();
-#endif
             }
         }
 
-        public static IMemoryBlock Allocate(Type elementType, int count, object fill)
+        /// <summary>
+        /// Backwards-compatible overload accepting int count.
+        /// </summary>
+        public static IMemoryBlock Allocate(Type elementType, int count)
+            => Allocate(elementType, (long)count);
+
+        public static IMemoryBlock Allocate(Type elementType, long count, object fill)
         {
             switch (elementType.GetTypeCode())
             {
-#if _REGEN
-	            %foreach supported_dtypes,supported_dtypes_lowercase%
-	            case NPTypeCode.#1:
-                    return new UnmanagedMemoryBlock<#2>(count, (#2)fill);
-	            %
-	            default:
-		            throw new NotSupportedException();
-#else
+                case NPTypeCode.Boolean:
+                    return new UnmanagedMemoryBlock<bool>(count, (bool)fill);
                 case NPTypeCode.Byte:
                     return new UnmanagedMemoryBlock<byte>(count, (byte)fill);
                 case NPTypeCode.Int16:
@@ -131,8 +124,13 @@ namespace NumSharp.Backends.Unmanaged
                     return new UnmanagedMemoryBlock<decimal>(count, (decimal)fill);
                 default:
                     throw new NotSupportedException();
-#endif
             }
         }
+
+        /// <summary>
+        /// Backwards-compatible overload accepting int count.
+        /// </summary>
+        public static IMemoryBlock Allocate(Type elementType, int count, object fill)
+            => Allocate(elementType, (long)count, fill);
     }
 }

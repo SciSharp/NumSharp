@@ -35,7 +35,7 @@ namespace NumSharp.Backends.Kernels
         /// <param name="src">Source array pointer</param>
         /// <param name="size">Number of elements</param>
         /// <param name="indices">Output list to populate with non-zero indices</param>
-        internal static unsafe void NonZeroSimdHelper<T>(T* src, int size, System.Collections.Generic.List<int> indices)
+        internal static unsafe void NonZeroSimdHelper<T>(T* src, long size, System.Collections.Generic.List<long> indices)
             where T : unmanaged
         {
             if (size == 0)
@@ -44,9 +44,9 @@ namespace NumSharp.Backends.Kernels
             if (Vector256.IsHardwareAccelerated && Vector256<T>.IsSupported && size >= Vector256<T>.Count)
             {
                 int vectorCount = Vector256<T>.Count;
-                int vectorEnd = size - vectorCount;
+                long vectorEnd = size - vectorCount;
                 var zero = Vector256<T>.Zero;
-                int i = 0;
+                long i = 0;
 
                 for (; i <= vectorEnd; i += vectorCount)
                 {
@@ -76,9 +76,9 @@ namespace NumSharp.Backends.Kernels
             else if (Vector128.IsHardwareAccelerated && Vector128<T>.IsSupported && size >= Vector128<T>.Count)
             {
                 int vectorCount = Vector128<T>.Count;
-                int vectorEnd = size - vectorCount;
+                long vectorEnd = size - vectorCount;
                 var zero = Vector128<T>.Zero;
-                int i = 0;
+                long i = 0;
 
                 for (; i <= vectorEnd; i += vectorCount)
                 {
@@ -105,7 +105,7 @@ namespace NumSharp.Backends.Kernels
             else
             {
                 // Scalar fallback
-                for (int i = 0; i < size; i++)
+                for (long i = 0; i < size; i++)
                 {
                     if (!System.Collections.Generic.EqualityComparer<T>.Default.Equals(src[i], default))
                         indices.Add(i);
@@ -118,25 +118,25 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         /// <param name="flatIndices">List of flat (linear) indices</param>
         /// <param name="shape">Shape of the array</param>
-        /// <returns>Array of NDArray&lt;int&gt;, one per dimension</returns>
-        internal static unsafe NumSharp.Generic.NDArray<int>[] ConvertFlatIndicesToCoordinates(
-            System.Collections.Generic.List<int> flatIndices, int[] shape)
+        /// <returns>Array of NDArray&lt;long&gt;, one per dimension</returns>
+        internal static unsafe NumSharp.Generic.NDArray<long>[] ConvertFlatIndicesToCoordinates(
+            System.Collections.Generic.List<long> flatIndices, long[] shape)
         {
             int ndim = shape.Length;
             int len = flatIndices.Count;
 
             // Create result arrays
-            var result = new NumSharp.Generic.NDArray<int>[ndim];
+            var result = new NumSharp.Generic.NDArray<long>[ndim];
             for (int d = 0; d < ndim; d++)
-                result[d] = new NumSharp.Generic.NDArray<int>(len);
+                result[d] = new NumSharp.Generic.NDArray<long>(len);
 
             // Get addresses for direct writing
-            var addresses = new int*[ndim];
+            var addresses = new long*[ndim];
             for (int d = 0; d < ndim; d++)
-                addresses[d] = (int*)result[d].Address;
+                addresses[d] = (long*)result[d].Address;
 
             // Pre-compute strides for index conversion
-            var strides = new int[ndim];
+            var strides = new long[ndim];
             strides[ndim - 1] = 1;
             for (int d = ndim - 2; d >= 0; d--)
                 strides[d] = strides[d + 1] * shape[d + 1];
@@ -144,7 +144,7 @@ namespace NumSharp.Backends.Kernels
             // Convert each flat index to coordinates
             for (int i = 0; i < len; i++)
             {
-                int flatIdx = flatIndices[i];
+                long flatIdx = flatIndices[i];
                 for (int d = 0; d < ndim; d++)
                 {
                     addresses[d][i] = flatIdx / strides[d];
@@ -165,38 +165,43 @@ namespace NumSharp.Backends.Kernels
         /// <param name="shape">Array dimensions</param>
         /// <param name="strides">Array strides (elements, not bytes)</param>
         /// <param name="offset">Base offset into storage</param>
-        /// <returns>Array of NDArray&lt;int&gt;, one per dimension</returns>
-        internal static unsafe NumSharp.Generic.NDArray<int>[] FindNonZeroStridedHelper<T>(
-            T* data, int[] shape, int[] strides, int offset) where T : unmanaged
+        /// <returns>Array of NDArray&lt;long&gt;, one per dimension</returns>
+        internal static unsafe NumSharp.Generic.NDArray<long>[] FindNonZeroStridedHelper<T>(
+            T* data, long[] shape, long[] strides, long offset) where T : unmanaged
         {
             int ndim = shape.Length;
 
             // Handle empty array
-            int size = 1;
+            long size = 1;
             for (int d = 0; d < ndim; d++)
                 size *= shape[d];
 
             if (size == 0)
             {
-                var emptyResult = new NumSharp.Generic.NDArray<int>[ndim];
+                var emptyResult = new NumSharp.Generic.NDArray<long>[ndim];
                 for (int d = 0; d < ndim; d++)
-                    emptyResult[d] = new NumSharp.Generic.NDArray<int>(0);
+                    emptyResult[d] = new NumSharp.Generic.NDArray<long>(0);
                 return emptyResult;
             }
 
             // Collect coordinates of non-zero elements
             // Pre-allocate with estimated capacity (assume ~25% non-zero for efficiency)
-            var nonzeroCoords = new System.Collections.Generic.List<int[]>(Math.Max(16, size / 4));
+            // List<T> capacity is int-limited by .NET design.
+            // For very large arrays, start with a reasonable capacity and let it grow.
+            int initialCapacity = size <= int.MaxValue
+                ? Math.Max(16, (int)(size / 4))
+                : 1 << 20; // 1M for very large arrays
+            var nonzeroCoords = new System.Collections.Generic.List<long[]>(initialCapacity);
 
             // Initialize coordinate array
-            var coords = new int[ndim];
+            var coords = new long[ndim];
 
             // Iterate through all elements using coordinate-based iteration
             // This handles arbitrary strides including negative strides
             while (true)
             {
                 // Calculate offset for current coordinates: offset + sum(coords[i] * strides[i])
-                int elemOffset = offset;
+                long elemOffset = offset;
                 for (int d = 0; d < ndim; d++)
                     elemOffset += coords[d] * strides[d];
 
@@ -204,7 +209,7 @@ namespace NumSharp.Backends.Kernels
                 if (!System.Collections.Generic.EqualityComparer<T>.Default.Equals(data[elemOffset], default))
                 {
                     // Clone coordinates and add to result
-                    var coordsCopy = new int[ndim];
+                    var coordsCopy = new long[ndim];
                     Array.Copy(coords, coordsCopy, ndim);
                     nonzeroCoords.Add(coordsCopy);
                 }
@@ -227,14 +232,14 @@ namespace NumSharp.Backends.Kernels
 
             // Convert collected coordinates to per-dimension arrays
             int len = nonzeroCoords.Count;
-            var result = new NumSharp.Generic.NDArray<int>[ndim];
+            var result = new NumSharp.Generic.NDArray<long>[ndim];
             for (int d = 0; d < ndim; d++)
-                result[d] = new NumSharp.Generic.NDArray<int>(len);
+                result[d] = new NumSharp.Generic.NDArray<long>(len);
 
             // Get addresses for direct writing
-            var addresses = new int*[ndim];
+            var addresses = new long*[ndim];
             for (int d = 0; d < ndim; d++)
-                addresses[d] = (int*)result[d].Address;
+                addresses[d] = (long*)result[d].Address;
 
             // Extract coordinates into per-dimension arrays
             for (int i = 0; i < len; i++)

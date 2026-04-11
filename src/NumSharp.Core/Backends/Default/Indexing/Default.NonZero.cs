@@ -2,6 +2,7 @@ using System;
 using NumSharp.Generic;
 using System.Collections.Generic;
 using NumSharp.Backends.Kernels;
+using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp.Backends
 {
@@ -18,8 +19,8 @@ namespace NumSharp.Backends
         /// - Handles contiguous and strided arrays efficiently
         /// </remarks>
         /// <param name="nd">Input array</param>
-        /// <returns>Array of NDArray&lt;int&gt;, one per dimension containing indices of non-zero elements</returns>
-        public override NDArray<int>[] NonZero(NDArray nd)
+        /// <returns>Array of NDArray&lt;long&gt;, one per dimension containing indices of non-zero elements</returns>
+        public override NDArray<long>[] NonZero(NDArray nd)
         {
             // Type dispatch to generic implementation
             switch (nd.typecode)
@@ -43,9 +44,9 @@ namespace NumSharp.Backends
 
         /// <summary>
         /// Generic implementation of nonzero using ILKernelGenerator.
-        /// Both contiguous and strided paths now use the unified IL-based approach.
+        /// Uses coordinate-based iteration via ILKernelGenerator for all cases.
         /// </summary>
-        private static unsafe NDArray<int>[] nonzeros<T>(NDArray<T> x) where T : unmanaged
+        private static unsafe NDArray<long>[] nonzeros<T>(NDArray<T> x) where T : unmanaged
         {
             // Ensure at least 1D (NumPy behavior)
             x = np.atleast_1d(x).MakeGeneric<T>();
@@ -57,22 +58,14 @@ namespace NumSharp.Backends
             // NumPy: np.nonzero(np.array([])) -> (array([], dtype=int64),)
             if (size == 0)
             {
-                var emptyResult = new NDArray<int>[ndim];
+                var emptyResult = new NDArray<long>[ndim];
                 for (int i = 0; i < ndim; i++)
-                    emptyResult[i] = new NDArray<int>(0);
+                    emptyResult[i] = new NDArray<long>(0);
                 return emptyResult;
             }
 
-            // SIMD fast path for contiguous arrays
-            if (shape.IsContiguous && ILKernelGenerator.Enabled && ILKernelGenerator.VectorBits > 0)
-            {
-                var flatIndices = new List<int>(Math.Max(16, size / 4));
-                ILKernelGenerator.NonZeroSimdHelper((T*)x.Address, size, flatIndices);
-                return ILKernelGenerator.ConvertFlatIndicesToCoordinates(flatIndices, x.shape);
-            }
-
-            // Strided path for non-contiguous arrays (transposed, sliced, etc.)
-            // Uses coordinate-based iteration via ILKernelGenerator
+            // Use strided helper for all cases (handles both contiguous and non-contiguous)
+            // The ILKernelGenerator.FindNonZeroStridedHelper uses coordinate-based iteration
             return ILKernelGenerator.FindNonZeroStridedHelper((T*)x.Address, shape.dimensions, shape.strides, shape.offset);
         }
 
@@ -82,7 +75,7 @@ namespace NumSharp.Backends
         /// <remarks>
         /// NumPy-aligned: np.count_nonzero([0, 1, 0, 2]) = 2
         /// </remarks>
-        public override int CountNonZero(NDArray nd)
+        public override long CountNonZero(NDArray nd)
         {
             if (nd.size == 0)
                 return 0;
@@ -121,7 +114,7 @@ namespace NumSharp.Backends
                 throw new ArgumentOutOfRangeException(nameof(axis));
 
             // Compute output shape
-            var outputDims = new int[nd.ndim - 1];
+            var outputDims = new long[nd.ndim - 1];
             for (int d = 0, od = 0; d < nd.ndim; d++)
                 if (d != axis) outputDims[od++] = shape.dimensions[d];
 
@@ -133,7 +126,7 @@ namespace NumSharp.Backends
                 // Already zeros from allocation
                 if (keepdims)
                 {
-                    var ks = new int[nd.ndim];
+                    var ks = new long[nd.ndim];
                     for (int d = 0, sd = 0; d < nd.ndim; d++)
                         ks[d] = (d == axis) ? 1 : outputDims[sd++];
                     result.Storage.Reshape(new Shape(ks));
@@ -162,7 +155,7 @@ namespace NumSharp.Backends
 
             if (keepdims)
             {
-                var ks = new int[nd.ndim];
+                var ks = new long[nd.ndim];
                 for (int d = 0, sd = 0; d < nd.ndim; d++)
                     ks[d] = (d == axis) ? 1 : (sd < outputDims.Length ? outputDims[sd++] : 1);
                 result.Storage.Reshape(new Shape(ks));
@@ -174,18 +167,18 @@ namespace NumSharp.Backends
         /// <summary>
         /// Generic implementation of count_nonzero (element-wise).
         /// </summary>
-        private static unsafe int count_nonzero<T>(NDArray<T> x) where T : unmanaged
+        private static unsafe long count_nonzero<T>(NDArray<T> x) where T : unmanaged
         {
             var shape = x.Shape;
             var size = x.size;
-            int count = 0;
+            long count = 0;
 
             if (shape.IsContiguous)
             {
                 // Fast path for contiguous arrays
                 T* ptr = (T*)x.Address;
                 T zero = default;
-                for (int i = 0; i < size; i++)
+                for (long i = 0; i < size; i++)
                 {
                     if (!EqualityComparer<T>.Default.Equals(ptr[i], zero))
                         count++;
@@ -214,13 +207,13 @@ namespace NumSharp.Backends
         private static unsafe void count_nonzero_axis<T>(NDArray<T> x, NDArray result, int axis) where T : unmanaged
         {
             var shape = x.Shape;
-            var axisSize = shape.dimensions[axis];
+            long axisSize = shape.dimensions[axis];
             var outputSize = result.size;
             T zero = default;
 
             // Compute output dimension strides for coordinate calculation
             int outputNdim = x.ndim - 1;
-            Span<int> outputDimStrides = stackalloc int[outputNdim > 0 ? outputNdim : 1];
+            Span<long> outputDimStrides = stackalloc long[outputNdim > 0 ? outputNdim : 1];
             if (outputNdim > 0)
             {
                 outputDimStrides[outputNdim - 1] = 1;
@@ -232,21 +225,21 @@ namespace NumSharp.Backends
                 }
             }
 
-            int axisStride = shape.strides[axis];
+            long axisStride = shape.strides[axis];
 
             // Use direct pointer access to result array (result is contiguous Int64)
             long* resultPtr = (long*)result.Address;
 
-            for (int outIdx = 0; outIdx < outputSize; outIdx++)
+            for (long outIdx = 0; outIdx < outputSize; outIdx++)
             {
                 // Convert linear output index to input coordinates
-                int remaining = outIdx;
-                int inputBaseOffset = 0;
+                long remaining = outIdx;
+                long inputBaseOffset = 0;
 
                 for (int d = 0; d < outputNdim; d++)
                 {
                     int inputDim = d >= axis ? d + 1 : d;
-                    int coord = remaining / outputDimStrides[d];
+                    long coord = remaining / outputDimStrides[d];
                     remaining = remaining % outputDimStrides[d];
                     inputBaseOffset += coord * shape.strides[inputDim];
                 }
@@ -254,7 +247,7 @@ namespace NumSharp.Backends
                 // Count non-zeros along axis
                 long count = 0;
                 T* basePtr = (T*)x.Address + shape.offset + inputBaseOffset;
-                for (int i = 0; i < axisSize; i++)
+                for (long i = 0; i < axisSize; i++)
                 {
                     if (!EqualityComparer<T>.Default.Equals(basePtr[i * axisStride], zero))
                         count++;
@@ -264,5 +257,6 @@ namespace NumSharp.Backends
                 resultPtr[outIdx] = count;
             }
         }
+
     }
 }

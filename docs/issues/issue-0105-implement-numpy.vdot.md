@@ -11,7 +11,7 @@
 ## Description
 
 Return the dot product of two vectors.
-https://numpy.org/doc/stable-1.15.1/reference/generated/numpy.vdot.html#numpy.vdot
+https://docs.scipy.org/doc/numpy-1.15.1/reference/generated/numpy.vdot.html#numpy.vdot
 
 `ndarray.vdot` should be put in `LinearAlgebra` folder.
 

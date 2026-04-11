@@ -160,7 +160,7 @@ public class NpSearchsortedEdgeCaseTests
     [Test]
     public void Int32Array_IntSearch()
     {
-        var arr = np.array(new int[] { 1, 2, 3, 4, 5 });
+        var arr = np.array(new long[] { 1, 2, 3, 4, 5 });
         var result = np.searchsorted(arr, 3);
         Assert.AreEqual(2, result);
     }
@@ -210,7 +210,7 @@ public class NpSearchsortedEdgeCaseTests
         var values = np.array(new[] { 2 });
         var result = np.searchsorted(arr, values);
         Assert.AreEqual(1, result.size);
-        Assert.AreEqual(1, result.GetInt32(0));
+        Assert.AreEqual(1L, result.GetInt64(0));
     }
 
     [Test]
@@ -221,8 +221,8 @@ public class NpSearchsortedEdgeCaseTests
         var values = np.array(new[] { 2, 4 });
         var result = np.searchsorted(arr, values);
         Assert.AreEqual(2, result.size);
-        Assert.AreEqual(1, result.GetInt32(0));
-        Assert.AreEqual(3, result.GetInt32(1));
+        Assert.AreEqual(1L, result.GetInt64(0));
+        Assert.AreEqual(3L, result.GetInt64(1));
     }
 
     [Test]
@@ -233,8 +233,8 @@ public class NpSearchsortedEdgeCaseTests
         var values = np.array(new[] { -5, 100 });
         var result = np.searchsorted(arr, values);
         Assert.AreEqual(2, result.size);
-        Assert.AreEqual(0, result.GetInt32(0));
-        Assert.AreEqual(3, result.GetInt32(1));
+        Assert.AreEqual(0L, result.GetInt64(0));
+        Assert.AreEqual(3L, result.GetInt64(1));
     }
 
     [Test]
@@ -245,10 +245,10 @@ public class NpSearchsortedEdgeCaseTests
         var values = np.array(new[] { -10, 20, 12, 13 });
         var result = np.searchsorted(arr, values);
         Assert.AreEqual(4, result.size);
-        Assert.AreEqual(0, result.GetInt32(0));
-        Assert.AreEqual(5, result.GetInt32(1));
-        Assert.AreEqual(1, result.GetInt32(2));
-        Assert.AreEqual(2, result.GetInt32(3));
+        Assert.AreEqual(0L, result.GetInt64(0));
+        Assert.AreEqual(5L, result.GetInt64(1));
+        Assert.AreEqual(1L, result.GetInt64(2));
+        Assert.AreEqual(2L, result.GetInt64(3));
     }
 
     [Test]
@@ -259,8 +259,8 @@ public class NpSearchsortedEdgeCaseTests
         var values = np.array(new[] { 1.5, 2.5 });
         var result = np.searchsorted(arr, values);
         Assert.AreEqual(2, result.size);
-        Assert.AreEqual(1, result.GetInt32(0));
-        Assert.AreEqual(2, result.GetInt32(1));
+        Assert.AreEqual(1L, result.GetInt64(0));
+        Assert.AreEqual(2L, result.GetInt64(1));
     }
 
     #endregion
@@ -277,7 +277,7 @@ public class NpSearchsortedEdgeCaseTests
 
         // Result should be a scalar NDArray
         Assert.IsTrue(result.Shape.IsScalar, "Result should be scalar");
-        Assert.AreEqual(1, result.GetInt32());
+        Assert.AreEqual(1L, result.GetInt64());
     }
 
     [Test]
@@ -289,7 +289,7 @@ public class NpSearchsortedEdgeCaseTests
         var result = np.searchsorted(arr, scalar);
 
         Assert.IsTrue(result.Shape.IsScalar, "Result should be scalar");
-        Assert.AreEqual(2, result.GetInt32());
+        Assert.AreEqual(2L, result.GetInt64());
     }
 
     #endregion

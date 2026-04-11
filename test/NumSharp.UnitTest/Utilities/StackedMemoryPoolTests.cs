@@ -3,7 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using NumSharp.Memory.Pooling;
+
 using NumSharp.Unmanaged.Memory;
 
 namespace NumSharp.UnitTest.Utilities

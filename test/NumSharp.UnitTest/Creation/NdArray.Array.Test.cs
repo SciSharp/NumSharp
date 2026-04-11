@@ -31,7 +31,7 @@ namespace NumSharp.UnitTest.Creation
             var list1 = new int[,] {{1, 2, 3}, {2, 3, 1}};
 
             var n1 = np.array(list1);
-            Assert.IsTrue(Enumerable.SequenceEqual(n1.shape, new int[] {2, 3}));
+            Assert.IsTrue(n1.shape.SequenceEqual(new long[] {2, 3}));
             Assert.IsTrue(Enumerable.SequenceEqual(n1.Data<int>(), new int[] {1, 2, 3, 2, 3, 1}));
         }
 
@@ -58,7 +58,7 @@ namespace NumSharp.UnitTest.Creation
             var list = new int[,,] {{{1, 2}, {3, 4}}, {{2, 2}, {3, 3}}, {{3, 2}, {3, 1}},};
 
             var nd = np.array(list);
-            Assert.IsTrue(Enumerable.SequenceEqual(nd.shape, new int[] {3, 2, 2}));
+            Assert.IsTrue(nd.shape.SequenceEqual(new long[] {3, 2, 2}));
             Assert.IsTrue(Enumerable.SequenceEqual(nd.Data<int>(), new int[] {1, 2, 3, 4, 2, 2, 3, 3, 3, 2, 3, 1}));
         }
 

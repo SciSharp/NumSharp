@@ -26,14 +26,24 @@ namespace NumSharp
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.all.html
         public static NDArray<bool> all(NDArray nd, int axis, bool keepdims = false)
         {
-            if (nd == null)
+            if (nd is null)
             {
                 throw new ArgumentNullException(nameof(nd), "Can't operate with null array");
             }
+
+            // Handle 0D arrays specially - NumPy 2.x allows axis=0 or axis=-1 on 0D arrays
             if (nd.ndim == 0)
             {
-                throw new ArgumentException("Can't operate with zero-dimensional array");
+                if (axis == 0 || axis == -1)
+                {
+                    // Return the scalar result as a 0D boolean array
+                    bool result = nd.TensorEngine.All(nd);
+                    return np.array(result).MakeGeneric<bool>();
+                }
+                throw new ArgumentOutOfRangeException(nameof(axis),
+                    $"axis {axis} is out of bounds for array of dimension 0");
             }
+
             if (axis < 0)
                 axis = nd.ndim + axis;
             if (axis < 0 || axis >= nd.ndim)
@@ -41,8 +51,8 @@ namespace NumSharp
                 throw new ArgumentOutOfRangeException(nameof(axis));
             }
 
-            int[] inputShape = nd.shape;
-            int[] outputShape = new int[keepdims ? inputShape.Length : inputShape.Length - 1];
+            long[] inputShape = nd.shape;
+            long[] outputShape = new long[keepdims ? inputShape.Length : inputShape.Length - 1];
             int outputIndex = 0;
             for (int i = 0; i < inputShape.Length; i++)
             {
@@ -57,11 +67,10 @@ namespace NumSharp
             }
 
             NDArray<bool> resultArray = zeros<bool>(outputShape).MakeGeneric<bool>();
-            Span<bool> resultSpan = resultArray.GetData().AsSpan<bool>();
 
-            int axisSize = inputShape[axis];
+            long axisSize = inputShape[axis];
 
-            int postAxisStride = 1;
+            long postAxisStride = 1;
             for (int i = axis + 1; i < inputShape.Length; i++)
             {
                 postAxisStride *= inputShape[i];
@@ -70,18 +79,18 @@ namespace NumSharp
             // Dispatch by type
             bool success = nd.typecode switch
             {
-                NPTypeCode.Boolean => ComputeAllPerAxis(nd.MakeGeneric<bool>(), axisSize, postAxisStride, resultSpan),
-                NPTypeCode.Byte => ComputeAllPerAxis(nd.MakeGeneric<byte>(), axisSize, postAxisStride, resultSpan),
-                NPTypeCode.Int16 => ComputeAllPerAxis(nd.MakeGeneric<short>(), axisSize, postAxisStride, resultSpan),
-                NPTypeCode.UInt16 => ComputeAllPerAxis(nd.MakeGeneric<ushort>(), axisSize, postAxisStride, resultSpan),
-                NPTypeCode.Int32 => ComputeAllPerAxis(nd.MakeGeneric<int>(), axisSize, postAxisStride, resultSpan),
-                NPTypeCode.UInt32 => ComputeAllPerAxis(nd.MakeGeneric<uint>(), axisSize, postAxisStride, resultSpan),
-                NPTypeCode.Int64 => ComputeAllPerAxis(nd.MakeGeneric<long>(), axisSize, postAxisStride, resultSpan),
-                NPTypeCode.UInt64 => ComputeAllPerAxis(nd.MakeGeneric<ulong>(), axisSize, postAxisStride, resultSpan),
-                NPTypeCode.Char => ComputeAllPerAxis(nd.MakeGeneric<char>(), axisSize, postAxisStride, resultSpan),
-                NPTypeCode.Double => ComputeAllPerAxis(nd.MakeGeneric<double>(), axisSize, postAxisStride, resultSpan),
-                NPTypeCode.Single => ComputeAllPerAxis(nd.MakeGeneric<float>(), axisSize, postAxisStride, resultSpan),
-                NPTypeCode.Decimal => ComputeAllPerAxis(nd.MakeGeneric<decimal>(), axisSize, postAxisStride, resultSpan),
+                NPTypeCode.Boolean => ComputeAllPerAxis(nd.MakeGeneric<bool>(), axisSize, postAxisStride, resultArray),
+                NPTypeCode.Byte => ComputeAllPerAxis(nd.MakeGeneric<byte>(), axisSize, postAxisStride, resultArray),
+                NPTypeCode.Int16 => ComputeAllPerAxis(nd.MakeGeneric<short>(), axisSize, postAxisStride, resultArray),
+                NPTypeCode.UInt16 => ComputeAllPerAxis(nd.MakeGeneric<ushort>(), axisSize, postAxisStride, resultArray),
+                NPTypeCode.Int32 => ComputeAllPerAxis(nd.MakeGeneric<int>(), axisSize, postAxisStride, resultArray),
+                NPTypeCode.UInt32 => ComputeAllPerAxis(nd.MakeGeneric<uint>(), axisSize, postAxisStride, resultArray),
+                NPTypeCode.Int64 => ComputeAllPerAxis(nd.MakeGeneric<long>(), axisSize, postAxisStride, resultArray),
+                NPTypeCode.UInt64 => ComputeAllPerAxis(nd.MakeGeneric<ulong>(), axisSize, postAxisStride, resultArray),
+                NPTypeCode.Char => ComputeAllPerAxis(nd.MakeGeneric<char>(), axisSize, postAxisStride, resultArray),
+                NPTypeCode.Double => ComputeAllPerAxis(nd.MakeGeneric<double>(), axisSize, postAxisStride, resultArray),
+                NPTypeCode.Single => ComputeAllPerAxis(nd.MakeGeneric<float>(), axisSize, postAxisStride, resultArray),
+                NPTypeCode.Decimal => ComputeAllPerAxis(nd.MakeGeneric<decimal>(), axisSize, postAxisStride, resultArray),
                 _ => throw new NotSupportedException($"Type {nd.typecode} is not supported")
             };
 
@@ -93,27 +102,30 @@ namespace NumSharp
             return resultArray;
         }
 
-        private static bool ComputeAllPerAxis<T>(NDArray<T> nd, int axisSize, int postAxisStride, Span<bool> resultSpan) where T : unmanaged
+        private static unsafe bool ComputeAllPerAxis<T>(NDArray<T> nd, long axisSize, long postAxisStride, NDArray<bool> result) where T : unmanaged
         {
-            Span<T> inputSpan = nd.GetData().AsSpan<T>();
+            // Use pointer-based access to support long indexing (arrays >2GB)
+            T* inputPtr = (T*)nd.Address;
+            bool* resultPtr = (bool*)result.Address;
+            long resultLength = result.size;
 
-            for (int o = 0; o < resultSpan.Length; o++)
+            for (long o = 0; o < resultLength; o++)
             {
-                int blockIndex = o / postAxisStride;
-                int inBlockIndex = o % postAxisStride;
-                int inputStartIndex = blockIndex * axisSize * postAxisStride + inBlockIndex;
+                long blockIndex = o / postAxisStride;
+                long inBlockIndex = o % postAxisStride;
+                long inputStartIndex = blockIndex * axisSize * postAxisStride + inBlockIndex;
 
                 bool currentResult = true;
-                for (int a = 0; a < axisSize; a++)
+                for (long a = 0; a < axisSize; a++)
                 {
-                    int inputIndex = inputStartIndex + a * postAxisStride;
-                    if (inputSpan[inputIndex].Equals(default(T)))
+                    long inputIndex = inputStartIndex + a * postAxisStride;
+                    if (inputPtr[inputIndex].Equals(default(T)))
                     {
                         currentResult = false;
                         break;
                     }
                 }
-                resultSpan[o] = currentResult;
+                resultPtr[o] = currentResult;
             }
 
             return true;

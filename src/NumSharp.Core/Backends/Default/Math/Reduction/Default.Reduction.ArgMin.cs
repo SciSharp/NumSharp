@@ -47,7 +47,7 @@ namespace NumSharp.Backends
 
                 if (keepdims)
                 {
-                    var keepdimsShape = new int[arr.ndim];
+                    var keepdimsShape = new long[arr.ndim];
                     for (int d = 0, sd = 0; d < arr.ndim; d++)
                     {
                         if (d == emptyAxis)
@@ -66,7 +66,7 @@ namespace NumSharp.Backends
                 var r = NDArray.Scalar(0L);  // Int64 for NumPy 2.x alignment
                 if (keepdims)
                 {
-                    var keepdimsShape = new int[arr.ndim];
+                    var keepdimsShape = new long[arr.ndim];
                     for (int i = 0; i < arr.ndim; i++)
                         keepdimsShape[i] = 1;
                     r.Storage.Reshape(new Shape(keepdimsShape));
@@ -81,7 +81,7 @@ namespace NumSharp.Backends
                 if (keepdims)
                 {
                     // NumPy: keepdims preserves the number of dimensions, all set to 1
-                    var keepdimsShape = new int[arr.ndim];
+                    var keepdimsShape = new long[arr.ndim];
                     for (int i = 0; i < arr.ndim; i++)
                         keepdimsShape[i] = 1;
                     r.Storage.Reshape(new Shape(keepdimsShape));
@@ -112,7 +112,7 @@ namespace NumSharp.Backends
             if (keepdims)
             {
                 // Insert a 1 at the axis position
-                var keepdimsShapeDims = new int[arr.ndim];
+                var keepdimsShapeDims = new long[arr.ndim];
                 int srcIdx = 0;
                 for (int i = 0; i < arr.ndim; i++)
                 {

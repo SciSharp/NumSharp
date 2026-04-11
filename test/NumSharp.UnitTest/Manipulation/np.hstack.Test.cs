@@ -66,9 +66,10 @@ namespace NumSharp.UnitTest.Manipulation
             Assert.IsTrue(n[0, 2, 1] == 5);
 
             ////4D
+            // np.arange returns int64 by default (NumPy 2.x)
             n1 = np.arange(24 * 100).reshape(2, 30, 20, 2);
             n2 = np.arange(24 * 100).reshape(2, 30, 20, 2);
-            var n4 = np.hstack(n1, n2).MakeGeneric<int>();
+            var n4 = np.hstack(n1, n2).MakeGeneric<long>();
 
             Assert.IsTrue(n4.size == (n1.size + n2.size));
             Assert.IsTrue(n4[0, 0, 0, 0] == 0);

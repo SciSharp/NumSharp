@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
@@ -16,14 +16,14 @@ namespace NumSharp
         /// <param name="ndims">The number of dimensions</param>
         /// <returns>The index in the memory block that refers to a specific value.</returns>
         [MethodImpl(OptimizeAndInline)]
-        public readonly unsafe int GetOffset(int* indices, int ndims)
+        public readonly unsafe long GetOffset(long* indices, int ndims)
         {
             // Scalar case
             if (dimensions.Length == 0)
                 return offset + (ndims > 0 ? indices[0] : 0);
 
             // NumPy formula: offset + sum(indices * strides)
-            int off = offset;
+            long off = offset;
             unchecked
             {
                 for (int i = 0; i < ndims; i++)
@@ -39,17 +39,17 @@ namespace NumSharp
         /// <returns></returns>
         /// <remarks>Used for slicing, returned shape is the new shape of the slice and offset is the offset from current address.</remarks>
         [MethodImpl(OptimizeAndInline)]
-        public readonly unsafe (Shape Shape, int Offset) GetSubshape(int* dims, int ndims)
+        public readonly unsafe (Shape Shape, long Offset) GetSubshape(long* dims, int ndims)
         {
             if (ndims == 0)
                 return (this, 0);
 
-            int offset;
+            long offset;
             var dim = ndims;
             var newNDim = dimensions.Length - dim;
             if (IsBroadcasted)
             {
-                var dimsClone = stackalloc int[ndims];
+                var dimsClone = stackalloc long[ndims];
                 for (int j = 0; j < ndims; j++)
                     dimsClone[j] = dims[j];
 
@@ -57,7 +57,7 @@ namespace NumSharp
                 // Unbroadcast indices (wrap around for broadcast dimensions)
                 for (int i = 0; i < dim; i++)
                 {
-                    int unreducedDim = strides[i] == 0 ? 1 : dimensions[i];
+                    long unreducedDim = strides[i] == 0 ? 1 : dimensions[i];
                     dimsClone[i] = dimsClone[i] % unreducedDim;
                 }
 
@@ -66,8 +66,8 @@ namespace NumSharp
                 for (int i = 0; i < dim; i++)
                     offset += strides[i] * dimsClone[i];
 
-                var retShape = new int[newNDim];
-                var retStrides = new int[newNDim];
+                var retShape = new long[newNDim];
+                var retStrides = new long[newNDim];
                 for (int i = 0; i < newNDim; i++)
                 {
                     retShape[i] = this.dimensions[dim + i];
@@ -75,7 +75,7 @@ namespace NumSharp
                 }
 
                 // Create result with bufferSize preserved (immutable constructor)
-                int bufSize = this.bufferSize > 0 ? this.bufferSize : this.size;
+                long bufSize = this.bufferSize > 0 ? this.bufferSize : this.size;
                 var result = new Shape(retShape, retStrides, offset, bufSize);
                 return (result, offset);
             }
@@ -84,7 +84,7 @@ namespace NumSharp
             offset = GetOffset(dims, ndims);
 
             // Use bufferSize for bounds checking (NumPy-aligned: no ViewInfo dependency)
-            int boundSize = bufferSize > 0 ? bufferSize : size;
+            long boundSize = bufferSize > 0 ? bufferSize : size;
             if (offset >= boundSize)
                 throw new IndexOutOfRangeException($"The offset {offset} is out of range in Shape {boundSize}");
 
@@ -92,7 +92,7 @@ namespace NumSharp
                 return (Scalar, offset);
 
             //compute subshape
-            var innerShape = new int[newNDim];
+            var innerShape = new long[newNDim];
             for (int i = 0; i < innerShape.Length; i++)
                 innerShape[i] = this.dimensions[dim + i];
 
@@ -111,7 +111,7 @@ namespace NumSharp
         /// <param name="coords">The coordinates.</param>
         /// <returns>Coordinates without negative indices.</returns>
         [SuppressMessage("ReSharper", "ParameterHidesMember"), MethodImpl(Optimize)]
-        public static unsafe void InferNegativeCoordinates(int[] dimensions, int* coords, int coordsCount)
+        public static unsafe void InferNegativeCoordinates(long[] dimensions, long* coords, int coordsCount)
         {
             for (int i = 0; i < coordsCount; i++)
             {
@@ -120,7 +120,5 @@ namespace NumSharp
                     coords[i] = dimensions[i] + curr;
             }
         }
-
-        /// <summary>
     }
 }

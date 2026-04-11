@@ -50,8 +50,8 @@ namespace NumSharp.Backends.Kernels
         private static unsafe AxisReductionKernel CreateAxisArgReductionKernelTyped<T>(AxisReductionKernelKey key)
             where T : unmanaged
         {
-            return (void* input, void* output, int* inputStrides, int* inputShape,
-                    int* outputStrides, int axis, int axisSize, int ndim, int outputSize) =>
+            return (void* input, void* output, long* inputStrides, long* inputShape,
+                    long* outputStrides, int axis, long axisSize, int ndim, long outputSize) =>
             {
                 AxisArgReductionHelper<T>(
                     (T*)input, (long*)output,
@@ -67,16 +67,16 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         internal static unsafe void AxisArgReductionHelper<T>(
             T* input, long* output,
-            int* inputStrides, int* inputShape, int* outputStrides,
-            int axis, int axisSize, int ndim, int outputSize,
+            long* inputStrides, long* inputShape, long* outputStrides,
+            int axis, long axisSize, int ndim, long outputSize,
             ReductionOp op)
             where T : unmanaged
         {
-            int axisStride = inputStrides[axis];
+            long axisStride = inputStrides[axis];
 
             // Compute output dimension strides for coordinate calculation
             int outputNdim = ndim - 1;
-            Span<int> outputDimStrides = stackalloc int[outputNdim > 0 ? outputNdim : 1];
+            Span<long> outputDimStrides = stackalloc long[outputNdim > 0 ? outputNdim : 1];
             if (outputNdim > 0)
             {
                 outputDimStrides[outputNdim - 1] = 1;
@@ -88,17 +88,17 @@ namespace NumSharp.Backends.Kernels
                 }
             }
 
-            for (int outIdx = 0; outIdx < outputSize; outIdx++)
+            for (long outIdx = 0; outIdx < outputSize; outIdx++)
             {
                 // Convert linear output index to coordinates and compute offsets
-                int remaining = outIdx;
-                int inputBaseOffset = 0;
-                int outputOffset = 0;
+                long remaining = outIdx;
+                long inputBaseOffset = 0;
+                long outputOffset = 0;
 
                 for (int d = 0; d < outputNdim; d++)
                 {
                     int inputDim = d >= axis ? d + 1 : d;
-                    int coord = remaining / outputDimStrides[d];
+                    long coord = remaining / outputDimStrides[d];
                     remaining = remaining % outputDimStrides[d];
                     inputBaseOffset += coord * inputStrides[inputDim];
                     outputOffset += coord * outputStrides[d];
@@ -115,7 +115,7 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// Find the index of the max or min value along an axis.
         /// </summary>
-        private static unsafe long ArgReduceAxis<T>(T* data, int size, int stride, ReductionOp op)
+        private static unsafe long ArgReduceAxis<T>(T* data, long size, long stride, ReductionOp op)
             where T : unmanaged
         {
             if (size == 0)
@@ -147,12 +147,12 @@ namespace NumSharp.Backends.Kernels
         /// ArgMax/ArgMin for float with NaN awareness.
         /// NumPy behavior: first NaN always wins.
         /// </summary>
-        private static unsafe long ArgReduceAxisFloatNaN(float* data, int size, int stride, ReductionOp op)
+        private static unsafe long ArgReduceAxisFloatNaN(float* data, long size, long stride, ReductionOp op)
         {
             float extreme = data[0];
             long extremeIdx = 0;
 
-            for (int i = 1; i < size; i++)
+            for (long i = 1; i < size; i++)
             {
                 float val = data[i * stride];
 
@@ -190,12 +190,12 @@ namespace NumSharp.Backends.Kernels
         /// ArgMax/ArgMin for double with NaN awareness.
         /// NumPy behavior: first NaN always wins.
         /// </summary>
-        private static unsafe long ArgReduceAxisDoubleNaN(double* data, int size, int stride, ReductionOp op)
+        private static unsafe long ArgReduceAxisDoubleNaN(double* data, long size, long stride, ReductionOp op)
         {
             double extreme = data[0];
             long extremeIdx = 0;
 
-            for (int i = 1; i < size; i++)
+            for (long i = 1; i < size; i++)
             {
                 double val = data[i * stride];
 
@@ -234,12 +234,12 @@ namespace NumSharp.Backends.Kernels
         /// For ArgMax: True > False, find first True
         /// For ArgMin: False < True, find first False
         /// </summary>
-        private static unsafe long ArgReduceAxisBool(bool* data, int size, int stride, ReductionOp op)
+        private static unsafe long ArgReduceAxisBool(bool* data, long size, long stride, ReductionOp op)
         {
             bool extreme = data[0];
             long extremeIdx = 0;
 
-            for (int i = 1; i < size; i++)
+            for (long i = 1; i < size; i++)
             {
                 bool val = data[i * stride];
 
@@ -269,14 +269,14 @@ namespace NumSharp.Backends.Kernels
         /// <summary>
         /// ArgMax/ArgMin for generic numeric types (non-NaN, non-boolean).
         /// </summary>
-        private static unsafe long ArgReduceAxisNumeric<T>(T* data, int size, int stride, ReductionOp op)
+        private static unsafe long ArgReduceAxisNumeric<T>(T* data, long size, long stride, ReductionOp op)
             where T : unmanaged
         {
             // Use IComparer to compare values
             T extreme = data[0];
             long extremeIdx = 0;
 
-            for (int i = 1; i < size; i++)
+            for (long i = 1; i < size; i++)
             {
                 T val = data[i * stride];
 
