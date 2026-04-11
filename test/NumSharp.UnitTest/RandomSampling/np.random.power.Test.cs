@@ -15,7 +15,7 @@ namespace NumSharp.UnitTest.RandomSampling;
     public void Power_ScalarCall_ReturnsDouble()
     {
         np.random.seed(42);
-        double result = np.random.power(5.0);
+        double result = (double)np.random.power(5.0);
         Assert.IsTrue(result >= 0 && result <= 1, $"Result {result} should be in [0, 1]");
     }
 

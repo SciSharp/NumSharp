@@ -12,11 +12,12 @@ namespace NumSharp.UnitTest.RandomSampling;
     public class RandomParetoTests : TestClass
 {
     [Test]
-    public void Pareto_ScalarCall_ReturnsDouble()
+    public void Pareto_ScalarCall_Returns0dArray()
     {
         np.random.seed(42);
-        double result = np.random.pareto(2.0);
-        Assert.IsTrue(result >= 0, "Pareto samples should be non-negative");
+        NDArray result = np.random.pareto(2.0);
+        Assert.AreEqual(0, result.ndim, "Scalar call should return 0-d array");
+        Assert.IsTrue(result.GetDouble() >= 0, "Pareto samples should be non-negative");
     }
 
     [Test]
