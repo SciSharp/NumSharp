@@ -20,7 +20,7 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void NegativeBinomial_2D_ReturnsCorrectShape()
         {
-            var rand = np.random.negative_binomial(10, 0.5, 5L, 5L);
+            var rand = np.random.negative_binomial(10, 0.5, new Shape(5, 5));
             Assert.AreEqual(2, rand.ndim);
             Assert.AreEqual(25, rand.size);
         }

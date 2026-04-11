@@ -33,7 +33,7 @@ namespace NumSharp.UnitTest.RandomSampling;
     public void Hypergeometric_MultiDimensionalSize_ReturnsCorrectShape()
     {
         np.random.seed(42);
-        var result = np.random.hypergeometric(15, 15, 10, 2L, 3L);
+        var result = np.random.hypergeometric(15, 15, 10, new Shape(2, 3));
         result.Should().BeShaped(2, 3);
     }
 

@@ -48,7 +48,7 @@ namespace NumSharp.UnitTest.RandomSampling
         {
             var low = 1d;
             var high = 2d;
-            var uniformed = np.random.uniform(low, high, 3, 3);
+            var uniformed = np.random.uniform(low, high, new Shape(3, 3));
             var data = uniformed.Data<double>();
             Assert.IsTrue(uniformed.ndim == 2);
             Assert.IsTrue(uniformed.size == 9);

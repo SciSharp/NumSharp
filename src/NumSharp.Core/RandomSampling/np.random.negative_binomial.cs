@@ -8,6 +8,11 @@ namespace NumSharp
     public partial class NumPyRandom
     {
         /// <summary>
+        ///     Draw a single sample from a negative binomial distribution.
+        /// </summary>
+        public NDArray negative_binomial(double n, double p) => negative_binomial(n, p, Shape.Scalar);
+
+        /// <summary>
         ///     Draw samples from a negative binomial distribution.
         /// </summary>
         /// <param name="n">Parameter of the distribution, > 0 (number of successes).</param>
@@ -26,17 +31,15 @@ namespace NumSharp
         ///     <br/>
         ///     Uses gamma-Poisson mixture: Y ~ Gamma(n, (1-p)/p), X ~ Poisson(Y)
         /// </remarks>
-        public NDArray negative_binomial(double n, double p, Shape size = default)
+        public NDArray negative_binomial(double n, double p, Shape size)
         {
             if (n <= 0)
                 throw new ArgumentException("n <= 0", nameof(n));
             if (p <= 0 || p > 1 || double.IsNaN(p))
                 throw new ArgumentException("p < 0, p > 1 or p is NaN", nameof(p));
 
-            if (size.IsEmpty)
-            {
+            if (size.IsScalar || size.IsEmpty)
                 return NDArray.Scalar(SampleNegativeBinomial(n, p));
-            }
 
             var ret = new NDArray<long>(size);
             ArraySlice<long> data = ret.Data<long>();
@@ -48,36 +51,6 @@ namespace NumSharp
 
             return ret;
         }
-
-        /// <summary>
-        ///     Draw samples from a negative binomial distribution.
-        /// </summary>
-        /// <param name="n">Parameter of the distribution, > 0.</param>
-        /// <param name="p">Parameter of the distribution, 0 &lt; p &lt;= 1.</param>
-        /// <param name="size">Output shape as int array.</param>
-        /// <returns>Drawn samples from the parameterized negative binomial distribution.</returns>
-        public NDArray negative_binomial(double n, double p, int[] size)
-            => negative_binomial(n, p, new Shape(size));
-
-        /// <summary>
-        ///     Draw samples from a negative binomial distribution.
-        /// </summary>
-        /// <param name="n">Parameter of the distribution, > 0.</param>
-        /// <param name="p">Parameter of the distribution, 0 &lt; p &lt;= 1.</param>
-        /// <param name="size">Output shape.</param>
-        /// <returns>Drawn samples from the parameterized negative binomial distribution.</returns>
-        public NDArray negative_binomial(double n, double p, long[] size)
-            => negative_binomial(n, p, new Shape(size));
-
-        /// <summary>
-        ///     Draw samples from a negative binomial distribution.
-        /// </summary>
-        /// <param name="n">Parameter of the distribution, > 0.</param>
-        /// <param name="p">Parameter of the distribution, 0 &lt; p &lt;= 1.</param>
-        /// <param name="size">Output shape as single int.</param>
-        /// <returns>Drawn samples from the parameterized negative binomial distribution.</returns>
-        public NDArray negative_binomial(double n, double p, int size)
-            => negative_binomial(n, p, new int[] { size });
 
         /// <summary>
         ///     Sample from the negative binomial distribution using gamma-Poisson mixture.

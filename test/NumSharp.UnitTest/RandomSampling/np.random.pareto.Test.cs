@@ -32,7 +32,7 @@ namespace NumSharp.UnitTest.RandomSampling;
     public void Pareto_MultiDimensionalSize_ReturnsCorrectShape()
     {
         np.random.seed(42);
-        var result = np.random.pareto(2.5, 2L, 3L);
+        var result = np.random.pareto(2.5, new Shape(2, 3));
         result.Should().BeShaped(2, 3);
     }
 

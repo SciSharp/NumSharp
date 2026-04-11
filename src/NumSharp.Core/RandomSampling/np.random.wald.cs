@@ -7,6 +7,11 @@ namespace NumSharp
     public partial class NumPyRandom
     {
         /// <summary>
+        ///     Draw a single sample from a Wald distribution.
+        /// </summary>
+        public NDArray wald(double mean, double scale) => wald(mean, scale, Shape.Scalar);
+
+        /// <summary>
         ///     Draw samples from a Wald, or inverse Gaussian, distribution.
         /// </summary>
         /// <param name="mean">Distribution mean, must be > 0.</param>
@@ -24,40 +29,6 @@ namespace NumSharp
         ///     P(x;mean,scale) = sqrt(scale/(2*pi*x^3)) * exp(-scale*(x-mean)^2 / (2*mean^2*x))
         /// </remarks>
         public NDArray wald(double mean, double scale, Shape size)
-            => wald(mean, scale, size.dimensions);
-
-        /// <summary>
-        ///     Draw samples from a Wald, or inverse Gaussian, distribution.
-        /// </summary>
-        /// <param name="mean">Distribution mean, must be > 0.</param>
-        /// <param name="scale">Scale parameter, must be > 0.</param>
-        /// <param name="size">Output shape as int array.</param>
-        /// <returns>Drawn samples from the parameterized Wald distribution.</returns>
-        /// <remarks>
-        ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.wald.html
-        ///     <br/>
-        ///     The inverse Gaussian distribution was first studied in relationship to
-        ///     Brownian motion. As the scale approaches infinity, the distribution
-        ///     becomes more like a Gaussian.
-        /// </remarks>
-        public NDArray wald(double mean, double scale, int[] size)
-            => wald(mean, scale, Shape.ComputeLongShape(size));
-
-        /// <summary>
-        ///     Draw samples from a Wald, or inverse Gaussian, distribution.
-        /// </summary>
-        /// <param name="mean">Distribution mean, must be > 0.</param>
-        /// <param name="scale">Scale parameter, must be > 0.</param>
-        /// <param name="size">Output shape as long array (for NumPy compatibility).</param>
-        /// <returns>Drawn samples from the parameterized Wald distribution.</returns>
-        /// <remarks>
-        ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.wald.html
-        ///     <br/>
-        ///     The inverse Gaussian distribution was first studied in relationship to
-        ///     Brownian motion. As the scale approaches infinity, the distribution
-        ///     becomes more like a Gaussian.
-        /// </remarks>
-        public NDArray wald(double mean, double scale, long[] size)
         {
             // Parameter validation (matches NumPy error messages)
             if (mean <= 0)
@@ -65,10 +36,8 @@ namespace NumSharp
             if (scale <= 0)
                 throw new ArgumentException("scale <= 0", nameof(scale));
 
-            if (size == null || size.Length == 0)
-            {
+            if (size.IsScalar || size.IsEmpty)
                 return NDArray.Scalar(SampleWald(mean, scale));
-            }
 
             var result = new NDArray<double>(size);
             ArraySlice<double> resultArray = result.Data<double>();

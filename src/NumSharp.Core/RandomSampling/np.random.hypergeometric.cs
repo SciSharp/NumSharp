@@ -23,11 +23,14 @@ namespace NumSharp
         ///     <br/>
         ///     Mean = nsample * ngood / (ngood + nbad)
         /// </remarks>
-        public NDArray hypergeometric(long ngood, long nbad, long nsample, Shape size)
+        public NDArray hypergeometric(long ngood, long nbad, long nsample, Shape? size = null)
         {
             ValidateHypergeometricParams(ngood, nbad, nsample);
 
-            var ret = new NDArray<long>(size);
+            if (size == null)
+                return NDArray.Scalar(SampleHypergeometric(ngood, nbad, nsample));
+
+            var ret = new NDArray<long>(size.Value);
             ArraySlice<long> data = ret.Data<long>();
 
             for (int i = 0; i < ret.size; i++)

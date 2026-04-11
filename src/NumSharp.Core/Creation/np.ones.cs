@@ -14,31 +14,51 @@ namespace NumSharp
         /// <param name="shapes">Shape of the new array.</param>
         /// <param name="dtype">The desired data-type for the array, e.g., <see cref="uint8"/>. Default is <see cref="float64"/> / <see cref="double"/>.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ones.html</remarks>
-        public static NDArray ones(params int[] shapes)
+        public static NDArray ones(int shape)
         {
-            return ones(typeof(double), shapes);
+            return ones(new Shape(shape), typeof(double));
         }
 
         /// <summary>
         ///     Return a new array of given shape and type, filled with ones.
         /// </summary>
-        /// <param name="shapes">Shape of the new array.</param>
+        /// <param name="shape">Shape of the new array.</param>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ones.html</remarks>
+        public static NDArray ones(int[] shape)
+        {
+            return ones(new Shape(shape), typeof(double));
+        }
+
+        /// <summary>
+        ///     Return a new array of given shape and type, filled with ones.
+        /// </summary>
+        /// <param name="shape">Shape of the new array.</param>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ones.html</remarks>
+        public static NDArray ones(long[] shape)
+        {
+            return ones(new Shape(shape), typeof(double));
+        }
+
+        /// <summary>
+        ///     Return a new array of given shape and type, filled with ones.
+        /// </summary>
+        /// <param name="shape">Shape of the new array.</param>
         /// <param name="dtype">The desired data-type for the array, e.g., <see cref="uint8"/>. Default is <see cref="float64"/> / <see cref="double"/>.</param>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ones.html</remarks>
-        public static NDArray ones(Type dtype = null, params int[] shapes)
+        public static NDArray ones(int[] shape, Type dtype)
         {
-            return ones(new Shape(shapes), dtype: dtype);
+            return ones(new Shape(shape), dtype: dtype);
         }
 
         /// <summary>
         ///     Return a new array of given shape and type, filled with ones.
         /// </summary>
-        /// <param name="shapes">Shape of the new array.</param>
+        /// <param name="shape">Shape of the new array.</param>
         /// <typeparam name="T">The desired data-type for the array, e.g., <see cref="uint8"/>. Default is <see cref="float64"/> / <see cref="double"/>.</typeparam>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.ones.html</remarks>
-        public static NDArray ones<T>(params int[] shapes) where T : unmanaged
+        public static NDArray ones<T>(int[] shape) where T : unmanaged
         {
-            return ones(new Shape(shapes), typeof(T));
+            return ones(new Shape(shape), typeof(T));
         }
 
         /// <summary>

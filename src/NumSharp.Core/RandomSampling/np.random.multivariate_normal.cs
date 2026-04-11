@@ -32,7 +32,7 @@ namespace NumSharp
         ///     sequence due to differences in eigenvector sign conventions between Jacobi and LAPACK's
         ///     divide-and-conquer algorithms.
         /// </remarks>
-        public unsafe NDArray multivariate_normal(double[] mean, double[,] cov, Shape size = default,
+        public unsafe NDArray multivariate_normal(double[] mean, double[,] cov, Shape? size = null,
             string check_valid = "warn", double tol = 1e-8)
         {
             // Validation
@@ -85,7 +85,7 @@ namespace NumSharp
             var zBlock = new UnmanagedMemoryBlock<double>(n);
             var z = new ArraySlice<double>(zBlock);
 
-            if (size.IsEmpty)
+            if (size == null)
             {
                 // Return single sample with shape (n,)
                 var result = new NDArray<double>(new Shape(n));
@@ -95,16 +95,17 @@ namespace NumSharp
             }
 
             // Output shape is (*size, n)
-            long[] outputDims = new long[size.NDim + 1];
-            for (long i = 0; i < size.NDim; i++)
-                outputDims[i] = size.dimensions[i];
-            outputDims[size.NDim] = n;
+            var sizeVal = size.Value;
+            long[] outputDims = new long[sizeVal.NDim + 1];
+            for (long i = 0; i < sizeVal.NDim; i++)
+                outputDims[i] = sizeVal.dimensions[i];
+            outputDims[sizeVal.NDim] = n;
 
             var ret = new NDArray<double>(outputDims);
             ArraySlice<double> retData = ret.Data<double>();
 
             // Number of samples is product of size dimensions
-            long numSamples = size.size;
+            long numSamples = sizeVal.size;
 
             for (long s = 0; s < numSamples; s++)
             {
@@ -117,7 +118,7 @@ namespace NumSharp
         /// <summary>
         ///     Draw random samples from a multivariate normal distribution.
         /// </summary>
-        public unsafe NDArray multivariate_normal(NDArray mean, NDArray cov, Shape size = default,
+        public unsafe NDArray multivariate_normal(NDArray mean, NDArray cov, Shape? size = null,
             string check_valid = "warn", double tol = 1e-8)
         {
             // Validate dimensions
@@ -173,7 +174,7 @@ namespace NumSharp
             var zBlock = new UnmanagedMemoryBlock<double>(n);
             var z = new ArraySlice<double>(zBlock);
 
-            if (size.IsEmpty)
+            if (size == null)
             {
                 // Return single sample with shape (n,)
                 var result = new NDArray<double>(new Shape(n));
@@ -183,16 +184,17 @@ namespace NumSharp
             }
 
             // Output shape is (*size, n)
-            long[] outputDims = new long[size.NDim + 1];
-            for (long i = 0; i < size.NDim; i++)
-                outputDims[i] = size.dimensions[i];
-            outputDims[size.NDim] = n;
+            var sizeVal2 = size.Value;
+            long[] outputDims = new long[sizeVal2.NDim + 1];
+            for (long i = 0; i < sizeVal2.NDim; i++)
+                outputDims[i] = sizeVal2.dimensions[i];
+            outputDims[sizeVal2.NDim] = n;
 
             var ret = new NDArray<double>(outputDims);
             ArraySlice<double> retData = ret.Data<double>();
 
             // Number of samples is product of size dimensions
-            long numSamples = size.size;
+            long numSamples = sizeVal2.size;
 
             for (long s = 0; s < numSamples; s++)
             {

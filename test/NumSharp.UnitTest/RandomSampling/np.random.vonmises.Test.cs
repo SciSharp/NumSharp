@@ -48,7 +48,7 @@ namespace NumSharp.UnitTest.RandomSampling
         public void VonMises_SizeNull_ReturnsScalar()
         {
             np.random.seed(42);
-            var result = np.random.vonmises(0, 1, (Shape?)null);
+            var result = np.random.vonmises(0, 1);
 
             result.ndim.Should().Be(0);
         }

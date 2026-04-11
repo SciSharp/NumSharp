@@ -7,6 +7,11 @@ namespace NumSharp
     public partial class NumPyRandom
     {
         /// <summary>
+        ///     Draw a single sample from the Laplace distribution.
+        /// </summary>
+        public NDArray laplace(double loc = 0.0, double scale = 1.0) => laplace(loc, scale, Shape.Scalar);
+
+        /// <summary>
         ///     Draw samples from the Laplace or double exponential distribution with
         ///     specified location (or mean) and scale (decay).
         /// </summary>
@@ -27,15 +32,13 @@ namespace NumSharp
         ///     <br/>
         ///     where μ is the location parameter and λ is the scale parameter.
         /// </remarks>
-        public NDArray laplace(double loc = 0.0, double scale = 1.0, Shape size = default)
+        public NDArray laplace(double loc, double scale, Shape size)
         {
             if (scale < 0)
                 throw new ArgumentException("scale < 0", nameof(scale));
 
-            if (size.IsEmpty)
-            {
+            if (size.IsScalar || size.IsEmpty)
                 return NDArray.Scalar(SampleLaplace(loc, scale));
-            }
 
             var ret = new NDArray<double>(size);
             ArraySlice<double> data = ret.Data<double>();
@@ -47,36 +50,6 @@ namespace NumSharp
 
             return ret;
         }
-
-        /// <summary>
-        ///     Draw samples from the Laplace or double exponential distribution.
-        /// </summary>
-        /// <param name="loc">The position of the distribution peak.</param>
-        /// <param name="scale">The exponential decay. Must be non-negative.</param>
-        /// <param name="size">Output shape as int array.</param>
-        /// <returns>Drawn samples from the parameterized Laplace distribution.</returns>
-        public NDArray laplace(double loc, double scale, int[] size)
-            => laplace(loc, scale, new Shape(size));
-
-        /// <summary>
-        ///     Draw samples from the Laplace or double exponential distribution.
-        /// </summary>
-        /// <param name="loc">The position of the distribution peak.</param>
-        /// <param name="scale">The exponential decay. Must be non-negative.</param>
-        /// <param name="size">Output shape.</param>
-        /// <returns>Drawn samples from the parameterized Laplace distribution.</returns>
-        public NDArray laplace(double loc, double scale, long[] size)
-            => laplace(loc, scale, new Shape(size));
-
-        /// <summary>
-        ///     Draw samples from the Laplace or double exponential distribution.
-        /// </summary>
-        /// <param name="loc">The position of the distribution peak.</param>
-        /// <param name="scale">The exponential decay. Must be non-negative.</param>
-        /// <param name="size">Output shape as single int.</param>
-        /// <returns>Drawn samples from the parameterized Laplace distribution.</returns>
-        public NDArray laplace(double loc, double scale, int size)
-            => laplace(loc, scale, new int[] { size });
 
         /// <summary>
         ///     Sample from the Laplace distribution using the same algorithm as NumPy.

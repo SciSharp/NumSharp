@@ -6,11 +6,16 @@ namespace NumSharp
     public partial class NumPyRandom
     {
         /// <summary>
+        ///     Draw a single sample from an F distribution.
+        /// </summary>
+        public NDArray f(double dfnum, double dfden) => f(dfnum, dfden, Shape.Scalar);
+
+        /// <summary>
         ///     Draw samples from an F distribution.
         /// </summary>
         /// <param name="dfnum">Degrees of freedom in numerator. Must be > 0.</param>
         /// <param name="dfden">Degrees of freedom in denominator. Must be > 0.</param>
-        /// <param name="size">Output shape. If null, a single value is returned.</param>
+        /// <param name="size">Output shape.</param>
         /// <returns>Drawn samples from the F distribution.</returns>
         /// <exception cref="ArgumentException">If dfnum or dfden is <= 0.</exception>
         /// <remarks>
@@ -23,67 +28,15 @@ namespace NumSharp
         ///     <br/>
         ///     For dfden > 2, mean = dfden / (dfden - 2).
         /// </remarks>
-        public NDArray f(double dfnum, double dfden, Shape? size = null)
+        public NDArray f(double dfnum, double dfden, Shape size)
         {
             if (dfnum <= 0)
                 throw new ArgumentException("dfnum <= 0", nameof(dfnum));
             if (dfden <= 0)
                 throw new ArgumentException("dfden <= 0", nameof(dfden));
 
-            if (size == null)
-            {
-                // Return scalar
+            if (size.IsScalar || size.IsEmpty)
                 return NDArray.Scalar(FSample(dfnum, dfden));
-            }
-
-            return f(dfnum, dfden, size.Value.dimensions);
-        }
-
-        /// <summary>
-        ///     Draw samples from an F distribution.
-        /// </summary>
-        /// <param name="dfnum">Degrees of freedom in numerator. Must be > 0.</param>
-        /// <param name="dfden">Degrees of freedom in denominator. Must be > 0.</param>
-        /// <param name="size">Output shape.</param>
-        /// <returns>Drawn samples from the F distribution.</returns>
-        /// <exception cref="ArgumentException">If dfnum or dfden is <= 0.</exception>
-        public NDArray f(double dfnum, double dfden, Shape size) => f(dfnum, dfden, size.dimensions);
-
-        /// <summary>
-        ///     Draw samples from an F distribution.
-        /// </summary>
-        /// <param name="dfnum">Degrees of freedom in numerator. Must be > 0.</param>
-        /// <param name="dfden">Degrees of freedom in denominator. Must be > 0.</param>
-        /// <param name="size">Output shape as a single dimension.</param>
-        /// <returns>Drawn samples from the F distribution.</returns>
-        /// <exception cref="ArgumentException">If dfnum or dfden is <= 0.</exception>
-        public NDArray f(double dfnum, double dfden, int size) => f(dfnum, dfden, new long[] { size });
-
-        /// <summary>
-        ///     Draw samples from an F distribution.
-        /// </summary>
-        /// <param name="dfnum">Degrees of freedom in numerator. Must be > 0.</param>
-        /// <param name="dfden">Degrees of freedom in denominator. Must be > 0.</param>
-        /// <param name="size">Output shape.</param>
-        /// <returns>Drawn samples from the F distribution.</returns>
-        /// <exception cref="ArgumentException">If dfnum or dfden is <= 0.</exception>
-        public NDArray f(double dfnum, double dfden, int[] size)
-            => f(dfnum, dfden, Shape.ComputeLongShape(size));
-
-        /// <summary>
-        ///     Draw samples from an F distribution.
-        /// </summary>
-        /// <param name="dfnum">Degrees of freedom in numerator. Must be > 0.</param>
-        /// <param name="dfden">Degrees of freedom in denominator. Must be > 0.</param>
-        /// <param name="size">Output shape.</param>
-        /// <returns>Drawn samples from the F distribution.</returns>
-        /// <exception cref="ArgumentException">If dfnum or dfden is <= 0.</exception>
-        public NDArray f(double dfnum, double dfden, long[] size)
-        {
-            if (dfnum <= 0)
-                throw new ArgumentException("dfnum <= 0", nameof(dfnum));
-            if (dfden <= 0)
-                throw new ArgumentException("dfden <= 0", nameof(dfden));
 
             // F = (chi2_num * dfden) / (chi2_den * dfnum)
             // where chi2 = 2 * gamma(df/2, 1) = gamma(df/2, 2)

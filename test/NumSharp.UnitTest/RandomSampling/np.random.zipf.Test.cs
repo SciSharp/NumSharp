@@ -20,7 +20,7 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void Zipf_2D_ReturnsCorrectShape()
         {
-            var rand = np.random.zipf(2, 5, 5);
+            var rand = np.random.zipf(2, new Shape(5, 5));
             Assert.AreEqual(2, rand.ndim);
             Assert.AreEqual(25, rand.size);
         }

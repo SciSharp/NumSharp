@@ -21,7 +21,7 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void Weibull_1DArray()
         {
-            var result = np.random.weibull(2, 5);
+            var result = np.random.weibull(2, new Shape(5));
 
             Assert.AreEqual(1, result.ndim);
             Assert.AreEqual(5, result.shape[0]);
@@ -31,7 +31,7 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void Weibull_2DArray()
         {
-            var result = np.random.weibull(2, 2, 3);
+            var result = np.random.weibull(2, new Shape(2, 3));
 
             Assert.AreEqual(2, result.ndim);
             Assert.AreEqual(2, result.shape[0]);

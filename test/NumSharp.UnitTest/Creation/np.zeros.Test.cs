@@ -22,7 +22,7 @@ namespace NumSharp.UnitTest.Creation
         [Test]
         public void Zeros2Dim()
         {
-            var n = np.zeros(3, 2);
+            var n = np.zeros(new Shape(3, 2));
             Assert.IsTrue(Enumerable.SequenceEqual(n.Data<double>(), new double[] {0, 0, 0, 0, 0, 0}));
         }
 

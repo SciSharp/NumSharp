@@ -15,7 +15,7 @@ namespace NumSharp.UnitTest.RandomSampling;
     public void NoncentralChisquare_ScalarCall_ReturnsDouble()
     {
         np.random.seed(42);
-        double result = np.random.noncentral_chisquare(3, 2);
+        double result = (double)np.random.noncentral_chisquare(3, 2);
         Assert.IsTrue(result >= 0, $"Result {result} should be non-negative");
     }
 
@@ -32,7 +32,7 @@ namespace NumSharp.UnitTest.RandomSampling;
     public void NoncentralChisquare_MultiDimensionalSize_ReturnsCorrectShape()
     {
         np.random.seed(42);
-        var result = np.random.noncentral_chisquare(3, 2, 2L, 3L);
+        var result = np.random.noncentral_chisquare(3, 2, new Shape(2, 3));
         result.Should().BeShaped(2, 3);
     }
 

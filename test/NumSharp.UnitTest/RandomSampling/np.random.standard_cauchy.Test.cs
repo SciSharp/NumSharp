@@ -30,7 +30,7 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void StandardCauchy_2DArray()
         {
-            var result = np.random.standard_cauchy(2L, 3L);
+            var result = np.random.standard_cauchy(new Shape(2, 3));
 
             Assert.AreEqual(2, result.ndim);
             Assert.AreEqual(2, result.shape[0]);

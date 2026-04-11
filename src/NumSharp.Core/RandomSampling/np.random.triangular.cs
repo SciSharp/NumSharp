@@ -7,6 +7,11 @@ namespace NumSharp
     public partial class NumPyRandom
     {
         /// <summary>
+        ///     Draw a single sample from the triangular distribution.
+        /// </summary>
+        public NDArray triangular(double left, double mode, double right) => triangular(left, mode, right, Shape.Scalar);
+
+        /// <summary>
         ///     Draw samples from the triangular distribution over the interval [left, right].
         /// </summary>
         /// <param name="left">Lower limit.</param>
@@ -21,40 +26,6 @@ namespace NumSharp
         ///     peak at mode, and upper limit right.
         /// </remarks>
         public NDArray triangular(double left, double mode, double right, Shape size)
-            => triangular(left, mode, right, size.dimensions);
-
-        /// <summary>
-        ///     Draw samples from the triangular distribution over the interval [left, right].
-        /// </summary>
-        /// <param name="left">Lower limit.</param>
-        /// <param name="mode">The value where the peak of the distribution occurs (left &lt;= mode &lt;= right).</param>
-        /// <param name="right">Upper limit, must be larger than left.</param>
-        /// <param name="size">Output shape as int array.</param>
-        /// <returns>Drawn samples from the parameterized triangular distribution.</returns>
-        /// <remarks>
-        ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.triangular.html
-        ///     <br/>
-        ///     The triangular distribution is a continuous probability distribution with lower limit left,
-        ///     peak at mode, and upper limit right.
-        /// </remarks>
-        public NDArray triangular(double left, double mode, double right, int[] size)
-            => triangular(left, mode, right, Shape.ComputeLongShape(size));
-
-        /// <summary>
-        ///     Draw samples from the triangular distribution over the interval [left, right].
-        /// </summary>
-        /// <param name="left">Lower limit.</param>
-        /// <param name="mode">The value where the peak of the distribution occurs (left &lt;= mode &lt;= right).</param>
-        /// <param name="right">Upper limit, must be larger than left.</param>
-        /// <param name="size">Output shape as long array (for NumPy compatibility).</param>
-        /// <returns>Drawn samples from the parameterized triangular distribution.</returns>
-        /// <remarks>
-        ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.triangular.html
-        ///     <br/>
-        ///     The triangular distribution is a continuous probability distribution with lower limit left,
-        ///     peak at mode, and upper limit right.
-        /// </remarks>
-        public NDArray triangular(double left, double mode, double right, long[] size)
         {
             // Parameter validation (matches NumPy error messages exactly)
             if (left > mode)
@@ -64,10 +35,8 @@ namespace NumSharp
             if (left == right)
                 throw new ArgumentException("left == right");
 
-            if (size == null || size.Length == 0)
-            {
+            if (size.IsScalar || size.IsEmpty)
                 return NDArray.Scalar(SampleTriangular(left, mode, right));
-            }
 
             var result = new NDArray<double>(size);
             ArraySlice<double> resultArray = result.Data<double>();

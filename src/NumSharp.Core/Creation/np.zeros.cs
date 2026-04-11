@@ -11,42 +11,53 @@ namespace NumSharp
         /// <param name="shapes">Shape of the new array,</param>
         /// <returns>Array of zeros with the given shape, dtype.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.zeros.html</remarks>
-        public static NDArray zeros(params int[] shapes)
+        public static NDArray zeros(int shape)
         {
-            return zeros(new Shape(shapes), (Type)null);
+            return zeros(new Shape(shape), (Type)null);
         }
 
         /// <summary>
         ///     Return a new double array of given shape, filled with zeros.
         /// </summary>
-        /// <param name="shapes">Shape of the new array,</param>
+        /// <param name="shape">Shape of the new array,</param>
         /// <returns>Array of zeros with the given shape, dtype.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.zeros.html</remarks>
-        public static NDArray zeros(params long[] shapes)
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.zeros.html</remarks>
+        public static NDArray zeros(int[] shape)
         {
-            return zeros(new Shape(shapes), (Type)null);
+            return zeros(new Shape(shape), (Type)null);
         }
 
         /// <summary>
         ///     Return a new double array of given shape, filled with zeros.
         /// </summary>
-        /// <param name="shapes">Shape of the new array,</param>
+        /// <param name="shape">Shape of the new array,</param>
+        /// <returns>Array of zeros with the given shape, dtype.</returns>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.zeros.html</remarks>
+        public static NDArray zeros(long[] shape)
+        {
+            return zeros(new Shape(shape), (Type)null);
+        }
+
+        /// <summary>
+        ///     Return a new double array of given shape, filled with zeros.
+        /// </summary>
+        /// <param name="shape">Shape of the new array,</param>
         /// <returns>Array of zeros with the given shape, type <typeparamref name="T"/>.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.zeros.html</remarks>
-        public static NDArray zeros<T>(params int[] shapes) where T : unmanaged
+        public static NDArray zeros<T>(int[] shape) where T : unmanaged
         {
-            return zeros(new Shape(shapes), typeof(T));
+            return zeros(new Shape(shape), typeof(T));
         }
 
         /// <summary>
         ///     Return a new double array of given shape, filled with zeros.
         /// </summary>
-        /// <param name="shapes">Shape of the new array,</param>
+        /// <param name="shape">Shape of the new array,</param>
         /// <returns>Array of zeros with the given shape, type <typeparamref name="T"/>.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.zeros.html</remarks>
-        public static NDArray zeros<T>(params long[] shapes) where T : unmanaged
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.zeros.html</remarks>
+        public static NDArray zeros<T>(long[] shape) where T : unmanaged
         {
-            return zeros(new Shape(shapes), typeof(T));
+            return zeros(new Shape(shape), typeof(T));
         }
 
         /// <summary>

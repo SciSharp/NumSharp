@@ -7,6 +7,11 @@ namespace NumSharp
     public partial class NumPyRandom
     {
         /// <summary>
+        ///     Draw a single sample from a noncentral chi-square distribution.
+        /// </summary>
+        public NDArray noncentral_chisquare(double df, double nonc) => noncentral_chisquare(df, nonc, Shape.Scalar);
+
+        /// <summary>
         ///     Draw samples from a noncentral chi-square distribution.
         /// </summary>
         /// <param name="df">Degrees of freedom, must be > 0.</param>
@@ -27,6 +32,9 @@ namespace NumSharp
             if (nonc < 0)
                 throw new ArgumentException("nonc < 0", nameof(nonc));
 
+            if (size.IsScalar || size.IsEmpty)
+                return NDArray.Scalar(SampleNoncentralChisquare(df, nonc));
+
             var ret = new NDArray<double>(size);
             ArraySlice<double> data = ret.Data<double>();
 
@@ -36,52 +44,6 @@ namespace NumSharp
             }
 
             return ret;
-        }
-
-        /// <summary>
-        ///     Draw samples from a noncentral chi-square distribution.
-        /// </summary>
-        /// <param name="df">Degrees of freedom, must be > 0.</param>
-        /// <param name="nonc">Non-centrality parameter, must be >= 0.</param>
-        /// <param name="size">Output shape as int array.</param>
-        /// <returns>Drawn samples from the parameterized noncentral chi-square distribution.</returns>
-        public NDArray noncentral_chisquare(double df, double nonc, int[] size)
-            => noncentral_chisquare(df, nonc, new Shape(size));
-
-        /// <summary>
-        ///     Draw samples from a noncentral chi-square distribution.
-        /// </summary>
-        /// <param name="df">Degrees of freedom, must be > 0.</param>
-        /// <param name="nonc">Non-centrality parameter, must be >= 0.</param>
-        /// <param name="size">Output shape.</param>
-        /// <returns>Drawn samples from the parameterized noncentral chi-square distribution.</returns>
-        public NDArray noncentral_chisquare(double df, double nonc, long[] size)
-            => noncentral_chisquare(df, nonc, new Shape(size));
-
-        /// <summary>
-        ///     Draw samples from a noncentral chi-square distribution.
-        /// </summary>
-        /// <param name="df">Degrees of freedom, must be > 0.</param>
-        /// <param name="nonc">Non-centrality parameter, must be >= 0.</param>
-        /// <param name="size">Output shape as single int.</param>
-        /// <returns>Drawn samples from the parameterized noncentral chi-square distribution.</returns>
-        public NDArray noncentral_chisquare(double df, double nonc, int size)
-            => noncentral_chisquare(df, nonc, new int[] { size });
-
-        /// <summary>
-        ///     Draw a single sample from a noncentral chi-square distribution.
-        /// </summary>
-        /// <param name="df">Degrees of freedom, must be > 0.</param>
-        /// <param name="nonc">Non-centrality parameter, must be >= 0.</param>
-        /// <returns>A single sample from the noncentral chi-square distribution.</returns>
-        public double noncentral_chisquare(double df, double nonc)
-        {
-            if (df <= 0)
-                throw new ArgumentException("df <= 0", nameof(df));
-            if (nonc < 0)
-                throw new ArgumentException("nonc < 0", nameof(nonc));
-
-            return SampleNoncentralChisquare(df, nonc);
         }
 
         /// <summary>

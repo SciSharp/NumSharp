@@ -7,6 +7,11 @@ namespace NumSharp
     public partial class NumPyRandom
     {
         /// <summary>
+        ///     Draw a single sample from a logistic distribution.
+        /// </summary>
+        public NDArray logistic(double loc = 0.0, double scale = 1.0) => logistic(loc, scale, Shape.Scalar);
+
+        /// <summary>
         ///     Draw samples from a logistic distribution.
         /// </summary>
         /// <param name="loc">Mean of the distribution. Default is 0.</param>
@@ -25,15 +30,13 @@ namespace NumSharp
         ///     <br/>
         ///     Mean = loc, Variance = scale^2 * pi^2 / 3
         /// </remarks>
-        public NDArray logistic(double loc = 0.0, double scale = 1.0, Shape size = default)
+        public NDArray logistic(double loc, double scale, Shape size)
         {
             if (scale < 0)
                 throw new ArgumentException("scale < 0", nameof(scale));
 
-            if (size.IsEmpty)
-            {
+            if (size.IsScalar || size.IsEmpty)
                 return NDArray.Scalar(SampleLogistic(loc, scale));
-            }
 
             var ret = new NDArray<double>(size);
             ArraySlice<double> data = ret.Data<double>();
@@ -45,36 +48,6 @@ namespace NumSharp
 
             return ret;
         }
-
-        /// <summary>
-        ///     Draw samples from a logistic distribution.
-        /// </summary>
-        /// <param name="loc">Mean of the distribution.</param>
-        /// <param name="scale">Scale parameter (must be >= 0).</param>
-        /// <param name="size">Output shape as int array.</param>
-        /// <returns>Drawn samples from the parameterized logistic distribution.</returns>
-        public NDArray logistic(double loc, double scale, int[] size)
-            => logistic(loc, scale, new Shape(size));
-
-        /// <summary>
-        ///     Draw samples from a logistic distribution.
-        /// </summary>
-        /// <param name="loc">Mean of the distribution.</param>
-        /// <param name="scale">Scale parameter (must be >= 0).</param>
-        /// <param name="size">Output shape.</param>
-        /// <returns>Drawn samples from the parameterized logistic distribution.</returns>
-        public NDArray logistic(double loc, double scale, long[] size)
-            => logistic(loc, scale, new Shape(size));
-
-        /// <summary>
-        ///     Draw samples from a logistic distribution.
-        /// </summary>
-        /// <param name="loc">Mean of the distribution.</param>
-        /// <param name="scale">Scale parameter (must be >= 0).</param>
-        /// <param name="size">Output shape as single int.</param>
-        /// <returns>Drawn samples from the parameterized logistic distribution.</returns>
-        public NDArray logistic(double loc, double scale, int size)
-            => logistic(loc, scale, new int[] { size });
 
         /// <summary>
         ///     Sample from the logistic distribution using inverse transform method.

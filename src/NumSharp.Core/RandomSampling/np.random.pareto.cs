@@ -29,6 +29,9 @@ namespace NumSharp
             if (a <= 0)
                 throw new ArgumentException("a <= 0", nameof(a));
 
+            if (size.IsScalar || size.IsEmpty)
+                return NDArray.Scalar(SamplePareto(a));
+
             var ret = new NDArray<double>(size);
             ArraySlice<double> data = ret.Data<double>();
 
@@ -71,14 +74,8 @@ namespace NumSharp
         ///     Draw a single sample from a Pareto II or Lomax distribution.
         /// </summary>
         /// <param name="a">Shape of the distribution. Must be positive (&gt; 0).</param>
-        /// <returns>A single sample from the Pareto distribution.</returns>
-        public double pareto(double a)
-        {
-            if (a <= 0)
-                throw new ArgumentException("a <= 0", nameof(a));
-
-            return SamplePareto(a);
-        }
+        /// <returns>A single sample from the Pareto distribution as 0-d array.</returns>
+        public NDArray pareto(double a) => pareto(a, Shape.Scalar);
 
         /// <summary>
         ///     Sample from the Pareto II (Lomax) distribution using inverse transform.

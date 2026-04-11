@@ -6,9 +6,14 @@ namespace NumSharp
     public partial class NumPyRandom
     {
         /// <summary>
+        ///     Draw a single sample from a standard Cauchy distribution.
+        /// </summary>
+        public NDArray standard_cauchy() => standard_cauchy(Shape.Scalar);
+
+        /// <summary>
         ///     Draw samples from a standard Cauchy distribution with mode = 0.
         /// </summary>
-        /// <param name="size">Output shape. If null, a single value is returned.</param>
+        /// <param name="size">Output shape.</param>
         /// <returns>Drawn samples from the standard Cauchy distribution.</returns>
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.standard_cauchy.html
@@ -21,48 +26,15 @@ namespace NumSharp
         ///     <br/>
         ///     Generated using inverse transform: X = tan(pi * (U - 0.5)) where U ~ Uniform(0, 1).
         /// </remarks>
-        public NDArray standard_cauchy(Shape? size = null)
+        public NDArray standard_cauchy(Shape size)
         {
-            if (size == null)
-            {
-                // Return scalar
+            if (size.IsScalar || size.IsEmpty)
                 return NDArray.Scalar(StandardCauchySample());
-            }
 
-            return standard_cauchy(size.Value.dimensions);
-        }
-
-        /// <summary>
-        ///     Draw samples from a standard Cauchy distribution with mode = 0.
-        /// </summary>
-        /// <param name="size">Output shape.</param>
-        /// <returns>Drawn samples from the standard Cauchy distribution.</returns>
-        public NDArray standard_cauchy(Shape size) => standard_cauchy(size.dimensions);
-
-        /// <summary>
-        ///     Draw samples from a standard Cauchy distribution with mode = 0.
-        /// </summary>
-        /// <param name="size">Output shape as a single dimension.</param>
-        /// <returns>Drawn samples from the standard Cauchy distribution.</returns>
-        public NDArray standard_cauchy(int size) => standard_cauchy(new long[] { size });
-
-        /// <summary>
-        ///     Draw samples from a standard Cauchy distribution with mode = 0.
-        /// </summary>
-        /// <param name="size">Output shape as int array.</param>
-        /// <returns>Drawn samples from the standard Cauchy distribution.</returns>
-        public NDArray standard_cauchy(int[] size) => standard_cauchy(Shape.ComputeLongShape(size));
-
-        /// <summary>
-        ///     Draw samples from a standard Cauchy distribution with mode = 0.
-        /// </summary>
-        /// <param name="size">Output shape.</param>
-        /// <returns>Drawn samples from the standard Cauchy distribution.</returns>
-        public NDArray standard_cauchy(long[] size)
-        {
             unsafe
             {
-                var array = new NDArray<double>(new Shape(size));
+                var shape = size;
+                var array = new NDArray<double>(shape);
                 var dst = array.Address;
                 var count = array.size;
 

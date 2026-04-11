@@ -25,7 +25,7 @@ namespace NumSharp
         ///     <br/>
         ///     Algorithm: For each sample, draw Y_i ~ Gamma(alpha_i, 1), then X = Y / sum(Y).
         /// </remarks>
-        public NDArray dirichlet(double[] alpha, Shape size = default)
+        public NDArray dirichlet(double[] alpha, Shape? size = null)
         {
             // Validation
             if (alpha == null || alpha.Length == 0)
@@ -45,7 +45,7 @@ namespace NumSharp
             for (long i = 0; i < k; i++)
                 alphaSlice[i] = alpha[i];
 
-            if (size.IsEmpty)
+            if (size == null)
             {
                 // Return single sample with shape (k,)
                 var result = new NDArray<double>(new Shape(k));
@@ -55,16 +55,17 @@ namespace NumSharp
             }
 
             // Output shape is (*size, k)
-            long[] outputDims = new long[size.NDim + 1];
-            for (long i = 0; i < size.NDim; i++)
-                outputDims[i] = size.dimensions[i];
-            outputDims[size.NDim] = k;
+            var sizeVal = size.Value;
+            long[] outputDims = new long[sizeVal.NDim + 1];
+            for (long i = 0; i < sizeVal.NDim; i++)
+                outputDims[i] = sizeVal.dimensions[i];
+            outputDims[sizeVal.NDim] = k;
 
             var ret = new NDArray<double>(outputDims);
             ArraySlice<double> retData = ret.Data<double>();
 
             // Number of samples is product of size dimensions
-            long numSamples = size.size;
+            long numSamples = sizeVal.size;
 
             for (long s = 0; s < numSamples; s++)
             {
@@ -80,7 +81,7 @@ namespace NumSharp
         /// <param name="alpha">Concentration parameters as NDArray.</param>
         /// <param name="size">Output shape.</param>
         /// <returns>Drawn samples from the Dirichlet distribution.</returns>
-        public NDArray dirichlet(NDArray alpha, Shape size = default)
+        public NDArray dirichlet(NDArray alpha, Shape? size = null)
         {
             long k = alpha.size;
 
@@ -100,7 +101,7 @@ namespace NumSharp
                     throw new ArgumentException("alpha <= 0", nameof(alpha));
             }
 
-            if (size.IsEmpty)
+            if (size == null)
             {
                 // Return single sample with shape (k,)
                 var result = new NDArray<double>(new Shape(k));
@@ -110,16 +111,17 @@ namespace NumSharp
             }
 
             // Output shape is (*size, k)
-            long[] outputDims = new long[size.NDim + 1];
-            for (long i = 0; i < size.NDim; i++)
-                outputDims[i] = size.dimensions[i];
-            outputDims[size.NDim] = k;
+            var sizeVal2 = size.Value;
+            long[] outputDims = new long[sizeVal2.NDim + 1];
+            for (long i = 0; i < sizeVal2.NDim; i++)
+                outputDims[i] = sizeVal2.dimensions[i];
+            outputDims[sizeVal2.NDim] = k;
 
             var ret = new NDArray<double>(outputDims);
             ArraySlice<double> retData = ret.Data<double>();
 
             // Number of samples is product of size dimensions
-            long numSamples = size.size;
+            long numSamples = sizeVal2.size;
 
             for (long s = 0; s < numSamples; s++)
             {

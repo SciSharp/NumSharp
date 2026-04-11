@@ -218,7 +218,7 @@ public class LongIndexingMasterTest
         // np.squeeze (small)
         RunTest(results, "np.squeeze(small)", () =>
         {
-            var original = np.zeros(1, SmallSize, 1);
+            var original = np.zeros(new Shape(1, SmallSize, 1));
             var arr = np.squeeze(original);
             Assert.AreEqual(SmallSize, arr.size);
             Assert.AreEqual(1, arr.ndim);
@@ -238,7 +238,7 @@ public class LongIndexingMasterTest
         // np.transpose (2D - smaller due to memory)
         RunTest(results, "np.transpose(2D)", () =>
         {
-            var original = np.zeros(1000, 1000);
+            var original = np.zeros(new Shape(1000, 1000));
             var arr = np.transpose(original);
             Assert.AreEqual(1000000, arr.size);
             Assert.AreEqual(1000, arr.shape[0]);
@@ -249,7 +249,7 @@ public class LongIndexingMasterTest
         // np.swapaxes (2D)
         RunTest(results, "np.swapaxes(2D)", () =>
         {
-            var original = np.zeros(1000, 1000);
+            var original = np.zeros(new Shape(1000, 1000));
             var arr = np.swapaxes(original, 0, 1);
             Assert.AreEqual(1000000, arr.size);
             return arr;

@@ -7,6 +7,11 @@ namespace NumSharp
     public partial class NumPyRandom
     {
         /// <summary>
+        ///     Draw a single sample from a Rayleigh distribution.
+        /// </summary>
+        public NDArray rayleigh(double scale = 1.0) => rayleigh(scale, Shape.Scalar);
+
+        /// <summary>
         ///     Draw samples from a Rayleigh distribution.
         /// </summary>
         /// <param name="scale">Scale parameter (also equals the mode). Must be non-negative. Default is 1.</param>
@@ -24,15 +29,13 @@ namespace NumSharp
         ///     <br/>
         ///     For Rayleigh(scale), mean = scale * sqrt(pi/2) ≈ 1.253 * scale
         /// </remarks>
-        public NDArray rayleigh(double scale = 1.0, Shape size = default)
+        public NDArray rayleigh(double scale, Shape size)
         {
             if (scale < 0)
                 throw new ArgumentException("scale < 0", nameof(scale));
 
-            if (size.IsEmpty)
-            {
+            if (size.IsScalar || size.IsEmpty)
                 return NDArray.Scalar(SampleRayleigh(scale));
-            }
 
             var ret = new NDArray<double>(size);
             ArraySlice<double> data = ret.Data<double>();
@@ -44,33 +47,6 @@ namespace NumSharp
 
             return ret;
         }
-
-        /// <summary>
-        ///     Draw samples from a Rayleigh distribution.
-        /// </summary>
-        /// <param name="scale">Scale parameter (also equals the mode). Must be non-negative.</param>
-        /// <param name="size">Output shape as int array.</param>
-        /// <returns>Drawn samples from the parameterized Rayleigh distribution.</returns>
-        public NDArray rayleigh(double scale, int[] size)
-            => rayleigh(scale, new Shape(size));
-
-        /// <summary>
-        ///     Draw samples from a Rayleigh distribution.
-        /// </summary>
-        /// <param name="scale">Scale parameter (also equals the mode). Must be non-negative.</param>
-        /// <param name="size">Output shape.</param>
-        /// <returns>Drawn samples from the parameterized Rayleigh distribution.</returns>
-        public NDArray rayleigh(double scale, long[] size)
-            => rayleigh(scale, new Shape(size));
-
-        /// <summary>
-        ///     Draw samples from a Rayleigh distribution.
-        /// </summary>
-        /// <param name="scale">Scale parameter (also equals the mode). Must be non-negative.</param>
-        /// <param name="size">Output shape as single int.</param>
-        /// <returns>Drawn samples from the parameterized Rayleigh distribution.</returns>
-        public NDArray rayleigh(double scale, int size)
-            => rayleigh(scale, new int[] { size });
 
         /// <summary>
         ///     Sample from the Rayleigh distribution using the same algorithm as NumPy.

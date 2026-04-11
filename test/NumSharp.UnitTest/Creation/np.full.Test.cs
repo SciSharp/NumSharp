@@ -22,7 +22,7 @@ namespace NumSharp.UnitTest.Creation
         [Test]
         public void SimpleInt1D()
         {
-            var np1 = np.full(1d, new Shape(5));
+            var np1 = np.full(new Shape(5), 1d);
 
             Assert.IsTrue(np1.Data<double>().Where(x => x == 1).ToArray().Length == 5);
         }
@@ -30,7 +30,7 @@ namespace NumSharp.UnitTest.Creation
         [Test]
         public void SimpleInt2D()
         {
-            var np1 = np.full(1d, new Shape(5, 5));
+            var np1 = np.full(new Shape(5, 5), 1d);
 
             Assert.IsTrue(np1.Data<double>().Where(x => x == 1).ToArray().Length == 25);
         }
@@ -38,7 +38,7 @@ namespace NumSharp.UnitTest.Creation
         [Test]
         public void SimpleDouble3D()
         {
-            var np1 = np.full(1d, new Shape(5, 5, 5));
+            var np1 = np.full(new Shape(5, 5, 5), 1d);
 
             Assert.IsTrue(np1.Data<double>().Where(x => x == 1).ToArray().Length == 125);
         }
@@ -59,7 +59,7 @@ namespace NumSharp.UnitTest.Creation
         [Arguments(typeof(bool))]
         public void Full_AllTypes(Type dtype)
         {
-            var np1 = np.full(Activator.CreateInstance(dtype), new Shape(3, 3, 3), dtype);
+            var np1 = np.full(new Shape(3, 3, 3), Activator.CreateInstance(dtype), dtype);
             np1.dtype.Should().Be(dtype);
             np1.Array.GetIndex(0).GetType().Should().Be(dtype);
         }

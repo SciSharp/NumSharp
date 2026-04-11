@@ -32,7 +32,7 @@ namespace NumSharp.UnitTest.RandomSampling;
     public void Power_MultiDimensionalSize_ReturnsCorrectShape()
     {
         np.random.seed(42);
-        var result = np.random.power(2.0, 2L, 3L);
+        var result = np.random.power(2.0, new Shape(2, 3));
         result.Should().BeShaped(2, 3);
     }
 

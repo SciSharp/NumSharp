@@ -39,7 +39,7 @@ namespace NumSharp.UnitTest.RandomSampling
         public void StandardNormal_2DShape_ReturnsCorrectShape()
         {
             np.random.seed(42);
-            var result = np.random.standard_normal(2, 3);
+            var result = np.random.standard_normal(new Shape(2, 3));
 
             Assert.AreEqual(2, result.ndim);
             Assert.AreEqual(6, result.size);
@@ -181,7 +181,7 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void StandardNormal_3DShape_Works()
         {
-            var result = np.random.standard_normal(2, 3, 4);
+            var result = np.random.standard_normal(new Shape(2, 3, 4));
 
             Assert.AreEqual(3, result.ndim);
             Assert.AreEqual(24, result.size);

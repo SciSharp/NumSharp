@@ -361,7 +361,7 @@ namespace NumSharp.UnitTest
         [Test]
         public void Bug6a_ToBitmap_1pxWide24bpp_StridePaddingCrash()
         {
-            var nd = np.ones(1, 2, 1, 3).astype(NPTypeCode.Byte);
+            var nd = np.ones(new Shape(1, 2, 1, 3)).astype(NPTypeCode.Byte);
             nd.size.Should().Be(6);
 
             // Expected: creates a 1x2 24bpp bitmap with all-ones pixels
@@ -384,7 +384,7 @@ namespace NumSharp.UnitTest
         [Test]
         public void Bug6b_ToBitmap_5pxWide24bpp_StridePaddingCrash()
         {
-            var nd = np.ones(1, 2, 5, 3).astype(NPTypeCode.Byte);
+            var nd = np.ones(new Shape(1, 2, 5, 3)).astype(NPTypeCode.Byte);
             nd.size.Should().Be(30);
 
             // Expected: creates a 5x2 24bpp bitmap
@@ -468,7 +468,7 @@ namespace NumSharp.UnitTest
         [Test]
         public void Bug8_ToBitmap_UnsupportedBpp_UnhelpfulError()
         {
-            var nd = np.zeros(1, 2, 2, 2).astype(NPTypeCode.Byte);
+            var nd = np.zeros(new Shape(1, 2, 2, 2)).astype(NPTypeCode.Byte);
 
             // Expected: descriptive ArgumentException about unsupported channel count
             // Actual: "Parameter is not valid" from new Bitmap(w, h, DontCare)

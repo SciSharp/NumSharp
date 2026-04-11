@@ -21,8 +21,20 @@ namespace NumSharp
         ///     distribution. Each sample represents n experiments, where each experiment
         ///     results in one of k possible outcomes.
         /// </remarks>
-        public NDArray multinomial(int n, double[] pvals, Shape size)
-            => multinomial(n, pvals, size.dimensions);
+        public NDArray multinomial(int n, double[] pvals, Shape? size = null)
+        {
+            return multinomial(n, pvals, size?.dimensions);
+        }
+
+        /// <summary>
+        ///     Draw samples from a multinomial distribution.
+        /// </summary>
+        /// <param name="n">Number of experiments (>= 0).</param>
+        /// <param name="pvals">Probabilities of each of the k different outcomes. Must sum to ~1.</param>
+        /// <param name="size">Output shape as int array.</param>
+        /// <returns>Drawn samples with shape (*size, k), where each row sums to n.</returns>
+        public NDArray multinomial(int n, double[] pvals, int[] size)
+            => multinomial(n, pvals, new Shape(size));
 
         /// <summary>
         ///     Draw samples from a multinomial distribution.
@@ -34,7 +46,7 @@ namespace NumSharp
         /// <remarks>
         ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.multinomial.html
         /// </remarks>
-        public NDArray multinomial(int n, double[] pvals, long[] size)
+        private NDArray multinomial(int n, double[] pvals, long[] size)
         {
             // Parameter validation
             if (n < 0)

@@ -8,6 +8,11 @@ namespace NumSharp
     public partial class NumPyRandom
     {
         /// <summary>
+        ///     Draw a single sample from the standard exponential distribution.
+        /// </summary>
+        public NDArray standard_exponential() => standard_exponential(Shape.Scalar);
+
+        /// <summary>
         ///     Draw samples from the standard exponential distribution.
         /// </summary>
         /// <param name="size">Output shape.</param>
@@ -22,12 +27,10 @@ namespace NumSharp
         ///     <br/>
         ///     Uses inverse transform: X = -log(1 - U) where U ~ Uniform(0, 1)
         /// </remarks>
-        public NDArray standard_exponential(Shape size = default)
+        public NDArray standard_exponential(Shape size)
         {
-            if (size.IsEmpty)
-            {
+            if (size.IsScalar || size.IsEmpty)
                 return NDArray.Scalar(SampleStandardExponential());
-            }
 
             var ret = new NDArray<double>(size);
             ArraySlice<double> data = ret.Data<double>();
@@ -39,30 +42,6 @@ namespace NumSharp
 
             return ret;
         }
-
-        /// <summary>
-        ///     Draw samples from the standard exponential distribution.
-        /// </summary>
-        /// <param name="size">Output shape as int array.</param>
-        /// <returns>Drawn samples from the standard exponential distribution.</returns>
-        public NDArray standard_exponential(int[] size)
-            => standard_exponential(new Shape(size));
-
-        /// <summary>
-        ///     Draw samples from the standard exponential distribution.
-        /// </summary>
-        /// <param name="size">Output shape.</param>
-        /// <returns>Drawn samples from the standard exponential distribution.</returns>
-        public NDArray standard_exponential(long[] size)
-            => standard_exponential(new Shape(size));
-
-        /// <summary>
-        ///     Draw samples from the standard exponential distribution.
-        /// </summary>
-        /// <param name="size">Output shape as single int.</param>
-        /// <returns>Drawn samples from the standard exponential distribution.</returns>
-        public NDArray standard_exponential(int size)
-            => standard_exponential(new int[] { size });
 
         /// <summary>
         ///     Sample a single value from the standard exponential distribution.

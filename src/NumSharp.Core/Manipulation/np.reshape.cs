@@ -9,7 +9,7 @@
         /// <param name="shape">The new shape should be compatible with the original shape. </param>
         /// <returns>original <paramref name="nd"/> reshaped without copying.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.reshape.html</remarks>
-        public static NDArray reshape(NDArray nd, params int[] shape)
+        public static NDArray reshape(NDArray nd, int[] shape)
         {
             return nd.reshape(shape);
         }
@@ -21,7 +21,7 @@
         /// <param name="shape">The new shape should be compatible with the original shape. </param>
         /// <returns>original <paramref name="nd"/> reshaped without copying.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.reshape.html</remarks>
-        public static NDArray reshape(NDArray nd, params long[] shape)
+        public static NDArray reshape(NDArray nd, long[] shape)
         {
             return nd.reshape(shape);
         }

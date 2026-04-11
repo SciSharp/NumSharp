@@ -20,7 +20,7 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void StandardExponential_2D_ReturnsCorrectShape()
         {
-            var rand = np.random.standard_exponential(5L, 5L);
+            var rand = np.random.standard_exponential(new Shape(5, 5));
             Assert.AreEqual(2, rand.ndim);
             Assert.AreEqual(25, rand.size);
         }

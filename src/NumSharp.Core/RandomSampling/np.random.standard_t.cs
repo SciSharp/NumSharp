@@ -7,6 +7,11 @@ namespace NumSharp
     public partial class NumPyRandom
     {
         /// <summary>
+        ///     Draw a single sample from a standard Student's t distribution.
+        /// </summary>
+        public NDArray standard_t(double df) => standard_t(df, Shape.Scalar);
+
+        /// <summary>
         ///     Draw samples from a standard Student's t distribution with df degrees of freedom.
         /// </summary>
         /// <param name="df">Degrees of freedom, must be > 0.</param>
@@ -22,45 +27,13 @@ namespace NumSharp
         ///     P(x, df) = Gamma((df+1)/2) / (sqrt(pi*df) * Gamma(df/2)) * (1 + x^2/df)^(-(df+1)/2)
         /// </remarks>
         public NDArray standard_t(double df, Shape size)
-            => standard_t(df, size.dimensions);
-
-        /// <summary>
-        ///     Draw samples from a standard Student's t distribution with df degrees of freedom.
-        /// </summary>
-        /// <param name="df">Degrees of freedom, must be > 0.</param>
-        /// <param name="size">Output shape as int array.</param>
-        /// <returns>Drawn samples from the parameterized standard Student's t distribution.</returns>
-        /// <remarks>
-        ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.standard_t.html
-        ///     <br/>
-        ///     A special case of the hyperbolic distribution. As df gets large, the result
-        ///     resembles that of the standard normal distribution.
-        /// </remarks>
-        public NDArray standard_t(double df, int[] size)
-            => standard_t(df, Shape.ComputeLongShape(size));
-
-        /// <summary>
-        ///     Draw samples from a standard Student's t distribution with df degrees of freedom.
-        /// </summary>
-        /// <param name="df">Degrees of freedom, must be > 0.</param>
-        /// <param name="size">Output shape.</param>
-        /// <returns>Drawn samples from the parameterized standard Student's t distribution.</returns>
-        /// <remarks>
-        ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.standard_t.html
-        ///     <br/>
-        ///     A special case of the hyperbolic distribution. As df gets large, the result
-        ///     resembles that of the standard normal distribution.
-        /// </remarks>
-        public NDArray standard_t(double df, long[] size)
         {
             // Parameter validation (matches NumPy error message)
             if (df <= 0)
                 throw new ArgumentException("df <= 0", nameof(df));
 
-            if (size == null || size.Length == 0)
-            {
+            if (size.IsScalar || size.IsEmpty)
                 return NDArray.Scalar(SampleStandardT(df));
-            }
 
             var result = new NDArray<double>(size);
             ArraySlice<double> resultArray = result.Data<double>();

@@ -26,6 +26,9 @@ namespace NumSharp
             if (a <= 0)
                 throw new ArgumentException("a <= 0", nameof(a));
 
+            if (size.IsScalar || size.IsEmpty)
+                return NDArray.Scalar(SamplePower(a));
+
             var ret = new NDArray<double>(size);
             ArraySlice<double> data = ret.Data<double>();
 
@@ -68,14 +71,8 @@ namespace NumSharp
         ///     Draw a single sample from a power distribution.
         /// </summary>
         /// <param name="a">Shape parameter of the distribution. Must be positive (&gt; 0).</param>
-        /// <returns>A single sample from the power distribution, in range [0, 1].</returns>
-        public double power(double a)
-        {
-            if (a <= 0)
-                throw new ArgumentException("a <= 0", nameof(a));
-
-            return SamplePower(a);
-        }
+        /// <returns>A single sample from the power distribution as 0-d array.</returns>
+        public NDArray power(double a) => power(a, Shape.Scalar);
 
         /// <summary>
         ///     Sample from the power distribution using inverse transform method.

@@ -71,7 +71,7 @@ namespace NumSharp.UnitTest.Logic
         [Test]
         public void NDArray()
         {
-            var value = np.zeros(3, 3);
+            var value = np.zeros(new Shape(3, 3));
             Assert.IsFalse(np.isscalar(value));
             NDArray nd = 1d;
             Assert.IsTrue(np.isscalar(nd));

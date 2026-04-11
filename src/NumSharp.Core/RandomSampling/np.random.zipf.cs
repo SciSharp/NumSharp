@@ -7,6 +7,11 @@ namespace NumSharp
     public partial class NumPyRandom
     {
         /// <summary>
+        ///     Draw a single sample from a Zipf distribution.
+        /// </summary>
+        public NDArray zipf(double a) => zipf(a, Shape.Scalar);
+
+        /// <summary>
         ///     Draw samples from a Zipf distribution.
         /// </summary>
         /// <param name="a">Distribution parameter. Must be greater than 1.</param>
@@ -26,15 +31,13 @@ namespace NumSharp
         ///     <br/>
         ///     Samples are positive integers.
         /// </remarks>
-        public NDArray zipf(double a, Shape size = default)
+        public NDArray zipf(double a, Shape size)
         {
             if (a <= 1.0 || double.IsNaN(a))
                 throw new ArgumentException("a <= 1 or a is NaN", nameof(a));
 
-            if (size.IsEmpty)
-            {
+            if (size.IsScalar || size.IsEmpty)
                 return NDArray.Scalar(SampleZipf(a));
-            }
 
             var ret = new NDArray<long>(size);
             ArraySlice<long> data = ret.Data<long>();
@@ -46,33 +49,6 @@ namespace NumSharp
 
             return ret;
         }
-
-        /// <summary>
-        ///     Draw samples from a Zipf distribution.
-        /// </summary>
-        /// <param name="a">Distribution parameter. Must be greater than 1.</param>
-        /// <param name="size">Output shape as int array.</param>
-        /// <returns>Drawn samples from the parameterized Zipf distribution.</returns>
-        public NDArray zipf(double a, int[] size)
-            => zipf(a, new Shape(size));
-
-        /// <summary>
-        ///     Draw samples from a Zipf distribution.
-        /// </summary>
-        /// <param name="a">Distribution parameter. Must be greater than 1.</param>
-        /// <param name="size">Output shape as long array (for NumPy compatibility).</param>
-        /// <returns>Drawn samples from the parameterized Zipf distribution.</returns>
-        public NDArray zipf(double a, long[] size)
-            => zipf(a, new Shape(size));
-
-        /// <summary>
-        ///     Draw samples from a Zipf distribution.
-        /// </summary>
-        /// <param name="a">Distribution parameter. Must be greater than 1.</param>
-        /// <param name="size">Output shape as single int.</param>
-        /// <returns>Drawn samples from the parameterized Zipf distribution.</returns>
-        public NDArray zipf(double a, int size)
-            => zipf(a, new int[] { size });
 
         /// <summary>
         ///     Sample from the Zipf distribution using the same rejection algorithm as NumPy.

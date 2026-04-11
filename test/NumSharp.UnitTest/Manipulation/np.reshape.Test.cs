@@ -18,7 +18,7 @@ namespace NumSharp.UnitTest.Manipulation
         {
             // NumPy: np.arange(6).reshape(2,3) = [[0,1,2],[3,4,5]]
             var a = np.arange(6);
-            var r = np.reshape(a, 2, 3);
+            var r = np.reshape(a, (2, 3));
 
             r.Should().BeShaped(2, 3);
             r.Should().BeOfValues(0, 1, 2, 3, 4, 5);
@@ -29,7 +29,7 @@ namespace NumSharp.UnitTest.Manipulation
         {
             // NumPy: np.arange(6).reshape(2,1,3) = [[[0,1,2]],[[3,4,5]]]
             var a = np.arange(6);
-            var r = np.reshape(a, 2, 1, 3);
+            var r = np.reshape(a, (2, 1, 3));
 
             r.Should().BeShaped(2, 1, 3);
             r.Should().BeOfValues(0, 1, 2, 3, 4, 5);
@@ -51,7 +51,7 @@ namespace NumSharp.UnitTest.Manipulation
         {
             // NumPy: np.arange(6).reshape(2,3).reshape(3,1,2) = [[[0,1]],[[2,3]],[[4,5]]]
             var a = np.arange(6).reshape(2, 3);
-            var r = np.reshape(a, 3, 1, 2);
+            var r = np.reshape(a, (3, 1, 2));
 
             r.Should().BeShaped(3, 1, 2);
             r.Should().BeOfValues(0, 1, 2, 3, 4, 5);
@@ -63,7 +63,7 @@ namespace NumSharp.UnitTest.Manipulation
             // NumPy: np.arange(24).reshape(2,3,4).reshape(6,4)
             // First row: [0,1,2,3], Last row: [20,21,22,23]
             var a = np.arange(24).reshape(2, 3, 4);
-            var r = np.reshape(a, 6, 4);
+            var r = np.reshape(a, (6, 4));
 
             r.Should().BeShaped(6, 4);
             r.Should().BeOfSize(24);
@@ -96,7 +96,7 @@ namespace NumSharp.UnitTest.Manipulation
             // NumPy: np.arange(24).reshape(2,3,2,2).reshape(6,4)
             // Same linear order as 3D→2D test
             var a = np.arange(24).reshape(2, 3, 2, 2);
-            var r = np.reshape(a, 6, 4);
+            var r = np.reshape(a, (6, 4));
 
             r.Should().BeShaped(6, 4);
             r.GetInt64(0, 0).Should().Be(0);
@@ -110,7 +110,7 @@ namespace NumSharp.UnitTest.Manipulation
         {
             // NumPy: np.arange(6).reshape(2,3).reshape(2,3) = [[0,1,2],[3,4,5]] (no-op)
             var a = np.arange(6).reshape(2, 3);
-            var r = np.reshape(a, 2, 3);
+            var r = np.reshape(a, (2, 3));
 
             r.Should().BeShaped(2, 3);
             r.Should().BeOfValues(0, 1, 2, 3, 4, 5);
@@ -121,7 +121,7 @@ namespace NumSharp.UnitTest.Manipulation
         {
             // NumPy: np.array([42]).reshape(1,1,1) = value 42, shape (1,1,1)
             var a = np.array(new long[] { 42 });
-            var r = np.reshape(a, 1, 1, 1);
+            var r = np.reshape(a, (1, 1, 1));
 
             r.Should().BeShaped(1, 1, 1);
             r.GetInt64(0, 0, 0).Should().Be(42);
@@ -132,7 +132,7 @@ namespace NumSharp.UnitTest.Manipulation
         {
             // NumPy: np.arange(6).reshape(1,6).reshape(6,1) = [[0],[1],[2],[3],[4],[5]]
             var a = np.arange(6).reshape(1, 6);
-            var r = np.reshape(a, 6, 1);
+            var r = np.reshape(a, (6, 1));
 
             r.Should().BeShaped(6, 1);
             r.GetInt64(0, 0).Should().Be(0);
@@ -152,7 +152,7 @@ namespace NumSharp.UnitTest.Manipulation
         {
             // NumPy: np.arange(12).reshape(-1,3) → shape (4,3)
             var a = np.arange(12);
-            var r = np.reshape(a, -1, 3);
+            var r = np.reshape(a, (-1, 3));
 
             r.Should().BeShaped(4, 3);
             r.Should().BeOfValues(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11);
@@ -163,7 +163,7 @@ namespace NumSharp.UnitTest.Manipulation
         {
             // NumPy: np.arange(12).reshape(3,-1) → shape (3,4)
             var a = np.arange(12);
-            var r = np.reshape(a, 3, -1);
+            var r = np.reshape(a, (3, -1));
 
             r.Should().BeShaped(3, 4);
             r.Should().BeOfValues(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11);
@@ -174,7 +174,7 @@ namespace NumSharp.UnitTest.Manipulation
         {
             // NumPy: np.arange(12).reshape(2,-1,3) → shape (2,2,3)
             var a = np.arange(12);
-            var r = np.reshape(a, 2, -1, 3);
+            var r = np.reshape(a, (2, -1, 3));
 
             r.Should().BeShaped(2, 2, 3);
             r.Should().BeOfValues(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11);
@@ -196,7 +196,7 @@ namespace NumSharp.UnitTest.Manipulation
         {
             // NumPy: np.arange(5).reshape(-1,1) → shape (5,1)
             var a = np.arange(5);
-            var r = np.reshape(a, -1, 1);
+            var r = np.reshape(a, (-1, 1));
 
             r.Should().BeShaped(5, 1);
             r.GetInt64(0, 0).Should().Be(0);
@@ -276,7 +276,7 @@ namespace NumSharp.UnitTest.Manipulation
             // Note: NumSharp doesn't have true 0-dim scalars; np.array(42) creates shape (1,)
             // np.array(42) creates int32 array
             var a = np.array(42);
-            var r = np.reshape(a, 1, 1);
+            var r = np.reshape(a, (1, 1));
 
             r.Should().BeShaped(1, 1);
             r.GetInt32(0, 0).Should().Be(42);
@@ -302,7 +302,7 @@ namespace NumSharp.UnitTest.Manipulation
         {
             // NumPy: np.array([]).reshape(0,3) → shape (0,3), size 0
             var a = np.array(new int[0]);
-            var r = np.reshape(a, 0, 3);
+            var r = np.reshape(a, (0, 3));
 
             r.Should().BeShaped(0, 3);
             r.Should().BeOfSize(0);
@@ -313,7 +313,7 @@ namespace NumSharp.UnitTest.Manipulation
         {
             // NumPy: np.array([]).reshape(3,0) → shape (3,0), size 0
             var a = np.array(new int[0]);
-            var r = np.reshape(a, 3, 0);
+            var r = np.reshape(a, (3, 0));
 
             r.Should().BeShaped(3, 0);
             r.Should().BeOfSize(0);
@@ -324,7 +324,7 @@ namespace NumSharp.UnitTest.Manipulation
         {
             // NumPy: np.array([]).reshape(0,0) → shape (0,0), size 0
             var a = np.array(new int[0]);
-            var r = np.reshape(a, 0, 0);
+            var r = np.reshape(a, (0, 0));
 
             r.Should().BeShaped(0, 0);
             r.Should().BeOfSize(0);
@@ -346,7 +346,7 @@ namespace NumSharp.UnitTest.Manipulation
         {
             // NumPy: np.array([]).reshape(-1,3) → shape (0,3)
             var a = np.array(new int[0]);
-            var r = np.reshape(a, -1, 3);
+            var r = np.reshape(a, (-1, 3));
 
             r.Should().BeShaped(0, 3);
             r.Should().BeOfSize(0);
@@ -362,7 +362,7 @@ namespace NumSharp.UnitTest.Manipulation
             // NumPy: np.arange(10)[2:8].reshape(2,3) = [[2,3,4],[5,6,7]]
             var a = np.arange(10);
             var s = a["2:8"];
-            var r = np.reshape(s, 2, 3);
+            var r = np.reshape(s, (2, 3));
 
             r.Should().BeShaped(2, 3);
             r.Should().BeOfValues(2, 3, 4, 5, 6, 7);
@@ -374,7 +374,7 @@ namespace NumSharp.UnitTest.Manipulation
             // NumPy: np.arange(10)[::2].reshape(1,5) = [[0,2,4,6,8]]
             var a = np.arange(10);
             var s = a["::2"];
-            var r = np.reshape(s, 1, 5);
+            var r = np.reshape(s, (1, 5));
 
             r.Should().BeShaped(1, 5);
             r.Should().BeOfValues(0, 2, 4, 6, 8);
@@ -410,7 +410,7 @@ namespace NumSharp.UnitTest.Manipulation
             // NumPy: np.arange(6)[::-1].reshape(2,3) = [[5,4,3],[2,1,0]]
             var a = np.arange(6);
             var s = a["::-1"];
-            var r = np.reshape(s, 2, 3);
+            var r = np.reshape(s, (2, 3));
 
             r.Should().BeShaped(2, 3);
             r.Should().BeOfValues(5, 4, 3, 2, 1, 0);
@@ -494,7 +494,7 @@ namespace NumSharp.UnitTest.Manipulation
         public void Reshape_Boolean()
         {
             var a = np.array(new bool[] { true, false, true, false, true, false });
-            var r = np.reshape(a, 2, 3);
+            var r = np.reshape(a, (2, 3));
 
             r.Should().BeShaped(2, 3);
             r.Should().BeOfType<bool>();
@@ -505,7 +505,7 @@ namespace NumSharp.UnitTest.Manipulation
         public void Reshape_Byte()
         {
             var a = np.array(new byte[] { 0, 1, 2, 3, 4, 5 });
-            var r = np.reshape(a, 2, 3);
+            var r = np.reshape(a, (2, 3));
 
             r.Should().BeShaped(2, 3);
             r.Should().BeOfType<byte>();
@@ -516,7 +516,7 @@ namespace NumSharp.UnitTest.Manipulation
         public void Reshape_Int16()
         {
             var a = np.array(new short[] { 0, 1, 2, 3, 4, 5 });
-            var r = np.reshape(a, 2, 3);
+            var r = np.reshape(a, (2, 3));
 
             r.Should().BeShaped(2, 3);
             r.Should().BeOfType<short>();
@@ -527,7 +527,7 @@ namespace NumSharp.UnitTest.Manipulation
         public void Reshape_UInt16()
         {
             var a = np.array(new ushort[] { 0, 1, 2, 3, 4, 5 });
-            var r = np.reshape(a, 2, 3);
+            var r = np.reshape(a, (2, 3));
 
             r.Should().BeShaped(2, 3);
             r.Should().BeOfType<ushort>();
@@ -538,7 +538,7 @@ namespace NumSharp.UnitTest.Manipulation
         public void Reshape_Int32()
         {
             var a = np.array(new int[] { 0, 1, 2, 3, 4, 5 });
-            var r = np.reshape(a, 2, 3);
+            var r = np.reshape(a, (2, 3));
 
             r.Should().BeShaped(2, 3);
             r.Should().BeOfType<int>();
@@ -549,7 +549,7 @@ namespace NumSharp.UnitTest.Manipulation
         public void Reshape_UInt32()
         {
             var a = np.array(new uint[] { 0, 1, 2, 3, 4, 5 });
-            var r = np.reshape(a, 2, 3);
+            var r = np.reshape(a, (2, 3));
 
             r.Should().BeShaped(2, 3);
             r.Should().BeOfType<uint>();
@@ -560,7 +560,7 @@ namespace NumSharp.UnitTest.Manipulation
         public void Reshape_Int64()
         {
             var a = np.array(new long[] { 0, 1, 2, 3, 4, 5 });
-            var r = np.reshape(a, 2, 3);
+            var r = np.reshape(a, (2, 3));
 
             r.Should().BeShaped(2, 3);
             r.Should().BeOfType<long>();
@@ -571,7 +571,7 @@ namespace NumSharp.UnitTest.Manipulation
         public void Reshape_UInt64()
         {
             var a = np.array(new ulong[] { 0, 1, 2, 3, 4, 5 });
-            var r = np.reshape(a, 2, 3);
+            var r = np.reshape(a, (2, 3));
 
             r.Should().BeShaped(2, 3);
             r.Should().BeOfType<ulong>();
@@ -582,7 +582,7 @@ namespace NumSharp.UnitTest.Manipulation
         public void Reshape_Char()
         {
             var a = np.array(new char[] { 'a', 'b', 'c', 'd', 'e', 'f' });
-            var r = np.reshape(a, 2, 3);
+            var r = np.reshape(a, (2, 3));
 
             r.Should().BeShaped(2, 3);
             r.Should().BeOfType<char>();
@@ -593,7 +593,7 @@ namespace NumSharp.UnitTest.Manipulation
         public void Reshape_Single()
         {
             var a = np.array(new float[] { 0f, 1f, 2f, 3f, 4f, 5f });
-            var r = np.reshape(a, 2, 3);
+            var r = np.reshape(a, (2, 3));
 
             r.Should().BeShaped(2, 3);
             r.Should().BeOfType<float>();
@@ -604,7 +604,7 @@ namespace NumSharp.UnitTest.Manipulation
         public void Reshape_Double()
         {
             var a = np.array(new double[] { 0.0, 1.0, 2.0, 3.0, 4.0, 5.0 });
-            var r = np.reshape(a, 2, 3);
+            var r = np.reshape(a, (2, 3));
 
             r.Should().BeShaped(2, 3);
             r.Should().BeOfType<double>();
@@ -615,7 +615,7 @@ namespace NumSharp.UnitTest.Manipulation
         public void Reshape_Decimal()
         {
             var a = np.array(new decimal[] { 0m, 1m, 2m, 3m, 4m, 5m });
-            var r = np.reshape(a, 2, 3);
+            var r = np.reshape(a, (2, 3));
 
             r.Should().BeShaped(2, 3);
             r.Should().BeOfType<decimal>();
@@ -654,7 +654,7 @@ namespace NumSharp.UnitTest.Manipulation
         {
             // Test large array different shape
             var a = np.arange(10000).reshape(100, 100);
-            var r = np.reshape(a, 50, 200);
+            var r = np.reshape(a, (50, 200));
 
             r.Should().BeShaped(50, 200);
             r.Should().BeOfSize(10000);
@@ -676,7 +676,7 @@ namespace NumSharp.UnitTest.Manipulation
             // NumPy: np.arange(6).reshape(2,4) → raises ValueError
             var a = np.arange(6);
 
-            Action act = () => np.reshape(a, 2, 4);
+            Action act = () => np.reshape(a, (2, 4));
 
             act.Should().Throw<Exception>(); // Could be IncorrectShapeException or similar
         }
@@ -687,7 +687,7 @@ namespace NumSharp.UnitTest.Manipulation
             // NumPy: np.arange(6).reshape(-1,-1) → raises ValueError
             var a = np.arange(6);
 
-            Action act = () => np.reshape(a, -1, -1);
+            Action act = () => np.reshape(a, (-1, -1));
 
             act.Should().Throw<ArgumentException>();
         }
@@ -698,7 +698,7 @@ namespace NumSharp.UnitTest.Manipulation
             // NumPy: np.arange(7).reshape(-1,3) → raises ValueError (7 not divisible by 3)
             var a = np.arange(7);
 
-            Action act = () => np.reshape(a, -1, 3);
+            Action act = () => np.reshape(a, (-1, 3));
 
             act.Should().Throw<Exception>();
         }
@@ -712,7 +712,7 @@ namespace NumSharp.UnitTest.Manipulation
         {
             // NumPy: np.reshape(a, (3,4)) == a.reshape(3,4)
             var a = np.arange(12);
-            var r1 = np.reshape(a, 3, 4);
+            var r1 = np.reshape(a, (3, 4));
             var r2 = a.reshape(3, 4);
 
             r1.Should().BeShaped(3, 4);
@@ -775,7 +775,7 @@ namespace NumSharp.UnitTest.Manipulation
             // NumSharp equivalent: np.expand_dims(a, 0)
             var a = np.arange(6);
             var expanded = np.expand_dims(a, 0);
-            var r = np.reshape(expanded, 2, 3);
+            var r = np.reshape(expanded, (2, 3));
 
             r.Should().BeShaped(2, 3);
             r.Should().BeOfValues(0, 1, 2, 3, 4, 5);
@@ -786,9 +786,9 @@ namespace NumSharp.UnitTest.Manipulation
         {
             // NumPy: arange(24)→(4,6)→(2,2,6)→(2,2,2,3)→(24), verify equal to original
             var a = np.arange(24);
-            var r1 = np.reshape(a, 4, 6);
-            var r2 = np.reshape(r1, 2, 2, 6);
-            var r3 = np.reshape(r2, 2, 2, 2, 3);
+            var r1 = np.reshape(a, (4, 6));
+            var r2 = np.reshape(r1, (2, 2, 6));
+            var r3 = np.reshape(r2, (2, 2, 2, 3));
             var r4 = np.reshape(r3, 24);
 
             r4.Should().BeShaped(24);

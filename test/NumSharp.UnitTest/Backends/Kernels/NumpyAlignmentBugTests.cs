@@ -611,7 +611,7 @@ public class NumpyAlignmentBugTests
         // >>> arr = np.zeros((3, 4, 5))
         // >>> np.moveaxis(arr, 0, -1).shape
         // (4, 5, 3)
-        var arr = np.zeros(3, 4, 5);
+        var arr = np.zeros(new Shape(3, 4, 5));
 
         var moved = np.moveaxis(arr, 0, -1);
 
@@ -626,7 +626,7 @@ public class NumpyAlignmentBugTests
     public void Bug15_Moveaxis_ToFirst()
     {
         // NUMPY: np.moveaxis(arr, -1, 0).shape on (3,4,5) -> (5,3,4)
-        var arr = np.zeros(3, 4, 5);
+        var arr = np.zeros(new Shape(3, 4, 5));
 
         var moved = np.moveaxis(arr, -1, 0);
 

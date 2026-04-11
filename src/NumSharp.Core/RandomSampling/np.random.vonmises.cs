@@ -6,6 +6,11 @@ namespace NumSharp
     public partial class NumPyRandom
     {
         /// <summary>
+        ///     Draw a single sample from a von Mises distribution.
+        /// </summary>
+        public NDArray vonmises(double mu, double kappa) => vonmises(mu, kappa, Shape.Scalar);
+
+        /// <summary>
         ///     Draw samples from a von Mises distribution.
         /// </summary>
         /// <param name="mu">Mode ("center") of the distribution in radians.</param>
@@ -14,7 +19,7 @@ namespace NumSharp
         ///     When kappa = 0, the distribution is uniform on the circle.
         ///     As kappa increases, the distribution becomes more concentrated around mu.
         /// </param>
-        /// <param name="size">Output shape. If null, a single value is returned.</param>
+        /// <param name="size">Output shape.</param>
         /// <returns>Drawn samples from the parameterized von Mises distribution.</returns>
         /// <exception cref="ArgumentException">If kappa is negative.</exception>
         /// <remarks>
@@ -30,57 +35,13 @@ namespace NumSharp
         ///     p(x) = exp(kappa * cos(x - mu)) / (2 * pi * I_0(kappa))
         ///     where I_0(kappa) is the modified Bessel function of order 0.
         /// </remarks>
-        public NDArray vonmises(double mu, double kappa, Shape? size = null)
-        {
-            if (kappa < 0)
-                throw new ArgumentException("kappa < 0", nameof(kappa));
-
-            if (size == null)
-            {
-                // Return scalar
-                return NDArray.Scalar(SampleVonMises(mu, kappa));
-            }
-
-            return vonmises(mu, kappa, size.Value.dimensions);
-        }
-
-        /// <summary>
-        ///     Draw samples from a von Mises distribution.
-        /// </summary>
-        /// <param name="mu">Mode ("center") of the distribution in radians.</param>
-        /// <param name="kappa">Concentration parameter of the distribution. Must be >= 0.</param>
-        /// <param name="size">Output shape as int array.</param>
-        /// <returns>Drawn samples from the parameterized von Mises distribution.</returns>
-        public NDArray vonmises(double mu, double kappa, int[] size)
-            => vonmises(mu, kappa, new Shape(size));
-
-        /// <summary>
-        ///     Draw samples from a von Mises distribution.
-        /// </summary>
-        /// <param name="mu">Mode ("center") of the distribution in radians.</param>
-        /// <param name="kappa">Concentration parameter of the distribution. Must be >= 0.</param>
-        /// <param name="size">Output shape.</param>
-        /// <returns>Drawn samples from the parameterized von Mises distribution.</returns>
-        public NDArray vonmises(double mu, double kappa, long[] size)
-            => vonmises(mu, kappa, new Shape(size));
-
-        /// <summary>
-        ///     Draw samples from a von Mises distribution.
-        /// </summary>
-        /// <param name="mu">Mode ("center") of the distribution in radians.</param>
-        /// <param name="kappa">Concentration parameter of the distribution. Must be >= 0.</param>
-        /// <param name="size">Output shape.</param>
-        /// <returns>Drawn samples from the parameterized von Mises distribution.</returns>
         public NDArray vonmises(double mu, double kappa, Shape size)
         {
             if (kappa < 0)
                 throw new ArgumentException("kappa < 0", nameof(kappa));
 
-            if (size.IsEmpty)
-            {
-                // Return scalar
+            if (size.IsScalar || size.IsEmpty)
                 return NDArray.Scalar(SampleVonMises(mu, kappa));
-            }
 
             unsafe
             {
@@ -95,16 +56,6 @@ namespace NumSharp
                 return ret;
             }
         }
-
-        /// <summary>
-        ///     Draw samples from a von Mises distribution.
-        /// </summary>
-        /// <param name="mu">Mode ("center") of the distribution in radians.</param>
-        /// <param name="kappa">Concentration parameter of the distribution. Must be >= 0.</param>
-        /// <param name="size">Output shape as single int.</param>
-        /// <returns>Drawn samples from the parameterized von Mises distribution.</returns>
-        public NDArray vonmises(double mu, double kappa, int size)
-            => vonmises(mu, kappa, new int[] { size });
 
         /// <summary>
         ///     Sample from the von Mises distribution using the same algorithm as NumPy.

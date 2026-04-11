@@ -6,10 +6,15 @@ namespace NumSharp
     public partial class NumPyRandom
     {
         /// <summary>
+        ///     Draw a single sample from a Weibull distribution.
+        /// </summary>
+        public NDArray weibull(double a) => weibull(a, Shape.Scalar);
+
+        /// <summary>
         ///     Draw samples from a Weibull distribution.
         /// </summary>
         /// <param name="a">Shape parameter of the distribution. Must be non-negative.</param>
-        /// <param name="size">Output shape. If null, a single value is returned.</param>
+        /// <param name="size">Output shape.</param>
         /// <returns>Drawn samples from the Weibull distribution.</returns>
         /// <exception cref="ArgumentException">If a is negative.</exception>
         /// <remarks>
@@ -23,12 +28,12 @@ namespace NumSharp
         ///     <br/>
         ///     When a=1, the Weibull distribution reduces to the exponential distribution.
         /// </remarks>
-        public NDArray weibull(double a, Shape? size = null)
+        public NDArray weibull(double a, Shape size)
         {
             if (a < 0)
                 throw new ArgumentException("a < 0", nameof(a));
 
-            if (size == null)
+            if (size.IsScalar || size.IsEmpty)
             {
                 // Return scalar
                 if (a == 0)
@@ -36,52 +41,9 @@ namespace NumSharp
                 return NDArray.Scalar(WeibullSample(a));
             }
 
-            return weibull(a, size.Value.dimensions);
-        }
-
-        /// <summary>
-        ///     Draw samples from a Weibull distribution.
-        /// </summary>
-        /// <param name="a">Shape parameter of the distribution. Must be non-negative.</param>
-        /// <param name="size">Output shape.</param>
-        /// <returns>Drawn samples from the Weibull distribution.</returns>
-        /// <exception cref="ArgumentException">If a is negative.</exception>
-        public NDArray weibull(double a, Shape size) => weibull(a, size.dimensions);
-
-        /// <summary>
-        ///     Draw samples from a Weibull distribution.
-        /// </summary>
-        /// <param name="a">Shape parameter of the distribution. Must be non-negative.</param>
-        /// <param name="size">Output shape as a single dimension.</param>
-        /// <returns>Drawn samples from the Weibull distribution.</returns>
-        /// <exception cref="ArgumentException">If a is negative.</exception>
-        public NDArray weibull(double a, int size) => weibull(a, new[] { size });
-
-        /// <summary>
-        ///     Draw samples from a Weibull distribution.
-        /// </summary>
-        /// <param name="a">Shape parameter of the distribution. Must be non-negative.</param>
-        /// <param name="size">Output shape as int array.</param>
-        /// <returns>Drawn samples from the Weibull distribution.</returns>
-        /// <exception cref="ArgumentException">If a is negative.</exception>
-        public NDArray weibull(double a, int[] size)
-            => weibull(a, Shape.ComputeLongShape(size));
-
-        /// <summary>
-        ///     Draw samples from a Weibull distribution.
-        /// </summary>
-        /// <param name="a">Shape parameter of the distribution. Must be non-negative.</param>
-        /// <param name="size">Output shape as long array (for NumPy compatibility).</param>
-        /// <returns>Drawn samples from the Weibull distribution.</returns>
-        /// <exception cref="ArgumentException">If a is negative.</exception>
-        public NDArray weibull(double a, long[] size)
-        {
-            if (a < 0)
-                throw new ArgumentException("a < 0", nameof(a));
-
             unsafe
             {
-                var array = new NDArray<double>(new Shape(size));
+                var array = new NDArray<double>(size);
                 var dst = array.Address;
                 var count = array.size;
 
