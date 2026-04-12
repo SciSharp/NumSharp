@@ -4,6 +4,7 @@ using System.Reflection;
 using System.Reflection.Emit;
 using System.Runtime.CompilerServices;
 using System.Runtime.Intrinsics;
+using System.Runtime.Intrinsics.X86;
 
 // =============================================================================
 // ILKernelGenerator.Where - IL-generated np.where(condition, x, y) kernels
@@ -253,13 +254,17 @@ namespace NumSharp.Backends.Kernels
         {
             // Get the appropriate mask creation method based on element size
             var maskMethod = GetMaskCreationMethod256((int)elementSize);
-            var loadMethod = typeof(Vector256).GetMethod("Load", new[] { typeof(T*) })!.MakeGenericMethod(typeof(T));
-            var storeMethod = typeof(Vector256).GetMethod("Store", new[] { typeof(Vector256<>).MakeGenericType(typeof(T)), typeof(T*) })!;
-            var selectMethod = typeof(Vector256).GetMethod("ConditionalSelect", new[] {
-                typeof(Vector256<>).MakeGenericType(typeof(T)),
-                typeof(Vector256<>).MakeGenericType(typeof(T)),
-                typeof(Vector256<>).MakeGenericType(typeof(T))
-            })!;
+
+            // Get Vector256 methods via reflection - need to find generic method definitions first
+            var loadMethod = Array.Find(typeof(Vector256).GetMethods(),
+                m => m.Name == "Load" && m.IsGenericMethodDefinition && m.GetParameters().Length == 1)!
+                .MakeGenericMethod(typeof(T));
+            var storeMethod = Array.Find(typeof(Vector256).GetMethods(),
+                m => m.Name == "Store" && m.IsGenericMethodDefinition && m.GetParameters().Length == 2)!
+                .MakeGenericMethod(typeof(T));
+            var selectMethod = Array.Find(typeof(Vector256).GetMethods(),
+                m => m.Name == "ConditionalSelect" && m.IsGenericMethodDefinition)!
+                .MakeGenericMethod(typeof(T));
 
             // Load address: cond + (i + offset)
             il.Emit(OpCodes.Ldarg_0);  // cond
@@ -325,13 +330,17 @@ namespace NumSharp.Backends.Kernels
         private static void EmitWhereV128BodyWithOffset<T>(ILGenerator il, LocalBuilder locI, long elementSize, long offset) where T : unmanaged
         {
             var maskMethod = GetMaskCreationMethod128((int)elementSize);
-            var loadMethod = typeof(Vector128).GetMethod("Load", new[] { typeof(T*) })!.MakeGenericMethod(typeof(T));
-            var storeMethod = typeof(Vector128).GetMethod("Store", new[] { typeof(Vector128<>).MakeGenericType(typeof(T)), typeof(T*) })!;
-            var selectMethod = typeof(Vector128).GetMethod("ConditionalSelect", new[] {
-                typeof(Vector128<>).MakeGenericType(typeof(T)),
-                typeof(Vector128<>).MakeGenericType(typeof(T)),
-                typeof(Vector128<>).MakeGenericType(typeof(T))
-            })!;
+
+            // Get Vector128 methods via reflection - need to find generic method definitions first
+            var loadMethod = Array.Find(typeof(Vector128).GetMethods(),
+                m => m.Name == "Load" && m.IsGenericMethodDefinition && m.GetParameters().Length == 1)!
+                .MakeGenericMethod(typeof(T));
+            var storeMethod = Array.Find(typeof(Vector128).GetMethods(),
+                m => m.Name == "Store" && m.IsGenericMethodDefinition && m.GetParameters().Length == 2)!
+                .MakeGenericMethod(typeof(T));
+            var selectMethod = Array.Find(typeof(Vector128).GetMethods(),
+                m => m.Name == "ConditionalSelect" && m.IsGenericMethodDefinition)!
+                .MakeGenericMethod(typeof(T));
 
             // Load address: cond + (i + offset)
             il.Emit(OpCodes.Ldarg_0);
@@ -502,10 +511,22 @@ namespace NumSharp.Backends.Kernels
 
         /// <summary>
         /// Create V256 mask from 16 bools for 2-byte elements.
+        /// Uses AVX2 vpmovzxbw instruction for single-instruction expansion.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static unsafe Vector256<ushort> CreateMaskV256_2Byte(byte* bools)
         {
+            if (Avx2.IsSupported)
+            {
+                // Load 16 bytes into Vector128, zero-extend each byte to 16-bit
+                // vpmovzxbw: byte -> word (16 bytes -> 16 words)
+                var bytes128 = Vector128.Load(bools);
+                var expanded = Avx2.ConvertToVector256Int16(bytes128).AsUInt16();
+                // Compare with zero: non-zero becomes 0xFFFF, zero stays 0
+                return Vector256.GreaterThan(expanded, Vector256<ushort>.Zero);
+            }
+
+            // Scalar fallback for non-AVX2 systems
             return Vector256.Create(
                 bools[0] != 0 ? (ushort)0xFFFF : (ushort)0,
                 bools[1] != 0 ? (ushort)0xFFFF : (ushort)0,
@@ -528,10 +549,22 @@ namespace NumSharp.Backends.Kernels
 
         /// <summary>
         /// Create V256 mask from 8 bools for 4-byte elements.
+        /// Uses AVX2 vpmovzxbd instruction for single-instruction expansion.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static unsafe Vector256<uint> CreateMaskV256_4Byte(byte* bools)
         {
+            if (Avx2.IsSupported)
+            {
+                // Load 8 bytes into low bytes of Vector128, zero-extend each byte to 32-bit
+                // vpmovzxbd: byte -> dword (8 bytes -> 8 dwords)
+                var bytes128 = Vector128.CreateScalar(*(ulong*)bools).AsByte();
+                var expanded = Avx2.ConvertToVector256Int32(bytes128).AsUInt32();
+                // Compare with zero: non-zero becomes 0xFFFF..., zero stays 0
+                return Vector256.GreaterThan(expanded, Vector256<uint>.Zero);
+            }
+
+            // Scalar fallback for non-AVX2 systems
             return Vector256.Create(
                 bools[0] != 0 ? 0xFFFFFFFFu : 0u,
                 bools[1] != 0 ? 0xFFFFFFFFu : 0u,
@@ -546,10 +579,22 @@ namespace NumSharp.Backends.Kernels
 
         /// <summary>
         /// Create V256 mask from 4 bools for 8-byte elements.
+        /// Uses AVX2 vpmovzxbq instruction for single-instruction expansion.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static unsafe Vector256<ulong> CreateMaskV256_8Byte(byte* bools)
         {
+            if (Avx2.IsSupported)
+            {
+                // Load 4 bytes into low bytes of Vector128, zero-extend each byte to 64-bit
+                // vpmovzxbq: byte -> qword (4 bytes -> 4 qwords)
+                var bytes128 = Vector128.CreateScalar(*(uint*)bools).AsByte();
+                var expanded = Avx2.ConvertToVector256Int64(bytes128).AsUInt64();
+                // Compare with zero: non-zero becomes 0xFFFF..., zero stays 0
+                return Vector256.GreaterThan(expanded, Vector256<ulong>.Zero);
+            }
+
+            // Scalar fallback for non-AVX2 systems
             return Vector256.Create(
                 bools[0] != 0 ? 0xFFFFFFFFFFFFFFFFul : 0ul,
                 bools[1] != 0 ? 0xFFFFFFFFFFFFFFFFul : 0ul,
@@ -572,10 +617,21 @@ namespace NumSharp.Backends.Kernels
 
         /// <summary>
         /// Create V128 mask from 8 bools for 2-byte elements.
+        /// Uses SSE4.1 pmovzxbw instruction for efficient expansion.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static unsafe Vector128<ushort> CreateMaskV128_2Byte(byte* bools)
         {
+            if (Sse41.IsSupported)
+            {
+                // Load 8 bytes, zero-extend each to 16-bit
+                // pmovzxbw: byte -> word (8 bytes -> 8 words)
+                var bytes128 = Vector128.CreateScalar(*(ulong*)bools).AsByte();
+                var expanded = Sse41.ConvertToVector128Int16(bytes128).AsUInt16();
+                return Vector128.GreaterThan(expanded, Vector128<ushort>.Zero);
+            }
+
+            // Scalar fallback
             return Vector128.Create(
                 bools[0] != 0 ? (ushort)0xFFFF : (ushort)0,
                 bools[1] != 0 ? (ushort)0xFFFF : (ushort)0,
@@ -590,10 +646,21 @@ namespace NumSharp.Backends.Kernels
 
         /// <summary>
         /// Create V128 mask from 4 bools for 4-byte elements.
+        /// Uses SSE4.1 pmovzxbd instruction for efficient expansion.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static unsafe Vector128<uint> CreateMaskV128_4Byte(byte* bools)
         {
+            if (Sse41.IsSupported)
+            {
+                // Load 4 bytes, zero-extend each to 32-bit
+                // pmovzxbd: byte -> dword (4 bytes -> 4 dwords)
+                var bytes128 = Vector128.CreateScalar(*(uint*)bools).AsByte();
+                var expanded = Sse41.ConvertToVector128Int32(bytes128).AsUInt32();
+                return Vector128.GreaterThan(expanded, Vector128<uint>.Zero);
+            }
+
+            // Scalar fallback
             return Vector128.Create(
                 bools[0] != 0 ? 0xFFFFFFFFu : 0u,
                 bools[1] != 0 ? 0xFFFFFFFFu : 0u,
@@ -604,10 +671,21 @@ namespace NumSharp.Backends.Kernels
 
         /// <summary>
         /// Create V128 mask from 2 bools for 8-byte elements.
+        /// Uses SSE4.1 pmovzxbq instruction for efficient expansion.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static unsafe Vector128<ulong> CreateMaskV128_8Byte(byte* bools)
         {
+            if (Sse41.IsSupported)
+            {
+                // Load 2 bytes, zero-extend each to 64-bit
+                // pmovzxbq: byte -> qword (2 bytes -> 2 qwords)
+                var bytes128 = Vector128.CreateScalar(*(ushort*)bools).AsByte();
+                var expanded = Sse41.ConvertToVector128Int64(bytes128).AsUInt64();
+                return Vector128.GreaterThan(expanded, Vector128<ulong>.Zero);
+            }
+
+            // Scalar fallback
             return Vector128.Create(
                 bools[0] != 0 ? 0xFFFFFFFFFFFFFFFFul : 0ul,
                 bools[1] != 0 ? 0xFFFFFFFFFFFFFFFFul : 0ul
