@@ -252,9 +252,6 @@ namespace NumSharp.Backends.Kernels
 
         private static void EmitWhereV256BodyWithOffset<T>(ILGenerator il, LocalBuilder locI, long elementSize, long offset) where T : unmanaged
         {
-            // Get the appropriate mask creation method based on element size
-            var maskMethod = GetMaskCreationMethod256((int)elementSize);
-
             // Get Vector256 methods via reflection - need to find generic method definitions first
             var loadMethod = Array.Find(typeof(Vector256).GetMethods(),
                 m => m.Name == "Load" && m.IsGenericMethodDefinition && m.GetParameters().Length == 1)!
@@ -277,8 +274,8 @@ namespace NumSharp.Backends.Kernels
             il.Emit(OpCodes.Conv_I);
             il.Emit(OpCodes.Add);
 
-            // Call mask creation: returns Vector256<T> on stack
-            il.Emit(OpCodes.Call, maskMethod);
+            // Inline mask creation - emit AVX2 instructions directly instead of calling helper
+            EmitInlineMaskCreationV256(il, (int)elementSize);
 
             // Load x vector: x + (i + offset) * elementSize
             il.Emit(OpCodes.Ldarg_1);  // x
@@ -329,8 +326,6 @@ namespace NumSharp.Backends.Kernels
 
         private static void EmitWhereV128BodyWithOffset<T>(ILGenerator il, LocalBuilder locI, long elementSize, long offset) where T : unmanaged
         {
-            var maskMethod = GetMaskCreationMethod128((int)elementSize);
-
             // Get Vector128 methods via reflection - need to find generic method definitions first
             var loadMethod = Array.Find(typeof(Vector128).GetMethods(),
                 m => m.Name == "Load" && m.IsGenericMethodDefinition && m.GetParameters().Length == 1)!
@@ -352,7 +347,9 @@ namespace NumSharp.Backends.Kernels
             }
             il.Emit(OpCodes.Conv_I);
             il.Emit(OpCodes.Add);
-            il.Emit(OpCodes.Call, maskMethod);
+
+            // Inline mask creation - emit SSE4.1 instructions directly
+            EmitInlineMaskCreationV128(il, (int)elementSize);
 
             // Load x vector
             il.Emit(OpCodes.Ldarg_1);
@@ -496,6 +493,230 @@ namespace NumSharp.Backends.Kernels
                 _ => throw new NotSupportedException($"Element size {elementSize} not supported for SIMD where")
             };
         }
+
+        #endregion
+
+        #region Inline Mask IL Emission
+
+        // Cache reflection lookups for inline emission
+        private static readonly MethodInfo _v128LoadByte = Array.Find(typeof(Vector128).GetMethods(),
+            m => m.Name == "Load" && m.IsGenericMethodDefinition)!.MakeGenericMethod(typeof(byte));
+        private static readonly MethodInfo _v256LoadByte = Array.Find(typeof(Vector256).GetMethods(),
+            m => m.Name == "Load" && m.IsGenericMethodDefinition)!.MakeGenericMethod(typeof(byte));
+
+        private static readonly MethodInfo _v128CreateScalarUInt = Array.Find(typeof(Vector128).GetMethods(),
+            m => m.Name == "CreateScalar" && m.IsGenericMethodDefinition)!.MakeGenericMethod(typeof(uint));
+        private static readonly MethodInfo _v128CreateScalarULong = Array.Find(typeof(Vector128).GetMethods(),
+            m => m.Name == "CreateScalar" && m.IsGenericMethodDefinition)!.MakeGenericMethod(typeof(ulong));
+        private static readonly MethodInfo _v128CreateScalarUShort = Array.Find(typeof(Vector128).GetMethods(),
+            m => m.Name == "CreateScalar" && m.IsGenericMethodDefinition)!.MakeGenericMethod(typeof(ushort));
+
+        // AsByte is an extension method on Vector128 static class, not instance method
+        private static readonly MethodInfo _v128UIntAsByte = Array.Find(typeof(Vector128).GetMethods(),
+            m => m.Name == "AsByte" && m.IsGenericMethodDefinition)!.MakeGenericMethod(typeof(uint));
+        private static readonly MethodInfo _v128ULongAsByte = Array.Find(typeof(Vector128).GetMethods(),
+            m => m.Name == "AsByte" && m.IsGenericMethodDefinition)!.MakeGenericMethod(typeof(ulong));
+        private static readonly MethodInfo _v128UShortAsByte = Array.Find(typeof(Vector128).GetMethods(),
+            m => m.Name == "AsByte" && m.IsGenericMethodDefinition)!.MakeGenericMethod(typeof(ushort));
+
+        private static readonly MethodInfo _avx2ConvertToV256Int64 = typeof(Avx2).GetMethod("ConvertToVector256Int64", new[] { typeof(Vector128<byte>) })!;
+        private static readonly MethodInfo _avx2ConvertToV256Int32 = typeof(Avx2).GetMethod("ConvertToVector256Int32", new[] { typeof(Vector128<byte>) })!;
+        private static readonly MethodInfo _avx2ConvertToV256Int16 = typeof(Avx2).GetMethod("ConvertToVector256Int16", new[] { typeof(Vector128<byte>) })!;
+
+        private static readonly MethodInfo _sse41ConvertToV128Int64 = typeof(Sse41).GetMethod("ConvertToVector128Int64", new[] { typeof(Vector128<byte>) })!;
+        private static readonly MethodInfo _sse41ConvertToV128Int32 = typeof(Sse41).GetMethod("ConvertToVector128Int32", new[] { typeof(Vector128<byte>) })!;
+        private static readonly MethodInfo _sse41ConvertToV128Int16 = typeof(Sse41).GetMethod("ConvertToVector128Int16", new[] { typeof(Vector128<byte>) })!;
+
+        // As* methods are extension methods on Vector256/Vector128 static classes
+        private static readonly MethodInfo _v256LongAsULong = Array.Find(typeof(Vector256).GetMethods(),
+            m => m.Name == "AsUInt64" && m.IsGenericMethodDefinition)!.MakeGenericMethod(typeof(long));
+        private static readonly MethodInfo _v256IntAsUInt = Array.Find(typeof(Vector256).GetMethods(),
+            m => m.Name == "AsUInt32" && m.IsGenericMethodDefinition)!.MakeGenericMethod(typeof(int));
+        private static readonly MethodInfo _v256ShortAsUShort = Array.Find(typeof(Vector256).GetMethods(),
+            m => m.Name == "AsUInt16" && m.IsGenericMethodDefinition)!.MakeGenericMethod(typeof(short));
+
+        private static readonly MethodInfo _v128LongAsULong = Array.Find(typeof(Vector128).GetMethods(),
+            m => m.Name == "AsUInt64" && m.IsGenericMethodDefinition)!.MakeGenericMethod(typeof(long));
+        private static readonly MethodInfo _v128IntAsUInt = Array.Find(typeof(Vector128).GetMethods(),
+            m => m.Name == "AsUInt32" && m.IsGenericMethodDefinition)!.MakeGenericMethod(typeof(int));
+        private static readonly MethodInfo _v128ShortAsUShort = Array.Find(typeof(Vector128).GetMethods(),
+            m => m.Name == "AsUInt16" && m.IsGenericMethodDefinition)!.MakeGenericMethod(typeof(short));
+
+        private static readonly MethodInfo _v256GreaterThanULong = Array.Find(typeof(Vector256).GetMethods(),
+            m => m.Name == "GreaterThan" && m.IsGenericMethodDefinition)!.MakeGenericMethod(typeof(ulong));
+        private static readonly MethodInfo _v256GreaterThanUInt = Array.Find(typeof(Vector256).GetMethods(),
+            m => m.Name == "GreaterThan" && m.IsGenericMethodDefinition)!.MakeGenericMethod(typeof(uint));
+        private static readonly MethodInfo _v256GreaterThanUShort = Array.Find(typeof(Vector256).GetMethods(),
+            m => m.Name == "GreaterThan" && m.IsGenericMethodDefinition)!.MakeGenericMethod(typeof(ushort));
+        private static readonly MethodInfo _v256GreaterThanByte = Array.Find(typeof(Vector256).GetMethods(),
+            m => m.Name == "GreaterThan" && m.IsGenericMethodDefinition)!.MakeGenericMethod(typeof(byte));
+
+        private static readonly MethodInfo _v128GreaterThanULong = Array.Find(typeof(Vector128).GetMethods(),
+            m => m.Name == "GreaterThan" && m.IsGenericMethodDefinition)!.MakeGenericMethod(typeof(ulong));
+        private static readonly MethodInfo _v128GreaterThanUInt = Array.Find(typeof(Vector128).GetMethods(),
+            m => m.Name == "GreaterThan" && m.IsGenericMethodDefinition)!.MakeGenericMethod(typeof(uint));
+        private static readonly MethodInfo _v128GreaterThanUShort = Array.Find(typeof(Vector128).GetMethods(),
+            m => m.Name == "GreaterThan" && m.IsGenericMethodDefinition)!.MakeGenericMethod(typeof(ushort));
+        private static readonly MethodInfo _v128GreaterThanByte = Array.Find(typeof(Vector128).GetMethods(),
+            m => m.Name == "GreaterThan" && m.IsGenericMethodDefinition)!.MakeGenericMethod(typeof(byte));
+
+        private static readonly FieldInfo _v256ZeroULong = typeof(Vector256<ulong>).GetProperty("Zero")!.GetMethod!.IsStatic
+            ? null! : null!; // Use GetMethod call instead
+        private static readonly MethodInfo _v256GetZeroULong = typeof(Vector256<ulong>).GetProperty("Zero")!.GetMethod!;
+        private static readonly MethodInfo _v256GetZeroUInt = typeof(Vector256<uint>).GetProperty("Zero")!.GetMethod!;
+        private static readonly MethodInfo _v256GetZeroUShort = typeof(Vector256<ushort>).GetProperty("Zero")!.GetMethod!;
+        private static readonly MethodInfo _v256GetZeroByte = typeof(Vector256<byte>).GetProperty("Zero")!.GetMethod!;
+
+        private static readonly MethodInfo _v128GetZeroULong = typeof(Vector128<ulong>).GetProperty("Zero")!.GetMethod!;
+        private static readonly MethodInfo _v128GetZeroUInt = typeof(Vector128<uint>).GetProperty("Zero")!.GetMethod!;
+        private static readonly MethodInfo _v128GetZeroUShort = typeof(Vector128<ushort>).GetProperty("Zero")!.GetMethod!;
+        private static readonly MethodInfo _v128GetZeroByte = typeof(Vector128<byte>).GetProperty("Zero")!.GetMethod!;
+
+        /// <summary>
+        /// Emit inline V256 mask creation. Stack: byte* -> Vector256{T} (as mask)
+        /// </summary>
+        private static void EmitInlineMaskCreationV256(ILGenerator il, int elementSize)
+        {
+            // Stack has: byte* pointing to condition bools
+
+            switch (elementSize)
+            {
+                case 8: // double/long: load 4 bytes, expand to 4 qwords
+                    // *(uint*)ptr
+                    il.Emit(OpCodes.Ldind_U4);
+                    // Vector128.CreateScalar<uint>(value)
+                    il.Emit(OpCodes.Call, _v128CreateScalarUInt);
+                    // .AsByte()
+                    il.Emit(OpCodes.Call, _v128UIntAsByte);
+                    // Avx2.ConvertToVector256Int64(bytes)
+                    il.Emit(OpCodes.Call, _avx2ConvertToV256Int64);
+                    // .AsUInt64()
+                    il.Emit(OpCodes.Call, _v256LongAsULong);
+                    // Vector256<ulong>.Zero
+                    il.Emit(OpCodes.Call, _v256GetZeroULong);
+                    // Vector256.GreaterThan(expanded, zero)
+                    il.Emit(OpCodes.Call, _v256GreaterThanULong);
+                    break;
+
+                case 4: // float/int: load 8 bytes, expand to 8 dwords
+                    // *(ulong*)ptr
+                    il.Emit(OpCodes.Ldind_I8);
+                    // Vector128.CreateScalar<ulong>(value)
+                    il.Emit(OpCodes.Call, _v128CreateScalarULong);
+                    // .AsByte()
+                    il.Emit(OpCodes.Call, _v128ULongAsByte);
+                    // Avx2.ConvertToVector256Int32(bytes)
+                    il.Emit(OpCodes.Call, _avx2ConvertToV256Int32);
+                    // .AsUInt32()
+                    il.Emit(OpCodes.Call, _v256IntAsUInt);
+                    // Vector256<uint>.Zero
+                    il.Emit(OpCodes.Call, _v256GetZeroUInt);
+                    // Vector256.GreaterThan(expanded, zero)
+                    il.Emit(OpCodes.Call, _v256GreaterThanUInt);
+                    break;
+
+                case 2: // short/char: load 16 bytes, expand to 16 words
+                    // Vector128.Load<byte>(ptr)
+                    il.Emit(OpCodes.Call, _v128LoadByte);
+                    // Avx2.ConvertToVector256Int16(bytes)
+                    il.Emit(OpCodes.Call, _avx2ConvertToV256Int16);
+                    // .AsUInt16()
+                    il.Emit(OpCodes.Call, _v256ShortAsUShort);
+                    // Vector256<ushort>.Zero
+                    il.Emit(OpCodes.Call, _v256GetZeroUShort);
+                    // Vector256.GreaterThan(expanded, zero)
+                    il.Emit(OpCodes.Call, _v256GreaterThanUShort);
+                    break;
+
+                case 1: // byte/bool: load 32 bytes, compare directly
+                    // Vector256.Load<byte>(ptr)
+                    il.Emit(OpCodes.Call, _v256LoadByte);
+                    // Vector256<byte>.Zero
+                    il.Emit(OpCodes.Call, _v256GetZeroByte);
+                    // Vector256.GreaterThan(vec, zero)
+                    il.Emit(OpCodes.Call, _v256GreaterThanByte);
+                    break;
+
+                default:
+                    throw new NotSupportedException($"Element size {elementSize} not supported");
+            }
+        }
+
+        /// <summary>
+        /// Emit inline V128 mask creation. Stack: byte* -> Vector128{T} (as mask)
+        /// </summary>
+        private static void EmitInlineMaskCreationV128(ILGenerator il, int elementSize)
+        {
+            switch (elementSize)
+            {
+                case 8: // double/long: load 2 bytes, expand to 2 qwords
+                    // *(ushort*)ptr
+                    il.Emit(OpCodes.Ldind_U2);
+                    // Vector128.CreateScalar<ushort>(value)
+                    il.Emit(OpCodes.Call, _v128CreateScalarUShort);
+                    // .AsByte()
+                    il.Emit(OpCodes.Call, _v128UShortAsByte);
+                    // Sse41.ConvertToVector128Int64(bytes)
+                    il.Emit(OpCodes.Call, _sse41ConvertToV128Int64);
+                    // .AsUInt64()
+                    il.Emit(OpCodes.Call, _v128LongAsULong);
+                    // Vector128<ulong>.Zero
+                    il.Emit(OpCodes.Call, _v128GetZeroULong);
+                    // Vector128.GreaterThan(expanded, zero)
+                    il.Emit(OpCodes.Call, _v128GreaterThanULong);
+                    break;
+
+                case 4: // float/int: load 4 bytes, expand to 4 dwords
+                    // *(uint*)ptr
+                    il.Emit(OpCodes.Ldind_U4);
+                    // Vector128.CreateScalar<uint>(value)
+                    il.Emit(OpCodes.Call, _v128CreateScalarUInt);
+                    // .AsByte()
+                    il.Emit(OpCodes.Call, _v128UIntAsByte);
+                    // Sse41.ConvertToVector128Int32(bytes)
+                    il.Emit(OpCodes.Call, _sse41ConvertToV128Int32);
+                    // .AsUInt32()
+                    il.Emit(OpCodes.Call, _v128IntAsUInt);
+                    // Vector128<uint>.Zero
+                    il.Emit(OpCodes.Call, _v128GetZeroUInt);
+                    // Vector128.GreaterThan(expanded, zero)
+                    il.Emit(OpCodes.Call, _v128GreaterThanUInt);
+                    break;
+
+                case 2: // short/char: load 8 bytes, expand to 8 words
+                    // *(ulong*)ptr
+                    il.Emit(OpCodes.Ldind_I8);
+                    // Vector128.CreateScalar<ulong>(value)
+                    il.Emit(OpCodes.Call, _v128CreateScalarULong);
+                    // .AsByte()
+                    il.Emit(OpCodes.Call, _v128ULongAsByte);
+                    // Sse41.ConvertToVector128Int16(bytes)
+                    il.Emit(OpCodes.Call, _sse41ConvertToV128Int16);
+                    // .AsUInt16()
+                    il.Emit(OpCodes.Call, _v128ShortAsUShort);
+                    // Vector128<ushort>.Zero
+                    il.Emit(OpCodes.Call, _v128GetZeroUShort);
+                    // Vector128.GreaterThan(expanded, zero)
+                    il.Emit(OpCodes.Call, _v128GreaterThanUShort);
+                    break;
+
+                case 1: // byte/bool: load 16 bytes, compare directly
+                    // Vector128.Load<byte>(ptr)
+                    il.Emit(OpCodes.Call, _v128LoadByte);
+                    // Vector128<byte>.Zero
+                    il.Emit(OpCodes.Call, _v128GetZeroByte);
+                    // Vector128.GreaterThan(vec, zero)
+                    il.Emit(OpCodes.Call, _v128GreaterThanByte);
+                    break;
+
+                default:
+                    throw new NotSupportedException($"Element size {elementSize} not supported");
+            }
+        }
+
+        #endregion
+
+        #region Static Mask Creation Methods (fallback)
 
         /// <summary>
         /// Create V256 mask from 32 bools for 1-byte elements.
