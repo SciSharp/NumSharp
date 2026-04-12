@@ -6,7 +6,6 @@ namespace NumSharp.UnitTest.RandomSampling
     /// <summary>
     /// Tests for np.random.dirichlet (Dirichlet distribution)
     /// </summary>
-    [NotInParallel]
     public class NpRandomDirichletTests : TestClass
     {
         [Test]
@@ -53,9 +52,9 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void Dirichlet_EachRowSumsToOne()
         {
-            np.random.seed(42);
+            var rng = np.random.RandomState(42);
             var alpha = new double[] { 1, 2, 3 };
-            var samples = np.random.dirichlet(alpha, 100);
+            var samples = rng.dirichlet(alpha, 100);
 
             for (int i = 0; i < 100; i++)
             {
@@ -71,9 +70,9 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void Dirichlet_AllValuesInZeroOne()
         {
-            np.random.seed(42);
+            var rng = np.random.RandomState(42);
             var alpha = new double[] { 1, 2, 3 };
-            var samples = np.random.dirichlet(alpha, 1000);
+            var samples = rng.dirichlet(alpha, 1000);
 
             foreach (var val in samples.AsIterator<double>())
             {
@@ -86,9 +85,9 @@ namespace NumSharp.UnitTest.RandomSampling
         {
             // Mean of component i = alpha[i] / sum(alpha)
             // For alpha = [1, 2, 3], sum = 6, means = [1/6, 2/6, 3/6] = [0.167, 0.333, 0.5]
-            np.random.seed(42);
+            var rng = np.random.RandomState(42);
             var alpha = new double[] { 1, 2, 3 };
-            var samples = np.random.dirichlet(alpha, 100000);
+            var samples = rng.dirichlet(alpha, 100000);
 
             double[] means = new double[3];
             for (int i = 0; i < 100000; i++)
@@ -113,9 +112,9 @@ namespace NumSharp.UnitTest.RandomSampling
         public void Dirichlet_UniformAlpha_HasEqualMeans()
         {
             // For alpha = [1, 1, 1], all means should be 1/3
-            np.random.seed(42);
+            var rng = np.random.RandomState(42);
             var alpha = new double[] { 1, 1, 1 };
-            var samples = np.random.dirichlet(alpha, 10000);
+            var samples = rng.dirichlet(alpha, 10000);
 
             double[] means = new double[3];
             for (int i = 0; i < 10000; i++)
@@ -158,11 +157,11 @@ namespace NumSharp.UnitTest.RandomSampling
         {
             var alpha = new double[] { 1, 2, 3 };
 
-            np.random.seed(42);
-            var samples1 = np.random.dirichlet(alpha, 10);
+            var rng1 = np.random.RandomState(42);
+            var samples1 = rng1.dirichlet(alpha, 10);
 
-            np.random.seed(42);
-            var samples2 = np.random.dirichlet(alpha, 10);
+            var rng2 = np.random.RandomState(42);
+            var samples2 = rng2.dirichlet(alpha, 10);
 
             for (int i = 0; i < samples1.size; i++)
             {
@@ -223,9 +222,9 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void Dirichlet_NumPy_SamplesSumToOne()
         {
-            np.random.seed(12345);
+            var rng = np.random.RandomState(12345);
             var alpha = new double[] { 0.5, 0.5, 0.5, 0.5 };
-            var samples = np.random.dirichlet(alpha, 100);
+            var samples = rng.dirichlet(alpha, 100);
 
             for (int i = 0; i < 100; i++)
             {

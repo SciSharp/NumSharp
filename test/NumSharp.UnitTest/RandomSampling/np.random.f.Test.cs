@@ -4,14 +4,13 @@ using System.Linq;
 
 namespace NumSharp.UnitTest.RandomSampling
 {
-    [NotInParallel]
     public class NpRandomFTest : TestClass
     {
         [Test]
         public void F_ScalarReturn()
         {
-            np.random.seed(42);
-            var result = np.random.f(5, 10);
+            var rng = np.random.RandomState(42);
+            var result = rng.f(5, 10);
 
             Assert.AreEqual(0, result.ndim);
             Assert.AreEqual(1, result.size);
@@ -75,8 +74,8 @@ namespace NumSharp.UnitTest.RandomSampling
         public void F_MeanMatchesTheory()
         {
             // For F(dfnum, dfden), mean = dfden / (dfden - 2) when dfden > 2
-            np.random.seed(42);
-            var samples = np.random.f(5, 10, 100000);
+            var rng = np.random.RandomState(42);
+            var samples = rng.f(5, 10, 100000);
             double expectedMean = 10.0 / (10.0 - 2.0);  // 1.25
             double actualMean = (double)np.mean(samples);
 
@@ -87,8 +86,8 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void F_AllValuesPositive()
         {
-            np.random.seed(42);
-            var samples = np.random.f(5, 10, 10000);
+            var rng = np.random.RandomState(42);
+            var samples = rng.f(5, 10, 10000);
 
             foreach (var val in samples.AsIterator<double>())
                 Assert.IsTrue(val > 0, $"Value {val} should be positive");
@@ -98,8 +97,8 @@ namespace NumSharp.UnitTest.RandomSampling
         public void F_DifferentDf_MeanMatchesTheory()
         {
             // Test with different df values
-            np.random.seed(42);
-            var samples = np.random.f(10, 20, 100000);
+            var rng = np.random.RandomState(42);
+            var samples = rng.f(10, 20, 100000);
             double expectedMean = 20.0 / (20.0 - 2.0);  // 1.111
             double actualMean = (double)np.mean(samples);
 
@@ -118,11 +117,11 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void F_Reproducible()
         {
-            np.random.seed(123);
-            var a = np.random.f(5, 10, 5);
+            var rng1 = np.random.RandomState(123);
+            var a = rng1.f(5, 10, 5);
 
-            np.random.seed(123);
-            var b = np.random.f(5, 10, 5);
+            var rng2 = np.random.RandomState(123);
+            var b = rng2.f(5, 10, 5);
 
             var aData = a.Data<double>();
             var bData = b.Data<double>();

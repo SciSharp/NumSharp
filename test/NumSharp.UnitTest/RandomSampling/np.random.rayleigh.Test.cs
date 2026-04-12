@@ -6,7 +6,7 @@ namespace NumSharp.UnitTest.RandomSampling
     /// <summary>
     /// Tests for np.random.rayleigh (Rayleigh distribution)
     /// </summary>
-    [NotInParallel]
+    
     public class NpRandomRayleighTests : TestClass
     {
         [Test]
@@ -38,8 +38,8 @@ namespace NumSharp.UnitTest.RandomSampling
         {
             // Rayleigh(scale=1) has mean = sqrt(pi/2) ≈ 1.253
             // and std ≈ 0.655
-            np.random.seed(42);
-            var samples = np.random.rayleigh(1, 100000L);
+            var rng = np.random.RandomState(42);
+            var samples = rng.rayleigh(1, 100000L);
 
             var mean = (double)np.mean(samples);
             var std = (double)np.std(samples);
@@ -54,9 +54,9 @@ namespace NumSharp.UnitTest.RandomSampling
         public void Rayleigh_WithScale_TransformsCorrectly()
         {
             // Rayleigh(scale) has mean = scale * sqrt(pi/2)
-            np.random.seed(42);
+            var rng = np.random.RandomState(42);
             double scale = 2.0;
-            var samples = np.random.rayleigh(scale, 100000L);
+            var samples = rng.rayleigh(scale, 100000L);
 
             var mean = (double)np.mean(samples);
             double expectedMean = scale * Math.Sqrt(Math.PI / 2.0);
@@ -84,8 +84,8 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void Rayleigh_Scalar_ReturnsScalar()
         {
-            np.random.seed(42);
-            var result = np.random.rayleigh();
+            var rng = np.random.RandomState(42);
+            var result = rng.rayleigh();
             // NumPy returns a scalar (0-dimensional) when no size is given
             Assert.AreEqual(0, result.ndim);
             Assert.AreEqual(1, result.size);
@@ -102,8 +102,8 @@ namespace NumSharp.UnitTest.RandomSampling
         public void Rayleigh_AllValuesPositive()
         {
             // Rayleigh distribution only produces non-negative values
-            np.random.seed(42);
-            var samples = np.random.rayleigh(1, 10000L);
+            var rng = np.random.RandomState(42);
+            var samples = rng.rayleigh(1, 10000L);
 
             foreach (var val in samples.AsIterator<double>())
             {
@@ -114,11 +114,11 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void Rayleigh_SameSeed_ProducesSameResults()
         {
-            np.random.seed(42);
-            var samples1 = np.random.rayleigh(1, 10L);
+            var rng1 = np.random.RandomState(42);
+            var samples1 = rng1.rayleigh(1, 10L);
 
-            np.random.seed(42);
-            var samples2 = np.random.rayleigh(1, 10L);
+            var rng2 = np.random.RandomState(42);
+            var samples2 = rng2.rayleigh(1, 10L);
 
             for (int i = 0; i < 10; i++)
             {
@@ -129,11 +129,11 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void Rayleigh_DifferentSeeds_ProduceDifferentResults()
         {
-            np.random.seed(42);
-            var samples1 = np.random.rayleigh(1, 10L);
+            var rng1 = np.random.RandomState(42);
+            var samples1 = rng1.rayleigh(1, 10L);
 
-            np.random.seed(123);
-            var samples2 = np.random.rayleigh(1, 10L);
+            var rng2 = np.random.RandomState(123);
+            var samples2 = rng2.rayleigh(1, 10L);
 
             bool anyDifferent = false;
             for (int i = 0; i < 10; i++)

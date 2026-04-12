@@ -12,7 +12,7 @@ namespace NumSharp.UnitTest.RandomSampling;
 /// NumPy's legacy shuffle only shuffles along axis 0 (no axis parameter).
 /// For axis support, use the Generator API (not yet implemented in NumSharp).
 /// </summary>
-[NotInParallel]
+
     public class ShuffleNumPyAlignedTests : TestClass
 {
     [Test]
@@ -21,8 +21,8 @@ namespace NumSharp.UnitTest.RandomSampling;
         var arr = np.arange(10);
         var originalSum = (int)np.sum(arr);
 
-        np.random.seed(42);
-        np.random.shuffle(arr);
+        var rng = np.random.RandomState(42);
+        rng.shuffle(arr);
 
         // Sum should be unchanged (same elements, different order)
         Assert.AreEqual(originalSum, (int)np.sum(arr));
@@ -35,8 +35,8 @@ namespace NumSharp.UnitTest.RandomSampling;
         var arr = np.arange(9).reshape(3, 3);
         // rows: [0,1,2], [3,4,5], [6,7,8]
 
-        np.random.seed(42);
-        np.random.shuffle(arr);
+        var rng = np.random.RandomState(42);
+        rng.shuffle(arr);
 
         // Total sum unchanged
         Assert.AreEqual(36, (int)np.sum(arr));
@@ -59,8 +59,8 @@ namespace NumSharp.UnitTest.RandomSampling;
         var block0Sum = (int)np.sum(arr[0]);
         var block1Sum = (int)np.sum(arr[1]);
 
-        np.random.seed(42);
-        np.random.shuffle(arr);
+        var rng = np.random.RandomState(42);
+        rng.shuffle(arr);
 
         // Total sum should be unchanged
         Assert.AreEqual(sumBefore, (int)np.sum(arr));
@@ -90,8 +90,8 @@ namespace NumSharp.UnitTest.RandomSampling;
         var block0SumBefore = (int)np.sum(arr[0]);
         var block1SumBefore = (int)np.sum(arr[1]);
 
-        np.random.seed(42);
-        np.random.shuffle(arr);
+        var rng = np.random.RandomState(42);
+        rng.shuffle(arr);
 
         // Total sum unchanged
         Assert.AreEqual(sumBefore, (int)np.sum(arr));
@@ -116,8 +116,8 @@ namespace NumSharp.UnitTest.RandomSampling;
         // Row 2: [6,7,8] sum=21
         // Row 3: [9,10,11] sum=30
 
-        np.random.seed(123);
-        np.random.shuffle(arr);
+        var rng = np.random.RandomState(123);
+        rng.shuffle(arr);
 
         // Verify each row still has valid sum (no mixing of elements between rows)
         var rowSums = new HashSet<int>();

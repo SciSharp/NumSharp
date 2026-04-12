@@ -4,20 +4,20 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 namespace NumSharp.UnitTest.RandomSampling
 {
     /// <summary>
-    /// Tests for np.random.multivariate_normal
+    /// Tests for rng.multivariate_normal
     /// Reference: https://numpy.org/doc/stable/reference/random/generated/numpy.random.multivariate_normal.html
     /// </summary>
-    [NotInParallel]
+    
     public class NpRandomMultivariateNormalTests : TestClass
     {
         [Test]
         public void MultivariateNormal_SingleSample_Returns1DArray()
         {
-            np.random.seed(42);
+            var rng = np.random.RandomState(42);
             var mean = new double[] { 0, 0 };
             var cov = new double[,] { { 1, 0 }, { 0, 1 } };
 
-            var result = np.random.multivariate_normal(mean, cov);
+            var result = rng.multivariate_normal(mean, cov);
 
             Assert.AreEqual(1, result.ndim);
             Assert.AreEqual(2, result.shape[0]);
@@ -26,11 +26,11 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void MultivariateNormal_MultipleSamples_ReturnsCorrectShape()
         {
-            np.random.seed(42);
+            var rng = np.random.RandomState(42);
             var mean = new double[] { 0, 0 };
             var cov = new double[,] { { 1, 0 }, { 0, 1 } };
 
-            var result = np.random.multivariate_normal(mean, cov, 100);
+            var result = rng.multivariate_normal(mean, cov, 100);
 
             Assert.AreEqual(2, result.ndim);
             Assert.AreEqual(100, result.shape[0]);
@@ -40,11 +40,11 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void MultivariateNormal_TupleSize_ReturnsCorrectShape()
         {
-            np.random.seed(42);
+            var rng = np.random.RandomState(42);
             var mean = new double[] { 0, 0 };
             var cov = new double[,] { { 1, 0 }, { 0, 1 } };
 
-            var result = np.random.multivariate_normal(mean, cov, new Shape(2, 3));
+            var result = rng.multivariate_normal(mean, cov, new Shape(2, 3));
 
             Assert.AreEqual(3, result.ndim);
             Assert.AreEqual(2, result.shape[0]);
@@ -55,11 +55,11 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void MultivariateNormal_Samples_HaveCorrectMean()
         {
-            np.random.seed(42);
+            var rng = np.random.RandomState(42);
             var mean = new double[] { 5, -3 };
             var cov = new double[,] { { 1, 0 }, { 0, 1 } };
 
-            var samples = np.random.multivariate_normal(mean, cov, 10000);
+            var samples = rng.multivariate_normal(mean, cov, 10000);
 
             double sum0 = 0, sum1 = 0;
             for (int i = 0; i < 10000; i++)
@@ -77,11 +77,11 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void MultivariateNormal_DiagonalCovariance_HasCorrectVariances()
         {
-            np.random.seed(42);
+            var rng = np.random.RandomState(42);
             var mean = new double[] { 0, 0 };
             var cov = new double[,] { { 1, 0 }, { 0, 4 } };  // var[0]=1, var[1]=4
 
-            var samples = np.random.multivariate_normal(mean, cov, 10000);
+            var samples = rng.multivariate_normal(mean, cov, 10000);
 
             // Compute sample variances
             double mean0 = 0, mean1 = 0;
@@ -109,11 +109,11 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void MultivariateNormal_CorrelatedVariables_HaveCorrectCovariance()
         {
-            np.random.seed(42);
+            var rng = np.random.RandomState(42);
             var mean = new double[] { 0, 0 };
             var cov = new double[,] { { 1, 0.5 }, { 0.5, 1 } };
 
-            var samples = np.random.multivariate_normal(mean, cov, 10000);
+            var samples = rng.multivariate_normal(mean, cov, 10000);
 
             // Compute sample covariance
             double mean0 = 0, mean1 = 0;
@@ -139,11 +139,11 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void MultivariateNormal_ThreeDimensional_Works()
         {
-            np.random.seed(42);
+            var rng = np.random.RandomState(42);
             var mean = new double[] { 1, 2, 3 };
             var cov = new double[,] { { 1, 0.2, 0.1 }, { 0.2, 1, 0.3 }, { 0.1, 0.3, 1 } };
 
-            var samples = np.random.multivariate_normal(mean, cov, 1000);
+            var samples = rng.multivariate_normal(mean, cov, 1000);
 
             Assert.AreEqual(2, samples.ndim);
             Assert.AreEqual(1000, samples.shape[0]);
@@ -153,11 +153,11 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void MultivariateNormal_OneDimensional_Works()
         {
-            np.random.seed(42);
+            var rng = np.random.RandomState(42);
             var mean = new double[] { 5 };
             var cov = new double[,] { { 4 } };  // variance = 4, stdev = 2
 
-            var samples = np.random.multivariate_normal(mean, cov, 10000);
+            var samples = rng.multivariate_normal(mean, cov, 10000);
 
             Assert.AreEqual(10000, samples.shape[0]);
             Assert.AreEqual(1, samples.shape[1]);
@@ -182,11 +182,11 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void MultivariateNormal_IdentityCovariance_ProducesUncorrelatedSamples()
         {
-            np.random.seed(42);
+            var rng = np.random.RandomState(42);
             var mean = new double[] { 0, 0, 0 };
             var cov = new double[,] { { 1, 0, 0 }, { 0, 1, 0 }, { 0, 0, 1 } };
 
-            var samples = np.random.multivariate_normal(mean, cov, 10000);
+            var samples = rng.multivariate_normal(mean, cov, 10000);
 
             // Compute sample correlation between dim 0 and dim 1
             double mean0 = 0, mean1 = 0;
@@ -215,11 +215,11 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void MultivariateNormal_NDArrayInput_Works()
         {
-            np.random.seed(42);
+            var rng = np.random.RandomState(42);
             var mean = np.array(new double[] { 0, 0 });
             var cov = np.array(new double[,] { { 1, 0 }, { 0, 1 } });
 
-            var result = np.random.multivariate_normal(mean, cov, new Shape(100));
+            var result = rng.multivariate_normal(mean, cov, new Shape(100));
 
             Assert.AreEqual(100, result.shape[0]);
             Assert.AreEqual(2, result.shape[1]);
@@ -299,13 +299,13 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void MultivariateNormal_CheckValidIgnore_ReturnsResultForNonPositiveDefinite()
         {
-            np.random.seed(42);
+            var rng = np.random.RandomState(42);
             var mean = new double[] { 0, 0 };
             // Not positive definite but we're ignoring
             var cov = new double[,] { { 1, 2 }, { 2, 1 } };
 
             // Should not throw with check_valid="ignore"
-            var result = np.random.multivariate_normal(mean, cov, null, "ignore");
+            var result = rng.multivariate_normal(mean, cov, null, "ignore");
 
             Assert.AreEqual(1, result.ndim);
             Assert.AreEqual(2, result.shape[0]);
@@ -314,7 +314,7 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void MultivariateNormal_LargeDimension_Works()
         {
-            np.random.seed(42);
+            var rng = np.random.RandomState(42);
             int n = 10;
             var mean = new double[n];
             var cov = new double[n, n];
@@ -324,7 +324,7 @@ namespace NumSharp.UnitTest.RandomSampling
                 cov[i, i] = 1.0;  // Identity covariance
             }
 
-            var samples = np.random.multivariate_normal(mean, cov, 100);
+            var samples = rng.multivariate_normal(mean, cov, 100);
 
             Assert.AreEqual(100, samples.shape[0]);
             Assert.AreEqual(n, samples.shape[1]);
@@ -333,11 +333,11 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void MultivariateNormal_ReturnsDtype_Double()
         {
-            np.random.seed(42);
+            var rng = np.random.RandomState(42);
             var mean = new double[] { 0, 0 };
             var cov = new double[,] { { 1, 0 }, { 0, 1 } };
 
-            var result = np.random.multivariate_normal(mean, cov, 10);
+            var result = rng.multivariate_normal(mean, cov, 10);
 
             Assert.AreEqual(typeof(double), result.dtype);
         }

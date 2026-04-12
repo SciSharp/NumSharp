@@ -4,14 +4,14 @@ using System.Linq;
 
 namespace NumSharp.UnitTest.RandomSampling
 {
-    [NotInParallel]
+    
     public class NpRandomWeibullTest : TestClass
     {
         [Test]
         public void Weibull_ScalarReturn()
         {
-            np.random.seed(42);
-            var result = np.random.weibull(1.5);
+            var rng = np.random.RandomState(42);
+            var result = rng.weibull(1.5);
 
             Assert.AreEqual(0, result.ndim);
             Assert.AreEqual(1, result.size);
@@ -66,8 +66,8 @@ namespace NumSharp.UnitTest.RandomSampling
         public void Weibull_A1_IsExponential()
         {
             // When a=1, Weibull reduces to exponential distribution with mean=1
-            np.random.seed(42);
-            var samples = np.random.weibull(1, 100000);
+            var rng = np.random.RandomState(42);
+            var samples = rng.weibull(1, 100000);
             var mean = (double)np.mean(samples);
 
             // Exponential(1) has mean=1
@@ -78,8 +78,8 @@ namespace NumSharp.UnitTest.RandomSampling
         public void Weibull_A2_StatisticalProperties()
         {
             // For Weibull(a=2), mean = Gamma(1 + 1/a) = Gamma(1.5) ≈ 0.886
-            np.random.seed(42);
-            var samples = np.random.weibull(2, 100000);
+            var rng = np.random.RandomState(42);
+            var samples = rng.weibull(2, 100000);
             var mean = (double)np.mean(samples);
 
             Assert.IsTrue(Math.Abs(mean - 0.886) < 0.02, $"Mean {mean} should be close to 0.886");
@@ -98,8 +98,8 @@ namespace NumSharp.UnitTest.RandomSampling
         public void Weibull_SmallA_ProducesLargeValues()
         {
             // Small a (shape < 1) produces heavy-tailed distribution
-            np.random.seed(42);
-            var samples = np.random.weibull(0.5, 1000);
+            var rng = np.random.RandomState(42);
+            var samples = rng.weibull(0.5, 1000);
             var max = (double)np.amax(samples);
 
             // Should have some large values due to heavy tail
@@ -110,8 +110,8 @@ namespace NumSharp.UnitTest.RandomSampling
         public void Weibull_LargeA_ProducesConcentratedValues()
         {
             // Large a produces values concentrated near 1
-            np.random.seed(42);
-            var samples = np.random.weibull(10, 1000);
+            var rng = np.random.RandomState(42);
+            var samples = rng.weibull(10, 1000);
             var mean = (double)np.mean(samples);
             var std = (double)np.std(samples);
 

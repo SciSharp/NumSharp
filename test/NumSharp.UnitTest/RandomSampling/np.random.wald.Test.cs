@@ -5,14 +5,14 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace NumSharp.UnitTest.RandomSampling
 {
-    [NotInParallel]
+    
     public class WaldTests
     {
         [Test]
         public void Wald_ReturnsScalar_WhenNoSize()
         {
-            np.random.seed(42);
-            var result = np.random.wald(1, 1);
+            var rng = np.random.RandomState(42);
+            var result = rng.wald(1, 1);
 
             // NumPy returns a scalar (0-dimensional) when no size is given
             result.ndim.Should().Be(0);
@@ -23,8 +23,8 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void Wald_Returns1DArray()
         {
-            np.random.seed(42);
-            var result = np.random.wald(1, 1, 5);
+            var rng = np.random.RandomState(42);
+            var result = rng.wald(1, 1, 5);
 
             result.shape.Should().ContainInOrder(5);
             result.size.Should().Be(5);
@@ -33,8 +33,8 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void Wald_Returns2DArray()
         {
-            np.random.seed(42);
-            var result = np.random.wald(1, 1, new[] { 2, 3 });
+            var rng = np.random.RandomState(42);
+            var result = rng.wald(1, 1, new[] { 2, 3 });
 
             result.shape.Should().ContainInOrder(2, 3);
             result.size.Should().Be(6);
@@ -43,8 +43,8 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void Wald_AllValuesPositive()
         {
-            np.random.seed(42);
-            var samples = np.random.wald(1, 1, 10000);
+            var rng = np.random.RandomState(42);
+            var samples = rng.wald(1, 1, 10000);
 
             var min = (double)np.amin(samples);
             min.Should().BeGreaterThan(0.0);
@@ -54,8 +54,8 @@ namespace NumSharp.UnitTest.RandomSampling
         public void Wald_HasExpectedMean()
         {
             // For Wald: E[X] = mean
-            np.random.seed(42);
-            var samples = np.random.wald(1, 1, 100000);
+            var rng = np.random.RandomState(42);
+            var samples = rng.wald(1, 1, 100000);
 
             var mean = (double)np.mean(samples);
             // Mean should be close to 1
@@ -67,8 +67,8 @@ namespace NumSharp.UnitTest.RandomSampling
         {
             // For Wald: Var[X] = mean^3 / scale
             // With mean=1, scale=1: Var = 1
-            np.random.seed(42);
-            var samples = np.random.wald(1, 1, 100000);
+            var rng = np.random.RandomState(42);
+            var samples = rng.wald(1, 1, 100000);
 
             var variance = (double)np.var(samples);
             // Variance should be close to 1
@@ -79,8 +79,8 @@ namespace NumSharp.UnitTest.RandomSampling
         public void Wald_DifferentMean_HasExpectedMean()
         {
             // With mean=3, scale=2
-            np.random.seed(42);
-            var samples = np.random.wald(3, 2, 100000);
+            var rng = np.random.RandomState(42);
+            var samples = rng.wald(3, 2, 100000);
 
             var mean = (double)np.mean(samples);
             // Mean should be close to 3
@@ -92,8 +92,8 @@ namespace NumSharp.UnitTest.RandomSampling
         {
             // For Wald: Var[X] = mean^3 / scale
             // With mean=3, scale=2: Var = 27/2 = 13.5
-            np.random.seed(42);
-            var samples = np.random.wald(3, 2, 100000);
+            var rng = np.random.RandomState(42);
+            var samples = rng.wald(3, 2, 100000);
 
             var variance = (double)np.var(samples);
             // Variance should be close to 13.5
@@ -103,8 +103,8 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void Wald_SmallParameters_AllPositive()
         {
-            np.random.seed(42);
-            var samples = np.random.wald(0.1, 0.1, 10000);
+            var rng = np.random.RandomState(42);
+            var samples = rng.wald(0.1, 0.1, 10000);
 
             foreach (var val in samples.AsIterator<double>())
             {
@@ -143,8 +143,8 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void Wald_ShapeOverload_Works()
         {
-            np.random.seed(42);
-            var result = np.random.wald(1, 1, new Shape(3, 4));
+            var rng = np.random.RandomState(42);
+            var result = rng.wald(1, 1, new Shape(3, 4));
 
             result.shape.Should().ContainInOrder(3, 4);
         }
@@ -152,11 +152,11 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void Wald_Reproducibility_WithSeed()
         {
-            np.random.seed(42);
-            var first = np.random.wald(1, 1, 5).ToArray<double>();
+            var rng1 = np.random.RandomState(42);
+            var first = rng1.wald(1, 1, 5).ToArray<double>();
 
-            np.random.seed(42);
-            var second = np.random.wald(1, 1, 5).ToArray<double>();
+            var rng2 = np.random.RandomState(42);
+            var second = rng2.wald(1, 1, 5).ToArray<double>();
 
             first.Should().BeEquivalentTo(second);
         }

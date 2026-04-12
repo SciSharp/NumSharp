@@ -5,25 +5,25 @@ using NumSharp.UnitTest.Utilities;
 namespace NumSharp.UnitTest.RandomSampling;
 
 /// <summary>
-/// Tests for np.random.noncentral_chisquare following NumPy 2.4.2 behavior.
+/// Tests for rng.noncentral_chisquare following NumPy 2.4.2 behavior.
 /// Mean = df + nonc
 /// </summary>
-[NotInParallel]
+
     public class RandomNoncentralChisquareTests : TestClass
 {
     [Test]
     public void NoncentralChisquare_ScalarCall_ReturnsDouble()
     {
-        np.random.seed(42);
-        double result = (double)np.random.noncentral_chisquare(3, 2);
+        var rng = np.random.RandomState(42);
+        double result = (double)rng.noncentral_chisquare(3, 2);
         Assert.IsTrue(result >= 0, $"Result {result} should be non-negative");
     }
 
     [Test]
     public void NoncentralChisquare_ArraySize_ReturnsCorrectShape()
     {
-        np.random.seed(42);
-        var result = np.random.noncentral_chisquare(3, 2, 5L);
+        var rng = np.random.RandomState(42);
+        var result = rng.noncentral_chisquare(3, 2, 5L);
         result.Should().BeShaped(5);
         Assert.AreEqual(typeof(double), result.dtype);
     }
@@ -31,24 +31,24 @@ namespace NumSharp.UnitTest.RandomSampling;
     [Test]
     public void NoncentralChisquare_MultiDimensionalSize_ReturnsCorrectShape()
     {
-        np.random.seed(42);
-        var result = np.random.noncentral_chisquare(3, 2, new Shape(2, 3));
+        var rng = np.random.RandomState(42);
+        var result = rng.noncentral_chisquare(3, 2, new Shape(2, 3));
         result.Should().BeShaped(2, 3);
     }
 
     [Test]
     public void NoncentralChisquare_ShapeSize_ReturnsCorrectShape()
     {
-        np.random.seed(42);
-        var result = np.random.noncentral_chisquare(3, 2, new Shape(3, 4));
+        var rng = np.random.RandomState(42);
+        var result = rng.noncentral_chisquare(3, 2, new Shape(3, 4));
         result.Should().BeShaped(3, 4);
     }
 
     [Test]
     public void NoncentralChisquare_AllValuesNonNegative()
     {
-        np.random.seed(12345);
-        var samples = np.random.noncentral_chisquare(3, 2, 10000L);
+        var rng = np.random.RandomState(12345);
+        var samples = rng.noncentral_chisquare(3, 2, 10000L);
 
         for (int i = 0; i < samples.size; i++)
         {
@@ -61,8 +61,8 @@ namespace NumSharp.UnitTest.RandomSampling;
     public void NoncentralChisquare_MeanConvergesToExpected()
     {
         // Mean = df + nonc = 3 + 2 = 5
-        np.random.seed(12345);
-        var samples = np.random.noncentral_chisquare(3, 2, 100000L);
+        var rng = np.random.RandomState(12345);
+        var samples = rng.noncentral_chisquare(3, 2, 100000L);
         double mean = (double)np.mean(samples);
 
         Assert.IsTrue(Math.Abs(mean - 5.0) < 0.1,
@@ -73,8 +73,8 @@ namespace NumSharp.UnitTest.RandomSampling;
     public void NoncentralChisquare_ZeroNonc_IsCentralChisquare()
     {
         // When nonc=0, it's central chi-square with mean = df
-        np.random.seed(12345);
-        var samples = np.random.noncentral_chisquare(3, 0, 100000L);
+        var rng = np.random.RandomState(12345);
+        var samples = rng.noncentral_chisquare(3, 0, 100000L);
         double mean = (double)np.mean(samples);
 
         Assert.IsTrue(Math.Abs(mean - 3.0) < 0.1,
@@ -85,8 +85,8 @@ namespace NumSharp.UnitTest.RandomSampling;
     public void NoncentralChisquare_SmallDf()
     {
         // df <= 1 uses the Poisson method
-        np.random.seed(42);
-        var samples = np.random.noncentral_chisquare(0.5, 2, 10000L);
+        var rng = np.random.RandomState(42);
+        var samples = rng.noncentral_chisquare(0.5, 2, 10000L);
 
         // All should be non-negative
         for (int i = 0; i < samples.size; i++)
@@ -105,8 +105,8 @@ namespace NumSharp.UnitTest.RandomSampling;
     public void NoncentralChisquare_LargeDf()
     {
         // Large df should work correctly
-        np.random.seed(42);
-        var samples = np.random.noncentral_chisquare(10, 5, 10000L);
+        var rng = np.random.RandomState(42);
+        var samples = rng.noncentral_chisquare(10, 5, 10000L);
         double mean = (double)np.mean(samples);
 
         // Mean = df + nonc = 10 + 5 = 15
@@ -118,8 +118,8 @@ namespace NumSharp.UnitTest.RandomSampling;
     public void NoncentralChisquare_LargeNonc()
     {
         // Large non-centrality
-        np.random.seed(42);
-        var samples = np.random.noncentral_chisquare(3, 20, 10000L);
+        var rng = np.random.RandomState(42);
+        var samples = rng.noncentral_chisquare(3, 20, 10000L);
         double mean = (double)np.mean(samples);
 
         // Mean = df + nonc = 3 + 20 = 23
@@ -160,11 +160,11 @@ namespace NumSharp.UnitTest.RandomSampling;
     [Test]
     public void NoncentralChisquare_Reproducibility()
     {
-        np.random.seed(42);
-        var result1 = np.random.noncentral_chisquare(3, 2, 5L);
+        var rng1 = np.random.RandomState(42);
+        var result1 = rng1.noncentral_chisquare(3, 2, 5L);
 
-        np.random.seed(42);
-        var result2 = np.random.noncentral_chisquare(3, 2, 5L);
+        var rng2 = np.random.RandomState(42);
+        var result2 = rng2.noncentral_chisquare(3, 2, 5L);
 
         for (int i = 0; i < 5; i++)
         {

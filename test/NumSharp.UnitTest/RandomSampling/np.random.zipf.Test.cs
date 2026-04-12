@@ -6,7 +6,7 @@ namespace NumSharp.UnitTest.RandomSampling
     /// <summary>
     /// Tests for np.random.zipf (Zipf/zeta distribution)
     /// </summary>
-    [NotInParallel]
+    
     public class NpRandomZipfTests : TestClass
     {
         [Test]
@@ -44,8 +44,8 @@ namespace NumSharp.UnitTest.RandomSampling
         public void Zipf_AllValuesPositive()
         {
             // Zipf distribution produces positive integers >= 1
-            np.random.seed(42);
-            var samples = np.random.zipf(2, 10000);
+            var rng = np.random.RandomState(42);
+            var samples = rng.zipf(2, 10000);
 
             foreach (var val in samples.AsIterator<long>())
             {
@@ -57,8 +57,8 @@ namespace NumSharp.UnitTest.RandomSampling
         public void Zipf_MinValueIsOne()
         {
             // Minimum value should be 1
-            np.random.seed(42);
-            var samples = np.random.zipf(2, 10000);
+            var rng = np.random.RandomState(42);
+            var samples = rng.zipf(2, 10000);
             long min = long.MaxValue;
             foreach (var val in samples.AsIterator<long>())
             {
@@ -71,8 +71,8 @@ namespace NumSharp.UnitTest.RandomSampling
         public void Zipf_LargeA_ReturnsAllOnes()
         {
             // For very large a (>= 1025), NumPy returns 1
-            np.random.seed(42);
-            var samples = np.random.zipf(2000, 100);
+            var rng = np.random.RandomState(42);
+            var samples = rng.zipf(2000, 100);
 
             foreach (var val in samples.AsIterator<long>())
             {
@@ -83,8 +83,8 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void Zipf_Scalar_ReturnsScalar()
         {
-            np.random.seed(42);
-            var result = np.random.zipf(2);
+            var rng = np.random.RandomState(42);
+            var result = rng.zipf(2);
             // NumPy returns a scalar (0-dimensional) when no size is given
             Assert.AreEqual(0, result.ndim);
             Assert.AreEqual(1, result.size);
@@ -93,11 +93,11 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void Zipf_SameSeed_ProducesSameResults()
         {
-            np.random.seed(42);
-            var samples1 = np.random.zipf(2, 10);
+            var rng1 = np.random.RandomState(42);
+            var samples1 = rng1.zipf(2, 10);
 
-            np.random.seed(42);
-            var samples2 = np.random.zipf(2, 10);
+            var rng2 = np.random.RandomState(42);
+            var samples2 = rng2.zipf(2, 10);
 
             for (int i = 0; i < 10; i++)
             {
@@ -108,11 +108,11 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void Zipf_DifferentSeeds_ProduceDifferentResults()
         {
-            np.random.seed(42);
-            var samples1 = np.random.zipf(2, 10);
+            var rng1 = np.random.RandomState(42);
+            var samples1 = rng1.zipf(2, 10);
 
-            np.random.seed(123);
-            var samples2 = np.random.zipf(2, 10);
+            var rng2 = np.random.RandomState(123);
+            var samples2 = rng2.zipf(2, 10);
 
             bool anyDifferent = false;
             for (int i = 0; i < 10; i++)
@@ -198,11 +198,10 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void Zipf_DifferentA_DifferentDistributions()
         {
-            np.random.seed(42);
-            var smallA = np.random.zipf(1.5, 1000);  // Heavy tail
+            var rng1 = np.random.RandomState(42);
+            var smallA = rng1.zipf(1.5, 1000);  // Heavy tail
 
-            np.random.seed(42);
-            var largeA = np.random.zipf(5, 1000);    // Light tail
+            var largeA = rng1.zipf(5, 1000);    // Light tail
 
             // Small a should have larger mean (more big values)
             double smallMean = 0;

@@ -9,7 +9,7 @@ namespace NumSharp.UnitTest.RandomSampling
     /// Tests for np.random.vonmises (von Mises / circular normal distribution).
     /// Based on NumPy 2.4.2 behavior.
     /// </summary>
-    [NotInParallel]
+    
     public class np_random_vonmises_Tests : TestClass
     {
         #region Basic Functionality
@@ -17,8 +17,8 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void VonMises_Scalar_ReturnsNDArray()
         {
-            np.random.seed(42);
-            var result = np.random.vonmises(0, 1);
+            var rng = np.random.RandomState(42);
+            var result = rng.vonmises(0, 1);
 
             result.Should().NotBeNull();
             result.ndim.Should().Be(0);  // Scalar
@@ -27,8 +27,8 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void VonMises_1D_ReturnsCorrectShape()
         {
-            np.random.seed(42);
-            var result = np.random.vonmises(0, 1, 5);
+            var rng = np.random.RandomState(42);
+            var result = rng.vonmises(0, 1, 5);
 
             result.Should().BeShaped(5);
             result.dtype.Should().Be(typeof(double));
@@ -37,8 +37,8 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void VonMises_2D_ReturnsCorrectShape()
         {
-            np.random.seed(42);
-            var result = np.random.vonmises(0, 1, new int[] { 2, 3 });
+            var rng = np.random.RandomState(42);
+            var result = rng.vonmises(0, 1, new int[] { 2, 3 });
 
             result.Should().BeShaped(2, 3);
             result.dtype.Should().Be(typeof(double));
@@ -47,8 +47,8 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void VonMises_SizeNull_ReturnsScalar()
         {
-            np.random.seed(42);
-            var result = np.random.vonmises(0, 1);
+            var rng = np.random.RandomState(42);
+            var result = rng.vonmises(0, 1);
 
             result.ndim.Should().Be(0);
         }
@@ -61,8 +61,8 @@ namespace NumSharp.UnitTest.RandomSampling
         public void VonMises_ResultsInRange_MinusPiToPi()
         {
             // All results should be in [-pi, pi]
-            np.random.seed(42);
-            var result = np.random.vonmises(0, 1, 10000);
+            var rng = np.random.RandomState(42);
+            var result = rng.vonmises(0, 1, 10000);
             var data = result.ToArray<double>();
 
             foreach (var v in data)
@@ -76,8 +76,8 @@ namespace NumSharp.UnitTest.RandomSampling
         public void VonMises_Kappa0_UniformOnCircle()
         {
             // kappa=0 gives uniform distribution on [-pi, pi]
-            np.random.seed(42);
-            var result = np.random.vonmises(0, 0, 10000);
+            var rng = np.random.RandomState(42);
+            var result = rng.vonmises(0, 0, 10000);
             var data = result.ToArray<double>();
 
             // All in range
@@ -98,8 +98,8 @@ namespace NumSharp.UnitTest.RandomSampling
         public void VonMises_HighKappa_ConcentratedAroundMu()
         {
             // High kappa = concentrated around mu
-            np.random.seed(42);
-            var result = np.random.vonmises(0, 100, 10000);
+            var rng = np.random.RandomState(42);
+            var result = rng.vonmises(0, 100, 10000);
             var data = result.ToArray<double>();
 
             double mean = 0;
@@ -121,8 +121,8 @@ namespace NumSharp.UnitTest.RandomSampling
         public void VonMises_HighKappa_ConcentratedAroundMuPiHalf()
         {
             // High kappa around mu=pi/2
-            np.random.seed(42);
-            var result = np.random.vonmises(Math.PI / 2, 100, 10000);
+            var rng = np.random.RandomState(42);
+            var result = rng.vonmises(Math.PI / 2, 100, 10000);
             var data = result.ToArray<double>();
 
             double mean = 0;
@@ -141,8 +141,8 @@ namespace NumSharp.UnitTest.RandomSampling
         public void VonMises_VerySmallKappa_NearUniform()
         {
             // kappa < 1e-8 uses uniform distribution
-            np.random.seed(42);
-            var result = np.random.vonmises(0, 1e-9, 10000);
+            var rng = np.random.RandomState(42);
+            var result = rng.vonmises(0, 1e-9, 10000);
             var data = result.ToArray<double>();
 
             // All in range
@@ -157,8 +157,8 @@ namespace NumSharp.UnitTest.RandomSampling
         public void VonMises_VeryHighKappa_WrappedNormalFallback()
         {
             // kappa > 1e6 uses wrapped normal approximation
-            np.random.seed(42);
-            var result = np.random.vonmises(0, 1e7, 1000);
+            var rng = np.random.RandomState(42);
+            var result = rng.vonmises(0, 1e7, 1000);
             var data = result.ToArray<double>();
 
             // All in range
@@ -178,10 +178,10 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void VonMises_VariousKappaValues_AllInRange()
         {
-            np.random.seed(42);
+            var rng = np.random.RandomState(42);
             foreach (double kappa in new[] { 0.0, 0.1, 1.0, 10.0, 100.0, 1000.0 })
             {
-                var result = np.random.vonmises(0, kappa, 1000);
+                var result = rng.vonmises(0, kappa, 1000);
                 var data = result.ToArray<double>();
 
                 foreach (var v in data)
@@ -215,10 +215,10 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void VonMises_DifferentMu_MeanFollowsMu()
         {
-            np.random.seed(42);
+            var rng = np.random.RandomState(42);
             foreach (double mu in new[] { 0.0, Math.PI / 4, Math.PI / 2, -Math.PI / 2 })
             {
-                var result = np.random.vonmises(mu, 10, 5000);
+                var result = rng.vonmises(mu, 10, 5000);
                 var data = result.ToArray<double>();
 
                 double mean = 0;
@@ -234,8 +234,8 @@ namespace NumSharp.UnitTest.RandomSampling
         public void VonMises_MuAtPi_WrapsCorrectly()
         {
             // mu = pi should wrap around properly
-            np.random.seed(42);
-            var result = np.random.vonmises(Math.PI, 10, 5000);
+            var rng = np.random.RandomState(42);
+            var result = rng.vonmises(Math.PI, 10, 5000);
             var data = result.ToArray<double>();
 
             // All in range
@@ -253,8 +253,8 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void VonMises_EmptyShape_ReturnsEmptyArray()
         {
-            np.random.seed(42);
-            var result = np.random.vonmises(0, 1, new int[] { 0 });
+            var rng = np.random.RandomState(42);
+            var result = rng.vonmises(0, 1, new int[] { 0 });
 
             result.size.Should().Be(0);
         }
@@ -262,8 +262,8 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void VonMises_Size1_ReturnsSingleElementArray()
         {
-            np.random.seed(42);
-            var result = np.random.vonmises(0, 1, 1);
+            var rng = np.random.RandomState(42);
+            var result = rng.vonmises(0, 1, 1);
 
             result.size.Should().Be(1);
         }
@@ -271,11 +271,11 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void VonMises_Reproducibility_SameSeedSameResults()
         {
-            np.random.seed(42);
-            var result1 = np.random.vonmises(0, 1, 10);
+            var rng1 = np.random.RandomState(42);
+            var result1 = rng1.vonmises(0, 1, 10);
 
-            np.random.seed(42);
-            var result2 = np.random.vonmises(0, 1, 10);
+            var rng2 = np.random.RandomState(42);
+            var result2 = rng2.vonmises(0, 1, 10);
 
             var data1 = result1.ToArray<double>();
             var data2 = result2.ToArray<double>();

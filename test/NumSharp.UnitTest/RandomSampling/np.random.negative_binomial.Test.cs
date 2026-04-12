@@ -6,7 +6,7 @@ namespace NumSharp.UnitTest.RandomSampling
     /// <summary>
     /// Tests for np.random.negative_binomial (negative binomial distribution)
     /// </summary>
-    [NotInParallel]
+    
     public class NpRandomNegativeBinomialTests : TestClass
     {
         [Test]
@@ -44,8 +44,8 @@ namespace NumSharp.UnitTest.RandomSampling
         public void NegativeBinomial_AllValuesNonNegative()
         {
             // Negative binomial produces non-negative integers (number of failures)
-            np.random.seed(42);
-            var samples = np.random.negative_binomial(10, 0.5, 10000L);
+            var rng = np.random.RandomState(42);
+            var samples = rng.negative_binomial(10, 0.5, 10000L);
 
             foreach (var val in samples.AsIterator<long>())
             {
@@ -58,8 +58,8 @@ namespace NumSharp.UnitTest.RandomSampling
         {
             // mean = n * (1-p) / p
             // For n=10, p=0.5: mean = 10 * 0.5 / 0.5 = 10
-            np.random.seed(42);
-            var samples = np.random.negative_binomial(10, 0.5, 100000L);
+            var rng = np.random.RandomState(42);
+            var samples = rng.negative_binomial(10, 0.5, 100000L);
 
             double mean = 0;
             foreach (var val in samples.AsIterator<long>())
@@ -75,8 +75,8 @@ namespace NumSharp.UnitTest.RandomSampling
         {
             // variance = n * (1-p) / p^2
             // For n=10, p=0.5: var = 10 * 0.5 / 0.25 = 20
-            np.random.seed(42);
-            var samples = np.random.negative_binomial(10, 0.5, 100000L);
+            var rng = np.random.RandomState(42);
+            var samples = rng.negative_binomial(10, 0.5, 100000L);
 
             double mean = 0;
             foreach (var val in samples.AsIterator<long>())
@@ -108,8 +108,8 @@ namespace NumSharp.UnitTest.RandomSampling
         public void NegativeBinomial_HighP_FewFailures()
         {
             // High p means few failures expected
-            np.random.seed(42);
-            var samples = np.random.negative_binomial(10, 0.9, 1000L);
+            var rng = np.random.RandomState(42);
+            var samples = rng.negative_binomial(10, 0.9, 1000L);
 
             double mean = 0;
             foreach (var val in samples.AsIterator<long>())
@@ -124,8 +124,8 @@ namespace NumSharp.UnitTest.RandomSampling
         public void NegativeBinomial_LowP_ManyFailures()
         {
             // Low p means many failures expected
-            np.random.seed(42);
-            var samples = np.random.negative_binomial(10, 0.1, 1000L);
+            var rng = np.random.RandomState(42);
+            var samples = rng.negative_binomial(10, 0.1, 1000L);
 
             double mean = 0;
             foreach (var val in samples.AsIterator<long>())
@@ -139,8 +139,8 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void NegativeBinomial_Scalar_ReturnsScalar()
         {
-            np.random.seed(42);
-            var result = np.random.negative_binomial(10, 0.5);
+            var rng = np.random.RandomState(42);
+            var result = rng.negative_binomial(10, 0.5);
             // NumPy returns a scalar (0-dimensional) when no size is given
             Assert.AreEqual(0, result.ndim);
             Assert.AreEqual(1, result.size);
@@ -149,11 +149,11 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void NegativeBinomial_SameSeed_ProducesSameResults()
         {
-            np.random.seed(42);
-            var samples1 = np.random.negative_binomial(10, 0.5, 10L);
+            var rng1 = np.random.RandomState(42);
+            var samples1 = rng1.negative_binomial(10, 0.5, 10L);
 
-            np.random.seed(42);
-            var samples2 = np.random.negative_binomial(10, 0.5, 10L);
+            var rng2 = np.random.RandomState(42);
+            var samples2 = rng2.negative_binomial(10, 0.5, 10L);
 
             for (int i = 0; i < 10; i++)
             {

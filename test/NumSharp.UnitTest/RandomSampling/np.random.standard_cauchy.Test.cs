@@ -4,14 +4,14 @@ using System.Linq;
 
 namespace NumSharp.UnitTest.RandomSampling
 {
-    [NotInParallel]
+    
     public class NpRandomStandardCauchyTest : TestClass
     {
         [Test]
         public void StandardCauchy_ScalarReturn()
         {
-            np.random.seed(42);
-            var result = np.random.standard_cauchy();
+            var rng = np.random.RandomState(42);
+            var result = rng.standard_cauchy();
 
             Assert.AreEqual(0, result.ndim);
             Assert.AreEqual(1, result.size);
@@ -50,8 +50,8 @@ namespace NumSharp.UnitTest.RandomSampling
         public void StandardCauchy_MedianNearZero()
         {
             // Cauchy has no mean/variance, but median = 0
-            np.random.seed(42);
-            var samples = np.random.standard_cauchy(100000L);
+            var rng = np.random.RandomState(42);
+            var samples = rng.standard_cauchy(100000L);
 
             // Calculate median manually
             var sorted = samples.Data<double>().OrderBy(x => x).ToArray();
@@ -64,8 +64,8 @@ namespace NumSharp.UnitTest.RandomSampling
         public void StandardCauchy_InterquartileRange()
         {
             // For standard Cauchy, Q1 = -1, Q3 = 1, so IQR = 2
-            np.random.seed(42);
-            var samples = np.random.standard_cauchy(100000L);
+            var rng = np.random.RandomState(42);
+            var samples = rng.standard_cauchy(100000L);
 
             var sorted = samples.Data<double>().OrderBy(x => x).ToArray();
             double q1 = sorted[sorted.Length / 4];
@@ -84,8 +84,8 @@ namespace NumSharp.UnitTest.RandomSampling
         public void StandardCauchy_HasHeavyTails()
         {
             // Cauchy has heavy tails - should have some extreme values
-            np.random.seed(42);
-            var samples = np.random.standard_cauchy(10000L);
+            var rng = np.random.RandomState(42);
+            var samples = rng.standard_cauchy(10000L);
 
             var max = (double)np.amax(samples);
             var min = (double)np.amin(samples);
@@ -115,11 +115,11 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void StandardCauchy_Reproducible()
         {
-            np.random.seed(123);
-            var a = np.random.standard_cauchy(5L);
+            var rng1 = np.random.RandomState(123);
+            var a = rng1.standard_cauchy(5L);
 
-            np.random.seed(123);
-            var b = np.random.standard_cauchy(5L);
+            var rng2 = np.random.RandomState(123);
+            var b = rng2.standard_cauchy(5L);
 
             var aData = a.Data<double>();
             var bData = b.Data<double>();

@@ -948,8 +948,8 @@ public class NumpyAlignmentBugTests
         //
         // NumSharp BUG: replace parameter is declared but never used.
         // Code always uses randint which samples WITH replacement.
-        np.random.seed(42);
-        var result = np.random.choice(10, new Shape(5), replace: false);
+        var rng = np.random.RandomState(42);
+        var result = rng.choice(10, new Shape(5), replace: false);
 
         // With replace=False, all values must be unique
         var values = result.ToArray<int>();
@@ -969,11 +969,11 @@ public class NumpyAlignmentBugTests
         // ValueError: Cannot take a larger sample than population when 'replace=False'
         //
         // NumSharp BUG: No validation, will produce duplicates instead
-        np.random.seed(42);
+        var rng = np.random.RandomState(42);
 
         try
         {
-            var result = np.random.choice(5, new Shape(10), replace: false);
+            var result = rng.choice(5, new Shape(10), replace: false);
             Assert.Fail(
                 "np.random.choice(5, 10, replace=False) should throw ValueError, " +
                 "but returned: " + string.Join(", ", result.ToArray<int>()));
@@ -995,8 +995,8 @@ public class NumpyAlignmentBugTests
     {
         // NUMPY: replace=True (default) allows duplicates
         // This test verifies the default behavior still works
-        np.random.seed(42);
-        var result = np.random.choice(3, new Shape(100), replace: true);
+        var rng = np.random.RandomState(42);
+        var result = rng.choice(3, new Shape(100), replace: true);
 
         // With only 3 choices and 100 samples, duplicates are guaranteed
         var values = result.ToArray<int>();
@@ -1012,9 +1012,9 @@ public class NumpyAlignmentBugTests
     {
         // NUMPY: np.random.choice(['a','b','c','d','e'], 3, replace=False)
         // Should return 3 unique elements from the array
-        np.random.seed(42);
+        var rng = np.random.RandomState(42);
         var arr = np.array(new[] { 10, 20, 30, 40, 50 });
-        var result = np.random.choice(arr, new Shape(3), replace: false);
+        var result = rng.choice(arr, new Shape(3), replace: false);
 
         var values = result.ToArray<int>();
         var uniqueCount = values.Distinct().Count();

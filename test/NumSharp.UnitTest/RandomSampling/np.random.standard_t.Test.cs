@@ -5,14 +5,14 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace NumSharp.UnitTest.RandomSampling
 {
-    [NotInParallel]
+    
     public class StandardTTests
     {
         [Test]
         public void StandardT_ReturnsScalar_WhenNoSize()
         {
-            np.random.seed(42);
-            var result = np.random.standard_t(10);
+            var rng = np.random.RandomState(42);
+            var result = rng.standard_t(10);
 
             // NumPy returns a scalar (0-dimensional) when no size is given
             result.ndim.Should().Be(0);
@@ -23,8 +23,8 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void StandardT_Returns1DArray()
         {
-            np.random.seed(42);
-            var result = np.random.standard_t(10, 5L);
+            var rng = np.random.RandomState(42);
+            var result = rng.standard_t(10, 5L);
 
             result.shape.Should().ContainInOrder(5);
             result.size.Should().Be(5);
@@ -33,8 +33,8 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void StandardT_Returns2DArray()
         {
-            np.random.seed(42);
-            var result = np.random.standard_t(10, new[] { 2, 3 });
+            var rng = np.random.RandomState(42);
+            var result = rng.standard_t(10, new[] { 2, 3 });
 
             result.shape.Should().ContainInOrder(2, 3);
             result.size.Should().Be(6);
@@ -44,8 +44,8 @@ namespace NumSharp.UnitTest.RandomSampling
         public void StandardT_HasMeanNearZero()
         {
             // For t distribution with df > 1: E[X] = 0
-            np.random.seed(42);
-            var samples = np.random.standard_t(10, 100000L);
+            var rng = np.random.RandomState(42);
+            var samples = rng.standard_t(10, 100000L);
 
             var mean = (double)np.mean(samples);
             // Mean should be close to 0
@@ -57,8 +57,8 @@ namespace NumSharp.UnitTest.RandomSampling
         {
             // For t distribution: Var[X] = df/(df-2) for df > 2
             // df=10: Var = 10/8 = 1.25, Std = sqrt(1.25) ≈ 1.118
-            np.random.seed(42);
-            var samples = np.random.standard_t(10, 100000L);
+            var rng = np.random.RandomState(42);
+            var samples = rng.standard_t(10, 100000L);
 
             var std = (double)np.std(samples);
             var expectedStd = Math.Sqrt(10.0 / 8.0);
@@ -69,8 +69,8 @@ namespace NumSharp.UnitTest.RandomSampling
         public void StandardT_HasExpectedStd_df5()
         {
             // df=5: Var = 5/3, Std = sqrt(5/3) ≈ 1.291
-            np.random.seed(42);
-            var samples = np.random.standard_t(5, 100000L);
+            var rng = np.random.RandomState(42);
+            var samples = rng.standard_t(5, 100000L);
 
             var std = (double)np.std(samples);
             var expectedStd = Math.Sqrt(5.0 / 3.0);
@@ -81,8 +81,8 @@ namespace NumSharp.UnitTest.RandomSampling
         public void StandardT_IsSymmetric()
         {
             // t distribution is symmetric around 0
-            np.random.seed(42);
-            var samples = np.random.standard_t(10, 100000L);
+            var rng = np.random.RandomState(42);
+            var samples = rng.standard_t(10, 100000L);
 
             int negCount = 0, posCount = 0;
             foreach (var val in samples.AsIterator<double>())
@@ -100,8 +100,8 @@ namespace NumSharp.UnitTest.RandomSampling
         public void StandardT_LargeDf_ApproachesNormal()
         {
             // As df → ∞, t distribution approaches standard normal
-            np.random.seed(42);
-            var samples = np.random.standard_t(1000, 100000L);
+            var rng = np.random.RandomState(42);
+            var samples = rng.standard_t(1000, 100000L);
 
             var mean = (double)np.mean(samples);
             var std = (double)np.std(samples);
@@ -115,10 +115,10 @@ namespace NumSharp.UnitTest.RandomSampling
         public void StandardT_SmallDf_HasHeavierTails()
         {
             // df=3 should have heavier tails than df=100
-            np.random.seed(42);
-            var samples3 = np.random.standard_t(3, 100000L);
-            np.random.seed(42);
-            var samples100 = np.random.standard_t(100, 100000L);
+            var rng1 = np.random.RandomState(42);
+            var samples3 = rng1.standard_t(3, 100000L);
+            var rng2 = np.random.RandomState(42);
+            var samples100 = rng2.standard_t(100, 100000L);
 
             var max3 = (double)np.amax(np.abs(samples3));
             var max100 = (double)np.amax(np.abs(samples100));
@@ -144,8 +144,8 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void StandardT_ShapeOverload_Works()
         {
-            np.random.seed(42);
-            var result = np.random.standard_t(10, new Shape(3, 4));
+            var rng = np.random.RandomState(42);
+            var result = rng.standard_t(10, new Shape(3, 4));
 
             result.shape.Should().ContainInOrder(3, 4);
         }
@@ -153,11 +153,11 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void StandardT_Reproducibility_WithSeed()
         {
-            np.random.seed(42);
-            var first = np.random.standard_t(10, 5L).ToArray<double>();
+            var rng1 = np.random.RandomState(42);
+            var first = rng1.standard_t(10, 5L).ToArray<double>();
 
-            np.random.seed(42);
-            var second = np.random.standard_t(10, 5L).ToArray<double>();
+            var rng2 = np.random.RandomState(42);
+            var second = rng2.standard_t(10, 5L).ToArray<double>();
 
             first.Should().BeEquivalentTo(second);
         }
@@ -166,8 +166,8 @@ namespace NumSharp.UnitTest.RandomSampling
         public void StandardT_FractionalDf_Works()
         {
             // df can be fractional
-            np.random.seed(42);
-            var samples = np.random.standard_t(2.5, 1000L);
+            var rng = np.random.RandomState(42);
+            var samples = rng.standard_t(2.5, 1000L);
 
             samples.size.Should().Be(1000);
             // Mean should still be ~0

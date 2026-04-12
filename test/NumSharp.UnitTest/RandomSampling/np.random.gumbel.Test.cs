@@ -6,7 +6,6 @@ namespace NumSharp.UnitTest.RandomSampling
     /// <summary>
     /// Tests for np.random.gumbel (Gumbel/extreme value type I distribution)
     /// </summary>
-    [NotInParallel]
     public class NpRandomGumbelTests : TestClass
     {
         // Euler-Mascheroni constant
@@ -41,8 +40,8 @@ namespace NumSharp.UnitTest.RandomSampling
         {
             // Gumbel(0, 1) has mean = γ ≈ 0.5772 (Euler-Mascheroni constant)
             // and std = π / sqrt(6) ≈ 1.283
-            np.random.seed(42);
-            var samples = np.random.gumbel(0, 1, 100000);
+            var rng = np.random.RandomState(42);
+            var samples = rng.gumbel(0, 1, 100000);
 
             var mean = (double)np.mean(samples);
             var std = (double)np.std(samples);
@@ -57,10 +56,10 @@ namespace NumSharp.UnitTest.RandomSampling
         public void Gumbel_WithLocScale_TransformsCorrectly()
         {
             // Gumbel(loc, scale) has mean = loc + scale * γ
-            np.random.seed(42);
+            var rng = np.random.RandomState(42);
             double loc = 2.0;
             double scale = 3.0;
-            var samples = np.random.gumbel(loc, scale, 100000);
+            var samples = rng.gumbel(loc, scale, 100000);
 
             var mean = (double)np.mean(samples);
             double expectedMean = loc + scale * EulerGamma;
@@ -89,8 +88,8 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void Gumbel_Scalar_ReturnsScalar()
         {
-            np.random.seed(42);
-            var result = np.random.gumbel();
+            var rng = np.random.RandomState(42);
+            var result = rng.gumbel();
             // NumPy returns a scalar (0-dimensional) when no size is given
             Assert.AreEqual(0, result.ndim);
             Assert.AreEqual(1, result.size);
@@ -106,11 +105,11 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void Gumbel_SameSeed_ProducesSameResults()
         {
-            np.random.seed(42);
-            var samples1 = np.random.gumbel(0, 1, 10);
+            var rng1 = np.random.RandomState(42);
+            var samples1 = rng1.gumbel(0, 1, 10);
 
-            np.random.seed(42);
-            var samples2 = np.random.gumbel(0, 1, 10);
+            var rng2 = np.random.RandomState(42);
+            var samples2 = rng2.gumbel(0, 1, 10);
 
             for (int i = 0; i < 10; i++)
             {
@@ -121,11 +120,11 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void Gumbel_DifferentSeeds_ProduceDifferentResults()
         {
-            np.random.seed(42);
-            var samples1 = np.random.gumbel(0, 1, 10);
+            var rng1 = np.random.RandomState(42);
+            var samples1 = rng1.gumbel(0, 1, 10);
 
-            np.random.seed(123);
-            var samples2 = np.random.gumbel(0, 1, 10);
+            var rng2 = np.random.RandomState(123);
+            var samples2 = rng2.gumbel(0, 1, 10);
 
             bool anyDifferent = false;
             for (int i = 0; i < 10; i++)
@@ -143,8 +142,8 @@ namespace NumSharp.UnitTest.RandomSampling
         public void Gumbel_CanProduceNegativeValues()
         {
             // Gumbel distribution can produce negative values (unlike Rayleigh)
-            np.random.seed(42);
-            var samples = np.random.gumbel(0, 1, 10000);
+            var rng = np.random.RandomState(42);
+            var samples = rng.gumbel(0, 1, 10000);
 
             bool hasNegative = false;
             foreach (var val in samples.AsIterator<double>())

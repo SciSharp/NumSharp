@@ -6,7 +6,6 @@ namespace NumSharp.UnitTest.RandomSampling
     /// <summary>
     /// Tests for np.random.laplace (Laplace/double exponential distribution)
     /// </summary>
-    [NotInParallel]
     public class NpRandomLaplaceTests : TestClass
     {
         [Test]
@@ -37,8 +36,8 @@ namespace NumSharp.UnitTest.RandomSampling
         public void Laplace_DefaultParameters_HasCorrectStatistics()
         {
             // Laplace(0, 1) has mean=0 and std=sqrt(2)≈1.414, variance=2
-            np.random.seed(42);
-            var samples = np.random.laplace(0, 1, 100000);
+            var rng = np.random.RandomState(42);
+            var samples = rng.laplace(0, 1, 100000);
 
             var mean = (double)np.mean(samples);
             var std = (double)np.std(samples);
@@ -54,10 +53,10 @@ namespace NumSharp.UnitTest.RandomSampling
         public void Laplace_WithLocScale_TransformsCorrectly()
         {
             // Laplace(μ, λ) has mean=μ and variance=2λ²
-            np.random.seed(42);
+            var rng = np.random.RandomState(42);
             double loc = 5.0;
             double scale = 2.0;
-            var samples = np.random.laplace(loc, scale, 100000);
+            var samples = rng.laplace(loc, scale, 100000);
 
             var mean = (double)np.mean(samples);
             var variance = (double)np.var(samples);
@@ -88,8 +87,8 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void Laplace_Scalar_ReturnsScalar()
         {
-            np.random.seed(42);
-            var result = np.random.laplace();
+            var rng = np.random.RandomState(42);
+            var result = rng.laplace();
             // NumPy returns a scalar (0-dimensional) when no size is given
             Assert.AreEqual(0, result.ndim);
             Assert.AreEqual(1, result.size);
@@ -105,11 +104,11 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void Laplace_DifferentSeeds_ProduceDifferentResults()
         {
-            np.random.seed(42);
-            var samples1 = np.random.laplace(0, 1, 10);
+            var rng1 = np.random.RandomState(42);
+            var samples1 = rng1.laplace(0, 1, 10);
 
-            np.random.seed(123);
-            var samples2 = np.random.laplace(0, 1, 10);
+            var rng2 = np.random.RandomState(123);
+            var samples2 = rng2.laplace(0, 1, 10);
 
             bool anyDifferent = false;
             for (int i = 0; i < 10; i++)
@@ -126,11 +125,11 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void Laplace_SameSeed_ProducesSameResults()
         {
-            np.random.seed(42);
-            var samples1 = np.random.laplace(0, 1, 10);
+            var rng1 = np.random.RandomState(42);
+            var samples1 = rng1.laplace(0, 1, 10);
 
-            np.random.seed(42);
-            var samples2 = np.random.laplace(0, 1, 10);
+            var rng2 = np.random.RandomState(42);
+            var samples2 = rng2.laplace(0, 1, 10);
 
             for (int i = 0; i < 10; i++)
             {
@@ -184,8 +183,8 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void Laplace_ProducesBothPositiveAndNegative()
         {
-            np.random.seed(42);
-            var samples = np.random.laplace(0, 1, 10000);
+            var rng = np.random.RandomState(42);
+            var samples = rng.laplace(0, 1, 10000);
 
             bool hasPositive = false;
             bool hasNegative = false;
