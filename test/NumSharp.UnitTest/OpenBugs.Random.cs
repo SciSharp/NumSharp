@@ -19,7 +19,6 @@ namespace NumSharp.UnitTest
     ///     print(np.random.rand())  # etc.
     ///     </code>
     /// </summary>
-    [NotInParallel]
     public class OpenBugsRandom : TestClass
     {
         // ===== CRITICAL: RNG Algorithm Mismatch =====
@@ -37,8 +36,8 @@ namespace NumSharp.UnitTest
         [OpenBugs]
         public void Rand_Seed42_ShouldMatchNumPy()
         {
-            np.random.seed(42);
-            var result = np.random.rand(0L);
+            var rng = np.random.RandomState(42);
+            var result = rng.rand(0L);
 
             // NumPy expected value
             const double expected = 0.3745401188473625;
@@ -56,8 +55,8 @@ namespace NumSharp.UnitTest
         [Test]
         public void Rand5_Seed42_ShouldMatchNumPy()
         {
-            np.random.seed(42);
-            var result = np.random.rand(5L);
+            var rng = np.random.RandomState(42);
+            var result = rng.rand(5L);
 
             // NumPy expected values
             var expected = new double[] {
@@ -86,8 +85,8 @@ namespace NumSharp.UnitTest
         [OpenBugs]
         public void Randn_Seed42_ShouldMatchNumPy()
         {
-            np.random.seed(42);
-            var result = np.random.randn(0L);
+            var rng = np.random.RandomState(42);
+            var result = rng.randn(0L);
 
             // NumPy expected value
             const double expected = 0.4967141530112327;
@@ -106,8 +105,8 @@ namespace NumSharp.UnitTest
         [Test]
         public void Randn5_Seed42_ShouldMatchNumPy()
         {
-            np.random.seed(42);
-            var result = np.random.randn(5L);
+            var rng = np.random.RandomState(42);
+            var result = rng.randn(5L);
 
             var expected = new double[] {
                 0.4967141530112327,
@@ -133,8 +132,8 @@ namespace NumSharp.UnitTest
         [Test]
         public void Randint_Seed42_ShouldMatchNumPy()
         {
-            np.random.seed(42);
-            var result = np.random.randint(0, 10);
+            var rng = np.random.RandomState(42);
+            var result = rng.randint(0, 10);
 
             const int expected = 6;
             var actual = (int)result;
@@ -151,8 +150,8 @@ namespace NumSharp.UnitTest
         [Test]
         public void Randint5_Seed42_ShouldMatchNumPy()
         {
-            np.random.seed(42);
-            var result = np.random.randint(0, 10, new Shape(5));
+            var rng = np.random.RandomState(42);
+            var result = rng.randint(0, 10, new Shape(5));
 
             var expected = new int[] { 6, 3, 7, 4, 6 };
 
@@ -172,8 +171,8 @@ namespace NumSharp.UnitTest
         [Test]
         public void Normal_Seed42_ShouldMatchNumPy()
         {
-            np.random.seed(42);
-            var result = np.random.normal(0, 1);
+            var rng = np.random.RandomState(42);
+            var result = rng.normal(0, 1);
 
             const double expected = 0.4967141530112327;
             var actual = result.GetDouble(0);
@@ -190,8 +189,8 @@ namespace NumSharp.UnitTest
         [Test]
         public void Uniform_Seed42_ShouldMatchNumPy()
         {
-            np.random.seed(42);
-            var result = np.random.uniform(0.0, 1.0, 1);
+            var rng = np.random.RandomState(42);
+            var result = rng.uniform(0.0, 1.0, 1);
 
             const double expected = 0.3745401188473625;
             var actual = result.GetDouble(0);
@@ -208,8 +207,8 @@ namespace NumSharp.UnitTest
         [Test]
         public void Choice_Seed42_ShouldMatchNumPy()
         {
-            np.random.seed(42);
-            var result = np.random.choice(10);
+            var rng = np.random.RandomState(42);
+            var result = rng.choice(10);
 
             const int expected = 6;
             var actual = result.GetInt32(0);
@@ -227,8 +226,8 @@ namespace NumSharp.UnitTest
         [OpenBugs]
         public void Permutation_Seed42_ShouldMatchNumPy()
         {
-            np.random.seed(42);
-            var result = np.random.permutation(5);
+            var rng = np.random.RandomState(42);
+            var result = rng.permutation(5);
 
             var expected = new int[] { 1, 4, 2, 0, 3 };
 
@@ -252,8 +251,8 @@ namespace NumSharp.UnitTest
         [Test]
         public void Exponential_Seed42_ShouldMatchNumPy()
         {
-            np.random.seed(42);
-            var result = np.random.exponential(1);
+            var rng = np.random.RandomState(42);
+            var result = rng.exponential(1);
 
             const double expected = 0.4692680899768591;
             var actual = result.GetDouble(0);
@@ -270,8 +269,8 @@ namespace NumSharp.UnitTest
         [Test]
         public void Poisson_Seed42_ShouldMatchNumPy()
         {
-            np.random.seed(42);
-            var result = np.random.poisson(5.0, 1);
+            var rng = np.random.RandomState(42);
+            var result = rng.poisson(5.0, 1);
 
             const long expected = 5;
             var actual = result.GetInt64(0);
@@ -288,8 +287,8 @@ namespace NumSharp.UnitTest
         [Test]
         public void Binomial_Seed42_ShouldMatchNumPy()
         {
-            np.random.seed(42);
-            var result = np.random.binomial(10, 0.5, 1);
+            var rng = np.random.RandomState(42);
+            var result = rng.binomial(10, 0.5, 1);
 
             const long expected = 4;
             var actual = result.GetInt64(0);
@@ -306,8 +305,8 @@ namespace NumSharp.UnitTest
         [Test]
         public void Beta_Seed42_ShouldMatchNumPy()
         {
-            np.random.seed(42);
-            var result = np.random.beta(0.5, 0.5);
+            var rng = np.random.RandomState(42);
+            var result = rng.beta(0.5, 0.5);
 
             const double expected = 0.5992069666276891;
             var actual = result.GetDouble(0);
@@ -324,8 +323,8 @@ namespace NumSharp.UnitTest
         [Test]
         public void Gamma_Seed42_ShouldMatchNumPy()
         {
-            np.random.seed(42);
-            var result = np.random.gamma(2, 1);
+            var rng = np.random.RandomState(42);
+            var result = rng.gamma(2, 1);
 
             const double expected = 2.3936793898692366;
             var actual = result.GetDouble(0);
