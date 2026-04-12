@@ -72,9 +72,39 @@ jobs:
         path: ${{ github.workspace }}/**/TestResults/**/*.trx
         retention-days: 5
 
-  build-nuget:
+  validate-release:
     needs: test
     if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    outputs:
+      is_valid: ${{ steps.check.outputs.is_valid }}
+      version: ${{ steps.check.outputs.version }}
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Verify tag is on master branch
+      id: check
+      run: |
+        TAG_COMMIT=$(git rev-parse HEAD)
+        VERSION="${GITHUB_REF#refs/tags/v}"
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+        # Check if the tagged commit is reachable from origin/master
+        if git merge-base --is-ancestor "$TAG_COMMIT" origin/master; then
+          echo "Tag v$VERSION is on master branch"
+          echo "is_valid=true" >> $GITHUB_OUTPUT
+        else
+          echo "::error::Tag v$VERSION is NOT on master branch. Releases must be tagged from master."
+          echo "is_valid=false" >> $GITHUB_OUTPUT
+          exit 1
+        fi
+
+  build-nuget:
+    needs: validate-release
+    if: needs.validate-release.outputs.is_valid == 'true'
     runs-on: ubuntu-latest
 
     steps:
@@ -155,8 +185,8 @@ jobs:
         retention-days: 5
 
   create-release:
-    needs: build-nuget
-    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [validate-release, build-nuget]
+    if: needs.validate-release.outputs.is_valid == 'true'
     runs-on: ubuntu-latest
 
     steps:
@@ -218,8 +248,8 @@ jobs:
           | NumSharp.Bitmap | [![NuGet](https://img.shields.io/nuget/v/NumSharp.Bitmap.svg)](https://www.nuget.org/packages/NumSharp.Bitmap/${{ steps.version.outputs.VERSION }}) |
 
   publish-nuget:
-    needs: build-nuget
-    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [validate-release, build-nuget]
+    if: needs.validate-release.outputs.is_valid == 'true'
     runs-on: ubuntu-latest
 
     steps:
