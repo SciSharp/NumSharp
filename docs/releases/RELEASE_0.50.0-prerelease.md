@@ -1,4 +1,4 @@
-# NumSharp 0.42.0 - Long Indexing Release
+# NumSharp 0.50.0 - Long Indexing Release
 
 This release introduces **Int64/Long Indexing** - a complete architectural migration enabling arrays larger than 2.1 billion elements (>2GB), along with comprehensive **NumPy 2.x type system alignment**, new type introspection APIs, and the Python container protocol.
 
