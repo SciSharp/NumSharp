@@ -361,7 +361,7 @@ namespace NumSharp.UnitTest.Utilities
         [Test]
         public void NDArray_AllValuesBe_Passes()
         {
-            np.full(42, new Shape(3, 3)).Should().AllValuesBe(42);
+            np.full(new Shape(3, 3), 42).Should().AllValuesBe(42);
         }
 
         [Test]
@@ -374,7 +374,7 @@ namespace NumSharp.UnitTest.Utilities
         [Test]
         public void NDArray_AllValuesBe_Double_Passes()
         {
-            np.full(3.14, new Shape(2, 2)).Should().AllValuesBe(3.14);
+            np.full(new Shape(2, 2), 3.14).Should().AllValuesBe(3.14);
         }
 
         [Test]
@@ -519,7 +519,7 @@ namespace NumSharp.UnitTest.Utilities
         [Test]
         public void NDArray_Chaining_AllValuesBe_And_Shape()
         {
-            np.full(7, new Shape(3, 3)).Should()
+            np.full(new Shape(3, 3), 7).Should()
                 .AllValuesBe(7)
                 .And.BeShaped(3, 3)
                 .And.BeOfSize(9);
@@ -607,18 +607,19 @@ namespace NumSharp.UnitTest.Utilities
         [Test]
         public void NDArray_AllValuesBe_AllDtypes()
         {
-            np.full(true, new Shape(2)).Should().AllValuesBe(true);
-            np.full((byte)5, new Shape(2)).Should().AllValuesBe((byte)5);
-            np.full((short)5, new Shape(2)).Should().AllValuesBe((short)5);
-            np.full((ushort)5, new Shape(2)).Should().AllValuesBe((ushort)5);
-            np.full(5, new Shape(2)).Should().AllValuesBe(5);
-            np.full(5u, new Shape(2)).Should().AllValuesBe(5u);
-            np.full(5L, new Shape(2)).Should().AllValuesBe(5L);
-            np.full(5UL, new Shape(2)).Should().AllValuesBe(5UL);
-            np.full('x', new Shape(2)).Should().AllValuesBe('x');
-            np.full(5.0, new Shape(2)).Should().AllValuesBe(5.0);
-            np.full(5f, new Shape(2)).Should().AllValuesBe(5f);
-            np.full(5m, new Shape(2)).Should().AllValuesBe(5m);
+            np.full(new Shape(2), true).Should().AllValuesBe(true);
+            np.full(new Shape(2), (byte)5).Should().AllValuesBe((byte)5);
+            np.full(new Shape(2), (short)5).Should().AllValuesBe((short)5);
+            np.full(new Shape(2), (ushort)5).Should().AllValuesBe((ushort)5);
+            np.full(new Shape(2), 5).Should().AllValuesBe(5);
+            np.full(new Shape(2), 5u).Should().AllValuesBe(5u);
+            np.full(new Shape(2), 5L).Should().AllValuesBe(5L);
+            np.full(new Shape(2), 5UL).Should().AllValuesBe(5UL);
+            np.full(new Shape(2), 'x').Should().AllValuesBe('x');
+            np.full(new Shape(2), 5.0).Should().AllValuesBe(5.0);
+            np.full(new Shape(2), 5f).Should().AllValuesBe(5f);
+            np.full(new Shape(2), 5m).Should().AllValuesBe(5m);
+            np.full([2], 5m).Should().AllValuesBe(5m);
         }
 
         #endregion

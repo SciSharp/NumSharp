@@ -11,7 +11,7 @@ namespace NumSharp.UnitTest.Manipulation
         [Test]
         public void Case1_GetData_Nonslice()
         {
-            var lhs = np.full(5, (3, 3), NPTypeCode.Int32);
+            var lhs = np.full(new Shape(3, 3), 5, NPTypeCode.Int32);
             var slice = lhs.Storage.GetData(0);
             slice.Count.Should().Be(3);
             slice.Shape.IsSliced.Should().BeFalse("Slicing should occurs only when lhs is already sliced.");
@@ -24,7 +24,7 @@ namespace NumSharp.UnitTest.Manipulation
         [Test]
         public void Case1_GetData_Slice()
         {
-            var lhs = np.full(5, (3, 3, 3), NPTypeCode.Int32);
+            var lhs = np.full(new Shape(3, 3, 3), 5, NPTypeCode.Int32);
             lhs = lhs["1,:,:"];
             var slice = lhs.Storage.GetData(0);
             slice.Count.Should().Be(3);
@@ -38,7 +38,7 @@ namespace NumSharp.UnitTest.Manipulation
         [Test]
         public void Case1_GetData_Slice2()
         {
-            var lhs = np.full(5, (6, 3, 3), NPTypeCode.Int32);
+            var lhs = np.full(new Shape(6, 3, 3), 5, NPTypeCode.Int32);
             lhs = lhs["::2,:,:"];
             var slice = lhs.Storage.GetData(0, 0);
             slice.Count.Should().Be(3);
@@ -52,7 +52,7 @@ namespace NumSharp.UnitTest.Manipulation
         [Test]
         public void Case2_GetData_Scalar_Nonslice()
         {
-            var lhs = np.full(5, (3, 3), NPTypeCode.Int32);
+            var lhs = np.full(new Shape(3, 3), 5, NPTypeCode.Int32);
             var slice = lhs.Storage.GetData(0, 1);
             slice.Count.Should().Be(1);
             slice.Shape.IsScalar.Should().BeTrue();
@@ -66,7 +66,7 @@ namespace NumSharp.UnitTest.Manipulation
         [Test]
         public void Case2_GetData_Scalar_Slice()
         {
-            var lhs = np.full(5, (3, 3, 3), NPTypeCode.Int32);
+            var lhs = np.full(new Shape(3, 3, 3), 5, NPTypeCode.Int32);
             lhs = lhs["1,:,:"];
             // After slicing with integer index, shape is (3,3), so use 2D indices
             var slice = lhs.Storage.GetData(1, 2);
@@ -82,7 +82,7 @@ namespace NumSharp.UnitTest.Manipulation
         [Test]
         public void Case2_GetData_Scalar_Slice2()
         {
-            var lhs = np.full(5, (6, 3, 3), NPTypeCode.Int32);
+            var lhs = np.full(new Shape(6, 3, 3), 5, NPTypeCode.Int32);
             lhs = lhs["::2,:,:"];
             var slice = lhs.Storage.GetData(1, 1, 2);
             slice.Count.Should().Be(1);
@@ -97,7 +97,7 @@ namespace NumSharp.UnitTest.Manipulation
         [Test]
         public void Case3_GetData_All_Slice2()
         {
-            var lhs = np.full(5, (6, 3, 3), NPTypeCode.Int32);
+            var lhs = np.full(new Shape(6, 3, 3), 5, NPTypeCode.Int32);
             lhs = lhs["::2,:,:"];
             var slice = lhs.Storage.GetData(new int[0]);
             slice.Count.Should().Be(3*3*3);
@@ -112,7 +112,7 @@ namespace NumSharp.UnitTest.Manipulation
         [Test]
         public void Case3_GetData_All()
         {
-            var lhs = np.full(5, (6, 3, 3), NPTypeCode.Int32);
+            var lhs = np.full(new Shape(6, 3, 3), 5, NPTypeCode.Int32);
             var slice = lhs.Storage.GetData(new int[0]);
             slice.Count.Should().Be(6*3*3);
             slice.Shape.IsScalar.Should().BeFalse();
@@ -126,7 +126,7 @@ namespace NumSharp.UnitTest.Manipulation
         [Test]
         public void Case1_GetNDArrays_Axis0()
         {
-            var a = np.full(5, (6, 3, 3), NPTypeCode.Int32);
+            var a = np.full(new Shape(6, 3, 3), 5, NPTypeCode.Int32);
             var ret = a.GetNDArrays(0);
             ret.Should().HaveCount(6);
             var f = ret.First();
@@ -136,7 +136,7 @@ namespace NumSharp.UnitTest.Manipulation
         [Test]
         public void Case1_GetNDArrays_Axis1()
         {
-            var a = np.full(5, (6, 3, 3), NPTypeCode.Int32);
+            var a = np.full(new Shape(6, 3, 3), 5, NPTypeCode.Int32);
             var ret = a.GetNDArrays(1);
             ret.Should().HaveCount(6*3);
             var f = ret.First();
@@ -146,7 +146,7 @@ namespace NumSharp.UnitTest.Manipulation
         [Test]
         public void Case1_GetNDArrays_Axis2()
         {
-            var a = np.full(5, (6, 3, 3), NPTypeCode.Int32);
+            var a = np.full(new Shape(6, 3, 3), 5, NPTypeCode.Int32);
             var ret = a.GetNDArrays(2);
             ret.Should().HaveCount(6*3*3);
             var f = ret.First();

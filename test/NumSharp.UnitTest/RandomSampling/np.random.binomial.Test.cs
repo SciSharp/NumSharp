@@ -20,7 +20,7 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void Rand2D()
         {
-            var rand = np.random.binomial(5, 0.5, 5, 5);
+            var rand = np.random.binomial(5, 0.5, new Shape(5, 5));
             Assert.IsTrue(rand.ndim == 2);
             Assert.IsTrue(rand.size == 25);
         }

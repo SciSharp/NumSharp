@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -178,18 +179,20 @@ namespace NumSharp.Backends
         /// <remarks>This ignores completely slicing. Supports long indexing for arrays &gt; 2B elements.</remarks>
         public unsafe Span<T> AsSpan<T>() where T : unmanaged
         {
+            Debug.Assert(typeof(T) == _dtype, $"AsSpan<{typeof(T).Name}> called on {_dtype.Name} array.");
             if (!_shape.IsContiguous)
                 throw new InvalidOperationException("Unable to span a non-contiguous storage.");
 
             return new Span<T>(Address, (int)Count);
         }
-        
+
         /// <summary>
         /// Returns an UnmanagedSpan representing this storage's memory.
         /// </summary>
         /// <remarks>This ignores completely slicing. Supports long indexing for arrays &gt; 2B elements.</remarks>
         public unsafe UnmanagedSpan<T> AsUnmanagedSpan<T>() where T : unmanaged
         {
+            Debug.Assert(typeof(T) == _dtype, $"AsUnmanagedSpan<{typeof(T).Name}> called on {_dtype.Name} array.");
             if (!_shape.IsContiguous)
                 throw new InvalidOperationException("Unable to span a non-contiguous storage.");
 

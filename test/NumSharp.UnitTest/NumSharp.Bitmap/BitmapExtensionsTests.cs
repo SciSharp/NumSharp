@@ -287,7 +287,7 @@ namespace NumSharp.UnitTest
         [Test]
         public void ToBitmap_DontCare_3Channel_Infers24bpp()
         {
-            var nd = np.zeros(1, 4, 4, 3).astype(NPTypeCode.Byte);
+            var nd = np.zeros(new Shape(1, 4, 4, 3)).astype(NPTypeCode.Byte);
             var bmp = nd.ToBitmap();
             bmp.PixelFormat.Should().Be(PixelFormat.Format24bppRgb);
         }
@@ -295,7 +295,7 @@ namespace NumSharp.UnitTest
         [Test]
         public void ToBitmap_DontCare_4Channel_Infers32bpp()
         {
-            var nd = np.zeros(1, 4, 4, 4).astype(NPTypeCode.Byte);
+            var nd = np.zeros(new Shape(1, 4, 4, 4)).astype(NPTypeCode.Byte);
             var bmp = nd.ToBitmap();
             bmp.PixelFormat.Should().Be(PixelFormat.Format32bppArgb);
         }
@@ -350,7 +350,7 @@ namespace NumSharp.UnitTest
         [Test]
         public void ToBitmap_WrongNdim_ThrowsArgumentException()
         {
-            var nd = np.zeros(3, 3, 3).astype(NPTypeCode.Byte);
+            var nd = np.zeros(new Shape(3, 3, 3)).astype(NPTypeCode.Byte);
             Action act = () => nd.ToBitmap();
             act.Should().Throw<ArgumentException>();
         }
@@ -358,7 +358,7 @@ namespace NumSharp.UnitTest
         [Test]
         public void ToBitmap_MultiplePictures_ThrowsArgumentException()
         {
-            var nd = np.zeros(2, 3, 3, 3).astype(NPTypeCode.Byte);
+            var nd = np.zeros(new Shape(2, 3, 3, 3)).astype(NPTypeCode.Byte);
             Action act = () => nd.ToBitmap();
             act.Should().Throw<ArgumentException>();
         }
@@ -367,7 +367,7 @@ namespace NumSharp.UnitTest
         public void ToBitmap_FormatMismatch_ThrowsArgumentException()
         {
             // 3-channel data but requesting 32bpp (4 channels)
-            var nd = np.zeros(1, 3, 3, 3).astype(NPTypeCode.Byte);
+            var nd = np.zeros(new Shape(1, 3, 3, 3)).astype(NPTypeCode.Byte);
             Action act = () => nd.ToBitmap(3, 3, PixelFormat.Format32bppArgb);
             act.Should().Throw<ArgumentException>();
         }
@@ -586,7 +586,7 @@ namespace NumSharp.UnitTest
         [Test]
         public void ToBitmap_AllBlack_RoundTripsCorrectly()
         {
-            var black = np.zeros(1, 8, 8, 3).astype(NPTypeCode.Byte);
+            var black = np.zeros(new Shape(1, 8, 8, 3)).astype(NPTypeCode.Byte);
             var bmp = black.ToBitmap(8, 8, PixelFormat.Format24bppRgb);
             var recovered = bmp.ToNDArray(copy: true, discardAlpha: false);
             recovered.Should().AllValuesBe((byte)0);
@@ -595,7 +595,7 @@ namespace NumSharp.UnitTest
         [Test]
         public void ToBitmap_AllWhite_RoundTripsCorrectly()
         {
-            var white = (np.zeros(1, 8, 8, 3) + 255).astype(NPTypeCode.Byte);
+            var white = (np.zeros(new Shape(1, 8, 8, 3)) + 255).astype(NPTypeCode.Byte);
             var bmp = white.ToBitmap(8, 8, PixelFormat.Format24bppRgb);
             var recovered = bmp.ToNDArray(copy: true, discardAlpha: false);
             recovered.Should().AllValuesBe((byte)255);
@@ -604,7 +604,7 @@ namespace NumSharp.UnitTest
         [Test]
         public void ToBitmap_32bpp_AllBlack_RoundTripsCorrectly()
         {
-            var black = np.zeros(1, 8, 8, 4).astype(NPTypeCode.Byte);
+            var black = np.zeros(new Shape(1, 8, 8, 4)).astype(NPTypeCode.Byte);
             var bmp = black.ToBitmap(8, 8, PixelFormat.Format32bppArgb);
             var recovered = bmp.ToNDArray(copy: true, discardAlpha: false);
             recovered.Should().BeShaped(1, 8, 8, 4);
@@ -614,7 +614,7 @@ namespace NumSharp.UnitTest
         [Test]
         public void ToBitmap_32bpp_AllWhite_RoundTripsCorrectly()
         {
-            var white = (np.zeros(1, 8, 8, 4) + 255).astype(NPTypeCode.Byte);
+            var white = (np.zeros(new Shape(1, 8, 8, 4)) + 255).astype(NPTypeCode.Byte);
             var bmp = white.ToBitmap(8, 8, PixelFormat.Format32bppArgb);
             var recovered = bmp.ToNDArray(copy: true, discardAlpha: false);
             recovered.Should().BeShaped(1, 8, 8, 4);
@@ -651,7 +651,7 @@ namespace NumSharp.UnitTest
         [Test]
         public void ToBitmap_SizeProperty_MatchesDimensions()
         {
-            var nd = np.zeros(1, 10, 20, 4).astype(NPTypeCode.Byte);
+            var nd = np.zeros(new Shape(1, 10, 20, 4)).astype(NPTypeCode.Byte);
             var bmp = nd.ToBitmap();
             bmp.Width.Should().Be(20);
             bmp.Height.Should().Be(10);

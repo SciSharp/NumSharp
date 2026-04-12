@@ -164,7 +164,6 @@ namespace NumSharp.UnitTest.View
         }
 
         [Test]
-        [OpenBugs]  // Pre-existing bug: SetData on sliced views causes memory corruption
         public void NestedView_1D()
         {
             var data = np.arange(10);
@@ -187,12 +186,12 @@ namespace NumSharp.UnitTest.View
             AssertAreEqual(new long[] { -5, -6, -7, -8, }, view2.ToArray<long>());
             AssertAreEqual(new long[] { -5, -6 }, view3.ToArray<long>());
             // modify views
-            view1.SetValue(55, 4);
+            view1.SetValue(55L, 4);
             AssertAreEqual(new long[] { 0, -1, -2, -3, -4, 55, -6, -7, -8, -9 }, data.ToArray<long>());
             AssertAreEqual(new long[] { -1, -2, -3, -4, 55, -6, -7, -8, }, view1.ToArray<long>());
             AssertAreEqual(new long[] { 55, -6, -7, -8, }, view2.ToArray<long>());
             AssertAreEqual(new long[] { 55, -6 }, view3.ToArray<long>());
-            view3.SetValue(66, 1);
+            view3.SetValue(66L, 1);
             AssertAreEqual(new long[] { 0, -1, -2, -3, -4, 55, 66, -7, -8, -9 }, data.ToArray<long>());
             AssertAreEqual(new long[] { -1, -2, -3, -4, 55, 66, -7, -8, }, view1.ToArray<long>());
             AssertAreEqual(new long[] { 55, 66, -7, -8, }, view2.ToArray<long>());
@@ -200,7 +199,6 @@ namespace NumSharp.UnitTest.View
         }
 
         [Test]
-        [OpenBugs]  // Pre-existing bug: SetData on sliced views causes memory corruption
         public void NestedView_1D_Stepping()
         {
             var data = np.arange(10);
@@ -223,12 +221,12 @@ namespace NumSharp.UnitTest.View
             AssertAreEqual(new long[] { -8, -6, -4, -2, }, view2.ToArray<long>());
             AssertAreEqual(new long[] { -2, -8 }, view3.ToArray<long>());
             // modify views
-            view1.SetValue(88, 7);
+            view1.SetValue(88L, 7);
             AssertAreEqual(new long[] { 0, -1, -2, -3, -4, -5, -6, -7, 88, -9 }, data.ToArray<long>());
             AssertAreEqual(new long[] { -1, -2, -3, -4, -5, -6, -7, 88, }, view1.ToArray<long>());
             AssertAreEqual(new long[] { 88, -6, -4, -2, }, view2.ToArray<long>());
             AssertAreEqual(new long[] { -2, 88 }, view3.ToArray<long>());
-            view3.SetValue(22, 0);
+            view3.SetValue(22L, 0);
             AssertAreEqual(new long[] { 0, -1, 22, -3, -4, -5, -6, -7, 88, -9 }, data.ToArray<long>());
             AssertAreEqual(new long[] { -1, 22, -3, -4, -5, -6, -7, 88, }, view1.ToArray<long>());
             AssertAreEqual(new long[] { 88, -6, -4, 22, }, view2.ToArray<long>());
@@ -336,7 +334,6 @@ namespace NumSharp.UnitTest.View
         }
 
         [Test]
-        [OpenBugs]  // Pre-existing bug: SetData on sliced views causes memory corruption
         public void NestedView_2D()
         {
             var data = np.array(new long[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 });
@@ -374,16 +371,16 @@ namespace NumSharp.UnitTest.View
             AssertAreEqual(new long[] { -8, -6, -4, -2, -8, -6, -4, -2 }, view2.ToArray<long>());
             AssertAreEqual(new long[] { -2, -8, -2, -8 }, view3.ToArray<long>());
             // modify views
-            view1.SetValue(88, 0, 7);
-            view1.SetValue(888, 1, 7);
+            view1.SetValue(88L, 0, 7);
+            view1.SetValue(888L, 1, 7);
             AssertAreEqual(new long[] { 0, -1, -2, -3, -4, -5, -6, -7, 88, -9, 0, -1, -2, -3, -4, -5, -6, -7, 888, -9 },
                 data.ToArray<long>());
             AssertAreEqual(new long[] { -1, -2, -3, -4, -5, -6, -7, 88, -1, -2, -3, -4, -5, -6, -7, 888 },
                 view1.ToArray<long>());
             AssertAreEqual(new long[] { 88, -6, -4, -2, 888, -6, -4, -2 }, view2.ToArray<long>());
             AssertAreEqual(new long[] { -2, 88, -2, 888 }, view3.ToArray<long>());
-            view3.SetValue(22, 0, 0);
-            view3.SetValue(222, 1, 0);
+            view3.SetValue(22L, 0, 0);
+            view3.SetValue(222L, 1, 0);
             AssertAreEqual(new long[] { 0, -1, 22, -3, -4, -5, -6, -7, 88, -9, 0, -1, 222, -3, -4, -5, -6, -7, 888, -9 },
                 data.ToArray<long>());
             AssertAreEqual(new long[] { -1, 22, -3, -4, -5, -6, -7, 88, -1, 222, -3, -4, -5, -6, -7, 888 },
@@ -526,7 +523,7 @@ namespace NumSharp.UnitTest.View
             //()
             //True
 
-            var lhs = np.full(5, (6, 3, 3), NPTypeCode.Int32);
+            var lhs = np.full(new Shape(6, 3, 3), 5, NPTypeCode.Int32);
             lhs = lhs["::2,:,:"];
             var slice = lhs.Storage.GetData(1, 1, 2);
             slice.Count.Should().Be(1);
@@ -538,7 +535,7 @@ namespace NumSharp.UnitTest.View
         [Test]
         public unsafe void SliceSelectsAll()
         {
-            var lhs = np.full(5, (6, 3, 3), NPTypeCode.Int32);
+            var lhs = np.full(new Shape(6, 3, 3), 5, NPTypeCode.Int32);
             var sliced = lhs[":"];
 
             (lhs.Storage.Address == sliced.Storage.Address).Should().BeTrue("When slice selects all values, it shouldn't return a view but a new wrapper for Storage");

@@ -362,7 +362,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         [Test]
         public void Std_AllSameValues_ReturnsZero()
         {
-            var a = np.full(5.0, 10);  // full(fill_value, shape...)
+            var a = np.full(10, 5.0);  // full(shape, fill_value)
             var result = np.std(a);
             Assert.AreEqual(0.0, (double)result);
         }
@@ -370,7 +370,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         [Test]
         public void Var_AllSameValues_ReturnsZero()
         {
-            var a = np.full(5.0, 10);  // full(fill_value, shape...)
+            var a = np.full(10, 5.0);  // full(shape, fill_value)
             var result = np.var(a);
             Assert.AreEqual(0.0, (double)result);
         }

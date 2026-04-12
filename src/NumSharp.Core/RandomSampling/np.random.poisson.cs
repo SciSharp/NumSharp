@@ -7,17 +7,9 @@ namespace NumSharp
     public partial class NumPyRandom
     {
         /// <summary>
-        ///     Draw samples from a Poisson distribution.
+        ///     Draw a single sample from a Poisson distribution.
         /// </summary>
-        /// <param name="lam">Expected number of events occurring in a fixed-time interval, must be >= 0. Default is 1.0.</param>
-        /// <param name="size">Output shape.</param>
-        /// <returns>Drawn samples from the parameterized Poisson distribution.</returns>
-        /// <remarks>
-        ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.poisson.html
-        ///     <br/>
-        ///     The Poisson distribution is the limit of the binomial distribution for large N.
-        /// </remarks>
-        public NDArray poisson(double lam, Shape size) => poisson(lam, size.dimensions);
+        public NDArray poisson(double lam = 1.0) => poisson(lam, Shape.Scalar);
 
         /// <summary>
         ///     Draw samples from a Poisson distribution.
@@ -30,25 +22,15 @@ namespace NumSharp
         ///     <br/>
         ///     The Poisson distribution is the limit of the binomial distribution for large N.
         /// </remarks>
-        public NDArray poisson(double lam, params int[] size) => poisson(lam, Shape.ComputeLongShape(size));
-
-        /// <summary>
-        ///     Draw samples from a Poisson distribution.
-        /// </summary>
-        /// <param name="lam">Expected number of events occurring in a fixed-time interval, must be >= 0. Default is 1.0.</param>
-        /// <param name="size">Output shape.</param>
-        /// <returns>Drawn samples from the parameterized Poisson distribution.</returns>
-        /// <remarks>
-        ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.poisson.html
-        ///     <br/>
-        ///     The Poisson distribution is the limit of the binomial distribution for large N.
-        /// </remarks>
-        public NDArray poisson(double lam, params long[] size)
+        public NDArray poisson(double lam, Shape size)
         {
             if (lam < 0)
                 throw new ArgumentException("lam must be >= 0", nameof(lam));
 
-            var result = new NDArray<double>(size);
+            if (size.IsScalar || size.IsEmpty)
+                return NDArray.Scalar((long)Knuth(lam));
+
+            var result = new NDArray<long>(size);
             unsafe
             {
                 long len = result.size;
@@ -63,6 +45,10 @@ namespace NumSharp
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         private int Knuth(double lambda)
         {
+            // Special case: lambda=0 always returns 0
+            if (lambda == 0)
+                return 0;
+
             // Knuth algorithm for Poisson distribution
             double p = 1.0;
             double L = Math.Exp(-lambda);

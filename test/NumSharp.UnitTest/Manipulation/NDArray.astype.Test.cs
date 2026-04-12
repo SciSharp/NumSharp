@@ -10,7 +10,7 @@ namespace NumSharp.UnitTest.Manipulation
         [Test]
         public void Upcasting()
         {
-            var nd = np.ones(np.int32, 3, 3);
+            var nd = np.ones(new Shape(3, 3), np.int32);
             var int64_copied = nd.astype(np.int64, true);
             var int64 = nd.astype(np.int64, false);
 
@@ -24,7 +24,7 @@ namespace NumSharp.UnitTest.Manipulation
         [Test]
         public void UpcastingByteToLong()
         {
-            var nd = np.ones(np.uint8, 3, 3);
+            var nd = np.ones(new Shape(3, 3), np.uint8);
             var int64_copied = nd.astype(np.int64, true);
             var int64 = nd.astype(np.int64, false);
 
@@ -38,7 +38,7 @@ namespace NumSharp.UnitTest.Manipulation
         [Test]
         public void UpcastingCharsToLong()
         {
-            var nd = np.ones(np.@char, 3, 3);
+            var nd = np.ones(new Shape(3, 3), np.@char);
             var int64_copied = nd.astype(np.int64, true);
             var int64 = nd.astype(np.int64, false);
 
@@ -52,7 +52,7 @@ namespace NumSharp.UnitTest.Manipulation
         [Test]
         public void DowncastingIntToShort()
         {
-            var nd = np.ones(np.int32, 3, 3);
+            var nd = np.ones(new Shape(3, 3), np.int32);
             var int16_copied = nd.astype(np.int16, true);
             var int16 = nd.astype(np.int16, false);
 
@@ -66,7 +66,7 @@ namespace NumSharp.UnitTest.Manipulation
         [Test]
         public void DowncastingDoubleToInt()
         {
-            var nd = np.ones(np.float64, 3, 3);
+            var nd = np.ones(new Shape(3, 3), np.float64);
             for (int i = 0; i < nd.size; i++)
             {
                 nd.SetAtIndex(1.3d, i);
@@ -90,7 +90,7 @@ namespace NumSharp.UnitTest.Manipulation
         [Test]
         public void DowncastingIntToUShort()
         {
-            var nd = np.ones(np.int32, 3, 3);
+            var nd = np.ones(new Shape(3, 3), np.int32);
             nd[2, 2].Data<int>()[0].Should().Be(1);
             var int16_copied = nd.astype(np.uint16, true);
             var int16 = nd.astype(np.uint16, false);
@@ -131,7 +131,7 @@ namespace NumSharp.UnitTest.Manipulation
         public void CastingByteToString()
         {
             throw new NotSupportedException();
-            //var nd = np.ones(np.uint8, 3, 3);
+            //var nd = np.ones(new Shape(3, 3), np.uint8);
             //nd[2, 2].Data<byte>()[0].Should().Be(1);
             //var output_copied = nd.astype(np.chars, true);
             //var output = nd.astype(np.chars, false);
@@ -149,7 +149,7 @@ namespace NumSharp.UnitTest.Manipulation
         [Test, Skip("Complex dtype is not supported yet")] //TODO!
         public void CastingIntToComplex()
         {
-            //var nd = np.ones(np.int32, 3, 3);
+            //var nd = np.ones(new Shape(3, 3), np.int32);
             //nd[2, 2].Data<int>()[0].Should().Be(1);
             //var output_copied = nd.astype(np.complex128, true);
             //var output = nd.astype(np.complex128, false);

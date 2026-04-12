@@ -7,20 +7,9 @@ namespace NumSharp
     public partial class NumPyRandom
     {
         /// <summary>
-        ///     Draw samples from a Gamma distribution.
+        ///     Draw a single sample from a Gamma distribution.
         /// </summary>
-        /// <param name="shape">The shape of the gamma distribution. Must be non-negative.</param>
-        /// <param name="scale">The scale of the gamma distribution. Must be non-negative. Default is 1.0.</param>
-        /// <param name="size">Output shape.</param>
-        /// <returns>Drawn samples from the parameterized gamma distribution.</returns>
-        /// <remarks>
-        ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.gamma.html
-        ///     <br/>
-        ///     Samples are drawn from a Gamma distribution with specified parameters,
-        ///     shape (sometimes designated "k") and scale (sometimes designated "theta"),
-        ///     where both parameters are > 0.
-        /// </remarks>
-        public NDArray gamma(double shape, double scale, Shape size) => gamma(shape, scale, size.dimensions);
+        public NDArray gamma(double shape, double scale = 1.0) => gamma(shape, scale, Shape.Scalar);
 
         /// <summary>
         ///     Draw samples from a Gamma distribution.
@@ -36,24 +25,11 @@ namespace NumSharp
         ///     shape (sometimes designated "k") and scale (sometimes designated "theta"),
         ///     where both parameters are > 0.
         /// </remarks>
-        public NDArray gamma(double shape, double scale, params int[] size) => gamma(shape, scale, Shape.ComputeLongShape(size));
-
-        /// <summary>
-        ///     Draw samples from a Gamma distribution.
-        /// </summary>
-        /// <param name="shape">The shape of the gamma distribution. Must be non-negative.</param>
-        /// <param name="scale">The scale of the gamma distribution. Must be non-negative. Default is 1.0.</param>
-        /// <param name="size">Output shape.</param>
-        /// <returns>Drawn samples from the parameterized gamma distribution.</returns>
-        /// <remarks>
-        ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.gamma.html
-        ///     <br/>
-        ///     Samples are drawn from a Gamma distribution with specified parameters,
-        ///     shape (sometimes designated "k") and scale (sometimes designated "theta"),
-        ///     where both parameters are > 0.
-        /// </remarks>
-        public NDArray gamma(double shape, double scale, params long[] size)
+        public NDArray gamma(double shape, double scale, Shape size)
         {
+            if (size.IsScalar || size.IsEmpty)
+                return NDArray.Scalar(SampleStandardGamma(shape) * scale);
+
             if (shape < 1)
             {
                 double d = shape + 1.0 - 1.0 / 3.0;
@@ -72,7 +48,7 @@ namespace NumSharp
         }
 
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        private NDArray Marsaglia(double d, double c, long[] size)
+        private NDArray Marsaglia(double d, double c, Shape size)
         {
             var result = new NDArray<double>(size);
             unsafe
@@ -88,7 +64,7 @@ namespace NumSharp
 
                         do
                         {
-                            x = Math.Sqrt(-2.0 * Math.Log(1.0 - nextDouble())) * Math.Sin(2.0 * Math.PI * (1.0 - nextDouble()));
+                            x = NextGaussian();
                             t = (1.0 + c * x);
                             v = t * t * t;
                         } while (v <= 0);

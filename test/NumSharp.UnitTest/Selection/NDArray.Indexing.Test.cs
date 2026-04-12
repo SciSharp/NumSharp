@@ -56,7 +56,7 @@ namespace NumSharp.UnitTest.Selection
             Assert.IsTrue(nd.GetInt64(1, 3) == 7);
 
             // set value
-            nd.SetValue(10, 0, 0);
+            nd.SetValue(10L, 0, 0);
             Assert.IsTrue(nd.GetInt64(0, 0) == 10);
             Assert.IsTrue(nd.GetInt64(1, 3) == 7);
         }

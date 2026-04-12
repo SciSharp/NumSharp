@@ -34,6 +34,7 @@ namespace NumSharp.Backends
         /// </summary>
         public void SetAtIndexUnsafe<T>(T value, long index) where T : unmanaged
         {
+            Debug.Assert(typeof(T) == _dtype, $"SetAtIndexUnsafe<{typeof(T).Name}> called on {_dtype.Name} array.");
             unsafe
             {
                 *((T*)Address + index) = value;
@@ -42,6 +43,7 @@ namespace NumSharp.Backends
 
         public unsafe void SetAtIndex<T>(T value, long index) where T : unmanaged
         {
+            Debug.Assert(typeof(T) == _dtype, $"SetAtIndex<{typeof(T).Name}> called on {_dtype.Name} array.");
             ThrowIfNotWriteable();
             *((T*)Address + _shape.TransformOffset(index)) = value;
         }
@@ -116,6 +118,7 @@ namespace NumSharp.Backends
         /// </remarks>
         public unsafe void SetValue<T>(T value, int[] indices) where T : unmanaged
         {
+            Debug.Assert(typeof(T) == _dtype, $"SetValue<{typeof(T).Name}> called on {_dtype.Name} array. Use matching type or non-generic SetValue for conversion.");
             ThrowIfNotWriteable();
             *((T*)Address + _shape.GetOffset(indices)) = value;
         }
@@ -131,6 +134,7 @@ namespace NumSharp.Backends
         /// </remarks>
         public unsafe void SetValue<T>(T value, params long[] indices) where T : unmanaged
         {
+            Debug.Assert(typeof(T) == _dtype, $"SetValue<{typeof(T).Name}> called on {_dtype.Name} array. Use matching type or non-generic SetValue for conversion.");
             ThrowIfNotWriteable();
             *((T*)Address + _shape.GetOffset(indices)) = value;
         }

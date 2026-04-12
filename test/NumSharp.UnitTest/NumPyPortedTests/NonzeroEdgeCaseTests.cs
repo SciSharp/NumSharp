@@ -63,7 +63,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         [Test]
         public void Nonzero_1DArray_AllZeros()
         {
-            var x = np.zeros<int>(5);
+            var x = np.zeros<int>(new int[] { 5 });
             var result = np.nonzero(x);
 
             Assert.AreEqual(1, result.Length);
@@ -157,7 +157,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         [Test]
         public void Nonzero_AllTrue()
         {
-            var x = np.ones<bool>(5);
+            var x = np.ones<bool>([5]);
             var result = np.nonzero(x);
 
             Assert.AreEqual(1, result.Length);
@@ -167,7 +167,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         [Test]
         public void Nonzero_AllFalse()
         {
-            var x = np.zeros<bool>(5);
+            var x = np.zeros<bool>(new int[] { 5 });
             var result = np.nonzero(x);
 
             Assert.AreEqual(1, result.Length);
@@ -315,7 +315,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         public void Nonzero_SparsePattern_SingleTruePerBlock()
         {
             // Test sparse boolean pattern
-            var c = np.zeros<bool>(200);
+            var c = np.zeros<bool>(new int[] { 200 });
             for (int i = 0; i < 200; i += 20)
             {
                 c[i.ToString()] = true;
@@ -333,7 +333,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         public void Nonzero_LargeArray()
         {
             // Create array with known non-zero pattern
-            var x = np.zeros<int>(1000);
+            var x = np.zeros<int>(new int[] { 1000 });
             x["100"] = 1;
             x["500"] = 2;
             x["999"] = 3;

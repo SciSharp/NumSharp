@@ -17,8 +17,10 @@ namespace NumSharp
         ///     <br/>
         ///     NumPy signature: rand(d0, d1, ..., dn) where d0..dn are dimension sizes.
         /// </remarks>
-        public NDArray rand(params int[] shape)
+        public NDArray rand(params long[] shape)
         {
+            if (shape.Length == 0)
+                return NDArray.Scalar(randomizer.NextDouble());
             return rand(new Shape(shape));
         }
 
@@ -36,6 +38,10 @@ namespace NumSharp
         public NDArray rand(Shape shape)
         {
             NDArray ret = new NDArray(typeof(double), shape, false);
+
+            // Handle empty arrays (any dimension is 0)
+            if (shape.size == 0)
+                return ret;
 
             unsafe
             {
@@ -61,23 +67,7 @@ namespace NumSharp
         ///     Results are from the "continuous uniform" distribution over the stated interval.
         ///     To sample Unif[a, b), b > a, multiply the output by (b-a) and add a.
         /// </remarks>
-        public NDArray random_sample(params int[] size)
-        {
-            return rand(size);
-        }
-
-        /// <summary>
-        ///     Return random floats in the half-open interval [0.0, 1.0).
-        /// </summary>
-        /// <param name="size">Output shape.</param>
-        /// <returns>Array of random floats.</returns>
-        /// <remarks>
-        ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.random_sample.html
-        /// </remarks>
-        public NDArray random_sample(Shape size)
-        {
-            return rand(size);
-        }
+        public NDArray random_sample(params long[] size) => rand(size);
 
         /// <summary>
         ///     Return random floats in the half-open interval [0.0, 1.0).
@@ -89,24 +79,6 @@ namespace NumSharp
         ///     <br/>
         ///     Alias for random_sample.
         /// </remarks>
-        public NDArray random(params int[] size)
-        {
-            return random_sample(size);
-        }
-
-        /// <summary>
-        ///     Return random floats in the half-open interval [0.0, 1.0).
-        /// </summary>
-        /// <param name="size">Output shape.</param>
-        /// <returns>Array of random floats.</returns>
-        /// <remarks>
-        ///     https://numpy.org/doc/stable/reference/random/generated/numpy.random.random.html
-        ///     <br/>
-        ///     Alias for random_sample.
-        /// </remarks>
-        public NDArray random(Shape size)
-        {
-            return random_sample(size);
-        }
+        public NDArray random(params long[] size) => random_sample(size);
     }
 }

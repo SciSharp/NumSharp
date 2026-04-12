@@ -16,7 +16,7 @@
             this.n_iter = n_iter;
             this.n_samples = y.size;
             this.n_features = np.size(X, 1);
-            this.X = np.hstack(np.ones((int)this.n_samples, 1),
+            this.X = np.hstack(np.ones(new int[] {(int)this.n_samples, 1}),
                                     (X - np.mean(X, 0) / np.std(X, 0)));
             this.y = np.expand_dims(y, -1);
             this.@params = np.zeros((this.n_features + 1, 1), NPTypeCode.Single);
@@ -41,7 +41,7 @@
                 X = this.X;
             else {
                 n_samples = np.size(X, 0);
-                this.X = np.hstack(np.ones((int)this.n_samples, 1),
+                this.X = np.hstack(np.ones(new int[] {(int)this.n_samples, 1}),
                     (X - np.mean(X, 0) / np.std(X, 0)));
             }
 
@@ -59,7 +59,7 @@
         public NDArray predict(NDArray X) {
             n_samples = np.size(X, 0);
             y = np.matmul(
-                    np.hstack(np.ones((int)this.n_samples, 1), (X - np.mean(X, 0) / np.std(X, 0))),
+                    np.hstack(np.ones(new int[] {(int)this.n_samples, 1}), (X - np.mean(X, 0) / np.std(X, 0))),
                     @params
                 );
 

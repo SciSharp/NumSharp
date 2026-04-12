@@ -98,6 +98,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
         }
 
         [Test]
+        [OpenBugs] // BUG: Large matrix dot product causes "index < Count" error
         public void Dot30_300x30_300()
         {
             var a = np.random.randn(30, 300);

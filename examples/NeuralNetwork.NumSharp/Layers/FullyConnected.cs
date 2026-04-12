@@ -33,7 +33,7 @@ namespace NeuralNetwork.NumSharp.Layers
         /// <param name="out">Number of neurons for this layers</param>
         public FullyConnected(int input_dim, int output_neurons, string act = "") : base("fc")
         {
-            Parameters["w"] = np.random.normal(0.5, 1, input_dim, output_neurons);
+            Parameters["w"] = np.random.normal(0.5, 1, (input_dim, output_neurons));
             InputDim = input_dim;
             OutNeurons = output_neurons;
 

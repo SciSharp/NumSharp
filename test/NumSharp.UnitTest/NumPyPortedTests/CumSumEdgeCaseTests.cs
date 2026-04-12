@@ -229,7 +229,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         [Test]
         public void CumSum_AllZeros()
         {
-            var a = np.zeros<int>(5);
+            var a = np.zeros<int>(new int[] { 5 });
             var result = np.cumsum(a);
             result.Should().BeOfValues(0L, 0L, 0L, 0L, 0L);
         }
@@ -241,7 +241,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         [Test]
         public void CumSum_AllOnes()
         {
-            var a = np.ones<int>(5);
+            var a = np.ones<int>([5]);
             var result = np.cumsum(a);
             result.Should().BeOfValues(1L, 2L, 3L, 4L, 5L);
         }

@@ -12,7 +12,7 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void Rand1D()
         {
-            var rand = np.random.rand(5);
+            var rand = np.random.rand(5L);
             Assert.IsTrue(rand.Data<double>().All(v => v >= 0 && v < 1));
             Assert.IsTrue(rand.ndim == 1);
             Assert.IsTrue(rand.size == 5);
@@ -30,7 +30,7 @@ namespace NumSharp.UnitTest.RandomSampling
         [Test]
         public void Rand2D()
         {
-            var rand = np.random.rand(5, 5);
+            var rand = np.random.rand(5L, 5L);
             Assert.IsTrue(rand.Data<double>().All(v => v >= 0 && v < 1));
             Assert.IsTrue(rand.ndim == 2);
             Assert.IsTrue(rand.size == 25);

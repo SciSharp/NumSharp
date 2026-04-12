@@ -33,7 +33,7 @@ namespace NumSharp
         WRITEABLE = 0x0400,
 
         /// <summary>Shape has a broadcast dimension (stride=0 with dim > 1).</summary>
-        BROADCASTED = 0x1000,  // NumSharp extension for cached IsBroadcasted
+        BROADCASTED = 0x1000, // NumSharp extension for cached IsBroadcasted
     }
 
     /// <summary>
@@ -47,6 +47,34 @@ namespace NumSharp
         ///     Use ArrayFlags enum for bit meanings.
         /// </summary>
         internal readonly int _flags;
+
+        /// <summary>
+        ///     Dense data are stored contiguously in memory, addressed by a single index (the memory address). <br></br>
+        ///     Array memory ordering schemes translate that single index into multiple indices corresponding to the array coordinates.<br></br>
+        ///     0: Row major<br></br>
+        ///     1: Column major
+        /// </summary>
+        internal const char layout = 'C';
+
+        internal readonly int _hashCode;
+        internal readonly long size;
+        internal readonly long[] dimensions;
+        internal readonly long[] strides;
+
+        /// <summary>
+        ///     Size of the underlying buffer (NumPy-aligned architecture).
+        ///     For non-view shapes, equals size. For sliced/broadcast shapes,
+        ///     this is the actual buffer size (not the view size), used for
+        ///     bounds checking and InternalArray slicing.
+        /// </summary>
+        internal readonly long bufferSize;
+
+        /// <summary>
+        ///     Base offset into storage (NumPy-aligned architecture).
+        ///     Computed at slice/broadcast time, enabling simple element access:
+        ///     element[indices] = data[offset + sum(indices * strides)]
+        /// </summary>
+        internal readonly long offset;
 
         /// <summary>
         ///     True if this shape represents a view (sliced) into underlying data.
@@ -75,7 +103,7 @@ namespace NumSharp
             get => (_flags & (int)ArrayFlags.C_CONTIGUOUS) != 0;
         }
 
-        #region Static Flag/Hash Computation (for readonly struct)
+#region Static Flag/Hash Computation (for readonly struct)
 
         /// <summary>
         ///     Computes array flags from dimensions and strides (static for readonly struct).
@@ -142,6 +170,7 @@ namespace NumSharp
                     sd *= dim;
                 }
             }
+
             return true;
         }
 
@@ -164,6 +193,7 @@ namespace NumSharp
                     hash ^= ((int)(size & 0x7FFFFFFF) * 397) * ((int)(v & 0x7FFFFFFF) * 397);
                 }
             }
+
             return (size, hash);
         }
 
@@ -196,7 +226,7 @@ namespace NumSharp
             return result;
         }
 
-        #endregion
+#endregion
 
         /// <summary>
         ///     Is this a simple sliced shape that uses the fast GetOffsetSimple path?
@@ -208,34 +238,6 @@ namespace NumSharp
             [MethodImpl(Inline)]
             get => IsSliced && !IsBroadcasted;
         }
-
-        /// <summary>
-        ///     Dense data are stored contiguously in memory, addressed by a single index (the memory address). <br></br>
-        ///     Array memory ordering schemes translate that single index into multiple indices corresponding to the array coordinates.<br></br>
-        ///     0: Row major<br></br>
-        ///     1: Column major
-        /// </summary>
-        internal const char layout = 'C';
-
-        internal readonly int _hashCode;
-        internal readonly long size;
-        internal readonly long[] dimensions;
-        internal readonly long[] strides;
-
-        /// <summary>
-        ///     Size of the underlying buffer (NumPy-aligned architecture).
-        ///     For non-view shapes, equals size. For sliced/broadcast shapes,
-        ///     this is the actual buffer size (not the view size), used for
-        ///     bounds checking and InternalArray slicing.
-        /// </summary>
-        internal readonly long bufferSize;
-
-        /// <summary>
-        ///     Base offset into storage (NumPy-aligned architecture).
-        ///     Computed at slice/broadcast time, enabling simple element access:
-        ///     element[indices] = data[offset + sum(indices * strides)]
-        /// </summary>
-        internal readonly long offset;
 
         /// <summary>
         ///     Is this shape a broadcast (has any stride=0 with dimension > 1)?
@@ -295,6 +297,7 @@ namespace NumSharp
                     if (strides[i] != 0)
                         return false;
                 }
+
                 return true;
             }
         }
@@ -319,6 +322,7 @@ namespace NumSharp
                     if (strides[i] != 0)
                         originalSize *= dimensions[i];
                 }
+
                 return originalSize == 0 ? 1 : originalSize; // At least 1 for scalar broadcasts
             }
         }
@@ -418,7 +422,7 @@ namespace NumSharp
             get => bufferSize > 0 ? bufferSize : size;
         }
 
-        #region Constructors
+#region Constructors
 
         /// <summary>
         ///     Creates a scalar shape (ndim=0, size=1).
@@ -500,7 +504,7 @@ namespace NumSharp
             this.strides = (long[])other.strides.Clone();
             this.offset = other.offset;
             this.IsScalar = other.IsScalar;
-            this._flags = other._flags; // Copy cached flags
+            this._flags = other._flags;
         }
 
         public Shape(long[] dims, long[] strides)
@@ -566,6 +570,24 @@ namespace NumSharp
         }
 
         /// <summary>
+        ///     Primary constructor with long dimensions.
+        /// </summary>
+        [MethodImpl(Optimize)]
+        public Shape(IEnumerable<long> dims)
+        {
+            var dimsArray = dims?.ToArray() ?? Array.Empty<long>();
+
+            this.dimensions = dimsArray;
+            this.strides = ComputeContiguousStrides(dimsArray);
+            this.offset = 0;
+
+            (this.size, this._hashCode) = ComputeSizeAndHash(dimsArray);
+            this.bufferSize = size;
+            this.IsScalar = _hashCode == int.MinValue;
+            this._flags = ComputeFlagsStatic(dimsArray, strides);
+        }
+
+        /// <summary>
         ///     Backward-compatible constructor with int dimensions.
         /// </summary>
         [MethodImpl(Optimize)]
@@ -591,7 +613,7 @@ namespace NumSharp
             this._flags = ComputeFlagsStatic(this.dimensions, this.strides);
         }
 
-        #endregion
+#endregion
 
         /// <summary>
         ///     An empty shape without any fields set (all dimensions are 0).
@@ -664,6 +686,7 @@ namespace NumSharp
                 for (int i = 0; i < indices.Length; i++)
                     off += indices[i] * strides[i];
             }
+
             return off;
         }
 
@@ -700,6 +723,7 @@ namespace NumSharp
                 for (int i = 0; i < indices.Length; i++)
                     off += indices[i] * strides[i];
             }
+
             return off;
         }
 
@@ -851,13 +875,14 @@ namespace NumSharp
                     coords[i] = remaining / factor;
                     remaining %= factor;
                 }
+
                 return coords;
             }
 
             long[] coords2 = null;
 
             if (strides.Length == 1)
-                coords2 = new long[] {offset};
+                coords2 = new long[] { offset };
 
             long counter = offset;
             coords2 = new long[strides.Length];
@@ -909,24 +934,6 @@ namespace NumSharp
             }
 
             return size;
-        }
-
-        /// <summary>
-        ///     Converts a long[] dimensions array to int[] for backward compatibility.
-        ///     Throws OverflowException if any dimension exceeds int.MaxValue.
-        /// </summary>
-        [MethodImpl(OptimizeAndInline)]
-        public static int[] ToIntArray(long[] dims)
-        {
-            if (dims == null)
-                return null;
-
-            var result = new int[dims.Length];
-            for (int i = 0; i < dims.Length; i++)
-            {
-                result[i] = checked((int)dims[i]);
-            }
-            return result;
         }
 
         public static long[] GetAxis(ref Shape shape, int axis)
@@ -994,7 +1001,7 @@ namespace NumSharp
             return l.ToArray();
         }
 
-        #region Slicing support
+#region Slicing support
 
         [MethodImpl(OptimizeAndInline)]
         public readonly Shape Slice(string slicing_notation) =>
@@ -1066,9 +1073,9 @@ namespace NumSharp
             return result;
         }
 
-        #endregion
+#endregion
 
-        #region Implicit Operators
+#region Implicit Operators
 
         public static explicit operator long[](Shape shape) =>
             (long[])shape.dimensions.Clone(); //we clone to avoid any changes
@@ -1082,14 +1089,27 @@ namespace NumSharp
                     throw new OverflowException($"Dimension {i} value {shape.dimensions[i]} exceeds int.MaxValue");
                 result[i] = (int)shape.dimensions[i];
             }
+
             return result;
         }
+
+        public static implicit operator Shape?(long[]? shape)
+            => shape is not null ? new Shape(shape) : (Shape?)null;
+
+        public static implicit operator Shape?(int[]? shape)
+            => shape is not null ? new Shape(shape) : (Shape?)null;
 
         public static implicit operator Shape(long[] dims) =>
             new Shape(dims);
 
         public static implicit operator Shape(int[] dims) =>
             new Shape(dims);
+
+        public static explicit operator long[](Shape? shape) =>
+            shape.HasValue ? (long[])shape.Value : null;
+
+        public static explicit operator int[](Shape? shape)
+            => shape.HasValue ? (int[])shape.Value : null;
 
         public static explicit operator long(Shape shape) =>
             shape.Size;
@@ -1101,10 +1121,10 @@ namespace NumSharp
             return (int)shape.Size;
         }
 
-        public static explicit operator Shape(long dim) =>
+        public static implicit operator Shape(long dim) =>
             Shape.Vector(dim);
 
-        public static explicit operator Shape(int dim) =>
+        public static implicit operator Shape(int dim) =>
             Shape.Vector(dim);
 
         public static explicit operator (long, long)(Shape shape) =>
@@ -1152,9 +1172,9 @@ namespace NumSharp
         public static implicit operator Shape((int, int, int, int, int, int) dims) =>
             new Shape(dims.Item1, dims.Item2, dims.Item3, dims.Item4, dims.Item5, dims.Item6);
 
-        #endregion
+#endregion
 
-        #region Deconstructor
+#region Deconstructor
 
         public readonly void Deconstruct(out long dim1, out long dim2)
         {
@@ -1201,9 +1221,9 @@ namespace NumSharp
             dim6 = dims[5];
         }
 
-        #endregion
+#endregion
 
-        #region Equality
+#region Equality
 
         public static bool operator ==(Shape a, Shape b)
         {
@@ -1280,7 +1300,7 @@ namespace NumSharp
             return _hashCode;
         }
 
-        #endregion
+#endregion
 
         /// <summary>
         ///     Translates coordinates with negative indices, e.g:<br></br>

@@ -327,7 +327,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         [Test]
         public void ArgMax_AllSameValues_ReturnsFirst()
         {
-            var a = np.full(5, 7);
+            var a = np.full(new Shape(7), 5);
             var result = np.argmax(a);
             Assert.AreEqual(0, (int)result);
         }
@@ -335,7 +335,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
         [Test]
         public void ArgMin_AllSameValues_ReturnsFirst()
         {
-            var a = np.full(5, 7);
+            var a = np.full(new Shape(7), 5);
             var result = np.argmin(a);
             Assert.AreEqual(0, (int)result);
         }

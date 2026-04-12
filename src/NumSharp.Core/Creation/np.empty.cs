@@ -11,42 +11,53 @@ namespace NumSharp
         /// <param name="shapes">Shape of the empty array, e.g., (2, 3) or 2.</param>
         /// <returns>Array of uninitialized (arbitrary) data of the given shape, dtype, and order. Object arrays will be initialized to None.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.empty.html</remarks>
-        public static NDArray empty(params int[] shapes)
+        public static NDArray empty(int shape)
         {
-            return empty(System.Array.ConvertAll(shapes, i => (long)i));
+            return empty(new Shape(shape), (Type)null);
         }
 
         /// <summary>
         ///     Return a new array of given shape and type, without initializing entries.
         /// </summary>
-        /// <param name="shapes">Shape of the empty array, e.g., (2, 3) or 2.</param>
-        /// <returns>Array of uninitialized (arbitrary) data of the given shape, dtype, and order. Object arrays will be initialized to None.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.empty.html</remarks>
-        public static NDArray empty(params long[] shapes)
-        {
-            return empty(new Shape(shapes), (Type)null);
-        }
-
-        /// <summary>
-        ///     Return a new array of given shape and type, without initializing entries.
-        /// </summary>
-        /// <param name="shapes">Shape of the empty array, e.g., (2, 3) or 2.</param>
+        /// <param name="shape">Shape of the empty array, e.g., (2, 3) or 2.</param>
         /// <returns>Array of uninitialized (arbitrary) data of the given shape, dtype, and order. Object arrays will be initialized to None.</returns>
         /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.empty.html</remarks>
-        public static NDArray empty<T>(params int[] shapes)
+        public static NDArray empty(int[] shape)
         {
-            return empty<T>(System.Array.ConvertAll(shapes, i => (long)i));
+            return empty(new Shape(shape), (Type)null);
         }
 
         /// <summary>
         ///     Return a new array of given shape and type, without initializing entries.
         /// </summary>
-        /// <param name="shapes">Shape of the empty array, e.g., (2, 3) or 2.</param>
+        /// <param name="shape">Shape of the empty array, e.g., (2, 3) or 2.</param>
         /// <returns>Array of uninitialized (arbitrary) data of the given shape, dtype, and order. Object arrays will be initialized to None.</returns>
-        /// <remarks>https://docs.scipy.org/doc/numpy/reference/generated/numpy.empty.html</remarks>
-        public static NDArray empty<T>(params long[] shapes)
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.empty.html</remarks>
+        public static NDArray empty(long[] shape)
         {
-            return empty(new Shape(shapes), typeof(T));
+            return empty(new Shape(shape), (Type)null);
+        }
+
+        /// <summary>
+        ///     Return a new array of given shape and type, without initializing entries.
+        /// </summary>
+        /// <param name="shape">Shape of the empty array, e.g., (2, 3) or 2.</param>
+        /// <returns>Array of uninitialized (arbitrary) data of the given shape, dtype, and order. Object arrays will be initialized to None.</returns>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.empty.html</remarks>
+        public static NDArray empty<T>(int[] shape)
+        {
+            return empty(new Shape(shape), typeof(T));
+        }
+
+        /// <summary>
+        ///     Return a new array of given shape and type, without initializing entries.
+        /// </summary>
+        /// <param name="shape">Shape of the empty array, e.g., (2, 3) or 2.</param>
+        /// <returns>Array of uninitialized (arbitrary) data of the given shape, dtype, and order. Object arrays will be initialized to None.</returns>
+        /// <remarks>https://numpy.org/doc/stable/reference/generated/numpy.empty.html</remarks>
+        public static NDArray empty<T>(long[] shape)
+        {
+            return empty(new Shape(shape), typeof(T));
         }
 
         /// <summary>

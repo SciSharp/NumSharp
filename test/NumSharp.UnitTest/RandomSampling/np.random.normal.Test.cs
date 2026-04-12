@@ -16,7 +16,7 @@ namespace NumSharp.UnitTest.RandomSampling
             // https://numpy.org/doc/stable/reference/random/generated/numpy.random.normal.html
             double mu = 0; // mean
             double sigma = 0.1; // standard deviation
-            var s = np.random.normal(mu, sigma, 10, 100);
+            var s = np.random.normal(mu, sigma, new Shape(10, 100));
 
             var mean = np.mean(s);
             Assert.IsTrue(Math.Abs(mu - mean.Data<double>()[0]) < 0.01);

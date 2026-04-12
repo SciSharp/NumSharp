@@ -49,10 +49,14 @@ namespace NumSharp
             }
 
             // For multi-dimensional arrays, shuffle along axis 0
-            // Fisher-Yates shuffle using NextInt64 for full long range support
+            // Fisher-Yates shuffle using NumPy's bounded_uint32 (rejection sampling)
             for (long i = n - 1; i > 0; i--)
             {
-                long j = randomizer.NextLong(i + 1);
+                // NumPy uses bounded_uint32 for shuffle which uses rejection sampling
+                // For values that fit in int32, use Next(int) which implements this correctly
+                long j = (i < int.MaxValue)
+                    ? randomizer.Next((int)(i + 1))
+                    : randomizer.NextLong(i + 1);
                 if (i != j)
                 {
                     SwapSlicesAxis0(x, i, j);
@@ -71,10 +75,13 @@ namespace NumSharp
             // Allocate temp buffer for swapping
             var temp = stackalloc byte[itemSize];
 
-            // Fisher-Yates shuffle with full long range support
+            // Fisher-Yates shuffle using NumPy's bounded_uint32 (rejection sampling)
             for (long i = n - 1; i > 0; i--)
             {
-                long j = randomizer.NextLong(i + 1);
+                // NumPy uses bounded_uint32 for shuffle which uses rejection sampling
+                long j = (i < int.MaxValue)
+                    ? randomizer.Next((int)(i + 1))
+                    : randomizer.NextLong(i + 1);
                 if (i != j)
                 {
                     var ptrI = addr + i * itemSize;

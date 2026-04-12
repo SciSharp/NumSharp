@@ -25,8 +25,8 @@ namespace NumSharp.UnitTest.LinearAlgebra
         [Test]
         public void Case2_2_2()
         {
-            var a = np.full(2, (3, 3));
-            var b = np.full(2, (3, 3));
+            var a = np.full(new Shape(3, 3), 2);
+            var b = np.full(new Shape(3, 3), 2);
             var ret = np.matmul(a, b);
             Console.WriteLine(ret.typecode);
             ret.flat.AsIterator().Cast<object>().Distinct().ToArray().Should().Contain(12).And.HaveCount(1);
@@ -46,8 +46,8 @@ namespace NumSharp.UnitTest.LinearAlgebra
         [Test]
         public void Case2_2_1()
         {
-            var a = np.full(2, (3, 3));
-            var b = np.full(3, (3));
+            var a = np.full(new Shape(3, 3), 2);
+            var b = np.full(new Shape(3), 3);
             var ret = np.matmul(a, b);
             Console.WriteLine(ret.typecode);
             ret.flat.AsIterator().Cast<object>().Distinct().ToArray().Should().Contain(18).And.HaveCount(1);
@@ -56,8 +56,8 @@ namespace NumSharp.UnitTest.LinearAlgebra
         [Test]
         public void Case_3_2_2__3_2_2()
         {
-            var a = np.full(2, (3, 2, 2));
-            var b = np.full(3, (3, 2, 2));
+            var a = np.full(new Shape(3, 2, 2), 2);
+            var b = np.full(new Shape(3, 2, 2), 3);
             var ret = np.matmul(a, b);
             ret.Should().AllValuesBe(12).And.BeShaped(3, 2, 2);
         }
@@ -65,8 +65,8 @@ namespace NumSharp.UnitTest.LinearAlgebra
         [Test]
         public void Case_3_1_2_2__3_2_2()
         {
-            var a = np.full(2, (3, 1, 2, 2));
-            var b = np.full(3, (3, 2, 2));
+            var a = np.full(new Shape(3, 1, 2, 2), 2);
+            var b = np.full(new Shape(3, 2, 2), 3);
             var ret = np.matmul(a, b);
             ret.Should().AllValuesBe(12).And.BeShaped(3, 3, 2, 2);
         }
@@ -94,8 +94,8 @@ namespace NumSharp.UnitTest.LinearAlgebra
         [Test]
         public void Case2_3_1_vs_1_3()
         {
-            var a = np.full(2, (3, 1));
-            var b = np.full(2, (1, 3));
+            var a = np.full(new Shape(3, 1), 2);
+            var b = np.full(new Shape(1, 3), 2);
             var ret = np.matmul(a, b);
             Console.WriteLine(ret.typecode);
             ret.flat.AsIterator().Cast<object>().Distinct().ToArray().Should().Contain(4).And.HaveCount(1);
