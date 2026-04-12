@@ -52,16 +52,19 @@ namespace NumSharp.Backends.Unmanaged
         /// <summary>
         ///     Construct with externally allocated memory and a custom <paramref name="dispose"/> function.
         /// </summary>
-        /// <param name="start"></param>
+        /// <param name="start">Pointer to externally allocated unmanaged memory.</param>
         /// <param name="count">The length in objects of <typeparamref name="T"/> and not in bytes.</param>
-        /// <param name="dispose"></param>
-        /// <remarks>Does claim ownership.</remarks>
+        /// <param name="dispose">Cleanup action called when memory is released.</param>
+        /// <remarks>
+        ///     Claims ownership of the memory. Caller is responsible for GC.AddMemoryPressure
+        ///     if the memory is unmanaged and large enough to warrant it.
+        /// </remarks>
         [MethodImpl(OptimizeAndInline)]
         public UnmanagedMemoryBlock(T* start, long count, Action dispose)
         {
             Count = count;
             BytesCount = InfoOf<T>.Size * count;
-            _disposer = new Disposer(dispose);
+            _disposer = new Disposer(dispose); // Caller tracks pressure for their allocation
             Address = start;
         }
 
@@ -1017,11 +1020,21 @@ namespace NumSharp.Backends.Unmanaged
             /// <summary>
             ///     Construct a AllocationType.External
             /// </summary>
-            /// <param name="dispose"></param>
-            public Disposer(Action dispose)
+            /// <param name="dispose">The cleanup action to invoke on disposal.</param>
+            /// <param name="bytesCount">
+            ///     Optional: Size in bytes for GC memory pressure tracking.
+            ///     Pass 0 for managed memory (GCHandle) or when caller manages pressure.
+            ///     Pass actual bytes for unmanaged memory to inform GC.
+            /// </param>
+            public Disposer(Action dispose, long bytesCount = 0)
             {
                 _dispose = dispose;
+                _bytesCount = bytesCount;
                 _type = AllocationType.External;
+
+                // Track memory pressure for external unmanaged memory
+                if (bytesCount > 0)
+                    GC.AddMemoryPressure(bytesCount);
             }
 
             /// <summary>
@@ -1052,6 +1065,9 @@ namespace NumSharp.Backends.Unmanaged
                         return;
                     case AllocationType.External:
                         _dispose();
+                        // Remove GC memory pressure if it was added for external unmanaged memory
+                        if (_bytesCount > 0)
+                            GC.RemoveMemoryPressure(_bytesCount);
                         return;
                     case AllocationType.GCHandle:
                         _gcHandle.Free();
