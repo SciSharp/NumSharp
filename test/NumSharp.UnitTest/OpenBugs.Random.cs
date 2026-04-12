@@ -19,7 +19,6 @@ namespace NumSharp.UnitTest
     ///     print(np.random.rand())  # etc.
     ///     </code>
     /// </summary>
-    [OpenBugs]
     [NotInParallel]
     public class OpenBugsRandom : TestClass
     {
@@ -35,6 +34,7 @@ namespace NumSharp.UnitTest
         ///     NumSharp seed=42: 0.668106465911542 (WRONG - different algorithm)
         /// </summary>
         [Test]
+        [OpenBugs]
         public void Rand_Seed42_ShouldMatchNumPy()
         {
             np.random.seed(42);
@@ -83,6 +83,7 @@ namespace NumSharp.UnitTest
         ///     NumSharp seed=42: Different value (wrong RNG + Box-Muller may differ)
         /// </summary>
         [Test]
+        [OpenBugs]
         public void Randn_Seed42_ShouldMatchNumPy()
         {
             np.random.seed(42);
@@ -223,6 +224,7 @@ namespace NumSharp.UnitTest
         ///     NumPy seed=42: [1, 4, 2, 0, 3]
         /// </summary>
         [Test]
+        [OpenBugs]
         public void Permutation_Seed42_ShouldMatchNumPy()
         {
             np.random.seed(42);

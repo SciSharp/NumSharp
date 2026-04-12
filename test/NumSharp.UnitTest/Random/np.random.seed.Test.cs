@@ -21,7 +21,6 @@ namespace NumSharp.UnitTest.RandomSampling
         }
 
         [Test]
-        [OpenBugs] // BUG: default(Shape) handling causes "index < Count" error
         public void UniformOneSample()
         {
             NumPyRandom rando = np.random.RandomState(1000);
@@ -63,7 +62,6 @@ namespace NumSharp.UnitTest.RandomSampling
         }
 
         [Test]
-        [OpenBugs] // BUG: default(Shape) handling causes "index < Count" error
         public void NonUniformSample()
         {
             NumPyRandom rando = np.random.RandomState(1000);

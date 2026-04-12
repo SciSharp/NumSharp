@@ -54,7 +54,6 @@ namespace NumSharp.UnitTest.RandomSampling
         }
 
         [Test]
-        [OpenBugs] // BUG: default(Shape) handling causes "index < Count" error
         public void NonUniformSample()
         {
             // Generate a non-uniform random sample from np.arange(5) of size 3:

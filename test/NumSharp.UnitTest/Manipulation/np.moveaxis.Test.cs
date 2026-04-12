@@ -7,7 +7,6 @@ namespace NumSharp.UnitTest.Manipulation
     public class np_moveaxis_Test
     {
         [Test]
-        [OpenBugs] // np.moveaxis returns wrong shape (returns unchanged)
         public void Case1()
         {
             var x = np.zeros((3, 4, 5));
@@ -16,7 +15,6 @@ namespace NumSharp.UnitTest.Manipulation
         }
 
         [Test]
-        [OpenBugs] // np.moveaxis returns wrong shape
         public void Case2()
         {
             var x = np.zeros((3, 4, 5));

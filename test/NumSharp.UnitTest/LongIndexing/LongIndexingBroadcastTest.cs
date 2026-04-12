@@ -287,7 +287,6 @@ public class LongIndexingBroadcastTest
     /// Slicing a broadcast array with indices > int.MaxValue throws OverflowException.
     /// </summary>
     [Test]
-    [OpenBugs]
     public async Task Broadcast_SliceWithLargeIndices_Limited()
     {
         var arr = BroadcastScalar((byte)99);
@@ -305,7 +304,6 @@ public class LongIndexingBroadcastTest
     /// Even with broadcast inputs, the output is allocated at full size.
     /// </summary>
     [Test]
-    [OpenBugs]
     public async Task Broadcast_Add_AllocatesFullOutput()
     {
         var a = BroadcastScalar((byte)10);
@@ -320,7 +318,6 @@ public class LongIndexingBroadcastTest
     /// LIMITATION: Unary operations allocate full output arrays.
     /// </summary>
     [Test]
-    [OpenBugs]
     public async Task Broadcast_Square_AllocatesFullOutput()
     {
         var arr = BroadcastScalar((byte)5);

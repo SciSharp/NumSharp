@@ -18,7 +18,6 @@ namespace NumSharp.UnitTest.Operations
         }
 
         [Test]
-        [OpenBugs]
         public void BoolTwo2D_NDArrayOR()
         {
             var np1 = new NDArray(typeof(bool), new Shape(2, 3));

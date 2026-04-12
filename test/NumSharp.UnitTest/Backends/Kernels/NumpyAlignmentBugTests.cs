@@ -1008,7 +1008,6 @@ public class NumpyAlignmentBugTests
     }
 
     [Test]
-    [OpenBugs]
     public void Bug32_Choice_NDArray_ReplaceFalse()
     {
         // NUMPY: np.random.choice(['a','b','c','d','e'], 3, replace=False)

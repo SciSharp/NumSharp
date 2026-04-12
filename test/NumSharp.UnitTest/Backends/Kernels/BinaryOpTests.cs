@@ -501,7 +501,6 @@ public class BinaryOpTests
     #region Edge Cases - 0D Scalars
 
     [Test]
-    [OpenBugs] // NumSharp doesn't properly handle 0D scalars (returns 1D instead)
     public void Add_0DScalars()
     {
         // NumPy: np.array(5) + np.array(3) = 8, shape=()
