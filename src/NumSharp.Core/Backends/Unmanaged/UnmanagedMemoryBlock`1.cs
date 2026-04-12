@@ -29,7 +29,7 @@ namespace NumSharp.Backends.Unmanaged
         {
             var bytes = BytesCount = count * InfoOf<T>.Size;
             var ptr = (IntPtr)NativeMemory.Alloc((nuint)bytes);
-            _disposer = new Disposer(ptr);
+            _disposer = new Disposer(ptr, bytes);
             Address = (T*)ptr;
             Count = count;
         }
@@ -984,16 +984,24 @@ namespace NumSharp.Backends.Unmanaged
             private readonly IntPtr Address;
             private readonly GCHandle _gcHandle;
             private readonly Action _dispose;
+            private readonly long _bytesCount;
 
 
             /// <summary>
             ///     Construct a AllocationType.Native (NativeMemory.Alloc)
             /// </summary>
-            /// <param name="address"></param>
-            public Disposer(IntPtr address)
+            /// <param name="address">The address of the allocated memory.</param>
+            /// <param name="bytesCount">The size in bytes of the allocation (for GC memory pressure tracking).</param>
+            public Disposer(IntPtr address, long bytesCount)
             {
                 Address = address;
+                _bytesCount = bytesCount;
                 _type = AllocationType.Native;
+
+                // Inform the GC about unmanaged memory allocation so it can
+                // schedule collections appropriately (fixes GitHub issue #501)
+                if (bytesCount > 0)
+                    GC.AddMemoryPressure(bytesCount);
             }
 
             /// <summary>
@@ -1036,6 +1044,9 @@ namespace NumSharp.Backends.Unmanaged
                 {
                     case AllocationType.Native:
                         NativeMemory.Free((void*)Address);
+                        // Remove GC memory pressure that was added during allocation
+                        if (_bytesCount > 0)
+                            GC.RemoveMemoryPressure(_bytesCount);
                         return;
                     case AllocationType.Wrap:
                         return;
