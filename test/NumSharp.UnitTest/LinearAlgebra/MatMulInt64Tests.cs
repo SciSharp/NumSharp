@@ -247,8 +247,9 @@ public class MatMulInt64Tests
     public async Task Dot_LargeContiguousArrays()
     {
         // Test with larger arrays to ensure SIMD path handles size correctly
-        var a = np.random.randn(100, 100);
-        var b = np.random.randn(100, 100);
+        var rng = np.random.RandomState(42);
+        var a = rng.randn(100, 100);
+        var b = rng.randn(100, 100);
 
         // Should not throw
         var result = np.dot(a, b);

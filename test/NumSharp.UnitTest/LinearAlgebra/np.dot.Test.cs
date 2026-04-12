@@ -101,8 +101,9 @@ namespace NumSharp.UnitTest.LinearAlgebra
         [OpenBugs] // RNG IndexOutOfRangeException in MT19937
         public void Dot30_300x30_300()
         {
-            var a = np.random.randn(30, 300);
-            var b = np.random.randn(300, 30);
+            var rng = np.random.RandomState(42);
+            var a = rng.randn(30, 300);
+            var b = rng.randn(300, 30);
             var c = np.dot(a, b);
         }
     }
