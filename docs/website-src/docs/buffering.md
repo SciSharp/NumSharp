@@ -12,7 +12,7 @@ This page explains how to create arrays from existing buffers without copying, h
 
 **Predictable Layout.** Managed arrays can be moved by the garbage collector at any time. Unmanaged memory stays put, which is essential when passing pointers to native libraries or GPU drivers.
 
-**No GC Pauses.** Large managed arrays cause GC pressure. A 1GB NDArray in unmanaged memory doesn't affect GC at all.
+**Reduced GC Overhead.** Large managed arrays cause GC pressure and can trigger expensive collections. Unmanaged memory avoids this—though NumSharp still informs the GC about allocation sizes so it can schedule collections appropriately.
 
 **Interop Efficiency.** When calling into native code (BLAS, CUDA, image processing libraries), unmanaged memory can be passed directly without marshaling.
 
@@ -49,6 +49,14 @@ User Code
 **External APIs** are what you interact with: `np.frombuffer()`, `np.array()`, and the `NDArray` constructors. These APIs hide the complexity of memory management behind sensible defaults.
 
 **Internal Infrastructure** handles the low-level details: pinning managed arrays so the GC won't move them, tracking ownership so memory gets freed at the right time, and managing the raw pointers. You don't need to interact with these directly—the external APIs handle it for you.
+
+### GC Pressure Tracking
+
+Although NumSharp uses unmanaged memory, the .NET garbage collector still needs to know about it. Otherwise, the GC sees only the small managed wrappers (~100 bytes each) and doesn't realize there's megabytes of unmanaged data attached. This can cause memory to grow unbounded before the GC kicks in.
+
+NumSharp solves this by calling `GC.AddMemoryPressure()` when allocating native memory and `GC.RemoveMemoryPressure()` when freeing it. This applies to arrays created with `np.array()`, `np.zeros()`, `np.empty()`, and similar functions.
+
+For external memory (via `np.frombuffer()` with a dispose callback), the caller is responsible for pressure tracking since NumSharp doesn't know how the memory was allocated.
 
 ---
 
@@ -163,17 +171,21 @@ This is appropriate when you're borrowing memory temporarily. You must ensure th
 
 ```csharp
 // We allocate native memory
-IntPtr ptr = Marshal.AllocHGlobal(1024 * sizeof(float));
+int bytes = 1024 * sizeof(float);
+IntPtr ptr = Marshal.AllocHGlobal(bytes);
+GC.AddMemoryPressure(bytes);  // Tell GC about this allocation
 
 // Transfer ownership to NumSharp
-var arr = np.frombuffer(ptr, 1024 * sizeof(float), typeof(float),
-    dispose: () => Marshal.FreeHGlobal(ptr));
+var arr = np.frombuffer(ptr, bytes, typeof(float),
+    dispose: () => {
+        Marshal.FreeHGlobal(ptr);
+        GC.RemoveMemoryPressure(bytes);
+    });
 
 // When arr is garbage collected, the dispose action runs
-// No manual free needed
 ```
 
-The `dispose` parameter takes an action that NumSharp calls when the array is no longer needed. This is cleaner for memory you've allocated, but be careful: if you free the memory yourself AND provide a dispose action, you'll double-free.
+The `dispose` parameter takes an action that NumSharp calls when the array is no longer needed. For large allocations, pair `GC.AddMemoryPressure()` with `GC.RemoveMemoryPressure()` so the GC knows about your memory. Be careful: if you free the memory yourself AND provide a dispose action, you'll double-free.
 
 ### From .NET Buffer Types
 
