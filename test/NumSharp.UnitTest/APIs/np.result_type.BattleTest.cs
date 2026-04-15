@@ -1,8 +1,5 @@
 using System;
 using System.Threading.Tasks;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-using TUnit.Core;
 
 namespace NumSharp.UnitTest.APIs;
 
@@ -13,7 +10,7 @@ public class NpResultTypeBattleTests
 {
     #region Single Type
 
-    [Test]
+    [TestMethod]
     public async Task ResultType_SingleType_ReturnsSame()
     {
         await Assert.That(np.result_type(NPTypeCode.Int32)).IsEqualTo(NPTypeCode.Int32);
@@ -24,19 +21,19 @@ public class NpResultTypeBattleTests
 
     #region Two Types - Integer Promotion
 
-    [Test]
+    [TestMethod]
     public async Task ResultType_Int32Int64_ReturnsInt64()
     {
         await Assert.That(np.result_type(NPTypeCode.Int32, NPTypeCode.Int64)).IsEqualTo(NPTypeCode.Int64);
     }
 
-    [Test]
+    [TestMethod]
     public async Task ResultType_Int16Int32_ReturnsInt32()
     {
         await Assert.That(np.result_type(NPTypeCode.Int16, NPTypeCode.Int32)).IsEqualTo(NPTypeCode.Int32);
     }
 
-    [Test]
+    [TestMethod]
     public async Task ResultType_SignedUnsigned_PromotesToContainBoth()
     {
         var result = np.result_type(NPTypeCode.UInt32, NPTypeCode.Int32);
@@ -47,7 +44,7 @@ public class NpResultTypeBattleTests
 
     #region Two Types - Float Promotion
 
-    [Test]
+    [TestMethod]
     public async Task ResultType_Float32Float64_ReturnsFloat64()
     {
         await Assert.That(np.result_type(NPTypeCode.Single, NPTypeCode.Double)).IsEqualTo(NPTypeCode.Double);
@@ -57,13 +54,13 @@ public class NpResultTypeBattleTests
 
     #region Error Cases
 
-    [Test]
+    [TestMethod]
     public async Task ResultType_Empty_Throws()
     {
         await Assert.That(() => np.result_type(Array.Empty<NPTypeCode>())).ThrowsException();
     }
 
-    [Test]
+    [TestMethod]
     public async Task ResultType_NullArray_Throws()
     {
         await Assert.That(() => np.result_type((NPTypeCode[])null!)).ThrowsException();
@@ -73,19 +70,19 @@ public class NpResultTypeBattleTests
 
     #region Two-Arg Convenience Overloads
 
-    [Test]
+    [TestMethod]
     public async Task ResultType_TwoArg_NPTypeCode()
     {
         await Assert.That(np.result_type(NPTypeCode.Int32, NPTypeCode.Int64)).IsEqualTo(NPTypeCode.Int64);
     }
 
-    [Test]
+    [TestMethod]
     public async Task ResultType_TwoArg_Type()
     {
         await Assert.That(np.result_type(typeof(int), typeof(long))).IsEqualTo(NPTypeCode.Int64);
     }
 
-    [Test]
+    [TestMethod]
     public async Task ResultType_TwoArg_NDArray()
     {
         var a = np.array(new int[] { 1, 2 });
@@ -93,14 +90,14 @@ public class NpResultTypeBattleTests
         await Assert.That(np.result_type(a, b)).IsEqualTo(NPTypeCode.Int64);
     }
 
-    [Test]
+    [TestMethod]
     public async Task ResultType_TwoArg_NDArray_NullFirst_Throws()
     {
         var b = np.array(new int[] { 1, 2 });
         await Assert.That(() => np.result_type((NDArray)null!, b)).ThrowsException();
     }
 
-    [Test]
+    [TestMethod]
     public async Task ResultType_TwoArg_NDArray_NullSecond_Throws()
     {
         var a = np.array(new int[] { 1, 2 });
@@ -111,7 +108,7 @@ public class NpResultTypeBattleTests
 
     #region Symmetry Property
 
-    [Test]
+    [TestMethod]
     public async Task ResultType_Symmetric()
     {
         await Assert.That(np.result_type(NPTypeCode.Int32, NPTypeCode.Int64))

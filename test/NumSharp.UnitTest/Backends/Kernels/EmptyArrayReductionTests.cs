@@ -1,7 +1,6 @@
 using System;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp;
-using TUnit.Core;
 
 namespace NumSharp.UnitTest.Backends.Kernels;
 
@@ -18,7 +17,7 @@ public class EmptyArrayReductionTests
     /// NumPy: np.max(np.array([])) raises ValueError
     /// "zero-size array to reduction operation maximum which has no identity"
     /// </summary>
-    [Test]
+    [TestMethod]
     public void Max_EmptyArray_ThrowsArgumentException()
     {
         var empty = np.array(new double[0]);
@@ -30,7 +29,7 @@ public class EmptyArrayReductionTests
     /// NumPy: np.min(np.array([])) raises ValueError
     /// "zero-size array to reduction operation minimum which has no identity"
     /// </summary>
-    [Test]
+    [TestMethod]
     public void Min_EmptyArray_ThrowsArgumentException()
     {
         var empty = np.array(new double[0]);
@@ -41,7 +40,7 @@ public class EmptyArrayReductionTests
     /// <summary>
     /// NumPy: np.amax(np.array([])) raises ValueError
     /// </summary>
-    [Test]
+    [TestMethod]
     public void AMax_EmptyArray_ThrowsArgumentException()
     {
         var empty = np.array(new double[0]);
@@ -52,7 +51,7 @@ public class EmptyArrayReductionTests
     /// <summary>
     /// NumPy: np.amin(np.array([])) raises ValueError
     /// </summary>
-    [Test]
+    [TestMethod]
     public void AMin_EmptyArray_ThrowsArgumentException()
     {
         var empty = np.array(new double[0]);
@@ -63,7 +62,7 @@ public class EmptyArrayReductionTests
     /// <summary>
     /// Verify error message matches NumPy's format.
     /// </summary>
-    [Test]
+    [TestMethod]
     public void Max_EmptyArray_ErrorMessageMatchesNumPy()
     {
         var empty = np.array(new double[0]);
@@ -78,7 +77,7 @@ public class EmptyArrayReductionTests
     /// <summary>
     /// Verify error message matches NumPy's format.
     /// </summary>
-    [Test]
+    [TestMethod]
     public void Min_EmptyArray_ErrorMessageMatchesNumPy()
     {
         var empty = np.array(new double[0]);
@@ -97,7 +96,7 @@ public class EmptyArrayReductionTests
     /// <summary>
     /// NumPy: np.sum(np.array([])) returns 0.0 (identity element for addition)
     /// </summary>
-    [Test]
+    [TestMethod]
     public void Sum_EmptyArray_ReturnsZero()
     {
         var empty = np.array(new double[0]);
@@ -110,7 +109,7 @@ public class EmptyArrayReductionTests
     /// <summary>
     /// NumPy: np.prod(np.array([])) returns 1.0 (identity element for multiplication)
     /// </summary>
-    [Test]
+    [TestMethod]
     public void Prod_EmptyArray_ReturnsOne()
     {
         var empty = np.array(new double[0]);
@@ -127,7 +126,7 @@ public class EmptyArrayReductionTests
     /// <summary>
     /// Verify non-empty arrays still work correctly for max.
     /// </summary>
-    [Test]
+    [TestMethod]
     public void Max_NonEmptyArray_ReturnsMax()
     {
         var arr = np.array(new double[] { 1.0, 5.0, 3.0 });
@@ -140,7 +139,7 @@ public class EmptyArrayReductionTests
     /// <summary>
     /// Verify non-empty arrays still work correctly for min.
     /// </summary>
-    [Test]
+    [TestMethod]
     public void Min_NonEmptyArray_ReturnsMin()
     {
         var arr = np.array(new double[] { 1.0, 5.0, 3.0 });
@@ -153,7 +152,7 @@ public class EmptyArrayReductionTests
     /// <summary>
     /// Single element array should work for max.
     /// </summary>
-    [Test]
+    [TestMethod]
     public void Max_SingleElementArray_ReturnsElement()
     {
         var arr = np.array(new double[] { 42.0 });
@@ -166,7 +165,7 @@ public class EmptyArrayReductionTests
     /// <summary>
     /// Single element array should work for min.
     /// </summary>
-    [Test]
+    [TestMethod]
     public void Min_SingleElementArray_ReturnsElement()
     {
         var arr = np.array(new double[] { 42.0 });
@@ -183,7 +182,7 @@ public class EmptyArrayReductionTests
     /// <summary>
     /// Empty int32 array should throw for max.
     /// </summary>
-    [Test]
+    [TestMethod]
     public void Max_EmptyInt32Array_ThrowsArgumentException()
     {
         var empty = np.array(new int[0]);
@@ -194,7 +193,7 @@ public class EmptyArrayReductionTests
     /// <summary>
     /// Empty float32 array should throw for max.
     /// </summary>
-    [Test]
+    [TestMethod]
     public void Max_EmptyFloat32Array_ThrowsArgumentException()
     {
         var empty = np.array(new float[0]);

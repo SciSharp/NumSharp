@@ -11,7 +11,7 @@ namespace NumSharp.UnitTest.RandomSampling;
 
     public class RandomParetoTests : TestClass
 {
-    [Test]
+    [TestMethod]
     public void Pareto_ScalarCall_Returns0dArray()
     {
         var rng = np.random.RandomState(42);
@@ -20,7 +20,7 @@ namespace NumSharp.UnitTest.RandomSampling;
         Assert.IsTrue(result.GetDouble() >= 0, "Pareto samples should be non-negative");
     }
 
-    [Test]
+    [TestMethod]
     public void Pareto_ArraySize_ReturnsCorrectShape()
     {
         var rng = np.random.RandomState(42);
@@ -29,7 +29,7 @@ namespace NumSharp.UnitTest.RandomSampling;
         Assert.AreEqual(typeof(double), result.dtype);
     }
 
-    [Test]
+    [TestMethod]
     public void Pareto_MultiDimensionalSize_ReturnsCorrectShape()
     {
         var rng = np.random.RandomState(42);
@@ -37,7 +37,7 @@ namespace NumSharp.UnitTest.RandomSampling;
         result.Should().BeShaped(2, 3);
     }
 
-    [Test]
+    [TestMethod]
     public void Pareto_ShapeSize_ReturnsCorrectShape()
     {
         var rng = np.random.RandomState(42);
@@ -45,7 +45,7 @@ namespace NumSharp.UnitTest.RandomSampling;
         result.Should().BeShaped(3, 4);
     }
 
-    [Test]
+    [TestMethod]
     public void Pareto_AllValuesNonNegative()
     {
         var rng = np.random.RandomState(12345);
@@ -58,7 +58,7 @@ namespace NumSharp.UnitTest.RandomSampling;
         }
     }
 
-    [Test]
+    [TestMethod]
     public void Pareto_MeanConvergesToExpected()
     {
         // For Pareto II (Lomax), mean = 1/(a-1) for a > 1
@@ -72,7 +72,7 @@ namespace NumSharp.UnitTest.RandomSampling;
             $"Mean {mean} should be close to 0.5 for a=3");
     }
 
-    [Test]
+    [TestMethod]
     public void Pareto_DifferentShapeParameters()
     {
         // Higher 'a' means heavier tail
@@ -88,31 +88,31 @@ namespace NumSharp.UnitTest.RandomSampling;
             $"Mean with a=0.5 ({mean_low}) should be > mean with a=5 ({mean_high})");
     }
 
-    [Test]
+    [TestMethod]
     public void Pareto_ZeroParameter_ThrowsArgumentException()
     {
         Assert.ThrowsException<ArgumentException>(() => np.random.pareto(0.0, 5L));
     }
 
-    [Test]
+    [TestMethod]
     public void Pareto_NegativeParameter_ThrowsArgumentException()
     {
         Assert.ThrowsException<ArgumentException>(() => np.random.pareto(-1.0, 5L));
     }
 
-    [Test]
+    [TestMethod]
     public void Pareto_ScalarZeroParameter_ThrowsArgumentException()
     {
         Assert.ThrowsException<ArgumentException>(() => np.random.pareto(0.0));
     }
 
-    [Test]
+    [TestMethod]
     public void Pareto_ScalarNegativeParameter_ThrowsArgumentException()
     {
         Assert.ThrowsException<ArgumentException>(() => np.random.pareto(-2.0));
     }
 
-    [Test]
+    [TestMethod]
     public void Pareto_SmallA_ProducesLargerValues()
     {
         // Small 'a' produces heavier tails (more extreme values)
@@ -125,7 +125,7 @@ namespace NumSharp.UnitTest.RandomSampling;
             $"With a=0.5, max value {max_val} should be > 10");
     }
 
-    [Test]
+    [TestMethod]
     public void Pareto_LargeA_ProducesSmallValues()
     {
         // Large 'a' concentrates values near zero
@@ -138,7 +138,7 @@ namespace NumSharp.UnitTest.RandomSampling;
             $"With a=10, max value {max_val} should be < 2");
     }
 
-    [Test]
+    [TestMethod]
     public void Pareto_Reproducibility()
     {
         var rng1 = np.random.RandomState(42);

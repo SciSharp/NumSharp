@@ -12,14 +12,14 @@ namespace NumSharp.UnitTest.Maths
 {
     public class NDArraySqrtTest
     {
-        [Test]
+        [TestMethod]
         public void Case1()
         {
             var nd = np.array(new double[] {1, 4, 9});
             np.sqrt(nd).Should().BeOfType<double>().And.BeOfValues(1, 2, 3);
         }
 
-        /*[Test]
+        /*[TestMethod]
         public void ComplexSqrtTest()
         {
             var np = new NDArray(typeof(Complex),3);

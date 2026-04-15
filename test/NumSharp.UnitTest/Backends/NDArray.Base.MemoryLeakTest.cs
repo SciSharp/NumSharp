@@ -20,7 +20,7 @@ namespace NumSharp.UnitTest.Backends
         /// <summary>
         /// Create many views, verify they don't leak when original lives.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void MemoryLeak_ManyViews_NoLeak()
         {
             var original = np.arange(1000);
@@ -48,7 +48,7 @@ namespace NumSharp.UnitTest.Backends
         /// <summary>
         /// Stress test: many nested views don't leak.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void MemoryLeak_DeepNesting_NoLeak()
         {
             var original = np.arange(10000);
@@ -72,7 +72,7 @@ namespace NumSharp.UnitTest.Backends
         /// <summary>
         /// Multiple independent chains don't interfere.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void MemoryLeak_IndependentChains_NoInterference()
         {
             var chains = new List<(NDArray original, List<NDArray> views)>();
@@ -114,7 +114,7 @@ namespace NumSharp.UnitTest.Backends
         /// <summary>
         /// View survives when original reference is dropped (but memory is kept alive).
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Lifecycle_ViewSurvivesDroppedOriginalReference()
         {
             var view = CreateViewAndDropOriginal();
@@ -141,7 +141,7 @@ namespace NumSharp.UnitTest.Backends
         /// <summary>
         /// Multiple views survive when original reference is dropped.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Lifecycle_MultipleViewsSurvive()
         {
             var views = CreateMultipleViewsAndDropOriginal();
@@ -185,7 +185,7 @@ namespace NumSharp.UnitTest.Backends
         /// <summary>
         /// Large array views work correctly.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void LargeArray_ViewsWork()
         {
             // 10 million elements
@@ -217,7 +217,7 @@ namespace NumSharp.UnitTest.Backends
         /// <summary>
         /// Mix of copies and views works correctly.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void MixedOperations_CopiesAndViews()
         {
             var a = np.arange(100);
@@ -250,7 +250,7 @@ namespace NumSharp.UnitTest.Backends
         /// Note: In NumSharp, slicing a broadcast array materializes the data (copies it),
         /// so the slice does NOT chain to the original. This differs from NumPy.
         /// </summary>
-        [Test]
+        [TestMethod]
         [Misaligned]
         public void MixedOperations_BroadcastThenSlice()
         {
@@ -276,7 +276,7 @@ namespace NumSharp.UnitTest.Backends
         /// This test creates a scenario where the original array's CLR object
         /// is collected but the view keeps the data alive.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Finalization_OriginalCollected_ViewStillWorks()
         {
             WeakReference<NDArray>? weakOriginal;
@@ -316,7 +316,7 @@ namespace NumSharp.UnitTest.Backends
         /// <summary>
         /// Views created from multiple threads all chain correctly.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Concurrent_MultipleThreads_ViewsChainCorrectly()
         {
             var original = np.arange(1000);

@@ -2,7 +2,6 @@ using System;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp;
 using NumSharp.UnitTest.Utilities;
-using TUnit.Core;
 
 namespace NumSharp.UnitTest.Backends.Kernels;
 
@@ -21,7 +20,7 @@ public class ArgMaxArgMinComprehensiveTests
 {
     #region ArgMax 1D Tests
 
-    [Test]
+    [TestMethod]
     public void ArgMax_1D_Int32()
     {
         // NumPy: np.argmax(np.array([1, 3, 2, 5, 4])) = 3
@@ -30,7 +29,7 @@ public class ArgMaxArgMinComprehensiveTests
         Assert.AreEqual(3L, (long)result);
     }
 
-    [Test]
+    [TestMethod]
     public void ArgMax_1D_Int64()
     {
         // NumPy: np.argmax(np.array([1, 3, 2, 5, 4], dtype=np.int64)) = 3
@@ -39,7 +38,7 @@ public class ArgMaxArgMinComprehensiveTests
         Assert.AreEqual(3L, (long)result);
     }
 
-    [Test]
+    [TestMethod]
     public void ArgMax_1D_Float32()
     {
         // NumPy: np.argmax(np.array([1.1, 3.3, 2.2, 5.5, 4.4], dtype=np.float32)) = 3
@@ -48,7 +47,7 @@ public class ArgMaxArgMinComprehensiveTests
         Assert.AreEqual(3L, (long)result);
     }
 
-    [Test]
+    [TestMethod]
     public void ArgMax_1D_Float64()
     {
         // NumPy: np.argmax(np.array([1.1, 3.3, 2.2, 5.5, 4.4], dtype=np.float64)) = 3
@@ -61,7 +60,7 @@ public class ArgMaxArgMinComprehensiveTests
 
     #region ArgMax 2D Tests
 
-    [Test]
+    [TestMethod]
     public void ArgMax_2D_NoAxis()
     {
         // NumPy: np.argmax([[1, 5, 3], [7, 2, 8], [4, 6, 0]]) = 5
@@ -71,7 +70,7 @@ public class ArgMaxArgMinComprehensiveTests
         Assert.AreEqual(5L, (long)result);
     }
 
-    [Test]
+    [TestMethod]
     public void ArgMax_2D_Axis0()
     {
         // NumPy: np.argmax([[1, 5, 3], [7, 2, 8], [4, 6, 0]], axis=0) = [1, 2, 1]
@@ -81,7 +80,7 @@ public class ArgMaxArgMinComprehensiveTests
         result.Should().BeOfValues(1L, 2L, 1L);
     }
 
-    [Test]
+    [TestMethod]
     public void ArgMax_2D_Axis1()
     {
         // NumPy: np.argmax([[1, 5, 3], [7, 2, 8], [4, 6, 0]], axis=1) = [1, 2, 1]
@@ -91,7 +90,7 @@ public class ArgMaxArgMinComprehensiveTests
         result.Should().BeOfValues(1L, 2L, 1L);
     }
 
-    [Test]
+    [TestMethod]
     public void ArgMax_2D_AxisNeg1()
     {
         // NumPy: np.argmax([[1, 5, 3], [7, 2, 8], [4, 6, 0]], axis=-1) = [1, 2, 1]
@@ -106,7 +105,7 @@ public class ArgMaxArgMinComprehensiveTests
 
     #region ArgMax 3D Tests
 
-    [Test]
+    [TestMethod]
     public void ArgMax_3D_NoAxis()
     {
         // NumPy: np.argmax([[[1, 2], [3, 4]], [[5, 6], [7, 8]], [[9, 10], [11, 12]]]) = 11
@@ -115,7 +114,7 @@ public class ArgMaxArgMinComprehensiveTests
         Assert.AreEqual(11L, (long)result);
     }
 
-    [Test]
+    [TestMethod]
     public void ArgMax_3D_Axis0()
     {
         // NumPy: np.argmax([[[1, 2], [3, 4]], [[5, 6], [7, 8]], [[9, 10], [11, 12]]], axis=0) = [[2, 2], [2, 2]]
@@ -125,7 +124,7 @@ public class ArgMaxArgMinComprehensiveTests
         result.Should().BeOfValues(2L, 2L, 2L, 2L);
     }
 
-    [Test]
+    [TestMethod]
     public void ArgMax_3D_Axis1()
     {
         // NumPy: np.argmax([[[1, 2], [3, 4]], [[5, 6], [7, 8]], [[9, 10], [11, 12]]], axis=1) = [[1, 1], [1, 1], [1, 1]]
@@ -135,7 +134,7 @@ public class ArgMaxArgMinComprehensiveTests
         result.Should().BeOfValues(1L, 1L, 1L, 1L, 1L, 1L);
     }
 
-    [Test]
+    [TestMethod]
     public void ArgMax_3D_Axis2()
     {
         // NumPy: np.argmax([[[1, 2], [3, 4]], [[5, 6], [7, 8]], [[9, 10], [11, 12]]], axis=2) = [[1, 1], [1, 1], [1, 1]]
@@ -149,7 +148,7 @@ public class ArgMaxArgMinComprehensiveTests
 
     #region ArgMax Edge Cases
 
-    [Test]
+    [TestMethod]
     public void ArgMax_SingleElement()
     {
         // NumPy: np.argmax([42]) = 0
@@ -158,7 +157,7 @@ public class ArgMaxArgMinComprehensiveTests
         Assert.AreEqual(0L, (long)result);
     }
 
-    [Test]
+    [TestMethod]
     public void ArgMax_IdenticalValues()
     {
         // NumPy: np.argmax([5, 5, 5, 5]) = 0 (returns first occurrence)
@@ -167,7 +166,7 @@ public class ArgMaxArgMinComprehensiveTests
         Assert.AreEqual(0L, (long)result);
     }
 
-    [Test]
+    [TestMethod]
     public void ArgMax_WithNaN()
     {
         // NumPy: np.argmax([1.0, nan, 3.0, 2.0]) = 1 (NaN returns its index)
@@ -180,7 +179,7 @@ public class ArgMaxArgMinComprehensiveTests
 
     #region ArgMax Rectangular Arrays
 
-    [Test]
+    [TestMethod]
     public void ArgMax_Rectangular_2x5_Axis0()
     {
         // NumPy: np.argmax([[1, 2, 3, 4, 5], [6, 7, 8, 9, 10]], axis=0) = [1, 1, 1, 1, 1]
@@ -190,7 +189,7 @@ public class ArgMaxArgMinComprehensiveTests
         result.Should().BeOfValues(1L, 1L, 1L, 1L, 1L);
     }
 
-    [Test]
+    [TestMethod]
     public void ArgMax_Rectangular_2x5_Axis1()
     {
         // NumPy: np.argmax([[1, 2, 3, 4, 5], [6, 7, 8, 9, 10]], axis=1) = [4, 4]
@@ -204,7 +203,7 @@ public class ArgMaxArgMinComprehensiveTests
 
     #region ArgMax Square Arrays
 
-    [Test]
+    [TestMethod]
     public void ArgMax_Square_4x4_Axis0()
     {
         // NumPy: np.argmax([[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12], [13, 14, 15, 16]], axis=0) = [3, 3, 3, 3]
@@ -214,7 +213,7 @@ public class ArgMaxArgMinComprehensiveTests
         result.Should().BeOfValues(3L, 3L, 3L, 3L);
     }
 
-    [Test]
+    [TestMethod]
     public void ArgMax_Square_4x4_Axis1()
     {
         // NumPy: np.argmax([[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12], [13, 14, 15, 16]], axis=1) = [3, 3, 3, 3]
@@ -228,7 +227,7 @@ public class ArgMaxArgMinComprehensiveTests
 
     #region ArgMax Higher Dimensional
 
-    [Test]
+    [TestMethod]
     public void ArgMax_3D_2x3x4_AxisNeg1()
     {
         // NumPy: np.argmax(np.arange(24).reshape(2, 3, 4), axis=-1) = [[3, 3, 3], [3, 3, 3]]
@@ -238,7 +237,7 @@ public class ArgMaxArgMinComprehensiveTests
         result.Should().BeOfValues(3L, 3L, 3L, 3L, 3L, 3L);
     }
 
-    [Test]
+    [TestMethod]
     public void ArgMax_3D_2x3x4_AxisNeg2()
     {
         // NumPy: np.argmax(np.arange(24).reshape(2, 3, 4), axis=-2) = [[2, 2, 2, 2], [2, 2, 2, 2]]
@@ -248,7 +247,7 @@ public class ArgMaxArgMinComprehensiveTests
         result.Should().BeOfValues(2L, 2L, 2L, 2L, 2L, 2L, 2L, 2L);
     }
 
-    [Test]
+    [TestMethod]
     public void ArgMax_3D_2x3x4_AxisNeg3()
     {
         // NumPy: np.argmax(np.arange(24).reshape(2, 3, 4), axis=-3) = [[1, 1, 1, 1], [1, 1, 1, 1], [1, 1, 1, 1]]
@@ -262,7 +261,7 @@ public class ArgMaxArgMinComprehensiveTests
 
     #region ArgMin 1D Tests
 
-    [Test]
+    [TestMethod]
     public void ArgMin_1D_Int32()
     {
         // NumPy: np.argmin(np.array([1, 3, 2, 5, 4])) = 0
@@ -271,7 +270,7 @@ public class ArgMaxArgMinComprehensiveTests
         Assert.AreEqual(0L, (long)result);
     }
 
-    [Test]
+    [TestMethod]
     public void ArgMin_1D_Int64()
     {
         // NumPy: np.argmin(np.array([1, 3, 2, 5, 4], dtype=np.int64)) = 0
@@ -280,7 +279,7 @@ public class ArgMaxArgMinComprehensiveTests
         Assert.AreEqual(0L, (long)result);
     }
 
-    [Test]
+    [TestMethod]
     public void ArgMin_1D_Float32()
     {
         // NumPy: np.argmin(np.array([1.1, 3.3, 2.2, 5.5, 4.4], dtype=np.float32)) = 0
@@ -289,7 +288,7 @@ public class ArgMaxArgMinComprehensiveTests
         Assert.AreEqual(0L, (long)result);
     }
 
-    [Test]
+    [TestMethod]
     public void ArgMin_1D_Float64()
     {
         // NumPy: np.argmin(np.array([1.1, 3.3, 2.2, 5.5, 4.4], dtype=np.float64)) = 0
@@ -302,7 +301,7 @@ public class ArgMaxArgMinComprehensiveTests
 
     #region ArgMin 2D Tests
 
-    [Test]
+    [TestMethod]
     public void ArgMin_2D_NoAxis()
     {
         // NumPy: np.argmin([[1, 5, 3], [7, 2, 8], [4, 6, 0]]) = 8
@@ -312,7 +311,7 @@ public class ArgMaxArgMinComprehensiveTests
         Assert.AreEqual(8L, (long)result);
     }
 
-    [Test]
+    [TestMethod]
     public void ArgMin_2D_Axis0()
     {
         // NumPy: np.argmin([[1, 5, 3], [7, 2, 8], [4, 6, 0]], axis=0) = [0, 1, 2]
@@ -322,7 +321,7 @@ public class ArgMaxArgMinComprehensiveTests
         result.Should().BeOfValues(0L, 1L, 2L);
     }
 
-    [Test]
+    [TestMethod]
     public void ArgMin_2D_Axis1()
     {
         // NumPy: np.argmin([[1, 5, 3], [7, 2, 8], [4, 6, 0]], axis=1) = [0, 1, 2]
@@ -332,7 +331,7 @@ public class ArgMaxArgMinComprehensiveTests
         result.Should().BeOfValues(0L, 1L, 2L);
     }
 
-    [Test]
+    [TestMethod]
     public void ArgMin_2D_AxisNeg1()
     {
         // NumPy: np.argmin([[1, 5, 3], [7, 2, 8], [4, 6, 0]], axis=-1) = [0, 1, 2]
@@ -346,7 +345,7 @@ public class ArgMaxArgMinComprehensiveTests
 
     #region ArgMin 3D Tests
 
-    [Test]
+    [TestMethod]
     public void ArgMin_3D_NoAxis()
     {
         // NumPy: np.argmin([[[1, 2], [3, 4]], [[5, 6], [7, 8]], [[9, 10], [11, 12]]]) = 0
@@ -355,7 +354,7 @@ public class ArgMaxArgMinComprehensiveTests
         Assert.AreEqual(0L, (long)result);
     }
 
-    [Test]
+    [TestMethod]
     public void ArgMin_3D_Axis0()
     {
         // NumPy: np.argmin([[[1, 2], [3, 4]], [[5, 6], [7, 8]], [[9, 10], [11, 12]]], axis=0) = [[0, 0], [0, 0]]
@@ -365,7 +364,7 @@ public class ArgMaxArgMinComprehensiveTests
         result.Should().BeOfValues(0L, 0L, 0L, 0L);
     }
 
-    [Test]
+    [TestMethod]
     public void ArgMin_3D_Axis1()
     {
         // NumPy: np.argmin([[[1, 2], [3, 4]], [[5, 6], [7, 8]], [[9, 10], [11, 12]]], axis=1) = [[0, 0], [0, 0], [0, 0]]
@@ -375,7 +374,7 @@ public class ArgMaxArgMinComprehensiveTests
         result.Should().BeOfValues(0L, 0L, 0L, 0L, 0L, 0L);
     }
 
-    [Test]
+    [TestMethod]
     public void ArgMin_3D_Axis2()
     {
         // NumPy: np.argmin([[[1, 2], [3, 4]], [[5, 6], [7, 8]], [[9, 10], [11, 12]]], axis=2) = [[0, 0], [0, 0], [0, 0]]
@@ -389,7 +388,7 @@ public class ArgMaxArgMinComprehensiveTests
 
     #region ArgMin Edge Cases
 
-    [Test]
+    [TestMethod]
     public void ArgMin_SingleElement()
     {
         // NumPy: np.argmin([42]) = 0
@@ -398,7 +397,7 @@ public class ArgMaxArgMinComprehensiveTests
         Assert.AreEqual(0L, (long)result);
     }
 
-    [Test]
+    [TestMethod]
     public void ArgMin_IdenticalValues()
     {
         // NumPy: np.argmin([5, 5, 5, 5]) = 0 (returns first occurrence)
@@ -407,7 +406,7 @@ public class ArgMaxArgMinComprehensiveTests
         Assert.AreEqual(0L, (long)result);
     }
 
-    [Test]
+    [TestMethod]
     public void ArgMin_WithNaN()
     {
         // NumPy: np.argmin([1.0, nan, 3.0, 2.0]) = 1 (NaN returns its index)
@@ -420,7 +419,7 @@ public class ArgMaxArgMinComprehensiveTests
 
     #region ArgMin Rectangular Arrays
 
-    [Test]
+    [TestMethod]
     public void ArgMin_Rectangular_2x5_Axis0()
     {
         // NumPy: np.argmin([[1, 2, 3, 4, 5], [6, 7, 8, 9, 10]], axis=0) = [0, 0, 0, 0, 0]
@@ -430,7 +429,7 @@ public class ArgMaxArgMinComprehensiveTests
         result.Should().BeOfValues(0L, 0L, 0L, 0L, 0L);
     }
 
-    [Test]
+    [TestMethod]
     public void ArgMin_Rectangular_2x5_Axis1()
     {
         // NumPy: np.argmin([[1, 2, 3, 4, 5], [6, 7, 8, 9, 10]], axis=1) = [0, 0]
@@ -444,7 +443,7 @@ public class ArgMaxArgMinComprehensiveTests
 
     #region ArgMin Higher Dimensional
 
-    [Test]
+    [TestMethod]
     public void ArgMin_3D_2x3x4_AxisNeg1()
     {
         // NumPy: np.argmin(np.arange(24).reshape(2, 3, 4), axis=-1) = [[0, 0, 0], [0, 0, 0]]
@@ -458,7 +457,7 @@ public class ArgMaxArgMinComprehensiveTests
 
     #region keepdims Tests
 
-    [Test]
+    [TestMethod]
     public void ArgMax_2D_Axis0_Keepdims()
     {
         // NumPy: np.argmax([[1, 2, 3], [4, 5, 6]], axis=0, keepdims=True).shape = (1, 3)
@@ -467,7 +466,7 @@ public class ArgMaxArgMinComprehensiveTests
         result.Should().BeShaped(1, 3);
     }
 
-    [Test]
+    [TestMethod]
     public void ArgMax_2D_Axis1_Keepdims()
     {
         // NumPy: np.argmax([[1, 2, 3], [4, 5, 6]], axis=1, keepdims=True).shape = (2, 1)

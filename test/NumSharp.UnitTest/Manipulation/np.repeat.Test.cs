@@ -12,7 +12,7 @@ namespace NumSharp.UnitTest.Manipulation
     {
         #region Basic Scalar Repeat Tests
 
-        [Test]
+        [TestMethod]
         public void Scalar_Int()
         {
             // np.repeat(3, 4) -> [3, 3, 3, 3]
@@ -21,7 +21,7 @@ namespace NumSharp.UnitTest.Manipulation
             nd.ToArray<int>().Should().ContainInOrder(3, 3, 3, 3);
         }
 
-        [Test]
+        [TestMethod]
         public void Scalar_Double()
         {
             var nd = np.repeat(2.5, 3);
@@ -29,7 +29,7 @@ namespace NumSharp.UnitTest.Manipulation
             nd.ToArray<double>().Should().ContainInOrder(2.5, 2.5, 2.5);
         }
 
-        [Test]
+        [TestMethod]
         public void Scalar_ZeroRepeats()
         {
             var nd = np.repeat(5, 0);
@@ -40,7 +40,7 @@ namespace NumSharp.UnitTest.Manipulation
 
         #region Basic Array Repeat Tests (NumPy test_numeric.py)
 
-        [Test]
+        [TestMethod]
         public void Array_UniformRepeat()
         {
             // From NumPy: np.repeat([1, 2, 3], 2) -> [1, 1, 2, 2, 3, 3]
@@ -49,7 +49,7 @@ namespace NumSharp.UnitTest.Manipulation
             nd.ToArray<int>().Should().ContainInOrder(1, 1, 2, 2, 3, 3);
         }
 
-        [Test]
+        [TestMethod]
         public void Array_ZeroRepeats()
         {
             var a = np.array(new int[] { 1, 2, 3 });
@@ -57,7 +57,7 @@ namespace NumSharp.UnitTest.Manipulation
             nd.size.Should().Be(0);
         }
 
-        [Test]
+        [TestMethod]
         public void Array_EmptyInput()
         {
             var a = np.array(new int[0]);
@@ -69,7 +69,7 @@ namespace NumSharp.UnitTest.Manipulation
 
         #region 2D Array Tests (NumPy test_multiarray.py)
 
-        [Test]
+        [TestMethod]
         public void Array2D_Flattens()
         {
             // From NumPy: np.repeat([[1, 2, 3], [4, 5, 6]], 2) flattens then repeats
@@ -78,7 +78,7 @@ namespace NumSharp.UnitTest.Manipulation
             nd.ToArray<int>().Should().ContainInOrder(1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6);
         }
 
-        [Test]
+        [TestMethod]
         public void Simple2DArray()
         {
             var x = np.array(new int[][] { new int[] { 1, 2 }, new int[] { 3, 4 } });
@@ -90,7 +90,7 @@ namespace NumSharp.UnitTest.Manipulation
 
         #region Per-Element Repeats Tests (NumPy test_multiarray.py)
 
-        [Test]
+        [TestMethod]
         public void ArrayRepeats_Basic()
         {
             // From NumPy: m.repeat([1, 3, 2, 1, 1, 2]) where m = [1, 2, 3, 4, 5, 6]
@@ -100,7 +100,7 @@ namespace NumSharp.UnitTest.Manipulation
             nd.ToArray<int>().Should().ContainInOrder(1, 2, 2, 2, 3, 3, 4, 5, 6, 6);
         }
 
-        [Test]
+        [TestMethod]
         public void ArrayRepeats_AllZeros()
         {
             var a = np.array(new int[] { 1, 2, 3 });
@@ -109,7 +109,7 @@ namespace NumSharp.UnitTest.Manipulation
             nd.size.Should().Be(0);
         }
 
-        [Test]
+        [TestMethod]
         public void ArrayRepeats_MixedZeroAndNonZero()
         {
             // np.repeat([1, 2, 3, 4], [0, 2, 0, 3]) -> [2, 2, 4, 4, 4]
@@ -123,7 +123,7 @@ namespace NumSharp.UnitTest.Manipulation
 
         #region Non-Contiguous Array Tests
 
-        [Test]
+        [TestMethod]
         public void SlicedArray_StridedView()
         {
             // Sliced arrays should work correctly
@@ -134,7 +134,7 @@ namespace NumSharp.UnitTest.Manipulation
             nd.ToArray<long>().Should().ContainInOrder(0L, 0L, 2L, 2L, 4L, 4L, 6L, 6L, 8L, 8L);
         }
 
-        [Test]
+        [TestMethod]
         public void TransposedArray()
         {
             // Transposed arrays (non-contiguous) should work correctly
@@ -148,7 +148,7 @@ namespace NumSharp.UnitTest.Manipulation
 
         #region All Dtype Tests
 
-        [Test]
+        [TestMethod]
         public void Dtype_Boolean()
         {
             var a = np.array(new bool[] { true, false, true });
@@ -156,7 +156,7 @@ namespace NumSharp.UnitTest.Manipulation
             nd.ToArray<bool>().Should().ContainInOrder(true, true, false, false, true, true);
         }
 
-        [Test]
+        [TestMethod]
         public void Dtype_Byte()
         {
             var a = np.array(new byte[] { 1, 2, 3 });
@@ -164,7 +164,7 @@ namespace NumSharp.UnitTest.Manipulation
             nd.ToArray<byte>().Should().ContainInOrder((byte)1, (byte)1, (byte)2, (byte)2, (byte)3, (byte)3);
         }
 
-        [Test]
+        [TestMethod]
         public void Dtype_Int16()
         {
             var a = np.array(new short[] { 1, 2, 3 });
@@ -172,7 +172,7 @@ namespace NumSharp.UnitTest.Manipulation
             nd.ToArray<short>().Should().ContainInOrder((short)1, (short)1, (short)2, (short)2, (short)3, (short)3);
         }
 
-        [Test]
+        [TestMethod]
         public void Dtype_UInt16()
         {
             var a = np.array(new ushort[] { 1, 2, 3 });
@@ -180,7 +180,7 @@ namespace NumSharp.UnitTest.Manipulation
             nd.ToArray<ushort>().Should().ContainInOrder((ushort)1, (ushort)1, (ushort)2, (ushort)2, (ushort)3, (ushort)3);
         }
 
-        [Test]
+        [TestMethod]
         public void Dtype_Int32()
         {
             var a = np.array(new int[] { 1, 2, 3 });
@@ -188,7 +188,7 @@ namespace NumSharp.UnitTest.Manipulation
             nd.ToArray<int>().Should().ContainInOrder(1, 1, 2, 2, 3, 3);
         }
 
-        [Test]
+        [TestMethod]
         public void Dtype_UInt32()
         {
             var a = np.array(new uint[] { 1, 2, 3 });
@@ -196,7 +196,7 @@ namespace NumSharp.UnitTest.Manipulation
             nd.ToArray<uint>().Should().ContainInOrder(1u, 1u, 2u, 2u, 3u, 3u);
         }
 
-        [Test]
+        [TestMethod]
         public void Dtype_Int64()
         {
             var a = np.array(new long[] { 1, 2, 3 });
@@ -204,7 +204,7 @@ namespace NumSharp.UnitTest.Manipulation
             nd.ToArray<long>().Should().ContainInOrder(1L, 1L, 2L, 2L, 3L, 3L);
         }
 
-        [Test]
+        [TestMethod]
         public void Dtype_UInt64()
         {
             var a = np.array(new ulong[] { 1, 2, 3 });
@@ -212,7 +212,7 @@ namespace NumSharp.UnitTest.Manipulation
             nd.ToArray<ulong>().Should().ContainInOrder(1UL, 1UL, 2UL, 2UL, 3UL, 3UL);
         }
 
-        [Test]
+        [TestMethod]
         public void Dtype_Char()
         {
             var a = np.array(new char[] { 'a', 'b', 'c' });
@@ -220,7 +220,7 @@ namespace NumSharp.UnitTest.Manipulation
             nd.ToArray<char>().Should().ContainInOrder('a', 'a', 'b', 'b', 'c', 'c');
         }
 
-        [Test]
+        [TestMethod]
         public void Dtype_Single()
         {
             var a = np.array(new float[] { 1.5f, 2.5f, 3.5f });
@@ -228,7 +228,7 @@ namespace NumSharp.UnitTest.Manipulation
             nd.ToArray<float>().Should().ContainInOrder(1.5f, 1.5f, 2.5f, 2.5f, 3.5f, 3.5f);
         }
 
-        [Test]
+        [TestMethod]
         public void Dtype_Double()
         {
             var a = np.array(new double[] { 1.5, 2.5, 3.5 });
@@ -236,7 +236,7 @@ namespace NumSharp.UnitTest.Manipulation
             nd.ToArray<double>().Should().ContainInOrder(1.5, 1.5, 2.5, 2.5, 3.5, 3.5);
         }
 
-        [Test]
+        [TestMethod]
         public void Dtype_Decimal()
         {
             var a = np.array(new decimal[] { 1.5m, 2.5m, 3.5m });
@@ -248,7 +248,7 @@ namespace NumSharp.UnitTest.Manipulation
 
         #region Array Repeats with All Dtypes
 
-        [Test]
+        [TestMethod]
         public void ArrayRepeats_Double()
         {
             var a = np.array(new double[] { 1.1, 2.2, 3.3 });
@@ -261,7 +261,7 @@ namespace NumSharp.UnitTest.Manipulation
 
         #region Large Repeat Counts
 
-        [Test]
+        [TestMethod]
         public void LargeRepeatCount()
         {
             var a = np.array(new int[] { 1, 2 });
@@ -275,7 +275,7 @@ namespace NumSharp.UnitTest.Manipulation
 
         #region Error Cases
 
-        [Test]
+        [TestMethod]
         public void Error_NegativeScalarRepeat()
         {
             var a = np.array(new int[] { 1, 2, 3 });
@@ -283,7 +283,7 @@ namespace NumSharp.UnitTest.Manipulation
             act.Should().Throw<ArgumentException>();
         }
 
-        [Test]
+        [TestMethod]
         public void Error_NegativeInArrayRepeat()
         {
             var a = np.array(new int[] { 1, 2, 3 });
@@ -292,7 +292,7 @@ namespace NumSharp.UnitTest.Manipulation
             act.Should().Throw<ArgumentException>();
         }
 
-        [Test]
+        [TestMethod]
         public void Error_MismatchedArraySizes()
         {
             var a = np.array(new int[] { 1, 2, 3 });
@@ -301,7 +301,7 @@ namespace NumSharp.UnitTest.Manipulation
             act.Should().Throw<ArgumentException>();
         }
 
-        [Test]
+        [TestMethod]
         public void Error_NegativeScalarRepeatValue()
         {
             Action act = () => np.repeat(5, -1);
@@ -312,7 +312,7 @@ namespace NumSharp.UnitTest.Manipulation
 
         #region Dtype Preservation Tests
 
-        [Test]
+        [TestMethod]
         public void DtypePreservation_Int32()
         {
             var a = np.array(new int[] { 1, 2, 3 });
@@ -320,7 +320,7 @@ namespace NumSharp.UnitTest.Manipulation
             nd.typecode.Should().Be(NPTypeCode.Int32);
         }
 
-        [Test]
+        [TestMethod]
         public void DtypePreservation_Double()
         {
             var a = np.array(new double[] { 1.0, 2.0, 3.0 });
@@ -328,7 +328,7 @@ namespace NumSharp.UnitTest.Manipulation
             nd.typecode.Should().Be(NPTypeCode.Double);
         }
 
-        [Test]
+        [TestMethod]
         public void DtypePreservation_Boolean()
         {
             var a = np.array(new bool[] { true, false });

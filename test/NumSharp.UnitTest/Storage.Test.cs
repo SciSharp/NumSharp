@@ -32,7 +32,7 @@ namespace NumSharp.UnitTest
             strg2DNonFull.ReplaceData(new float[] {0, 1, 2, 3, 4, 5, 6, 7, 8, 9});
         }
 
-        [Test]
+        [TestMethod]
         public void Creation()
         {
             Assert.IsNotNull(strg1D);
@@ -40,7 +40,7 @@ namespace NumSharp.UnitTest
             Assert.IsNotNull(strg2DNonFull);
         }
 
-        [Test]
+        [TestMethod]
         public void InternalArrayCheck()
         {
             Assert.IsTrue(strg1D.GetData().Count == 10);
@@ -48,7 +48,7 @@ namespace NumSharp.UnitTest
             Assert.IsTrue(strg2DNonFull.GetData().Count == 10);
         }
 
-        [Test]
+        [TestMethod]
         public void IndexingCheck()
         {
             var element1D = strg1D.GetValue<double>(0);
@@ -60,7 +60,7 @@ namespace NumSharp.UnitTest
             }
         }
 
-        [Test]
+        [TestMethod]
         public unsafe void CloneCheck()
         {
             var l = strg1D;
@@ -73,7 +73,7 @@ namespace NumSharp.UnitTest
             l.Shape.Should().Be(r.Shape);
         }
 
-        [Test, Skip("Transpose is not implemented")]
+        [TestMethod, Ignore("Transpose is not implemented")]
         public void ReshapeLayout2d()
         {
             //var x = np.arange(6).MakeGeneric<int>();
@@ -90,7 +90,7 @@ namespace NumSharp.UnitTest
             //Assert.AreEqual(y[1, 0], 3);
         }
 
-        [Test, Skip("Transpose is not implemented")]
+        [TestMethod, Ignore("Transpose is not implemented")]
         public void ReshapeLayout3d()
         {
             //var x = np.arange(12).MakeGeneric<int>();
@@ -106,7 +106,7 @@ namespace NumSharp.UnitTest
             //Assert.AreEqual(y[0, 1], 4);
         }
 
-        [Test]
+        [TestMethod]
         public void CastingViaGet()
         {
             new Action(() =>
@@ -116,8 +116,8 @@ namespace NumSharp.UnitTest
             }).Should().NotThrow();
         }
 
-        [Skip("Ignored")]
-        [Test]
+        [Ignore("Ignored")]
+        [TestMethod]
         public void CheckChangeTensorLayout2D()
         {
             var strg2DCpy = (UnmanagedStorage)strg2D.Clone();

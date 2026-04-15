@@ -2,7 +2,6 @@ using System;
 using System.Threading.Tasks;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp;
-using TUnit.Core;
 
 namespace NumSharp.UnitTest.LongIndexing;
 
@@ -22,7 +21,7 @@ namespace NumSharp.UnitTest.LongIndexing;
 ///   even when input is broadcast, causing OutOfMemoryException
 ///
 /// NOTE: Marked [LargeMemoryTest] because iterating over 2.36 billion elements causes
-/// excessive CPU/memory pressure when TUnit runs tests in parallel.
+/// excessive CPU/memory pressure when MSTest runs tests in parallel.
 /// </summary>
 public class LongIndexingBroadcastTest
 {
@@ -54,7 +53,7 @@ public class LongIndexingBroadcastTest
     // SHAPE AND INDEXING (all pass - no memory allocation needed)
     // ================================================================
 
-    [Test, LargeMemoryTest]
+    [TestMethod, LargeMemoryTest]
     public async Task Broadcast_HasCorrectSize()
     {
         var arr = BroadcastScalar((byte)42);
@@ -63,7 +62,7 @@ public class LongIndexingBroadcastTest
         Assert.AreEqual(LargeSize, arr.shape[0]);
     }
 
-    [Test, LargeMemoryTest]
+    [TestMethod, LargeMemoryTest]
     public async Task Broadcast_IsBroadcasted()
     {
         var arr = BroadcastScalar((byte)42);
@@ -71,7 +70,7 @@ public class LongIndexingBroadcastTest
         Assert.IsFalse(arr.Shape.IsContiguous);
     }
 
-    [Test, LargeMemoryTest]
+    [TestMethod, LargeMemoryTest]
     public async Task Broadcast_GetAtLargeIndex()
     {
         var arr = BroadcastScalar((byte)77);
@@ -86,7 +85,7 @@ public class LongIndexingBroadcastTest
     // REDUCTIONS (these iterate over all elements logically - PASS)
     // ================================================================
 
-    [Test, LargeMemoryTest]
+    [TestMethod, LargeMemoryTest]
     public async Task Broadcast_Mean()
     {
         var arr = BroadcastScalar((byte)42);
@@ -97,7 +96,7 @@ public class LongIndexingBroadcastTest
         Assert.AreEqual(42.0, result.GetDouble(0), 0.001);
     }
 
-    [Test, LargeMemoryTest]
+    [TestMethod, LargeMemoryTest]
     public async Task Broadcast_Min()
     {
         var arr = BroadcastScalar((byte)7);
@@ -106,7 +105,7 @@ public class LongIndexingBroadcastTest
         Assert.AreEqual(7, result.GetByte(0));
     }
 
-    [Test, LargeMemoryTest]
+    [TestMethod, LargeMemoryTest]
     public async Task Broadcast_Max()
     {
         var arr = BroadcastScalar((byte)200);
@@ -115,7 +114,7 @@ public class LongIndexingBroadcastTest
         Assert.AreEqual(200, result.GetByte(0));
     }
 
-    [Test, LargeMemoryTest]
+    [TestMethod, LargeMemoryTest]
     public async Task Broadcast_ArgMax()
     {
         var arr = BroadcastScalar((byte)100);
@@ -125,7 +124,7 @@ public class LongIndexingBroadcastTest
         Assert.AreEqual(0L, result);
     }
 
-    [Test, LargeMemoryTest]
+    [TestMethod, LargeMemoryTest]
     public async Task Broadcast_ArgMin()
     {
         var arr = BroadcastScalar((byte)50);
@@ -135,7 +134,7 @@ public class LongIndexingBroadcastTest
         Assert.AreEqual(0L, result);
     }
 
-    [Test, LargeMemoryTest]
+    [TestMethod, LargeMemoryTest]
     public async Task Broadcast_All()
     {
         var arr = BroadcastScalar((byte)1);
@@ -144,7 +143,7 @@ public class LongIndexingBroadcastTest
         Assert.IsTrue(result);
     }
 
-    [Test, LargeMemoryTest]
+    [TestMethod, LargeMemoryTest]
     public async Task Broadcast_All_Zero()
     {
         var arr = BroadcastScalar((byte)0);
@@ -153,7 +152,7 @@ public class LongIndexingBroadcastTest
         Assert.IsFalse(result);
     }
 
-    [Test, LargeMemoryTest]
+    [TestMethod, LargeMemoryTest]
     public async Task Broadcast_Any()
     {
         var arr = BroadcastScalar((byte)1);
@@ -162,7 +161,7 @@ public class LongIndexingBroadcastTest
         Assert.IsTrue(result);
     }
 
-    [Test, LargeMemoryTest]
+    [TestMethod, LargeMemoryTest]
     public async Task Broadcast_Any_Zero()
     {
         var arr = BroadcastScalar((byte)0);
@@ -171,7 +170,7 @@ public class LongIndexingBroadcastTest
         Assert.IsFalse(result);
     }
 
-    [Test, LargeMemoryTest]
+    [TestMethod, LargeMemoryTest]
     public async Task Broadcast_CountNonzero()
     {
         var arr = BroadcastScalar((byte)1);
@@ -181,7 +180,7 @@ public class LongIndexingBroadcastTest
         Assert.AreEqual(LargeSize, result);
     }
 
-    [Test, LargeMemoryTest]
+    [TestMethod, LargeMemoryTest]
     public async Task Broadcast_CountNonzero_Zero()
     {
         var arr = BroadcastScalar((byte)0);
@@ -194,7 +193,7 @@ public class LongIndexingBroadcastTest
     // SHAPE MANIPULATION (most pass - only reshape with slice fails)
     // ================================================================
 
-    [Test, LargeMemoryTest]
+    [TestMethod, LargeMemoryTest]
     public async Task Broadcast_ExpandDims()
     {
         var arr = BroadcastScalar((byte)11);
@@ -206,7 +205,7 @@ public class LongIndexingBroadcastTest
         Assert.AreEqual(LargeSize, result.shape[1]);
     }
 
-    [Test, LargeMemoryTest]
+    [TestMethod, LargeMemoryTest]
     public async Task Broadcast_Atleast2d()
     {
         var arr = BroadcastScalar((byte)22);
@@ -216,7 +215,7 @@ public class LongIndexingBroadcastTest
         Assert.AreEqual(2, result.ndim);
     }
 
-    [Test, LargeMemoryTest]
+    [TestMethod, LargeMemoryTest]
     public async Task Broadcast_Atleast3d()
     {
         var arr = BroadcastScalar((byte)22);
@@ -230,7 +229,7 @@ public class LongIndexingBroadcastTest
     // 2D BROADCAST (tests multi-dimensional long indexing)
     // ================================================================
 
-    [Test, LargeMemoryTest]
+    [TestMethod, LargeMemoryTest]
     public async Task Broadcast2D_RowBroadcast()
     {
         // Broadcast a single row to many rows
@@ -245,7 +244,7 @@ public class LongIndexingBroadcastTest
         Assert.AreEqual(77, arr.GetByte(rows - 1, cols - 1));
     }
 
-    [Test, LargeMemoryTest]
+    [TestMethod, LargeMemoryTest]
     public async Task Broadcast2D_ColumnBroadcast()
     {
         // Broadcast a single column to many columns
@@ -260,7 +259,7 @@ public class LongIndexingBroadcastTest
         Assert.AreEqual(88, arr.GetByte(rows - 1, cols - 1));
     }
 
-    [Test, LargeMemoryTest]
+    [TestMethod, LargeMemoryTest]
     public async Task Broadcast2D_Transpose()
     {
         // Test transpose of a broadcast array
@@ -286,7 +285,7 @@ public class LongIndexingBroadcastTest
     /// LIMITATION: SliceDef is limited to int indices.
     /// Slicing a broadcast array with indices > int.MaxValue throws OverflowException.
     /// </summary>
-    [Test]
+    [TestMethod]
     public async Task Broadcast_SliceWithLargeIndices_Limited()
     {
         var arr = BroadcastScalar((byte)99);
@@ -303,7 +302,7 @@ public class LongIndexingBroadcastTest
     /// LIMITATION: Binary operations allocate full output arrays.
     /// Even with broadcast inputs, the output is allocated at full size.
     /// </summary>
-    [Test]
+    [TestMethod]
     public async Task Broadcast_Add_AllocatesFullOutput()
     {
         var a = BroadcastScalar((byte)10);
@@ -317,7 +316,7 @@ public class LongIndexingBroadcastTest
     /// <summary>
     /// LIMITATION: Unary operations allocate full output arrays.
     /// </summary>
-    [Test]
+    [TestMethod]
     public async Task Broadcast_Square_AllocatesFullOutput()
     {
         var arr = BroadcastScalar((byte)5);
@@ -331,7 +330,7 @@ public class LongIndexingBroadcastTest
     /// LIMITATION: Sum on broadcast uses inefficient iterator.
     /// Currently throws "index < Count, Memory corruption expected" for large broadcast.
     /// </summary>
-    [Test]
+    [TestMethod]
     [OpenBugs]
     public async Task Broadcast_Sum_InternalError()
     {
@@ -347,8 +346,8 @@ public class LongIndexingBroadcastTest
     // Note: This DOES allocate full memory, so it's marked Explicit + LongIndexing
     // ================================================================
 
-    [Test]
-    [Explicit("Allocates full 2.4GB array")]
+    [TestMethod]
+    [TestCategory("Explicit")] // Allocates full 2.4GB array
     [HighMemory]
     public async Task Broadcast_Copy_MaterializesFullArray()
     {

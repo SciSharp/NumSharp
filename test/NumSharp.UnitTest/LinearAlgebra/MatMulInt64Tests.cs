@@ -3,9 +3,6 @@ using System.Linq;
 using System.Threading.Tasks;
 using NumSharp;
 using NumSharp.UnitTest.Utilities;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-using TUnit.Core;
 
 namespace NumSharp.UnitTest.LinearAlgebra;
 
@@ -17,7 +14,7 @@ public class MatMulInt64Tests
 {
     #region Basic Correctness Tests
 
-    [Test]
+    [TestMethod]
     public async Task MatMul_Float64_2x2_Correct()
     {
         // NumPy:
@@ -35,7 +32,7 @@ public class MatMulInt64Tests
         await Assert.That(result.GetDouble(1, 1)).IsEqualTo(50.0);
     }
 
-    [Test]
+    [TestMethod]
     public async Task MatMul_Float32_2x2_Correct()
     {
         var a = np.array(new float[,] { { 1, 2 }, { 3, 4 } });
@@ -49,7 +46,7 @@ public class MatMulInt64Tests
         await Assert.That(result.GetSingle(1, 1)).IsEqualTo(50.0f);
     }
 
-    [Test]
+    [TestMethod]
     public async Task MatMul_Int32_2x2_Correct()
     {
         var a = np.array(new int[,] { { 1, 2 }, { 3, 4 } });
@@ -67,7 +64,7 @@ public class MatMulInt64Tests
 
     #region SIMD Path Tests (Contiguous Arrays)
 
-    [Test]
+    [TestMethod]
     public async Task MatMul_ContiguousArrays_UsesSimdPath()
     {
         // Create contiguous arrays that should trigger SIMD path
@@ -90,7 +87,7 @@ public class MatMulInt64Tests
         await Assert.That(result.GetDouble(0, 0)).IsEqualTo(2850.0);
     }
 
-    [Test]
+    [TestMethod]
     public async Task MatMul_LargerMatrices_Correct()
     {
         // Test with larger matrices to exercise blocking in SIMD path
@@ -105,7 +102,7 @@ public class MatMulInt64Tests
         await Assert.That(result.GetDouble(63, 63)).IsEqualTo(64.0);
     }
 
-    [Test]
+    [TestMethod]
     public async Task MatMul_NonSquare_MxN_NxP()
     {
         // Test non-square matrix multiplication
@@ -129,7 +126,7 @@ public class MatMulInt64Tests
 
     #region np.dot Tests
 
-    [Test]
+    [TestMethod]
     public async Task Dot_Float64_VectorVector()
     {
         // NumPy: np.dot([1,2,3], [4,5,6]) = 32
@@ -141,7 +138,7 @@ public class MatMulInt64Tests
         await Assert.That((double)result).IsEqualTo(32.0);
     }
 
-    [Test]
+    [TestMethod]
     public async Task Dot_Float32_VectorVector()
     {
         var a = np.array(new float[] { 1, 2, 3 });
@@ -152,7 +149,7 @@ public class MatMulInt64Tests
         await Assert.That((float)result).IsEqualTo(32.0f);
     }
 
-    [Test]
+    [TestMethod]
     public async Task Dot_MatrixVector()
     {
         // NumPy: np.dot([[1,2],[3,4]], [5,6]) = [17, 39]
@@ -166,7 +163,7 @@ public class MatMulInt64Tests
         await Assert.That(result.GetDouble(1)).IsEqualTo(39.0);
     }
 
-    [Test]
+    [TestMethod]
     public async Task Dot_MatrixMatrix_SameAsMatMul()
     {
         var a = np.array(new double[,] { { 1, 2 }, { 3, 4 } });
@@ -186,7 +183,7 @@ public class MatMulInt64Tests
 
     #region Edge Cases
 
-    [Test]
+    [TestMethod]
     public async Task MatMul_1x1_Matrices()
     {
         var a = np.array(new double[,] { { 3 } });
@@ -199,7 +196,7 @@ public class MatMulInt64Tests
         await Assert.That(result.GetDouble(0, 0)).IsEqualTo(12.0);
     }
 
-    [Test]
+    [TestMethod]
     public async Task MatMul_Identity_PreservesMatrix()
     {
         var a = np.array(new double[,] { { 1, 2 }, { 3, 4 } });
@@ -213,7 +210,7 @@ public class MatMulInt64Tests
         await Assert.That(result.GetDouble(1, 1)).IsEqualTo(4.0);
     }
 
-    [Test]
+    [TestMethod]
     public async Task MatMul_ZeroMatrix_ReturnsZeros()
     {
         var a = np.array(new double[,] { { 1, 2 }, { 3, 4 } });
@@ -231,7 +228,7 @@ public class MatMulInt64Tests
 
     #region Various DTypes
 
-    [Test]
+    [TestMethod]
     public async Task MatMul_Int64_Correct()
     {
         var a = np.array(new long[,] { { 1, 2 }, { 3, 4 } });
@@ -243,7 +240,7 @@ public class MatMulInt64Tests
         await Assert.That(result.GetInt64(1, 1)).IsEqualTo(50L);
     }
 
-    [Test]
+    [TestMethod]
     public async Task Dot_LargeContiguousArrays()
     {
         // Test with larger arrays to ensure SIMD path handles size correctly

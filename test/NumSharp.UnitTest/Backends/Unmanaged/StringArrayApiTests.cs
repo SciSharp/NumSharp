@@ -10,7 +10,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
     {
         private static string[] strArray = new string[] { "Hello,", " SciSharp Team!"};
 
-        [Test]
+        [TestMethod]
         public void StringArrayConverting()
         {
             var nd = np.array(strArray);

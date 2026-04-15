@@ -1,7 +1,6 @@
 using System;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp;
-using TUnit.Core;
 
 namespace NumSharp.UnitTest.Backends.Kernels;
 
@@ -24,7 +23,7 @@ public class TypePromotionTests
     /// <summary>
     /// NumPy: np.sum(np.int32([1,2,3])).dtype -> int64
     /// </summary>
-    [Test]
+    [TestMethod]
     public void Sum_Int32_ReturnsInt64()
     {
         var arr = np.array(new int[] { 1, 2, 3 });
@@ -39,7 +38,7 @@ public class TypePromotionTests
     /// <summary>
     /// NumPy: np.prod(np.int32([2,3,4])).dtype -> int64
     /// </summary>
-    [Test]
+    [TestMethod]
     public void Prod_Int32_ReturnsInt64()
     {
         var arr = np.array(new int[] { 2, 3, 4 });
@@ -54,7 +53,7 @@ public class TypePromotionTests
     /// <summary>
     /// NumPy: np.cumsum(np.int32([1,2,3])).dtype -> int64
     /// </summary>
-    [Test]
+    [TestMethod]
     public void Cumsum_Int32_ReturnsInt64()
     {
         var arr = np.array(new int[] { 1, 2, 3 });
@@ -73,7 +72,7 @@ public class TypePromotionTests
     /// <summary>
     /// NumPy: np.max(np.int32([1,2,3])).dtype -> int32 (preserves)
     /// </summary>
-    [Test]
+    [TestMethod]
     public void Max_Int32_PreservesType()
     {
         var arr = np.array(new int[] { 1, 2, 3 });
@@ -88,7 +87,7 @@ public class TypePromotionTests
     /// <summary>
     /// NumPy: np.min(np.int32([1,2,3])).dtype -> int32 (preserves)
     /// </summary>
-    [Test]
+    [TestMethod]
     public void Min_Int32_PreservesType()
     {
         var arr = np.array(new int[] { 1, 2, 3 });
@@ -103,7 +102,7 @@ public class TypePromotionTests
     /// <summary>
     /// NumPy: np.mean(np.int32([1,2,3])).dtype -> float64
     /// </summary>
-    [Test]
+    [TestMethod]
     public void Mean_Int32_ReturnsFloat64()
     {
         var arr = np.array(new int[] { 1, 2, 3 });
@@ -118,7 +117,7 @@ public class TypePromotionTests
     /// <summary>
     /// NumPy: np.std(np.int32([1,2,3])).dtype -> float64
     /// </summary>
-    [Test]
+    [TestMethod]
     public void Std_Int32_ReturnsFloat64()
     {
         var arr = np.array(new int[] { 1, 2, 3 });
@@ -132,7 +131,7 @@ public class TypePromotionTests
     /// <summary>
     /// NumPy: np.var(np.int32([1,2,3])).dtype -> float64
     /// </summary>
-    [Test]
+    [TestMethod]
     public void Var_Int32_ReturnsFloat64()
     {
         var arr = np.array(new int[] { 1, 2, 3 });
@@ -150,7 +149,7 @@ public class TypePromotionTests
     /// <summary>
     /// NumPy: (int32 + int32).dtype -> int32
     /// </summary>
-    [Test]
+    [TestMethod]
     public void Add_Int32_Int32_PreservesType()
     {
         var a = np.array(new int[] { 1, 2, 3 });
@@ -164,7 +163,7 @@ public class TypePromotionTests
     /// <summary>
     /// NumPy: (int32 + int64).dtype -> int64
     /// </summary>
-    [Test]
+    [TestMethod]
     public void Add_Int32_Int64_ReturnsInt64()
     {
         var a = np.array(new int[] { 1, 2, 3 });
@@ -178,7 +177,7 @@ public class TypePromotionTests
     /// <summary>
     /// NumPy: (int32 + float32).dtype -> float64
     /// </summary>
-    [Test]
+    [TestMethod]
     public void Add_Int32_Float32_ReturnsFloat64()
     {
         var a = np.array(new int[] { 1, 2, 3 });
@@ -193,7 +192,7 @@ public class TypePromotionTests
     /// <summary>
     /// NumPy: (int64 + float32).dtype -> float64
     /// </summary>
-    [Test]
+    [TestMethod]
     public void Add_Int64_Float32_ReturnsFloat64()
     {
         var a = np.array(new long[] { 1L, 2L, 3L });
@@ -208,7 +207,7 @@ public class TypePromotionTests
     /// <summary>
     /// NumPy: (float32 + float64).dtype -> float64
     /// </summary>
-    [Test]
+    [TestMethod]
     public void Add_Float32_Float64_ReturnsFloat64()
     {
         var a = np.array(new float[] { 1.0f, 2.0f, 3.0f });
@@ -226,7 +225,7 @@ public class TypePromotionTests
     /// <summary>
     /// NumPy: (int32 / int32).dtype -> float64 (true division)
     /// </summary>
-    [Test]
+    [TestMethod]
     public void Divide_Int32_Int32_ReturnsFloat64()
     {
         var a = np.array(new int[] { 4, 5, 6 });
@@ -247,7 +246,7 @@ public class TypePromotionTests
     /// NumPy: (int32 // int32).dtype -> int32 (floor division)
     /// Note: NumSharp may not have floor division operator
     /// </summary>
-    [Test]
+    [TestMethod]
     public void FloorDivide_Int32_Int32_PreservesType()
     {
         var a = np.array(new int[] { 5, 7, 9 });
@@ -273,7 +272,7 @@ public class TypePromotionTests
     /// <summary>
     /// NumPy: np.power(int32, 2).dtype -> int32
     /// </summary>
-    [Test]
+    [TestMethod]
     public void Power_Int32_Int_PreservesType()
     {
         var a = np.array(new int[] { 2, 3, 4 });
@@ -292,7 +291,7 @@ public class TypePromotionTests
     /// <summary>
     /// NumPy: np.power(int32, 2.0).dtype -> float64
     /// </summary>
-    [Test]
+    [TestMethod]
     public void Power_Int32_Float_ReturnsFloat64()
     {
         var a = np.array(new int[] { 2, 3, 4 });
@@ -315,7 +314,7 @@ public class TypePromotionTests
     /// <summary>
     /// NumPy: np.sqrt(int32).dtype -> float64
     /// </summary>
-    [Test]
+    [TestMethod]
     public void Sqrt_Int32_ReturnsFloat64()
     {
         var arr = np.array(new int[] { 4, 9, 16 });
@@ -334,7 +333,7 @@ public class TypePromotionTests
     /// <summary>
     /// NumPy: np.abs(int32).dtype -> int32 (preserves)
     /// </summary>
-    [Test]
+    [TestMethod]
     public void Abs_Int32_PreservesType()
     {
         var arr = np.array(new int[] { -1, -2, 3 });
@@ -353,7 +352,7 @@ public class TypePromotionTests
     /// <summary>
     /// NumPy: np.sign(int32).dtype -> int32 (preserves)
     /// </summary>
-    [Test]
+    [TestMethod]
     public void Sign_Int32_PreservesType()
     {
         var arr = np.array(new int[] { -5, 0, 5 });
@@ -372,7 +371,7 @@ public class TypePromotionTests
     /// <summary>
     /// NumPy: np.square(int32).dtype -> int32 (preserves)
     /// </summary>
-    [Test]
+    [TestMethod]
     public void Square_Int32_PreservesType()
     {
         var arr = np.array(new int[] { 2, 3, 4 });
@@ -391,7 +390,7 @@ public class TypePromotionTests
     /// <summary>
     /// NumPy: np.negative(int32).dtype -> int32 (preserves)
     /// </summary>
-    [Test]
+    [TestMethod]
     public void Negative_Int32_PreservesType()
     {
         var arr = np.array(new int[] { 1, -2, 3 });
@@ -415,7 +414,7 @@ public class TypePromotionTests
     /// NumPy: np.argmax([1,2,3]) -> 2 (returns int64 scalar)
     /// NumSharp: np.argmax now returns long (C# long = int64) - aligned with NumPy
     /// </summary>
-    [Test]
+    [TestMethod]
     public void ArgMax_ReturnsCorrectIndex()
     {
         var arr = np.array(new int[] { 1, 3, 2 });
@@ -429,7 +428,7 @@ public class TypePromotionTests
     /// NumPy: np.argmin([1,2,3]) -> 0 (returns int64 scalar)
     /// NumSharp: np.argmin now returns long (C# long = int64) - aligned with NumPy
     /// </summary>
-    [Test]
+    [TestMethod]
     public void ArgMin_ReturnsCorrectIndex()
     {
         var arr = np.array(new int[] { 3, 1, 2 });
@@ -442,7 +441,7 @@ public class TypePromotionTests
     /// <summary>
     /// NumPy: np.argmax(arr, axis=0) returns NDArray with dtype int64
     /// </summary>
-    [Test]
+    [TestMethod]
     public void ArgMax_WithAxis_ReturnsInt64Array()
     {
         var arr = np.array(new int[,] { { 1, 2 }, { 3, 4 } });
@@ -460,7 +459,7 @@ public class TypePromotionTests
     /// <summary>
     /// NumPy: np.argmin(arr, axis=0) returns NDArray with dtype int64
     /// </summary>
-    [Test]
+    [TestMethod]
     public void ArgMin_WithAxis_ReturnsInt64Array()
     {
         var arr = np.array(new int[,] { { 3, 4 }, { 1, 2 } });
@@ -483,7 +482,7 @@ public class TypePromotionTests
     /// Test reduction along axis maintains correct shape and dtype.
     /// NumPy: np.sum([[1,2],[3,4]], axis=0) -> [4, 6] with dtype int64
     /// </summary>
-    [Test]
+    [TestMethod]
     public void Sum_WithAxis_CorrectShapeAndType()
     {
         var arr = np.array(new int[,] { { 1, 2 }, { 3, 4 } });
@@ -506,7 +505,7 @@ public class TypePromotionTests
     /// Test keepdims parameter with reduction.
     /// NumPy: np.sum([[1,2],[3,4]], axis=0, keepdims=True) -> [[4, 6]]
     /// </summary>
-    [Test]
+    [TestMethod]
     public void Sum_WithKeepdims_CorrectShape()
     {
         var arr = np.array(new int[,] { { 1, 2 }, { 3, 4 } });
@@ -525,7 +524,7 @@ public class TypePromotionTests
     /// <summary>
     /// NumPy: byte + int32 -> int32
     /// </summary>
-    [Test]
+    [TestMethod]
     public void Add_Byte_Int32_ReturnsInt32()
     {
         var a = np.array(new byte[] { 1, 2, 3 });
@@ -539,7 +538,7 @@ public class TypePromotionTests
     /// <summary>
     /// NumPy: uint32 + int32 -> int64 (to avoid overflow)
     /// </summary>
-    [Test]
+    [TestMethod]
     public void Add_UInt32_Int32_ReturnsInt64()
     {
         var a = np.array(new uint[] { 1, 2, 3 });
@@ -559,7 +558,7 @@ public class TypePromotionTests
     /// NumPy: np.max(np.array([])) raises ValueError
     /// "zero-size array to reduction operation maximum which has no identity"
     /// </summary>
-    [Test]
+    [TestMethod]
     public void Max_EmptyArray_ThrowsArgumentException()
     {
         var empty = np.array(new double[0]);
@@ -570,7 +569,7 @@ public class TypePromotionTests
     /// NumPy: np.min(np.array([])) raises ValueError
     /// "zero-size array to reduction operation minimum which has no identity"
     /// </summary>
-    [Test]
+    [TestMethod]
     public void Min_EmptyArray_ThrowsArgumentException()
     {
         var empty = np.array(new double[0]);
@@ -581,7 +580,7 @@ public class TypePromotionTests
     /// NumPy: np.argmax(np.array([])) raises ValueError
     /// "attempt to get argmax of an empty sequence"
     /// </summary>
-    [Test]
+    [TestMethod]
     public void ArgMax_EmptyArray_ThrowsArgumentException()
     {
         var empty = np.array(new double[0]);
@@ -592,7 +591,7 @@ public class TypePromotionTests
     /// NumPy: np.argmin(np.array([])) raises ValueError
     /// "attempt to get argmin of an empty sequence"
     /// </summary>
-    [Test]
+    [TestMethod]
     public void ArgMin_EmptyArray_ThrowsArgumentException()
     {
         var empty = np.array(new double[0]);

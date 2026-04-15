@@ -9,7 +9,7 @@ namespace NumSharp.UnitTest.APIs
 {
     public class NumpyToFromFileTest : TestClass
     {
-        [Test]
+        [TestMethod]
         public void NumpyToFromFileTestByte1()
         {
             var testString = "Hallo World!";
@@ -27,7 +27,7 @@ namespace NumSharp.UnitTest.APIs
             AssertAreEqual(rawData, loadedArray.Array);
         }
 
-        [Test]
+        [TestMethod]
         public void NumpyToFromFileTestUShort1()
         {
             var testString = "Hallo World!";

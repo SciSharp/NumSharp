@@ -1,8 +1,5 @@
 using System;
 using System.Threading.Tasks;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-using TUnit.Core;
 
 namespace NumSharp.UnitTest.APIs;
 
@@ -13,7 +10,7 @@ public class NpIInfoBattleTests
 {
     #region All Integer Types Coverage
 
-    [Test]
+    [TestMethod]
     public async Task IInfo_Boolean_AllProperties()
     {
         var info = np.iinfo(NPTypeCode.Boolean);
@@ -25,7 +22,7 @@ public class NpIInfoBattleTests
         await Assert.That(info.dtype).IsEqualTo(NPTypeCode.Boolean);
     }
 
-    [Test]
+    [TestMethod]
     public async Task IInfo_Byte_AllProperties()
     {
         var info = np.iinfo(NPTypeCode.Byte);
@@ -36,7 +33,7 @@ public class NpIInfoBattleTests
         await Assert.That(info.kind).IsEqualTo('u');
     }
 
-    [Test]
+    [TestMethod]
     public async Task IInfo_Int16_AllProperties()
     {
         var info = np.iinfo(NPTypeCode.Int16);
@@ -46,7 +43,7 @@ public class NpIInfoBattleTests
         await Assert.That(info.kind).IsEqualTo('i');
     }
 
-    [Test]
+    [TestMethod]
     public async Task IInfo_UInt16_AllProperties()
     {
         var info = np.iinfo(NPTypeCode.UInt16);
@@ -56,7 +53,7 @@ public class NpIInfoBattleTests
         await Assert.That(info.kind).IsEqualTo('u');
     }
 
-    [Test]
+    [TestMethod]
     public async Task IInfo_Int32_AllProperties()
     {
         var info = np.iinfo(NPTypeCode.Int32);
@@ -66,7 +63,7 @@ public class NpIInfoBattleTests
         await Assert.That(info.kind).IsEqualTo('i');
     }
 
-    [Test]
+    [TestMethod]
     public async Task IInfo_UInt32_AllProperties()
     {
         var info = np.iinfo(NPTypeCode.UInt32);
@@ -76,7 +73,7 @@ public class NpIInfoBattleTests
         await Assert.That(info.kind).IsEqualTo('u');
     }
 
-    [Test]
+    [TestMethod]
     public async Task IInfo_Int64_AllProperties()
     {
         var info = np.iinfo(NPTypeCode.Int64);
@@ -86,7 +83,7 @@ public class NpIInfoBattleTests
         await Assert.That(info.kind).IsEqualTo('i');
     }
 
-    [Test]
+    [TestMethod]
     public async Task IInfo_UInt64_AllProperties()
     {
         var info = np.iinfo(NPTypeCode.UInt64);
@@ -97,7 +94,7 @@ public class NpIInfoBattleTests
         await Assert.That(info.kind).IsEqualTo('u');
     }
 
-    [Test]
+    [TestMethod]
     public async Task IInfo_Char_AllProperties()
     {
         var info = np.iinfo(NPTypeCode.Char);
@@ -111,49 +108,49 @@ public class NpIInfoBattleTests
 
     #region Error Cases
 
-    [Test]
+    [TestMethod]
     public async Task IInfo_Single_Throws()
     {
         await Assert.That(() => np.iinfo(NPTypeCode.Single)).ThrowsException();
     }
 
-    [Test]
+    [TestMethod]
     public async Task IInfo_Double_Throws()
     {
         await Assert.That(() => np.iinfo(NPTypeCode.Double)).ThrowsException();
     }
 
-    [Test]
+    [TestMethod]
     public async Task IInfo_Decimal_Throws()
     {
         await Assert.That(() => np.iinfo(NPTypeCode.Decimal)).ThrowsException();
     }
 
-    [Test]
+    [TestMethod]
     public async Task IInfo_Empty_Throws()
     {
         await Assert.That(() => np.iinfo(NPTypeCode.Empty)).ThrowsException();
     }
 
-    [Test]
+    [TestMethod]
     public async Task IInfo_NullType_Throws()
     {
         await Assert.That(() => np.iinfo((Type)null!)).ThrowsException();
     }
 
-    [Test]
+    [TestMethod]
     public async Task IInfo_NullArray_Throws()
     {
         await Assert.That(() => np.iinfo((NDArray)null!)).ThrowsException();
     }
 
-    [Test]
+    [TestMethod]
     public async Task IInfo_EmptyDtypeString_Throws()
     {
         await Assert.That(() => np.iinfo("")).ThrowsException();
     }
 
-    [Test]
+    [TestMethod]
     public async Task IInfo_InvalidDtypeString_Throws()
     {
         await Assert.That(() => np.iinfo("float32")).ThrowsException();
@@ -163,7 +160,7 @@ public class NpIInfoBattleTests
 
     #region Generic Overload Tests
 
-    [Test]
+    [TestMethod]
     public async Task IInfo_Generic_Int()
     {
         var info = np.iinfo<int>();
@@ -172,7 +169,7 @@ public class NpIInfoBattleTests
         await Assert.That(info.max).IsEqualTo(int.MaxValue);
     }
 
-    [Test]
+    [TestMethod]
     public async Task IInfo_Generic_Byte()
     {
         var info = np.iinfo<byte>();
@@ -180,14 +177,14 @@ public class NpIInfoBattleTests
         await Assert.That(info.max).IsEqualTo(255);
     }
 
-    [Test]
+    [TestMethod]
     public async Task IInfo_Generic_Long()
     {
         var info = np.iinfo<long>();
         await Assert.That(info.bits).IsEqualTo(64);
     }
 
-    [Test]
+    [TestMethod]
     public async Task IInfo_Generic_Bool()
     {
         var info = np.iinfo<bool>();
@@ -195,7 +192,7 @@ public class NpIInfoBattleTests
         await Assert.That(info.max).IsEqualTo(1);
     }
 
-    [Test]
+    [TestMethod]
     public async Task IInfo_Generic_Float_Throws()
     {
         await Assert.That(() => np.iinfo<float>()).ThrowsException();
@@ -205,7 +202,7 @@ public class NpIInfoBattleTests
 
     #region NDArray Overload Tests
 
-    [Test]
+    [TestMethod]
     public async Task IInfo_NDArray_Int32()
     {
         var arr = np.array(new int[] { 1, 2, 3 });
@@ -214,7 +211,7 @@ public class NpIInfoBattleTests
         await Assert.That(info.dtype).IsEqualTo(NPTypeCode.Int32);
     }
 
-    [Test]
+    [TestMethod]
     public async Task IInfo_NDArray_Byte()
     {
         var arr = np.array(new byte[] { 1, 2, 3 });
@@ -222,7 +219,7 @@ public class NpIInfoBattleTests
         await Assert.That(info.bits).IsEqualTo(8);
     }
 
-    [Test]
+    [TestMethod]
     public async Task IInfo_NDArray_Float_Throws()
     {
         var arr = np.array(new float[] { 1.0f, 2.0f });
@@ -236,28 +233,28 @@ public class NpIInfoBattleTests
     // Note: np.dtype() uses size+type format (e.g., "i4" for int32)
     // NumPy-style names like "int32" are not fully supported yet
 
-    [Test]
+    [TestMethod]
     public async Task IInfo_String_Int()
     {
         var info = np.iinfo("int");  // defaults to int32
         await Assert.That(info.bits).IsEqualTo(32);
     }
 
-    [Test]
+    [TestMethod]
     public async Task IInfo_String_I4()
     {
         var info = np.iinfo("i4");  // int32
         await Assert.That(info.bits).IsEqualTo(32);
     }
 
-    [Test]
+    [TestMethod]
     public async Task IInfo_String_I8()
     {
         var info = np.iinfo("i8");  // int64
         await Assert.That(info.bits).IsEqualTo(64);
     }
 
-    [Test]
+    [TestMethod]
     public async Task IInfo_String_Bool()
     {
         var info = np.iinfo("bool");
@@ -268,7 +265,7 @@ public class NpIInfoBattleTests
 
     #region ToString Tests
 
-    [Test]
+    [TestMethod]
     public async Task IInfo_ToString_ContainsExpectedInfo()
     {
         var info = np.iinfo(NPTypeCode.Int32);
@@ -282,7 +279,7 @@ public class NpIInfoBattleTests
 
     #region UInt64 Max Value Edge Case
 
-    [Test]
+    [TestMethod]
     public async Task IInfo_UInt64_MaxExceedsLongMaxValue()
     {
         var info = np.iinfo(NPTypeCode.UInt64);

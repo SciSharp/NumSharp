@@ -8,7 +8,7 @@ namespace NumSharp.UnitTest
 {
     public class ImplicitCastTester
     {
-        [Test]
+        [TestMethod]
         public void ConvertFromJagged()
         {
             double[][] a = new double[3][];
@@ -29,7 +29,7 @@ namespace NumSharp.UnitTest
                 Assert.IsTrue(c[idx, jdx] == a[idx][jdx]);
         }
 
-        [Test]
+        [TestMethod]
         public void FromDotNetVector()
         {
             NDArray nd = new double[] {1, 2, 3, 4};
@@ -40,7 +40,7 @@ namespace NumSharp.UnitTest
             Assert.IsTrue(((double)nd[3]) == 4);
         }
 
-        [Test]
+        [TestMethod]
         public void FromDotNetMatrix()
         {
             NDArray nd = new double[,] {{1, 2, 3}, {4, 5, 6}};
@@ -52,7 +52,7 @@ namespace NumSharp.UnitTest
                 Assert.IsTrue((double)nd[idx, jdx] == doubleMatr[idx, jdx]);
         }
 
-        [Test]
+        [TestMethod]
         public void FromAndToDotNetMatrix()
         {
             NDArray nd = new double[,] {{1, 2, 3}, {4, 5, 6}};
@@ -73,7 +73,7 @@ namespace NumSharp.UnitTest
             }
         }
 
-        [Test]
+        [TestMethod]
         public void StringCast2()
         {
             NDArray nd = "[1,2,3;4,5,6]";
@@ -87,7 +87,7 @@ namespace NumSharp.UnitTest
             }
         }
 
-        [Test]
+        [TestMethod]
         public void StringCast3()
         {
             NDArray nd = "[3,1,1,2]";

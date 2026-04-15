@@ -15,7 +15,7 @@ public class NpApiOverloadTests_BinaryReductions
 {
     #region Basic Binary Operations
 
-    [Test]
+    [TestMethod]
     public void Add_TwoArrays_Compiles()
     {
         var a = np.array(new double[] { 1, 2, 3 });
@@ -27,7 +27,7 @@ public class NpApiOverloadTests_BinaryReductions
         result.GetDouble(2).Should().Be(9.0);
     }
 
-    [Test]
+    [TestMethod]
     public void Subtract_TwoArrays_Compiles()
     {
         var a = np.array(new double[] { 5, 7, 9 });
@@ -39,7 +39,7 @@ public class NpApiOverloadTests_BinaryReductions
         result.GetDouble(2).Should().Be(6.0);
     }
 
-    [Test]
+    [TestMethod]
     public void Multiply_TwoArrays_Compiles()
     {
         var a = np.array(new double[] { 2, 3, 4 });
@@ -51,7 +51,7 @@ public class NpApiOverloadTests_BinaryReductions
         result.GetDouble(2).Should().Be(28.0);
     }
 
-    [Test]
+    [TestMethod]
     public void Divide_TwoArrays_Compiles()
     {
         var a = np.array(new double[] { 10, 20, 30 });
@@ -63,7 +63,7 @@ public class NpApiOverloadTests_BinaryReductions
         result.GetDouble(2).Should().Be(6.0);
     }
 
-    [Test]
+    [TestMethod]
     public void TrueDivide_TwoArrays_Compiles()
     {
         var a = np.array(new double[] { 10, 20, 30 });
@@ -75,7 +75,7 @@ public class NpApiOverloadTests_BinaryReductions
         result.GetDouble(2).Should().Be(5.0);
     }
 
-    [Test]
+    [TestMethod]
     public void Mod_TwoArrays_Compiles()
     {
         var a = np.array(new double[] { 10, 20, 30 });
@@ -87,7 +87,7 @@ public class NpApiOverloadTests_BinaryReductions
         result.GetDouble(2).Should().Be(6.0);
     }
 
-    [Test]
+    [TestMethod]
     public void Mod_ArrayAndFloatScalar_Compiles()
     {
         var a = np.array(new double[] { 10, 20, 30 });
@@ -102,7 +102,7 @@ public class NpApiOverloadTests_BinaryReductions
 
     #region Power Operations
 
-    [Test]
+    [TestMethod]
     public void Power_ArrayAndValueTypeScalar_Compiles()
     {
         var a = np.array(new double[] { 2, 3, 4 });
@@ -114,7 +114,7 @@ public class NpApiOverloadTests_BinaryReductions
         result.GetDouble(2).Should().Be(16.0);
     }
 
-    [Test]
+    [TestMethod]
     public void Power_ArrayAndValueTypeScalarWithDtype_Compiles()
     {
         var a = np.array(new double[] { 2, 3, 4 });
@@ -124,7 +124,7 @@ public class NpApiOverloadTests_BinaryReductions
         result.dtype.Should().Be(typeof(double));
     }
 
-    [Test]
+    [TestMethod]
     public void Power_ArrayAndValueTypeScalarWithNPTypeCode_Compiles()
     {
         var a = np.array(new double[] { 2, 3, 4 });
@@ -134,7 +134,7 @@ public class NpApiOverloadTests_BinaryReductions
         result.typecode.Should().Be(NPTypeCode.Double);
     }
 
-    [Test]
+    [TestMethod]
     public void Power_TwoArrays_Compiles()
     {
         var a = np.array(new double[] { 2, 3, 4 });
@@ -146,7 +146,7 @@ public class NpApiOverloadTests_BinaryReductions
         result.GetDouble(2).Should().Be(16.0);
     }
 
-    [Test]
+    [TestMethod]
     public void Power_TwoArraysWithDtype_Compiles()
     {
         var a = np.array(new double[] { 2, 3, 4 });
@@ -156,7 +156,7 @@ public class NpApiOverloadTests_BinaryReductions
         result.dtype.Should().Be(typeof(double));
     }
 
-    [Test]
+    [TestMethod]
     public void Power_TwoArraysWithNPTypeCode_Compiles()
     {
         var a = np.array(new double[] { 2, 3, 4 });
@@ -170,7 +170,7 @@ public class NpApiOverloadTests_BinaryReductions
 
     #region Floor Division Operations
 
-    [Test]
+    [TestMethod]
     public void FloorDivide_TwoArrays_Compiles()
     {
         var a = np.array(new double[] { 7, 8, 9 });
@@ -182,7 +182,7 @@ public class NpApiOverloadTests_BinaryReductions
         result.GetDouble(2).Should().Be(2.0);
     }
 
-    [Test]
+    [TestMethod]
     public void FloorDivide_TwoArraysWithDtype_Compiles()
     {
         var a = np.array(new double[] { 7, 8, 9 });
@@ -192,7 +192,7 @@ public class NpApiOverloadTests_BinaryReductions
         result.dtype.Should().Be(typeof(double));
     }
 
-    [Test]
+    [TestMethod]
     public void FloorDivide_TwoArraysWithNPTypeCode_Compiles()
     {
         var a = np.array(new double[] { 7, 8, 9 });
@@ -202,7 +202,7 @@ public class NpApiOverloadTests_BinaryReductions
         result.typecode.Should().Be(NPTypeCode.Double);
     }
 
-    [Test]
+    [TestMethod]
     public void FloorDivide_ArrayAndValueTypeScalar_Compiles()
     {
         var a = np.array(new double[] { 7, 8, 9 });
@@ -214,7 +214,7 @@ public class NpApiOverloadTests_BinaryReductions
         result.GetDouble(2).Should().Be(4.0);
     }
 
-    [Test]
+    [TestMethod]
     public void FloorDivide_ArrayAndValueTypeScalarWithDtype_Compiles()
     {
         var a = np.array(new double[] { 7, 8, 9 });
@@ -224,7 +224,7 @@ public class NpApiOverloadTests_BinaryReductions
         result.dtype.Should().Be(typeof(double));
     }
 
-    [Test]
+    [TestMethod]
     public void FloorDivide_ArrayAndValueTypeScalarWithNPTypeCode_Compiles()
     {
         var a = np.array(new double[] { 7, 8, 9 });
@@ -238,7 +238,7 @@ public class NpApiOverloadTests_BinaryReductions
 
     #region Maximum Operations
 
-    [Test]
+    [TestMethod]
     public void Maximum_TwoArrays_Compiles()
     {
         var a = np.array(new double[] { 1, 5, 3 });
@@ -250,7 +250,7 @@ public class NpApiOverloadTests_BinaryReductions
         result.GetDouble(2).Should().Be(6.0);
     }
 
-    [Test]
+    [TestMethod]
     public void Maximum_TwoArraysWithDtype_Compiles()
     {
         var a = np.array(new double[] { 1, 5, 3 });
@@ -260,7 +260,7 @@ public class NpApiOverloadTests_BinaryReductions
         result.dtype.Should().Be(typeof(double));
     }
 
-    [Test]
+    [TestMethod]
     public void Maximum_TwoArraysWithOut_Compiles()
     {
         var a = np.array(new double[] { 1, 5, 3 });
@@ -275,7 +275,7 @@ public class NpApiOverloadTests_BinaryReductions
 
     #region Minimum Operations
 
-    [Test]
+    [TestMethod]
     public void Minimum_TwoArrays_Compiles()
     {
         var a = np.array(new double[] { 1, 5, 3 });
@@ -287,7 +287,7 @@ public class NpApiOverloadTests_BinaryReductions
         result.GetDouble(2).Should().Be(3.0);
     }
 
-    [Test]
+    [TestMethod]
     public void Minimum_TwoArraysWithDtype_Compiles()
     {
         var a = np.array(new double[] { 1, 5, 3 });
@@ -297,7 +297,7 @@ public class NpApiOverloadTests_BinaryReductions
         result.dtype.Should().Be(typeof(double));
     }
 
-    [Test]
+    [TestMethod]
     public void Minimum_TwoArraysWithOut_Compiles()
     {
         var a = np.array(new double[] { 1, 5, 3 });
@@ -312,7 +312,7 @@ public class NpApiOverloadTests_BinaryReductions
 
     #region Fmax Operations
 
-    [Test]
+    [TestMethod]
     public void Fmax_TwoArrays_Compiles()
     {
         var a = np.array(new double[] { 1, 5, 3 });
@@ -324,7 +324,7 @@ public class NpApiOverloadTests_BinaryReductions
         result.GetDouble(2).Should().Be(6.0);
     }
 
-    [Test]
+    [TestMethod]
     public void Fmax_TwoArraysWithDtype_Compiles()
     {
         var a = np.array(new double[] { 1, 5, 3 });
@@ -334,7 +334,7 @@ public class NpApiOverloadTests_BinaryReductions
         result.dtype.Should().Be(typeof(double));
     }
 
-    [Test]
+    [TestMethod]
     public void Fmax_TwoArraysWithOut_Compiles()
     {
         var a = np.array(new double[] { 1, 5, 3 });
@@ -349,7 +349,7 @@ public class NpApiOverloadTests_BinaryReductions
 
     #region Fmin Operations
 
-    [Test]
+    [TestMethod]
     public void Fmin_TwoArrays_Compiles()
     {
         var a = np.array(new double[] { 1, 5, 3 });
@@ -361,7 +361,7 @@ public class NpApiOverloadTests_BinaryReductions
         result.GetDouble(2).Should().Be(3.0);
     }
 
-    [Test]
+    [TestMethod]
     public void Fmin_TwoArraysWithDtype_Compiles()
     {
         var a = np.array(new double[] { 1, 5, 3 });
@@ -371,7 +371,7 @@ public class NpApiOverloadTests_BinaryReductions
         result.dtype.Should().Be(typeof(double));
     }
 
-    [Test]
+    [TestMethod]
     public void Fmin_TwoArraysWithOut_Compiles()
     {
         var a = np.array(new double[] { 1, 5, 3 });
@@ -386,7 +386,7 @@ public class NpApiOverloadTests_BinaryReductions
 
     #region Clip Operations
 
-    [Test]
+    [TestMethod]
     public void Clip_MinMax_Compiles()
     {
         var a = np.array(new double[] { 1, 5, 3, 8, 2 });
@@ -401,7 +401,7 @@ public class NpApiOverloadTests_BinaryReductions
         result.GetDouble(4).Should().Be(2.0);  // clipped to min
     }
 
-    [Test]
+    [TestMethod]
     public void Clip_MinMaxWithDtype_Compiles()
     {
         var a = np.array(new double[] { 1, 5, 3, 8, 2 });
@@ -412,7 +412,7 @@ public class NpApiOverloadTests_BinaryReductions
         result.dtype.Should().Be(typeof(double));
     }
 
-    [Test]
+    [TestMethod]
     public void Clip_MinMaxWithOut_Compiles()
     {
         var a = np.array(new double[] { 1, 5, 3, 8, 2 });
@@ -428,7 +428,7 @@ public class NpApiOverloadTests_BinaryReductions
 
     #region Bitwise Operations
 
-    [Test]
+    [TestMethod]
     public void LeftShift_TwoArrays_Compiles()
     {
         var a = np.array(new int[] { 1, 2, 4 });
@@ -440,7 +440,7 @@ public class NpApiOverloadTests_BinaryReductions
         result.GetInt32(2).Should().Be(32);  // 4 << 3 = 32
     }
 
-    [Test]
+    [TestMethod]
     public void LeftShift_ArrayAndIntScalar_Compiles()
     {
         var a = np.array(new int[] { 1, 2, 4 });
@@ -451,7 +451,7 @@ public class NpApiOverloadTests_BinaryReductions
         result.GetInt32(2).Should().Be(16);  // 4 << 2 = 16
     }
 
-    [Test]
+    [TestMethod]
     public void RightShift_TwoArrays_Compiles()
     {
         var a = np.array(new int[] { 4, 8, 32 });
@@ -463,7 +463,7 @@ public class NpApiOverloadTests_BinaryReductions
         result.GetInt32(2).Should().Be(4);   // 32 >> 3 = 4
     }
 
-    [Test]
+    [TestMethod]
     public void RightShift_ArrayAndIntScalar_Compiles()
     {
         var a = np.array(new int[] { 4, 8, 16 });
@@ -474,7 +474,7 @@ public class NpApiOverloadTests_BinaryReductions
         result.GetInt32(2).Should().Be(4);   // 16 >> 2 = 4
     }
 
-    [Test]
+    [TestMethod]
     public void Invert_Array_Compiles()
     {
         var a = np.array(new int[] { 0, 1, -1 });
@@ -485,7 +485,7 @@ public class NpApiOverloadTests_BinaryReductions
         result.GetInt32(2).Should().Be(0);   // ~-1 = 0
     }
 
-    [Test]
+    [TestMethod]
     public void Invert_ArrayWithDtype_Compiles()
     {
         var a = np.array(new int[] { 0, 1, -1 });
@@ -493,7 +493,7 @@ public class NpApiOverloadTests_BinaryReductions
         result.Should().NotBeNull();
     }
 
-    [Test]
+    [TestMethod]
     public void BitwiseNot_Array_Compiles()
     {
         var a = np.array(new int[] { 0, 1, -1 });
@@ -504,7 +504,7 @@ public class NpApiOverloadTests_BinaryReductions
         result.GetInt32(2).Should().Be(0);   // ~-1 = 0
     }
 
-    [Test]
+    [TestMethod]
     public void BitwiseNot_ArrayWithDtype_Compiles()
     {
         var a = np.array(new int[] { 0, 1, -1 });
@@ -516,7 +516,7 @@ public class NpApiOverloadTests_BinaryReductions
 
     #region Arctan2 Operations
 
-    [Test]
+    [TestMethod]
     public void Arctan2_TwoArrays_Compiles()
     {
         var y = np.array(new double[] { 1, 0, -1 });
@@ -528,7 +528,7 @@ public class NpApiOverloadTests_BinaryReductions
         result.GetDouble(2).Should().BeApproximately(-Math.PI / 2, 1e-10);  // arctan2(-1, 0) = -pi/2
     }
 
-    [Test]
+    [TestMethod]
     public void Arctan2_TwoArraysWithDtype_Compiles()
     {
         var y = np.array(new double[] { 1, 0, -1 });
@@ -542,7 +542,7 @@ public class NpApiOverloadTests_BinaryReductions
 
     #region Sum Reductions
 
-    [Test]
+    [TestMethod]
     public void Sum_NoParams_Compiles()
     {
         var a = np.array(new double[] { 1, 2, 3 });
@@ -550,7 +550,7 @@ public class NpApiOverloadTests_BinaryReductions
         result.GetDouble(0).Should().Be(6.0);
     }
 
-    [Test]
+    [TestMethod]
     public void Sum_WithAxis_Compiles()
     {
         var a = np.array(new double[,] { { 1, 2 }, { 3, 4 } });
@@ -560,7 +560,7 @@ public class NpApiOverloadTests_BinaryReductions
         result.GetDouble(1).Should().Be(6.0);  // 2 + 4
     }
 
-    [Test]
+    [TestMethod]
     public void Sum_WithKeepdims_Compiles()
     {
         var a = np.array(new double[] { 1, 2, 3 });
@@ -569,7 +569,7 @@ public class NpApiOverloadTests_BinaryReductions
         result.GetDouble(0).Should().Be(6.0);
     }
 
-    [Test]
+    [TestMethod]
     public void Sum_WithAxisAndKeepdims_Compiles()
     {
         var a = np.array(new double[,] { { 1, 2 }, { 3, 4 } });
@@ -578,7 +578,7 @@ public class NpApiOverloadTests_BinaryReductions
         result.ndim.Should().Be(2);
     }
 
-    [Test]
+    [TestMethod]
     public void Sum_WithAxisKeepdimsAndTypeDtype_Compiles()
     {
         var a = np.array(new int[] { 1, 2, 3 });
@@ -586,7 +586,7 @@ public class NpApiOverloadTests_BinaryReductions
         result.Should().NotBeNull();
     }
 
-    [Test]
+    [TestMethod]
     public void Sum_WithAxisKeepdimsAndNPTypeCode_Compiles()
     {
         var a = np.array(new int[] { 1, 2, 3 });
@@ -594,7 +594,7 @@ public class NpApiOverloadTests_BinaryReductions
         result.Should().NotBeNull();
     }
 
-    [Test]
+    [TestMethod]
     public void Sum_WithAxisAndTypeDtype_Compiles()
     {
         var a = np.array(new int[] { 1, 2, 3 });
@@ -602,7 +602,7 @@ public class NpApiOverloadTests_BinaryReductions
         result.Should().NotBeNull();
     }
 
-    [Test]
+    [TestMethod]
     public void Sum_WithAxisAndNPTypeCode_Compiles()
     {
         var a = np.array(new int[] { 1, 2, 3 });
@@ -610,7 +610,7 @@ public class NpApiOverloadTests_BinaryReductions
         result.Should().NotBeNull();
     }
 
-    [Test]
+    [TestMethod]
     public void Sum_WithTypeDtype_Compiles()
     {
         var a = np.array(new int[] { 1, 2, 3 });
@@ -618,7 +618,7 @@ public class NpApiOverloadTests_BinaryReductions
         result.Should().NotBeNull();
     }
 
-    [Test]
+    [TestMethod]
     public void Sum_WithNPTypeCode_Compiles()
     {
         var a = np.array(new int[] { 1, 2, 3 });
@@ -630,7 +630,7 @@ public class NpApiOverloadTests_BinaryReductions
 
     #region Prod Reduction
 
-    [Test]
+    [TestMethod]
     public void Prod_WithAxisDtypeKeepdims_Compiles()
     {
         var a = np.array(new int[] { 1, 2, 3, 4 });
@@ -644,7 +644,7 @@ public class NpApiOverloadTests_BinaryReductions
 
     #region Mean Reductions
 
-    [Test]
+    [TestMethod]
     public void Mean_NoParams_Compiles()
     {
         var a = np.array(new double[] { 1, 2, 3, 4 });
@@ -653,7 +653,7 @@ public class NpApiOverloadTests_BinaryReductions
         result.GetDouble(0).Should().Be(2.5);
     }
 
-    [Test]
+    [TestMethod]
     public void Mean_WithAxis_Compiles()
     {
         var a = np.array(new double[,] { { 1, 2 }, { 3, 4 } });
@@ -663,7 +663,7 @@ public class NpApiOverloadTests_BinaryReductions
         result.GetDouble(1).Should().Be(3.0);  // (2+4)/2
     }
 
-    [Test]
+    [TestMethod]
     public void Mean_WithKeepdims_Compiles()
     {
         var a = np.array(new double[] { 1, 2, 3, 4 });
@@ -672,7 +672,7 @@ public class NpApiOverloadTests_BinaryReductions
         result.GetDouble(0).Should().Be(2.5);
     }
 
-    [Test]
+    [TestMethod]
     public void Mean_WithAxisDtypeKeepdims_Compiles()
     {
         var a = np.array(new double[,] { { 1, 2 }, { 3, 4 } });
@@ -680,7 +680,7 @@ public class NpApiOverloadTests_BinaryReductions
         result.Should().NotBeNull();
     }
 
-    [Test]
+    [TestMethod]
     public void Mean_WithAxisNPTypeCodeKeepdims_Compiles()
     {
         var a = np.array(new double[,] { { 1, 2 }, { 3, 4 } });
@@ -688,7 +688,7 @@ public class NpApiOverloadTests_BinaryReductions
         result.Should().NotBeNull();
     }
 
-    [Test]
+    [TestMethod]
     public void Mean_WithAxisAndKeepdims_Compiles()
     {
         var a = np.array(new double[,] { { 1, 2 }, { 3, 4 } });
@@ -701,7 +701,7 @@ public class NpApiOverloadTests_BinaryReductions
 
     #region Nan Reductions
 
-    [Test]
+    [TestMethod]
     public void NanSum_WithAxisAndKeepdims_Compiles()
     {
         var a = np.array(new double[] { 1, double.NaN, 3, 4 });
@@ -710,7 +710,7 @@ public class NpApiOverloadTests_BinaryReductions
         result.GetDouble(0).Should().Be(8.0);  // 1 + 3 + 4 = 8 (NaN ignored)
     }
 
-    [Test]
+    [TestMethod]
     public void NanProd_WithAxisAndKeepdims_Compiles()
     {
         var a = np.array(new double[] { 2, double.NaN, 3, 4 });
@@ -719,7 +719,7 @@ public class NpApiOverloadTests_BinaryReductions
         result.GetDouble(0).Should().Be(24.0);  // 2 * 3 * 4 = 24 (NaN ignored)
     }
 
-    [Test]
+    [TestMethod]
     public void NanMean_WithAxisAndKeepdims_Compiles()
     {
         var a = np.array(new double[] { 1, double.NaN, 3, 4 });
@@ -729,7 +729,7 @@ public class NpApiOverloadTests_BinaryReductions
         result.GetDouble(0).Should().BeApproximately(8.0 / 3.0, 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void NanMin_WithAxisAndKeepdims_Compiles()
     {
         var a = np.array(new double[] { 5, double.NaN, 3, 4 });
@@ -738,7 +738,7 @@ public class NpApiOverloadTests_BinaryReductions
         result.GetDouble(0).Should().Be(3.0);  // min ignoring NaN
     }
 
-    [Test]
+    [TestMethod]
     public void NanMax_WithAxisAndKeepdims_Compiles()
     {
         var a = np.array(new double[] { 1, double.NaN, 3, 4 });
@@ -751,7 +751,7 @@ public class NpApiOverloadTests_BinaryReductions
 
     #region Std/Var Reductions
 
-    [Test]
+    [TestMethod]
     public void Std_WithKeepdimsDdofDtype_Compiles()
     {
         var a = np.array(new double[] { 1, 2, 3, 4, 5 });
@@ -761,7 +761,7 @@ public class NpApiOverloadTests_BinaryReductions
         result.GetDouble(0).Should().BeApproximately(Math.Sqrt(2.0), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void Std_WithAxisTypeDtypeKeepdimsDdof_Compiles()
     {
         var a = np.array(new double[,] { { 1, 2 }, { 3, 4 } });
@@ -769,7 +769,7 @@ public class NpApiOverloadTests_BinaryReductions
         result.Should().NotBeNull();
     }
 
-    [Test]
+    [TestMethod]
     public void Std_WithAxisNPTypeCodeKeepdimsDdof_Compiles()
     {
         var a = np.array(new double[,] { { 1, 2 }, { 3, 4 } });
@@ -777,7 +777,7 @@ public class NpApiOverloadTests_BinaryReductions
         result.Should().NotBeNull();
     }
 
-    [Test]
+    [TestMethod]
     public void Std_WithAxisKeepdimsDdofDtype_Compiles()
     {
         var a = np.array(new double[,] { { 1, 2 }, { 3, 4 } });
@@ -786,7 +786,7 @@ public class NpApiOverloadTests_BinaryReductions
         result.Should().NotBeNull();
     }
 
-    [Test]
+    [TestMethod]
     public void Var_WithKeepdimsDdofDtype_Compiles()
     {
         var a = np.array(new double[] { 1, 2, 3, 4, 5 });
@@ -796,7 +796,7 @@ public class NpApiOverloadTests_BinaryReductions
         result.GetDouble(0).Should().Be(2.0);
     }
 
-    [Test]
+    [TestMethod]
     public void Var_WithAxisTypeDtypeKeepdimsDdof_Compiles()
     {
         var a = np.array(new double[,] { { 1, 2 }, { 3, 4 } });
@@ -804,7 +804,7 @@ public class NpApiOverloadTests_BinaryReductions
         result.Should().NotBeNull();
     }
 
-    [Test]
+    [TestMethod]
     public void Var_WithAxisNPTypeCodeKeepdimsDdof_Compiles()
     {
         var a = np.array(new double[,] { { 1, 2 }, { 3, 4 } });
@@ -812,7 +812,7 @@ public class NpApiOverloadTests_BinaryReductions
         result.Should().NotBeNull();
     }
 
-    [Test]
+    [TestMethod]
     public void Var_WithAxisKeepdimsDdofDtype_Compiles()
     {
         var a = np.array(new double[,] { { 1, 2 }, { 3, 4 } });
@@ -821,7 +821,7 @@ public class NpApiOverloadTests_BinaryReductions
         result.Should().NotBeNull();
     }
 
-    [Test]
+    [TestMethod]
     public void NanStd_WithAxisKeepdimsDdof_Compiles()
     {
         var a = np.array(new double[] { 1, double.NaN, 3, 4, 5 });
@@ -830,7 +830,7 @@ public class NpApiOverloadTests_BinaryReductions
         // std of [1,3,4,5] ignoring NaN
     }
 
-    [Test]
+    [TestMethod]
     public void NanVar_WithAxisKeepdimsDdof_Compiles()
     {
         var a = np.array(new double[] { 1, double.NaN, 3, 4, 5 });

@@ -11,25 +11,25 @@ namespace NumSharp.UnitTest.Utilities
 {
     public class ArraysTests
     {
-        [Test]
+        [TestMethod]
         public void Create_1()
         {
             Arrays.Create(typeof(int), 1000).Should().BeOfType<int[]>().Which.Should().HaveCount(1000);
         }
 
-        [Test]
+        [TestMethod]
         public void Create_2()
         {
             Arrays.Create(typeof(int), new int[] {1000}).Should().BeOfType<int[]>().Which.Should().HaveCount(1000);
         }
 
-        [Test]
+        [TestMethod]
         public void Create_3()
         {
             Arrays.Create(NPTypeCode.Int32, 1000).Should().BeOfType<int[]>().Which.Should().HaveCount(1000);
         }
 
-        [Test]
+        [TestMethod]
         public void Insert_0()
         {
             int index = 0;
@@ -41,7 +41,7 @@ namespace NumSharp.UnitTest.Utilities
             Enumerable.SequenceEqual(l, Enumerable.Range(0, 10)).Should().BeTrue();
         }
 
-        [Test]
+        [TestMethod]
         public void Insert_2()
         {
             int index = 2;
@@ -53,7 +53,7 @@ namespace NumSharp.UnitTest.Utilities
             Enumerable.SequenceEqual(l, Enumerable.Range(0, 10)).Should().BeTrue();
         }
 
-        [Test]
+        [TestMethod]
         public void Insert_5()
         {
             int index = 5;
@@ -65,7 +65,7 @@ namespace NumSharp.UnitTest.Utilities
             Enumerable.SequenceEqual(l, Enumerable.Range(0, 10)).Should().BeTrue();
         }
 
-        [Test]
+        [TestMethod]
         public void Insert_9()
         {
             int index = 9;
@@ -77,7 +77,7 @@ namespace NumSharp.UnitTest.Utilities
             Enumerable.SequenceEqual(l, Enumerable.Range(0, 10)).Should().BeTrue();
         }
 
-        [Test]
+        [TestMethod]
         public void Insert_0_Copy()
         {
             int index = 0;
@@ -89,7 +89,7 @@ namespace NumSharp.UnitTest.Utilities
             Enumerable.SequenceEqual(l, Enumerable.Range(0, 10)).Should().BeTrue();
         }
 
-        [Test]
+        [TestMethod]
         public void Insert_2_Copy()
         {
             int index = 2;
@@ -101,7 +101,7 @@ namespace NumSharp.UnitTest.Utilities
             Enumerable.SequenceEqual(l, Enumerable.Range(0, 10)).Should().BeTrue();
         }
 
-        [Test]
+        [TestMethod]
         public void Insert_5_Copy()
         {
             int index = 5;
@@ -113,7 +113,7 @@ namespace NumSharp.UnitTest.Utilities
             Enumerable.SequenceEqual(l, Enumerable.Range(0, 10)).Should().BeTrue();
         }
 
-        [Test]
+        [TestMethod]
         public void Insert_9_Copy()
         {
             int index = 9;

@@ -7,7 +7,7 @@ namespace NumSharp.UnitTest.Issues
         /// <summary>
         ///     https://github.com/SciSharp/NumSharp/issues/447#issuecomment-825556230
         /// </summary>
-        [Test]
+        [TestMethod]
         public void ReproducingTest()
         {
             NDArray array3d = new NDArray(typeof(double), new Shape(new int[] {10, 50, 50}), true);

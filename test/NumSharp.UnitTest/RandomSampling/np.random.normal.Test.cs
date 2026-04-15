@@ -10,7 +10,7 @@ namespace NumSharp.UnitTest.RandomSampling
 {
     public class NpRandomNormalTest
     {
-        [Test]
+        [TestMethod]
         public void NormalDistributionTest()
         {
             // https://numpy.org/doc/stable/reference/random/generated/numpy.random.normal.html

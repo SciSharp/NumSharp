@@ -16,7 +16,7 @@ namespace NumSharp.UnitTest
         ///     Fixed:    Works correctly
         ///     Was:      NullReferenceException
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Reshape_ToScalarShape_SingleElement_Works()
         {
             var a = np.array(new int[] { 42 }); // shape (1,)
@@ -33,7 +33,7 @@ namespace NumSharp.UnitTest
         /// <summary>
         ///     Test reshaping from 2D single-element to scalar.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Reshape_FromMultiDim_ToScalar_Works()
         {
             var a = np.array(new int[,] { { 99 } }); // shape (1, 1)
@@ -48,7 +48,7 @@ namespace NumSharp.UnitTest
         /// <summary>
         ///     Test that reshaping non-single-element array to scalar throws.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Reshape_MultiElement_ToScalar_Throws()
         {
             var a = np.array(new int[] { 1, 2, 3 }); // size 3

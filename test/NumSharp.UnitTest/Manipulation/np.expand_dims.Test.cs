@@ -5,7 +5,7 @@ namespace NumSharp.UnitTest.Manipulation
 {
     public class ExpandDimsTest
     {
-        [Test]
+        [TestMethod]
         public void Simple1DArrayTo2DArray()
         {
             var input = np.array(1, 2, 3);
@@ -19,7 +19,7 @@ namespace NumSharp.UnitTest.Manipulation
             Assert.IsTrue(Enumerable.SequenceEqual(result.Data<int>(), expected.Data<int>()));
         }
 
-        [Test]
+        [TestMethod]
         public void Simple1DArrayToTransposed2D()
         {
             var input = np.array(1, 2, 3);
@@ -33,7 +33,7 @@ namespace NumSharp.UnitTest.Manipulation
             Assert.IsTrue(Enumerable.SequenceEqual(result.Data<int>(), expected.Data<int>()));
         }
 
-        [Test]
+        [TestMethod]
         public void Simple1DArrayToTransposed3D()
         {
             var input = np.array(1, 2, 3);

@@ -2,9 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using NumSharp;
-using TUnit.Core;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
 
 namespace NumSharp.UnitTest.Backends;
 
@@ -16,7 +13,7 @@ public class ContainerProtocolTests
 {
     #region Contains Tests
 
-    [Test]
+    [TestMethod]
     public async Task Contains_Int32_ValueExists_ReturnsTrue()
     {
         // NumPy: 3 in np.array([1, 2, 3, 4, 5]) = True
@@ -26,7 +23,7 @@ public class ContainerProtocolTests
         await Assert.That(arr.__contains__(3)).IsTrue();
     }
 
-    [Test]
+    [TestMethod]
     public async Task Contains_Int32_ValueNotExists_ReturnsFalse()
     {
         // NumPy: 10 in np.array([1, 2, 3, 4, 5]) = False
@@ -36,7 +33,7 @@ public class ContainerProtocolTests
         await Assert.That(arr.__contains__(10)).IsFalse();
     }
 
-    [Test]
+    [TestMethod]
     public async Task Contains_Double_ValueExists_ReturnsTrue()
     {
         // NumPy: 2.5 in np.array([1.0, 2.5, 3.0]) = True
@@ -45,7 +42,7 @@ public class ContainerProtocolTests
         await Assert.That(arr.Contains(2.5)).IsTrue();
     }
 
-    [Test]
+    [TestMethod]
     public async Task Contains_Double_NaN_ReturnsFalse()
     {
         // NumPy: np.nan in np.array([1.0, np.nan, 3.0]) = False
@@ -55,7 +52,7 @@ public class ContainerProtocolTests
         await Assert.That(arr.Contains(double.NaN)).IsFalse();
     }
 
-    [Test]
+    [TestMethod]
     public async Task Contains_EmptyArray_ReturnsFalse()
     {
         // NumPy: 1 in np.array([]) = False
@@ -64,7 +61,7 @@ public class ContainerProtocolTests
         await Assert.That(arr.Contains(1)).IsFalse();
     }
 
-    [Test]
+    [TestMethod]
     public async Task Contains_2DArray_SearchesAllElements()
     {
         // NumPy: 5 in np.array([[1, 2], [3, 4], [5, 6]]) = True
@@ -74,7 +71,7 @@ public class ContainerProtocolTests
         await Assert.That(arr.Contains(10)).IsFalse();
     }
 
-    [Test]
+    [TestMethod]
     public async Task Contains_Boolean_True()
     {
         // NumPy: True in np.array([False, True, False]) = True
@@ -84,7 +81,7 @@ public class ContainerProtocolTests
         await Assert.That(arr.Contains(false)).IsTrue();
     }
 
-    [Test]
+    [TestMethod]
     public async Task Contains_TypePromotion_IntInFloatArray()
     {
         // NumPy: 2 in np.array([1.0, 2.0, 3.0]) = True
@@ -94,7 +91,7 @@ public class ContainerProtocolTests
         await Assert.That(arr.Contains(2)).IsTrue();
     }
 
-    [Test]
+    [TestMethod]
     public async Task Contains_Null_ReturnsFalse()
     {
         var arr = np.array(new[] { 1, 2, 3 });
@@ -102,7 +99,7 @@ public class ContainerProtocolTests
         await Assert.That(arr.Contains(null)).IsFalse();
     }
 
-    [Test]
+    [TestMethod]
     public async Task Contains_FirstElement()
     {
         var arr = np.array(new[] { 42, 1, 2, 3 });
@@ -110,7 +107,7 @@ public class ContainerProtocolTests
         await Assert.That(arr.Contains(42)).IsTrue();
     }
 
-    [Test]
+    [TestMethod]
     public async Task Contains_LastElement()
     {
         var arr = np.array(new[] { 1, 2, 3, 42 });
@@ -122,7 +119,7 @@ public class ContainerProtocolTests
 
     #region Hash Tests
 
-    [Test]
+    [TestMethod]
     public async Task GetHashCode_ThrowsNotSupportedException()
     {
         // NumPy: hash(np.array([1, 2, 3])) -> TypeError: unhashable type: 'numpy.ndarray'
@@ -131,7 +128,7 @@ public class ContainerProtocolTests
         await Assert.That(() => arr.GetHashCode()).Throws<NotSupportedException>();
     }
 
-    [Test]
+    [TestMethod]
     public async Task __hash___ThrowsNotSupportedException()
     {
         // NumPy: hash(np.array([1, 2, 3])) -> TypeError: unhashable type: 'numpy.ndarray'
@@ -140,7 +137,7 @@ public class ContainerProtocolTests
         await Assert.That(() => arr.__hash__()).Throws<NotSupportedException>();
     }
 
-    [Test]
+    [TestMethod]
     public async Task Dictionary_WithNDArrayKey_ThrowsOnAccess()
     {
         // Attempting to use NDArray as dictionary key should fail
@@ -151,7 +148,7 @@ public class ContainerProtocolTests
         await Assert.That(() => dict.Add(arr, "value")).Throws<NotSupportedException>();
     }
 
-    [Test]
+    [TestMethod]
     public async Task Dictionary_WithReferenceEqualityComparer_Works()
     {
         // Workaround: use ReferenceEqualityComparer
@@ -171,7 +168,7 @@ public class ContainerProtocolTests
 
     #region Python Naming Convention Tests
 
-    [Test]
+    [TestMethod]
     public async Task __contains___IsSameAsContains()
     {
         var arr = np.array(new[] { 1, 2, 3, 4, 5 });
@@ -185,7 +182,7 @@ public class ContainerProtocolTests
 
     #region Length Tests (__len__)
 
-    [Test]
+    [TestMethod]
     public async Task __len___1DArray_ReturnsLength()
     {
         // NumPy: len(np.array([1, 2, 3])) = 3
@@ -194,7 +191,7 @@ public class ContainerProtocolTests
         await Assert.That(arr.__len__()).IsEqualTo(3);
     }
 
-    [Test]
+    [TestMethod]
     public async Task __len___2DArray_ReturnsFirstDimension()
     {
         // NumPy: len(np.array([[1, 2], [3, 4], [5, 6]])) = 3
@@ -203,7 +200,7 @@ public class ContainerProtocolTests
         await Assert.That(arr.__len__()).IsEqualTo(3);
     }
 
-    [Test]
+    [TestMethod]
     public async Task __len___ScalarArray_ThrowsTypeError()
     {
         // NumPy: len(np.array(5)) -> TypeError: len() of unsized object
@@ -218,7 +215,7 @@ public class ContainerProtocolTests
 
     #region Iteration Tests (__iter__)
 
-    [Test]
+    [TestMethod]
     public async Task __iter___ReturnsEnumerator()
     {
         var arr = np.array(new[] { 1, 2, 3 });
@@ -232,7 +229,7 @@ public class ContainerProtocolTests
 
     #region Indexing Tests (__getitem__, __setitem__)
 
-    [Test]
+    [TestMethod]
     public async Task __getitem___IntIndex_ReturnsElement()
     {
         var arr = np.array(new[] { 10, 20, 30 });
@@ -241,7 +238,7 @@ public class ContainerProtocolTests
         await Assert.That((int)result).IsEqualTo(20);
     }
 
-    [Test]
+    [TestMethod]
     public async Task __getitem___NegativeIndex_ReturnsFromEnd()
     {
         var arr = np.array(new[] { 10, 20, 30 });
@@ -250,7 +247,7 @@ public class ContainerProtocolTests
         await Assert.That((int)result).IsEqualTo(30);
     }
 
-    [Test]
+    [TestMethod]
     public async Task __getitem___SliceString_ReturnsSlice()
     {
         var arr = np.array(new[] { 10, 20, 30, 40, 50 });
@@ -260,7 +257,7 @@ public class ContainerProtocolTests
         await Assert.That((int)result[0]).IsEqualTo(20);
     }
 
-    [Test]
+    [TestMethod]
     public async Task __setitem___IntIndex_SetsElement()
     {
         var arr = np.array(new[] { 10, 20, 30 });
@@ -269,7 +266,7 @@ public class ContainerProtocolTests
         await Assert.That((int)arr[1]).IsEqualTo(99);
     }
 
-    [Test]
+    [TestMethod]
     public async Task __setitem___SliceString_SetsSlice()
     {
         var arr = np.array(new[] { 10, 20, 30, 40, 50 });

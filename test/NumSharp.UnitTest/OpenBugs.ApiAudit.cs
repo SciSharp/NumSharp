@@ -26,7 +26,7 @@ namespace NumSharp.UnitTest
         ///     NumPy:    sign(int32[]).dtype = int32
         ///     NumSharp: FIXED — sign(int32[]).dtype = int32
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Bug64_Sign_PreservesDtype()
         {
             var a = np.array(new int[] { -3, 0, 5 });
@@ -56,7 +56,7 @@ namespace NumSharp.UnitTest
         ///     NumPy:    arange(5)[mask] = [0, 2, 4]
         ///     NumSharp: FIXED — returns [0, 2, 4] (size=3)
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Bug69_BooleanMaskGetter_ReturnsSelection()
         {
             var a = np.arange(5); // [0, 1, 2, 3, 4]
@@ -77,7 +77,7 @@ namespace NumSharp.UnitTest
         ///     NumPy:    a[mask] = 99 -> [99, 20, 99, 40, 99]
         ///     NumSharp: FIXED — correctly sets masked elements
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Bug70_BooleanMaskSetter_Works()
         {
             var a = np.array(new int[] { 10, 20, 30, 40, 50 });
@@ -136,7 +136,7 @@ namespace NumSharp.UnitTest
         ///     NumPy:    float(np.sum(np.arange(10))) = 45.0
         ///     NumSharp: returns ~6.95e-310 (int32 bytes read as double)
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Bug_DoubleCast_Int32NDArray_ReturnsGarbage()
         {
             // np.sum returns a scalar NDArray (ndim=0)
@@ -168,7 +168,7 @@ namespace NumSharp.UnitTest
         ///     NumPy:    np.array([42]).reshape(()) = array(42), ndim=0
         ///     NumSharp: FIXED — correctly creates scalar array
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Bug73_Reshape_ScalarShape_Works()
         {
             var a = np.array(new int[] { 42 }); // shape (1,)
@@ -200,7 +200,7 @@ namespace NumSharp.UnitTest
         ///     NumPy:    sign([NaN, inf, -inf, 0]) = [NaN, 1, -1, 0]
         ///     NumSharp: FIXED — returns correct values including NaN
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Bug77_Sign_NaN_ReturnsNaN()
         {
             var a = np.array(new double[] { double.NaN, 1.0, double.PositiveInfinity, double.NegativeInfinity, 0.0 });
@@ -220,7 +220,7 @@ namespace NumSharp.UnitTest
         ///     NumPy:    std([]) = NaN (with warning)
         ///     NumSharp: FIXED — returns NaN
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Bug78a_Std_EmptyArray_ReturnsNaN()
         {
             var empty = np.array(new double[0]);
@@ -236,7 +236,7 @@ namespace NumSharp.UnitTest
         ///     NumPy:    var([]) = NaN (with warning)
         ///     NumSharp: FIXED — returns NaN
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Bug78b_Var_EmptyArray_ReturnsNaN()
         {
             var empty = np.array(new double[0]);
@@ -259,7 +259,7 @@ namespace NumSharp.UnitTest
         ///     NumPy:    a[[1,3]] = [99,88] -> [10,99,30,88,50]
         ///     NumSharp: FIXED — correctly sets indexed elements
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Bug80_FancyIndexSetter_Works()
         {
             var a = np.array(new int[] { 10, 20, 30, 40, 50 });

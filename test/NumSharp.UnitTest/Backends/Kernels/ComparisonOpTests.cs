@@ -2,9 +2,6 @@ using System;
 using System.Threading.Tasks;
 using NumSharp;
 using NumSharp.UnitTest.Utilities;
-using TUnit.Core;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
 
 namespace NumSharp.UnitTest.Backends.Kernels;
 
@@ -16,7 +13,7 @@ public class ComparisonOpTests
 {
     #region Basic Equality Tests (Test 1)
 
-    [Test]
+    [TestMethod]
     public async Task Equal_Int32_SameType()
     {
         // NumPy: np.array([1, 2, 3, 4, 5]) == np.array([1, 3, 3, 5, 5]) = [True, False, True, False, True]
@@ -31,7 +28,7 @@ public class ComparisonOpTests
         await Assert.That(result.GetBoolean(4)).IsTrue();   // 5 == 5
     }
 
-    [Test]
+    [TestMethod]
     public async Task NotEqual_Int32_SameType()
     {
         // NumPy: np.array([1, 2, 3, 4, 5]) != np.array([1, 3, 3, 5, 5]) = [False, True, False, True, False]
@@ -46,7 +43,7 @@ public class ComparisonOpTests
         await Assert.That(result.GetBoolean(4)).IsFalse();
     }
 
-    [Test]
+    [TestMethod]
     public async Task Less_Int32_SameType()
     {
         // NumPy: np.array([1, 2, 3, 4, 5]) < np.array([1, 3, 3, 5, 5]) = [False, True, False, True, False]
@@ -61,7 +58,7 @@ public class ComparisonOpTests
         await Assert.That(result.GetBoolean(4)).IsFalse();  // 5 < 5 = False
     }
 
-    [Test]
+    [TestMethod]
     public async Task Greater_Int32_SameType()
     {
         // NumPy: np.array([1, 2, 3, 4, 5]) > np.array([1, 3, 3, 5, 5]) = [False, False, False, False, False]
@@ -76,7 +73,7 @@ public class ComparisonOpTests
         await Assert.That(result.GetBoolean(4)).IsFalse();
     }
 
-    [Test]
+    [TestMethod]
     public async Task LessEqual_Int32_SameType()
     {
         // NumPy: np.array([1, 2, 3, 4, 5]) <= np.array([1, 3, 3, 5, 5]) = [True, True, True, True, True]
@@ -91,7 +88,7 @@ public class ComparisonOpTests
         await Assert.That(result.GetBoolean(4)).IsTrue();
     }
 
-    [Test]
+    [TestMethod]
     public async Task GreaterEqual_Int32_SameType()
     {
         // NumPy: np.array([1, 2, 3, 4, 5]) >= np.array([1, 3, 3, 5, 5]) = [True, False, True, False, True]
@@ -110,7 +107,7 @@ public class ComparisonOpTests
 
     #region Mixed Types Tests (Test 2)
 
-    [Test]
+    [TestMethod]
     public async Task Equal_MixedTypes_Int32_Float64()
     {
         // NumPy: np.array([1, 2, 3, 4], dtype=int32) == np.array([1.5, 2.0, 2.5, 4.0], dtype=float64) = [False, True, False, True]
@@ -124,7 +121,7 @@ public class ComparisonOpTests
         await Assert.That(result.GetBoolean(3)).IsTrue();   // 4 == 4.0
     }
 
-    [Test]
+    [TestMethod]
     public async Task Less_MixedTypes_Int32_Float64()
     {
         // NumPy: np.array([1, 2, 3, 4], dtype=int32) < np.array([1.5, 2.0, 2.5, 4.0], dtype=float64) = [True, False, False, False]
@@ -138,7 +135,7 @@ public class ComparisonOpTests
         await Assert.That(result.GetBoolean(3)).IsFalse();  // 4 >= 4.0
     }
 
-    [Test]
+    [TestMethod]
     public async Task GreaterEqual_MixedTypes_Int32_Float64()
     {
         // NumPy: np.array([1, 2, 3, 4], dtype=int32) >= np.array([1.5, 2.0, 2.5, 4.0], dtype=float64) = [False, True, True, True]
@@ -156,7 +153,7 @@ public class ComparisonOpTests
 
     #region Broadcasting Tests (Test 3)
 
-    [Test]
+    [TestMethod]
     public async Task Greater_Broadcasting_2D_vs_1D()
     {
         // NumPy: arr2d = [[1, 2, 3], [4, 5, 6]], arr1d = [2, 3, 4]
@@ -176,7 +173,7 @@ public class ComparisonOpTests
         await Assert.That(result.GetBoolean(1, 2)).IsTrue();
     }
 
-    [Test]
+    [TestMethod]
     public async Task LessEqual_Broadcasting_2D_vs_1D()
     {
         // NumPy: arr2d <= arr1d = [[True, True, True], [False, False, False]]
@@ -199,7 +196,7 @@ public class ComparisonOpTests
 
     #region Scalar Comparison Tests (Test 4)
 
-    [Test]
+    [TestMethod]
     public async Task Greater_ScalarRight()
     {
         // NumPy: arr > 3 = [False, False, False, True, True]
@@ -213,7 +210,7 @@ public class ComparisonOpTests
         await Assert.That(result.GetBoolean(4)).IsTrue();
     }
 
-    [Test]
+    [TestMethod]
     public async Task LessEqual_ScalarRight()
     {
         // NumPy: arr <= 2.5 = [True, True, False, False, False]
@@ -227,7 +224,7 @@ public class ComparisonOpTests
         await Assert.That(result.GetBoolean(4)).IsFalse();
     }
 
-    [Test]
+    [TestMethod]
     public async Task Equal_ScalarRight()
     {
         // NumPy: arr == 3.0 = [False, False, True, False, False]
@@ -245,7 +242,7 @@ public class ComparisonOpTests
 
     #region Boolean Comparison Tests (Test 5)
 
-    [Test]
+    [TestMethod]
     public async Task Equal_Boolean()
     {
         // NumPy: [True, True, False, False] == [True, False, True, False] = [True, False, False, True]
@@ -259,7 +256,7 @@ public class ComparisonOpTests
         await Assert.That(result.GetBoolean(3)).IsTrue();
     }
 
-    [Test]
+    [TestMethod]
     public async Task NotEqual_Boolean()
     {
         // NumPy: [True, True, False, False] != [True, False, True, False] = [False, True, True, False]
@@ -273,7 +270,7 @@ public class ComparisonOpTests
         await Assert.That(result.GetBoolean(3)).IsFalse();
     }
 
-    [Test]
+    [TestMethod]
     public async Task Less_Boolean()
     {
         // NumPy: [True, True, False, False] < [True, False, True, False] = [False, False, True, False]
@@ -288,7 +285,7 @@ public class ComparisonOpTests
         await Assert.That(result.GetBoolean(3)).IsFalse();  // False < False = False
     }
 
-    [Test]
+    [TestMethod]
     public async Task Greater_Boolean()
     {
         // NumPy: [True, True, False, False] > [True, False, True, False] = [False, True, False, False]
@@ -306,7 +303,7 @@ public class ComparisonOpTests
 
     #region Byte Comparison Tests (Test 6)
 
-    [Test]
+    [TestMethod]
     public async Task Equal_Byte()
     {
         // NumPy: np.array([0, 128, 255], dtype=uint8) == np.array([1, 128, 254], dtype=uint8) = [False, True, False]
@@ -319,7 +316,7 @@ public class ComparisonOpTests
         await Assert.That(result.GetBoolean(2)).IsFalse();
     }
 
-    [Test]
+    [TestMethod]
     public async Task Less_Byte()
     {
         // NumPy: np.array([0, 128, 255], dtype=uint8) < np.array([1, 128, 254], dtype=uint8) = [True, False, False]
@@ -336,7 +333,7 @@ public class ComparisonOpTests
 
     #region Scalar vs Scalar Tests (Test 7)
 
-    [Test]
+    [TestMethod]
     public async Task Equal_ScalarVsScalar()
     {
         // NumPy: np.array(3) == np.array(5) = False (shape: ())
@@ -348,7 +345,7 @@ public class ComparisonOpTests
         await Assert.That(result.GetBoolean()).IsFalse();
     }
 
-    [Test]
+    [TestMethod]
     public async Task Less_ScalarVsScalar()
     {
         // NumPy: np.array(3) < np.array(5) = True
@@ -360,7 +357,7 @@ public class ComparisonOpTests
         await Assert.That(result.GetBoolean()).IsTrue();
     }
 
-    [Test]
+    [TestMethod]
     public async Task GreaterEqual_ScalarVsScalar()
     {
         // NumPy: np.array(3) >= np.array(5) = False
@@ -376,7 +373,7 @@ public class ComparisonOpTests
 
     #region Float Edge Cases Tests (Test 8)
 
-    [Test]
+    [TestMethod]
     public async Task Equal_FloatWithNaN()
     {
         // NumPy: [1.0, nan, inf, -inf, 0.0] == [1.0, nan, inf, -inf, 0.0] = [True, False, True, True, True]
@@ -391,7 +388,7 @@ public class ComparisonOpTests
         await Assert.That(result.GetBoolean(4)).IsTrue();   // 0.0 == 0.0
     }
 
-    [Test]
+    [TestMethod]
     public async Task Less_FloatWithInfinity()
     {
         // NumPy: [1.0, nan, inf, -inf, 0.0] < 1.0 = [False, False, False, True, True]
@@ -409,7 +406,7 @@ public class ComparisonOpTests
 
     #region All dtypes tests
 
-    [Test]
+    [TestMethod]
     public async Task Equal_Int16()
     {
         var a = np.array(new short[] { 1, 2, 3 });
@@ -421,7 +418,7 @@ public class ComparisonOpTests
         await Assert.That(result.GetBoolean(2)).IsTrue();
     }
 
-    [Test]
+    [TestMethod]
     public async Task Equal_UInt16()
     {
         var a = np.array(new ushort[] { 1, 2, 3 });
@@ -433,7 +430,7 @@ public class ComparisonOpTests
         await Assert.That(result.GetBoolean(2)).IsTrue();
     }
 
-    [Test]
+    [TestMethod]
     public async Task Equal_UInt32()
     {
         var a = np.array(new uint[] { 1, 2, 3 });
@@ -445,7 +442,7 @@ public class ComparisonOpTests
         await Assert.That(result.GetBoolean(2)).IsTrue();
     }
 
-    [Test]
+    [TestMethod]
     public async Task Equal_Int64()
     {
         var a = np.array(new long[] { 1, 2, 3 });
@@ -457,7 +454,7 @@ public class ComparisonOpTests
         await Assert.That(result.GetBoolean(2)).IsTrue();
     }
 
-    [Test]
+    [TestMethod]
     public async Task Equal_UInt64()
     {
         var a = np.array(new ulong[] { 1, 2, 3 });
@@ -469,7 +466,7 @@ public class ComparisonOpTests
         await Assert.That(result.GetBoolean(2)).IsTrue();
     }
 
-    [Test]
+    [TestMethod]
     public async Task Equal_Single()
     {
         var a = np.array(new float[] { 1.0f, 2.0f, 3.0f });
@@ -481,7 +478,7 @@ public class ComparisonOpTests
         await Assert.That(result.GetBoolean(2)).IsTrue();
     }
 
-    [Test]
+    [TestMethod]
     public async Task Equal_Decimal()
     {
         var a = np.array(new decimal[] { 1.0m, 2.0m, 3.0m });
@@ -493,7 +490,7 @@ public class ComparisonOpTests
         await Assert.That(result.GetBoolean(2)).IsTrue();
     }
 
-    [Test]
+    [TestMethod]
     public async Task Equal_Char()
     {
         var a = np.array(new char[] { 'a', 'b', 'c' });

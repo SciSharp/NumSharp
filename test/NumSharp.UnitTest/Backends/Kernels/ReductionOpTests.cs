@@ -2,7 +2,6 @@ using System;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp;
 using NumSharp.UnitTest.Utilities;
-using TUnit.Core;
 
 namespace NumSharp.UnitTest.Backends.Kernels;
 
@@ -18,7 +17,7 @@ public class ReductionOpTests
 
     #region Basic 1D Sum Tests
 
-    [Test]
+    [TestMethod]
     public void Sum_Float64_1D()
     {
         // NumPy: sum([1.0, 2.0, 3.0, 4.0, 5.0]) = 15.0
@@ -28,7 +27,7 @@ public class ReductionOpTests
         Assert.AreEqual(15.0, result.GetDouble(0));
     }
 
-    [Test]
+    [TestMethod]
     public void Sum_Int32_1D()
     {
         var a = np.array(new[] { 1, 2, 3, 4, 5 });
@@ -41,7 +40,7 @@ public class ReductionOpTests
 
     #region Basic 1D Prod Tests
 
-    [Test]
+    [TestMethod]
     public void Prod_Float64_1D()
     {
         // NumPy: prod([1.0, 2.0, 3.0, 4.0, 5.0]) = 120.0
@@ -55,7 +54,7 @@ public class ReductionOpTests
 
     #region Basic 1D Max/Min Tests
 
-    [Test]
+    [TestMethod]
     public void Max_Float64_1D()
     {
         // NumPy: max([1.0, 2.0, 3.0, 4.0, 5.0]) = 5.0
@@ -65,7 +64,7 @@ public class ReductionOpTests
         Assert.AreEqual(5.0, result.GetDouble(0));
     }
 
-    [Test]
+    [TestMethod]
     public void Min_Float64_1D()
     {
         // NumPy: min([1.0, 2.0, 3.0, 4.0, 5.0]) = 1.0
@@ -79,7 +78,7 @@ public class ReductionOpTests
 
     #region Basic 1D ArgMax/ArgMin Tests
 
-    [Test]
+    [TestMethod]
     public void ArgMax_Float64_1D()
     {
         // NumPy: argmax([1.0, 2.0, 3.0, 4.0, 5.0]) = 4
@@ -89,7 +88,7 @@ public class ReductionOpTests
         Assert.AreEqual(4, result);
     }
 
-    [Test]
+    [TestMethod]
     public void ArgMin_Float64_1D()
     {
         // NumPy: argmin([1.0, 2.0, 3.0, 4.0, 5.0]) = 0
@@ -103,7 +102,7 @@ public class ReductionOpTests
 
     #region Basic 1D Mean/Std/Var Tests
 
-    [Test]
+    [TestMethod]
     public void Mean_Float64_1D()
     {
         // NumPy: mean([1.0, 2.0, 3.0, 4.0, 5.0]) = 3.0
@@ -113,7 +112,7 @@ public class ReductionOpTests
         Assert.AreEqual(3.0, result.GetDouble(0));
     }
 
-    [Test]
+    [TestMethod]
     public void Std_Float64_1D()
     {
         // NumPy: std([1.0, 2.0, 3.0, 4.0, 5.0]) = 1.4142135623730951
@@ -123,7 +122,7 @@ public class ReductionOpTests
         Assert.IsTrue(Math.Abs(result.GetDouble(0) - 1.4142135623730951) < Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void Var_Float64_1D()
     {
         // NumPy: var([1.0, 2.0, 3.0, 4.0, 5.0]) = 2.0
@@ -137,7 +136,7 @@ public class ReductionOpTests
 
     #region Basic 1D CumSum Tests
 
-    [Test]
+    [TestMethod]
     public void CumSum_Float64_1D()
     {
         // NumPy: cumsum([1.0, 2.0, 3.0, 4.0, 5.0]) = [1.0, 3.0, 6.0, 10.0, 15.0]
@@ -151,7 +150,7 @@ public class ReductionOpTests
 
     #region 2D Sum with Axis Tests
 
-    [Test]
+    [TestMethod]
     public void Sum_2D_NoAxis()
     {
         // NumPy: sum([[1,2,3],[4,5,6]]) = 21.0
@@ -161,7 +160,7 @@ public class ReductionOpTests
         Assert.AreEqual(21.0, result.GetDouble(0));
     }
 
-    [Test]
+    [TestMethod]
     public void Sum_2D_Axis0()
     {
         // NumPy: sum([[1,2,3],[4,5,6]], axis=0) = [5, 7, 9]
@@ -172,7 +171,7 @@ public class ReductionOpTests
         result.Should().BeOfValues(5.0, 7.0, 9.0);
     }
 
-    [Test]
+    [TestMethod]
     public void Sum_2D_Axis1()
     {
         // NumPy: sum([[1,2,3],[4,5,6]], axis=1) = [6, 15]
@@ -187,7 +186,7 @@ public class ReductionOpTests
 
     #region 2D Mean with Axis Tests
 
-    [Test]
+    [TestMethod]
     public void Mean_2D_Axis0()
     {
         // NumPy: mean([[1,2,3],[4,5,6]], axis=0) = [2.5, 3.5, 4.5]
@@ -198,7 +197,7 @@ public class ReductionOpTests
         result.Should().BeOfValues(2.5, 3.5, 4.5);
     }
 
-    [Test]
+    [TestMethod]
     public void Mean_2D_Axis1()
     {
         // NumPy: mean([[1,2,3],[4,5,6]], axis=1) = [2.0, 5.0]
@@ -213,7 +212,7 @@ public class ReductionOpTests
 
     #region 2D Max/Min with Axis Tests
 
-    [Test]
+    [TestMethod]
     public void Max_2D_Axis0()
     {
         // NumPy: max([[1,2,3],[4,5,6]], axis=0) = [4, 5, 6]
@@ -224,7 +223,7 @@ public class ReductionOpTests
         result.Should().BeOfValues(4.0, 5.0, 6.0);
     }
 
-    [Test]
+    [TestMethod]
     public void Max_2D_Axis1()
     {
         // NumPy: max([[1,2,3],[4,5,6]], axis=1) = [3, 6]
@@ -235,7 +234,7 @@ public class ReductionOpTests
         result.Should().BeOfValues(3.0, 6.0);
     }
 
-    [Test]
+    [TestMethod]
     public void Min_2D_Axis0()
     {
         // NumPy: min([[1,2,3],[4,5,6]], axis=0) = [1, 2, 3]
@@ -246,7 +245,7 @@ public class ReductionOpTests
         result.Should().BeOfValues(1.0, 2.0, 3.0);
     }
 
-    [Test]
+    [TestMethod]
     public void Min_2D_Axis1()
     {
         // NumPy: min([[1,2,3],[4,5,6]], axis=1) = [1, 4]
@@ -261,7 +260,7 @@ public class ReductionOpTests
 
     #region 2D ArgMax/ArgMin with Axis Tests
 
-    [Test]
+    [TestMethod]
     public void ArgMax_2D_Axis0()
     {
         // NumPy: argmax([[1,2,3],[4,5,6]], axis=0) = [1, 1, 1]
@@ -272,7 +271,7 @@ public class ReductionOpTests
         result.Should().BeOfValues(1L, 1L, 1L);
     }
 
-    [Test]
+    [TestMethod]
     public void ArgMax_2D_Axis1()
     {
         // NumPy: argmax([[1,2,3],[4,5,6]], axis=1) = [2, 2]
@@ -287,7 +286,7 @@ public class ReductionOpTests
 
     #region keepdims Tests
 
-    [Test]
+    [TestMethod]
     public void Sum_2D_Axis0_Keepdims()
     {
         // NumPy: sum([[1,2,3],[4,5,6]], axis=0, keepdims=True) = [[5, 7, 9]], shape=(1,3)
@@ -298,7 +297,7 @@ public class ReductionOpTests
         result.Should().BeOfValues(5.0, 7.0, 9.0);
     }
 
-    [Test]
+    [TestMethod]
     public void Sum_2D_Axis1_Keepdims()
     {
         // NumPy: sum([[1,2,3],[4,5,6]], axis=1, keepdims=True) = [[6], [15]], shape=(2,1)
@@ -309,7 +308,7 @@ public class ReductionOpTests
         result.Should().BeOfValues(6.0, 15.0);
     }
 
-    [Test]
+    [TestMethod]
     public void Mean_2D_Axis0_Keepdims()
     {
         var a = np.array(new[,] { { 1.0, 2.0, 3.0 }, { 4.0, 5.0, 6.0 } });
@@ -323,7 +322,7 @@ public class ReductionOpTests
 
     #region Edge Cases - Infinity
 
-    [Test]
+    [TestMethod]
     public void Sum_WithInfinity()
     {
         // NumPy: sum([1.0, inf, 3.0]) = inf
@@ -333,7 +332,7 @@ public class ReductionOpTests
         Assert.IsTrue(double.IsPositiveInfinity(result.GetDouble(0)));
     }
 
-    [Test]
+    [TestMethod]
     public void Mean_WithInfinity()
     {
         // NumPy: mean([1.0, inf, 3.0]) = inf
@@ -347,7 +346,7 @@ public class ReductionOpTests
 
     #region Edge Cases - NaN
 
-    [Test]
+    [TestMethod]
     public void Sum_WithNaN()
     {
         // NumPy: sum([1.0, nan, 3.0]) = nan
@@ -357,7 +356,7 @@ public class ReductionOpTests
         Assert.IsTrue(double.IsNaN(result.GetDouble(0)));
     }
 
-    [Test]
+    [TestMethod]
     public void Mean_WithNaN()
     {
         // NumPy: mean([1.0, nan, 3.0]) = nan
@@ -367,7 +366,7 @@ public class ReductionOpTests
         Assert.IsTrue(double.IsNaN(result.GetDouble(0)));
     }
 
-    [Test]
+    [TestMethod]
     public void Max_WithNaN()
     {
         // NumPy: max([1.0, nan, 3.0]) = nan
@@ -381,7 +380,7 @@ public class ReductionOpTests
 
     #region Edge Cases - Empty Array
 
-    [Test]
+    [TestMethod]
     public void Sum_EmptyArray()
     {
         // NumPy: sum([]) = 0.0
@@ -391,7 +390,7 @@ public class ReductionOpTests
         Assert.AreEqual(0.0, result.GetDouble(0));
     }
 
-    [Test]
+    [TestMethod]
     public void Prod_EmptyArray()
     {
         // NumPy: prod([]) = 1.0
@@ -405,7 +404,7 @@ public class ReductionOpTests
 
     #region Edge Cases - 0D Scalar
 
-    [Test]
+    [TestMethod]
     public void Sum_0DScalar()
     {
         // NumPy: sum(np.array(5.0)) = 5.0, shape=()
@@ -420,7 +419,7 @@ public class ReductionOpTests
 
     #region CumSum with Axis Tests
 
-    [Test]
+    [TestMethod]
     public void CumSum_2D_NoAxis()
     {
         // NumPy: cumsum([[1,2,3],[4,5,6]]) = [1, 3, 6, 10, 15, 21]
@@ -430,7 +429,7 @@ public class ReductionOpTests
         result.Should().BeOfValues(1, 3, 6, 10, 15, 21);
     }
 
-    [Test]
+    [TestMethod]
     public void CumSum_2D_Axis0()
     {
         // NumPy: cumsum([[1,2,3],[4,5,6]], axis=0) = [[1, 2, 3], [5, 7, 9]]
@@ -441,7 +440,7 @@ public class ReductionOpTests
         result.Should().BeOfValues(1, 2, 3, 5, 7, 9);
     }
 
-    [Test]
+    [TestMethod]
     public void CumSum_2D_Axis1()
     {
         // NumPy: cumsum([[1,2,3],[4,5,6]], axis=1) = [[1, 3, 6], [4, 9, 15]]
@@ -456,7 +455,7 @@ public class ReductionOpTests
 
     #region Boolean Reduction Tests
 
-    [Test]
+    [TestMethod]
     public void Sum_Bool()
     {
         // NumPy: sum([True, False, True, True]) = 3
@@ -466,7 +465,7 @@ public class ReductionOpTests
         Assert.AreEqual(3L, result.GetInt64(0));
     }
 
-    [Test]
+    [TestMethod]
     public void All_Bool()
     {
         // NumPy: all([True, False, True, True]) = False
@@ -476,7 +475,7 @@ public class ReductionOpTests
         Assert.IsFalse(result);
     }
 
-    [Test]
+    [TestMethod]
     public void All_Bool_AllTrue()
     {
         var a = np.array(new[] { true, true, true, true });
@@ -489,7 +488,7 @@ public class ReductionOpTests
 
     #region Integer Type Tests
 
-    [Test]
+    [TestMethod]
     public void Sum_Int32_PromotesToInt64()
     {
         // NumPy: int32 sum returns int64
@@ -500,7 +499,7 @@ public class ReductionOpTests
         Assert.AreEqual(NPTypeCode.Int64, result.typecode);
     }
 
-    [Test]
+    [TestMethod]
     public void Mean_Int32_ReturnsFloat64()
     {
         // NumPy: int32 mean returns float64
@@ -511,7 +510,7 @@ public class ReductionOpTests
         Assert.AreEqual(NPTypeCode.Double, result.typecode);
     }
 
-    [Test]
+    [TestMethod]
     public void Max_Int32_PreservesType()
     {
         // NumPy: int32 max returns int32
@@ -526,7 +525,7 @@ public class ReductionOpTests
 
     #region Sliced Array Tests
 
-    [Test]
+    [TestMethod]
     public void Sum_SlicedArray()
     {
         var a = np.array(new[] { 1, 2, 3, 4, 5, 6 });
@@ -536,7 +535,7 @@ public class ReductionOpTests
         Assert.AreEqual(9L, result.GetInt64(0));
     }
 
-    [Test]
+    [TestMethod]
     public void Mean_SlicedArray()
     {
         var a = np.array(new double[] { 1, 2, 3, 4, 5, 6 });

@@ -9,7 +9,7 @@ namespace NumSharp.UnitTest.RandomSampling
 {
     public class NpRandomRandTests : TestClass
     {
-        [Test]
+        [TestMethod]
         public void Rand1D()
         {
             var rand = np.random.rand(5L);
@@ -18,7 +18,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.IsTrue(rand.size == 5);
         }
 
-        [Test]
+        [TestMethod]
         public void Rand1DByShape()
         {
             var rand = np.random.rand(new Shape(5));
@@ -27,7 +27,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.IsTrue(rand.size == 5);
         }
 
-        [Test]
+        [TestMethod]
         public void Rand2D()
         {
             var rand = np.random.rand(5L, 5L);
@@ -36,7 +36,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.IsTrue(rand.size == 25);
         }
 
-        [Test]
+        [TestMethod]
         public void Rand2DByShape()
         {
             var rand = np.random.rand(new Shape(5, 5));

@@ -1,6 +1,5 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.UnitTest.Utilities;
-using TUnit.Core;
 
 namespace NumSharp.UnitTest.Backends.Kernels;
 
@@ -12,7 +11,7 @@ public class AxisReductionEdgeCaseTests
 {
     #region Basic axis parameter tests
 
-    [Test]
+    [TestMethod]
     public void Sum_Axis0_2D_MatchesNumPy()
     {
         // NumPy: np.sum([[1,2,3],[4,5,6]], axis=0) = [5, 7, 9]
@@ -25,7 +24,7 @@ public class AxisReductionEdgeCaseTests
         Assert.AreEqual(9L, result.GetInt64(2));
     }
 
-    [Test]
+    [TestMethod]
     public void Sum_Axis1_2D_MatchesNumPy()
     {
         // NumPy: np.sum([[1,2,3],[4,5,6]], axis=1) = [6, 15]
@@ -37,7 +36,7 @@ public class AxisReductionEdgeCaseTests
         Assert.AreEqual(15L, result.GetInt64(1));
     }
 
-    [Test]
+    [TestMethod]
     public void Sum_AxisNeg1_2D_MatchesNumPy()
     {
         // NumPy: np.sum([[1,2,3],[4,5,6]], axis=-1) = [6, 15]
@@ -53,7 +52,7 @@ public class AxisReductionEdgeCaseTests
 
     #region keepdims=True tests
 
-    [Test]
+    [TestMethod]
     public void Sum_Axis0_Keepdims_2D()
     {
         // NumPy: np.sum([[1,2,3],[4,5,6]], axis=0, keepdims=True) = [[5, 7, 9]]
@@ -66,7 +65,7 @@ public class AxisReductionEdgeCaseTests
         Assert.AreEqual(9L, result.GetInt64(0, 2));
     }
 
-    [Test]
+    [TestMethod]
     public void Sum_Axis1_Keepdims_2D()
     {
         // NumPy: np.sum([[1,2,3],[4,5,6]], axis=1, keepdims=True) = [[6], [15]]
@@ -78,7 +77,7 @@ public class AxisReductionEdgeCaseTests
         Assert.AreEqual(15L, result.GetInt64(1, 0));
     }
 
-    [Test]
+    [TestMethod]
     public void Max_Axis0_Keepdims_3D()
     {
         // NumPy: np.max(np.arange(24).reshape(2,3,4), axis=0, keepdims=True).shape = (1, 3, 4)
@@ -88,7 +87,7 @@ public class AxisReductionEdgeCaseTests
         result.Should().BeShaped(1, 3, 4);
     }
 
-    [Test]
+    [TestMethod]
     public void Min_Axis1_Keepdims_3D()
     {
         // NumPy: np.min(np.arange(24).reshape(2,3,4), axis=1, keepdims=True).shape = (2, 1, 4)
@@ -98,7 +97,7 @@ public class AxisReductionEdgeCaseTests
         result.Should().BeShaped(2, 1, 4);
     }
 
-    [Test]
+    [TestMethod]
     public void Prod_Axis2_Keepdims_3D()
     {
         // NumPy: np.prod(np.arange(1,25).reshape(2,3,4), axis=2, keepdims=True).shape = (2, 3, 1)
@@ -112,7 +111,7 @@ public class AxisReductionEdgeCaseTests
 
     #region Negative axis tests
 
-    [Test]
+    [TestMethod]
     public void Sum_AxisNeg2_3D()
     {
         // NumPy: np.sum(np.arange(24).reshape(2,3,4), axis=-2).shape = (2, 4)
@@ -122,7 +121,7 @@ public class AxisReductionEdgeCaseTests
         result.Should().BeShaped(2, 4);
     }
 
-    [Test]
+    [TestMethod]
     public void Max_AxisNeg1_3D()
     {
         // NumPy: np.max(np.arange(24).reshape(2,3,4), axis=-1).shape = (2, 3)
@@ -132,7 +131,7 @@ public class AxisReductionEdgeCaseTests
         result.Should().BeShaped(2, 3);
     }
 
-    [Test]
+    [TestMethod]
     public void Min_AxisNeg3_3D()
     {
         // NumPy: np.min(np.arange(24).reshape(2,3,4), axis=-3).shape = (3, 4)
@@ -147,7 +146,7 @@ public class AxisReductionEdgeCaseTests
 
     #region Empty array along axis tests
 
-    [Test]
+    [TestMethod]
     public void Sum_EmptyAlongAxis0()
     {
         // NumPy: np.sum(np.zeros((0, 3)), axis=0) = [0., 0., 0.]
@@ -161,7 +160,7 @@ public class AxisReductionEdgeCaseTests
         Assert.AreEqual(0.0, result.GetDouble(2));
     }
 
-    [Test]
+    [TestMethod]
     public void Sum_EmptyAlongAxis1()
     {
         // NumPy: np.sum(np.zeros((2, 0)), axis=1) = [0., 0.]
@@ -174,7 +173,7 @@ public class AxisReductionEdgeCaseTests
         Assert.AreEqual(0.0, result.GetDouble(1));
     }
 
-    [Test]
+    [TestMethod]
     public void Prod_EmptyAlongAxis()
     {
         // NumPy: np.prod(np.ones((0, 3)), axis=0) = [1., 1., 1.]
@@ -192,7 +191,7 @@ public class AxisReductionEdgeCaseTests
 
     #region NaN handling in reductions
 
-    [Test]
+    [TestMethod]
     public void Sum_WithNaN_Axis0_PropagatesNaN()
     {
         // NumPy: np.sum([[1., np.nan], [3., 4.]], axis=0) = [4., nan]
@@ -204,7 +203,7 @@ public class AxisReductionEdgeCaseTests
         Assert.IsTrue(double.IsNaN(result.GetDouble(1)));
     }
 
-    [Test]
+    [TestMethod]
     public void Sum_WithNaN_Axis1_PropagatesNaN()
     {
         // NumPy: np.sum([[1., 2.], [np.nan, 4.]], axis=1) = [3., nan]
@@ -216,7 +215,7 @@ public class AxisReductionEdgeCaseTests
         Assert.IsTrue(double.IsNaN(result.GetDouble(1)));
     }
 
-    [Test]
+    [TestMethod]
     public void Max_WithNaN_PropagatesNaN()
     {
         // NumPy: np.max([[1., np.nan], [3., 4.]], axis=0) = [3., nan]
@@ -228,7 +227,7 @@ public class AxisReductionEdgeCaseTests
         Assert.IsTrue(double.IsNaN(result.GetDouble(1)));
     }
 
-    [Test]
+    [TestMethod]
     public void Min_WithNaN_PropagatesNaN()
     {
         // NumPy: np.min([[1., 2.], [np.nan, 4.]], axis=1) = [1., nan]
@@ -244,7 +243,7 @@ public class AxisReductionEdgeCaseTests
 
     #region Broadcast array with axis reduction
 
-    [Test]
+    [TestMethod]
     public void Sum_BroadcastArray_Axis0()
     {
         // Create a broadcast array and reduce along axis
@@ -260,7 +259,7 @@ public class AxisReductionEdgeCaseTests
         Assert.AreEqual(12L, result.GetInt64(2)); // 3+3+3+3 = 12
     }
 
-    [Test]
+    [TestMethod]
     public void Sum_BroadcastArray_Axis1()
     {
         // Create a broadcast array and reduce along axis
@@ -279,7 +278,7 @@ public class AxisReductionEdgeCaseTests
 
     #region prod with axis parameter
 
-    [Test]
+    [TestMethod]
     public void Prod_Axis0_2D()
     {
         // NumPy: np.prod([[1,2,3],[4,5,6]], axis=0) = [4, 10, 18]
@@ -292,7 +291,7 @@ public class AxisReductionEdgeCaseTests
         Assert.AreEqual(18L, result.GetInt64(2));
     }
 
-    [Test]
+    [TestMethod]
     public void Prod_Axis1_2D()
     {
         // NumPy: np.prod([[1,2,3],[4,5,6]], axis=1) = [6, 120]
@@ -308,7 +307,7 @@ public class AxisReductionEdgeCaseTests
 
     #region min/max with axis parameter
 
-    [Test]
+    [TestMethod]
     public void Max_Axis0_2D()
     {
         // NumPy: np.max([[1,5,3],[4,2,6]], axis=0) = [4, 5, 6]
@@ -321,7 +320,7 @@ public class AxisReductionEdgeCaseTests
         Assert.AreEqual(6, result.GetInt32(2));
     }
 
-    [Test]
+    [TestMethod]
     public void Max_Axis1_2D()
     {
         // NumPy: np.max([[1,5,3],[4,2,6]], axis=1) = [5, 6]
@@ -333,7 +332,7 @@ public class AxisReductionEdgeCaseTests
         Assert.AreEqual(6, result.GetInt32(1));
     }
 
-    [Test]
+    [TestMethod]
     public void Min_Axis0_2D()
     {
         // NumPy: np.min([[1,5,3],[4,2,6]], axis=0) = [1, 2, 3]
@@ -346,7 +345,7 @@ public class AxisReductionEdgeCaseTests
         Assert.AreEqual(3, result.GetInt32(2));
     }
 
-    [Test]
+    [TestMethod]
     public void Min_Axis1_2D()
     {
         // NumPy: np.min([[1,5,3],[4,2,6]], axis=1) = [1, 2]
@@ -362,7 +361,7 @@ public class AxisReductionEdgeCaseTests
 
     #region mean with axis parameter
 
-    [Test]
+    [TestMethod]
     public void Mean_Axis0_2D()
     {
         // NumPy: np.mean([[1,2,3],[4,5,6]], axis=0) = [2.5, 3.5, 4.5]
@@ -375,7 +374,7 @@ public class AxisReductionEdgeCaseTests
         Assert.AreEqual(4.5, result.GetDouble(2), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void Mean_Axis1_2D()
     {
         // NumPy: np.mean([[1,2,3],[4,5,6]], axis=1) = [2., 5.]
@@ -387,7 +386,7 @@ public class AxisReductionEdgeCaseTests
         Assert.AreEqual(5.0, result.GetDouble(1), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void Mean_Axis0_Keepdims()
     {
         // NumPy: np.mean([[1,2,3],[4,5,6]], axis=0, keepdims=True) = [[2.5, 3.5, 4.5]]
@@ -404,7 +403,7 @@ public class AxisReductionEdgeCaseTests
 
     #region argmax/argmin with axis parameter
 
-    [Test]
+    [TestMethod]
     public void Argmax_Axis0_2D()
     {
         // NumPy: np.argmax([[1,5,3],[4,2,6]], axis=0) = [1, 0, 1]
@@ -417,7 +416,7 @@ public class AxisReductionEdgeCaseTests
         Assert.AreEqual(1L, result.GetInt64(2));
     }
 
-    [Test]
+    [TestMethod]
     public void Argmax_Axis1_2D()
     {
         // NumPy: np.argmax([[1,5,3],[4,2,6]], axis=1) = [1, 2]
@@ -429,7 +428,7 @@ public class AxisReductionEdgeCaseTests
         Assert.AreEqual(2L, result.GetInt64(1));
     }
 
-    [Test]
+    [TestMethod]
     public void Argmin_Axis0_2D()
     {
         // NumPy: np.argmin([[1,5,3],[4,2,6]], axis=0) = [0, 1, 0]
@@ -442,7 +441,7 @@ public class AxisReductionEdgeCaseTests
         Assert.AreEqual(0L, result.GetInt64(2));
     }
 
-    [Test]
+    [TestMethod]
     public void Argmin_Axis1_2D()
     {
         // NumPy: np.argmin([[1,5,3],[4,2,6]], axis=1) = [0, 1]
@@ -454,7 +453,7 @@ public class AxisReductionEdgeCaseTests
         Assert.AreEqual(1L, result.GetInt64(1));
     }
 
-    [Test]
+    [TestMethod]
     public void Argmax_Axis0_Keepdims()
     {
         // NumPy: np.argmax([[1,5,3],[4,2,6]], axis=0, keepdims=True) = [[1, 0, 1]]
@@ -467,7 +466,7 @@ public class AxisReductionEdgeCaseTests
         Assert.AreEqual(1L, result.GetInt64(0, 2));
     }
 
-    [Test]
+    [TestMethod]
     public void Argmax_WithNaN_Axis0()
     {
         // NumPy: np.argmax([[1., np.nan], [3., 4.]], axis=0) = [1, 0]
@@ -484,7 +483,7 @@ public class AxisReductionEdgeCaseTests
 
     #region Single element axis tests
 
-    [Test]
+    [TestMethod]
     public void Sum_SingleRowMatrix_Axis0()
     {
         // NumPy: np.sum([[1, 2, 3]], axis=0) = [1, 2, 3]
@@ -499,7 +498,7 @@ public class AxisReductionEdgeCaseTests
         Assert.AreEqual(3L, result.GetInt64(2));
     }
 
-    [Test]
+    [TestMethod]
     public void Sum_SingleColumnMatrix_Axis1()
     {
         // NumPy: np.sum([[1], [2], [3]], axis=1) = [1, 2, 3]
@@ -517,7 +516,7 @@ public class AxisReductionEdgeCaseTests
 
     #region Large array tests (ensure SIMD path is used)
 
-    [Test]
+    [TestMethod]
     public void Sum_LargeArray_Axis0_CorrectResults()
     {
         // Create a large 2D array to trigger SIMD path
@@ -538,7 +537,7 @@ public class AxisReductionEdgeCaseTests
         }
     }
 
-    [Test]
+    [TestMethod]
     public void Sum_LargeArray_Axis1_CorrectResults()
     {
         // Create a large 2D array to trigger SIMD path
@@ -559,7 +558,7 @@ public class AxisReductionEdgeCaseTests
         }
     }
 
-    [Test]
+    [TestMethod]
     public void Max_LargeArray_Axis0()
     {
         int rows = 256;
@@ -579,7 +578,7 @@ public class AxisReductionEdgeCaseTests
         }
     }
 
-    [Test]
+    [TestMethod]
     public void Min_LargeArray_Axis1()
     {
         int rows = 64;
@@ -603,7 +602,7 @@ public class AxisReductionEdgeCaseTests
 
     #region Sliced array tests
 
-    [Test]
+    [TestMethod]
     public void Sum_SlicedArray_Axis0()
     {
         // Create array and slice it, then reduce
@@ -622,7 +621,7 @@ public class AxisReductionEdgeCaseTests
         Assert.AreEqual(26L, result.GetInt64(3));
     }
 
-    [Test]
+    [TestMethod]
     public void Sum_SlicedArray_Axis1()
     {
         var arr = np.arange(24).reshape(4, 6);

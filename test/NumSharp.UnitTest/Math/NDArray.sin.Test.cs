@@ -5,7 +5,7 @@ namespace NumSharp.UnitTest.Maths
 {
     public class SinTest
     {
-        [Test]
+        [TestMethod]
         public void Simple1DArray()
         {
             var nd = np.array(new double[] {0D, 0.523598775598299D,

@@ -9,7 +9,7 @@ namespace NumSharp.UnitTest.RandomSampling
     
     public class NpRandomRayleighTests : TestClass
     {
-        [Test]
+        [TestMethod]
         public void Rayleigh_1D_ReturnsCorrectShape()
         {
             var rand = np.random.rayleigh(1, 5L);
@@ -17,7 +17,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.AreEqual(5, rand.size);
         }
 
-        [Test]
+        [TestMethod]
         public void Rayleigh_2D_ReturnsCorrectShape()
         {
             var rand = np.random.rayleigh(1, new Shape(5, 5));
@@ -25,7 +25,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.AreEqual(25, rand.size);
         }
 
-        [Test]
+        [TestMethod]
         public void Rayleigh_2DByShape_ReturnsCorrectShape()
         {
             var rand = np.random.rayleigh(1, new Shape(5, 5));
@@ -33,7 +33,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.AreEqual(25, rand.size);
         }
 
-        [Test]
+        [TestMethod]
         public void Rayleigh_DefaultParameters_HasCorrectStatistics()
         {
             // Rayleigh(scale=1) has mean = sqrt(pi/2) ≈ 1.253
@@ -50,7 +50,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.IsTrue(Math.Abs(std - 0.655) < 0.05, $"Std should be near 0.655, got {std}");
         }
 
-        [Test]
+        [TestMethod]
         public void Rayleigh_WithScale_TransformsCorrectly()
         {
             // Rayleigh(scale) has mean = scale * sqrt(pi/2)
@@ -64,13 +64,13 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.IsTrue(Math.Abs(mean - expectedMean) < 0.1, $"Mean should be near {expectedMean}, got {mean}");
         }
 
-        [Test]
+        [TestMethod]
         public void Rayleigh_NegativeScale_ThrowsArgumentException()
         {
             Assert.ThrowsException<ArgumentException>(() => np.random.rayleigh(-1, 5L));
         }
 
-        [Test]
+        [TestMethod]
         public void Rayleigh_ScaleZero_ReturnsAllZeros()
         {
             var samples = np.random.rayleigh(0.0, 5L);
@@ -81,7 +81,7 @@ namespace NumSharp.UnitTest.RandomSampling
             }
         }
 
-        [Test]
+        [TestMethod]
         public void Rayleigh_Scalar_ReturnsScalar()
         {
             var rng = np.random.RandomState(42);
@@ -91,14 +91,14 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.AreEqual(1, result.size);
         }
 
-        [Test]
+        [TestMethod]
         public void Rayleigh_ReturnsFloat64()
         {
             var result = np.random.rayleigh(1, 5L);
             Assert.AreEqual(NPTypeCode.Double, result.typecode);
         }
 
-        [Test]
+        [TestMethod]
         public void Rayleigh_AllValuesPositive()
         {
             // Rayleigh distribution only produces non-negative values
@@ -111,7 +111,7 @@ namespace NumSharp.UnitTest.RandomSampling
             }
         }
 
-        [Test]
+        [TestMethod]
         public void Rayleigh_SameSeed_ProducesSameResults()
         {
             var rng1 = np.random.RandomState(42);
@@ -126,7 +126,7 @@ namespace NumSharp.UnitTest.RandomSampling
             }
         }
 
-        [Test]
+        [TestMethod]
         public void Rayleigh_DifferentSeeds_ProduceDifferentResults()
         {
             var rng1 = np.random.RandomState(42);
@@ -153,7 +153,7 @@ namespace NumSharp.UnitTest.RandomSampling
         /// Migrated from NumPy test_random.py test_rayleigh_0
         /// Tests that scale=0 returns 0.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Rayleigh_NumPy_ScaleZeroReturnsZero()
         {
             // From NumPy: assert_equal(np.random.rayleigh(scale=0), 0)
@@ -165,7 +165,7 @@ namespace NumSharp.UnitTest.RandomSampling
         /// Migrated from NumPy test_random.py test_rayleigh_0
         /// Negative scale should raise ValueError.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Rayleigh_NumPy_NegativeScaleRaises()
         {
             // From NumPy: assert_raises(ValueError, np.random.rayleigh, scale=-0.)
@@ -177,7 +177,7 @@ namespace NumSharp.UnitTest.RandomSampling
         /// Migrated from NumPy test_smoke.py test_rayleigh
         /// Basic smoke test that rayleigh produces correct output size.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Rayleigh_NumPy_SmokeTest()
         {
             // From NumPy: vals = rg.rayleigh(0.2, 10); assert_(len(vals) == 10)

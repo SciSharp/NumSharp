@@ -13,7 +13,7 @@ namespace NumSharp.UnitTest.LinearAlgebra;
 /// </summary>
 public class DotBattleTests : TestClass
 {
-    [Test]
+    [TestMethod]
     public void Dot_1D_1D_InnerProduct()
     {
         // NumPy: np.dot([1,2,3], [4,5,6]) = 32, dtype=int64
@@ -25,7 +25,7 @@ public class DotBattleTests : TestClass
         Assert.AreEqual(0, result.ndim); // Scalar result
     }
 
-    [Test]
+    [TestMethod]
     public void Dot_2D_1D()
     {
         // NumPy: [[1,2],[3,4]] dot [5,6] = [17, 39], shape=(2,)
@@ -37,7 +37,7 @@ public class DotBattleTests : TestClass
         result.Should().BeOfValues(17, 39);
     }
 
-    [Test]
+    [TestMethod]
     public void Dot_1D_2D()
     {
         // NumPy: [1,2] dot [[3,4],[5,6]] = [13, 16], shape=(2,)
@@ -49,7 +49,7 @@ public class DotBattleTests : TestClass
         result.Should().BeOfValues(13, 16);
     }
 
-    [Test]
+    [TestMethod]
     public void Dot_2D_2D_MatrixMultiply()
     {
         // NumPy: [[1,2],[3,4]] dot [[5,6],[7,8]] = [[19,22],[43,50]]
@@ -64,7 +64,7 @@ public class DotBattleTests : TestClass
         Assert.AreEqual(50, (int)result[1, 1]);
     }
 
-    [Test]
+    [TestMethod]
     public void Dot_Scalars()
     {
         // NumPy: np.dot(3, 4) = 12
@@ -72,7 +72,7 @@ public class DotBattleTests : TestClass
         Assert.AreEqual(12, (int)result);
     }
 
-    [Test]
+    [TestMethod]
     public void Dot_MixedDtypes_Int32_Float64()
     {
         // NumPy: int32 dot float64 = float64
@@ -83,7 +83,7 @@ public class DotBattleTests : TestClass
         Assert.AreEqual(17.0, (double)result, 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void Dot_EmptyArrays()
     {
         // NumPy: dot of empty 1D = 0.0
@@ -94,7 +94,7 @@ public class DotBattleTests : TestClass
         Assert.AreEqual(0.0, (double)result);
     }
 
-    [Test]
+    [TestMethod]
     public void Dot_3D_2D_HigherDimensions()
     {
         // NumPy: shape(2,3,4) dot shape(4,5) = shape(2,3,5)
@@ -105,7 +105,7 @@ public class DotBattleTests : TestClass
         result.Should().BeShaped(2, 3, 5);
     }
 
-    [Test]
+    [TestMethod]
     [OpenBugs]  // NumSharp returns (2,4) instead of (2,3)
     public void Dot_ND_1D()
     {
@@ -121,7 +121,7 @@ public class DotBattleTests : TestClass
         Assert.AreEqual(220, (int)result[1, 2]);
     }
 
-    [Test]
+    [TestMethod]
     public void Dot_StridedArrays_NonContiguous()
     {
         // NumPy: strided (non-contiguous) arrays
@@ -135,7 +135,7 @@ public class DotBattleTests : TestClass
         Assert.AreEqual(140, (int)result);
     }
 
-    [Test]
+    [TestMethod]
     public void Dot_TransposedArrays()
     {
         // NumPy: (2,3) dot (3,2) = (2,2)
@@ -151,7 +151,7 @@ public class DotBattleTests : TestClass
         Assert.AreEqual(50, (int)result[1, 1]);
     }
 
-    [Test]
+    [TestMethod]
     public void Dot_LargeMatrices()
     {
         // Verify large matrix multiply works
@@ -167,7 +167,7 @@ public class DotBattleTests : TestClass
         Assert.AreEqual(expected, (double)result[0, 0], 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void Dot_ColumnVector_RowVector()
     {
         // (3,1) dot (1,3) = (3,3) outer product
@@ -181,7 +181,7 @@ public class DotBattleTests : TestClass
         Assert.AreEqual(18, (int)result[2, 2]);  // 3 * 6 = 18
     }
 
-    [Test]
+    [TestMethod]
     public void Dot_RowVector_ColumnVector()
     {
         // (1,3) dot (3,1) = (1,1) scalar in matrix form

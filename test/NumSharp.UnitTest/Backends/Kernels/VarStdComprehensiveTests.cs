@@ -2,7 +2,6 @@ using System;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp;
 using NumSharp.UnitTest.Utilities;
-using TUnit.Core;
 
 namespace NumSharp.UnitTest.Backends.Kernels;
 
@@ -24,7 +23,7 @@ public class VarStdComprehensiveTests
 
     #region Var 1D Tests
 
-    [Test]
+    [TestMethod]
     public void Var_1D_Float64()
     {
         // NumPy: np.var([1.0, 2.0, 3.0, 4.0, 5.0]) = 2.0
@@ -33,7 +32,7 @@ public class VarStdComprehensiveTests
         Assert.IsTrue(Math.Abs(result.GetDouble(0) - 2.0) < Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void Var_1D_Float64_Ddof0()
     {
         // NumPy: np.var([1.0, 2.0, 3.0, 4.0, 5.0], ddof=0) = 2.0
@@ -42,7 +41,7 @@ public class VarStdComprehensiveTests
         Assert.IsTrue(Math.Abs(result.GetDouble(0) - 2.0) < Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void Var_1D_Float64_Ddof1()
     {
         // NumPy: np.var([1.0, 2.0, 3.0, 4.0, 5.0], ddof=1) = 2.5
@@ -51,7 +50,7 @@ public class VarStdComprehensiveTests
         Assert.IsTrue(Math.Abs(result.GetDouble(0) - 2.5) < Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void Var_1D_Int32()
     {
         // NumPy: np.var([1, 2, 3, 4, 5]) = 2.0 (returns float64)
@@ -60,7 +59,7 @@ public class VarStdComprehensiveTests
         Assert.IsTrue(Math.Abs(result.GetDouble(0) - 2.0) < Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void Var_1D_Int64()
     {
         // NumPy: np.var([1, 2, 3, 4, 5], dtype=int64) = 2.0 (returns float64)
@@ -69,7 +68,7 @@ public class VarStdComprehensiveTests
         Assert.IsTrue(Math.Abs(result.GetDouble(0) - 2.0) < Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void Var_1D_Float32()
     {
         // NumPy: np.var([1.0, 2.0, 3.0, 4.0, 5.0], dtype=float32) = 2.0 (returns float32)
@@ -83,7 +82,7 @@ public class VarStdComprehensiveTests
 
     #region Var 2D Tests
 
-    [Test]
+    [TestMethod]
     public void Var_2D_NoAxis()
     {
         // NumPy: np.var([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]]) = 6.666666666666667
@@ -92,7 +91,7 @@ public class VarStdComprehensiveTests
         Assert.IsTrue(Math.Abs(result.GetDouble(0) - 6.666666666666667) < Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void Var_2D_Axis0()
     {
         // NumPy: np.var([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]], axis=0) = [6.0, 6.0, 6.0]
@@ -102,7 +101,7 @@ public class VarStdComprehensiveTests
         result.Should().BeOfValuesApproximately(Tolerance, 6.0, 6.0, 6.0);
     }
 
-    [Test]
+    [TestMethod]
     public void Var_2D_Axis1()
     {
         // NumPy: np.var([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]], axis=1) = [0.666..., 0.666..., 0.666...]
@@ -112,7 +111,7 @@ public class VarStdComprehensiveTests
         result.Should().BeOfValuesApproximately(Tolerance, 0.6666666666666666, 0.6666666666666666, 0.6666666666666666);
     }
 
-    [Test]
+    [TestMethod]
     public void Var_2D_AxisNeg1()
     {
         // NumPy: np.var([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]], axis=-1) = [0.666..., 0.666..., 0.666...]
@@ -122,7 +121,7 @@ public class VarStdComprehensiveTests
         result.Should().BeOfValuesApproximately(Tolerance, 0.6666666666666666, 0.6666666666666666, 0.6666666666666666);
     }
 
-    [Test]
+    [TestMethod]
     public void Var_2D_Axis0_Ddof1()
     {
         // NumPy: np.var([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]], axis=0, ddof=1) = [9.0, 9.0, 9.0]
@@ -136,7 +135,7 @@ public class VarStdComprehensiveTests
 
     #region Var 3D Tests
 
-    [Test]
+    [TestMethod]
     public void Var_3D_NoAxis()
     {
         // NumPy: np.var([[[1.0, 2.0], [3.0, 4.0]], [[5.0, 6.0], [7.0, 8.0]]]) = 5.25
@@ -145,7 +144,7 @@ public class VarStdComprehensiveTests
         Assert.IsTrue(Math.Abs(result.GetDouble(0) - 5.25) < Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void Var_3D_Axis0()
     {
         // NumPy: np.var([[[1.0, 2.0], [3.0, 4.0]], [[5.0, 6.0], [7.0, 8.0]]], axis=0) = [[4.0, 4.0], [4.0, 4.0]]
@@ -155,7 +154,7 @@ public class VarStdComprehensiveTests
         result.Should().BeOfValuesApproximately(Tolerance, 4.0, 4.0, 4.0, 4.0);
     }
 
-    [Test]
+    [TestMethod]
     public void Var_3D_Axis1()
     {
         // NumPy: np.var([[[1.0, 2.0], [3.0, 4.0]], [[5.0, 6.0], [7.0, 8.0]]], axis=1) = [[1.0, 1.0], [1.0, 1.0]]
@@ -165,7 +164,7 @@ public class VarStdComprehensiveTests
         result.Should().BeOfValuesApproximately(Tolerance, 1.0, 1.0, 1.0, 1.0);
     }
 
-    [Test]
+    [TestMethod]
     public void Var_3D_Axis2()
     {
         // NumPy: np.var([[[1.0, 2.0], [3.0, 4.0]], [[5.0, 6.0], [7.0, 8.0]]], axis=2) = [[0.25, 0.25], [0.25, 0.25]]
@@ -179,7 +178,7 @@ public class VarStdComprehensiveTests
 
     #region Var Edge Cases
 
-    [Test]
+    [TestMethod]
     public void Var_SingleElement()
     {
         // NumPy: np.var([42.0]) = 0.0
@@ -188,7 +187,7 @@ public class VarStdComprehensiveTests
         Assert.IsTrue(Math.Abs(result.GetDouble(0) - 0.0) < Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void Var_IdenticalValues()
     {
         // NumPy: np.var([5.0, 5.0, 5.0, 5.0]) = 0.0
@@ -197,7 +196,7 @@ public class VarStdComprehensiveTests
         Assert.IsTrue(Math.Abs(result.GetDouble(0) - 0.0) < Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void Var_Rectangular_2x5_Axis0()
     {
         // NumPy: np.var([[1.0, 2.0, 3.0, 4.0, 5.0], [6.0, 7.0, 8.0, 9.0, 10.0]], axis=0) = [6.25, 6.25, 6.25, 6.25, 6.25]
@@ -207,7 +206,7 @@ public class VarStdComprehensiveTests
         result.Should().BeOfValuesApproximately(Tolerance, 6.25, 6.25, 6.25, 6.25, 6.25);
     }
 
-    [Test]
+    [TestMethod]
     public void Var_Rectangular_2x5_Axis1()
     {
         // NumPy: np.var([[1.0, 2.0, 3.0, 4.0, 5.0], [6.0, 7.0, 8.0, 9.0, 10.0]], axis=1) = [2.0, 2.0]
@@ -221,7 +220,7 @@ public class VarStdComprehensiveTests
 
     #region Std 1D Tests
 
-    [Test]
+    [TestMethod]
     public void Std_1D_Float64()
     {
         // NumPy: np.std([1.0, 2.0, 3.0, 4.0, 5.0]) = 1.4142135623730951
@@ -230,7 +229,7 @@ public class VarStdComprehensiveTests
         Assert.IsTrue(Math.Abs(result.GetDouble(0) - 1.4142135623730951) < Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void Std_1D_Float64_Ddof0()
     {
         // NumPy: np.std([1.0, 2.0, 3.0, 4.0, 5.0], ddof=0) = 1.4142135623730951
@@ -239,7 +238,7 @@ public class VarStdComprehensiveTests
         Assert.IsTrue(Math.Abs(result.GetDouble(0) - 1.4142135623730951) < Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void Std_1D_Float64_Ddof1()
     {
         // NumPy: np.std([1.0, 2.0, 3.0, 4.0, 5.0], ddof=1) = 1.5811388300841898
@@ -248,7 +247,7 @@ public class VarStdComprehensiveTests
         Assert.IsTrue(Math.Abs(result.GetDouble(0) - 1.5811388300841898) < Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void Std_1D_Int32()
     {
         // NumPy: np.std([1, 2, 3, 4, 5]) = 1.4142135623730951 (returns float64)
@@ -257,7 +256,7 @@ public class VarStdComprehensiveTests
         Assert.IsTrue(Math.Abs(result.GetDouble(0) - 1.4142135623730951) < Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void Std_1D_Int64()
     {
         // NumPy: np.std([1, 2, 3, 4, 5], dtype=int64) = 1.4142135623730951 (returns float64)
@@ -266,7 +265,7 @@ public class VarStdComprehensiveTests
         Assert.IsTrue(Math.Abs(result.GetDouble(0) - 1.4142135623730951) < Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void Std_1D_Float32()
     {
         // NumPy: np.std([1.0, 2.0, 3.0, 4.0, 5.0], dtype=float32) = 1.4142135381698608 (returns float32)
@@ -280,7 +279,7 @@ public class VarStdComprehensiveTests
 
     #region Std 2D Tests
 
-    [Test]
+    [TestMethod]
     public void Std_2D_NoAxis()
     {
         // NumPy: np.std([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]]) = 2.581988897471611
@@ -289,7 +288,7 @@ public class VarStdComprehensiveTests
         Assert.IsTrue(Math.Abs(result.GetDouble(0) - 2.581988897471611) < Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void Std_2D_Axis0()
     {
         // NumPy: np.std([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]], axis=0) = [2.449..., 2.449..., 2.449...]
@@ -299,7 +298,7 @@ public class VarStdComprehensiveTests
         result.Should().BeOfValuesApproximately(Tolerance, 2.449489742783178, 2.449489742783178, 2.449489742783178);
     }
 
-    [Test]
+    [TestMethod]
     public void Std_2D_Axis1()
     {
         // NumPy: np.std([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]], axis=1) = [0.816..., 0.816..., 0.816...]
@@ -309,7 +308,7 @@ public class VarStdComprehensiveTests
         result.Should().BeOfValuesApproximately(Tolerance, 0.816496580927726, 0.816496580927726, 0.816496580927726);
     }
 
-    [Test]
+    [TestMethod]
     public void Std_2D_AxisNeg1()
     {
         // NumPy: np.std([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]], axis=-1) = [0.816..., 0.816..., 0.816...]
@@ -319,7 +318,7 @@ public class VarStdComprehensiveTests
         result.Should().BeOfValuesApproximately(Tolerance, 0.816496580927726, 0.816496580927726, 0.816496580927726);
     }
 
-    [Test]
+    [TestMethod]
     public void Std_2D_Axis0_Ddof1()
     {
         // NumPy: np.std([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]], axis=0, ddof=1) = [3.0, 3.0, 3.0]
@@ -333,7 +332,7 @@ public class VarStdComprehensiveTests
 
     #region Std 3D Tests
 
-    [Test]
+    [TestMethod]
     public void Std_3D_NoAxis()
     {
         // NumPy: np.std([[[1.0, 2.0], [3.0, 4.0]], [[5.0, 6.0], [7.0, 8.0]]]) = 2.29128784747792
@@ -342,7 +341,7 @@ public class VarStdComprehensiveTests
         Assert.IsTrue(Math.Abs(result.GetDouble(0) - 2.29128784747792) < Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void Std_3D_Axis0()
     {
         // NumPy: np.std([[[1.0, 2.0], [3.0, 4.0]], [[5.0, 6.0], [7.0, 8.0]]], axis=0) = [[2.0, 2.0], [2.0, 2.0]]
@@ -352,7 +351,7 @@ public class VarStdComprehensiveTests
         result.Should().BeOfValuesApproximately(Tolerance, 2.0, 2.0, 2.0, 2.0);
     }
 
-    [Test]
+    [TestMethod]
     public void Std_3D_Axis1()
     {
         // NumPy: np.std([[[1.0, 2.0], [3.0, 4.0]], [[5.0, 6.0], [7.0, 8.0]]], axis=1) = [[1.0, 1.0], [1.0, 1.0]]
@@ -362,7 +361,7 @@ public class VarStdComprehensiveTests
         result.Should().BeOfValuesApproximately(Tolerance, 1.0, 1.0, 1.0, 1.0);
     }
 
-    [Test]
+    [TestMethod]
     public void Std_3D_Axis2()
     {
         // NumPy: np.std([[[1.0, 2.0], [3.0, 4.0]], [[5.0, 6.0], [7.0, 8.0]]], axis=2) = [[0.5, 0.5], [0.5, 0.5]]
@@ -376,7 +375,7 @@ public class VarStdComprehensiveTests
 
     #region Std Edge Cases
 
-    [Test]
+    [TestMethod]
     public void Std_SingleElement()
     {
         // NumPy: np.std([42.0]) = 0.0
@@ -385,7 +384,7 @@ public class VarStdComprehensiveTests
         Assert.IsTrue(Math.Abs(result.GetDouble(0) - 0.0) < Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void Std_IdenticalValues()
     {
         // NumPy: np.std([5.0, 5.0, 5.0, 5.0]) = 0.0
@@ -394,7 +393,7 @@ public class VarStdComprehensiveTests
         Assert.IsTrue(Math.Abs(result.GetDouble(0) - 0.0) < Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void Std_Rectangular_2x5_Axis0()
     {
         // NumPy: np.std([[1.0, 2.0, 3.0, 4.0, 5.0], [6.0, 7.0, 8.0, 9.0, 10.0]], axis=0) = [2.5, 2.5, 2.5, 2.5, 2.5]
@@ -404,7 +403,7 @@ public class VarStdComprehensiveTests
         result.Should().BeOfValuesApproximately(Tolerance, 2.5, 2.5, 2.5, 2.5, 2.5);
     }
 
-    [Test]
+    [TestMethod]
     public void Std_Rectangular_2x5_Axis1()
     {
         // NumPy: np.std([[1.0, 2.0, 3.0, 4.0, 5.0], [6.0, 7.0, 8.0, 9.0, 10.0]], axis=1) = [1.414..., 1.414...]
@@ -418,7 +417,7 @@ public class VarStdComprehensiveTests
 
     #region keepdims Tests
 
-    [Test]
+    [TestMethod]
     public void Var_2D_Axis0_Keepdims()
     {
         // NumPy: np.var([[1, 2, 3], [4, 5, 6]], axis=0, keepdims=True).shape = (1, 3)
@@ -427,7 +426,7 @@ public class VarStdComprehensiveTests
         result.Should().BeShaped(1, 3);
     }
 
-    [Test]
+    [TestMethod]
     public void Std_2D_Axis0_Keepdims()
     {
         // NumPy: np.std([[1, 2, 3], [4, 5, 6]], axis=0, keepdims=True).shape = (1, 3)
@@ -440,7 +439,7 @@ public class VarStdComprehensiveTests
 
     #region Large Values (Numerical Stability)
 
-    [Test]
+    [TestMethod]
     public void Var_LargeValues()
     {
         // NumPy: np.var([1e15, 2e15, 3e15]) = 6.666666666666666e+29
@@ -449,7 +448,7 @@ public class VarStdComprehensiveTests
         Assert.IsTrue(Math.Abs(result.GetDouble(0) - 6.666666666666666e+29) / 6.666666666666666e+29 < 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void Std_LargeValues()
     {
         // NumPy: np.std([1e15, 2e15, 3e15]) = 816496580927726.0

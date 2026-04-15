@@ -2,7 +2,6 @@ using System;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp;
 using NumSharp.UnitTest.Utilities;
-using TUnit.Core;
 
 namespace NumSharp.UnitTest.APIs;
 
@@ -14,7 +13,7 @@ public class NpSearchsortedEdgeCaseTests
 {
     #region Scalar Input Tests (Main Fix)
 
-    [Test]
+    [TestMethod]
     public void ScalarInt_ExactMatch()
     {
         // NumPy 2.4.2: np.searchsorted([1, 2, 3, 4, 5], 3) = 2
@@ -23,7 +22,7 @@ public class NpSearchsortedEdgeCaseTests
         Assert.AreEqual(2, result);
     }
 
-    [Test]
+    [TestMethod]
     public void ScalarInt_NotInArray()
     {
         // NumPy 2.4.2: np.searchsorted([1, 3, 5], 4) = 2
@@ -32,7 +31,7 @@ public class NpSearchsortedEdgeCaseTests
         Assert.AreEqual(2, result);
     }
 
-    [Test]
+    [TestMethod]
     public void ScalarDouble_ExactMatch()
     {
         // NumPy 2.4.2: np.searchsorted([1.0, 2.0, 3.0], 2.0) = 1
@@ -41,7 +40,7 @@ public class NpSearchsortedEdgeCaseTests
         Assert.AreEqual(1, result);
     }
 
-    [Test]
+    [TestMethod]
     public void ScalarDouble_Between()
     {
         // NumPy 2.4.2: np.searchsorted([1.0, 2.0, 3.0], 2.5) = 2
@@ -54,7 +53,7 @@ public class NpSearchsortedEdgeCaseTests
 
     #region Value Not In Array Tests
 
-    [Test]
+    [TestMethod]
     public void Value_BeforeAllElements()
     {
         // NumPy 2.4.2: np.searchsorted([10, 20, 30], 5) = 0
@@ -63,7 +62,7 @@ public class NpSearchsortedEdgeCaseTests
         Assert.AreEqual(0, result);
     }
 
-    [Test]
+    [TestMethod]
     public void Value_AfterAllElements()
     {
         // NumPy 2.4.2: np.searchsorted([10, 20, 30], 100) = 3
@@ -72,7 +71,7 @@ public class NpSearchsortedEdgeCaseTests
         Assert.AreEqual(3, result);
     }
 
-    [Test]
+    [TestMethod]
     public void Value_InMiddleGap()
     {
         // NumPy 2.4.2: np.searchsorted([1, 5, 10, 50], 7) = 2
@@ -85,7 +84,7 @@ public class NpSearchsortedEdgeCaseTests
 
     #region Empty Array Edge Cases
 
-    [Test]
+    [TestMethod]
     public void EmptySearchArray_ReturnZero()
     {
         // NumPy 2.4.2: np.searchsorted([], 5) = 0
@@ -94,7 +93,7 @@ public class NpSearchsortedEdgeCaseTests
         Assert.AreEqual(0, result);
     }
 
-    [Test]
+    [TestMethod]
     public void EmptySearchArray_ReturnZeroForDouble()
     {
         // NumPy 2.4.2: np.searchsorted([], 5.0) = 0
@@ -103,7 +102,7 @@ public class NpSearchsortedEdgeCaseTests
         Assert.AreEqual(0, result);
     }
 
-    [Test]
+    [TestMethod]
     public void EmptyValuesArray_ReturnEmptyArray()
     {
         // NumPy 2.4.2: np.searchsorted([1, 2, 3], []) returns array([], dtype=int64)
@@ -117,7 +116,7 @@ public class NpSearchsortedEdgeCaseTests
 
     #region Duplicate Values Tests
 
-    [Test]
+    [TestMethod]
     public void DuplicateValues_ReturnsLeftmostIndex()
     {
         // NumPy 2.4.2 (side='left' default): np.searchsorted([1, 2, 2, 2, 3], 2) = 1
@@ -126,7 +125,7 @@ public class NpSearchsortedEdgeCaseTests
         Assert.AreEqual(1, result);
     }
 
-    [Test]
+    [TestMethod]
     public void AllDuplicates_ReturnsZero()
     {
         // NumPy 2.4.2: np.searchsorted([5, 5, 5, 5], 5) = 0
@@ -135,7 +134,7 @@ public class NpSearchsortedEdgeCaseTests
         Assert.AreEqual(0, result);
     }
 
-    [Test]
+    [TestMethod]
     public void AllDuplicates_ValueGreater()
     {
         // NumPy 2.4.2: np.searchsorted([5, 5, 5, 5], 10) = 4
@@ -144,7 +143,7 @@ public class NpSearchsortedEdgeCaseTests
         Assert.AreEqual(4, result);
     }
 
-    [Test]
+    [TestMethod]
     public void AllDuplicates_ValueLess()
     {
         // NumPy 2.4.2: np.searchsorted([5, 5, 5, 5], 1) = 0
@@ -157,7 +156,7 @@ public class NpSearchsortedEdgeCaseTests
 
     #region Different dtypes Tests
 
-    [Test]
+    [TestMethod]
     public void Int32Array_IntSearch()
     {
         var arr = np.array(new long[] { 1, 2, 3, 4, 5 });
@@ -165,7 +164,7 @@ public class NpSearchsortedEdgeCaseTests
         Assert.AreEqual(2, result);
     }
 
-    [Test]
+    [TestMethod]
     public void Int64Array_IntSearch()
     {
         var arr = np.array(new long[] { 1L, 2L, 3L, 4L, 5L });
@@ -173,7 +172,7 @@ public class NpSearchsortedEdgeCaseTests
         Assert.AreEqual(2, result);
     }
 
-    [Test]
+    [TestMethod]
     public void FloatArray_DoubleSearch()
     {
         var arr = np.array(new float[] { 1.0f, 2.0f, 3.0f });
@@ -181,7 +180,7 @@ public class NpSearchsortedEdgeCaseTests
         Assert.AreEqual(2, result);
     }
 
-    [Test]
+    [TestMethod]
     public void DoubleArray_IntSearch()
     {
         // Cross-type search: int value in double array
@@ -190,7 +189,7 @@ public class NpSearchsortedEdgeCaseTests
         Assert.AreEqual(2, result);
     }
 
-    [Test]
+    [TestMethod]
     public void ByteArray_Search()
     {
         var arr = np.array(new byte[] { 10, 20, 30, 40 });
@@ -202,7 +201,7 @@ public class NpSearchsortedEdgeCaseTests
 
     #region NDArray Input Tests
 
-    [Test]
+    [TestMethod]
     public void NDArrayInput_SingleElement()
     {
         // NumPy 2.4.2: np.searchsorted([1, 2, 3], [2]) = array([1])
@@ -213,7 +212,7 @@ public class NpSearchsortedEdgeCaseTests
         Assert.AreEqual(1L, result.GetInt64(0));
     }
 
-    [Test]
+    [TestMethod]
     public void NDArrayInput_MultipleElements()
     {
         // NumPy 2.4.2: np.searchsorted([1, 2, 3, 4, 5], [2, 4]) = array([1, 3])
@@ -225,7 +224,7 @@ public class NpSearchsortedEdgeCaseTests
         Assert.AreEqual(3L, result.GetInt64(1));
     }
 
-    [Test]
+    [TestMethod]
     public void NDArrayInput_AllOutOfRange()
     {
         // NumPy 2.4.2: np.searchsorted([10, 20, 30], [-5, 100]) = array([0, 3])
@@ -237,7 +236,7 @@ public class NpSearchsortedEdgeCaseTests
         Assert.AreEqual(3L, result.GetInt64(1));
     }
 
-    [Test]
+    [TestMethod]
     public void NDArrayInput_MixedInAndOut()
     {
         // NumPy 2.4.2: np.searchsorted([11, 12, 13, 14, 15], [-10, 20, 12, 13]) = array([0, 5, 1, 2])
@@ -251,7 +250,7 @@ public class NpSearchsortedEdgeCaseTests
         Assert.AreEqual(2L, result.GetInt64(3));
     }
 
-    [Test]
+    [TestMethod]
     public void NDArrayInput_DoubleValues()
     {
         // NumPy 2.4.2: np.searchsorted([1.0, 2.0, 3.0], [1.5, 2.5]) = array([1, 2])
@@ -267,7 +266,7 @@ public class NpSearchsortedEdgeCaseTests
 
     #region Scalar NDArray Tests (Key Fix Area)
 
-    [Test]
+    [TestMethod]
     public void ScalarNDArray_ReturnsScalar()
     {
         // NumPy 2.4.2: np.searchsorted([1, 2, 3], np.array(2)) returns scalar 1
@@ -280,7 +279,7 @@ public class NpSearchsortedEdgeCaseTests
         Assert.AreEqual(1L, result.GetInt64());
     }
 
-    [Test]
+    [TestMethod]
     public void ScalarNDArray_Double_ReturnsScalar()
     {
         // np.searchsorted([1.0, 2.0, 3.0], np.array(2.5)) returns scalar 2
@@ -296,7 +295,7 @@ public class NpSearchsortedEdgeCaseTests
 
     #region Single Element Array Tests
 
-    [Test]
+    [TestMethod]
     public void SingleElementArray_ValueLess()
     {
         // NumPy 2.4.2: np.searchsorted([5], 1) = 0
@@ -305,7 +304,7 @@ public class NpSearchsortedEdgeCaseTests
         Assert.AreEqual(0, result);
     }
 
-    [Test]
+    [TestMethod]
     public void SingleElementArray_ValueEqual()
     {
         // NumPy 2.4.2: np.searchsorted([5], 5) = 0
@@ -314,7 +313,7 @@ public class NpSearchsortedEdgeCaseTests
         Assert.AreEqual(0, result);
     }
 
-    [Test]
+    [TestMethod]
     public void SingleElementArray_ValueGreater()
     {
         // NumPy 2.4.2: np.searchsorted([5], 10) = 1
@@ -327,7 +326,7 @@ public class NpSearchsortedEdgeCaseTests
 
     #region Boundary Value Tests
 
-    [Test]
+    [TestMethod]
     public void FirstElement_Match()
     {
         // NumPy 2.4.2: np.searchsorted([1, 2, 3], 1) = 0
@@ -336,7 +335,7 @@ public class NpSearchsortedEdgeCaseTests
         Assert.AreEqual(0, result);
     }
 
-    [Test]
+    [TestMethod]
     public void LastElement_Match()
     {
         // NumPy 2.4.2: np.searchsorted([1, 2, 3], 3) = 2
@@ -345,7 +344,7 @@ public class NpSearchsortedEdgeCaseTests
         Assert.AreEqual(2, result);
     }
 
-    [Test]
+    [TestMethod]
     public void JustBeforeFirst()
     {
         // NumPy 2.4.2: np.searchsorted([10, 20, 30], 9) = 0
@@ -354,7 +353,7 @@ public class NpSearchsortedEdgeCaseTests
         Assert.AreEqual(0, result);
     }
 
-    [Test]
+    [TestMethod]
     public void JustAfterLast()
     {
         // NumPy 2.4.2: np.searchsorted([10, 20, 30], 31) = 3
@@ -367,7 +366,7 @@ public class NpSearchsortedEdgeCaseTests
 
     #region Large Array Tests
 
-    [Test]
+    [TestMethod]
     public void LargeArray_FindMiddle()
     {
         // Create array 0..999
@@ -376,7 +375,7 @@ public class NpSearchsortedEdgeCaseTests
         Assert.AreEqual(500, result);
     }
 
-    [Test]
+    [TestMethod]
     public void LargeArray_FindNearEnd()
     {
         // Create array 0..999
@@ -385,7 +384,7 @@ public class NpSearchsortedEdgeCaseTests
         Assert.AreEqual(999, result);
     }
 
-    [Test]
+    [TestMethod]
     public void LargeArray_FindBetweenElements()
     {
         // Create array [0, 10, 20, ..., 990]
@@ -398,7 +397,7 @@ public class NpSearchsortedEdgeCaseTests
 
     #region Negative Value Tests
 
-    [Test]
+    [TestMethod]
     public void NegativeValues_InArray()
     {
         // NumPy 2.4.2: np.searchsorted([-3, -1, 0, 2, 5], -2) = 1
@@ -407,7 +406,7 @@ public class NpSearchsortedEdgeCaseTests
         Assert.AreEqual(1, result);
     }
 
-    [Test]
+    [TestMethod]
     public void NegativeValues_SearchNegative()
     {
         // NumPy 2.4.2: np.searchsorted([-10, -5, 0, 5, 10], -7) = 1
@@ -416,7 +415,7 @@ public class NpSearchsortedEdgeCaseTests
         Assert.AreEqual(1, result);
     }
 
-    [Test]
+    [TestMethod]
     public void NegativeValues_SearchZero()
     {
         // NumPy 2.4.2: np.searchsorted([-10, -5, 0, 5, 10], 0) = 2
@@ -429,7 +428,7 @@ public class NpSearchsortedEdgeCaseTests
 
     #region Floating Point Precision Tests
 
-    [Test]
+    [TestMethod]
     public void FloatPrecision_VeryClose()
     {
         // Test with very close floating point values
@@ -438,7 +437,7 @@ public class NpSearchsortedEdgeCaseTests
         Assert.AreEqual(2, result);
     }
 
-    [Test]
+    [TestMethod]
     public void FloatPrecision_SmallValues()
     {
         // Test with small values

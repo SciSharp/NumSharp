@@ -10,7 +10,7 @@ namespace NumSharp.UnitTest.Selection
 {
     public class EnumeratorTest
     {
-        [Test]
+        [TestMethod]
         public void Enumerate_1D_YieldsScalars()
         {
             // 1D arrays iterate over scalar elements
@@ -19,7 +19,7 @@ namespace NumSharp.UnitTest.Selection
             values.Should().BeEquivalentTo(new long[] { 0, 1, 2, 3, 4 });
         }
 
-        [Test]
+        [TestMethod]
         public void Enumerate_2D_YieldsRows()
         {
             // 2D arrays iterate over rows (1D slices)
@@ -31,7 +31,7 @@ namespace NumSharp.UnitTest.Selection
             rows[1].Should().BeOfValues(3, 4, 5);
         }
 
-        [Test]
+        [TestMethod]
         public void Enumerate_3D_Yields2DSlices()
         {
             // 3D arrays iterate over 2D slices
@@ -43,7 +43,7 @@ namespace NumSharp.UnitTest.Selection
             slices[0].shape.Should().BeEquivalentTo(new long[] { 3, 2 });
         }
 
-        [Test]
+        [TestMethod]
         public void Flat_IteratesAllElements()
         {
             // .flat always iterates over all elements as scalars

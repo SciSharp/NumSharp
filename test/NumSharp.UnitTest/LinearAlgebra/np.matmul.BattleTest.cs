@@ -11,7 +11,7 @@ namespace NumSharp.UnitTest.LinearAlgebra;
 /// </summary>
 public class MatmulBattleTests : TestClass
 {
-    [Test]
+    [TestMethod]
     public void Matmul_2D_2D()
     {
         // NumPy: [[1,2],[3,4]] @ [[5,6],[7,8]] = [[19,22],[43,50]]
@@ -26,7 +26,7 @@ public class MatmulBattleTests : TestClass
         Assert.AreEqual(50, (int)result[1, 1]);
     }
 
-    [Test]
+    [TestMethod]
     [OpenBugs]  // NumSharp requires 2D inputs, doesn't support 1D @ 1D
     public void Matmul_1D_1D_DotProduct()
     {
@@ -38,7 +38,7 @@ public class MatmulBattleTests : TestClass
         Assert.AreEqual(32, (int)result);
     }
 
-    [Test]
+    [TestMethod]
     [OpenBugs]  // NumSharp returns shape (2,1) instead of (2,)
     public void Matmul_2D_1D()
     {
@@ -51,7 +51,7 @@ public class MatmulBattleTests : TestClass
         result.Should().BeOfValues(17, 39);
     }
 
-    [Test]
+    [TestMethod]
     [OpenBugs]  // NumSharp throws dimension mismatch for 1D @ 2D
     public void Matmul_1D_2D()
     {
@@ -64,7 +64,7 @@ public class MatmulBattleTests : TestClass
         result.Should().BeOfValues(13, 16);
     }
 
-    [Test]
+    [TestMethod]
     [OpenBugs]  // NumSharp crashes on >2D broadcasting
     public void Matmul_Broadcasting_3D_2D()
     {
@@ -81,7 +81,7 @@ public class MatmulBattleTests : TestClass
         Assert.AreEqual(3, (int)result[0, 1, 1]);
     }
 
-    [Test]
+    [TestMethod]
     public void Matmul_LargeMatrices()
     {
         var a = np.arange(1000).reshape(100, 10).astype(np.float64);
@@ -91,7 +91,7 @@ public class MatmulBattleTests : TestClass
         result.Should().BeShaped(100, 50);
     }
 
-    [Test]
+    [TestMethod]
     public void Matmul_Transposed()
     {
         // (2,3) @ (3,2) = (2,2)

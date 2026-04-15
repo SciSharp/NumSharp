@@ -11,13 +11,13 @@ namespace NumSharp.UnitTest.LinearAlgebra
     public class np_prod_tests
     {
 
-        [Test]
+        [TestMethod]
         public void EmptyArray()
         {
             np.prod(np.array(new int[0])).Should().BeScalar(1);
         }
 
-        [Test]
+        [TestMethod]
         public void Case1()
         {
             var a = np.prod(np.array(1f, 2f));
@@ -25,7 +25,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
             a.Shape.IsScalar.Should().BeTrue();
         }
 
-        [Test]
+        [TestMethod]
         public void Case1_double()
         {
             var a = np.prod(np.array(1d, 2d));
@@ -33,7 +33,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
             a.Shape.IsScalar.Should().BeTrue();
         }
 
-        [Test]
+        [TestMethod]
         public void Case2()
         {
             var a = np.prod(np.array(1f, 2f, 3, 4).reshape(2, 2));
@@ -41,7 +41,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
             a.Shape.IsScalar.Should().BeTrue();
         }
 
-        [Test]
+        [TestMethod]
         public void Case3()
         {
             var a = np.prod(np.array(1f, 2f, 3, 4).reshape(2, 2), axis: 1);
@@ -50,7 +50,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
             a.shape.Should().HaveCount(1).And.ContainInOrder(2);
         }
 
-        [Test]
+        [TestMethod]
         public void Case4()
         {
             var a = np.prod(np.array(1f, 2f, 3, 4).reshape(2, 2), axis: 1);
@@ -59,7 +59,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
             a.shape.Should().HaveCount(1).And.ContainInOrder(2);
         }
 
-        [Test]
+        [TestMethod]
         public void Case4_dtype()
         {
             var a = np.prod(np.array(1f, 2f, 3, 4).reshape(2, 2), axis: 1, dtype: np.uint8);
@@ -75,7 +75,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
         /// NumPy: prod([True, True, True, True]) = 1
         /// Return type is int64 (NumPy 2.x behavior).
         /// </summary>
-        [Test]
+        [TestMethod]
         public void BooleanArray_TreatsAsIntAndReturnsInt64()
         {
             // Array with False - product is 0

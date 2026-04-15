@@ -17,7 +17,7 @@ namespace NumSharp.UnitTest
         ///     Fixed:    (double)(NDArray)sum = 45.0 (numeric conversion)
         ///     Was:      returns ~6.95e-310 (int64 bytes read as double)
         /// </summary>
-        [Test]
+        [TestMethod]
         public void DoubleCast_Int64Scalar_ConvertsCorrectly()
         {
             // np.sum returns a scalar NDArray (ndim=0)
@@ -39,7 +39,7 @@ namespace NumSharp.UnitTest
         /// <summary>
         ///     BUG 72 FIX: (double) cast on int32 scalar NDArray should convert correctly.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void DoubleCast_Int32Scalar_ConvertsCorrectly()
         {
             var scalar = NDArray.Scalar(42);
@@ -59,7 +59,7 @@ namespace NumSharp.UnitTest
         ///     The main fix (Bug 72) is that cross-dtype conversion now works correctly
         ///     instead of reinterpreting raw bytes as the wrong type.
         /// </remarks>
-        [Test]
+        [TestMethod]
         public void CrossDtypeConversions_WorkCorrectly()
         {
             // int64 -> double

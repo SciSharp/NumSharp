@@ -26,7 +26,7 @@ namespace NumSharp.UnitTest.View
 
         #region Regression: 1D slices — values
 
-        [Test]
+        [TestMethod]
         public void Slice1D_Step1_Values()
         {
             // np.arange(10)[2:7] = [2, 3, 4, 5, 6]
@@ -40,7 +40,7 @@ namespace NumSharp.UnitTest.View
             s.GetInt64(4).Should().Be(6);
         }
 
-        [Test]
+        [TestMethod]
         public void Slice1D_Step2_Values()
         {
             // np.arange(10)[::2] = [0, 2, 4, 6, 8]
@@ -54,7 +54,7 @@ namespace NumSharp.UnitTest.View
             s.GetInt64(4).Should().Be(8);
         }
 
-        [Test]
+        [TestMethod]
         public void Slice1D_Reversed_Values()
         {
             // np.arange(5)[::-1] = [4, 3, 2, 1, 0]
@@ -68,7 +68,7 @@ namespace NumSharp.UnitTest.View
             s.GetInt64(4).Should().Be(0);
         }
 
-        [Test]
+        [TestMethod]
         public void Slice1D_SingleElement_Values()
         {
             // np.arange(10)[3:4] = [3]
@@ -82,7 +82,7 @@ namespace NumSharp.UnitTest.View
 
         #region Regression: 2D slices — values
 
-        [Test]
+        [TestMethod]
         public void Slice2D_RowSlice_Values()
         {
             // np.arange(12).reshape(3,4)[1:3] = [[4,5,6,7],[8,9,10,11]]
@@ -99,7 +99,7 @@ namespace NumSharp.UnitTest.View
             s.GetInt64(1, 3).Should().Be(11);
         }
 
-        [Test]
+        [TestMethod]
         public void Slice2D_ColumnSlice_Values()
         {
             // np.arange(12).reshape(3,4)[:,1:3] = [[1,2],[5,6],[9,10]]
@@ -114,7 +114,7 @@ namespace NumSharp.UnitTest.View
             s.GetInt64(2, 1).Should().Be(10);
         }
 
-        [Test]
+        [TestMethod]
         public void Slice2D_SingleRow_Values()
         {
             // np.arange(12).reshape(3,4)[1:2] = [[4,5,6,7]]
@@ -127,7 +127,7 @@ namespace NumSharp.UnitTest.View
             s.GetInt64(0, 3).Should().Be(7);
         }
 
-        [Test]
+        [TestMethod]
         public void Slice2D_SingleRowPartialCol_Values()
         {
             // np.arange(12).reshape(3,4)[1:2,1:3] = [[5,6]]
@@ -142,7 +142,7 @@ namespace NumSharp.UnitTest.View
 
         #region Regression: 3D slices — values
 
-        [Test]
+        [TestMethod]
         public void Slice3D_RowSlice_Values()
         {
             // np.arange(24).reshape(2,3,4)[0:1] — shape (1,3,4), values 0..11
@@ -153,7 +153,7 @@ namespace NumSharp.UnitTest.View
                 s.GetAtIndex(i).Should().Be(i);
         }
 
-        [Test]
+        [TestMethod]
         public void Slice3D_SingleRowPartialCol_Values()
         {
             // np.arange(24).reshape(2,3,4)[0:1,1:3,:] = [[4..11]]
@@ -170,7 +170,7 @@ namespace NumSharp.UnitTest.View
             s.GetInt64(0, 1, 3).Should().Be(11);
         }
 
-        [Test]
+        [TestMethod]
         public void Slice3D_MiddleDim_Values()
         {
             // np.arange(24).reshape(2,3,4)[:,1:2,:] — shape (2,1,4)
@@ -188,7 +188,7 @@ namespace NumSharp.UnitTest.View
 
         #region Regression: Slice-of-slice — values
 
-        [Test]
+        [TestMethod]
         public void SliceOfContiguousSlice_Values()
         {
             // np.arange(10)[2:8][1:4] = [3, 4, 5]
@@ -201,7 +201,7 @@ namespace NumSharp.UnitTest.View
             s2.GetInt64(2).Should().Be(5);
         }
 
-        [Test]
+        [TestMethod]
         public void SliceOfSteppedSlice_SingleElement_Values()
         {
             // np.arange(10)[::2][0:1] = [0]
@@ -212,7 +212,7 @@ namespace NumSharp.UnitTest.View
             s.GetInt64(0).Should().Be(0);
         }
 
-        [Test]
+        [TestMethod]
         public void SliceOfSteppedSlice_Range_Values()
         {
             // np.arange(10)[::2][1:3] = [2, 4]
@@ -228,7 +228,7 @@ namespace NumSharp.UnitTest.View
 
         #region Regression: Ravel values (must be correct regardless of view/copy)
 
-        [Test]
+        [TestMethod]
         public void Ravel_ContiguousSlice1D_Values()
         {
             // np.ravel(np.arange(10)[2:7]) = [2,3,4,5,6]
@@ -243,7 +243,7 @@ namespace NumSharp.UnitTest.View
             r.GetInt64(4).Should().Be(6);
         }
 
-        [Test]
+        [TestMethod]
         public void Ravel_ContiguousRowSlice2D_Values()
         {
             // np.ravel(np.arange(12).reshape(3,4)[1:3]) = [4,5,6,7,8,9,10,11]
@@ -255,7 +255,7 @@ namespace NumSharp.UnitTest.View
                 r.GetInt64(i).Should().Be(4 + i);
         }
 
-        [Test]
+        [TestMethod]
         public void Ravel_ColumnSlice2D_Values()
         {
             // np.ravel(np.arange(12).reshape(3,4)[:,1:3]) = [1,2,5,6,9,10]
@@ -271,7 +271,7 @@ namespace NumSharp.UnitTest.View
             r.GetInt64(5).Should().Be(10);
         }
 
-        [Test]
+        [TestMethod]
         public void Ravel_SteppedSlice_Values()
         {
             // np.ravel(np.arange(10)[::2]) = [0,2,4,6,8]
@@ -290,7 +290,7 @@ namespace NumSharp.UnitTest.View
 
         #region Regression: Iterator correctness through slices
 
-        [Test]
+        [TestMethod]
         public void Iterator_ContiguousSlice1D()
         {
             // Iterating through a contiguous slice must produce correct values
@@ -301,7 +301,7 @@ namespace NumSharp.UnitTest.View
                 s.GetAtIndex(i).Should().Be(expected[i], $"index {i}");
         }
 
-        [Test]
+        [TestMethod]
         public void Iterator_ContiguousRowSlice2D()
         {
             var a = np.arange(20).reshape(4, 5);
@@ -311,7 +311,7 @@ namespace NumSharp.UnitTest.View
                 s.GetAtIndex(i).Should().Be(5 + i, $"index {i}");
         }
 
-        [Test]
+        [TestMethod]
         public void Iterator_NonContiguousColumnSlice2D()
         {
             var a = np.arange(12).reshape(3, 4);
@@ -321,7 +321,7 @@ namespace NumSharp.UnitTest.View
                 s.GetAtIndex(i).Should().Be(expected[i], $"index {i}");
         }
 
-        [Test]
+        [TestMethod]
         public void Iterator_SteppedSlice()
         {
             var a = np.arange(10);
@@ -336,7 +336,7 @@ namespace NumSharp.UnitTest.View
 
         #region Regression: np.roll on sliced arrays (uses ravel internally)
 
-        [Test]
+        [TestMethod]
         public void Roll_OnContiguousSlice()
         {
             // np.roll(np.arange(10)[2:7], 2) = [5, 6, 2, 3, 4]
@@ -351,7 +351,7 @@ namespace NumSharp.UnitTest.View
             r.GetInt64(4).Should().Be(4);
         }
 
-        [Test]
+        [TestMethod]
         public void Roll_OnRowSlice2D()
         {
             // np.roll(np.arange(12).reshape(3,4)[1:3], 1, axis=1)
@@ -379,7 +379,7 @@ namespace NumSharp.UnitTest.View
 
         #region Fix validation: IsContiguous should be true for contiguous slices
 
-        [Test]
+        [TestMethod]
                 public void IsContiguous_Step1Slice1D()
         {
             // NumPy: a[2:7].flags['C_CONTIGUOUS'] = True
@@ -389,7 +389,7 @@ namespace NumSharp.UnitTest.View
                 "step-1 slice [2:7] is contiguous in memory");
         }
 
-        [Test]
+        [TestMethod]
                 public void IsContiguous_RowSlice2D()
         {
             // NumPy: a[1:3].flags['C_CONTIGUOUS'] = True
@@ -399,7 +399,7 @@ namespace NumSharp.UnitTest.View
                 "row slice [1:3] of C-contiguous 2D array is contiguous");
         }
 
-        [Test]
+        [TestMethod]
                 public void IsContiguous_SingleRow2D()
         {
             // NumPy: a[1:2].flags['C_CONTIGUOUS'] = True
@@ -409,7 +409,7 @@ namespace NumSharp.UnitTest.View
                 "single row slice [1:2] is contiguous");
         }
 
-        [Test]
+        [TestMethod]
                 public void IsContiguous_SingleRowPartialCol2D()
         {
             // NumPy: a[1:2,1:3].flags['C_CONTIGUOUS'] = True
@@ -419,7 +419,7 @@ namespace NumSharp.UnitTest.View
                 "single row with partial columns [1:2,1:3] is contiguous");
         }
 
-        [Test]
+        [TestMethod]
                 public void IsContiguous_SingleElement1D()
         {
             // NumPy: a[3:4].flags['C_CONTIGUOUS'] = True
@@ -429,7 +429,7 @@ namespace NumSharp.UnitTest.View
                 "single element slice [3:4] is contiguous");
         }
 
-        [Test]
+        [TestMethod]
                 public void IsContiguous_3D_RowSlice()
         {
             // NumPy: a[0:1].flags['C_CONTIGUOUS'] = True
@@ -439,7 +439,7 @@ namespace NumSharp.UnitTest.View
                 "3D row slice [0:1] is contiguous");
         }
 
-        [Test]
+        [TestMethod]
                 public void IsContiguous_3D_SingleRowPartialCol()
         {
             // NumPy: a[0:1,1:3,:].flags['C_CONTIGUOUS'] = True
@@ -449,7 +449,7 @@ namespace NumSharp.UnitTest.View
                 "3D single-row partial-col [0:1,1:3,:] is contiguous");
         }
 
-        [Test]
+        [TestMethod]
                 public void IsContiguous_SliceOfContiguousSlice()
         {
             // np.arange(10)[2:8][1:4] — merged step-1, contiguous
@@ -459,7 +459,7 @@ namespace NumSharp.UnitTest.View
                 "slice of a contiguous slice should be contiguous");
         }
 
-        [Test]
+        [TestMethod]
                 public void IsContiguous_SliceOfSteppedSlice_SingleElement()
         {
             // np.arange(10)[::2][0:1] — merged step=2 but count=1 (contiguous)
@@ -473,7 +473,7 @@ namespace NumSharp.UnitTest.View
 
         #region Fix validation: IsContiguous should be false for non-contiguous slices
 
-        [Test]
+        [TestMethod]
         public void IsContiguous_Step2Slice_False()
         {
             // NumPy: a[::2].flags['C_CONTIGUOUS'] = False
@@ -483,7 +483,7 @@ namespace NumSharp.UnitTest.View
                 "step-2 slice has gaps in memory");
         }
 
-        [Test]
+        [TestMethod]
         public void IsContiguous_ReversedSlice_False()
         {
             // NumPy: a[::-1].flags['C_CONTIGUOUS'] = False
@@ -493,7 +493,7 @@ namespace NumSharp.UnitTest.View
                 "reversed slice is not contiguous");
         }
 
-        [Test]
+        [TestMethod]
         public void IsContiguous_ColumnSlice_False()
         {
             // NumPy: a[:,1:3].flags['C_CONTIGUOUS'] = False
@@ -503,7 +503,7 @@ namespace NumSharp.UnitTest.View
                 "column slice has gaps between rows");
         }
 
-        [Test]
+        [TestMethod]
         public void IsContiguous_3D_MiddleDim_False()
         {
             // NumPy: a[:,1:2,:].flags['C_CONTIGUOUS'] = False
@@ -513,7 +513,7 @@ namespace NumSharp.UnitTest.View
                 "middle-dim slice of 3D is not contiguous when outer dim > 1");
         }
 
-        [Test]
+        [TestMethod]
         public void IsContiguous_MultiRowPartialCol_False()
         {
             // NumPy: a[0:2,1:3].flags['C_CONTIGUOUS'] = False
@@ -523,7 +523,7 @@ namespace NumSharp.UnitTest.View
                 "multiple rows with partial columns is not contiguous");
         }
 
-        [Test]
+        [TestMethod]
         public void IsContiguous_SliceOfSteppedSlice_Range_False()
         {
             // np.arange(10)[::2][1:3] — merged step=2, count=2 (not contiguous)
@@ -533,7 +533,7 @@ namespace NumSharp.UnitTest.View
                 "range from stepped slice inherits step>1");
         }
 
-        [Test]
+        [TestMethod]
         public void IsContiguous_Broadcast_False()
         {
             // Broadcast is never contiguous
@@ -546,7 +546,7 @@ namespace NumSharp.UnitTest.View
 
         #region Fix validation: Contiguous slices should share memory (view semantics)
 
-        [Test]
+        [TestMethod]
                 public void ViewSemantics_Step1Slice1D_MutationPropagates()
         {
             // NumPy: s = a[2:7]; s[0] = 999; a[2] == 999
@@ -557,7 +557,7 @@ namespace NumSharp.UnitTest.View
                 "contiguous slice should share memory with original");
         }
 
-        [Test]
+        [TestMethod]
                 public void ViewSemantics_RowSlice2D_MutationPropagates()
         {
             // NumPy: s = a[1:3]; s[0,0] = 999; a[1,0] == 999
@@ -568,7 +568,7 @@ namespace NumSharp.UnitTest.View
                 "contiguous row slice should share memory with original");
         }
 
-        [Test]
+        [TestMethod]
                 public void ViewSemantics_SingleRowPartialCol_MutationPropagates()
         {
             // NumPy: s = a[1:2,1:3]; s[0,0] = 999; a[1,1] == 999
@@ -579,7 +579,7 @@ namespace NumSharp.UnitTest.View
                 "contiguous single-row partial-col slice should share memory");
         }
 
-        [Test]
+        [TestMethod]
                 public void ViewSemantics_SliceOfContiguousSlice_MutationPropagates()
         {
             // NumPy: s = a[2:8][1:4]; s[0] = 999; a[3] == 999
@@ -594,7 +594,7 @@ namespace NumSharp.UnitTest.View
 
         #region Fix validation: Non-contiguous slices should NOT share memory
 
-        [Test]
+        [TestMethod]
         public void ViewSemantics_SteppedSlice_MutationDoesNotPropagate()
         {
             // NumPy: s = np.ravel(a[::2]); s is a copy
@@ -606,7 +606,7 @@ namespace NumSharp.UnitTest.View
                 "ravel of stepped slice should be a copy");
         }
 
-        [Test]
+        [TestMethod]
         public void ViewSemantics_ColumnSlice_RavelIsCopy()
         {
             var a = np.arange(12).reshape(3, 4);
@@ -621,7 +621,7 @@ namespace NumSharp.UnitTest.View
 
         #region Fix validation: Ravel of contiguous slice should be a view
 
-        [Test]
+        [TestMethod]
                 public void Ravel_ContiguousSlice1D_IsView()
         {
             // NumPy: r = np.ravel(a[2:7]); r is a view
@@ -633,7 +633,7 @@ namespace NumSharp.UnitTest.View
                 "ravel of contiguous slice should return a view");
         }
 
-        [Test]
+        [TestMethod]
                 public void Ravel_ContiguousRowSlice2D_IsView()
         {
             // NumPy: r = np.ravel(a[1:3]); r is a view
@@ -649,7 +649,7 @@ namespace NumSharp.UnitTest.View
 
         #region Fix validation: Downstream consumers — copyto, unique
 
-        [Test]
+        [TestMethod]
                 public void Copyto_ContiguousSlice_FastPath()
         {
             // np.copyto with contiguous slices should use fast memcpy path
@@ -664,7 +664,7 @@ namespace NumSharp.UnitTest.View
 
         #region Fix validation: Multiple dtypes through contiguous slice path
 
-        [Test]
+        [TestMethod]
                 public void ContiguousSlice_Float64_Values()
         {
             var a = np.arange(10.0); // float64
@@ -674,7 +674,7 @@ namespace NumSharp.UnitTest.View
             s.GetDouble(4).Should().Be(6.0);
         }
 
-        [Test]
+        [TestMethod]
                 public void ContiguousSlice_Float32_Values()
         {
             var a = np.arange(10).astype(np.float32);
@@ -684,7 +684,7 @@ namespace NumSharp.UnitTest.View
             s.GetSingle(4).Should().Be(6.0f);
         }
 
-        [Test]
+        [TestMethod]
                 public void ContiguousSlice_Byte_Values()
         {
             var a = np.arange(10).astype(np.uint8);
@@ -694,7 +694,7 @@ namespace NumSharp.UnitTest.View
             s.GetByte(4).Should().Be(6);
         }
 
-        [Test]
+        [TestMethod]
                 public void ContiguousSlice_Int64_Values()
         {
             var a = np.arange(10).astype(np.int64);
@@ -708,7 +708,7 @@ namespace NumSharp.UnitTest.View
 
         #region Edge cases
 
-        [Test]
+        [TestMethod]
         public void EmptySlice_Values()
         {
             // np.arange(10)[5:5] = []
@@ -717,7 +717,7 @@ namespace NumSharp.UnitTest.View
             s.size.Should().Be(0);
         }
 
-        [Test]
+        [TestMethod]
                 public void FullSlice_IsContiguous()
         {
             // np.arange(10)[:] should be contiguous (it's all elements)
@@ -728,7 +728,7 @@ namespace NumSharp.UnitTest.View
             s.size.Should().Be(10);
         }
 
-        [Test]
+        [TestMethod]
                 public void ContiguousSlice_ThenReshape_Values()
         {
             // np.arange(12)[2:10].reshape(2,4) should work and be contiguous

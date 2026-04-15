@@ -10,7 +10,7 @@ namespace NumSharp.UnitTest
 {
     public class PowerTest
     {
-        [Test]
+        [TestMethod]
         public void PowerWithSingleValue()
         {
             // np.arange returns int64 by default (NumPy 2.x)

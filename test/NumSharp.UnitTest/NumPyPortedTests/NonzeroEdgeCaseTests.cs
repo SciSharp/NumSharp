@@ -3,7 +3,6 @@ using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.Backends;
 using NumSharp.UnitTest.Utilities;
-using TUnit.Core;
 
 namespace NumSharp.UnitTest.NumPyPortedTests
 {
@@ -15,7 +14,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
     {
         #region Trivial Cases (from test_nonzero_trivial)
 
-        [Test]
+        [TestMethod]
         public void Nonzero_EmptyArray_ReturnsEmptyTuple()
         {
             // NumPy: nonzero([]) = (array([], dtype=int64),)
@@ -25,7 +24,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             Assert.AreEqual(0, result[0].size);
         }
 
-        [Test]
+        [TestMethod]
         public void Nonzero_SingleZero_ReturnsEmpty()
         {
             // NumPy: nonzero([0]) = (array([], dtype=int64),)
@@ -35,7 +34,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             Assert.AreEqual(0, result[0].size);
         }
 
-        [Test]
+        [TestMethod]
         public void Nonzero_SingleOne_ReturnsIndexZero()
         {
             // NumPy: nonzero([1]) = (array([0]),)
@@ -49,7 +48,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
 
         #region 1D Array Tests (from test_nonzero_onedim)
 
-        [Test]
+        [TestMethod]
         public void Nonzero_1DArray_MixedValues()
         {
             // NumPy: nonzero([1,0,2,-1,0,0,8]) = (array([0, 2, 3, 6]),)
@@ -60,7 +59,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             result[0].Should().BeOfValues(0, 2, 3, 6);
         }
 
-        [Test]
+        [TestMethod]
         public void Nonzero_1DArray_AllZeros()
         {
             var x = np.zeros<int>(new int[] { 5 });
@@ -70,7 +69,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             Assert.AreEqual(0, result[0].size);
         }
 
-        [Test]
+        [TestMethod]
         public void Nonzero_1DArray_AllNonzero()
         {
             var x = np.array(new int[] { 1, 2, 3, 4, 5 });
@@ -84,7 +83,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
 
         #region 2D Array Tests (from test_nonzero_twodim)
 
-        [Test]
+        [TestMethod]
         public void Nonzero_2DArray_SparseValues()
         {
             // NumPy: nonzero([[0,1,0],[2,0,3]]) = (array([0, 1, 1]), array([1, 0, 2]))
@@ -96,7 +95,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             result[1].Should().BeOfValues(1, 0, 2);
         }
 
-        [Test]
+        [TestMethod]
         public void Nonzero_EyeMatrix()
         {
             // NumPy: nonzero(eye(3)) = (array([0, 1, 2]), array([0, 1, 2]))
@@ -108,7 +107,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             result[1].Should().BeOfValues(0, 1, 2);
         }
 
-        [Test]
+        [TestMethod]
         public void Nonzero_2DArray_Arange()
         {
             // NumPy test Case2: arange(9).reshape(3,3) - 0 is only nonzero at position 0
@@ -125,7 +124,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
 
         #region 3D Array Tests
 
-        [Test]
+        [TestMethod]
         public void Nonzero_3DArray()
         {
             // NumPy: nonzero([[[0,1],[0,0]],[[1,0],[0,1]]]) =
@@ -143,7 +142,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
 
         #region Boolean Array Tests
 
-        [Test]
+        [TestMethod]
         public void Nonzero_BooleanArray()
         {
             // NumPy: nonzero([True, False, True, False, True]) = (array([0, 2, 4]),)
@@ -154,7 +153,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             result[0].Should().BeOfValues(0, 2, 4);
         }
 
-        [Test]
+        [TestMethod]
         public void Nonzero_AllTrue()
         {
             var x = np.ones<bool>([5]);
@@ -164,7 +163,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             result[0].Should().BeOfValues(0, 1, 2, 3, 4);
         }
 
-        [Test]
+        [TestMethod]
         public void Nonzero_AllFalse()
         {
             var x = np.zeros<bool>(new int[] { 5 });
@@ -178,7 +177,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
 
         #region Float Array Tests (from test_nonzero_float_dtypes)
 
-        [Test]
+        [TestMethod]
         public void Nonzero_Float32Array()
         {
             var x = np.array(new float[] { 0f, 1.5f, 0f, -2.3f, 0f });
@@ -188,7 +187,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             result[0].Should().BeOfValues(1, 3);
         }
 
-        [Test]
+        [TestMethod]
         public void Nonzero_Float64Array()
         {
             var x = np.array(new double[] { 0.0, 1.5, 0.0, -2.3, 0.0 });
@@ -198,7 +197,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             result[0].Should().BeOfValues(1, 3);
         }
 
-        [Test]
+        [TestMethod]
         public void Nonzero_NegativeZero_TreatedAsZero()
         {
             // NumPy: nonzero([0.0, -0.0, 1.0]) = (array([2]),)
@@ -213,7 +212,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
 
         #region Integer Dtype Tests (from test_nonzero_integer_dtypes)
 
-        [Test]
+        [TestMethod]
         public void Nonzero_Int16Array()
         {
             var x = np.array(new short[] { 0, 1, 0, -1, 2 });
@@ -222,7 +221,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             result[0].Should().BeOfValues(1, 3, 4);
         }
 
-        [Test]
+        [TestMethod]
         public void Nonzero_Int32Array()
         {
             var x = np.array(new int[] { 0, 1, 0, -1, 2 });
@@ -231,7 +230,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             result[0].Should().BeOfValues(1, 3, 4);
         }
 
-        [Test]
+        [TestMethod]
         public void Nonzero_Int64Array()
         {
             var x = np.array(new long[] { 0, 1, 0, -1, 2 });
@@ -240,7 +239,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             result[0].Should().BeOfValues(1, 3, 4);
         }
 
-        [Test]
+        [TestMethod]
         public void Nonzero_UInt8Array()
         {
             var x = np.array(new byte[] { 0, 1, 0, 5, 2 });
@@ -249,7 +248,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             result[0].Should().BeOfValues(1, 3, 4);
         }
 
-        [Test]
+        [TestMethod]
         public void Nonzero_UInt16Array()
         {
             var x = np.array(new ushort[] { 0, 1, 0, 5, 2 });
@@ -258,7 +257,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             result[0].Should().BeOfValues(1, 3, 4);
         }
 
-        [Test]
+        [TestMethod]
         public void Nonzero_UInt32Array()
         {
             var x = np.array(new uint[] { 0, 1, 0, 5, 2 });
@@ -267,7 +266,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             result[0].Should().BeOfValues(1, 3, 4);
         }
 
-        [Test]
+        [TestMethod]
         public void Nonzero_UInt64Array()
         {
             var x = np.array(new ulong[] { 0, 1, 0, 5, 2 });
@@ -280,7 +279,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
 
         #region Transposed Array Tests
 
-        [Test]
+        [TestMethod]
         public void Nonzero_TransposedArray()
         {
             // NumPy: nonzero([[0,1,0],[2,0,3]].T) = (array([0, 1, 2]), array([1, 0, 1]))
@@ -296,7 +295,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
 
         #region Using Result for Indexing
 
-        [Test]
+        [TestMethod]
         public void Nonzero_UseResultForIndexing()
         {
             // NumPy: x[nonzero(x)] returns the non-zero values
@@ -311,7 +310,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
 
         #region Sparse Pattern Tests (from test_sparse)
 
-        [Test]
+        [TestMethod]
         public void Nonzero_SparsePattern_SingleTruePerBlock()
         {
             // Test sparse boolean pattern
@@ -329,7 +328,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
 
         #region Large Array Tests
 
-        [Test]
+        [TestMethod]
         public void Nonzero_LargeArray()
         {
             // Create array with known non-zero pattern
@@ -346,7 +345,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
 
         #region Edge Cases with Slices
 
-        [Test]
+        [TestMethod]
         public void Nonzero_SlicedArray()
         {
             var x = np.arange(10);
@@ -357,7 +356,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             result[0].Should().BeOfValues(0, 1, 2, 3, 4, 5);
         }
 
-        [Test]
+        [TestMethod]
         public void Nonzero_StridedSlice()
         {
             var x = np.array(new int[] { 0, 1, 0, 2, 0, 3, 0, 4 });
@@ -371,7 +370,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
 
         #region NaN Handling
 
-        [Test]
+        [TestMethod]
         public void Nonzero_NaN_TreatedAsNonzero()
         {
             // NaN is non-zero (it's not equal to zero)
@@ -381,7 +380,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             result[0].Should().BeOfValues(1, 3);
         }
 
-        [Test]
+        [TestMethod]
         public void Nonzero_Inf_TreatedAsNonzero()
         {
             var x = np.array(new double[] { 0.0, double.PositiveInfinity, 0.0, double.NegativeInfinity });

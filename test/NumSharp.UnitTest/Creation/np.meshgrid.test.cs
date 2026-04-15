@@ -7,7 +7,7 @@ namespace NumSharp.UnitTest.Creation
 {
     public class NumpyMeshgridTest
     {
-        [Test]
+        [TestMethod]
         public void MeshgridTest()
         {
             NDArray X = np.array(0, 1, 2);

@@ -8,7 +8,7 @@ namespace NumSharp.UnitTest.RandomSampling
     
     public class TriangularTests
     {
-        [Test]
+        [TestMethod]
         public void Triangular_ReturnsScalar_WhenNoSize()
         {
             var rng = np.random.RandomState(42);
@@ -20,7 +20,7 @@ namespace NumSharp.UnitTest.RandomSampling
             result.dtype.Should().Be(typeof(double));
         }
 
-        [Test]
+        [TestMethod]
         public void Triangular_Returns1DArray()
         {
             var rng = np.random.RandomState(42);
@@ -30,7 +30,7 @@ namespace NumSharp.UnitTest.RandomSampling
             result.size.Should().Be(5);
         }
 
-        [Test]
+        [TestMethod]
         public void Triangular_Returns2DArray()
         {
             var rng = np.random.RandomState(42);
@@ -40,7 +40,7 @@ namespace NumSharp.UnitTest.RandomSampling
             result.size.Should().Be(6);
         }
 
-        [Test]
+        [TestMethod]
         public void Triangular_AllValuesWithinBounds()
         {
             var rng = np.random.RandomState(42);
@@ -53,7 +53,7 @@ namespace NumSharp.UnitTest.RandomSampling
             max.Should().BeLessThanOrEqualTo(1.0);
         }
 
-        [Test]
+        [TestMethod]
         public void Triangular_SymmetricMode_HasExpectedMean()
         {
             // For triangular(left, mode, right), mean = (left + mode + right) / 3
@@ -66,7 +66,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Math.Abs(mean - expectedMean).Should().BeLessThan(0.01);
         }
 
-        [Test]
+        [TestMethod]
         public void Triangular_LeftSkewed_HasExpectedMean()
         {
             // mode=0.1, mean should be (0 + 0.1 + 1) / 3 ≈ 0.3667
@@ -79,7 +79,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Math.Abs(mean - expectedMean).Should().BeLessThan(0.01);
         }
 
-        [Test]
+        [TestMethod]
         public void Triangular_RightSkewed_HasExpectedMean()
         {
             // mode=0.9, mean should be (0 + 0.9 + 1) / 3 ≈ 0.6333
@@ -92,7 +92,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Math.Abs(mean - expectedMean).Should().BeLessThan(0.01);
         }
 
-        [Test]
+        [TestMethod]
         public void Triangular_ModeAtLeft_StillValid()
         {
             var rng = np.random.RandomState(42);
@@ -107,7 +107,7 @@ namespace NumSharp.UnitTest.RandomSampling
             }
         }
 
-        [Test]
+        [TestMethod]
         public void Triangular_ModeAtRight_StillValid()
         {
             var rng = np.random.RandomState(42);
@@ -122,7 +122,7 @@ namespace NumSharp.UnitTest.RandomSampling
             }
         }
 
-        [Test]
+        [TestMethod]
         public void Triangular_NegativeRange_Works()
         {
             var rng = np.random.RandomState(42);
@@ -136,28 +136,28 @@ namespace NumSharp.UnitTest.RandomSampling
             }
         }
 
-        [Test]
+        [TestMethod]
         public void Triangular_LeftGreaterThanMode_ThrowsArgumentException()
         {
             Action act = () => np.random.triangular(1, 0.5, 2); // left=1, mode=0.5, right=2
             act.Should().Throw<ArgumentException>();
         }
 
-        [Test]
+        [TestMethod]
         public void Triangular_ModeGreaterThanRight_ThrowsArgumentException()
         {
             Action act = () => np.random.triangular(0, 1.5, 1); // mode > right
             act.Should().Throw<ArgumentException>();
         }
 
-        [Test]
+        [TestMethod]
         public void Triangular_LeftEqualsRight_ThrowsArgumentException()
         {
             Action act = () => np.random.triangular(5, 5, 5); // degenerate case not allowed
             act.Should().Throw<ArgumentException>();
         }
 
-        [Test]
+        [TestMethod]
         public void Triangular_ShapeOverload_Works()
         {
             var rng = np.random.RandomState(42);
@@ -166,7 +166,7 @@ namespace NumSharp.UnitTest.RandomSampling
             result.shape.Should().ContainInOrder(3, 4);
         }
 
-        [Test]
+        [TestMethod]
         public void Triangular_Reproducibility_WithSeed()
         {
             var rng1 = np.random.RandomState(42);

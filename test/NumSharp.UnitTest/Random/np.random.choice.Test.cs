@@ -9,7 +9,7 @@ namespace NumSharp.UnitTest.RandomSampling
 {
     public class NpRandomChoiceTests : TestClass
     {
-        [Test]
+        [TestMethod]
         [OpenBugs] // BUG: default(Shape) handling causes "index < Count" error
         public void UniformOneSample()
         {
@@ -31,7 +31,7 @@ namespace NumSharp.UnitTest.RandomSampling
             }
         }
 
-        [Test]
+        [TestMethod]
         [OpenBugs] // BUG: default(Shape) handling causes "index < Count" error
         public void UniformMultipleSample()
         {
@@ -53,7 +53,7 @@ namespace NumSharp.UnitTest.RandomSampling
             }
         }
 
-        [Test]
+        [TestMethod]
         public void NonUniformSample()
         {
             // Generate a non-uniform random sample from np.arange(5) of size 3:
@@ -76,7 +76,7 @@ namespace NumSharp.UnitTest.RandomSampling
             }
         }
 
-        [Test]
+        [TestMethod]
         [OpenBugs] // Choice without replacement not implemented yet
         public void UniformSampleWithoutReplace()
         {
@@ -84,7 +84,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.Fail("Not implemented");
         }
 
-        [Test]
+        [TestMethod]
         [OpenBugs] // Choice without replacement not implemented yet
         public void NonUniformSampleWithoutReplace()
         {
@@ -93,8 +93,8 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.Fail("Not implemented");
         }
 
-        [Test]
-        [Skip("Choice with string arrays not implemented yet")]
+        [TestMethod]
+        [Ignore("Choice with string arrays not implemented yet")]
         public void StringArraySample1()
         {
             //int nrSamples = 5;
@@ -113,7 +113,7 @@ namespace NumSharp.UnitTest.RandomSampling
             //}
         }
 
-        [Test]
+        [TestMethod]
         public void IntegerArraySample()
         {
             int nrSamples = 5;

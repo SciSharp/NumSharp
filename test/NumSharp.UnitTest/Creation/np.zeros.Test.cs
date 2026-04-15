@@ -11,7 +11,7 @@ namespace NumSharp.UnitTest.Creation
 {
     public class NumPyZerosTest
     {
-        [Test]
+        [TestMethod]
         public void zero()
         {
             var n = np.zeros(3);
@@ -19,21 +19,21 @@ namespace NumSharp.UnitTest.Creation
             Assert.IsTrue(Enumerable.SequenceEqual(n.Data<double>(), new double[] {0, 0, 0}));
         }
 
-        [Test]
+        [TestMethod]
         public void Zeros2Dim()
         {
             var n = np.zeros(new Shape(3, 2));
             Assert.IsTrue(Enumerable.SequenceEqual(n.Data<double>(), new double[] {0, 0, 0, 0, 0, 0}));
         }
 
-        [Test]
+        [TestMethod]
         public void Zeros1DimWithDtype()
         {
             var n = np.zeros(new Shape(3), np.int32);
             Assert.IsTrue(Enumerable.SequenceEqual(n.Data<int>(), new int[] {0, 0, 0}));
         }
 
-        [Test]
+        [TestMethod]
         public void SimpleInt1D()
         {
             var np1 = np.zeros(new Shape(5));
@@ -41,7 +41,7 @@ namespace NumSharp.UnitTest.Creation
             Assert.IsTrue(np1.Data<double>().Where(x => x == 0).ToArray().Length == 5);
         }
 
-        [Test]
+        [TestMethod]
         public void SimpleInt2D()
         {
             var np1 = np.zeros(new Shape(5, 5));
@@ -49,7 +49,7 @@ namespace NumSharp.UnitTest.Creation
             Assert.IsTrue(np1.Data<double>().Where(x => x == 0).ToArray().Length == 25);
         }
 
-        [Test]
+        [TestMethod]
         public void SimpleDouble3D()
         {
             var np1 = np.zeros(new Shape(5, 5, 5));

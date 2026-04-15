@@ -10,21 +10,21 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
     {
         private static string hello = "hello";
 
-        [Test]
+        [TestMethod]
         public void np_array_string()
         {
             var str = NDArray.FromString(hello);
             str.Should().BeOfType<char>().And.BeShaped(5).And.BeOfValues('h', 'e', 'l', 'l', 'o');
         }
 
-        [Test]
+        [TestMethod]
         public void FromString()
         {
             var str = NDArray.FromString(hello);
             str.Should().BeOfType<char>().And.BeShaped(5).And.BeOfValues('h', 'e', 'l', 'l', 'o');
         }
 
-        [Test]
+        [TestMethod]
         public void AsString()
         {
             var str = np.array('h', 'e', 'l', 'l', 'o');
@@ -32,7 +32,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             NDArray.AsString(str).Should().Be(hello);
         }
 
-        [Test]
+        [TestMethod]
         public void GetString()
         {
             var str = np.repeat(np.array('h', 'e', 'l', 'l', 'o'), 5);
@@ -45,7 +45,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             }).Should().Throw<ArgumentOutOfRangeException>();
         }
 
-        [Test]
+        [TestMethod]
         public void GetString_Sliced()
         {
             var str = np.repeat(np.array('h', 'e', 'l', 'l', 'o'), 5).reshape(5, 5)[":, 0"];
@@ -55,7 +55,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             str.Shape.IsContiguous.Should().BeFalse("column slice has stride != 1");
             str.GetString().Should().Be("hello");
         }
-        [Test]
+        [TestMethod]
         public void SetString_Sliced()
         {
             var str = np.repeat(np.array('h', 'e', 'l', 'l', 'o'), 5).reshape(5, 5)[":, 0"];
@@ -67,7 +67,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             str.Should().BeOfValues("kekek".ToCharArray().Cast<object>().ToArray());
         }
 
-        [Test]
+        [TestMethod]
         public void SetString()
         {
             var str = np.repeat(np.array('h', 'e', 'l', 'l', 'o'), 5);

@@ -11,7 +11,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
 {
     public class np_outer_test
     {
-        [Test]
+        [TestMethod]
         public void Case1()
         {
             np.outer(np.ones(5), np.linspace(-2, 2, 5))

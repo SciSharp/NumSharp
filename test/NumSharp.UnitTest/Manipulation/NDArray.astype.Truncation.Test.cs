@@ -2,7 +2,6 @@ using System;
 using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.Backends;
-using TUnit.Core;
 
 namespace NumSharp.UnitTest.Manipulation
 {
@@ -25,7 +24,7 @@ namespace NumSharp.UnitTest.Manipulation
         // BASIC TRUNCATION TESTS
         // ================================================================
 
-        [Test]
+        [TestMethod]
         public void Float64_ToInt32_PositiveFractions_TruncateTowardZero()
         {
             // NumPy: np.array([2.1, 2.5, 2.9]).astype(np.int32) -> [2, 2, 2]
@@ -38,7 +37,7 @@ namespace NumSharp.UnitTest.Manipulation
             result.GetAtIndex<int>(2).Should().Be(2, "2.9 should truncate to 2");
         }
 
-        [Test]
+        [TestMethod]
         public void Float64_ToInt32_NegativeFractions_TruncateTowardZero()
         {
             // NumPy: np.array([-2.1, -2.5, -2.9]).astype(np.int32) -> [-2, -2, -2]
@@ -52,7 +51,7 @@ namespace NumSharp.UnitTest.Manipulation
             result.GetAtIndex<int>(2).Should().Be(-2, "-2.9 should truncate to -2 (NOT -3)");
         }
 
-        [Test]
+        [TestMethod]
         public void Float32_ToInt32_TruncateTowardZero()
         {
             // Same behavior for float32
@@ -72,7 +71,7 @@ namespace NumSharp.UnitTest.Manipulation
         // would give different results than truncation
         // ================================================================
 
-        [Test]
+        [TestMethod]
         public void Float64_ToInt32_BankersRoundingEdgeCases()
         {
             // Banker's rounding would round these to even:
@@ -88,7 +87,7 @@ namespace NumSharp.UnitTest.Manipulation
             result.GetAtIndex<int>(4).Should().Be(4, "4.5 truncates to 4");
         }
 
-        [Test]
+        [TestMethod]
         public void Float64_ToInt32_NegativeBankersRoundingEdgeCases()
         {
             // Banker's rounding for negatives:
@@ -108,7 +107,7 @@ namespace NumSharp.UnitTest.Manipulation
         // VERY SMALL VALUES
         // ================================================================
 
-        [Test]
+        [TestMethod]
         public void Float64_ToInt32_VerySmallPositive_TruncateToZero()
         {
             var arr = np.array(new double[] { 0.0001, 0.1, 0.9, 0.99999 });
@@ -120,7 +119,7 @@ namespace NumSharp.UnitTest.Manipulation
             result.GetAtIndex<int>(3).Should().Be(0, "0.99999 truncates to 0");
         }
 
-        [Test]
+        [TestMethod]
         public void Float64_ToInt32_VerySmallNegative_TruncateToZero()
         {
             var arr = np.array(new double[] { -0.0001, -0.1, -0.9, -0.99999 });
@@ -136,7 +135,7 @@ namespace NumSharp.UnitTest.Manipulation
         // TYPE BOUNDARY VALUES
         // ================================================================
 
-        [Test]
+        [TestMethod]
         public void Float64_ToInt32_AtBoundaries()
         {
             // Values just inside Int32 range
@@ -154,7 +153,7 @@ namespace NumSharp.UnitTest.Manipulation
             result.GetAtIndex<int>(3).Should().Be(-2147483647, "-2147483647.9 truncates to -2147483647");
         }
 
-        [Test]
+        [TestMethod]
         public void Float64_ToInt64_AtBoundaries()
         {
             // Int64 has a larger range
@@ -172,7 +171,7 @@ namespace NumSharp.UnitTest.Manipulation
             result.GetAtIndex<long>(2).Should().Be(9007199254740991L);
         }
 
-        [Test]
+        [TestMethod]
         public void Float64_ToByte_AtBoundaries()
         {
             var arr = np.array(new double[] { 0.9, 254.9, 127.5, 255.0 });
@@ -185,7 +184,7 @@ namespace NumSharp.UnitTest.Manipulation
             result.GetAtIndex<byte>(3).Should().Be(255, "255.0 stays 255");
         }
 
-        [Test]
+        [TestMethod]
         public void Float64_ToInt16_AtBoundaries()
         {
             var arr = np.array(new double[] {
@@ -207,7 +206,7 @@ namespace NumSharp.UnitTest.Manipulation
         // OVERFLOW BEHAVIOR
         // ================================================================
 
-        [Test]
+        [TestMethod]
         public void Float64_ToInt32_Overflow_ThrowsException()
         {
             var arr = np.array(new double[] { (double)int.MaxValue + 1000 });
@@ -218,7 +217,7 @@ namespace NumSharp.UnitTest.Manipulation
                 "Converting value > int.MaxValue should throw OverflowException");
         }
 
-        [Test]
+        [TestMethod]
         public void Float64_ToInt32_Underflow_ThrowsException()
         {
             var arr = np.array(new double[] { (double)int.MinValue - 1000 });
@@ -235,7 +234,7 @@ namespace NumSharp.UnitTest.Manipulation
         // and raises a warning. NumSharp should throw or have defined behavior.
         // ================================================================
 
-        [Test]
+        [TestMethod]
         public void Float64_ToInt32_NaN_ThrowsOrReturnsZero()
         {
             // NumPy: RuntimeWarning and returns -2147483648 (or platform dependent)
@@ -259,7 +258,7 @@ namespace NumSharp.UnitTest.Manipulation
             }
         }
 
-        [Test]
+        [TestMethod]
         public void Float64_ToInt32_PositiveInfinity_Throws()
         {
             var arr = np.array(new double[] { double.PositiveInfinity });
@@ -271,7 +270,7 @@ namespace NumSharp.UnitTest.Manipulation
                 "Converting +Infinity should throw OverflowException");
         }
 
-        [Test]
+        [TestMethod]
         public void Float64_ToInt32_NegativeInfinity_Throws()
         {
             var arr = np.array(new double[] { double.NegativeInfinity });
@@ -288,7 +287,7 @@ namespace NumSharp.UnitTest.Manipulation
         // Verify truncation works for all float->int conversion paths
         // ================================================================
 
-        [Test]
+        [TestMethod]
         public void Float64_ToAllIntTypes_Truncation()
         {
             var arr = np.array(new double[] { 2.9, -2.9 });
@@ -334,7 +333,7 @@ namespace NumSharp.UnitTest.Manipulation
             toUInt64.GetAtIndex<ulong>(1).Should().Be(1000);
         }
 
-        [Test]
+        [TestMethod]
         public void Float32_ToAllIntTypes_Truncation()
         {
             var arr = np.array(new float[] { 2.9f, -2.9f });
@@ -359,7 +358,7 @@ namespace NumSharp.UnitTest.Manipulation
         // MULTI-DIMENSIONAL ARRAYS
         // ================================================================
 
-        [Test]
+        [TestMethod]
         public void Float64_ToInt32_2DArray_TruncatesAllElements()
         {
             var arr = np.array(new double[,] {
@@ -382,7 +381,7 @@ namespace NumSharp.UnitTest.Manipulation
             result[1, 2].GetInt32().Should().Be(-3);
         }
 
-        [Test]
+        [TestMethod]
         public void Float64_ToInt32_3DArray_TruncatesAllElements()
         {
             var arr = np.arange(24).astype(np.float64).reshape(2, 3, 4);
@@ -402,7 +401,7 @@ namespace NumSharp.UnitTest.Manipulation
         // SLICED/VIEW ARRAYS
         // ================================================================
 
-        [Test]
+        [TestMethod]
         public void Float64_ToInt32_SlicedArray_TruncatesCorrectly()
         {
             var arr = np.array(new double[] { 0.9, 1.9, 2.9, 3.9, 4.9, 5.9 });
@@ -417,7 +416,7 @@ namespace NumSharp.UnitTest.Manipulation
             result.GetAtIndex<int>(3).Should().Be(4);
         }
 
-        [Test]
+        [TestMethod]
         public void Float64_ToInt32_SteppedSlice_TruncatesCorrectly()
         {
             var arr = np.array(new double[] { 0.9, 1.9, 2.9, 3.9, 4.9, 5.9 });
@@ -435,7 +434,7 @@ namespace NumSharp.UnitTest.Manipulation
         // COPY PARAMETER
         // ================================================================
 
-        [Test]
+        [TestMethod]
         public void Float64_ToInt32_WithCopy_CreatesNewArray()
         {
             var arr = np.array(new double[] { 2.9, -2.9 });
@@ -450,7 +449,7 @@ namespace NumSharp.UnitTest.Manipulation
         // MIXED VALUES
         // ================================================================
 
-        [Test]
+        [TestMethod]
         public void Float64_ToInt32_MixedValues_AllTruncateCorrectly()
         {
             // NumPy reference:
@@ -472,7 +471,7 @@ namespace NumSharp.UnitTest.Manipulation
         // DECIMAL TO INT (should also truncate)
         // ================================================================
 
-        [Test]
+        [TestMethod]
         public void Decimal_ToInt32_Truncation()
         {
             var arr = np.array(new decimal[] { 2.9m, -2.9m, 1.5m, -1.5m });
@@ -488,7 +487,7 @@ namespace NumSharp.UnitTest.Manipulation
         // EXACT INTEGER VALUES (no truncation needed)
         // ================================================================
 
-        [Test]
+        [TestMethod]
         public void Float64_ToInt32_ExactIntegers_PreservedExactly()
         {
             var arr = np.array(new double[] { 0.0, 1.0, -1.0, 100.0, -100.0,

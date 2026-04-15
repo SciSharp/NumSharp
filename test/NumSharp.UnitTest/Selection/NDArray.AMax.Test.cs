@@ -8,7 +8,7 @@ namespace NumSharp.UnitTest.Selection
 {
     public class NDArrayAMaxTest
     {
-        [Test]
+        [TestMethod]
         public void argmax12()
         {
             NDArray x = DataSample.Int32D12;
@@ -17,35 +17,35 @@ namespace NumSharp.UnitTest.Selection
             Assert.AreEqual(y0, 3);
         }
 
-        [Test]
+        [TestMethod]
         public void argmax_case1()
         {
             var a = np.arange(27).reshape(3, 3, 3);
             np.argmax(a).Should().Be(26);
         }
 
-        [Test]
+        [TestMethod]
         public void argmax_case2()
         {
             var a = np.arange(27).reshape(3, 3, 3);
             np.argmax(a, axis: 1).flat.Cast<long>().Should().AllBeEquivalentTo(2);
         }
 
-        [Test]
+        [TestMethod]
         public void argmax_case3()
         {
             var a = np.arange(27).reshape(3, 3, 3);
             np.argmax(a, axis: 0).flat.Cast<long>().Should().AllBeEquivalentTo(2);
         }
 
-        [Test]
+        [TestMethod]
         public void argmax_case4()
         {
             var a = np.arange(27).reshape(3, 3, 3);
             np.argmax(a, axis: 2).flat.Cast<long>().Should().AllBeEquivalentTo(2);
         }
 
-        [Test]
+        [TestMethod]
         public void argmax_case5()
         {
             var a = np.arange(6).reshape(2, 3) + 10;
@@ -56,7 +56,7 @@ namespace NumSharp.UnitTest.Selection
             ret.shape.Should().HaveCount(1).And.ContainInOrder(3);
         }
 
-        [Test]
+        [TestMethod]
         public void argmax_case6()
         {
             var a = np.arange(6).reshape(2, 3) + 10;
@@ -67,7 +67,7 @@ namespace NumSharp.UnitTest.Selection
             ret.shape.Should().HaveCount(1).And.ContainInOrder(2);
         }
 
-        [Test]
+        [TestMethod]
         public void argmin_case5()
         {
             var a = np.arange(6).reshape(2, 3) + 10;
@@ -78,7 +78,7 @@ namespace NumSharp.UnitTest.Selection
             ret.shape.Should().HaveCount(1).And.ContainInOrder(3);
         }
 
-        [Test]
+        [TestMethod]
         public void argmin_case6()
         {
             var a = np.arange(6).reshape(2, 3) + 10;
@@ -89,35 +89,35 @@ namespace NumSharp.UnitTest.Selection
             ret.shape.Should().HaveCount(1).And.ContainInOrder(2);
         }
 
-        [Test]
+        [TestMethod]
         public void argmin_case2()
         {
             var a = np.arange(27).reshape(3, 3, 3);
             np.argmin(a, axis: 1).flat.Cast<long>().Should().AllBeEquivalentTo(0);
         }
 
-        [Test]
+        [TestMethod]
         public void argmin_case3()
         {
             var a = np.arange(27).reshape(3, 3, 3);
             np.argmin(a, axis: 0).flat.Cast<long>().Should().AllBeEquivalentTo(0);
         }
 
-        [Test]
+        [TestMethod]
         public void argmin_case4()
         {
             var a = np.arange(27).reshape(3, 3, 3);
             np.argmin(a, axis: 2).flat.Cast<long>().Should().AllBeEquivalentTo(0);
         }
 
-        [Test]
+        [TestMethod]
         public void argmin_case1()
         {
             var a = np.arange(27).reshape(3, 3, 3);
             np.argmin(a).Should().Be(0);
         }
 
-        [Test]
+        [TestMethod]
         public void argmax4x3()
         {
             NDArray x = DataSample.Int32D4x3;
@@ -129,7 +129,7 @@ namespace NumSharp.UnitTest.Selection
             Assert.IsTrue(Enumerable.SequenceEqual(y1.Data<long>(), new long[] {0, 1, 2, 1}));
         }
 
-        [Test]
+        [TestMethod]
         public void amax()
         {
             //default type

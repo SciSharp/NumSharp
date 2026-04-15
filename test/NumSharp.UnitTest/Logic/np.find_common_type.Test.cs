@@ -8,154 +8,154 @@ namespace NumSharp.UnitTest.Logic
 {
     public class np_find_common_type_test
     {
-        [Test]
+        [TestMethod]
         public void Case1()
         {
             var r = np.find_common_type(new[] {np.float32}, new[] {np.int64, np.float64});
             r.Should().Be(NPTypeCode.Single);
         }
 
-        [Test]
+        [TestMethod]
         public void Case2()
         {
             var r = np.find_common_type(new[] {np.float32}, new[] {np.complex64});
             r.Should().Be(NPTypeCode.Complex);
         }
 
-        [Test]
+        [TestMethod]
         public void Case3()
         {
             var r = np.find_common_type(new[] {np.float32}, new[] {np.complex64});
             r.Should().Be(NPTypeCode.Complex);
         }
 
-        [Test]
+        [TestMethod]
         public void Case4()
         {
             var r = np.find_common_type(new[] {"f4", "f4", "i4",}, new[] {"c8"});
             r.Should().Be(NPTypeCode.Complex);
         }
 
-        [Test]
+        [TestMethod]
         public void Case5()
         {
             var r = np.find_common_type(new[] {"f4", "f4", "i4",}, new[] {"c8"});
             r.Should().Be(NPTypeCode.Complex);
         }
 
-        [Test]
+        [TestMethod]
         public void Case6()
         {
             var r = np.find_common_type(new[] {np.int32, np.float32});
             r.Should().Be(NPTypeCode.Double);
         }
 
-        [Test]
+        [TestMethod]
         public void Case7()
         {
             var r = np.find_common_type(new[] {np.int32, np.float64});
             r.Should().Be(NPTypeCode.Double);
         }
 
-        [Test]
+        [TestMethod]
         public void Case8()
         {
             var r = np.find_common_type(new[] {np.int32, np.float64}, new[] {np.int32, np.float64});
             r.Should().Be(NPTypeCode.Double);
         }
 
-        [Test]
+        [TestMethod]
         public void Case9()
         {
             var r = np.find_common_type(new[] {np.int32, np.float64}, new[] {np.int32, np.float32});
             r.Should().Be(NPTypeCode.Double);
         }
 
-        [Test]
+        [TestMethod]
         public void Case10()
         {
             var r = np.find_common_type(new[] {np.int32, np.float64}, new[] {np.complex64});
             r.Should().Be(NPTypeCode.Complex);
         }
 
-        [Test]
+        [TestMethod]
         public void Case11()
         {
             var r = np.find_common_type(new[] {np.uint8, np.float32}, new Type[0]);
             r.Should().Be(NPTypeCode.Single);
         }
 
-        [Test]
+        [TestMethod]
         public void Case12()
         {
             var r = np.find_common_type(new[] {np.@byte, np.float32}, new Type[0]);
             r.Should().Be(NPTypeCode.Single);
         }
 
-        [Test]
+        [TestMethod]
         public void Case13()
         {
             var r = np.find_common_type(new[] {np.float32, np.float32}, new Type[0]);
             r.Should().Be(NPTypeCode.Single);
         }
 
-        [Test]
+        [TestMethod]
         public void Case14()
         {
             var r = np.find_common_type(new[] {np.float32, np.@byte}, new Type[0]);
             r.Should().Be(NPTypeCode.Single);
         }
 
-        [Test]
+        [TestMethod]
         public void Case15()
         {
             var r = np.find_common_type(new[] {np.float64, np.float64}, new Type[0]);
             r.Should().Be(NPTypeCode.Double);
         }
 
-        [Test]
+        [TestMethod]
         public void Case17()
         {
             var r = np.find_common_type(new[] {np.@byte, np.@byte}, new Type[0]);
             r.Should().Be(NPTypeCode.Byte);
         }
 
-        [Test]
+        [TestMethod]
         public void Case18()
         {
             var r = np.find_common_type(new[] {np.complex128, np.@double}, new Type[0]);
             r.Should().Be(NPTypeCode.Complex);
         }
 
-        [Test]
+        [TestMethod]
         public void Case19()
         {
             var r = np.find_common_type(new[] {np.complex128, np.complex128}, new Type[0]);
             r.Should().Be(NPTypeCode.Complex);
         }
 
-        [Test]
+        [TestMethod]
         public void Case20()
         {
             var r = np.find_common_type(new[] {np.complex128, np.complex128}, new[] {np.@double});
             r.Should().Be(NPTypeCode.Complex);
         }
 
-        [Test]
+        [TestMethod]
         public void Case21()
         {
             var r = np.find_common_type(new[] {np.@decimal, np.@double}, new NPTypeCode[0]);
             r.Should().Be(NPTypeCode.Decimal);
         }
 
-        [Test]
+        [TestMethod]
         public void Case22()
         {
             var r = np.find_common_type(new[] {np.int16, np.int64}, new NPTypeCode[0]);
             r.Should().Be(NPTypeCode.Int64);
         }
 
-        [Test]
+        [TestMethod]
         public void Case23()
         {
             var r = np.find_common_type(new[] {np.@char, np.int16}, new NPTypeCode[0]);
@@ -167,7 +167,7 @@ namespace NumSharp.UnitTest.Logic
         /// the array dtype wins (no type widening). This matches NumPy 2.x behavior.
         /// See: https://numpy.org/neps/nep-0050-scalar-promotion.html
         /// </summary>
-        [Test]
+        [TestMethod]
         public void NEP50_UnsignedArray_SignedScalar_ArrayWins()
         {
             // uint8 array + signed scalar → uint8
@@ -191,7 +191,7 @@ namespace NumSharp.UnitTest.Logic
             np._FindCommonArrayScalarType(NPTypeCode.UInt64, NPTypeCode.Int64).Should().Be(NPTypeCode.UInt64);
         }
 
-        [Test, Skip("Ignored")]
+        [TestMethod, Ignore("Ignored")]
         public void gen_typecode_map()
         {
             var r = np.find_common_type(new[] {np.float32, np.float64}, new NPTypeCode[0]);
@@ -340,8 +340,8 @@ namespace NumSharp.UnitTest.Logic
 #endif
         }
 
-        [Test]
-        [Skip("Ignored")]
+        [TestMethod]
+        [Ignore("Ignored")]
         public void gen_all_possible_combinations()
         {
 #if _REGEN

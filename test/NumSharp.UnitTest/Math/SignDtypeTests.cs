@@ -15,7 +15,7 @@ namespace NumSharp.UnitTest
         ///     Fixed:    Returns int32
         ///     Was:      Returns Double
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Sign_Int32_PreservesDtype()
         {
             var a = np.array(new int[] { -3, 0, 5 });
@@ -30,7 +30,7 @@ namespace NumSharp.UnitTest
         /// <summary>
         ///     Test np.sign preserves dtype for other integer types.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Sign_Int64_PreservesDtype()
         {
             var a = np.array(new long[] { -100L, 0L, 100L });
@@ -45,7 +45,7 @@ namespace NumSharp.UnitTest
         /// <summary>
         ///     Test np.sign preserves dtype for float types.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Sign_Double_PreservesDtype()
         {
             var a = np.array(new double[] { -2.5, 0.0, 3.7 });
@@ -60,7 +60,7 @@ namespace NumSharp.UnitTest
         /// <summary>
         ///     Test np.sign with byte type.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Sign_Byte_PreservesDtype()
         {
             // Byte is unsigned, so sign is always 0 or 1

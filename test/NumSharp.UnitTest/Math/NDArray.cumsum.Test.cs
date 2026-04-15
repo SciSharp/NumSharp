@@ -11,7 +11,7 @@ namespace NumSharp.UnitTest.Maths
 {
     public class NDArrayCumsumTest : TestClass
     {
-        [Test]
+        [TestMethod]
         public void CumsumStaticFunction()
         {
             NDArray arr = new double[] {0, 1, 4, 2, 5, 6, 2};
@@ -20,7 +20,7 @@ namespace NumSharp.UnitTest.Maths
             np.cumsum(arr).Should().Be(expected);
         }
 
-        [Test]
+        [TestMethod]
         public void CumsumMemberFunction()
         {
             NDArray arr = new double[] {0, 1, 4, 2, 5, 6, 2};
@@ -29,7 +29,7 @@ namespace NumSharp.UnitTest.Maths
             arr.cumsum().Should().Be(expected);
         }
 
-        [Test]
+        [TestMethod]
         public void Cumsum2d()
         {
             NDArray arr = new int[,] {{1, 2, 3}, {4, 5, 6}};
@@ -39,7 +39,7 @@ namespace NumSharp.UnitTest.Maths
             np.cumsum(arr).Should().Be(expected);
         }
 
-        [Test]
+        [TestMethod]
         public void Cumsum2dDtype()
         {
             NDArray arr = new int[,] {{1, 2, 3}, {4, 5, 6}};
@@ -48,7 +48,7 @@ namespace NumSharp.UnitTest.Maths
             np.cumsum(arr, typeCode: NPTypeCode.Single).Should().Be(expected);
         }
 
-        [Test]
+        [TestMethod]
         public void Cumsum2dAxisRows()
         {
             NDArray arr = new int[,] {{1, 2, 3}, {4, 5, 6}};
@@ -58,7 +58,7 @@ namespace NumSharp.UnitTest.Maths
             np.cumsum(arr, axis: 0).Should().Be(expected);
         }
 
-        [Test]
+        [TestMethod]
         public void Cumsum2dAxisCols()
         {
             NDArray arr = new int[,] {{1, 2, 3}, {4, 5, 6}};
@@ -73,7 +73,7 @@ namespace NumSharp.UnitTest.Maths
         /// NumPy: cumsum([True, False, True, True, False]) = [1, 1, 2, 3, 3]
         /// Return type is int64 (NumPy 2.x behavior).
         /// </summary>
-        [Test]
+        [TestMethod]
         public void BooleanArray_TreatsAsIntAndReturnsInt64()
         {
             var a = np.array(new bool[] { true, false, true, true, false });

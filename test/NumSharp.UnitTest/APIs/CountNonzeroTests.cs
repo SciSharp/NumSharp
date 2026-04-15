@@ -2,9 +2,6 @@ using System;
 using System.Threading.Tasks;
 using NumSharp;
 using NumSharp.UnitTest.Utilities;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-using TUnit.Core;
 
 namespace NumSharp.UnitTest.APIs;
 
@@ -16,7 +13,7 @@ public class CountNonzeroTests
 {
     #region Element-wise (No Axis)
 
-    [Test]
+    [TestMethod]
     public async Task CountNonzero_1D_ReturnsCount()
     {
         // NumPy: np.count_nonzero([0, 1, 0, 2]) = 2
@@ -26,7 +23,7 @@ public class CountNonzeroTests
         await Assert.That(result).IsEqualTo(2);
     }
 
-    [Test]
+    [TestMethod]
     public async Task CountNonzero_1D_AllZero_ReturnsZero()
     {
         // NumPy: np.count_nonzero([0, 0, 0]) = 0
@@ -36,7 +33,7 @@ public class CountNonzeroTests
         await Assert.That(result).IsEqualTo(0);
     }
 
-    [Test]
+    [TestMethod]
     public async Task CountNonzero_1D_AllNonzero_ReturnsSize()
     {
         // NumPy: np.count_nonzero([1, 2, 3]) = 3
@@ -46,7 +43,7 @@ public class CountNonzeroTests
         await Assert.That(result).IsEqualTo(3);
     }
 
-    [Test]
+    [TestMethod]
     public async Task CountNonzero_2D_ReturnsTotal()
     {
         // NumPy: np.count_nonzero([[0, 1], [2, 0]]) = 2
@@ -56,7 +53,7 @@ public class CountNonzeroTests
         await Assert.That(result).IsEqualTo(2);
     }
 
-    [Test]
+    [TestMethod]
     public async Task CountNonzero_Empty_ReturnsZero()
     {
         // NumPy: np.count_nonzero([]) = 0
@@ -70,7 +67,7 @@ public class CountNonzeroTests
 
     #region Boolean Arrays
 
-    [Test]
+    [TestMethod]
     public async Task CountNonzero_Boolean_TrueIsNonzero()
     {
         // NumPy: np.count_nonzero([False, True, False, True]) = 2
@@ -84,7 +81,7 @@ public class CountNonzeroTests
 
     #region Float Arrays
 
-    [Test]
+    [TestMethod]
     public async Task CountNonzero_Float_ZeroIsExact()
     {
         // NumPy: np.count_nonzero([0.0, 1.0, 0.0, 2.0]) = 2
@@ -94,7 +91,7 @@ public class CountNonzeroTests
         await Assert.That(result).IsEqualTo(2);
     }
 
-    [Test]
+    [TestMethod]
     public async Task CountNonzero_Float_NaN_IsNonzero()
     {
         // NumPy: np.count_nonzero([0.0, nan, 0.0]) = 1
@@ -108,7 +105,7 @@ public class CountNonzeroTests
 
     #region Axis Reduction
 
-    [Test]
+    [TestMethod]
     public async Task CountNonzero_2D_Axis0()
     {
         // NumPy: np.count_nonzero([[0, 1, 2], [3, 0, 0]], axis=0) = [1, 1, 1]
@@ -121,7 +118,7 @@ public class CountNonzeroTests
         await Assert.That(result.GetInt64(2)).IsEqualTo(1L);
     }
 
-    [Test]
+    [TestMethod]
     public async Task CountNonzero_2D_Axis1()
     {
         // NumPy: np.count_nonzero([[0, 1, 2], [3, 0, 0]], axis=1) = [2, 1]
@@ -133,7 +130,7 @@ public class CountNonzeroTests
         await Assert.That(result.GetInt64(1)).IsEqualTo(1L);
     }
 
-    [Test]
+    [TestMethod]
     public async Task CountNonzero_2D_Axis0_Keepdims()
     {
         // NumPy: np.count_nonzero([[0, 1, 2], [3, 0, 0]], axis=0, keepdims=True) = [[1, 1, 1]] (shape 1,3)
@@ -147,7 +144,7 @@ public class CountNonzeroTests
         await Assert.That(result.GetAtIndex<long>(2)).IsEqualTo(1L);
     }
 
-    [Test]
+    [TestMethod]
     public async Task CountNonzero_2D_NegativeAxis()
     {
         // NumPy: np.count_nonzero([[0, 1, 2], [3, 0, 0]], axis=-1) = [2, 1]
@@ -159,7 +156,7 @@ public class CountNonzeroTests
         await Assert.That(result.GetInt64(1)).IsEqualTo(1L);
     }
 
-    [Test]
+    [TestMethod]
     public async Task CountNonzero_3D_Axis1()
     {
         // 3D array with shape (2, 2, 3) reduced along axis 1 gives shape (2, 3)
@@ -184,7 +181,7 @@ public class CountNonzeroTests
 
     #region Empty Array Axis Reduction
 
-    [Test]
+    [TestMethod]
     public async Task CountNonzero_Empty2D_Axis0_ReturnsZeros()
     {
         // NumPy: np.count_nonzero(np.zeros((0, 3)), axis=0) = [0, 0, 0]
@@ -197,7 +194,7 @@ public class CountNonzeroTests
         await Assert.That(result.GetInt64(2)).IsEqualTo(0L);
     }
 
-    [Test]
+    [TestMethod]
     public async Task CountNonzero_Empty2D_Axis1_ReturnsEmpty()
     {
         // NumPy: np.count_nonzero(np.zeros((0, 3)), axis=1) = [] (shape (0,))

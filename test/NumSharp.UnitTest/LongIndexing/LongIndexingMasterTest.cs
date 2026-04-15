@@ -5,7 +5,6 @@ using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp;
-using TUnit.Core;
 
 namespace NumSharp.UnitTest.LongIndexing;
 
@@ -46,8 +45,8 @@ public class LongIndexingMasterTest
     /// Master test that exercises all np.* functions with large arrays.
     /// Runs sequentially to manage memory usage.
     /// </summary>
-    [Test]
-    [Explicit("Requires ~8GB+ RAM. Run manually with: dotnet test -- --treenode-filter \"/*/*/*/*[Category=LongIndexing]\"")]
+    [TestMethod]
+    [TestCategory("Explicit")] // Requires ~8GB+ RAM. Run manually with: dotnet test --filter "TestCategory=LongIndexing"
     public async Task AllNpFunctions_WithLargeArrays()
     {
         var results = new System.Collections.Generic.List<(string Operation, bool Success, string Error, TimeSpan Duration)>();

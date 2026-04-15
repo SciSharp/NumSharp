@@ -32,7 +32,7 @@ public class NEP50_TypePromotion
     /// Verified: python3 -c "import numpy as np; print((np.array([1,2,3], np.uint8) + 5).dtype)"
     /// Output: uint8
     /// </summary>
-    [Test]
+    [TestMethod]
     public void UInt8Array_Plus_PythonInt_Returns_UInt8()
     {
         var arr = np.array(new byte[] { 1, 2, 3 });
@@ -48,7 +48,7 @@ public class NEP50_TypePromotion
     /// Verified: python3 -c "import numpy as np; print((np.array([1,2,3], np.uint16) + 5).dtype)"
     /// Output: uint16
     /// </summary>
-    [Test]
+    [TestMethod]
     public void UInt16Array_Plus_PythonInt_Returns_UInt16()
     {
         var arr = np.array(new ushort[] { 1, 2, 3 });
@@ -62,7 +62,7 @@ public class NEP50_TypePromotion
     /// Verified: python3 -c "import numpy as np; print((np.array([1,2,3], np.uint32) + 5).dtype)"
     /// Output: uint32
     /// </summary>
-    [Test]
+    [TestMethod]
     public void UInt32Array_Plus_PythonInt_Returns_UInt32()
     {
         var arr = np.array(new uint[] { 1, 2, 3 });
@@ -76,7 +76,7 @@ public class NEP50_TypePromotion
     /// Verified: python3 -c "import numpy as np; print((np.array([1,2,3], np.uint64) + 5).dtype)"
     /// Output: uint64
     /// </summary>
-    [Test]
+    [TestMethod]
     public void UInt64Array_Plus_PythonInt_Returns_UInt64()
     {
         var arr = np.array(new ulong[] { 1, 2, 3 });
@@ -94,7 +94,7 @@ public class NEP50_TypePromotion
     /// Verified: python3 -c "import numpy as np; print((np.array([1,2,3], np.int16) + 5).dtype)"
     /// Output: int16
     /// </summary>
-    [Test]
+    [TestMethod]
     public void Int16Array_Plus_PythonInt_Returns_Int16()
     {
         var arr = np.array(new short[] { 1, 2, 3 });
@@ -108,7 +108,7 @@ public class NEP50_TypePromotion
     /// Verified: python3 -c "import numpy as np; print((np.array([1,2,3], np.int32) + 5).dtype)"
     /// Output: int32
     /// </summary>
-    [Test]
+    [TestMethod]
     public void Int32Array_Plus_PythonInt_Returns_Int32()
     {
         var arr = np.array(new int[] { 1, 2, 3 });
@@ -122,7 +122,7 @@ public class NEP50_TypePromotion
     /// Verified: python3 -c "import numpy as np; print((np.array([1,2,3], np.int64) + 5).dtype)"
     /// Output: int64
     /// </summary>
-    [Test]
+    [TestMethod]
     public void Int64Array_Plus_PythonInt_Returns_Int64()
     {
         var arr = np.array(new long[] { 1, 2, 3 });
@@ -140,7 +140,7 @@ public class NEP50_TypePromotion
     /// Verified: python3 -c "import numpy as np; print((np.array([1,2,3], np.float32) + 5).dtype)"
     /// Output: float32
     /// </summary>
-    [Test]
+    [TestMethod]
     public void Float32Array_Plus_PythonInt_Returns_Float32()
     {
         var arr = np.array(new float[] { 1f, 2f, 3f });
@@ -154,7 +154,7 @@ public class NEP50_TypePromotion
     /// Verified: python3 -c "import numpy as np; print((np.array([1,2,3], np.float64) + 5).dtype)"
     /// Output: float64
     /// </summary>
-    [Test]
+    [TestMethod]
     public void Float64Array_Plus_PythonInt_Returns_Float64()
     {
         var arr = np.array(new double[] { 1.0, 2.0, 3.0 });
@@ -172,7 +172,7 @@ public class NEP50_TypePromotion
     /// Verified: python3 -c "import numpy as np; print((np.array([1,2,3], np.float32) + 5.0).dtype)"
     /// Output: float32
     /// </summary>
-    [Test]
+    [TestMethod]
     public void Float32Array_Plus_PythonFloat_Returns_Float32()
     {
         var arr = np.array(new float[] { 1f, 2f, 3f });
@@ -186,7 +186,7 @@ public class NEP50_TypePromotion
     /// Verified: python3 -c "import numpy as np; print((np.array([1,2,3], np.float64) + 5.0).dtype)"
     /// Output: float64
     /// </summary>
-    [Test]
+    [TestMethod]
     public void Float64Array_Plus_PythonFloat_Returns_Float64()
     {
         var arr = np.array(new double[] { 1.0, 2.0, 3.0 });
@@ -204,7 +204,7 @@ public class NEP50_TypePromotion
     /// Verified: python3 -c "import numpy as np; print((np.array([1,2,3], np.int32) + 5.0).dtype)"
     /// Output: float64
     /// </summary>
-    [Test]
+    [TestMethod]
     public void Int32Array_Plus_PythonFloat_Returns_Float64()
     {
         var arr = np.array(new int[] { 1, 2, 3 });
@@ -218,7 +218,7 @@ public class NEP50_TypePromotion
     /// Verified: python3 -c "import numpy as np; print((np.array([1,2,3], np.uint8) + 5.0).dtype)"
     /// Output: float64
     /// </summary>
-    [Test]
+    [TestMethod]
     public void UInt8Array_Plus_PythonFloat_Returns_Float64()
     {
         var arr = np.array(new byte[] { 1, 2, 3 });
@@ -236,7 +236,7 @@ public class NEP50_TypePromotion
     /// Verified: python3 -c "import numpy as np; print((np.array([10,20,30], np.uint8) - 5).dtype)"
     /// Output: uint8
     /// </summary>
-    [Test]
+    [TestMethod]
     public void UInt8Array_Minus_PythonInt_Returns_UInt8()
     {
         var arr = np.array(new byte[] { 10, 20, 30 });
@@ -252,7 +252,7 @@ public class NEP50_TypePromotion
     /// Verified: python3 -c "import numpy as np; print((np.array([10,20,30], np.uint16) - 5).dtype)"
     /// Output: uint16
     /// </summary>
-    [Test]
+    [TestMethod]
     public void UInt16Array_Minus_PythonInt_Returns_UInt16()
     {
         var arr = np.array(new ushort[] { 10, 20, 30 });
@@ -270,7 +270,7 @@ public class NEP50_TypePromotion
     /// Verified: python3 -c "import numpy as np; print((np.array([1,2,3], np.uint8) * 5).dtype)"
     /// Output: uint8
     /// </summary>
-    [Test]
+    [TestMethod]
     public void UInt8Array_Times_PythonInt_Returns_UInt8()
     {
         var arr = np.array(new byte[] { 1, 2, 3 });
@@ -286,7 +286,7 @@ public class NEP50_TypePromotion
     /// Verified: python3 -c "import numpy as np; print((np.array([1,2,3], np.uint32) * 5).dtype)"
     /// Output: uint32
     /// </summary>
-    [Test]
+    [TestMethod]
     public void UInt32Array_Times_PythonInt_Returns_UInt32()
     {
         var arr = np.array(new uint[] { 1, 2, 3 });
@@ -306,7 +306,7 @@ public class NEP50_TypePromotion
     ///
     /// NumSharp now matches NumPy: true division returns float64.
     /// </summary>
-    [Test]
+    [TestMethod]
     public void UInt8Array_Divide_PythonInt_Returns_Float64()
     {
         var arr = np.array(new byte[] { 10, 20, 30 });
@@ -323,7 +323,7 @@ public class NEP50_TypePromotion
     ///
     /// NumSharp now matches NumPy: true division returns float64.
     /// </summary>
-    [Test]
+    [TestMethod]
     public void Int32Array_Divide_PythonInt_Returns_Float64()
     {
         var arr = np.array(new int[] { 10, 20, 30 });
@@ -339,7 +339,7 @@ public class NEP50_TypePromotion
     /// Verified: python3 -c "import numpy as np; print((np.array([10,20,30], np.float64) / 5).dtype)"
     /// Output: float64
     /// </summary>
-    [Test]
+    [TestMethod]
     public void Float64Array_Divide_PythonInt_Returns_Float64()
     {
         var arr = np.array(new double[] { 10.0, 20.0, 30.0 });
@@ -357,7 +357,7 @@ public class NEP50_TypePromotion
     /// Verified: python3 -c "import numpy as np; print((np.array([10,20,30], np.uint8) % 7).dtype)"
     /// Output: uint8
     /// </summary>
-    [Test]
+    [TestMethod]
     public void UInt8Array_Mod_PythonInt_Returns_UInt8()
     {
         var arr = np.array(new byte[] { 10, 20, 30 });
@@ -373,7 +373,7 @@ public class NEP50_TypePromotion
     /// Verified: python3 -c "import numpy as np; print((np.array([10,20,30], np.int32) % 7).dtype)"
     /// Output: int32
     /// </summary>
-    [Test]
+    [TestMethod]
     public void Int32Array_Mod_PythonInt_Returns_Int32()
     {
         var arr = np.array(new int[] { 10, 20, 30 });
@@ -391,7 +391,7 @@ public class NEP50_TypePromotion
     /// Verified: python3 -c "import numpy as np; print((5 + np.array([1,2,3], np.uint8)).dtype)"
     /// Output: uint8
     /// </summary>
-    [Test]
+    [TestMethod]
     public void PythonInt_Plus_UInt8Array_Returns_UInt8()
     {
         var arr = np.array(new byte[] { 1, 2, 3 });
@@ -405,7 +405,7 @@ public class NEP50_TypePromotion
     /// Verified: python3 -c "import numpy as np; print((5 - np.array([1,2,3], np.uint8)).dtype)"
     /// Output: uint8
     /// </summary>
-    [Test]
+    [TestMethod]
     public void PythonInt_Minus_UInt8Array_Returns_UInt8()
     {
         var arr = np.array(new byte[] { 1, 2, 3 });
@@ -421,7 +421,7 @@ public class NEP50_TypePromotion
     /// Verified: python3 -c "import numpy as np; print((5 * np.array([1,2,3], np.uint8)).dtype)"
     /// Output: uint8
     /// </summary>
-    [Test]
+    [TestMethod]
     public void PythonInt_Times_UInt8Array_Returns_UInt8()
     {
         var arr = np.array(new byte[] { 1, 2, 3 });
@@ -439,7 +439,7 @@ public class NEP50_TypePromotion
     /// Direct verification of the type promotion table for NEP 50 changes.
     /// These are the 12 entries that changed from NumPy 1.x to 2.x behavior.
     /// </summary>
-    [Test]
+    [TestMethod]
     public void ArrayScalarType_UInt8_SignedScalars()
     {
         // NEP 50: uint8 array + signed scalar → uint8 (array wins)
@@ -448,7 +448,7 @@ public class NEP50_TypePromotion
         np._FindCommonArrayScalarType(NPTypeCode.Byte, NPTypeCode.Int64).Should().Be(NPTypeCode.Byte);
     }
 
-    [Test]
+    [TestMethod]
     public void ArrayScalarType_UInt16_SignedScalars()
     {
         // NEP 50: uint16 array + signed scalar → uint16 (array wins)
@@ -457,7 +457,7 @@ public class NEP50_TypePromotion
         np._FindCommonArrayScalarType(NPTypeCode.UInt16, NPTypeCode.Int64).Should().Be(NPTypeCode.UInt16);
     }
 
-    [Test]
+    [TestMethod]
     public void ArrayScalarType_UInt32_SignedScalars()
     {
         // NEP 50: uint32 array + signed scalar → uint32 (array wins)
@@ -466,7 +466,7 @@ public class NEP50_TypePromotion
         np._FindCommonArrayScalarType(NPTypeCode.UInt32, NPTypeCode.Int64).Should().Be(NPTypeCode.UInt32);
     }
 
-    [Test]
+    [TestMethod]
     public void ArrayScalarType_UInt64_SignedScalars()
     {
         // NEP 50: uint64 array + signed scalar → uint64 (array wins)
@@ -486,7 +486,7 @@ public class NEP50_TypePromotion
     /// Verified: python3 -c "import numpy as np; print((np.array([1], np.uint8) + np.array([5], np.int32)).dtype)"
     /// Output: int32
     /// </summary>
-    [Test]
+    [TestMethod]
     public void ArrayArray_UInt8_Plus_Int32_Returns_Int32()
     {
         var arr1 = np.array(new byte[] { 1, 2, 3 });
@@ -501,7 +501,7 @@ public class NEP50_TypePromotion
     /// Verified: python3 -c "import numpy as np; print((np.array([1], np.uint16) + np.array([5], np.int32)).dtype)"
     /// Output: int32
     /// </summary>
-    [Test]
+    [TestMethod]
     public void ArrayArray_UInt16_Plus_Int32_Returns_Int32()
     {
         var arr1 = np.array(new ushort[] { 1, 2, 3 });
@@ -518,7 +518,7 @@ public class NEP50_TypePromotion
     /// <summary>
     /// Same-type operations remain unchanged.
     /// </summary>
-    [Test]
+    [TestMethod]
     public void SameType_UInt8_Plus_UInt8_Returns_UInt8()
     {
         var arr1 = np.array(new byte[] { 1, 2, 3 });
@@ -532,7 +532,7 @@ public class NEP50_TypePromotion
     /// <summary>
     /// Unsigned array + larger unsigned scalar → array dtype (unchanged).
     /// </summary>
-    [Test]
+    [TestMethod]
     public void UInt8Array_Plus_UInt32Scalar_Returns_UInt8()
     {
         // This was already "array wins" in NumPy 1.x for same-kind
@@ -542,7 +542,7 @@ public class NEP50_TypePromotion
     /// <summary>
     /// Float operations with int scalars → float (array kind wins).
     /// </summary>
-    [Test]
+    [TestMethod]
     public void Float32Array_Operations_PreserveFloat()
     {
         var arr = np.array(new float[] { 1f, 2f, 3f });
@@ -560,7 +560,7 @@ public class NEP50_TypePromotion
     /// <summary>
     /// Empty array operations should preserve dtype.
     /// </summary>
-    [Test]
+    [TestMethod]
     public void EmptyArray_Operations_PreserveDtype()
     {
         var arr = np.array(Array.Empty<byte>());
@@ -573,7 +573,7 @@ public class NEP50_TypePromotion
     /// <summary>
     /// 1D array operations.
     /// </summary>
-    [Test]
+    [TestMethod]
     public void OneDimensional_UInt8_Operations()
     {
         var arr = np.arange(10).astype(np.uint8);
@@ -586,7 +586,7 @@ public class NEP50_TypePromotion
     /// <summary>
     /// Multi-dimensional array operations.
     /// </summary>
-    [Test]
+    [TestMethod]
     public void MultiDimensional_UInt8_Operations()
     {
         var arr = np.arange(12).astype(np.uint8).reshape(3, 4);
@@ -607,7 +607,7 @@ public class NEP50_TypePromotion
     ///
     /// NumSharp uses scalar-scalar table which may differ.
     /// </summary>
-    [Test]
+    [TestMethod]
     [Misaligned]
     public void ScalarArray_Operations_UsesScalarScalarPromotion()
     {
@@ -628,7 +628,7 @@ public class NEP50_TypePromotion
     /// Verified: python3 -c "import numpy as np; print((np.array([1,2,3], np.uint8) ** 2).dtype)"
     /// Output: uint8
     /// </summary>
-    [Test]
+    [TestMethod]
     public void UInt8Array_Power_PythonInt_Returns_UInt8()
     {
         var arr = np.array(new byte[] { 1, 2, 3 });
@@ -644,7 +644,7 @@ public class NEP50_TypePromotion
     /// Verified: python3 -c "import numpy as np; print((np.array([1,2,3], np.int32) ** 2).dtype)"
     /// Output: int32
     /// </summary>
-    [Test]
+    [TestMethod]
     public void Int32Array_Power_PythonInt_Returns_Int32()
     {
         var arr = np.array(new int[] { 1, 2, 3 });
@@ -668,7 +668,7 @@ public class NEP50_TypePromotion
     ///
     /// NumSharp now follows NumPy 2.x behavior.
     /// </summary>
-    [Test]
+    [TestMethod]
     public void Documentation_NEP50_BreakingChange()
     {
         // This is the key behavioral change from NumPy 1.x to 2.x
@@ -692,7 +692,7 @@ public class NEP50_TypePromotion
     ///
     /// Note: NumSharp doesn't support int8 (sbyte), so we use int16.
     /// </summary>
-    [Test]
+    [TestMethod]
     public void CrossKind_IntArray_Plus_Float_Returns_Float64()
     {
         var intArr = np.array(new short[] { 1, 2, 3 });  // int16
@@ -705,7 +705,7 @@ public class NEP50_TypePromotion
     /// Verified: python3 -c "import numpy as np; print((np.array([1,2,3], np.uint8) + 5.0).dtype)"
     /// Output: float64
     /// </summary>
-    [Test]
+    [TestMethod]
     public void CrossKind_UInt8Array_Plus_Float_Returns_Float64()
     {
         var arr = np.array(new byte[] { 1, 2, 3 });
@@ -718,7 +718,7 @@ public class NEP50_TypePromotion
     /// Verified: python3 -c "import numpy as np; print((np.array([1,2,3], np.int32) + 5.0).dtype)"
     /// Output: float64
     /// </summary>
-    [Test]
+    [TestMethod]
     public void CrossKind_Int32Array_Plus_Float_Returns_Float64()
     {
         var arr = np.array(new int[] { 1, 2, 3 });
@@ -740,7 +740,7 @@ public class NEP50_TypePromotion
     /// NumPy 2.x with numpy scalar: int16 (strongly typed)
     /// NumSharp with C# short: treats as weakly typed → uint8
     /// </summary>
-    [Test]
+    [TestMethod]
     public void NEP50_UInt8_Plus_Short_AllOps()
     {
         var arr = np.array(new byte[] { 10, 20, 30 });
@@ -752,7 +752,7 @@ public class NEP50_TypePromotion
         (arr % scalar).dtype.Should().Be(np.uint8, "uint8 % int16 → uint8");
     }
 
-    [Test]
+    [TestMethod]
     public void NEP50_UInt8_Plus_Int_AllOps()
     {
         var arr = np.array(new byte[] { 10, 20, 30 });
@@ -764,7 +764,7 @@ public class NEP50_TypePromotion
         (arr % scalar).dtype.Should().Be(np.uint8, "uint8 % int32 → uint8");
     }
 
-    [Test]
+    [TestMethod]
     public void NEP50_UInt8_Plus_Long_AllOps()
     {
         var arr = np.array(new byte[] { 10, 20, 30 });
@@ -780,7 +780,7 @@ public class NEP50_TypePromotion
     // UINT16 + SIGNED SCALARS (3 combinations)
     // ============================================================================
 
-    [Test]
+    [TestMethod]
     public void NEP50_UInt16_Plus_Short_AllOps()
     {
         var arr = np.array(new ushort[] { 100, 200, 300 });
@@ -792,7 +792,7 @@ public class NEP50_TypePromotion
         (arr % scalar).dtype.Should().Be(np.uint16, "uint16 % int16 → uint16");
     }
 
-    [Test]
+    [TestMethod]
     public void NEP50_UInt16_Plus_Int_AllOps()
     {
         var arr = np.array(new ushort[] { 100, 200, 300 });
@@ -804,7 +804,7 @@ public class NEP50_TypePromotion
         (arr % scalar).dtype.Should().Be(np.uint16, "uint16 % int32 → uint16");
     }
 
-    [Test]
+    [TestMethod]
     public void NEP50_UInt16_Plus_Long_AllOps()
     {
         var arr = np.array(new ushort[] { 100, 200, 300 });
@@ -820,7 +820,7 @@ public class NEP50_TypePromotion
     // UINT32 + SIGNED SCALARS (3 combinations)
     // ============================================================================
 
-    [Test]
+    [TestMethod]
     public void NEP50_UInt32_Plus_Short_AllOps()
     {
         var arr = np.array(new uint[] { 1000, 2000, 3000 });
@@ -832,7 +832,7 @@ public class NEP50_TypePromotion
         (arr % scalar).dtype.Should().Be(np.uint32, "uint32 % int16 → uint32");
     }
 
-    [Test]
+    [TestMethod]
     public void NEP50_UInt32_Plus_Int_AllOps()
     {
         var arr = np.array(new uint[] { 1000, 2000, 3000 });
@@ -844,7 +844,7 @@ public class NEP50_TypePromotion
         (arr % scalar).dtype.Should().Be(np.uint32, "uint32 % int32 → uint32");
     }
 
-    [Test]
+    [TestMethod]
     public void NEP50_UInt32_Plus_Long_AllOps()
     {
         var arr = np.array(new uint[] { 1000, 2000, 3000 });
@@ -860,7 +860,7 @@ public class NEP50_TypePromotion
     // UINT64 + SIGNED SCALARS (3 combinations)
     // ============================================================================
 
-    [Test]
+    [TestMethod]
     public void NEP50_UInt64_Plus_Short_AllOps()
     {
         var arr = np.array(new ulong[] { 10000, 20000, 30000 });
@@ -872,7 +872,7 @@ public class NEP50_TypePromotion
         (arr % scalar).dtype.Should().Be(np.uint64, "uint64 % int16 → uint64");
     }
 
-    [Test]
+    [TestMethod]
     public void NEP50_UInt64_Plus_Int_AllOps()
     {
         var arr = np.array(new ulong[] { 10000, 20000, 30000 });
@@ -884,7 +884,7 @@ public class NEP50_TypePromotion
         (arr % scalar).dtype.Should().Be(np.uint64, "uint64 % int32 → uint64");
     }
 
-    [Test]
+    [TestMethod]
     public void NEP50_UInt64_Plus_Long_AllOps()
     {
         var arr = np.array(new ulong[] { 10000, 20000, 30000 });
@@ -903,7 +903,7 @@ public class NEP50_TypePromotion
     /// <summary>
     /// Verify actual computed values are correct, not just dtypes.
     /// </summary>
-    [Test]
+    [TestMethod]
     public void NEP50_Values_UInt8_Operations()
     {
         var arr = np.array(new byte[] { 10, 20, 30 });
@@ -929,7 +929,7 @@ public class NEP50_TypePromotion
         mod.GetAtIndex<byte>(2).Should().Be(2);   // 30 % 7
     }
 
-    [Test]
+    [TestMethod]
     public void NEP50_Values_UInt32_Operations()
     {
         var arr = np.array(new uint[] { 1000, 2000, 3000 });
@@ -945,7 +945,7 @@ public class NEP50_TypePromotion
         sub.GetAtIndex<uint>(2).Should().Be(2500);
     }
 
-    [Test]
+    [TestMethod]
     public void NEP50_Values_UInt64_Operations()
     {
         var arr = np.array(new ulong[] { 10000, 20000, 30000 });

@@ -24,7 +24,7 @@ namespace NumSharp.UnitTest.View
             }
         }
 
-        [Test]
+        [TestMethod]
         public void GetOffsetTest_unsliced()
         {
             // unsliced shape
@@ -37,7 +37,7 @@ namespace NumSharp.UnitTest.View
 
         }
 
-        [Test]
+        [TestMethod]
         public void GetOffsetTest_sliced()
         {
             new Shape(10, 10, 10).Slice("2:8, ::-2, 7").Should().Be(new Shape(6, 5));

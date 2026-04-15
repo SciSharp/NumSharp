@@ -11,7 +11,7 @@ namespace NumSharp.UnitTest.Indexing
     /// </summary>
     public class np_nonzero_strided_tests : TestClass
     {
-        [Test]
+        [TestMethod]
         public void Transposed_2D()
         {
             // NumPy:
@@ -29,7 +29,7 @@ namespace NumSharp.UnitTest.Indexing
             result[1].Should().BeOfValues(0, 1, 2);  // col indices
         }
 
-        [Test]
+        [TestMethod]
         public void Strided_1D_EveryOther()
         {
             // NumPy:
@@ -48,7 +48,7 @@ namespace NumSharp.UnitTest.Indexing
             result[0].Should().BeOfValues(0, 1, 2, 3, 4);  // all elements are non-zero
         }
 
-        [Test]
+        [TestMethod]
         public void Strided_1D_WithZeros()
         {
             // NumPy:
@@ -66,7 +66,7 @@ namespace NumSharp.UnitTest.Indexing
             Assert.AreEqual(0, result[0].size);  // all zeros
         }
 
-        [Test]
+        [TestMethod]
         public void Strided_1D_Reversed()
         {
             // NumPy:
@@ -85,7 +85,7 @@ namespace NumSharp.UnitTest.Indexing
             result[0].Should().BeOfValues(0, 2, 4);  // indices 0, 2, 4 have values 3, 2, 1
         }
 
-        [Test]
+        [TestMethod]
         public void Sliced_2D_NonContiguous()
         {
             // NumPy:
@@ -104,7 +104,7 @@ namespace NumSharp.UnitTest.Indexing
             result[1].Should().BeOfValues(0, 1, 0, 1);  // cols
         }
 
-        [Test]
+        [TestMethod]
         public void Transposed_3D()
         {
             // Test transpose of 3D array
@@ -128,7 +128,7 @@ namespace NumSharp.UnitTest.Indexing
             result[2].Should().BeOfValues(0, 1);  // dim 2 (was dim 0)
         }
 
-        [Test]
+        [TestMethod]
         public void Boolean_Strided()
         {
             // NumPy:
@@ -146,7 +146,7 @@ namespace NumSharp.UnitTest.Indexing
             Assert.AreEqual(0, result[0].size);  // all false at even indices
         }
 
-        [Test]
+        [TestMethod]
         public void Boolean_Strided_Odd()
         {
             // NumPy:
@@ -165,7 +165,7 @@ namespace NumSharp.UnitTest.Indexing
             result[0].Should().BeOfValues(0, 1, 2);  // all true
         }
 
-        [Test]
+        [TestMethod]
         public void Float_Strided_WithNaN()
         {
             // NaN should be treated as non-zero even in strided arrays
@@ -180,7 +180,7 @@ namespace NumSharp.UnitTest.Indexing
             result[0].Should().BeOfValues(0, 1, 2);  // all non-zero (NaN is non-zero)
         }
 
-        [Test]
+        [TestMethod]
         public void Column_Slice()
         {
             // Test extracting a column (non-contiguous in row-major)
@@ -200,7 +200,7 @@ namespace NumSharp.UnitTest.Indexing
             result[0].Should().BeOfValues(0, 2);  // indices 0 and 2 are non-zero
         }
 
-        [Test]
+        [TestMethod]
         public void Row_Slice_Contiguous()
         {
             // Test extracting a row (should be contiguous in row-major)

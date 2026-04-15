@@ -11,7 +11,7 @@ namespace NumSharp.UnitTest.Creation
 {
     public class NdArrayRollTest
     {
-        [Test]
+        [TestMethod]
         public void Base1DTest()
         {
             NDArray nd1 = new double[] {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
@@ -41,7 +41,7 @@ namespace NumSharp.UnitTest.Creation
             Assert.IsTrue(Enumerable.SequenceEqual(nd2_, expNd2));
         }
 
-        [Test]
+        [TestMethod]
         public void Base2DTest()
         {
             var nd1 = np.arange(10).reshape(2, 5);
@@ -55,7 +55,7 @@ namespace NumSharp.UnitTest.Creation
             Assert.IsTrue(Enumerable.SequenceEqual(nd1.shape, nd3.shape));
         }
 
-        [Test]
+        [TestMethod]
         public void RollWithAxis()
         {
             var x = np.arange(10);

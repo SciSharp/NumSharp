@@ -10,7 +10,7 @@ namespace NumSharp.UnitTest.Utilities
 {
     public class StackedMemoryPoolTests
     {
-        [Test]
+        [TestMethod]
         public void TakeExceedStored()
         {
             var pool = new StackedMemoryPool(4, 10);

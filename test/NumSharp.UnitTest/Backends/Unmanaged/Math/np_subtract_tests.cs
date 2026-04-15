@@ -9,7 +9,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
 {
     public class np_subtract_tests
     {
-        [Test]
+        [TestMethod]
         public void Subtract()
         {
             var left = np.zeros(new Shape(5, 5)) + 5d;
@@ -25,22 +25,22 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
 #if _REGEN
         %a = except(supported_dtypes, "NDArray", "Boolean")
         %foreach a
-        [Arguments(NPTypeCode.Boolean, NPTypeCode.#1)]
+        [DataRow(NPTypeCode.Boolean, NPTypeCode.#1)]
 #else
-        [Arguments(NPTypeCode.Boolean, NPTypeCode.Boolean)]
-        [Arguments(NPTypeCode.Boolean, NPTypeCode.Byte)]
-        [Arguments(NPTypeCode.Boolean, NPTypeCode.Int16)]
-        [Arguments(NPTypeCode.Boolean, NPTypeCode.UInt16)]
-        [Arguments(NPTypeCode.Boolean, NPTypeCode.Int32)]
-        [Arguments(NPTypeCode.Boolean, NPTypeCode.UInt32)]
-        [Arguments(NPTypeCode.Boolean, NPTypeCode.Int64)]
-        [Arguments(NPTypeCode.Boolean, NPTypeCode.UInt64)]
-        [Arguments(NPTypeCode.Boolean, NPTypeCode.Char)]
-        [Arguments(NPTypeCode.Boolean, NPTypeCode.Double)]
-        [Arguments(NPTypeCode.Boolean, NPTypeCode.Single)]
-        [Arguments(NPTypeCode.Boolean, NPTypeCode.Decimal)]
+        [DataRow(NPTypeCode.Boolean, NPTypeCode.Boolean)]
+        [DataRow(NPTypeCode.Boolean, NPTypeCode.Byte)]
+        [DataRow(NPTypeCode.Boolean, NPTypeCode.Int16)]
+        [DataRow(NPTypeCode.Boolean, NPTypeCode.UInt16)]
+        [DataRow(NPTypeCode.Boolean, NPTypeCode.Int32)]
+        [DataRow(NPTypeCode.Boolean, NPTypeCode.UInt32)]
+        [DataRow(NPTypeCode.Boolean, NPTypeCode.Int64)]
+        [DataRow(NPTypeCode.Boolean, NPTypeCode.UInt64)]
+        [DataRow(NPTypeCode.Boolean, NPTypeCode.Char)]
+        [DataRow(NPTypeCode.Boolean, NPTypeCode.Double)]
+        [DataRow(NPTypeCode.Boolean, NPTypeCode.Single)]
+        [DataRow(NPTypeCode.Boolean, NPTypeCode.Decimal)]
 #endif
-        [Test]
+        [TestMethod]
         public void SubtractAllPossabilitiesBoolean(NPTypeCode ltc, NPTypeCode rtc)
         {
             var left = np.ones(new Shape(5, 5), rtc);
@@ -55,7 +55,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             }
         }
 
-        [Test]
+        [TestMethod]
         public void SubtractUpcast()
         {
             var left = (np.zeros(new Shape(5, 5)) + 5d).astype(NPTypeCode.Single);
@@ -72,7 +72,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             }
         }
 
-        [Test]
+        [TestMethod]
         public void SubtractDowncast()
         {
             var left = (np.zeros(new Shape(5, 5)) + 5d).astype(NPTypeCode.Single);
@@ -89,14 +89,14 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             }
         }
 
-        [Test]
+        [TestMethod]
         public void Subtract_Two_Scalars()
         {
             var left = NDArray.Scalar(1d) - NDArray.Scalar(5d);
             left.GetDouble(0).Should().Be(-4);
         }
 
-        [Test]
+        [TestMethod]
         public void Subtract_ND_3_1_vs_1_3()
         {
             var left = np.arange(3).reshape((3, 1)).astype(np.float64);
@@ -117,7 +117,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             }
         }
 
-        [Test]
+        [TestMethod]
         public void Subtract_ND_2_1_3_3_vs_1_3()
         {
             var left = np.arange(2 * 3 * 3).reshape((2, 1, 3, 3)).astype(np.float64);
@@ -139,7 +139,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             ret.GetDouble(1, 0, 2, 2).Should().Be(15);
         }
 
-        [Test]
+        [TestMethod]
         public void Subtract_ND_2_3_3()
         {
             var left = np.arange(6).reshape((2, 3, 1)).astype(np.float64);
@@ -166,7 +166,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             }
         }
 
-        [Test]
+        [TestMethod]
         public void Subtract_RightScalar()
         {
             var left = np.zeros(new Shape(5, 5), np.float64) + 5d;
@@ -180,7 +180,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             }
         }
 
-        [Test]
+        [TestMethod]
         public void Subtract_LeftScalar()
         {
             var left = NDArray.Scalar(1d);
@@ -194,7 +194,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             }
         }
 
-        [Test]
+        [TestMethod]
         public void Subtract_Rising()
         {
             var left = np.zeros(new Shape(5, 5), np.float64);
@@ -219,7 +219,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             }
         }
 
-        [Test]
+        [TestMethod]
         public void Subtract_RightScalar_Rising()
         {
             var left = np.zeros(new Shape(5, 5), np.float64);
@@ -239,7 +239,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
             }
         }
 
-        [Test]
+        [TestMethod]
         public void Subtract_LeftScalar_Rising()
         {
             var left = NDArray.Scalar(1d);
@@ -257,7 +257,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         %a = ["Boolean","Byte","Int16","UInt16","Int32","UInt32","Int64","UInt64","Double","Single","Decimal"]
         %b = [true,"1","1","1","1","1u","1L","1UL","1d","1f","1m"]
         %foreach forevery(a,a,true), forevery(b,b,true)%
-        [Test]
+        [TestMethod]
         public void Subtract_#1_To_#2()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.#1) + 3;
@@ -274,7 +274,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
         %
 #else
 
-        [Test]
+        [TestMethod]
         public void Subtract_Boolean_To_Byte()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Boolean) + 3;
@@ -288,7 +288,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Boolean_To_Int16()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Boolean) + 3;
@@ -302,7 +302,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Boolean_To_UInt16()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Boolean) + 3;
@@ -316,7 +316,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Boolean_To_Int32()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Boolean) + 3;
@@ -330,7 +330,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Boolean_To_UInt32()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Boolean) + 3;
@@ -344,7 +344,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Boolean_To_Int64()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Boolean) + 3;
@@ -358,7 +358,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Boolean_To_UInt64()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Boolean) + 3;
@@ -372,7 +372,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Boolean_To_Double()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Boolean) + 3;
@@ -386,7 +386,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Boolean_To_Single()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Boolean) + 3;
@@ -400,7 +400,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Boolean_To_Decimal()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Boolean) + 3;
@@ -414,7 +414,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Byte_To_Boolean()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Byte) + 3;
@@ -428,7 +428,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Byte_To_Int16()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Byte) + 3;
@@ -442,7 +442,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Byte_To_UInt16()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Byte) + 3;
@@ -456,7 +456,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Byte_To_Int32()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Byte) + 3;
@@ -470,7 +470,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Byte_To_UInt32()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Byte) + 3;
@@ -484,7 +484,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Byte_To_Int64()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Byte) + 3;
@@ -498,7 +498,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Byte_To_UInt64()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Byte) + 3;
@@ -512,7 +512,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Byte_To_Double()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Byte) + 3;
@@ -526,7 +526,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Byte_To_Single()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Byte) + 3;
@@ -540,7 +540,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Byte_To_Decimal()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Byte) + 3;
@@ -554,7 +554,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Int16_To_Boolean()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int16) + 3;
@@ -568,7 +568,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Int16_To_Byte()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int16) + 3;
@@ -582,7 +582,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Int16_To_UInt16()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int16) + 3;
@@ -596,7 +596,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Int16_To_Int32()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int16) + 3;
@@ -610,7 +610,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Int16_To_UInt32()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int16) + 3;
@@ -624,7 +624,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Int16_To_Int64()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int16) + 3;
@@ -638,7 +638,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Int16_To_UInt64()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int16) + 3;
@@ -652,7 +652,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Int16_To_Double()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int16) + 3;
@@ -666,7 +666,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Int16_To_Single()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int16) + 3;
@@ -680,7 +680,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Int16_To_Decimal()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int16) + 3;
@@ -694,7 +694,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_UInt16_To_Boolean()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt16) + 3;
@@ -708,7 +708,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_UInt16_To_Byte()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt16) + 3;
@@ -722,7 +722,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_UInt16_To_Int16()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt16) + 3;
@@ -736,7 +736,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_UInt16_To_Int32()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt16) + 3;
@@ -750,7 +750,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_UInt16_To_UInt32()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt16) + 3;
@@ -764,7 +764,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_UInt16_To_Int64()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt16) + 3;
@@ -778,7 +778,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_UInt16_To_UInt64()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt16) + 3;
@@ -792,7 +792,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_UInt16_To_Double()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt16) + 3;
@@ -806,7 +806,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_UInt16_To_Single()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt16) + 3;
@@ -820,7 +820,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_UInt16_To_Decimal()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt16) + 3;
@@ -834,7 +834,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Int32_To_Boolean()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int32) + 3;
@@ -848,7 +848,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Int32_To_Byte()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int32) + 3;
@@ -862,7 +862,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Int32_To_Int16()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int32) + 3;
@@ -876,7 +876,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Int32_To_UInt16()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int32) + 3;
@@ -890,7 +890,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Int32_To_UInt32()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int32) + 3;
@@ -904,7 +904,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Int32_To_Int64()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int32) + 3;
@@ -918,7 +918,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Int32_To_UInt64()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int32) + 3;
@@ -932,7 +932,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Int32_To_Double()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int32) + 3;
@@ -946,7 +946,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Int32_To_Single()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int32) + 3;
@@ -960,7 +960,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Int32_To_Decimal()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int32) + 3;
@@ -974,7 +974,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_UInt32_To_Boolean()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt32) + 3;
@@ -988,7 +988,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_UInt32_To_Byte()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt32) + 3;
@@ -1002,7 +1002,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_UInt32_To_Int16()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt32) + 3;
@@ -1016,7 +1016,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_UInt32_To_UInt16()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt32) + 3;
@@ -1030,7 +1030,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_UInt32_To_Int32()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt32) + 3;
@@ -1044,7 +1044,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_UInt32_To_Int64()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt32) + 3;
@@ -1058,7 +1058,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_UInt32_To_UInt64()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt32) + 3;
@@ -1072,7 +1072,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_UInt32_To_Double()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt32) + 3;
@@ -1086,7 +1086,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_UInt32_To_Single()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt32) + 3;
@@ -1100,7 +1100,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_UInt32_To_Decimal()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt32) + 3;
@@ -1114,7 +1114,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Int64_To_Boolean()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int64) + 3;
@@ -1128,7 +1128,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Int64_To_Byte()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int64) + 3;
@@ -1142,7 +1142,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Int64_To_Int16()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int64) + 3;
@@ -1156,7 +1156,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Int64_To_UInt16()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int64) + 3;
@@ -1170,7 +1170,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Int64_To_Int32()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int64) + 3;
@@ -1184,7 +1184,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Int64_To_UInt32()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int64) + 3;
@@ -1198,7 +1198,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Int64_To_UInt64()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int64) + 3;
@@ -1212,7 +1212,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Int64_To_Double()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int64) + 3;
@@ -1226,7 +1226,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Int64_To_Single()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int64) + 3;
@@ -1240,7 +1240,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Int64_To_Decimal()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Int64) + 3;
@@ -1254,7 +1254,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_UInt64_To_Boolean()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt64) + 3;
@@ -1268,7 +1268,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_UInt64_To_Byte()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt64) + 3;
@@ -1282,7 +1282,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_UInt64_To_Int16()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt64) + 3;
@@ -1296,7 +1296,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_UInt64_To_UInt16()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt64) + 3;
@@ -1310,7 +1310,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_UInt64_To_Int32()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt64) + 3;
@@ -1324,7 +1324,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_UInt64_To_UInt32()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt64) + 3;
@@ -1338,7 +1338,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_UInt64_To_Int64()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt64) + 3;
@@ -1352,7 +1352,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_UInt64_To_Double()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt64) + 3;
@@ -1366,7 +1366,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_UInt64_To_Single()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt64) + 3;
@@ -1380,7 +1380,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_UInt64_To_Decimal()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.UInt64) + 3;
@@ -1394,7 +1394,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Double_To_Boolean()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Double) + 3;
@@ -1408,7 +1408,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Double_To_Byte()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Double) + 3;
@@ -1422,7 +1422,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Double_To_Int16()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Double) + 3;
@@ -1436,7 +1436,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Double_To_UInt16()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Double) + 3;
@@ -1450,7 +1450,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Double_To_Int32()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Double) + 3;
@@ -1464,7 +1464,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Double_To_UInt32()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Double) + 3;
@@ -1478,7 +1478,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Double_To_Int64()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Double) + 3;
@@ -1492,7 +1492,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Double_To_UInt64()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Double) + 3;
@@ -1506,7 +1506,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Double_To_Single()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Double) + 3;
@@ -1520,7 +1520,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Double_To_Decimal()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Double) + 3;
@@ -1534,7 +1534,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Single_To_Boolean()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Single) + 3;
@@ -1548,7 +1548,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Single_To_Byte()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Single) + 3;
@@ -1562,7 +1562,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Single_To_Int16()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Single) + 3;
@@ -1576,7 +1576,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Single_To_UInt16()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Single) + 3;
@@ -1590,7 +1590,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Single_To_Int32()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Single) + 3;
@@ -1604,7 +1604,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Single_To_UInt32()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Single) + 3;
@@ -1618,7 +1618,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Single_To_Int64()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Single) + 3;
@@ -1632,7 +1632,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged.Math
                 Console.WriteLine(val);
             }
         }
-        [Test]
+        [TestMethod]
         public void Subtract_Single_To_UInt64()
         {
             var left = np.zeros(new Shape(5, 5), NPTypeCode.Single) + 3;

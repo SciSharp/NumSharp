@@ -15,7 +15,7 @@ namespace NumSharp.UnitTest.Logic
     /// </remarks>
     public class np_isinf_Test
     {
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void np_isinf_1D()
         {
             var arr = new NDArray(new[] { 1.0, Math.PI, double.PositiveInfinity, double.NegativeInfinity, double.NaN, 0.0 });
@@ -27,7 +27,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.IsTrue(Enumerable.SequenceEqual(result.Data<bool>(), new[] { false, false, true, true, false, false }));
         }
 
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void np_isinf_2D()
         {
             var arr = new NDArray(new[] {
@@ -41,7 +41,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.IsTrue(Enumerable.SequenceEqual(result.Data<bool>(), new[] { true, false, false, true, false, false }));
         }
 
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void np_isinf_Float32()
         {
             // Test with float32 array
@@ -53,7 +53,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.IsTrue(Enumerable.SequenceEqual(result.Data<bool>(), new[] { false, true, true, false, false, false }));
         }
 
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void np_isinf_IntegerTypes_AlwaysFalse()
         {
             // Integer types cannot be infinity
@@ -63,7 +63,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.IsFalse(np.any(np.isinf(np.array(new short[] { 0, short.MaxValue, short.MinValue }))));
         }
 
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void np_isinf_Scalar()
         {
             Assert.IsFalse(np.isinf(np.array(1.0)).GetBoolean());
@@ -72,7 +72,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.IsTrue(np.isinf(np.array(double.NegativeInfinity)).GetBoolean());
         }
 
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void np_isinf_EmptyArray()
         {
             var empty = np.array(new double[0]);
@@ -81,7 +81,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.AreEqual(typeof(bool), result.dtype);
         }
 
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void np_isinf_SlicedArray()
         {
             // Test with non-contiguous (sliced) array
@@ -93,7 +93,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.IsTrue(Enumerable.SequenceEqual(result.Data<bool>(), new[] { false, false, false }));
         }
 
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void np_isinf_NaNIsNotInfinity()
         {
             // Important: NaN is NOT infinity
@@ -102,7 +102,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.IsFalse(result.GetBoolean(0));
         }
 
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void np_isinf_MaxValueIsNotInfinity()
         {
             // Important: MaxValue/MinValue are NOT infinity

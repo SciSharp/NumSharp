@@ -12,7 +12,7 @@ namespace NumSharp.UnitTest.Logic
     {
         #region Integer Promotions
 
-        [Test]
+        [TestMethod]
         public void IntegerPromotion_Uint8_Int16()
         {
             // uint8 + int16 → int16 (int16 can hold both ranges)
@@ -22,7 +22,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.AreEqual(NPTypeCode.Int16, result.typecode);
         }
 
-        [Test]
+        [TestMethod]
         public void IntegerPromotion_Uint8_Int32()
         {
             var a = np.array(new byte[] { 1, 2, 3 });
@@ -31,7 +31,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.AreEqual(NPTypeCode.Int32, result.typecode);
         }
 
-        [Test]
+        [TestMethod]
         public void IntegerPromotion_Uint16_Int16()
         {
             // uint16 + int16 → int32 (need larger to hold both ranges)
@@ -41,7 +41,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.AreEqual(NPTypeCode.Int32, result.typecode);
         }
 
-        [Test]
+        [TestMethod]
         public void IntegerPromotion_Uint32_Int32()
         {
             // uint32 + int32 → int64 (need larger to hold both ranges)
@@ -51,7 +51,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.AreEqual(NPTypeCode.Int64, result.typecode);
         }
 
-        [Test]
+        [TestMethod]
         public void IntegerPromotion_Uint32_Int64()
         {
             var a = np.array(new uint[] { 1, 2, 3 });
@@ -60,7 +60,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.AreEqual(NPTypeCode.Int64, result.typecode);
         }
 
-        [Test]
+        [TestMethod]
         public void IntegerPromotion_Uint64_Int64()
         {
             // uint64 + int64 → float64 (no larger integer type available)
@@ -74,7 +74,7 @@ namespace NumSharp.UnitTest.Logic
 
         #region Float Promotions (NEP50)
 
-        [Test]
+        [TestMethod]
         public void FloatPromotion_Int32_Float32_ReturnsFloat64()
         {
             // NEP50: int32 + float32 → float64 (NOT float32!)
@@ -85,7 +85,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.AreEqual(NPTypeCode.Double, result.typecode);
         }
 
-        [Test]
+        [TestMethod]
         public void FloatPromotion_Int32_Float64()
         {
             var a = np.array(new int[] { 1, 2, 3 });
@@ -94,7 +94,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.AreEqual(NPTypeCode.Double, result.typecode);
         }
 
-        [Test]
+        [TestMethod]
         public void FloatPromotion_Float32_Float64()
         {
             var a = np.array(new float[] { 1.0f, 2.0f, 3.0f });
@@ -107,7 +107,7 @@ namespace NumSharp.UnitTest.Logic
 
         #region Boolean Promotions
 
-        [Test]
+        [TestMethod]
         public void BoolPromotion_Bool_Int32()
         {
             var a = np.array(new bool[] { true, false, true });
@@ -116,7 +116,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.AreEqual(NPTypeCode.Int32, result.typecode);
         }
 
-        [Test]
+        [TestMethod]
         public void BoolPromotion_Bool_Float32()
         {
             var a = np.array(new bool[] { true, false, true });
@@ -125,7 +125,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.AreEqual(NPTypeCode.Single, result.typecode);
         }
 
-        [Test]
+        [TestMethod]
         public void BoolPromotion_Bool_Float64()
         {
             var a = np.array(new bool[] { true, false, true });
@@ -138,7 +138,7 @@ namespace NumSharp.UnitTest.Logic
 
         #region Scalar + Array (NEP50 - scalar doesn't promote)
 
-        [Test]
+        [TestMethod]
         public void ScalarPromotion_Int32Array_IntScalar()
         {
             // NEP50: Scalar doesn't promote array dtype
@@ -147,7 +147,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.AreEqual(NPTypeCode.Int32, result.typecode);
         }
 
-        [Test]
+        [TestMethod]
         public void ScalarPromotion_Float32Array_IntScalar()
         {
             // NEP50: Int scalar doesn't promote float32 to float64
@@ -156,7 +156,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.AreEqual(NPTypeCode.Single, result.typecode);
         }
 
-        [Test]
+        [TestMethod]
         public void ScalarPromotion_Float32Array_DoubleScalar()
         {
             // NEP50: Double scalar doesn't promote float32 array
@@ -165,7 +165,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.AreEqual(NPTypeCode.Single, result.typecode);
         }
 
-        [Test]
+        [TestMethod]
         public void ScalarPromotion_Int32Array_DoubleScalar()
         {
             // Float scalar DOES promote int array to float
@@ -178,7 +178,7 @@ namespace NumSharp.UnitTest.Logic
 
         #region All Operations Preserve Type Rules
 
-        [Test]
+        [TestMethod]
         public void Subtraction_SameRulesAsAddition()
         {
             var a = np.array(new int[] { 1, 2, 3 });
@@ -187,7 +187,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.AreEqual(NPTypeCode.Double, result.typecode);
         }
 
-        [Test]
+        [TestMethod]
         public void Multiplication_SameRulesAsAddition()
         {
             var a = np.array(new int[] { 1, 2, 3 });
@@ -196,7 +196,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.AreEqual(NPTypeCode.Double, result.typecode);
         }
 
-        [Test]
+        [TestMethod]
         public void Division_SameRulesAsAddition()
         {
             var a = np.array(new int[] { 1, 2, 3 });

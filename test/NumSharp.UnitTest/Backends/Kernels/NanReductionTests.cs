@@ -2,7 +2,6 @@ using System;
 using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp;
-using TUnit.Core;
 
 namespace NumSharp.UnitTest.Backends.Kernels;
 
@@ -14,7 +13,7 @@ public class NanReductionTests
 {
     #region np.nansum Tests
 
-    [Test]
+    [TestMethod]
     public void NanSum_BasicFloat_IgnoresNaN()
     {
         // NumPy: np.nansum([1.0, np.nan, 3.0]) == 4.0
@@ -23,7 +22,7 @@ public class NanReductionTests
         Assert.AreEqual(4.0f, (float)result.GetAtIndex(0), 1e-6f);
     }
 
-    [Test]
+    [TestMethod]
     public void NanSum_BasicDouble_IgnoresNaN()
     {
         // NumPy: np.nansum([1.0, np.nan, 3.0]) == 4.0
@@ -32,7 +31,7 @@ public class NanReductionTests
         Assert.AreEqual(4.0, (double)result.GetAtIndex(0), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void NanSum_AllNaN_ReturnsZero()
     {
         // NumPy: np.nansum([np.nan, np.nan]) == 0.0
@@ -41,7 +40,7 @@ public class NanReductionTests
         Assert.AreEqual(0.0, (double)result.GetAtIndex(0), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void NanSum_NoNaN_SameAsSum()
     {
         // NumPy: np.nansum([1.0, 2.0, 3.0]) == 6.0
@@ -50,7 +49,7 @@ public class NanReductionTests
         Assert.AreEqual(6.0, (double)result.GetAtIndex(0), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void NanSum_MultipleNaN_IgnoresAll()
     {
         // NumPy: np.nansum([np.nan, 1.0, np.nan, 2.0, np.nan]) == 3.0
@@ -59,7 +58,7 @@ public class NanReductionTests
         Assert.AreEqual(3.0, (double)result.GetAtIndex(0), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void NanSum_LargeArray_SIMD()
     {
         // Test SIMD path with large array (> Vector256 count)
@@ -78,7 +77,7 @@ public class NanReductionTests
 
     #region np.nanprod Tests
 
-    [Test]
+    [TestMethod]
     public void NanProd_BasicDouble_IgnoresNaN()
     {
         // NumPy: np.nanprod([2.0, np.nan, 3.0]) == 6.0
@@ -87,7 +86,7 @@ public class NanReductionTests
         Assert.AreEqual(6.0, (double)result.GetAtIndex(0), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void NanProd_AllNaN_ReturnsOne()
     {
         // NumPy: np.nanprod([np.nan, np.nan]) == 1.0
@@ -96,7 +95,7 @@ public class NanReductionTests
         Assert.AreEqual(1.0, (double)result.GetAtIndex(0), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void NanProd_NoNaN_SameAsProd()
     {
         // NumPy: np.nanprod([2.0, 3.0, 4.0]) == 24.0
@@ -105,7 +104,7 @@ public class NanReductionTests
         Assert.AreEqual(24.0, (double)result.GetAtIndex(0), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void NanProd_WithZero_ReturnsZero()
     {
         // NumPy: np.nanprod([2.0, 0.0, np.nan, 3.0]) == 0.0
@@ -114,7 +113,7 @@ public class NanReductionTests
         Assert.AreEqual(0.0, (double)result.GetAtIndex(0), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void NanProd_Float_IgnoresNaN()
     {
         // NumPy: np.nanprod(np.array([2.0, np.nan, 3.0], dtype=np.float32)) == 6.0
@@ -127,7 +126,7 @@ public class NanReductionTests
 
     #region np.nanmin Tests
 
-    [Test]
+    [TestMethod]
     public void NanMin_BasicDouble_IgnoresNaN()
     {
         // NumPy: np.nanmin([1.0, np.nan, 3.0]) == 1.0
@@ -136,7 +135,7 @@ public class NanReductionTests
         Assert.AreEqual(1.0, (double)result.GetAtIndex(0), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void NanMin_AllNaN_ReturnsNaN()
     {
         // NumPy: np.nanmin([np.nan, np.nan]) == nan (with RuntimeWarning)
@@ -145,7 +144,7 @@ public class NanReductionTests
         Assert.IsTrue(double.IsNaN((double)result.GetAtIndex(0)));
     }
 
-    [Test]
+    [TestMethod]
     public void NanMin_NoNaN_SameAsMin()
     {
         // NumPy: np.nanmin([5.0, 2.0, 8.0]) == 2.0
@@ -154,7 +153,7 @@ public class NanReductionTests
         Assert.AreEqual(2.0, (double)result.GetAtIndex(0), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void NanMin_NegativeValues_IgnoresNaN()
     {
         // NumPy: np.nanmin([-5.0, np.nan, -2.0]) == -5.0
@@ -163,7 +162,7 @@ public class NanReductionTests
         Assert.AreEqual(-5.0, (double)result.GetAtIndex(0), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void NanMin_Float_IgnoresNaN()
     {
         // NumPy: np.nanmin(np.array([1.0, np.nan, 3.0], dtype=np.float32)) == 1.0
@@ -172,7 +171,7 @@ public class NanReductionTests
         Assert.AreEqual(1.0f, (float)result.GetAtIndex(0), 1e-6f);
     }
 
-    [Test]
+    [TestMethod]
     public void NanMin_NaNAtStart_IgnoresIt()
     {
         // NumPy: np.nanmin([np.nan, 5.0, 2.0]) == 2.0
@@ -181,7 +180,7 @@ public class NanReductionTests
         Assert.AreEqual(2.0, (double)result.GetAtIndex(0), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void NanMin_NaNAtEnd_IgnoresIt()
     {
         // NumPy: np.nanmin([5.0, 2.0, np.nan]) == 2.0
@@ -194,7 +193,7 @@ public class NanReductionTests
 
     #region np.nanmax Tests
 
-    [Test]
+    [TestMethod]
     public void NanMax_BasicDouble_IgnoresNaN()
     {
         // NumPy: np.nanmax([1.0, np.nan, 3.0]) == 3.0
@@ -203,7 +202,7 @@ public class NanReductionTests
         Assert.AreEqual(3.0, (double)result.GetAtIndex(0), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void NanMax_AllNaN_ReturnsNaN()
     {
         // NumPy: np.nanmax([np.nan, np.nan]) == nan (with RuntimeWarning)
@@ -212,7 +211,7 @@ public class NanReductionTests
         Assert.IsTrue(double.IsNaN((double)result.GetAtIndex(0)));
     }
 
-    [Test]
+    [TestMethod]
     public void NanMax_NoNaN_SameAsMax()
     {
         // NumPy: np.nanmax([5.0, 2.0, 8.0]) == 8.0
@@ -221,7 +220,7 @@ public class NanReductionTests
         Assert.AreEqual(8.0, (double)result.GetAtIndex(0), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void NanMax_NegativeValues_IgnoresNaN()
     {
         // NumPy: np.nanmax([-5.0, np.nan, -2.0]) == -2.0
@@ -230,7 +229,7 @@ public class NanReductionTests
         Assert.AreEqual(-2.0, (double)result.GetAtIndex(0), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void NanMax_Float_IgnoresNaN()
     {
         // NumPy: np.nanmax(np.array([1.0, np.nan, 3.0], dtype=np.float32)) == 3.0
@@ -239,7 +238,7 @@ public class NanReductionTests
         Assert.AreEqual(3.0f, (float)result.GetAtIndex(0), 1e-6f);
     }
 
-    [Test]
+    [TestMethod]
     public void NanMax_NaNAtStart_IgnoresIt()
     {
         // NumPy: np.nanmax([np.nan, 5.0, 2.0]) == 5.0
@@ -248,7 +247,7 @@ public class NanReductionTests
         Assert.AreEqual(5.0, (double)result.GetAtIndex(0), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void NanMax_NaNAtEnd_IgnoresIt()
     {
         // NumPy: np.nanmax([5.0, 2.0, np.nan]) == 5.0
@@ -261,7 +260,7 @@ public class NanReductionTests
 
     #region Large Array SIMD Tests
 
-    [Test]
+    [TestMethod]
     public void NanSum_LargeFloatArray_SIMD()
     {
         // Test SIMD path with large float array
@@ -284,7 +283,7 @@ public class NanReductionTests
         Assert.AreEqual(expectedSum, (float)result.GetAtIndex(0), 1e-3f);
     }
 
-    [Test]
+    [TestMethod]
     public void NanMin_LargeDoubleArray_SIMD()
     {
         // Test SIMD path for nanmin
@@ -299,7 +298,7 @@ public class NanReductionTests
         Assert.AreEqual(0.5, (double)result.GetAtIndex(0), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void NanMax_LargeDoubleArray_SIMD()
     {
         // Test SIMD path for nanmax
@@ -314,7 +313,7 @@ public class NanReductionTests
         Assert.AreEqual(9999.0, (double)result.GetAtIndex(0), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void NanProd_LargeFloatArray_SIMD()
     {
         // Test SIMD path for nanprod with small values to avoid overflow
@@ -343,7 +342,7 @@ public class NanReductionTests
 
     #region Edge Cases
 
-    [Test]
+    [TestMethod]
     public void NanSum_SingleNaN_ReturnsZero()
     {
         var arr = np.array(new double[] { double.NaN });
@@ -351,7 +350,7 @@ public class NanReductionTests
         Assert.AreEqual(0.0, (double)result.GetAtIndex(0), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void NanProd_SingleNaN_ReturnsOne()
     {
         var arr = np.array(new double[] { double.NaN });
@@ -359,7 +358,7 @@ public class NanReductionTests
         Assert.AreEqual(1.0, (double)result.GetAtIndex(0), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void NanMin_SingleNaN_ReturnsNaN()
     {
         var arr = np.array(new double[] { double.NaN });
@@ -367,7 +366,7 @@ public class NanReductionTests
         Assert.IsTrue(double.IsNaN((double)result.GetAtIndex(0)));
     }
 
-    [Test]
+    [TestMethod]
     public void NanMax_SingleNaN_ReturnsNaN()
     {
         var arr = np.array(new double[] { double.NaN });
@@ -375,7 +374,7 @@ public class NanReductionTests
         Assert.IsTrue(double.IsNaN((double)result.GetAtIndex(0)));
     }
 
-    [Test]
+    [TestMethod]
     public void NanSum_SingleValue_ReturnsThatValue()
     {
         var arr = np.array(new double[] { 42.0 });
@@ -383,7 +382,7 @@ public class NanReductionTests
         Assert.AreEqual(42.0, (double)result.GetAtIndex(0), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void NanMin_WithInfinity_IgnoresNaN()
     {
         // NumPy: np.nanmin([np.nan, np.inf, 1.0]) == 1.0
@@ -392,7 +391,7 @@ public class NanReductionTests
         Assert.AreEqual(1.0, (double)result.GetAtIndex(0), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void NanMax_WithNegInfinity_IgnoresNaN()
     {
         // NumPy: np.nanmax([np.nan, -np.inf, 1.0]) == 1.0
@@ -405,7 +404,7 @@ public class NanReductionTests
 
     #region Keepdims Tests
 
-    [Test]
+    [TestMethod]
     public void NanSum_Keepdims_PreservesShape()
     {
         var arr = np.array(new double[] { 1.0, double.NaN, 3.0 }).reshape(1, 3);
@@ -415,7 +414,7 @@ public class NanReductionTests
         Assert.AreEqual(1, result.shape[1]);
     }
 
-    [Test]
+    [TestMethod]
     public void NanProd_Keepdims_PreservesShape()
     {
         var arr = np.array(new double[] { 2.0, double.NaN, 3.0 }).reshape(1, 3);
@@ -429,7 +428,7 @@ public class NanReductionTests
 
     #region Axis Reduction Tests
 
-    [Test]
+    [TestMethod]
     public void NanSum_Axis0_2D_IgnoresNaN()
     {
         // NumPy: np.nansum([[1, np.nan], [np.nan, 4]], axis=0) == [1, 4]
@@ -441,7 +440,7 @@ public class NanReductionTests
         Assert.AreEqual(4.0, (double)result.GetAtIndex(1), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void NanSum_Axis1_2D_IgnoresNaN()
     {
         // NumPy: np.nansum([[1, np.nan], [np.nan, 4]], axis=1) == [1, 4]
@@ -453,7 +452,7 @@ public class NanReductionTests
         Assert.AreEqual(4.0, (double)result.GetAtIndex(1), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void NanSum_Axis_AllNaNRow_ReturnsZero()
     {
         // NumPy: np.nansum([[np.nan, np.nan], [1.0, 2.0]], axis=1) == [0.0, 3.0]
@@ -463,7 +462,7 @@ public class NanReductionTests
         Assert.AreEqual(3.0, (double)result.GetAtIndex(1), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void NanProd_Axis0_2D_IgnoresNaN()
     {
         // NumPy: np.nanprod([[1, np.nan], [np.nan, 4]], axis=0) == [1, 4]
@@ -475,7 +474,7 @@ public class NanReductionTests
         Assert.AreEqual(4.0, (double)result.GetAtIndex(1), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void NanProd_Axis1_2D_IgnoresNaN()
     {
         // NumPy: np.nanprod([[2, np.nan], [np.nan, 3]], axis=1) == [2, 3]
@@ -485,7 +484,7 @@ public class NanReductionTests
         Assert.AreEqual(3.0, (double)result.GetAtIndex(1), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void NanProd_Axis_AllNaNRow_ReturnsOne()
     {
         // NumPy: np.nanprod([[np.nan, np.nan], [1.0, 2.0]], axis=1) == [1.0, 2.0]
@@ -495,7 +494,7 @@ public class NanReductionTests
         Assert.AreEqual(2.0, (double)result.GetAtIndex(1), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void NanMin_Axis0_2D_IgnoresNaN()
     {
         // NumPy: np.nanmin([[1, np.nan], [np.nan, 4]], axis=0) == [1, 4]
@@ -507,7 +506,7 @@ public class NanReductionTests
         Assert.AreEqual(4.0, (double)result.GetAtIndex(1), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void NanMin_Axis1_2D_IgnoresNaN()
     {
         // NumPy: np.nanmin([[5, np.nan, 2], [np.nan, 3, 1]], axis=1) == [2, 1]
@@ -517,7 +516,7 @@ public class NanReductionTests
         Assert.AreEqual(1.0, (double)result.GetAtIndex(1), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void NanMin_Axis_AllNaNRow_ReturnsNaN()
     {
         // NumPy: np.nanmin([[np.nan, np.nan], [1.0, 2.0]], axis=1) == [nan, 1.0]
@@ -527,7 +526,7 @@ public class NanReductionTests
         Assert.AreEqual(1.0, (double)result.GetAtIndex(1), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void NanMax_Axis0_2D_IgnoresNaN()
     {
         // NumPy: np.nanmax([[1, np.nan], [np.nan, 4]], axis=0) == [1, 4]
@@ -539,7 +538,7 @@ public class NanReductionTests
         Assert.AreEqual(4.0, (double)result.GetAtIndex(1), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void NanMax_Axis1_2D_IgnoresNaN()
     {
         // NumPy: np.nanmax([[5, np.nan, 2], [np.nan, 3, 1]], axis=1) == [5, 3]
@@ -549,7 +548,7 @@ public class NanReductionTests
         Assert.AreEqual(3.0, (double)result.GetAtIndex(1), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void NanMax_Axis_AllNaNRow_ReturnsNaN()
     {
         // NumPy: np.nanmax([[np.nan, np.nan], [1.0, 2.0]], axis=1) == [nan, 2.0]
@@ -559,7 +558,7 @@ public class NanReductionTests
         Assert.AreEqual(2.0, (double)result.GetAtIndex(1), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void NanSum_Axis_Keepdims_PreservesShape()
     {
         // NumPy: np.nansum([[1, np.nan], [np.nan, 4]], axis=0, keepdims=True).shape == (1, 2)
@@ -570,7 +569,7 @@ public class NanReductionTests
         Assert.AreEqual(2, result.shape[1]);
     }
 
-    [Test]
+    [TestMethod]
     public void NanSum_Axis_Float_IgnoresNaN()
     {
         // Same as double but with float32
@@ -580,7 +579,7 @@ public class NanReductionTests
         Assert.AreEqual(4.0f, (float)result.GetAtIndex(1), 1e-6f);
     }
 
-    [Test]
+    [TestMethod]
     public void NanMin_Axis_Float_IgnoresNaN()
     {
         var arr = np.array(new float[,] { { 5.0f, float.NaN }, { float.NaN, 2.0f } });
@@ -589,7 +588,7 @@ public class NanReductionTests
         Assert.AreEqual(2.0f, (float)result.GetAtIndex(1), 1e-6f);
     }
 
-    [Test]
+    [TestMethod]
     public void NanMax_Axis_Float_IgnoresNaN()
     {
         var arr = np.array(new float[,] { { 5.0f, float.NaN }, { float.NaN, 2.0f } });
@@ -598,7 +597,7 @@ public class NanReductionTests
         Assert.AreEqual(2.0f, (float)result.GetAtIndex(1), 1e-6f);
     }
 
-    [Test]
+    [TestMethod]
     public void NanSum_3D_Axis1()
     {
         // 3D array with NaN, reduce along middle axis
@@ -626,7 +625,7 @@ public class NanReductionTests
         Assert.AreEqual(6.0, (double)result[1, 1], 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void NanSum_NegativeAxis()
     {
         // NumPy: np.nansum([[1, np.nan], [np.nan, 4]], axis=-1) == [1, 4]

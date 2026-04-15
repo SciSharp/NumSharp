@@ -8,7 +8,7 @@ namespace NumSharp.UnitTest.Manipulation
     /// </summary>
     public class np_stack_tests
     {
-        [Test]
+        [TestMethod]
         public void Case1()
         {
             //1D

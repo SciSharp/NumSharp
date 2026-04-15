@@ -2,7 +2,6 @@ using System;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp;
 using NumSharp.UnitTest.Utilities;
-using TUnit.Core;
 
 namespace NumSharp.UnitTest.Backends.Kernels;
 
@@ -14,7 +13,7 @@ public class ManipulationEdgeCaseTests
 {
     #region Broadcasting Complex Scenarios
 
-    [Test]
+    [TestMethod]
     public void Broadcast_3D_With_2D()
     {
         // NumPy: (2,3,4) + (3,4) = (2,3,4)
@@ -30,7 +29,7 @@ public class ManipulationEdgeCaseTests
         Assert.AreEqual(3.0, result.GetDouble(0, 0, 0));
     }
 
-    [Test]
+    [TestMethod]
     public void Broadcast_3D_With_1D()
     {
         // NumPy: (2,3,4) + (4,) = (2,3,4)
@@ -45,7 +44,7 @@ public class ManipulationEdgeCaseTests
         Assert.AreEqual(4, result.shape[2]);
     }
 
-    [Test]
+    [TestMethod]
     public void Broadcast_Row_Plus_Column()
     {
         // NumPy: (1,3) + (3,1) = (3,3)
@@ -62,7 +61,7 @@ public class ManipulationEdgeCaseTests
         Assert.AreEqual(33.0, result.GetDouble(2, 2));
     }
 
-    [Test]
+    [TestMethod]
     public void Broadcast_EmptyArray_WithShape()
     {
         // NumPy: np.zeros((0,3)) + np.array([1,2,3]) = shape (0, 3)
@@ -81,7 +80,7 @@ public class ManipulationEdgeCaseTests
 
     #region Squeeze Edge Cases
 
-    [Test]
+    [TestMethod]
     public void Squeeze_RemovesAllOnes()
     {
         // NumPy: np.squeeze([[[[1, 2, 3]]]]) = [1, 2, 3] with shape (3,)
@@ -93,7 +92,7 @@ public class ManipulationEdgeCaseTests
         Assert.AreEqual(3, result.shape[0]);
     }
 
-    [Test]
+    [TestMethod]
     public void Squeeze_SpecificAxis()
     {
         // NumPy: np.squeeze(arr, axis=0) where arr.shape = (1, 1, 3)
@@ -110,7 +109,7 @@ public class ManipulationEdgeCaseTests
 
     #region Expand Dims Edge Cases
 
-    [Test]
+    [TestMethod]
     public void ExpandDims_NegativeAxis()
     {
         // NumPy: np.expand_dims([1,2,3], -1).shape = (3, 1)
@@ -123,7 +122,7 @@ public class ManipulationEdgeCaseTests
         Assert.AreEqual(1, result.shape[1]);
     }
 
-    [Test]
+    [TestMethod]
     public void ExpandDims_Multiple()
     {
         // NumPy: np.expand_dims(np.expand_dims(arr, 0), 0).shape = (1, 1, 3)
@@ -141,7 +140,7 @@ public class ManipulationEdgeCaseTests
 
     #region Concatenate Edge Cases
 
-    [Test]
+    [TestMethod]
     public void Concatenate_1D()
     {
         // NumPy: np.concatenate([[1,2,3], [4,5,6]]) = [1,2,3,4,5,6]
@@ -153,7 +152,7 @@ public class ManipulationEdgeCaseTests
         result.Should().BeOfValues(1, 2, 3, 4, 5, 6);
     }
 
-    [Test]
+    [TestMethod]
     public void Concatenate_2D_Axis0()
     {
         // NumPy: np.concatenate([[[1,2],[3,4]], [[5,6],[7,8]]], axis=0)
@@ -167,7 +166,7 @@ public class ManipulationEdgeCaseTests
         Assert.AreEqual(5, result.GetInt32(2, 0));
     }
 
-    [Test]
+    [TestMethod]
     public void Concatenate_2D_Axis1()
     {
         var a = np.array(new[,] { { 1, 2 }, { 3, 4 } });
@@ -180,7 +179,7 @@ public class ManipulationEdgeCaseTests
         Assert.AreEqual(5, result.GetInt32(0, 2));
     }
 
-    [Test]
+    [TestMethod]
     public void Concatenate_EmptyWithNonEmpty()
     {
         // NumPy: np.concatenate([[], [1,2]]) = [1., 2.]
@@ -196,7 +195,7 @@ public class ManipulationEdgeCaseTests
 
     #region Stack Edge Cases
 
-    [Test]
+    [TestMethod]
     public void Stack_DefaultAxis0()
     {
         // NumPy: np.stack([[1,2,3], [4,5,6]]) = [[1,2,3], [4,5,6]]
@@ -209,7 +208,7 @@ public class ManipulationEdgeCaseTests
         Assert.AreEqual(3, result.shape[1]);
     }
 
-    [Test]
+    [TestMethod]
     public void Stack_Axis1()
     {
         // NumPy: np.stack([[1,2,3], [4,5,6]], axis=1) = [[1,4], [2,5], [3,6]]
@@ -228,7 +227,7 @@ public class ManipulationEdgeCaseTests
 
     #region VStack/HStack Edge Cases
 
-    [Test]
+    [TestMethod]
     public void VStack_1D()
     {
         // NumPy: np.vstack([[1,2,3], [4,5,6]]) = [[1,2,3], [4,5,6]]
@@ -241,7 +240,7 @@ public class ManipulationEdgeCaseTests
         Assert.AreEqual(3, result.shape[1]);
     }
 
-    [Test]
+    [TestMethod]
     public void HStack_1D()
     {
         // NumPy: np.hstack([[1,2,3], [4,5,6]]) = [1,2,3,4,5,6]
@@ -254,7 +253,7 @@ public class ManipulationEdgeCaseTests
         Assert.AreEqual(6, result.size);
     }
 
-    [Test]
+    [TestMethod]
     public void HStack_2D()
     {
         var a = np.array(new[,] { { 1, 2 }, { 3, 4 } });
@@ -270,7 +269,7 @@ public class ManipulationEdgeCaseTests
 
     #region Repeat Edge Cases
 
-    [Test]
+    [TestMethod]
     public void Repeat_Scalar()
     {
         // NumPy: np.repeat([1, 2, 3], 3) = [1, 1, 1, 2, 2, 2, 3, 3, 3]
@@ -281,7 +280,7 @@ public class ManipulationEdgeCaseTests
         result.Should().BeOfValues(1, 1, 1, 2, 2, 2, 3, 3, 3);
     }
 
-    [Test]
+    [TestMethod]
     public void Repeat_PerElement()
     {
         // NumPy: np.repeat([1, 2, 3], [1, 2, 3]) = [1, 2, 2, 3, 3, 3]
@@ -297,7 +296,7 @@ public class ManipulationEdgeCaseTests
 
     #region Flatten/Ravel Edge Cases
 
-    [Test]
+    [TestMethod]
     public void Flatten_ReturnsContiguousCopy()
     {
         var arr = np.array(new[,] { { 1, 2 }, { 3, 4 } });
@@ -308,7 +307,7 @@ public class ManipulationEdgeCaseTests
         Assert.AreEqual(1, flat.ndim);
     }
 
-    [Test]
+    [TestMethod]
     public void Ravel_Returns1D()
     {
         var arr = np.array(new[,] { { 1, 2 }, { 3, 4 } });
@@ -319,7 +318,7 @@ public class ManipulationEdgeCaseTests
         Assert.AreEqual(1, raveled.ndim);
     }
 
-    [Test]
+    [TestMethod]
     public void Ravel_SlicedArray()
     {
         var arr = np.array(new[] { 1, 2, 3, 4, 5, 6 });
@@ -334,7 +333,7 @@ public class ManipulationEdgeCaseTests
 
     #region Reshape Edge Cases
 
-    [Test]
+    [TestMethod]
     public void Reshape_InferDimension()
     {
         // NumPy: np.reshape([1,2,3,4,5,6], (-1, 2)) = [[1,2],[3,4],[5,6]]
@@ -346,7 +345,7 @@ public class ManipulationEdgeCaseTests
         Assert.AreEqual(2, result.shape[1]);
     }
 
-    [Test]
+    [TestMethod]
     public void Reshape_ToScalar()
     {
         // NumPy: np.array([5]).reshape(()) = 5 (0D scalar)
@@ -358,7 +357,7 @@ public class ManipulationEdgeCaseTests
         Assert.AreEqual(1, result.size);
     }
 
-    [Test]
+    [TestMethod]
     public void Reshape_EmptyArray()
     {
         // NumPy: np.array([]).reshape((0, 5)).shape = (0, 5)
@@ -375,7 +374,7 @@ public class ManipulationEdgeCaseTests
 
     #region Transpose Edge Cases
 
-    [Test]
+    [TestMethod]
     public void Transpose_1D_NoOp()
     {
         // NumPy: arr1d.T.shape = (3,) (no change for 1D)
@@ -387,7 +386,7 @@ public class ManipulationEdgeCaseTests
         Assert.AreEqual(3, transposed.shape[0]);
     }
 
-    [Test]
+    [TestMethod]
     public void Transpose_2D()
     {
         var arr = np.array(new[,] { { 1, 2, 3 }, { 4, 5, 6 } });
@@ -400,7 +399,7 @@ public class ManipulationEdgeCaseTests
         Assert.AreEqual(4, transposed.GetInt32(0, 1));
     }
 
-    [Test]
+    [TestMethod]
     public void Transpose_3D()
     {
         // NumPy: arr3d.T reverses all axes
@@ -417,7 +416,7 @@ public class ManipulationEdgeCaseTests
 
     #region Unique Edge Cases
 
-    [Test]
+    [TestMethod]
     public void Unique_ReturnsSorted()
     {
         // NumPy: np.unique([3, 1, 2, 1, 3, 2]) = [1, 2, 3] (sorted!)
@@ -428,7 +427,7 @@ public class ManipulationEdgeCaseTests
         result.Should().BeOfValues(1, 2, 3);
     }
 
-    [Test]
+    [TestMethod]
     public void Unique_Float_WithNaN()
     {
         // NumPy: np.unique([1, nan, 2, nan, 1]) = [1, 2, nan]

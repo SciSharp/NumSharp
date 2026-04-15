@@ -13,14 +13,14 @@ namespace NumSharp.UnitTest.RandomSampling
     /// </summary>
     public class NpRandomSeedTests : TestClass
     {
-        [Test]
+        [TestMethod]
         public void SeedTest()
         {
             NumPyRandom rando = np.random.RandomState(1000);
             Assert.AreEqual(1000, rando.Seed, "The seed value given in the ctor does not match the seed value attribute.");
         }
 
-        [Test]
+        [TestMethod]
         public void UniformOneSample()
         {
             NumPyRandom rando = np.random.RandomState(1000);
@@ -39,7 +39,7 @@ namespace NumSharp.UnitTest.RandomSampling
 
         }
 
-        [Test]
+        [TestMethod]
         [OpenBugs] // BUG: default(Shape) handling causes "index < Count" error
         public void UniformMultipleSample()
         {
@@ -61,7 +61,7 @@ namespace NumSharp.UnitTest.RandomSampling
             }
         }
 
-        [Test]
+        [TestMethod]
         public void NonUniformSample()
         {
             NumPyRandom rando = np.random.RandomState(1000);
@@ -83,7 +83,7 @@ namespace NumSharp.UnitTest.RandomSampling
         }
 
 
-        [Test]
+        [TestMethod]
         [OpenBugs] // BUG: default(Shape) handling causes "index < Count" error
         public void IntegerArraySample()
         {

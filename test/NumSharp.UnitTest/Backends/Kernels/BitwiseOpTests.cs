@@ -3,7 +3,6 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp;
 using NumSharp.Generic;
 using NumSharp.UnitTest.Utilities;
-using TUnit.Core;
 
 namespace NumSharp.UnitTest.Backends.Kernels;
 
@@ -15,7 +14,7 @@ public class BitwiseOpTests
 {
     #region Boolean AND Tests
 
-    [Test]
+    [TestMethod]
     public void BitwiseAnd_Bool_TruthTable()
     {
         // NumPy: [True, True, False, False] & [True, False, True, False]
@@ -30,7 +29,7 @@ public class BitwiseOpTests
         Assert.IsFalse(result.GetBoolean(3));
     }
 
-    [Test]
+    [TestMethod]
     public void BitwiseAnd_Bool_WithScalar_True()
     {
         var a = np.array(new[] { true, true, false, false });
@@ -42,7 +41,7 @@ public class BitwiseOpTests
         Assert.IsFalse(result.GetBoolean(3));
     }
 
-    [Test]
+    [TestMethod]
     public void BitwiseAnd_Bool_WithScalar_False()
     {
         var a = np.array(new[] { true, true, false, false });
@@ -58,7 +57,7 @@ public class BitwiseOpTests
 
     #region Boolean OR Tests
 
-    [Test]
+    [TestMethod]
     public void BitwiseOr_Bool_TruthTable()
     {
         // NumPy: [True, True, False, False] | [True, False, True, False]
@@ -73,7 +72,7 @@ public class BitwiseOpTests
         Assert.IsFalse(result.GetBoolean(3));
     }
 
-    [Test]
+    [TestMethod]
     public void BitwiseOr_Bool_WithScalar_True()
     {
         var a = np.array(new[] { true, true, false, false });
@@ -85,7 +84,7 @@ public class BitwiseOpTests
         Assert.IsTrue(result.GetBoolean(3));
     }
 
-    [Test]
+    [TestMethod]
     public void BitwiseOr_Bool_WithScalar_False()
     {
         var a = np.array(new[] { true, true, false, false });
@@ -101,7 +100,7 @@ public class BitwiseOpTests
 
     #region Boolean XOR Tests
 
-    [Test]
+    [TestMethod]
     public void BitwiseXor_Bool_TruthTable()
     {
         // NumPy: [True, True, False, False] ^ [True, False, True, False]
@@ -121,7 +120,7 @@ public class BitwiseOpTests
 
     #region Boolean NOT Tests
 
-    [Test]
+    [TestMethod]
     public void BitwiseNot_Bool()
     {
         // NumPy: ~[True, True, False, False] = [False, False, True, True]
@@ -138,7 +137,7 @@ public class BitwiseOpTests
 
     #region Integer Bitwise AND Tests
 
-    [Test]
+    [TestMethod]
     public void BitwiseAnd_Byte()
     {
         // NumPy: [0b11110000, 0b10101010, 0b00001111] & [0b11001100, 0b01010101, 0b11110000]
@@ -150,7 +149,7 @@ public class BitwiseOpTests
         result.Should().BeOfValues(192, 0, 0).And.BeOfType(NPTypeCode.Byte);
     }
 
-    [Test]
+    [TestMethod]
     public void BitwiseAnd_Int32()
     {
         var a = np.array(new[] { 0b11110000, 0b10101010, 0b00001111 });
@@ -160,7 +159,7 @@ public class BitwiseOpTests
         result.Should().BeOfValues(192, 0, 0).And.BeOfType(NPTypeCode.Int32);
     }
 
-    [Test]
+    [TestMethod]
     public void BitwiseAnd_Int64()
     {
         var a = np.array(new long[] { 0b11110000, 0b10101010, 0b00001111 });
@@ -174,7 +173,7 @@ public class BitwiseOpTests
 
     #region Integer Bitwise OR Tests
 
-    [Test]
+    [TestMethod]
     public void BitwiseOr_Byte()
     {
         // NumPy: [0b11110000, 0b10101010, 0b00001111] | [0b11001100, 0b01010101, 0b11110000]
@@ -186,7 +185,7 @@ public class BitwiseOpTests
         result.Should().BeOfValues(252, 255, 255).And.BeOfType(NPTypeCode.Byte);
     }
 
-    [Test]
+    [TestMethod]
     public void BitwiseOr_Int32()
     {
         var a = np.array(new[] { 0b11110000, 0b10101010, 0b00001111 });
@@ -200,7 +199,7 @@ public class BitwiseOpTests
 
     #region Integer Bitwise XOR Tests
 
-    [Test]
+    [TestMethod]
     public void BitwiseXor_Byte()
     {
         // NumPy: [0b11110000, 0b10101010, 0b00001111] ^ [0b11001100, 0b01010101, 0b11110000]
@@ -212,7 +211,7 @@ public class BitwiseOpTests
         result.Should().BeOfValues(60, 255, 255).And.BeOfType(NPTypeCode.Byte);
     }
 
-    [Test]
+    [TestMethod]
     public void BitwiseXor_Int32()
     {
         NDArray<int> a = np.array(new[] { 0b11110000, 0b10101010, 0b00001111 }).MakeGeneric<int>();
@@ -226,7 +225,7 @@ public class BitwiseOpTests
 
     #region Broadcasting Tests
 
-    [Test]
+    [TestMethod]
     public void BitwiseAnd_2D_With_1D_Broadcasting()
     {
         // NumPy: [[True, False], [True, False]] & [True, False]
@@ -242,7 +241,7 @@ public class BitwiseOpTests
         Assert.IsFalse((bool)result[1, 1]);
     }
 
-    [Test]
+    [TestMethod]
     public void BitwiseOr_2D_With_1D_Broadcasting()
     {
         var a = np.array(new[,] { { true, false }, { false, false } });
@@ -256,7 +255,7 @@ public class BitwiseOpTests
         Assert.IsTrue((bool)result[1, 1]);
     }
 
-    [Test]
+    [TestMethod]
     public void BitwiseAnd_Int32_Scalar_Broadcasting()
     {
         // Array AND with scalar
@@ -270,7 +269,7 @@ public class BitwiseOpTests
 
     #region Boolean Mask Scenario Tests
 
-    [Test]
+    [TestMethod]
     public void BitwiseAnd_BooleanMasks()
     {
         // Common pattern: combining comparison results
@@ -287,7 +286,7 @@ public class BitwiseOpTests
         Assert.IsFalse(combined.GetBoolean(4));
     }
 
-    [Test]
+    [TestMethod]
     public void BitwiseOr_BooleanMasks()
     {
         // data > 2 OR data < 5 = all True in this case
@@ -307,7 +306,7 @@ public class BitwiseOpTests
 
     #region Typed NDArray Tests
 
-    [Test]
+    [TestMethod]
     public void BitwiseOr_TypedBoolArray()
     {
         // This tests the NDArray<bool> | NDArray<bool> operator
@@ -321,7 +320,7 @@ public class BitwiseOpTests
         Assert.IsFalse(result.GetBoolean(3));
     }
 
-    [Test]
+    [TestMethod]
     public void BitwiseAnd_TypedBoolArray()
     {
         var a = np.array(new[] { true, false, true, false }).MakeGeneric<bool>();
@@ -334,7 +333,7 @@ public class BitwiseOpTests
         Assert.IsFalse(result.GetBoolean(3));
     }
 
-    [Test]
+    [TestMethod]
     public void BitwiseXor_TypedBoolArray()
     {
         var a = np.array(new[] { true, false, true, false }).MakeGeneric<bool>();
@@ -351,7 +350,7 @@ public class BitwiseOpTests
 
     #region Sliced Array Tests
 
-    [Test]
+    [TestMethod]
     public void BitwiseAnd_SlicedArrays()
     {
         var a = np.array(new[] { true, false, true, false, true, false });
@@ -372,7 +371,7 @@ public class BitwiseOpTests
 
     #region Empty Array Tests
 
-    [Test]
+    [TestMethod]
     public void BitwiseAnd_EmptyArrays()
     {
         var a = np.array(Array.Empty<bool>());

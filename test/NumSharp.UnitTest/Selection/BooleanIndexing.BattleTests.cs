@@ -3,7 +3,6 @@ using System.Linq;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp;
 using NumSharp.Generic;
-using TUnit.Core;
 
 namespace NumSharp.UnitTest.Selection;
 
@@ -15,7 +14,7 @@ public class BooleanIndexing_BattleTests
 {
     #region Case 1: Same-Shape Boolean Mask (Element-wise)
 
-    [Test]
+    [TestMethod]
     public void Case1_SameShape_1D_BasicMask()
     {
         // NumPy: arr = [1, 2, 3, 4, 5], mask = [T, F, T, F, T] → [1, 3, 5]
@@ -30,7 +29,7 @@ public class BooleanIndexing_BattleTests
         Assert.AreEqual(5, result.GetInt32(2));
     }
 
-    [Test]
+    [TestMethod]
     public void Case1_SameShape_1D_ResultIs1D()
     {
         var arr = np.array(new[] { 1, 2, 3, 4, 5 });
@@ -42,7 +41,7 @@ public class BooleanIndexing_BattleTests
         Assert.AreEqual(1, result.ndim);
     }
 
-    [Test]
+    [TestMethod]
     public void Case1_SameShape_1D_ResultIsCopy()
     {
         var arr = np.array(new[] { 1, 2, 3, 4, 5 });
@@ -59,7 +58,7 @@ public class BooleanIndexing_BattleTests
 
     #region Case 2: 2D Same-Shape Mask
 
-    [Test]
+    [TestMethod]
     public void Case2_SameShape_2D_ElementWise()
     {
         // NumPy: arr2d > 5 selects [6, 7, 8, 9, 10, 11]
@@ -77,7 +76,7 @@ public class BooleanIndexing_BattleTests
         Assert.AreEqual(11, result.item<int>(5));
     }
 
-    [Test]
+    [TestMethod]
     public void Case2_SameShape_2D_AlwaysReturns1D()
     {
         // NumPy: 2D mask on 2D array → always returns 1D
@@ -89,7 +88,7 @@ public class BooleanIndexing_BattleTests
         Assert.AreEqual(1, result.ndim);
     }
 
-    [Test]
+    [TestMethod]
     public void Case2_SameShape_2D_PreservesOrder()
     {
         // NumPy iterates in C-order (row-major)
@@ -110,7 +109,7 @@ public class BooleanIndexing_BattleTests
 
     #region Case 3: 1D Mask on Axis-0 (Row Selection)
 
-    [Test]
+    [TestMethod]
     public void Case3_Axis0_2D_SelectsRows()
     {
         // NumPy: arr2d[[T,F,T]] selects rows 0 and 2
@@ -122,7 +121,7 @@ public class BooleanIndexing_BattleTests
         Assert.IsTrue(result.shape.SequenceEqual(new long[] { 2, 4 }), $"Expected shape [2, 4], got [{string.Join(", ", result.shape)}]");
     }
 
-    [Test]
+    [TestMethod]
     public void Case3_Axis0_2D_CorrectValues()
     {
         var arr2d = np.arange(12).reshape(3, 4);
@@ -143,7 +142,7 @@ public class BooleanIndexing_BattleTests
         Assert.AreEqual(11, result.item<int>(1, 3));
     }
 
-    [Test]
+    [TestMethod]
     public void Case3_Axis0_3D_SelectsAlongAxis0()
     {
         // NumPy: 1D mask on 3D array selects along axis 0
@@ -156,7 +155,7 @@ public class BooleanIndexing_BattleTests
         Assert.IsTrue(result.shape.SequenceEqual(new long[] { 1, 3, 4 }), $"Expected shape [1, 3, 4], got [{string.Join(", ", result.shape)}]");
     }
 
-    [Test]
+    [TestMethod]
     public void Case3_Axis0_3D_CorrectValues()
     {
         var arr3d = np.arange(24).reshape(2, 3, 4);
@@ -174,7 +173,7 @@ public class BooleanIndexing_BattleTests
 
     #region Case 4: Boolean Mask + Additional Index (Combined Indexing)
 
-    [Test]
+    [TestMethod]
     public void Case4_BooleanPlusInteger_Workaround()
     {
         // NumPy: arr2d[mask, 0] - select masked rows, then column 0
@@ -192,7 +191,7 @@ public class BooleanIndexing_BattleTests
         Assert.AreEqual(8, result.item<int>(1));
     }
 
-    [Test]
+    [TestMethod]
     public void Case4_BooleanPlusSlice_Workaround()
     {
         // NumPy: arr2d[mask, 1:3] - select masked rows, then columns 1-2
@@ -215,7 +214,7 @@ public class BooleanIndexing_BattleTests
 
     #region Case 5: 3D Array with Masks (ndim variations)
 
-    [Test]
+    [TestMethod]
     public void Case5_3D_FullShapeMask()
     {
         // NumPy: 3D mask on 3D array → 1D result
@@ -230,7 +229,7 @@ public class BooleanIndexing_BattleTests
         Assert.AreEqual(23, result.item<int>(10));
     }
 
-    [Test]
+    [TestMethod]
     public void Case5_3D_1DMask_PreservesRemainingDims()
     {
         var arr3d = np.arange(24).reshape(2, 3, 4);
@@ -242,7 +241,7 @@ public class BooleanIndexing_BattleTests
         Assert.IsTrue(result.shape.SequenceEqual(new long[] { 1, 3, 4 }), $"Expected shape [1, 3, 4], got [{string.Join(", ", result.shape)}]");
     }
 
-    [Test]
+    [TestMethod]
     public void Case5_2DMaskOn3D_PartialShapeMatch()
     {
         // NumPy: 2D mask (2,3) on 3D array (2,3,4) → shape (count_true, 4)
@@ -279,7 +278,7 @@ public class BooleanIndexing_BattleTests
 
     #region Case 6: Boolean Mask Assignment (Setter)
 
-    [Test]
+    [TestMethod]
     public void Case6_Assignment_ScalarValue()
     {
         // NumPy: arr[mask] = 0 sets all masked elements to 0
@@ -296,7 +295,7 @@ public class BooleanIndexing_BattleTests
         Assert.AreEqual(0, arr.GetInt32(4));
     }
 
-    [Test]
+    [TestMethod]
     public void Case6_Assignment_ArrayValue()
     {
         // NumPy: arr[mask] = [10, 20, 30] assigns in order
@@ -313,7 +312,7 @@ public class BooleanIndexing_BattleTests
         Assert.AreEqual(30, arr.GetInt32(4));
     }
 
-    [Test]
+    [TestMethod]
     public void Case6_Assignment_2D_SameShapeMask()
     {
         // NumPy: arr2d[mask2d] = -1
@@ -328,7 +327,7 @@ public class BooleanIndexing_BattleTests
         Assert.AreEqual(-1, arr2d.item<int>(2, 3)); // was 11
     }
 
-    [Test]
+    [TestMethod]
     public void Case6_Assignment_2D_RowMask()
     {
         // NumPy: arr2d[[T,F,T]] = 99
@@ -344,7 +343,7 @@ public class BooleanIndexing_BattleTests
         Assert.AreEqual(99, arr2d.item<int>(2, 0));
     }
 
-    [Test]
+    [TestMethod]
     public void Case6_Assignment_BroadcastValue()
     {
         // NumPy: arr2d[[T,F,T]] = [[100, 101, 102, 103]] broadcasts
@@ -365,7 +364,7 @@ public class BooleanIndexing_BattleTests
 
     #region Case 7: Edge Cases - Empty Masks
 
-    [Test]
+    [TestMethod]
     public void Case7_AllFalse_EmptyResult()
     {
         var arr = np.array(new[] { 1, 2, 3, 4, 5 });
@@ -377,7 +376,7 @@ public class BooleanIndexing_BattleTests
         Assert.AreEqual(0, result.size);
     }
 
-    [Test]
+    [TestMethod]
     public void Case7_AllTrue_AllElements()
     {
         var arr = np.array(new[] { 1, 2, 3, 4, 5 });
@@ -390,7 +389,7 @@ public class BooleanIndexing_BattleTests
         Assert.AreEqual(5, result.GetInt32(4));
     }
 
-    [Test]
+    [TestMethod]
     public void Case7_EmptyArray_EmptyMask()
     {
         var empty = np.array(new int[0]);
@@ -401,7 +400,7 @@ public class BooleanIndexing_BattleTests
         Assert.IsTrue(result.shape.SequenceEqual(new long[] { 0 }), $"Expected shape [0], got [{string.Join(", ", result.shape)}]");
     }
 
-    [Test]
+    [TestMethod]
     public void Case7_EmptyResult_PreservesDtype()
     {
         var arrFloat = np.array(new[] { 1.5, 2.5, 3.5 });
@@ -417,7 +416,7 @@ public class BooleanIndexing_BattleTests
 
     #region Case 8: Shape Mismatch Errors
 
-    [Test]
+    [TestMethod]
     public void Case8_ShapeMismatch_ThrowsError()
     {
         var arr = np.array(new[] { 1, 2, 3, 4, 5 });
@@ -426,7 +425,7 @@ public class BooleanIndexing_BattleTests
         Assert.ThrowsException<IndexOutOfRangeException>(() => arr[badMask]);
     }
 
-    [Test]
+    [TestMethod]
     public void Case8_ShapeMismatch_ErrorMessage()
     {
         var arr = np.array(new[] { 1, 2, 3, 4, 5 });
@@ -443,7 +442,7 @@ public class BooleanIndexing_BattleTests
         }
     }
 
-    [Test]
+    [TestMethod]
     public void Case8_2D_WrongMaskShape()
     {
         var arr2d = np.arange(12).reshape(3, 4);
@@ -457,7 +456,7 @@ public class BooleanIndexing_BattleTests
 
     #region Case 9: Boolean Scalar Indexing
 
-    [Test]
+    [TestMethod]
     public void Case9_BooleanScalar_True()
     {
         // NumPy: arr[True] adds a dimension → [[1, 2, 3]]
@@ -479,7 +478,7 @@ public class BooleanIndexing_BattleTests
         }
     }
 
-    [Test]
+    [TestMethod]
     public void Case9_BooleanScalar_False()
     {
         // NumPy: arr[False] → empty array with extra dimension
@@ -503,7 +502,7 @@ public class BooleanIndexing_BattleTests
 
     #region Case 10: np.nonzero and np.where equivalence
 
-    [Test]
+    [TestMethod]
     public void Case10_Nonzero_ReturnsCorrectIndices()
     {
         var mask = np.array(new[] { true, false, true, false, true }).MakeGeneric<bool>();
@@ -517,7 +516,7 @@ public class BooleanIndexing_BattleTests
         Assert.AreEqual(4, indices[0].item<int>(2));
     }
 
-    [Test]
+    [TestMethod]
     public void Case10_Nonzero_2D_ReturnsTwoArrays()
     {
         var mask2d = np.array(new[,] { { true, false, true }, { false, true, false } }).MakeGeneric<bool>();
@@ -538,7 +537,7 @@ public class BooleanIndexing_BattleTests
         Assert.AreEqual(1, indices[1].item<int>(2));
     }
 
-    [Test]
+    [TestMethod]
     public void Case10_BooleanIndex_EqualsNonzeroFancyIndex()
     {
         var arr = np.array(new[] { 10, 20, 30, 40, 50 });
@@ -557,7 +556,7 @@ public class BooleanIndexing_BattleTests
 
     #region Case 11: Order Preservation
 
-    [Test]
+    [TestMethod]
     public void Case11_OrderPreservation_FollowsMaskPosition()
     {
         // NumPy: Order follows the position in the mask, not the order of True values
@@ -572,7 +571,7 @@ public class BooleanIndexing_BattleTests
         Assert.AreEqual(50, result.GetInt32(2));
     }
 
-    [Test]
+    [TestMethod]
     public void Case11_2D_COrderIteration()
     {
         // NumPy iterates in C-order (row-major)
@@ -591,7 +590,7 @@ public class BooleanIndexing_BattleTests
 
     #region Case 12: Non-Contiguous Arrays
 
-    [Test]
+    [TestMethod]
     public void Case12_SlicedArray_BooleanMask()
     {
         // Boolean mask on sliced (non-contiguous) array
@@ -611,7 +610,7 @@ public class BooleanIndexing_BattleTests
         Assert.AreEqual(14, result.item<int>(2));
     }
 
-    [Test]
+    [TestMethod]
     public void Case12_TransposedArray_BooleanMask()
     {
         var arr = np.arange(12).reshape(3, 4);
@@ -632,7 +631,7 @@ public class BooleanIndexing_BattleTests
         Assert.AreEqual(11, result.item<int>(5));
     }
 
-    [Test]
+    [TestMethod]
     public void Case12_SlicedView_BooleanMask()
     {
         var arr = np.arange(20).reshape(4, 5);
@@ -652,7 +651,7 @@ public class BooleanIndexing_BattleTests
 
     #region Case 13: Broadcast Arrays
 
-    [Test]
+    [TestMethod]
     public void Case13_BroadcastArray_BooleanMask()
     {
         var arr1d = np.array(new[] { 1, 2, 3 });
@@ -676,7 +675,7 @@ public class BooleanIndexing_BattleTests
 
     #region Case 14: Broadcast Comparison for Mask
 
-    [Test]
+    [TestMethod]
     public void Case14_BroadcastComparison_CreatesMask()
     {
         var arr2d = np.arange(12).reshape(3, 4);
@@ -699,7 +698,7 @@ public class BooleanIndexing_BattleTests
 
     #region Case 15: Ravel/Flatten with Boolean
 
-    [Test]
+    [TestMethod]
     public void Case15_RavelThenBoolean()
     {
         var arr2d = np.arange(12).reshape(3, 4);
@@ -713,7 +712,7 @@ public class BooleanIndexing_BattleTests
         Assert.AreEqual(11, result.item<int>(5));
     }
 
-    [Test]
+    [TestMethod]
     public void Case15_FlattenThenBoolean()
     {
         var arr2d = np.arange(12).reshape(3, 4);
@@ -729,7 +728,7 @@ public class BooleanIndexing_BattleTests
 
     #region Case 16: Chained Boolean Indexing
 
-    [Test]
+    [TestMethod]
     public void Case16_ChainedBooleanIndexing()
     {
         var arr = np.arange(20);
@@ -754,7 +753,7 @@ public class BooleanIndexing_BattleTests
 
     #region Case 17: Result Memory Layout
 
-    [Test]
+    [TestMethod]
     public void Case17_ResultIsContiguous()
     {
         var arr2d = np.arange(12).reshape(3, 4);
@@ -766,7 +765,7 @@ public class BooleanIndexing_BattleTests
         Assert.IsTrue(result.Shape.IsContiguous, "Result should be contiguous");
     }
 
-    [Test]
+    [TestMethod]
     public void Case17_ResultFromNonContiguous_IsContiguous()
     {
         var arr = np.arange(20).reshape(4, 5);
@@ -785,7 +784,7 @@ public class BooleanIndexing_BattleTests
 
     #region Case 18: Different Dtypes
 
-    [Test]
+    [TestMethod]
     public void Case18_Float64()
     {
         var arr = np.array(new[] { 1.5, 2.5, 3.5, 4.5, 5.5 });
@@ -798,7 +797,7 @@ public class BooleanIndexing_BattleTests
         Assert.AreEqual(3.5, result.GetDouble(0));
     }
 
-    [Test]
+    [TestMethod]
     public void Case18_Float32()
     {
         var arr = np.array(new float[] { 1.5f, 2.5f, 3.5f, 4.5f, 5.5f });
@@ -810,7 +809,7 @@ public class BooleanIndexing_BattleTests
         Assert.AreEqual(3, result.size);
     }
 
-    [Test]
+    [TestMethod]
     public void Case18_Int64()
     {
         var arr = np.array(new long[] { 1L, 2L, 3L, 4L, 5L });
@@ -821,7 +820,7 @@ public class BooleanIndexing_BattleTests
         Assert.AreEqual(typeof(long), result.dtype);
     }
 
-    [Test]
+    [TestMethod]
     public void Case18_Boolean()
     {
         var arr = np.array(new[] { true, false, true, false, true });
@@ -836,7 +835,7 @@ public class BooleanIndexing_BattleTests
         Assert.IsTrue(result.GetBoolean(2));
     }
 
-    [Test]
+    [TestMethod]
     public void Case18_Byte()
     {
         var arr = np.array(new byte[] { 1, 2, 3, 4, 5 });
@@ -852,7 +851,7 @@ public class BooleanIndexing_BattleTests
 
     #region Case 19: Single Element Selection
 
-    [Test]
+    [TestMethod]
     public void Case19_SingleElementSelected()
     {
         var arr = np.array(new[] { 1, 2, 3, 4, 5 });
@@ -864,7 +863,7 @@ public class BooleanIndexing_BattleTests
         Assert.AreEqual(3, result.GetInt32(0));
     }
 
-    [Test]
+    [TestMethod]
     public void Case19_2D_SingleRow()
     {
         var arr2d = np.arange(12).reshape(3, 4);
@@ -880,7 +879,7 @@ public class BooleanIndexing_BattleTests
 
     #region Case 20: Large Arrays
 
-    [Test]
+    [TestMethod]
     public void Case20_LargeArray_Performance()
     {
         var size = 100000;
@@ -898,7 +897,7 @@ public class BooleanIndexing_BattleTests
 
     #region Case 21: Comparison Operators for Mask Generation
 
-    [Test]
+    [TestMethod]
     public void Case21_GreaterThan()
     {
         var arr = np.array(new[] { 1, 2, 3, 4, 5 });
@@ -911,7 +910,7 @@ public class BooleanIndexing_BattleTests
         Assert.AreEqual(5, result.GetInt32(1));
     }
 
-    [Test]
+    [TestMethod]
     public void Case21_LessThan()
     {
         var arr = np.array(new[] { 1, 2, 3, 4, 5 });
@@ -924,7 +923,7 @@ public class BooleanIndexing_BattleTests
         Assert.AreEqual(2, result.GetInt32(1));
     }
 
-    [Test]
+    [TestMethod]
     public void Case21_Equal()
     {
         var arr = np.array(new[] { 1, 2, 3, 2, 1 });
@@ -937,7 +936,7 @@ public class BooleanIndexing_BattleTests
         Assert.AreEqual(2, result.GetInt32(1));
     }
 
-    [Test]
+    [TestMethod]
     public void Case21_NotEqual()
     {
         var arr = np.array(new[] { 1, 2, 3, 2, 1 });
@@ -951,7 +950,7 @@ public class BooleanIndexing_BattleTests
         Assert.AreEqual(1, result.GetInt32(2));
     }
 
-    [Test]
+    [TestMethod]
     public void Case21_GreaterEqual()
     {
         var arr = np.array(new[] { 1, 2, 3, 4, 5 });
@@ -962,7 +961,7 @@ public class BooleanIndexing_BattleTests
         Assert.AreEqual(3, result.size);
     }
 
-    [Test]
+    [TestMethod]
     public void Case21_LessEqual()
     {
         var arr = np.array(new[] { 1, 2, 3, 4, 5 });
@@ -977,7 +976,7 @@ public class BooleanIndexing_BattleTests
 
     #region Case 22: Logical Operations on Masks
 
-    [Test]
+    [TestMethod]
     public void Case22_LogicalAnd()
     {
         var arr = np.array(new[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 });
@@ -993,7 +992,7 @@ public class BooleanIndexing_BattleTests
         Assert.AreEqual(7, result.GetInt32(3));
     }
 
-    [Test]
+    [TestMethod]
     public void Case22_LogicalOr()
     {
         var arr = np.array(new[] { 1, 2, 3, 4, 5 });
@@ -1009,7 +1008,7 @@ public class BooleanIndexing_BattleTests
         Assert.AreEqual(5, result.GetInt32(1));
     }
 
-    [Test]
+    [TestMethod]
     public void Case22_LogicalNot()
     {
         var arr = np.array(new[] { 1, 2, 3, 4, 5 });
@@ -1028,7 +1027,7 @@ public class BooleanIndexing_BattleTests
 
     #region Case 23: NaN Handling
 
-    [Test]
+    [TestMethod]
     public void Case23_NaN_Comparison()
     {
         var arr = np.array(new[] { 1.0, double.NaN, 3.0, double.NaN, 5.0 });
@@ -1043,7 +1042,7 @@ public class BooleanIndexing_BattleTests
         Assert.AreEqual(5.0, result.GetDouble(1));
     }
 
-    [Test]
+    [TestMethod]
     public void Case23_IsNaN_Mask()
     {
         var arr = np.array(new[] { 1.0, double.NaN, 3.0, double.NaN, 5.0 });
@@ -1056,7 +1055,7 @@ public class BooleanIndexing_BattleTests
         Assert.IsTrue(double.IsNaN(result.GetDouble(1)));
     }
 
-    [Test]
+    [TestMethod]
     public void Case23_NotNaN_Mask()
     {
         var arr = np.array(new[] { 1.0, double.NaN, 3.0, double.NaN, 5.0 });
@@ -1074,7 +1073,7 @@ public class BooleanIndexing_BattleTests
 
     #region Case 24: Infinity Handling
 
-    [Test]
+    [TestMethod]
     public void Case24_Infinity_Comparison()
     {
         var arr = np.array(new[] { 1.0, double.PositiveInfinity, 3.0, double.NegativeInfinity, 5.0 });
@@ -1088,7 +1087,7 @@ public class BooleanIndexing_BattleTests
         Assert.AreEqual(5.0, result.GetDouble(1));
     }
 
-    [Test]
+    [TestMethod]
     [OpenBugs] // np.isinf is not implemented (returns null)
     public void Case24_IsInf_Mask()
     {
@@ -1104,7 +1103,7 @@ public class BooleanIndexing_BattleTests
 
     #region Case 25: Modulo for Mask
 
-    [Test]
+    [TestMethod]
     public void Case25_Modulo_EvenNumbers()
     {
         var arr = np.arange(10);
@@ -1118,7 +1117,7 @@ public class BooleanIndexing_BattleTests
         Assert.AreEqual(8, result.item<int>(4));
     }
 
-    [Test]
+    [TestMethod]
     public void Case25_Modulo_MultipleOf3()
     {
         var arr = np.arange(15);
@@ -1137,7 +1136,7 @@ public class BooleanIndexing_BattleTests
 
     #region Case 26: Complex Mask Expressions
 
-    [Test]
+    [TestMethod]
     public void Case26_ComplexExpression_Range()
     {
         var arr = np.arange(20);
@@ -1151,7 +1150,7 @@ public class BooleanIndexing_BattleTests
         Assert.AreEqual(14, result.item<int>(9));
     }
 
-    [Test]
+    [TestMethod]
     public void Case26_ComplexExpression_MultipleConditions()
     {
         var arr = np.arange(20);
@@ -1171,7 +1170,7 @@ public class BooleanIndexing_BattleTests
 
     #region Case 27: Assignment Edge Cases
 
-    [Test]
+    [TestMethod]
     public void Case27_Assignment_EmptyMask_NoChange()
     {
         var arr = np.array(new[] { 1, 2, 3, 4, 5 });
@@ -1187,7 +1186,7 @@ public class BooleanIndexing_BattleTests
         }
     }
 
-    [Test]
+    [TestMethod]
     public void Case27_Assignment_AllTrue()
     {
         var arr = np.array(new[] { 1, 2, 3, 4, 5 });
@@ -1205,7 +1204,7 @@ public class BooleanIndexing_BattleTests
 
     #region Case 28: Higher Dimensional Arrays
 
-    [Test]
+    [TestMethod]
     public void Case28_4D_SameShapeMask()
     {
         var arr4d = np.arange(24).reshape(2, 3, 2, 2);
@@ -1220,7 +1219,7 @@ public class BooleanIndexing_BattleTests
         Assert.AreEqual(23, result.item<int>(10));
     }
 
-    [Test]
+    [TestMethod]
     public void Case28_4D_1DMask()
     {
         var arr4d = np.arange(48).reshape(2, 3, 4, 2);
@@ -1236,7 +1235,7 @@ public class BooleanIndexing_BattleTests
 
     #region Case 29: count_nonzero Relationship
 
-    [Test]
+    [TestMethod]
     public void Case29_CountNonzero_MatchesResultSize()
     {
         var arr = np.array(new[] { 1, 2, 3, 4, 5 });
@@ -1248,7 +1247,7 @@ public class BooleanIndexing_BattleTests
         Assert.AreEqual(count, result.size);
     }
 
-    [Test]
+    [TestMethod]
     public void Case29_CountNonzero_2D()
     {
         var arr2d = np.arange(12).reshape(3, 4);

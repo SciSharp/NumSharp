@@ -9,7 +9,7 @@ namespace NumSharp.UnitTest.RandomSampling
     {
         private static readonly double[] DicePvals = { 1.0 / 6, 1.0 / 6, 1.0 / 6, 1.0 / 6, 1.0 / 6, 1.0 / 6 };
 
-        [Test]
+        [TestMethod]
         public void Multinomial_ReturnsSingleSample_WhenNoSize()
         {
             var rng = np.random.RandomState(42);
@@ -19,7 +19,7 @@ namespace NumSharp.UnitTest.RandomSampling
             result.dtype.Should().Be(typeof(int));
         }
 
-        [Test]
+        [TestMethod]
         public void Multinomial_SumEqualsN()
         {
             var rng = np.random.RandomState(42);
@@ -29,7 +29,7 @@ namespace NumSharp.UnitTest.RandomSampling
             sum.Should().Be(20);
         }
 
-        [Test]
+        [TestMethod]
         public void Multinomial_Returns2DArray_WithSize()
         {
             var rng = np.random.RandomState(42);
@@ -38,7 +38,7 @@ namespace NumSharp.UnitTest.RandomSampling
             result.shape.Should().ContainInOrder(5, 6);
         }
 
-        [Test]
+        [TestMethod]
         public void Multinomial_Returns3DArray_With2DSize()
         {
             var rng = np.random.RandomState(42);
@@ -47,7 +47,7 @@ namespace NumSharp.UnitTest.RandomSampling
             result.shape.Should().ContainInOrder(2, 3, 6);
         }
 
-        [Test]
+        [TestMethod]
         public void Multinomial_AllRowsSumToN()
         {
             var rng = np.random.RandomState(42);
@@ -64,7 +64,7 @@ namespace NumSharp.UnitTest.RandomSampling
             }
         }
 
-        [Test]
+        [TestMethod]
         public void Multinomial_AllValuesNonNegative()
         {
             var rng = np.random.RandomState(42);
@@ -76,7 +76,7 @@ namespace NumSharp.UnitTest.RandomSampling
             }
         }
 
-        [Test]
+        [TestMethod]
         public void Multinomial_BiasedPvals_ProducesMoreInHighProbCategory()
         {
             var rng = np.random.RandomState(42);
@@ -96,7 +96,7 @@ namespace NumSharp.UnitTest.RandomSampling
             lastCategoryTotal.Should().BeGreaterThan(firstCategoryTotal);
         }
 
-        [Test]
+        [TestMethod]
         public void Multinomial_NZero_ReturnsAllZeros()
         {
             var rng = np.random.RandomState(42);
@@ -108,28 +108,28 @@ namespace NumSharp.UnitTest.RandomSampling
             }
         }
 
-        [Test]
+        [TestMethod]
         public void Multinomial_NNegative_ThrowsArgumentException()
         {
             Action act = () => np.random.multinomial(-1, DicePvals);
             act.Should().Throw<ArgumentException>();
         }
 
-        [Test]
+        [TestMethod]
         public void Multinomial_PvalsNegative_ThrowsArgumentException()
         {
             Action act = () => np.random.multinomial(20, new[] { 0.5, -0.1, 0.6 });
             act.Should().Throw<ArgumentException>();
         }
 
-        [Test]
+        [TestMethod]
         public void Multinomial_PvalsSumGreaterThanOne_ThrowsArgumentException()
         {
             Action act = () => np.random.multinomial(20, new[] { 0.5, 0.6, 0.1 });
             act.Should().Throw<ArgumentException>();
         }
 
-        [Test]
+        [TestMethod]
         public void Multinomial_ShapeOverload_Works()
         {
             var rng = np.random.RandomState(42);
@@ -138,7 +138,7 @@ namespace NumSharp.UnitTest.RandomSampling
             result.shape.Should().ContainInOrder(3, 4, 6);
         }
 
-        [Test]
+        [TestMethod]
         public void Multinomial_Reproducibility_WithSeed()
         {
             var rng1 = np.random.RandomState(42);
@@ -150,7 +150,7 @@ namespace NumSharp.UnitTest.RandomSampling
             first.Should().BeEquivalentTo(second);
         }
 
-        [Test]
+        [TestMethod]
         public void Multinomial_TwoCategories_IsBinomialLike()
         {
             var rng = np.random.RandomState(42);
@@ -169,7 +169,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Math.Abs(avgFirst - 30).Should().BeLessThan(3);
         }
 
-        [Test]
+        [TestMethod]
         public void Multinomial_LargeN_Works()
         {
             var rng = np.random.RandomState(42);

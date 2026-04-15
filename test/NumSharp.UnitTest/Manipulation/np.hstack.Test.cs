@@ -7,7 +7,7 @@ namespace NumSharp.UnitTest.Manipulation
     /// </summary>
     public class np_hstack_tests
     {
-        [Test]
+        [TestMethod]
         public void HStackNDArrays()
         {
             //1D

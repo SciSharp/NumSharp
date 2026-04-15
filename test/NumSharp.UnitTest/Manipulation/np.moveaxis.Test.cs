@@ -6,7 +6,7 @@ namespace NumSharp.UnitTest.Manipulation
 {
     public class np_moveaxis_Test
     {
-        [Test]
+        [TestMethod]
         public void Case1()
         {
             var x = np.zeros((3, 4, 5));
@@ -14,7 +14,7 @@ namespace NumSharp.UnitTest.Manipulation
             np.moveaxis(x, -1, 0).Should().BeShaped(5, 3, 4);   // NumPy verified (was incorrectly 5,4,3)
         }
 
-        [Test]
+        [TestMethod]
         public void Case2()
         {
             var x = np.zeros((3, 4, 5));

@@ -2,7 +2,6 @@ using System;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp;
 using NumSharp.UnitTest.Utilities;
-using TUnit.Core;
 
 namespace NumSharp.UnitTest.Backends.Kernels;
 
@@ -17,7 +16,7 @@ public class NonContiguousTests
 {
     #region Transposed Array Operations
 
-    [Test]
+    [TestMethod]
     public void Transpose_2D_Sqrt()
     {
         // NumPy: np.sqrt(arr.T) where arr = [[1, 4], [9, 16], [25, 36]]
@@ -39,7 +38,7 @@ public class NonContiguousTests
         Assert.AreEqual(6.0, result.GetDouble(1, 2), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void Transpose_2D_Add()
     {
         // NumPy: arr.T + arr.T where arr = [[1, 2], [3, 4]]
@@ -56,7 +55,7 @@ public class NonContiguousTests
         Assert.AreEqual(8.0, result.GetDouble(1, 1), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void Transpose_2D_Sum()
     {
         // NumPy: np.sum(arr.T) where arr = [[1, 2, 3], [4, 5, 6]]
@@ -70,7 +69,7 @@ public class NonContiguousTests
         Assert.AreEqual(21.0, result.GetDouble(0), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void Transpose_2D_Multiply()
     {
         // arr * arr.T (both 2x2)
@@ -86,7 +85,7 @@ public class NonContiguousTests
         Assert.AreEqual(16.0, result.GetDouble(1, 1), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void Transpose_3D_Sum()
     {
         // NumPy: np.sum(arr.T) where arr has shape (2, 3, 4)
@@ -106,7 +105,7 @@ public class NonContiguousTests
 
     #region Broadcast View Operations
 
-    [Test]
+    [TestMethod]
     public void BroadcastTo_Scalar_Sum()
     {
         // NumPy: np.sum(np.broadcast_to(5, (3, 3)))
@@ -123,7 +122,7 @@ public class NonContiguousTests
         Assert.AreEqual(45.0, (double)result, 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void BroadcastTo_1D_Sqrt()
     {
         // NumPy: np.sqrt(np.broadcast_to([1, 4, 9], (3, 3)))
@@ -142,7 +141,7 @@ public class NonContiguousTests
         }
     }
 
-    [Test]
+    [TestMethod]
     public void BroadcastTo_Column_Add()
     {
         // NumPy: np.broadcast_to([[1], [2], [3]], (3, 3)) + np.broadcast_to([10, 20, 30], (3, 3))
@@ -162,7 +161,7 @@ public class NonContiguousTests
         Assert.AreEqual(33.0, result.GetDouble(2, 2), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void BroadcastTo_Mean()
     {
         // NumPy: np.mean(np.broadcast_to([1, 2, 3], (4, 3)))
@@ -179,7 +178,7 @@ public class NonContiguousTests
 
     #region Reversed Array Operations
 
-    [Test]
+    [TestMethod]
     public void Reversed_Sqrt()
     {
         // NumPy: np.sqrt(arr[::-1]) where arr = [1, 4, 9, 16, 25]
@@ -197,7 +196,7 @@ public class NonContiguousTests
         Assert.AreEqual(1.0, result.GetDouble(4), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void Reversed_Add_WithOriginal()
     {
         // NumPy: arr + arr[::-1] where arr = [1, 2, 3, 4, 5]
@@ -212,7 +211,7 @@ public class NonContiguousTests
         }
     }
 
-    [Test]
+    [TestMethod]
     public void Reversed_2D_Rows()
     {
         // NumPy: np.sum(arr[::-1, :]) where arr = [[1,2,3], [4,5,6]]
@@ -228,7 +227,7 @@ public class NonContiguousTests
         Assert.AreEqual(21.0, result.GetDouble(0), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void Reversed_2D_Cols()
     {
         // NumPy: arr[:, ::-1] where arr = [[1,2,3], [4,5,6]]
@@ -246,7 +245,7 @@ public class NonContiguousTests
 
     #region Multi-Dimensional Slice Operations
 
-    [Test]
+    [TestMethod]
     public void Slice3D_Sum()
     {
         // NumPy: np.sum(arr[::, ::2, ::]) where arr has shape (2, 3, 4)
@@ -263,7 +262,7 @@ public class NonContiguousTests
         Assert.AreEqual(184.0, (double)result, 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void Slice3D_Sqrt()
     {
         // Create array with perfect squares for testing
@@ -283,7 +282,7 @@ public class NonContiguousTests
 
     #region ATan2 on Non-Contiguous Arrays (Task #73 fix verification)
 
-    [Test]
+    [TestMethod]
     public void ATan2_SlicedArrays()
     {
         // NumPy: np.arctan2(y[::2], x[::2])
@@ -300,7 +299,7 @@ public class NonContiguousTests
         Assert.AreEqual(Math.PI, result.GetDouble(2), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void ATan2_TransposedArrays()
     {
         // NumPy: np.arctan2(y.T, x.T)
@@ -317,7 +316,7 @@ public class NonContiguousTests
         Assert.AreEqual(Math.PI, result.GetDouble(1, 1), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void ATan2_ReversedArrays()
     {
         // NumPy: np.arctan2(y[::-1], x[::-1])
@@ -337,7 +336,7 @@ public class NonContiguousTests
 
     #region Negate Boolean on Non-Contiguous Arrays (Task #74 fix verification)
 
-    [Test]
+    [TestMethod]
     [OpenBugs]  // Remove when Task #74 is fixed
     public void NegateBoolean_SlicedArray()
     {
@@ -355,7 +354,7 @@ public class NonContiguousTests
         Assert.AreEqual(-1, result.GetInt32(2));
     }
 
-    [Test]
+    [TestMethod]
     [OpenBugs]  // Remove when Task #74 is fixed
     public void NegateBoolean_ReversedArray()
     {
@@ -376,7 +375,7 @@ public class NonContiguousTests
 
     #region Combined Non-Contiguous Patterns
 
-    [Test]
+    [TestMethod]
     public void TransposedSlice_Sum()
     {
         // NumPy: np.sum(arr.T[::2, :])
@@ -392,7 +391,7 @@ public class NonContiguousTests
         Assert.AreEqual(16.0, result.GetDouble(0), 1e-10);  // 1+5+3+7=16
     }
 
-    [Test]
+    [TestMethod]
     public void SlicedTransposed_Multiply()
     {
         // Slice first, then transpose
@@ -414,7 +413,7 @@ public class NonContiguousTests
         Assert.AreEqual(100.0, result.GetDouble(1, 1), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void ReversedTransposed_Add()
     {
         var arr = np.array(new double[,] { { 1, 2 }, { 3, 4 } });
@@ -436,7 +435,7 @@ public class NonContiguousTests
 
     #region All/Any on Non-Contiguous Arrays
 
-    [Test]
+    [TestMethod]
     public void All_SlicedBoolArray()
     {
         // NumPy: np.all(arr[::2]) where arr = [True, False, True, False, True]
@@ -450,7 +449,7 @@ public class NonContiguousTests
         Assert.IsTrue(result);
     }
 
-    [Test]
+    [TestMethod]
     public void All_SlicedBoolArray_False()
     {
         // NumPy: np.all(arr[1::2]) where arr = [True, False, True, False, True]
@@ -464,7 +463,7 @@ public class NonContiguousTests
         Assert.IsFalse(result);
     }
 
-    [Test]
+    [TestMethod]
     public void Any_SlicedBoolArray()
     {
         // NumPy: np.any(arr[::2]) where arr = [False, True, False, True, False]
@@ -478,7 +477,7 @@ public class NonContiguousTests
         Assert.IsFalse(result);
     }
 
-    [Test]
+    [TestMethod]
     public void Any_TransposedBoolArray()
     {
         // NumPy: np.any(arr.T) where arr = [[False, False], [True, False]]
@@ -496,7 +495,7 @@ public class NonContiguousTests
 
     #region ArgMax/ArgMin on Non-Contiguous Arrays
 
-    [Test]
+    [TestMethod]
     public void ArgMax_SlicedArray()
     {
         // NumPy: np.argmax(arr[::2]) where arr = [1, 999, 5, 999, 3, 999, 7, 999]
@@ -510,7 +509,7 @@ public class NonContiguousTests
         Assert.AreEqual(3, result);
     }
 
-    [Test]
+    [TestMethod]
     public void ArgMin_ReversedArray()
     {
         // NumPy: np.argmin(arr[::-1]) where arr = [5, 2, 8, 1, 9]
@@ -524,7 +523,7 @@ public class NonContiguousTests
         Assert.AreEqual(1, result);
     }
 
-    [Test]
+    [TestMethod]
     public void ArgMax_TransposedArray()
     {
         // NumPy: np.argmax(arr.T) where arr = [[1, 2], [9, 4]]
@@ -543,7 +542,7 @@ public class NonContiguousTests
 
     #region Power on Non-Contiguous Arrays
 
-    [Test]
+    [TestMethod]
     public void Power_SlicedArrays()
     {
         // NumPy: np.power(base[::2], exp[::2])
@@ -560,7 +559,7 @@ public class NonContiguousTests
         Assert.AreEqual(64.0, result.GetDouble(2), 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void Power_TransposedArrays()
     {
         // NumPy: np.power(base.T, exp.T)
@@ -581,7 +580,7 @@ public class NonContiguousTests
 
     #region FloorDivide on Non-Contiguous Arrays
 
-    [Test]
+    [TestMethod]
     public void FloorDivide_SlicedArrays()
     {
         // NumPy: np.floor_divide(a[::2], b[::2])

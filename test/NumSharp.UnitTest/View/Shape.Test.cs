@@ -14,7 +14,7 @@ namespace NumSharp.UnitTest
 {
     public class ShapeTest
     {
-        [Test]
+        [TestMethod]
         public void Index()
         {
             var shape0 = new Shape(4, 3);
@@ -24,7 +24,7 @@ namespace NumSharp.UnitTest
             Assert.IsTrue(idx0 == 3 * 2 + 1 * 1);
         }
 
-        [Test]
+        [TestMethod]
         public void CheckIndexing()
         {
             var shape0 = new Shape(4, 3, 2);
@@ -61,13 +61,13 @@ namespace NumSharp.UnitTest
         }
 
         // Test removed: ChangeTensorLayout was removed (NumSharp is C-order only)
-        // [Test, Skip("Ignored")]
+        // [TestMethod, Ignore("Ignored")]
         // public void CheckColRowSwitch() { ... }
 
         /// <summary>
         ///     Based on issue https://github.com/SciSharp/NumSharp/issues/306
         /// </summary>
-        [Test]
+        [TestMethod]
         public void EqualityComparer()
         {
             // Shape is now a readonly struct - cannot be null
@@ -92,7 +92,7 @@ namespace NumSharp.UnitTest
         }
 
 
-        [Test, TUnit.Core.Timeout(10000)]
+        [TestMethod, Timeout(10000)]
         public void ExtractShape_FromArray(CancellationToken cancellationToken)
         {
             // @formatter:off — disable formatter after this line
@@ -137,7 +137,7 @@ namespace NumSharp.UnitTest
             Shape.ExtractShape(new int[5]).Should().ContainInOrder(5);
         }
 
-        [Test]
+        [TestMethod]
         public void Create_Vector()
         {
             Shape.Vector(10).Should().Be(new Shape(10));
@@ -150,7 +150,7 @@ namespace NumSharp.UnitTest
             Shape.Vector(0).strides.Should().ContainInOrder(new Shape(0).strides);
         }
 
-        [Test]
+        [TestMethod]
         public void Create_Matrix()
         {
             Shape.Matrix(5, 5).Should().Be(new Shape(5, 5));
@@ -169,7 +169,7 @@ namespace NumSharp.UnitTest
             Shape.Matrix(0, 0).strides.Should().ContainInOrder(new Shape(0, 0).strides);
         }
 
-        [Test]
+        [TestMethod]
         public void GetAxis()
         {
             var baseshape = new Shape(2, 3, 4, 5);
@@ -180,7 +180,7 @@ namespace NumSharp.UnitTest
             Shape.GetAxis(baseshape, -1).Should().ContainInOrder(2, 3, 4);
         }
 
-        [Test]
+        [TestMethod]
         public void GetSubshape()
         {
             //initialize
@@ -294,7 +294,7 @@ namespace NumSharp.UnitTest
             retTuple.Shape.Dimensions[1].Should().Be(1);
         }
 
-        [Test]
+        [TestMethod]
         public void ShapeSlicing_1D()
         {
             // NumPy-pure: test offset and strides instead of ViewInfo
@@ -307,7 +307,7 @@ namespace NumSharp.UnitTest
             new Shape(10).Slice("-7:").Offset.Should().Be(3);
         }
 
-        [Test]
+        [TestMethod]
         public void RepeatedSlicing_1D()
         {
             // NumPy-pure: double slicing uses parent offset+strides
@@ -320,7 +320,7 @@ namespace NumSharp.UnitTest
             new Shape(10).Slice(":5").Slice("2:").BufferSize.Should().Be(10);
         }
 
-        [Test]
+        [TestMethod]
         public void ShapeSlicing_2D()
         {
             // NumPy-pure: test dimensions and offset
@@ -331,14 +331,14 @@ namespace NumSharp.UnitTest
         }
 
 
-        [Test]
+        [TestMethod]
         public void GetCoordsFromIndex_2D()
         {
             var shape = new Shape(3, 3).Slice(":,1:");
             // todo: test get coords from index with sliced shapes
         }
 
-        [Test]
+        [TestMethod]
         public void ExpandDim_Case1()
         {
             Shape shape = (3, 3, 3);
@@ -347,7 +347,7 @@ namespace NumSharp.UnitTest
             shape.GetOffset(2, 0, 0, 2).Should().Be(9 * 2 + 2);
         }
 
-        [Test]
+        [TestMethod]
         public void ExpandDim_Case2()
         {
             Shape shape = (3, 3, 3);
@@ -355,7 +355,7 @@ namespace NumSharp.UnitTest
             shape.GetOffset(0, 2, 0, 2).Should().Be(9 * 2 + 2);
         }
 
-        [Test]
+        [TestMethod]
         public void ExpandDim_Case3()
         {
             Shape shape = (3, 3, 3);
@@ -364,7 +364,7 @@ namespace NumSharp.UnitTest
             shape.GetOffset(2, 0, 0, 2).Should().Be(9 * 2 + 2);
         }
 
-        [Test]
+        [TestMethod]
         public void ExpandDim_Case4()
         {
             Shape shape = (3, 3, 3);
@@ -374,7 +374,7 @@ namespace NumSharp.UnitTest
         }
 
 
-        [Test]
+        [TestMethod]
         public void ExpandDim0_Slice()
         {
             //>>> a = np.arange(27).reshape(3, 3, 3)[0, :]
@@ -403,7 +403,7 @@ namespace NumSharp.UnitTest
             shape.Should().Be(new Shape(3, 1, 3));
         }
 
-        [Test]
+        [TestMethod]
         public void ExpandDim1_Slice()
         {
             //>>> a = np.arange(3 * 2 * 3).reshape(3, 2, 3)[1, :]
@@ -426,7 +426,7 @@ namespace NumSharp.UnitTest
             shape.Should().Be(new Shape(2, 1, 3));
         }
 
-        //[Test]
+        //[TestMethod]
         //public void Strides_Case1()
         //{
         //    var a = np.arange(3 * 2 * 2).reshape((3, 2, 2));
@@ -435,7 +435,7 @@ namespace NumSharp.UnitTest
         //    a.Shape.Strides.Should().BeEquivalentTo(new int[] {16, 8, 4});
         //}
 
-        [Test]
+        [TestMethod]
         public void HashcodeComputation()
         {
             // With readonly struct, hashcode is computed at construction time
@@ -452,7 +452,7 @@ namespace NumSharp.UnitTest
             a._hashCode.Should().Be(b._hashCode);
         }
 
-        [Test]
+        [TestMethod]
         public void HashcodeScalars()
         {
             Shape.Scalar.GetHashCode().Should().Be(int.MinValue);

@@ -70,7 +70,7 @@ namespace NumSharp.UnitTest.Creation
             0, 1, 2, 3, 4
             }, new Shape(new int[] { 5, 5 }));
 
-        [Test]
+        [TestMethod]
         public void BaseTest()
         {
             var V53 = np.arange(0, 5, 1).mgrid(np.arange(0, 3, 1));

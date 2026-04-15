@@ -26,7 +26,7 @@ namespace NumSharp.UnitTest.Creation
         // 1. BASIC: shape and dtype preservation
         // ==========================================================
 
-        [Test]
+        [TestMethod]
         public void Basic_1D_Int32_PreservesShapeAndDtype()
         {
             // NumPy: np.empty_like(np.arange(5, dtype='int32')) → shape=(5,), dtype=int32
@@ -37,7 +37,7 @@ namespace NumSharp.UnitTest.Creation
             r.ndim.Should().Be(1);
         }
 
-        [Test]
+        [TestMethod]
         public void Basic_2D_Float64_PreservesShapeAndDtype()
         {
             // NumPy: np.empty_like(np.arange(6, dtype='float64').reshape(2,3)) → shape=(2,3), dtype=float64
@@ -48,7 +48,7 @@ namespace NumSharp.UnitTest.Creation
             r.ndim.Should().Be(2);
         }
 
-        [Test]
+        [TestMethod]
         public void Basic_3D_PreservesShapeAndDtype()
         {
             // NumPy: np.empty_like(np.arange(24).reshape(2,3,4)) → shape=(2,3,4)
@@ -58,7 +58,7 @@ namespace NumSharp.UnitTest.Creation
             r.ndim.Should().Be(3);
         }
 
-        [Test]
+        [TestMethod]
         public void Basic_4D_PreservesShapeAndDtype()
         {
             // NumPy: np.empty_like(np.arange(120).reshape(2,3,4,5)) → shape=(2,3,4,5)
@@ -68,7 +68,7 @@ namespace NumSharp.UnitTest.Creation
             r.ndim.Should().Be(4);
         }
 
-        [Test]
+        [TestMethod]
         public void Basic_Scalar_PreservesScalarShape()
         {
             // NumPy: np.empty_like(np.array(3.14)) → shape=(), dtype=float64, ndim=0
@@ -80,7 +80,7 @@ namespace NumSharp.UnitTest.Creation
             r.dtype.Should().Be(typeof(double));
         }
 
-        [Test]
+        [TestMethod]
         public void Basic_SingleElement_PreservesShape()
         {
             // NumPy: np.empty_like(np.array([42], dtype='int32')) → shape=(1,), dtype=int32
@@ -94,7 +94,7 @@ namespace NumSharp.UnitTest.Creation
         // 2. DTYPE OVERRIDE (Type overload)
         // ==========================================================
 
-        [Test]
+        [TestMethod]
         public void DtypeOverride_Int32ToFloat32()
         {
             var a = np.arange(6).astype(np.int32).reshape(2, 3);
@@ -103,7 +103,7 @@ namespace NumSharp.UnitTest.Creation
             r.dtype.Should().Be(typeof(float), "dtype overridden");
         }
 
-        [Test]
+        [TestMethod]
         public void DtypeOverride_Int32ToFloat64()
         {
             var a = np.arange(6).astype(np.int32).reshape(2, 3);
@@ -112,7 +112,7 @@ namespace NumSharp.UnitTest.Creation
             r.dtype.Should().Be(typeof(double));
         }
 
-        [Test]
+        [TestMethod]
         public void DtypeOverride_Int32ToInt64()
         {
             var a = np.arange(6).astype(np.int32).reshape(2, 3);
@@ -121,7 +121,7 @@ namespace NumSharp.UnitTest.Creation
             r.dtype.Should().Be(typeof(long));
         }
 
-        [Test]
+        [TestMethod]
         public void DtypeOverride_Int32ToInt16()
         {
             var a = np.arange(6).astype(np.int32).reshape(2, 3);
@@ -130,7 +130,7 @@ namespace NumSharp.UnitTest.Creation
             r.dtype.Should().Be(typeof(short));
         }
 
-        [Test]
+        [TestMethod]
         public void DtypeOverride_Int32ToByte()
         {
             var a = np.arange(6).astype(np.int32).reshape(2, 3);
@@ -139,7 +139,7 @@ namespace NumSharp.UnitTest.Creation
             r.dtype.Should().Be(typeof(byte));
         }
 
-        [Test]
+        [TestMethod]
         public void DtypeOverride_Int32ToBool()
         {
             var a = np.arange(6).astype(np.int32).reshape(2, 3);
@@ -148,7 +148,7 @@ namespace NumSharp.UnitTest.Creation
             r.dtype.Should().Be(typeof(bool));
         }
 
-        [Test]
+        [TestMethod]
         public void DtypeOverride_Float64ToDecimal()
         {
             var a = np.arange(4).astype(np.float64).reshape(2, 2);
@@ -157,7 +157,7 @@ namespace NumSharp.UnitTest.Creation
             r.dtype.Should().Be(typeof(decimal));
         }
 
-        [Test]
+        [TestMethod]
         public void DtypeOverride_NullDtype_PreservesOriginal()
         {
             var a = np.arange(6).astype(np.int32).reshape(2, 3);
@@ -169,7 +169,7 @@ namespace NumSharp.UnitTest.Creation
         // 3. NPTypeCode OVERLOAD
         // ==========================================================
 
-        [Test]
+        [TestMethod]
         public void NPTypeCode_Overload_Float32()
         {
             var a = np.arange(6).astype(np.int32).reshape(2, 3);
@@ -178,7 +178,7 @@ namespace NumSharp.UnitTest.Creation
             r.dtype.Should().Be(typeof(float));
         }
 
-        [Test]
+        [TestMethod]
         public void NPTypeCode_Overload_Float64()
         {
             var a = np.arange(6).astype(np.int32).reshape(2, 3);
@@ -187,7 +187,7 @@ namespace NumSharp.UnitTest.Creation
             r.dtype.Should().Be(typeof(double));
         }
 
-        [Test]
+        [TestMethod]
         public void NPTypeCode_Overload_Boolean()
         {
             var a = np.arange(6).astype(np.int32).reshape(2, 3);
@@ -196,7 +196,7 @@ namespace NumSharp.UnitTest.Creation
             r.dtype.Should().Be(typeof(bool));
         }
 
-        [Test]
+        [TestMethod]
         public void NPTypeCode_Overload_Int64()
         {
             var a = np.arange(6).astype(np.int32).reshape(2, 3);
@@ -205,7 +205,7 @@ namespace NumSharp.UnitTest.Creation
             r.dtype.Should().Be(typeof(long));
         }
 
-        [Test]
+        [TestMethod]
         public void NPTypeCode_Overload_Byte()
         {
             var a = np.arange(6).astype(np.int32).reshape(2, 3);
@@ -214,19 +214,19 @@ namespace NumSharp.UnitTest.Creation
             r.dtype.Should().Be(typeof(byte));
         }
 
-        [Test]
-        [Arguments(NPTypeCode.Boolean, typeof(bool), DisplayName = "NPTypeCode_Boolean")]
-        [Arguments(NPTypeCode.Byte, typeof(byte), DisplayName = "NPTypeCode_Byte")]
-        [Arguments(NPTypeCode.Int16, typeof(short), DisplayName = "NPTypeCode_Int16")]
-        [Arguments(NPTypeCode.UInt16, typeof(ushort), DisplayName = "NPTypeCode_UInt16")]
-        [Arguments(NPTypeCode.Int32, typeof(int), DisplayName = "NPTypeCode_Int32")]
-        [Arguments(NPTypeCode.UInt32, typeof(uint), DisplayName = "NPTypeCode_UInt32")]
-        [Arguments(NPTypeCode.Int64, typeof(long), DisplayName = "NPTypeCode_Int64")]
-        [Arguments(NPTypeCode.UInt64, typeof(ulong), DisplayName = "NPTypeCode_UInt64")]
-        [Arguments(NPTypeCode.Char, typeof(char), DisplayName = "NPTypeCode_Char")]
-        [Arguments(NPTypeCode.Single, typeof(float), DisplayName = "NPTypeCode_Single")]
-        [Arguments(NPTypeCode.Double, typeof(double), DisplayName = "NPTypeCode_Double")]
-        [Arguments(NPTypeCode.Decimal, typeof(decimal), DisplayName = "NPTypeCode_Decimal")]
+        [TestMethod]
+        [DataRow(NPTypeCode.Boolean, typeof(bool), DisplayName = "NPTypeCode_Boolean")]
+        [DataRow(NPTypeCode.Byte, typeof(byte), DisplayName = "NPTypeCode_Byte")]
+        [DataRow(NPTypeCode.Int16, typeof(short), DisplayName = "NPTypeCode_Int16")]
+        [DataRow(NPTypeCode.UInt16, typeof(ushort), DisplayName = "NPTypeCode_UInt16")]
+        [DataRow(NPTypeCode.Int32, typeof(int), DisplayName = "NPTypeCode_Int32")]
+        [DataRow(NPTypeCode.UInt32, typeof(uint), DisplayName = "NPTypeCode_UInt32")]
+        [DataRow(NPTypeCode.Int64, typeof(long), DisplayName = "NPTypeCode_Int64")]
+        [DataRow(NPTypeCode.UInt64, typeof(ulong), DisplayName = "NPTypeCode_UInt64")]
+        [DataRow(NPTypeCode.Char, typeof(char), DisplayName = "NPTypeCode_Char")]
+        [DataRow(NPTypeCode.Single, typeof(float), DisplayName = "NPTypeCode_Single")]
+        [DataRow(NPTypeCode.Double, typeof(double), DisplayName = "NPTypeCode_Double")]
+        [DataRow(NPTypeCode.Decimal, typeof(decimal), DisplayName = "NPTypeCode_Decimal")]
         public void NPTypeCode_Overload_All12Types(NPTypeCode typeCode, Type expectedType)
         {
             var a = np.arange(4).reshape(2, 2);
@@ -235,7 +235,7 @@ namespace NumSharp.UnitTest.Creation
             r.shape.Should().BeEquivalentTo(new long[] { 2, 2 });
         }
 
-        [Test]
+        [TestMethod]
         public void NPTypeCode_Overload_WithShapeOverride()
         {
             var a = np.arange(6).astype(np.int32).reshape(2, 3);
@@ -248,19 +248,19 @@ namespace NumSharp.UnitTest.Creation
         // 4. ALL 12 DTYPES preserved (Type overload, no dtype override)
         // ==========================================================
 
-        [Test]
-        [Arguments(typeof(bool), DisplayName = "Boolean")]
-        [Arguments(typeof(byte), DisplayName = "Byte")]
-        [Arguments(typeof(short), DisplayName = "Int16")]
-        [Arguments(typeof(ushort), DisplayName = "UInt16")]
-        [Arguments(typeof(int), DisplayName = "Int32")]
-        [Arguments(typeof(uint), DisplayName = "UInt32")]
-        [Arguments(typeof(long), DisplayName = "Int64")]
-        [Arguments(typeof(ulong), DisplayName = "UInt64")]
-        [Arguments(typeof(char), DisplayName = "Char")]
-        [Arguments(typeof(float), DisplayName = "Single")]
-        [Arguments(typeof(double), DisplayName = "Double")]
-        [Arguments(typeof(decimal), DisplayName = "Decimal")]
+        [TestMethod]
+        [DataRow(typeof(bool), DisplayName = "Boolean")]
+        [DataRow(typeof(byte), DisplayName = "Byte")]
+        [DataRow(typeof(short), DisplayName = "Int16")]
+        [DataRow(typeof(ushort), DisplayName = "UInt16")]
+        [DataRow(typeof(int), DisplayName = "Int32")]
+        [DataRow(typeof(uint), DisplayName = "UInt32")]
+        [DataRow(typeof(long), DisplayName = "Int64")]
+        [DataRow(typeof(ulong), DisplayName = "UInt64")]
+        [DataRow(typeof(char), DisplayName = "Char")]
+        [DataRow(typeof(float), DisplayName = "Single")]
+        [DataRow(typeof(double), DisplayName = "Double")]
+        [DataRow(typeof(decimal), DisplayName = "Decimal")]
         public void AllDtypes_Preserved(Type dtype)
         {
             var a = np.ones(new Shape(3), dtype);
@@ -269,19 +269,19 @@ namespace NumSharp.UnitTest.Creation
             r.shape.Should().BeEquivalentTo(new long[] { 3 });
         }
 
-        [Test]
-        [Arguments(typeof(bool), DisplayName = "Boolean_2D")]
-        [Arguments(typeof(byte), DisplayName = "Byte_2D")]
-        [Arguments(typeof(short), DisplayName = "Int16_2D")]
-        [Arguments(typeof(ushort), DisplayName = "UInt16_2D")]
-        [Arguments(typeof(int), DisplayName = "Int32_2D")]
-        [Arguments(typeof(uint), DisplayName = "UInt32_2D")]
-        [Arguments(typeof(long), DisplayName = "Int64_2D")]
-        [Arguments(typeof(ulong), DisplayName = "UInt64_2D")]
-        [Arguments(typeof(char), DisplayName = "Char_2D")]
-        [Arguments(typeof(float), DisplayName = "Single_2D")]
-        [Arguments(typeof(double), DisplayName = "Double_2D")]
-        [Arguments(typeof(decimal), DisplayName = "Decimal_2D")]
+        [TestMethod]
+        [DataRow(typeof(bool), DisplayName = "Boolean_2D")]
+        [DataRow(typeof(byte), DisplayName = "Byte_2D")]
+        [DataRow(typeof(short), DisplayName = "Int16_2D")]
+        [DataRow(typeof(ushort), DisplayName = "UInt16_2D")]
+        [DataRow(typeof(int), DisplayName = "Int32_2D")]
+        [DataRow(typeof(uint), DisplayName = "UInt32_2D")]
+        [DataRow(typeof(long), DisplayName = "Int64_2D")]
+        [DataRow(typeof(ulong), DisplayName = "UInt64_2D")]
+        [DataRow(typeof(char), DisplayName = "Char_2D")]
+        [DataRow(typeof(float), DisplayName = "Single_2D")]
+        [DataRow(typeof(double), DisplayName = "Double_2D")]
+        [DataRow(typeof(decimal), DisplayName = "Decimal_2D")]
         public void AllDtypes_2D_Preserved(Type dtype)
         {
             var a = np.ones(new Shape(2, 3), dtype);
@@ -294,7 +294,7 @@ namespace NumSharp.UnitTest.Creation
         // 5. EMPTY ARRAYS (zero-size dimensions)
         // ==========================================================
 
-        [Test]
+        [TestMethod]
         public void Empty_1D_ZeroElements()
         {
             // NumPy: np.empty_like(np.array([], dtype='float64')) → shape=(0,), size=0
@@ -305,7 +305,7 @@ namespace NumSharp.UnitTest.Creation
             r.size.Should().Be(0);
         }
 
-        [Test]
+        [TestMethod]
         public void Empty_2D_ZeroRows()
         {
             // NumPy: np.empty_like(np.empty((0,3), dtype='int32')) → shape=(0,3), size=0
@@ -316,7 +316,7 @@ namespace NumSharp.UnitTest.Creation
             r.size.Should().Be(0);
         }
 
-        [Test]
+        [TestMethod]
         public void Empty_2D_ZeroCols()
         {
             // NumPy: np.empty_like(np.empty((3,0), dtype='int32')) → shape=(3,0), size=0
@@ -327,7 +327,7 @@ namespace NumSharp.UnitTest.Creation
             r.size.Should().Be(0);
         }
 
-        [Test]
+        [TestMethod]
         public void Empty_3D_ZeroMiddleDim()
         {
             // NumPy: np.empty_like(np.empty((2,0,4), dtype='float32')) → shape=(2,0,4), size=0
@@ -342,7 +342,7 @@ namespace NumSharp.UnitTest.Creation
         // 6. SLICED PROTOTYPES
         // ==========================================================
 
-        [Test]
+        [TestMethod]
         public void Sliced_1D_Contiguous()
         {
             // NumPy: np.empty_like(np.arange(10)[2:7]) → shape=(5,), C-contiguous
@@ -356,7 +356,7 @@ namespace NumSharp.UnitTest.Creation
             r.ndim.Should().Be(1);
         }
 
-        [Test]
+        [TestMethod]
         public void Sliced_1D_Stepped()
         {
             // NumPy: np.empty_like(np.arange(10)[::2]) → shape=(5,), C-contiguous
@@ -369,7 +369,7 @@ namespace NumSharp.UnitTest.Creation
             r.dtype.Should().Be(a.dtype);
         }
 
-        [Test]
+        [TestMethod]
         public void Sliced_2D_RowSlice()
         {
             // NumPy: np.empty_like(np.arange(12).reshape(3,4)[1:3]) → shape=(2,4)
@@ -382,7 +382,7 @@ namespace NumSharp.UnitTest.Creation
             r.dtype.Should().Be(a.dtype);
         }
 
-        [Test]
+        [TestMethod]
         public void Sliced_2D_ColumnSlice()
         {
             // NumPy: np.empty_like(np.arange(12).reshape(3,4)[:,1:3]) → shape=(3,2), C-contiguous
@@ -395,7 +395,7 @@ namespace NumSharp.UnitTest.Creation
             r.dtype.Should().Be(a.dtype);
         }
 
-        [Test]
+        [TestMethod]
         public void Sliced_ReversedSlice()
         {
             // NumPy: np.empty_like(np.arange(5)[::-1]) → shape=(5,)
@@ -411,7 +411,7 @@ namespace NumSharp.UnitTest.Creation
         // 7. BROADCAST PROTOTYPES
         // ==========================================================
 
-        [Test]
+        [TestMethod]
         public void Broadcast_RowVector()
         {
             // NumPy: np.empty_like(np.broadcast_to([1,2,3], (4,3))) → shape=(4,3), writeable
@@ -425,7 +425,7 @@ namespace NumSharp.UnitTest.Creation
             r.size.Should().Be(12);
         }
 
-        [Test]
+        [TestMethod]
         public void Broadcast_ScalarToMatrix()
         {
             // NumPy: np.empty_like(np.broadcast_to(5, (3,4))) → shape=(3,4)
@@ -438,7 +438,7 @@ namespace NumSharp.UnitTest.Creation
             r.dtype.Should().Be(typeof(int));
         }
 
-        [Test]
+        [TestMethod]
         public void Broadcast_ColumnVector()
         {
             // np.broadcast_to(np.array([[10],[20],[30]]), (3,3))
@@ -451,7 +451,7 @@ namespace NumSharp.UnitTest.Creation
             r.dtype.Should().Be(typeof(int));
         }
 
-        [Test]
+        [TestMethod]
         public void Broadcast_WithDtypeOverride()
         {
             var a = np.array(new int[] { 1, 2, 3 });
@@ -466,7 +466,7 @@ namespace NumSharp.UnitTest.Creation
         // 8. TRANSPOSED PROTOTYPES
         // ==========================================================
 
-        [Test]
+        [TestMethod]
         public void Transposed_2D()
         {
             // NumPy: np.empty_like(np.arange(6).reshape(2,3).T) → shape=(3,2)
@@ -483,7 +483,7 @@ namespace NumSharp.UnitTest.Creation
         // 9. MEMORY INDEPENDENCE — result never shares memory
         // ==========================================================
 
-        [Test]
+        [TestMethod]
         public void MemoryIndependence_PlainArray()
         {
             // NumPy: np.shares_memory(a, np.empty_like(a)) → False
@@ -493,7 +493,7 @@ namespace NumSharp.UnitTest.Creation
             a.GetAtIndex<int>(0).Should().Be(1, "writing to result must not affect prototype");
         }
 
-        [Test]
+        [TestMethod]
         [OpenBugs] // BUG: SetAtIndex<int> fails on Int64 array (NEP50 type change)
         public void MemoryIndependence_SlicedPrototype()
         {
@@ -505,7 +505,7 @@ namespace NumSharp.UnitTest.Creation
             a.GetInt64(1, 0).Should().Be(4L, "writing to result must not affect original array");
         }
 
-        [Test]
+        [TestMethod]
         public void MemoryIndependence_BroadcastPrototype()
         {
             var a = np.array(new int[] { 1, 2, 3 });
@@ -520,7 +520,7 @@ namespace NumSharp.UnitTest.Creation
         // 10. WRITEABILITY — result is always writeable
         // ==========================================================
 
-        [Test]
+        [TestMethod]
         public void Writeable_FromBroadcastPrototype()
         {
             // Broadcast arrays in NumPy are read-only, but empty_like result is writeable
@@ -534,7 +534,7 @@ namespace NumSharp.UnitTest.Creation
             r.GetAtIndex<int>(0).Should().Be(42);
         }
 
-        [Test]
+        [TestMethod]
         [OpenBugs] // BUG: SetAtIndex<int> fails on Int64 array (NEP50 type change)
         public void Writeable_FromSlicedPrototype()
         {
@@ -549,7 +549,7 @@ namespace NumSharp.UnitTest.Creation
         // 11. SIZE CORRECTNESS
         // ==========================================================
 
-        [Test]
+        [TestMethod]
         public void Size_Matches_Prototype()
         {
             var a = np.arange(24).reshape(2, 3, 4);
@@ -557,7 +557,7 @@ namespace NumSharp.UnitTest.Creation
             r.size.Should().Be(24);
         }
 
-        [Test]
+        [TestMethod]
         public void Size_WithDtypeOverride_MatchesPrototypeShape()
         {
             // dtype override changes element size but not count
@@ -571,7 +571,7 @@ namespace NumSharp.UnitTest.Creation
         //     (same shape/dtype contract, different initialization)
         // ==========================================================
 
-        [Test]
+        [TestMethod]
         public void SameContract_AsZerosLike()
         {
             var a = np.arange(6).astype(np.float64).reshape(2, 3);
@@ -583,7 +583,7 @@ namespace NumSharp.UnitTest.Creation
             e.dtype.Should().Be(z.dtype, "empty_like and zeros_like should have same dtype");
         }
 
-        [Test]
+        [TestMethod]
         public void SameContract_AsOnesLike()
         {
             var a = np.arange(6).astype(np.int32).reshape(2, 3);
@@ -599,7 +599,7 @@ namespace NumSharp.UnitTest.Creation
         // 13. LARGE ARRAYS
         // ==========================================================
 
-        [Test]
+        [TestMethod]
         public void LargeArray_1000x1000()
         {
             var a = np.empty(new Shape(1000, 1000), typeof(double));
@@ -613,13 +613,13 @@ namespace NumSharp.UnitTest.Creation
         // 14. SCALAR DTYPES (ndim=0) — all supported types
         // ==========================================================
 
-        [Test]
-        [Arguments(typeof(int), DisplayName = "Scalar_Int32")]
-        [Arguments(typeof(double), DisplayName = "Scalar_Double")]
-        [Arguments(typeof(bool), DisplayName = "Scalar_Boolean")]
-        [Arguments(typeof(float), DisplayName = "Scalar_Single")]
-        [Arguments(typeof(long), DisplayName = "Scalar_Int64")]
-        [Arguments(typeof(byte), DisplayName = "Scalar_Byte")]
+        [TestMethod]
+        [DataRow(typeof(int), DisplayName = "Scalar_Int32")]
+        [DataRow(typeof(double), DisplayName = "Scalar_Double")]
+        [DataRow(typeof(bool), DisplayName = "Scalar_Boolean")]
+        [DataRow(typeof(float), DisplayName = "Scalar_Single")]
+        [DataRow(typeof(long), DisplayName = "Scalar_Int64")]
+        [DataRow(typeof(byte), DisplayName = "Scalar_Byte")]
         public void Scalar_AllDtypes(Type dtype)
         {
             // NumPy: np.empty_like(np.array(42, dtype=...)) → shape=(), ndim=0
@@ -634,7 +634,7 @@ namespace NumSharp.UnitTest.Creation
         // 15. RESULT IS NOT A VIEW — always a fresh allocation
         // ==========================================================
 
-        [Test]
+        [TestMethod]
         public void NotAView_PlainArray()
         {
             var a = np.arange(5).astype(np.int32);
@@ -648,7 +648,7 @@ namespace NumSharp.UnitTest.Creation
                 a.GetAtIndex<int>(i).Should().Be(i, $"prototype[{i}] should be unchanged");
         }
 
-        [Test]
+        [TestMethod]
         public void NotAView_SlicedArray()
         {
             var a = np.arange(10).astype(np.int32);
@@ -668,7 +668,7 @@ namespace NumSharp.UnitTest.Creation
         // 16. CHAINED OPERATIONS — empty_like on empty_like result
         // ==========================================================
 
-        [Test]
+        [TestMethod]
         public void Chained_EmptyLikeOfEmptyLike()
         {
             var a = np.arange(6).astype(np.float64).reshape(2, 3);
@@ -683,7 +683,7 @@ namespace NumSharp.UnitTest.Creation
         // 17. INTEGRATION — empty_like used in np.roll pattern
         // ==========================================================
 
-        [Test]
+        [TestMethod]
         public void Integration_RollPattern()
         {
             // np.roll uses empty_like internally for its result buffer
@@ -695,7 +695,7 @@ namespace NumSharp.UnitTest.Creation
             result.size.Should().Be(a.size);
         }
 
-        [Test]
+        [TestMethod]
         public void Integration_RollPattern_2D()
         {
             var a = np.arange(6).astype(np.int32).reshape(2, 3);
@@ -710,7 +710,7 @@ namespace NumSharp.UnitTest.Creation
         // 18. SHAPE OVERRIDE PARAMETER
         // ==========================================================
 
-        [Test]
+        [TestMethod]
         public void ShapeOverride_2DTo2D()
         {
             // NumPy: np.empty_like(a, shape=(4,5)) → shape=(4,5), dtype preserved from a
@@ -720,7 +720,7 @@ namespace NumSharp.UnitTest.Creation
             r.dtype.Should().Be(typeof(int), "dtype preserved from prototype");
         }
 
-        [Test]
+        [TestMethod]
         public void ShapeOverride_2DTo1D()
         {
             // NumPy: np.empty_like(a, shape=(10,)) → shape=(10,), dtype preserved
@@ -730,7 +730,7 @@ namespace NumSharp.UnitTest.Creation
             r.dtype.Should().Be(typeof(int));
         }
 
-        [Test]
+        [TestMethod]
         public void ShapeOverride_2DTo3D()
         {
             var a = np.arange(6).astype(np.float64).reshape(2, 3);
@@ -739,7 +739,7 @@ namespace NumSharp.UnitTest.Creation
             r.dtype.Should().Be(typeof(double));
         }
 
-        [Test]
+        [TestMethod]
         public void ShapeOverride_WithDtypeOverride()
         {
             // NumPy: np.empty_like(a, dtype='float64', shape=(3,3,3)) → shape=(3,3,3), dtype=float64
@@ -749,7 +749,7 @@ namespace NumSharp.UnitTest.Creation
             r.dtype.Should().Be(typeof(double));
         }
 
-        [Test]
+        [TestMethod]
         public void ShapeOverride_SameSize()
         {
             // Override with same total element count but different shape
@@ -760,7 +760,7 @@ namespace NumSharp.UnitTest.Creation
             r.size.Should().Be(12);
         }
 
-        [Test]
+        [TestMethod]
         public void ShapeOverride_DifferentSize()
         {
             // Override with different total element count
@@ -771,7 +771,7 @@ namespace NumSharp.UnitTest.Creation
             r.size.Should().Be(100);
         }
 
-        [Test]
+        [TestMethod]
         public void ShapeOverride_ToScalar()
         {
             // NumPy: np.empty_like(a, shape=()) → shape=(), ndim=0
@@ -782,7 +782,7 @@ namespace NumSharp.UnitTest.Creation
             r.dtype.Should().Be(typeof(int));
         }
 
-        [Test]
+        [TestMethod]
         public void ShapeOverride_DefaultShape_UsesPrototype()
         {
             // When shape is default (empty), prototype shape is used
@@ -791,7 +791,7 @@ namespace NumSharp.UnitTest.Creation
             r.shape.Should().BeEquivalentTo(new long[] { 2, 3 });
         }
 
-        [Test]
+        [TestMethod]
         public void ShapeOverride_FromBroadcast()
         {
             // Override shape on broadcast prototype
@@ -802,7 +802,7 @@ namespace NumSharp.UnitTest.Creation
             r.dtype.Should().Be(typeof(int));
         }
 
-        [Test]
+        [TestMethod]
         public void ShapeOverride_FromSlice()
         {
             // Override shape on sliced prototype
@@ -817,7 +817,7 @@ namespace NumSharp.UnitTest.Creation
         // 19. SHAPE DIMENSIONS INDEPENDENCE (aliasing fix)
         // ==========================================================
 
-        [Test]
+        [TestMethod]
         public void ShapeDimensionsArray_NotAliased()
         {
             // Fixed: np.empty_like now clones the dimensions int[] from prototype.
@@ -829,7 +829,7 @@ namespace NumSharp.UnitTest.Creation
                 "dimensions array should not be the same reference (defensive copy)");
         }
 
-        [Test]
+        [TestMethod]
         public void ShapeDimensionsArray_MutationIsolation()
         {
             // Verify that having separate int[] means mutations to one don't affect the other.

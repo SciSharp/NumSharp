@@ -9,7 +9,7 @@ namespace NumSharp.UnitTest.MathTests;
 /// </summary>
 public class NpMinimumTests : TestClass
 {
-    [Test]
+    [TestMethod]
     public void Minimum_IntBroadcast_CorrectValues()
     {
         // NumPy: minimum([1,5,3], [[2],[4]]) = [[1,2,2],[1,4,3]]
@@ -24,7 +24,7 @@ public class NpMinimumTests : TestClass
             "np.minimum with broadcast should compute element-wise min correctly");
     }
 
-    [Test]
+    [TestMethod]
     public void Minimum_DoubleBroadcast_CorrectValues()
     {
         // NumPy: minimum([1.,5.,3.], [[2.],[4.]]) = [[1,2,2],[1,4,3]]
@@ -39,7 +39,7 @@ public class NpMinimumTests : TestClass
             "np.minimum with double broadcast should compute element-wise min correctly");
     }
 
-    [Test]
+    [TestMethod]
     public void Minimum_FloatBroadcast_CorrectValues()
     {
         // NumPy: minimum([1f,5f,3f], [[2f],[4f]]) = [[1,2,2],[1,4,3]]
@@ -54,7 +54,7 @@ public class NpMinimumTests : TestClass
             "np.minimum with float broadcast should compute element-wise min correctly");
     }
 
-    [Test]
+    [TestMethod]
     public void Minimum_SameShape_CorrectValues()
     {
         var a = np.array(new int[] { 1, 5, 3, 8 });
@@ -65,7 +65,7 @@ public class NpMinimumTests : TestClass
         np.array_equal(r, expected).Should().BeTrue();
     }
 
-    [Test]
+    [TestMethod]
     public void Minimum_ScalarBroadcast_CorrectValues()
     {
         var a = np.array(new int[] { 1, 5, 3, 8 });
@@ -76,7 +76,7 @@ public class NpMinimumTests : TestClass
         np.array_equal(r, expected).Should().BeTrue();
     }
 
-    [Test]
+    [TestMethod]
     public void Maximum_IntBroadcast_CorrectValues()
     {
         // Verify np.maximum also works correctly with broadcast

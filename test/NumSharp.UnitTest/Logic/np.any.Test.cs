@@ -1,15 +1,12 @@
 using System;
 using System.Linq;
-using TUnit.Core;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
 using Assert = Microsoft.VisualStudio.TestTools.UnitTesting.Assert;
 
 namespace NumSharp.UnitTest.Logic
 {
     public class NpAnyTest
     {
-        [Test]
+        [TestMethod]
         public void Any1DArrayTest()
         {
             // 测试1维数组
@@ -18,7 +15,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.AreEqual(true, result.GetBoolean(0));
         }
 
-        [Test]
+        [TestMethod]
         public void Any2DArrayTest()
         {
             // 测试2维数组
@@ -28,7 +25,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.IsTrue(Enumerable.SequenceEqual(result.Data<bool>(), expected.Data<bool>()));
         }
 
-        [Test]
+        [TestMethod]
         public void Any2DArrayWithAxis1Test()
         {
             // 测试2维数组，axis=1
@@ -38,7 +35,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.IsTrue(Enumerable.SequenceEqual(result.Data<bool>(), expected.Data<bool>()));
         }
 
-        [Test]
+        [TestMethod]
         public void AnyWithKeepdimsTest()
         {
             // 测试keepdims参数
@@ -50,7 +47,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.AreEqual(2, result.shape[1]);
         }
 
-        [Test]
+        [TestMethod]
         public void AnyWithNegativeAxisTest()
         {
             // 测试负轴
@@ -60,7 +57,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.IsTrue(Enumerable.SequenceEqual(result1.Data<bool>(), result2.Data<bool>()));
         }
 
-        [Test]
+        [TestMethod]
         public void AnyAllZerosTest()
         {
             // 测试全零数组
@@ -70,7 +67,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.IsTrue(Enumerable.SequenceEqual(result.Data<bool>(), expected.Data<bool>()));
         }
 
-        [Test]
+        [TestMethod]
         public void AnyAllNonZerosTest()
         {
             // 测试全非零数组
@@ -80,7 +77,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.IsTrue(Enumerable.SequenceEqual(result.Data<bool>(), expected.Data<bool>()));
         }
 
-        [Test]
+        [TestMethod]
         public void AnyInvalidAxisTest()
         {
             // Test invalid axis - should throw ArgumentOutOfRangeException
@@ -88,7 +85,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.ThrowsException<ArgumentOutOfRangeException>(() => np.any(arr, axis: 5, keepdims: false));
         }
 
-        [Test]
+        [TestMethod]
         public void AnyScalarArrayTest()
         {
             // NumPy: np.array(5) creates 0D array, np.any(a) returns True
@@ -101,7 +98,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.AreEqual(true, result);
         }
 
-        [Test]
+        [TestMethod]
         public void Any0DArray_WithAxis0_ReturnsScalar()
         {
             // NumPy 2.x: np.any(0D_array, axis=0) returns 0D boolean scalar
@@ -113,7 +110,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.AreEqual(true, (bool)result);
         }
 
-        [Test]
+        [TestMethod]
         public void Any0DArray_WithAxisNeg1_ReturnsScalar()
         {
             // NumPy 2.x: np.any(0D_array, axis=-1) is equivalent to axis=0
@@ -123,7 +120,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.AreEqual(false, (bool)result);
         }
 
-        [Test]
+        [TestMethod]
         public void Any0DArray_WithInvalidAxis_Throws()
         {
             // NumPy 2.x: np.any(0D_array, axis=1) raises AxisError
@@ -133,7 +130,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.ThrowsException<ArgumentOutOfRangeException>(() => np.any(arr, axis: -2));
         }
 
-        [Test]
+        [TestMethod]
         public void Any0DArray_WithKeepdims_Returns0D()
         {
             // NumPy 2.x: keepdims=True on 0D still returns 0D (no axes to keep)
@@ -143,7 +140,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.AreEqual(true, (bool)result);
         }
 
-        [Test]
+        [TestMethod]
         public void AnyNullArrayTest()
         {
             // Test null array - should throw ArgumentNullException

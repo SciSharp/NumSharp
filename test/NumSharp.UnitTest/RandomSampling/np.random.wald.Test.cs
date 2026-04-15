@@ -8,7 +8,7 @@ namespace NumSharp.UnitTest.RandomSampling
     
     public class WaldTests
     {
-        [Test]
+        [TestMethod]
         public void Wald_ReturnsScalar_WhenNoSize()
         {
             var rng = np.random.RandomState(42);
@@ -20,7 +20,7 @@ namespace NumSharp.UnitTest.RandomSampling
             result.dtype.Should().Be(typeof(double));
         }
 
-        [Test]
+        [TestMethod]
         public void Wald_Returns1DArray()
         {
             var rng = np.random.RandomState(42);
@@ -30,7 +30,7 @@ namespace NumSharp.UnitTest.RandomSampling
             result.size.Should().Be(5);
         }
 
-        [Test]
+        [TestMethod]
         public void Wald_Returns2DArray()
         {
             var rng = np.random.RandomState(42);
@@ -40,7 +40,7 @@ namespace NumSharp.UnitTest.RandomSampling
             result.size.Should().Be(6);
         }
 
-        [Test]
+        [TestMethod]
         public void Wald_AllValuesPositive()
         {
             var rng = np.random.RandomState(42);
@@ -50,7 +50,7 @@ namespace NumSharp.UnitTest.RandomSampling
             min.Should().BeGreaterThan(0.0);
         }
 
-        [Test]
+        [TestMethod]
         public void Wald_HasExpectedMean()
         {
             // For Wald: E[X] = mean
@@ -62,7 +62,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Math.Abs(mean - 1.0).Should().BeLessThan(0.05);
         }
 
-        [Test]
+        [TestMethod]
         public void Wald_HasExpectedVariance()
         {
             // For Wald: Var[X] = mean^3 / scale
@@ -75,7 +75,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Math.Abs(variance - 1.0).Should().BeLessThan(0.1);
         }
 
-        [Test]
+        [TestMethod]
         public void Wald_DifferentMean_HasExpectedMean()
         {
             // With mean=3, scale=2
@@ -87,7 +87,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Math.Abs(mean - 3.0).Should().BeLessThan(0.1);
         }
 
-        [Test]
+        [TestMethod]
         public void Wald_DifferentParams_HasExpectedVariance()
         {
             // For Wald: Var[X] = mean^3 / scale
@@ -100,7 +100,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Math.Abs(variance - 13.5).Should().BeLessThan(1.0);
         }
 
-        [Test]
+        [TestMethod]
         public void Wald_SmallParameters_AllPositive()
         {
             var rng = np.random.RandomState(42);
@@ -112,35 +112,35 @@ namespace NumSharp.UnitTest.RandomSampling
             }
         }
 
-        [Test]
+        [TestMethod]
         public void Wald_MeanZero_ThrowsArgumentException()
         {
             Action act = () => np.random.wald(0, 1);
             act.Should().Throw<ArgumentException>();
         }
 
-        [Test]
+        [TestMethod]
         public void Wald_MeanNegative_ThrowsArgumentException()
         {
             Action act = () => np.random.wald(-1, 1);
             act.Should().Throw<ArgumentException>();
         }
 
-        [Test]
+        [TestMethod]
         public void Wald_ScaleZero_ThrowsArgumentException()
         {
             Action act = () => np.random.wald(1, 0);
             act.Should().Throw<ArgumentException>();
         }
 
-        [Test]
+        [TestMethod]
         public void Wald_ScaleNegative_ThrowsArgumentException()
         {
             Action act = () => np.random.wald(1, -1);
             act.Should().Throw<ArgumentException>();
         }
 
-        [Test]
+        [TestMethod]
         public void Wald_ShapeOverload_Works()
         {
             var rng = np.random.RandomState(42);
@@ -149,7 +149,7 @@ namespace NumSharp.UnitTest.RandomSampling
             result.shape.Should().ContainInOrder(3, 4);
         }
 
-        [Test]
+        [TestMethod]
         public void Wald_Reproducibility_WithSeed()
         {
             var rng1 = np.random.RandomState(42);

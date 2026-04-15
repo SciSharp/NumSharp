@@ -12,7 +12,7 @@ namespace NumSharp.UnitTest.Creation
 {
     public class NumPyArangeTest
     {
-        [Test]
+        [TestMethod]
         public void arange()
         {
             var n = np.arange(3);
@@ -38,7 +38,7 @@ namespace NumSharp.UnitTest.Creation
             Assert.IsTrue(Enumerable.SequenceEqual(r, t));
         }
 
-        [Test]
+        [TestMethod]
         public void arange_negative()
         {
             np.arange(3, 0, -1).Should().BeOfValues(3, 2, 1);
@@ -49,7 +49,7 @@ namespace NumSharp.UnitTest.Creation
             np.arange(3f, 0f, -2f).Should().BeOfValues(3f, 1f);
         }
 
-        [Test]
+        [TestMethod]
         public void arange_case2()
         {
             np.arange(10, 1, -1).Should().BeOfValues(10, 9, 8, 7, 6, 5, 4, 3, 2);

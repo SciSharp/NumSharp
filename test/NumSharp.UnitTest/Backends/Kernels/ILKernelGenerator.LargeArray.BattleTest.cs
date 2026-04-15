@@ -3,9 +3,6 @@ using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using NumSharp;
 using NumSharp.UnitTest;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-using TUnit.Core;
 
 namespace NumSharp.UnitTest.Backends.Kernels;
 
@@ -29,7 +26,7 @@ public class ILKernelGenerator_LargeArray_BattleTest
 
     #region Binary Operations
 
-    [Test, LargeMemoryTest]
+    [TestMethod, LargeMemoryTest]
     public async Task Binary_Add_LargeByteArray()
     {
         // Two 1.4B byte arrays = 2.8GB total
@@ -51,7 +48,7 @@ public class ILKernelGenerator_LargeArray_BattleTest
         }
     }
 
-    [Test, LargeMemoryTest]
+    [TestMethod, LargeMemoryTest]
     public async Task Binary_Subtract_LargeByteArray()
     {
         var a = np.full(new Shape(DualArraySize), (byte)10, NPTypeCode.Byte);
@@ -69,7 +66,7 @@ public class ILKernelGenerator_LargeArray_BattleTest
         }
     }
 
-    [Test, LargeMemoryTest]
+    [TestMethod, LargeMemoryTest]
     public async Task Binary_Multiply_LargeByteArray()
     {
         var a = np.full(new Shape(DualArraySize), (byte)2, NPTypeCode.Byte);
@@ -85,7 +82,7 @@ public class ILKernelGenerator_LargeArray_BattleTest
 
     #region Unary Operations
 
-    [Test, LargeMemoryTest]
+    [TestMethod, LargeMemoryTest]
     public async Task Unary_Negate_LargeInt16Array()
     {
         // Int16: 1.4B elements = 2.8GB
@@ -103,7 +100,7 @@ public class ILKernelGenerator_LargeArray_BattleTest
         }
     }
 
-    [Test, LargeMemoryTest]
+    [TestMethod, LargeMemoryTest]
     public async Task Unary_Abs_LargeInt16Array()
     {
         var a = np.full(new Shape(DualArraySize), (short)-5, NPTypeCode.Int16);
@@ -118,7 +115,7 @@ public class ILKernelGenerator_LargeArray_BattleTest
 
     #region Reduction Operations
 
-    [Test, LargeMemoryTest]
+    [TestMethod, LargeMemoryTest]
     public async Task Reduction_Sum_LargeByteArray()
     {
         // All ones - sum should equal size
@@ -130,7 +127,7 @@ public class ILKernelGenerator_LargeArray_BattleTest
         await Assert.That((long)result).IsEqualTo(LargeSize);
     }
 
-    [Test, LargeMemoryTest]
+    [TestMethod, LargeMemoryTest]
     public async Task Reduction_Min_LargeByteArray()
     {
         var a = np.ones(new Shape(LargeSize), NPTypeCode.Byte);
@@ -143,7 +140,7 @@ public class ILKernelGenerator_LargeArray_BattleTest
         await Assert.That((byte)result).IsEqualTo((byte)0);
     }
 
-    [Test, LargeMemoryTest]
+    [TestMethod, LargeMemoryTest]
     public async Task Reduction_Max_LargeByteArray()
     {
         var a = np.zeros(new Shape(LargeSize), NPTypeCode.Byte);
@@ -156,7 +153,7 @@ public class ILKernelGenerator_LargeArray_BattleTest
         await Assert.That((byte)result).IsEqualTo((byte)255);
     }
 
-    [Test, LargeMemoryTest]
+    [TestMethod, LargeMemoryTest]
     public async Task Reduction_Mean_LargeByteArray()
     {
         // All ones - mean should be 1.0
@@ -167,7 +164,7 @@ public class ILKernelGenerator_LargeArray_BattleTest
         await Assert.That((double)result).IsEqualTo(1.0);
     }
 
-    [Test, LargeMemoryTest]
+    [TestMethod, LargeMemoryTest]
     public async Task Reduction_Any_LargeByteArray()
     {
         var a = np.zeros(new Shape(LargeSize), NPTypeCode.Byte);
@@ -180,7 +177,7 @@ public class ILKernelGenerator_LargeArray_BattleTest
         await Assert.That((bool)result).IsTrue();
     }
 
-    [Test, LargeMemoryTest]
+    [TestMethod, LargeMemoryTest]
     public async Task Reduction_All_LargeByteArray()
     {
         var a = np.ones(new Shape(LargeSize), NPTypeCode.Byte);
@@ -202,7 +199,7 @@ public class ILKernelGenerator_LargeArray_BattleTest
 
     #region Comparison Operations
 
-    [Test, LargeMemoryTest]
+    [TestMethod, LargeMemoryTest]
     public async Task Comparison_Equal_LargeByteArray()
     {
         var a = np.ones(new Shape(DualArraySize), NPTypeCode.Byte);
@@ -230,7 +227,7 @@ public class ILKernelGenerator_LargeArray_BattleTest
         await Assert.That(result).IsTrue();
     }
 
-    [Test, LargeMemoryTest]
+    [TestMethod, LargeMemoryTest]
     public async Task Comparison_Greater_LargeByteArray()
     {
         var a = np.full(new Shape(DualArraySize), (byte)5, NPTypeCode.Byte);
@@ -253,7 +250,7 @@ public class ILKernelGenerator_LargeArray_BattleTest
 
     #region Clip Operations
 
-    [Test, LargeMemoryTest]
+    [TestMethod, LargeMemoryTest]
     public async Task Clip_LargeByteArray()
     {
         var a = np.arange(0, 256, 1, NPTypeCode.Byte);
@@ -283,7 +280,7 @@ public class ILKernelGenerator_LargeArray_BattleTest
 
     #region Indexing Beyond int.MaxValue
 
-    [Test, LargeMemoryTest]
+    [TestMethod, LargeMemoryTest]
     public async Task Indexing_SetGet_BeyondIntMaxValue()
     {
         var a = np.zeros(new Shape(LargeSize), NPTypeCode.Byte);
@@ -315,7 +312,7 @@ public class ILKernelGenerator_LargeArray_BattleTest
 
     #region Slicing with Large Offsets
 
-    [Test, LargeMemoryTest]
+    [TestMethod, LargeMemoryTest]
     public async Task Slicing_ViewBeyondIntMaxValue()
     {
         var a = np.zeros(new Shape(LargeSize), NPTypeCode.Byte);
@@ -344,7 +341,7 @@ public class ILKernelGenerator_LargeArray_BattleTest
 
     #region Large Stride Operations (stride > int.MaxValue)
 
-    [Test, LargeMemoryTest]
+    [TestMethod, LargeMemoryTest]
     public async Task Reduction_Sum_LargeStride()
     {
         // Create a 2D array where stride along axis 0 exceeds int.MaxValue
@@ -374,7 +371,7 @@ public class ILKernelGenerator_LargeArray_BattleTest
         await Assert.That((long)sum).IsEqualTo(3);
     }
 
-    [Test, LargeMemoryTest]
+    [TestMethod, LargeMemoryTest]
     public async Task Binary_Add_SlicedWithLargeStep()
     {
         var a = np.ones(new Shape(LargeSize), NPTypeCode.Byte);
@@ -395,7 +392,7 @@ public class ILKernelGenerator_LargeArray_BattleTest
         await Assert.That((byte)result[1]).IsEqualTo((byte)2);
     }
 
-    [Test, LargeMemoryTest]
+    [TestMethod, LargeMemoryTest]
     public async Task Reduction_Max_SlicedWithLargeStride()
     {
         var a = np.zeros(new Shape(LargeSize), NPTypeCode.Byte);
@@ -424,7 +421,7 @@ public class ILKernelGenerator_LargeArray_BattleTest
 
     #region Float/Double Operations (smaller arrays due to element size)
 
-    [Test, LargeMemoryTest]
+    [TestMethod, LargeMemoryTest]
     public async Task Binary_Add_LargeFloatArray()
     {
         // Float: 4 bytes per element
@@ -445,7 +442,7 @@ public class ILKernelGenerator_LargeArray_BattleTest
         await Assert.That((float)result[floatSize / 2]).IsEqualTo(2.0f);
     }
 
-    [Test, LargeMemoryTest]
+    [TestMethod, LargeMemoryTest]
     public async Task Reduction_Sum_LargeFloatArray()
     {
         long floatSize = 500_000_000L; // 2GB

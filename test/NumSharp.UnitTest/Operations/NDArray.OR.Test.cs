@@ -6,7 +6,7 @@ namespace NumSharp.UnitTest.Operations
 {
     public class NDArrayOrTest
     {
-        [Test]
+        [TestMethod]
         public void BoolTwo1D_NDArrayOR()
         {
             var np1 = new NDArray(new[] {true, true, false, false}, new Shape(4));
@@ -17,7 +17,7 @@ namespace NumSharp.UnitTest.Operations
             Assert.IsTrue(Enumerable.SequenceEqual(new[] {true, true, true, false}, np3.Data<bool>()));
         }
 
-        [Test]
+        [TestMethod]
         public void BoolTwo2D_NDArrayOR()
         {
             var np1 = new NDArray(typeof(bool), new Shape(2, 3));

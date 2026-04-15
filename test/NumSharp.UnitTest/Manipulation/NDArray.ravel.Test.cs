@@ -5,7 +5,7 @@ namespace NumSharp.UnitTest.Manipulation
 {
     public class RavelTest
     {
-        [Test]
+        [TestMethod]
         public void Simple2DArray()
         {
             var nd1 = np.array(new int[][] {new int[] {3, 1, 1, 2}, new int[] {3, 1, 1, 2}});

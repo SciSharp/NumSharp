@@ -2,7 +2,6 @@ using System;
 using System.Linq;
 using AwesomeAssertions;
 using NumSharp;
-using TUnit.Core;
 
 namespace NumSharp.UnitTest
 {
@@ -61,7 +60,7 @@ namespace NumSharp.UnitTest
         /// <summary>
         ///     BUG 84: prod(empty bool) should return int64, not bool.
         /// </summary>
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Bug84_Prod_EmptyBool_ReturnsInt64()
         {
             var a = np.array(new bool[0]);
@@ -89,7 +88,7 @@ namespace NumSharp.UnitTest
     {
         // ----- STD/VAR TESTS -----
 
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void StdVar_BasicDtypes_MatchNumPy()
         {
             var a_int32 = np.array(new int[] { 1, 2, 3, 4, 5 });
@@ -108,7 +107,7 @@ namespace NumSharp.UnitTest
             np.var(a_float64).GetDouble(0).Should().BeApproximately(2.0, 1e-10);
         }
 
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void StdVar_WithAxis_MatchNumPy()
         {
             var a = np.array(new double[,] { { 1, 2, 3 }, { 4, 5, 6 } });
@@ -125,7 +124,7 @@ namespace NumSharp.UnitTest
             std_axis1.GetDouble(1).Should().BeApproximately(0.81649658, 1e-6);
         }
 
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void StdVar_EmptyArray_ReturnsNaN()
         {
             var empty = np.array(new double[0]);
@@ -133,7 +132,7 @@ namespace NumSharp.UnitTest
             double.IsNaN(np.var(empty).GetDouble(0)).Should().BeTrue("var(empty) = NaN");
         }
 
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void StdVar_SingleElement_Ddof1_ReturnsNaN()
         {
             var single = np.array(new double[] { 5.0 });
@@ -143,7 +142,7 @@ namespace NumSharp.UnitTest
 
         // ----- CUMSUM TESTS -----
 
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void CumSum_TypePromotion_MatchNumPy()
         {
             // int32 -> int64
@@ -162,7 +161,7 @@ namespace NumSharp.UnitTest
             cs_float32.dtype.Should().Be(typeof(float), "cumsum(float32) -> float32");
         }
 
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void CumSum_WithAxis_MatchNumPy()
         {
             var a = np.array(new int[,] { { 1, 2, 3 }, { 4, 5, 6 } });
@@ -180,7 +179,7 @@ namespace NumSharp.UnitTest
             cs_axis1.GetInt64(1, 2).Should().Be(15L);
         }
 
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void CumSum_BoolArray_MatchNumPy()
         {
             var a = np.array(new bool[] { true, false, true, true, false });
@@ -197,7 +196,7 @@ namespace NumSharp.UnitTest
 
         // ----- SHIFT TESTS -----
 
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Shift_BasicOperations_MatchNumPy()
         {
             var a = np.array(new int[] { 1, 2, 4, 8, 16 });
@@ -213,7 +212,7 @@ namespace NumSharp.UnitTest
             rs.GetInt32(4).Should().Be(8);
         }
 
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Shift_SignedRightShift_IsArithmetic()
         {
             // NumPy uses arithmetic right shift for signed types
@@ -232,7 +231,7 @@ namespace NumSharp.UnitTest
         // These tests verify the fix for Bug 81 where shift by >= bit width
         // returned the original value instead of 0 (due to C# masking behavior).
 
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Shift_FullBitWidth_ReturnsZero()
         {
             // int32 << 32 should return 0 (not original value)
@@ -253,7 +252,7 @@ namespace NumSharp.UnitTest
             result.GetInt32(0).Should().Be(0, "NumPy: 1 << 64 = 0 for int32");
         }
 
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Shift_UInt32_FullBitWidth_ReturnsZero()
         {
             var a = np.array(new uint[] { 0xFFFFFFFF });
@@ -261,7 +260,7 @@ namespace NumSharp.UnitTest
             result.GetUInt32(0).Should().Be(0u, "NumPy: 0xFFFFFFFF << 32 = 0 for uint32");
         }
 
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Shift_NegativeRightShift_FullBitWidth_ReturnsMinusOne()
         {
             // Negative values right-shifted by >= bit width should return -1
@@ -271,7 +270,7 @@ namespace NumSharp.UnitTest
             result.GetInt32(1).Should().Be(-1, "NumPy: -100 >> 32 = -1 for int32");
         }
 
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Shift_ArrayShifts_WithOverflow()
         {
             // Test array shift amounts where some are >= bit width
@@ -290,7 +289,7 @@ namespace NumSharp.UnitTest
 
         // ----- DOT TESTS (contiguous) -----
 
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Dot_1Dx1D_InnerProduct()
         {
             var a = np.array(new double[] { 1, 2, 3 });
@@ -301,7 +300,7 @@ namespace NumSharp.UnitTest
             result.GetDouble(0).Should().Be(32.0);
         }
 
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Dot_2Dx2D_MatrixMultiply()
         {
             var a = np.array(new double[,] { { 1, 2 }, { 3, 4 } });
@@ -321,7 +320,7 @@ namespace NumSharp.UnitTest
         ///     BUG 82 (FIXED): Dot product with both operands transposed.
         ///     Previously produced wrong results due to incorrect stride handling.
         /// </summary>
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Dot_BothTransposed_MatchNumPy()
         {
             // Original arrays before transpose
@@ -357,7 +356,7 @@ namespace NumSharp.UnitTest
         /// <summary>
         ///     BUG 82b (FIXED): Dot with one transposed operand.
         /// </summary>
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Dot_OneTransposed_MatchNumPy()
         {
             // One contiguous, one transposed
@@ -390,7 +389,7 @@ namespace NumSharp.UnitTest
 
         // ----- BOOL PROD TESTS -----
 
-        [Test, OpenBugs]
+        [TestMethod, OpenBugs]
         public void Prod_BoolArray_MatchNumPy()
         {
             // prod([True, True, True]) = 1

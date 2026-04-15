@@ -9,7 +9,7 @@ namespace NumSharp.UnitTest
 {
     public class MultiplyTest : TestClass
     {
-        [Test]
+        [TestMethod]
         public void UInt8MultiplyTest1()
         {
             var nd1 = np.arange(3).astype(np.uint8);
@@ -18,7 +18,7 @@ namespace NumSharp.UnitTest
 
             AssertAreEqual(new int[] {0, 2, 4}, nd2.Data<int>());
         }
-        [Test]
+        [TestMethod]
         public void UInt16MultiplyTest1()
         {
             var nd1 = np.arange(3).astype(np.uint16);

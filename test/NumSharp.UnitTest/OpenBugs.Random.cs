@@ -32,7 +32,7 @@ namespace NumSharp.UnitTest
         ///     NumPy seed=42:    0.3745401188473625
         ///     NumSharp seed=42: 0.668106465911542 (WRONG - different algorithm)
         /// </summary>
-        [Test]
+        [TestMethod]
         [OpenBugs]
         public void Rand_Seed42_ShouldMatchNumPy()
         {
@@ -52,7 +52,7 @@ namespace NumSharp.UnitTest
         ///
         ///     NumPy seed=42: [0.37454012, 0.95071431, 0.73199394, 0.59865848, 0.15601864]
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Rand5_Seed42_ShouldMatchNumPy()
         {
             var rng = np.random.RandomState(42);
@@ -81,7 +81,7 @@ namespace NumSharp.UnitTest
         ///     NumPy seed=42:    0.4967141530112327
         ///     NumSharp seed=42: Different value (wrong RNG + Box-Muller may differ)
         /// </summary>
-        [Test]
+        [TestMethod]
         [OpenBugs]
         public void Randn_Seed42_ShouldMatchNumPy()
         {
@@ -102,7 +102,7 @@ namespace NumSharp.UnitTest
         ///     NumPy seed=42: [0.4967141530112327, -0.13826430117118466, 0.6476885381006925,
         ///                    1.5230298564080254, -0.23415337472333597]
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Randn5_Seed42_ShouldMatchNumPy()
         {
             var rng = np.random.RandomState(42);
@@ -129,7 +129,7 @@ namespace NumSharp.UnitTest
         ///
         ///     NumPy seed=42, randint(0,10): 6
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Randint_Seed42_ShouldMatchNumPy()
         {
             var rng = np.random.RandomState(42);
@@ -147,7 +147,7 @@ namespace NumSharp.UnitTest
         ///
         ///     NumPy seed=42: [6, 3, 7, 4, 6]
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Randint5_Seed42_ShouldMatchNumPy()
         {
             var rng = np.random.RandomState(42);
@@ -168,7 +168,7 @@ namespace NumSharp.UnitTest
         ///
         ///     NumPy seed=42: 0.4967141530112327
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Normal_Seed42_ShouldMatchNumPy()
         {
             var rng = np.random.RandomState(42);
@@ -186,7 +186,7 @@ namespace NumSharp.UnitTest
         ///
         ///     NumPy seed=42: 0.3745401188473625
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Uniform_Seed42_ShouldMatchNumPy()
         {
             var rng = np.random.RandomState(42);
@@ -204,7 +204,7 @@ namespace NumSharp.UnitTest
         ///
         ///     NumPy seed=42: 6
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Choice_Seed42_ShouldMatchNumPy()
         {
             var rng = np.random.RandomState(42);
@@ -222,7 +222,7 @@ namespace NumSharp.UnitTest
         ///
         ///     NumPy seed=42: [1, 4, 2, 0, 3]
         /// </summary>
-        [Test]
+        [TestMethod]
         [OpenBugs]
         public void Permutation_Seed42_ShouldMatchNumPy()
         {
@@ -248,7 +248,7 @@ namespace NumSharp.UnitTest
         ///
         ///     NumPy seed=42: 0.4692680899768591
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Exponential_Seed42_ShouldMatchNumPy()
         {
             var rng = np.random.RandomState(42);
@@ -266,7 +266,7 @@ namespace NumSharp.UnitTest
         ///
         ///     NumPy seed=42: 5
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Poisson_Seed42_ShouldMatchNumPy()
         {
             var rng = np.random.RandomState(42);
@@ -284,7 +284,7 @@ namespace NumSharp.UnitTest
         ///
         ///     NumPy seed=42: 4
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Binomial_Seed42_ShouldMatchNumPy()
         {
             var rng = np.random.RandomState(42);
@@ -302,7 +302,7 @@ namespace NumSharp.UnitTest
         ///
         ///     NumPy seed=42: 0.5992069666276891
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Beta_Seed42_ShouldMatchNumPy()
         {
             var rng = np.random.RandomState(42);
@@ -320,7 +320,7 @@ namespace NumSharp.UnitTest
         ///
         ///     NumPy seed=42: 2.3936793898692366
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Gamma_Seed42_ShouldMatchNumPy()
         {
             var rng = np.random.RandomState(42);

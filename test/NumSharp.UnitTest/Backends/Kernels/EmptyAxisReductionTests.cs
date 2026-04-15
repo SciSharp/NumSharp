@@ -1,9 +1,6 @@
 using System;
 using System.Threading.Tasks;
 using NumSharp;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-using TUnit.Core;
 
 namespace NumSharp.UnitTest.Backends.Kernels
 {
@@ -15,7 +12,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
     {
         #region Sum Tests
 
-        [Test]
+        [TestMethod]
         public async Task Sum_EmptyAxis0_ReturnsZerosWithReducedShape()
         {
             // NumPy: np.sum(np.zeros((0, 3)), axis=0) returns array([0., 0., 0.]) with shape (3,)
@@ -28,7 +25,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
             await Assert.That(result.GetDouble(2)).IsEqualTo(0.0);
         }
 
-        [Test]
+        [TestMethod]
         public async Task Sum_EmptyAxis1_ReturnsEmptyArray()
         {
             // NumPy: np.sum(np.zeros((0, 3)), axis=1) returns array([]) with shape (0,)
@@ -39,7 +36,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
             await Assert.That(result.size).IsEqualTo(0);
         }
 
-        [Test]
+        [TestMethod]
         public async Task Sum_EmptyAxis0_Keepdims_ReturnsCorrectShape()
         {
             // NumPy: np.sum(np.zeros((0, 3)), axis=0, keepdims=True) returns shape (1, 3)
@@ -49,7 +46,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
             await Assert.That(result.shape).IsEquivalentTo(new long[] { 1, 3 });
         }
 
-        [Test]
+        [TestMethod]
         public async Task Sum_EmptyAxis1_Keepdims_ReturnsCorrectShape()
         {
             // NumPy: np.sum(np.zeros((0, 3)), axis=1, keepdims=True) returns shape (0, 1)
@@ -59,7 +56,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
             await Assert.That(result.shape).IsEquivalentTo(new long[] { 0, 1 });
         }
 
-        [Test]
+        [TestMethod]
         public async Task Sum_Empty3D_ReturnsCorrectShapes()
         {
             // NumPy: np.sum(np.zeros((2, 0, 4)), axis=1) returns shape (2, 4)
@@ -74,7 +71,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
 
         #region Prod Tests
 
-        [Test]
+        [TestMethod]
         public async Task Prod_EmptyAxis0_ReturnsOnesWithReducedShape()
         {
             // NumPy: np.prod(np.zeros((0, 3)), axis=0) returns array([1., 1., 1.]) with shape (3,)
@@ -87,7 +84,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
             await Assert.That(result.GetDouble(2)).IsEqualTo(1.0);
         }
 
-        [Test]
+        [TestMethod]
         public async Task Prod_EmptyAxis1_ReturnsEmptyArray()
         {
             // NumPy: np.prod(np.zeros((0, 3)), axis=1) returns array([]) with shape (0,)
@@ -102,7 +99,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
 
         #region Min/Max Tests
 
-        [Test]
+        [TestMethod]
         public async Task Min_EmptyAxis0_ThrowsArgumentException()
         {
             // NumPy: np.min(np.zeros((0, 3)), axis=0) raises ValueError
@@ -112,7 +109,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
                 .Throws<ArgumentException>();
         }
 
-        [Test]
+        [TestMethod]
         public async Task Min_EmptyAxis1_ReturnsEmptyArray()
         {
             // NumPy: np.min(np.zeros((0, 3)), axis=1) returns array([]) with shape (0,)
@@ -123,7 +120,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
             await Assert.That(result.size).IsEqualTo(0);
         }
 
-        [Test]
+        [TestMethod]
         public async Task Max_EmptyAxis0_ThrowsArgumentException()
         {
             // NumPy: np.max(np.zeros((0, 3)), axis=0) raises ValueError
@@ -133,7 +130,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
                 .Throws<ArgumentException>();
         }
 
-        [Test]
+        [TestMethod]
         public async Task Max_EmptyAxis1_ReturnsEmptyArray()
         {
             // NumPy: np.max(np.zeros((0, 3)), axis=1) returns array([]) with shape (0,)
@@ -148,7 +145,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
 
         #region ArgMax/ArgMin Tests
 
-        [Test]
+        [TestMethod]
         public async Task ArgMax_EmptyAxis0_ThrowsArgumentException()
         {
             // NumPy: np.argmax(np.zeros((0, 3)), axis=0) raises ValueError
@@ -158,7 +155,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
                 .Throws<ArgumentException>();
         }
 
-        [Test]
+        [TestMethod]
         public async Task ArgMax_EmptyAxis1_ReturnsEmptyArray()
         {
             // NumPy: np.argmax(np.zeros((0, 3)), axis=1) returns array([], dtype=int64) with shape (0,)
@@ -170,7 +167,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
             await Assert.That(result.typecode).IsEqualTo(NPTypeCode.Int64);
         }
 
-        [Test]
+        [TestMethod]
         public async Task ArgMin_EmptyAxis0_ThrowsArgumentException()
         {
             // NumPy: np.argmin(np.zeros((0, 3)), axis=0) raises ValueError
@@ -180,7 +177,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
                 .Throws<ArgumentException>();
         }
 
-        [Test]
+        [TestMethod]
         public async Task ArgMin_EmptyAxis1_ReturnsEmptyArray()
         {
             // NumPy: np.argmin(np.zeros((0, 3)), axis=1) returns array([], dtype=int64) with shape (0,)
@@ -196,7 +193,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
 
         #region Mean/Std/Var Tests
 
-        [Test]
+        [TestMethod]
         public async Task Mean_EmptyAxis0_ReturnsNaNArray()
         {
             // NumPy: np.mean(np.zeros((0, 3)), axis=0) returns array([nan, nan, nan])
@@ -209,7 +206,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
             await Assert.That(double.IsNaN(result.GetDouble(2))).IsTrue();
         }
 
-        [Test]
+        [TestMethod]
         public async Task Mean_EmptyAxis1_ReturnsEmptyArray()
         {
             // NumPy: np.mean(np.zeros((0, 3)), axis=1) returns array([]) with shape (0,)
@@ -220,7 +217,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
             await Assert.That(result.size).IsEqualTo(0);
         }
 
-        [Test]
+        [TestMethod]
         public async Task Std_EmptyAxis0_ReturnsNaNArray()
         {
             // NumPy: np.std(np.zeros((0, 3)), axis=0) returns array([nan, nan, nan])
@@ -233,7 +230,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
             await Assert.That(double.IsNaN(result.GetDouble(2))).IsTrue();
         }
 
-        [Test]
+        [TestMethod]
         public async Task Var_EmptyAxis0_ReturnsNaNArray()
         {
             // NumPy: np.var(np.zeros((0, 3)), axis=0) returns array([nan, nan, nan])
@@ -250,7 +247,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
 
         #region Edge Cases
 
-        [Test]
+        [TestMethod]
         public async Task Sum_Reversed_EmptyAxis()
         {
             // NumPy: np.sum(np.zeros((3, 0)), axis=1) returns array([0., 0., 0.]) with shape (3,)
@@ -263,7 +260,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
             await Assert.That(result.GetDouble(2)).IsEqualTo(0.0);
         }
 
-        [Test]
+        [TestMethod]
         public async Task Sum_NoAxis_EmptyArray_ReturnsScalar()
         {
             // NumPy: np.sum(np.zeros((0,))) returns 0.0
@@ -274,7 +271,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
             await Assert.That((double)result).IsEqualTo(0.0);
         }
 
-        [Test]
+        [TestMethod]
         public async Task Prod_NoAxis_EmptyArray_ReturnsOne()
         {
             // NumPy: np.prod(np.zeros((0,))) returns 1.0

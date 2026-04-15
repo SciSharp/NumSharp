@@ -4,7 +4,6 @@ using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.Backends;
 using NumSharp.UnitTest.Utilities;
-using TUnit.Core;
 
 namespace NumSharp.UnitTest.NumPyPortedTests
 {
@@ -16,7 +15,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
     {
         #region Float Power Tests (from test_power_float)
 
-        [Test]
+        [TestMethod]
         public void Power_Float_ZeroExponent_ReturnsOnes()
         {
             // NumPy: x**0 = [1., 1., 1.]
@@ -25,7 +24,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             result.Should().BeOfValues(1.0, 1.0, 1.0);
         }
 
-        [Test]
+        [TestMethod]
         public void Power_Float_OneExponent_ReturnsOriginal()
         {
             // NumPy: x**1 = x
@@ -34,7 +33,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             result.Should().BeOfValues(1.0, 2.0, 3.0);
         }
 
-        [Test]
+        [TestMethod]
         public void Power_Float_TwoExponent_ReturnsSquares()
         {
             // NumPy: x**2 = [1., 4., 9.]
@@ -43,7 +42,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             result.Should().BeOfValues(1.0, 4.0, 9.0);
         }
 
-        [Test]
+        [TestMethod]
         public void Power_Float_NegativeOneExponent_ReturnsReciprocals()
         {
             // NumPy: x**(-1) = [1., 0.5, 0.33333333]
@@ -55,7 +54,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             Assert.IsTrue(Math.Abs(data[2] - (1.0 / 3.0)) < 1e-10);
         }
 
-        [Test]
+        [TestMethod]
         public void Power_Float_HalfExponent_ReturnsSqrt()
         {
             // NumPy: x**(0.5) = [1., sqrt(2), sqrt(3)]
@@ -71,7 +70,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
 
         #region Integer Power Tests (from test_integer_power*)
 
-        [Test]
+        [TestMethod]
         [Misaligned] // NumSharp uses Math.Pow (double precision) which loses precision for large integers
         public void Power_Integer_LargeValues()
         {
@@ -87,7 +86,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             Assert.IsTrue(relativeError < 1e-14, $"Expected ~{expected}, got {actual}, relative error {relativeError}");
         }
 
-        [Test]
+        [TestMethod]
         public void Power_Int32_ZeroExponent_ReturnsOnes()
         {
             // NumPy: power(arr, 0) returns ones_like(arr) for all integer types
@@ -97,7 +96,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             result.Should().BeOfValues(expected.GetData<int>().Cast<object>().ToArray());
         }
 
-        [Test]
+        [TestMethod]
         public void Power_Int64_ZeroExponent_ReturnsOnes()
         {
             var arr = np.arange(-10, 10).astype(np.int64);
@@ -106,7 +105,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             result.Should().BeOfValues(expected.GetData<long>().Cast<object>().ToArray());
         }
 
-        [Test]
+        [TestMethod]
         public void Power_UInt32_ZeroExponent_ReturnsOnes()
         {
             var arr = np.arange(10).astype(np.uint32);
@@ -115,7 +114,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             result.Should().BeOfValues(expected.GetData<uint>().Cast<object>().ToArray());
         }
 
-        [Test]
+        [TestMethod]
         public void Power_OneBase_AnyExponent_ReturnsOnes()
         {
             // NumPy: power(1, arr) returns ones_like(arr)
@@ -124,7 +123,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             result.Should().BeOfValues(1, 1, 1, 1, 1, 1, 1, 1, 1, 1);
         }
 
-        [Test]
+        [TestMethod]
         public void Power_ZeroBase_PositiveExponent_ReturnsZeros()
         {
             // NumPy: power(0, arr) returns zeros for positive exponents
@@ -137,7 +136,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
 
         #region Float to Inf Power Tests (from test_float_to_inf_power)
 
-        [Test]
+        [TestMethod]
         public void Power_Float32_InfExponents()
         {
             // NumPy: power with inf exponents
@@ -157,7 +156,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             Assert.AreEqual(0f, data[7]);
         }
 
-        [Test]
+        [TestMethod]
         public void Power_Float64_InfExponents()
         {
             var a = np.array(new double[] { 1.0, 1.0, 2.0, 2.0, -2.0, -2.0, double.PositiveInfinity, double.NegativeInfinity });
@@ -180,7 +179,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
 
         #region Fast Power Path Tests (from test_fast_power)
 
-        [Test]
+        [TestMethod]
         public void Power_Int16_FloatExponent_ReturnsFloat64()
         {
             // NumPy: int16**2.0 returns float64
@@ -191,7 +190,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             result.Should().BeOfValues(1.0, 4.0, 9.0);
         }
 
-        [Test]
+        [TestMethod]
         public void Power_Int32_FloatExponent_ReturnsFloat64()
         {
             var x = np.array(new int[] { 1, 2, 3, 4 });
@@ -205,7 +204,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
 
         #region Special Cases (0^0, negative base)
 
-        [Test]
+        [TestMethod]
         public void Power_ZeroToZero_ReturnsOne()
         {
             // NumPy: 0^0 = 1 (by convention)
@@ -214,7 +213,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             Assert.AreEqual(1.0, (double)np.power(0.0, 0));
         }
 
-        [Test]
+        [TestMethod]
         public void Power_NegativeBase_IntegerExponent()
         {
             // NumPy: (-2)^3 = -8, (-2)^4 = 16
@@ -224,7 +223,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             Assert.AreEqual(-8.0, (double)np.power(-2.0, 3.0));
         }
 
-        [Test]
+        [TestMethod]
         public void Power_NegativeBase_FractionalExponent_ReturnsNaN()
         {
             // NumPy: (-2.0)^0.5 = nan, (-1.0)^0.5 = nan
@@ -239,7 +238,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
 
         #region Square Root via Power
 
-        [Test]
+        [TestMethod]
         public void Power_HalfExponent_MatchesSqrt()
         {
             // NumPy: power([1,4,9,16,25], 0.5) = [1,2,3,4,5]
@@ -248,7 +247,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             result.Should().BeOfValues(1.0, 2.0, 3.0, 4.0, 5.0);
         }
 
-        [Test]
+        [TestMethod]
         public void Power_NegativeHalfExponent()
         {
             // NumPy: power([1,4,9], -0.5) = [1, 0.5, 0.33333...]
@@ -265,7 +264,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
 
         #region Broadcasting Tests
 
-        [Test]
+        [TestMethod]
         public void Power_Broadcasting_2DArray_1DExponent()
         {
             // NumPy: power([[1,2],[3,4]], [2,3]) = [[1,8],[9,64]]
@@ -277,7 +276,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             result.Should().BeOfValues(1, 8, 9, 64);
         }
 
-        [Test]
+        [TestMethod]
         public void Power_Broadcasting_1DArray_2DExponent()
         {
             // NumPy: power([1,2,3,4], [[1],[2],[3]]).shape = (3,4)
@@ -292,7 +291,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
 
         #region Strided Array Tests
 
-        [Test]
+        [TestMethod]
         public void Power_StridedArray()
         {
             // NumPy: power(a[::2], 2) where a = [0,1,2,3,4,5,6,7,8,9]
@@ -308,7 +307,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
 
         #region Dtype Preservation Tests
 
-        [Test]
+        [TestMethod]
         public void Power_Int32_Int32_ReturnsInt32()
         {
             var a = np.array(new int[] { 2, 3, 4 });
@@ -316,7 +315,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             Assert.AreEqual(np.int32, result.dtype);
         }
 
-        [Test]
+        [TestMethod]
         public void Power_Int64_Int64_ReturnsInt64()
         {
             var a = np.array(new long[] { 2, 3, 4 });
@@ -324,7 +323,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             Assert.AreEqual(np.int64, result.dtype);
         }
 
-        [Test]
+        [TestMethod]
         public void Power_Float32_Float32_ReturnsFloat32()
         {
             var a = np.array(new float[] { 2f, 3f, 4f });
@@ -332,7 +331,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             Assert.AreEqual(np.float32, result.dtype);
         }
 
-        [Test]
+        [TestMethod]
         public void Power_Float64_Float64_ReturnsFloat64()
         {
             var a = np.array(new double[] { 2.0, 3.0, 4.0 });
@@ -344,7 +343,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
 
         #region Cube Root and Other Fractional Powers
 
-        [Test]
+        [TestMethod]
         public void Power_CubeRoot()
         {
             // NumPy: power([1,8,27,64], 1/3) = [1,2,3,4]
@@ -362,7 +361,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
 
         #region Very Large/Small Exponent Tests
 
-        [Test]
+        [TestMethod]
         public void Power_LargeExponent()
         {
             // NumPy: power([1, 1.0001, 0.9999], 10000)

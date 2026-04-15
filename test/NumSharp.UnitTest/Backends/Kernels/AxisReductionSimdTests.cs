@@ -1,7 +1,6 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.Backends.Kernels;
 using NumSharp.UnitTest.Utilities;
-using TUnit.Core;
 
 namespace NumSharp.UnitTest.Backends.Kernels;
 
@@ -10,7 +9,7 @@ namespace NumSharp.UnitTest.Backends.Kernels;
 /// </summary>
 public class AxisReductionSimdTests
 {
-    [Test]
+    [TestMethod]
     public void Sum_Axis0_2D_Contiguous()
     {
         // Create array [[1, 2, 3], [4, 5, 6]]
@@ -25,7 +24,7 @@ public class AxisReductionSimdTests
         Assert.AreEqual(9, (int)result[2]);
     }
 
-    [Test]
+    [TestMethod]
     public void Sum_Axis1_2D_Contiguous()
     {
         // Create array [[1, 2, 3], [4, 5, 6]]
@@ -39,7 +38,7 @@ public class AxisReductionSimdTests
         Assert.AreEqual(15, (int)result[1]);
     }
 
-    [Test]
+    [TestMethod]
     public void Sum_Axis1_LargeArray_UsesSimd()
     {
         // Create a large 2D array to ensure SIMD path is used
@@ -67,7 +66,7 @@ public class AxisReductionSimdTests
         }
     }
 
-    [Test]
+    [TestMethod]
     public void Sum_Axis0_LargeArray_UsesSimd()
     {
         // Create a large 2D array to ensure SIMD path is used
@@ -95,7 +94,7 @@ public class AxisReductionSimdTests
         }
     }
 
-    [Test]
+    [TestMethod]
     public void Max_Axis1_2D()
     {
         var arr = np.array(new int[,] { { 3, 1, 4 }, { 1, 5, 9 } });
@@ -107,7 +106,7 @@ public class AxisReductionSimdTests
         Assert.AreEqual(9, (int)result[1]);
     }
 
-    [Test]
+    [TestMethod]
     public void Min_Axis0_2D()
     {
         var arr = np.array(new double[,] { { 3.0, 1.0, 4.0 }, { 1.0, 5.0, 9.0 } });
@@ -120,7 +119,7 @@ public class AxisReductionSimdTests
         Assert.AreEqual(4.0, (double)result[2], 1e-10);
     }
 
-    [Test]
+    [TestMethod]
     public void Prod_Axis1_2D()
     {
         var arr = np.array(new int[,] { { 1, 2, 3 }, { 4, 5, 6 } });
@@ -132,7 +131,7 @@ public class AxisReductionSimdTests
         Assert.AreEqual(120L, (long)result[1]);
     }
 
-    [Test]
+    [TestMethod]
     public void Sum_Axis2_3D_ContiguousInnerAxis()
     {
         // 2x3x4 array
@@ -160,7 +159,7 @@ public class AxisReductionSimdTests
         Assert.AreEqual(58L, (long)result[1, 0]);
     }
 
-    [Test]
+    [TestMethod]
     public void Sum_NegativeAxis()
     {
         var arr = np.array(new int[,] { { 1, 2, 3 }, { 4, 5, 6 } });
@@ -173,7 +172,7 @@ public class AxisReductionSimdTests
         Assert.AreEqual(15L, (long)result[1]);
     }
 
-    [Test]
+    [TestMethod]
     public void Sum_Keepdims()
     {
         var arr = np.array(new int[,] { { 1, 2, 3 }, { 4, 5, 6 } });
@@ -185,7 +184,7 @@ public class AxisReductionSimdTests
         Assert.AreEqual(15L, (long)result[1, 0]);
     }
 
-    [Test]
+    [TestMethod]
     public void AxisReductionKernel_IsAvailable()
     {
         // Test that the kernel is available for supported types
@@ -206,7 +205,7 @@ public class AxisReductionSimdTests
         }
     }
 
-    [Test]
+    [TestMethod]
     public void Sum_AllDtypes_Axis1()
     {
         // Test that axis reduction works for various dtypes

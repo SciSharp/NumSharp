@@ -12,7 +12,7 @@ namespace NumSharp.UnitTest.Logic
     {
         #region np.equal
 
-        [Test]
+        [TestMethod]
         public void equal_ArrayArray()
         {
             // NumPy: np.equal([1, 2, 3], [1, 0, 3]) -> [True, False, True]
@@ -26,7 +26,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.IsTrue(result.GetBoolean(2));
         }
 
-        [Test]
+        [TestMethod]
         public void equal_ArrayScalar()
         {
             // NumPy: np.equal([1, 2, 3], 2) -> [False, True, False]
@@ -39,7 +39,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.IsFalse(result.GetBoolean(2));
         }
 
-        [Test]
+        [TestMethod]
         public void equal_ScalarArray()
         {
             // NumPy: np.equal(2, [1, 2, 3]) -> [False, True, False]
@@ -52,7 +52,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.IsFalse(result.GetBoolean(2));
         }
 
-        [Test]
+        [TestMethod]
         public void equal_Float64()
         {
             // NumPy: np.equal([1.0, 2.0, 3.0], [1.0, 2.1, 3.0]) -> [True, False, True]
@@ -69,7 +69,7 @@ namespace NumSharp.UnitTest.Logic
 
         #region np.not_equal
 
-        [Test]
+        [TestMethod]
         public void not_equal_ArrayArray()
         {
             // NumPy: np.not_equal([1, 2, 3], [1, 0, 3]) -> [False, True, False]
@@ -82,7 +82,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.IsFalse(result.GetBoolean(2));
         }
 
-        [Test]
+        [TestMethod]
         public void not_equal_ArrayScalar()
         {
             // NumPy: np.not_equal([1, 2, 3], 2) -> [True, False, True]
@@ -98,7 +98,7 @@ namespace NumSharp.UnitTest.Logic
 
         #region np.less
 
-        [Test]
+        [TestMethod]
         public void less_ArrayArray()
         {
             // NumPy: np.less([1, 2, 3], [2, 2, 2]) -> [True, False, False]
@@ -111,7 +111,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.IsFalse(result.GetBoolean(2));
         }
 
-        [Test]
+        [TestMethod]
         public void less_ArrayScalar()
         {
             // NumPy: np.less([1, 2, 3], 2) -> [True, False, False]
@@ -123,7 +123,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.IsFalse(result.GetBoolean(2));
         }
 
-        [Test]
+        [TestMethod]
         public void less_ScalarArray()
         {
             // NumPy: np.less(2, [1, 2, 3]) -> [False, False, True]
@@ -139,7 +139,7 @@ namespace NumSharp.UnitTest.Logic
 
         #region np.greater
 
-        [Test]
+        [TestMethod]
         public void greater_ArrayArray()
         {
             // NumPy: np.greater([1, 2, 3], [2, 2, 2]) -> [False, False, True]
@@ -152,7 +152,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.IsTrue(result.GetBoolean(2));
         }
 
-        [Test]
+        [TestMethod]
         public void greater_ArrayScalar()
         {
             // NumPy: np.greater([1, 2, 3], 2) -> [False, False, True]
@@ -168,7 +168,7 @@ namespace NumSharp.UnitTest.Logic
 
         #region np.less_equal
 
-        [Test]
+        [TestMethod]
         public void less_equal_ArrayArray()
         {
             // NumPy: np.less_equal([1, 2, 3], [2, 2, 2]) -> [True, True, False]
@@ -181,7 +181,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.IsFalse(result.GetBoolean(2));
         }
 
-        [Test]
+        [TestMethod]
         public void less_equal_ArrayScalar()
         {
             // NumPy: np.less_equal([1, 2, 3], 2) -> [True, True, False]
@@ -197,7 +197,7 @@ namespace NumSharp.UnitTest.Logic
 
         #region np.greater_equal
 
-        [Test]
+        [TestMethod]
         public void greater_equal_ArrayArray()
         {
             // NumPy: np.greater_equal([1, 2, 3], [2, 2, 2]) -> [False, True, True]
@@ -210,7 +210,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.IsTrue(result.GetBoolean(2));
         }
 
-        [Test]
+        [TestMethod]
         public void greater_equal_ArrayScalar()
         {
             // NumPy: np.greater_equal([1, 2, 3], 2) -> [False, True, True]
@@ -226,7 +226,7 @@ namespace NumSharp.UnitTest.Logic
 
         #region Broadcasting
 
-        [Test]
+        [TestMethod]
         public void comparison_Broadcasting2D()
         {
             // NumPy: np.equal([[1, 2], [3, 4]], [1, 4]) -> [[True, False], [False, True]]
@@ -241,7 +241,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.IsTrue(result.GetBoolean(1, 1));
         }
 
-        [Test]
+        [TestMethod]
         public void less_Broadcasting()
         {
             // NumPy: np.less([[1], [2], [3]], [1, 2, 3]) broadcasts to (3, 3)
@@ -272,7 +272,7 @@ namespace NumSharp.UnitTest.Logic
 
         #region Different dtypes
 
-        [Test]
+        [TestMethod]
         public void equal_MixedTypes()
         {
             // NumPy: np.equal(int32_array, float64_array) works with type promotion
@@ -285,7 +285,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.IsTrue(result.GetBoolean(2));
         }
 
-        [Test]
+        [TestMethod]
         public void less_MixedTypes()
         {
             // NumPy: np.less(int32_array, float64_array)

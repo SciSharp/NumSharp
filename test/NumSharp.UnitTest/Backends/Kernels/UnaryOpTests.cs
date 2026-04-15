@@ -2,7 +2,6 @@ using System;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp;
 using NumSharp.UnitTest.Utilities;
-using TUnit.Core;
 
 namespace NumSharp.UnitTest.Backends.Kernels;
 
@@ -17,7 +16,7 @@ public class UnaryOpTests
 
     #region Trigonometric Functions
 
-    [Test]
+    [TestMethod]
     public void Sin_Float64()
     {
         // NumPy: sin([0, π/6, π/4, π/2, π])
@@ -31,7 +30,7 @@ public class UnaryOpTests
         Assert.IsTrue(Math.Abs(result.GetDouble(4)) < Tolerance); // sin(π) ≈ 0
     }
 
-    [Test]
+    [TestMethod]
     public void Cos_Float64()
     {
         // NumPy: cos([0, π/6, π/4, π/2, π])
@@ -45,7 +44,7 @@ public class UnaryOpTests
         Assert.IsTrue(Math.Abs(result.GetDouble(4) - (-1.0)) < Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void Tan_Float64()
     {
         // NumPy: tan([0, π/4, -π/4])
@@ -61,7 +60,7 @@ public class UnaryOpTests
 
     #region Inverse Trigonometric Functions
 
-    [Test]
+    [TestMethod]
     public void ASin_Float64()
     {
         // NumPy: arcsin([-1, -0.5, 0, 0.5, 1])
@@ -75,7 +74,7 @@ public class UnaryOpTests
         Assert.IsTrue(Math.Abs(result.GetDouble(4) - (Pi / 2)) < Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void ACos_Float64()
     {
         // NumPy: arccos([-1, -0.5, 0, 0.5, 1])
@@ -89,7 +88,7 @@ public class UnaryOpTests
         Assert.IsTrue(Math.Abs(result.GetDouble(4) - 0.0) < Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void ATan_Float64()
     {
         // NumPy: arctan([-1, -0.5, 0, 0.5, 1])
@@ -107,7 +106,7 @@ public class UnaryOpTests
 
     #region Hyperbolic Functions
 
-    [Test]
+    [TestMethod]
     public void Sinh_Float64()
     {
         // NumPy: sinh([-2, -1, 0, 1, 2])
@@ -121,7 +120,7 @@ public class UnaryOpTests
         Assert.IsTrue(Math.Abs(result.GetDouble(4) - 3.6268604078470186) < Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void Cosh_Float64()
     {
         // NumPy: cosh([-2, -1, 0, 1, 2])
@@ -135,7 +134,7 @@ public class UnaryOpTests
         Assert.IsTrue(Math.Abs(result.GetDouble(4) - 3.7621956910836314) < Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void Tanh_Float64()
     {
         // NumPy: tanh([-2, -1, 0, 1, 2])
@@ -153,7 +152,7 @@ public class UnaryOpTests
 
     #region Logarithmic Functions
 
-    [Test]
+    [TestMethod]
     public void Log_Float64()
     {
         // NumPy: log([0.001, 0.5, 1, e, 10, 100])
@@ -168,7 +167,7 @@ public class UnaryOpTests
         Assert.IsTrue(Math.Abs(result.GetDouble(5) - 4.605170185988092) < Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void Log2_Float64()
     {
         var input = np.array(new double[] { 0.5, 1, 2, 4, 8, 1024 });
@@ -182,7 +181,7 @@ public class UnaryOpTests
         Assert.IsTrue(Math.Abs(result.GetDouble(5) - 10.0) < Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void Log10_Float64()
     {
         var input = np.array(new double[] { 0.001, 0.1, 1, 10, 100 });
@@ -195,7 +194,7 @@ public class UnaryOpTests
         Assert.IsTrue(Math.Abs(result.GetDouble(4) - 2.0) < Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void Log1p_Float64()
     {
         // NumPy: log1p([0, 0.5, 1, e-1, 9, 99])
@@ -214,7 +213,7 @@ public class UnaryOpTests
 
     #region Exponential Functions
 
-    [Test]
+    [TestMethod]
     public void Exp_Float64()
     {
         // NumPy: exp([0, 0.5, 1, 2])
@@ -227,7 +226,7 @@ public class UnaryOpTests
         Assert.IsTrue(Math.Abs(result.GetDouble(3) - 7.38905609893065) < Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void Exp2_Float64()
     {
         // NumPy: exp2([0, 1, 2, 3, 10])
@@ -241,7 +240,7 @@ public class UnaryOpTests
         Assert.IsTrue(Math.Abs(result.GetDouble(4) - 1024.0) < Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void Expm1_Float64()
     {
         // NumPy: expm1([0, 0.5, 1, 2])
@@ -258,7 +257,7 @@ public class UnaryOpTests
 
     #region General Operations
 
-    [Test]
+    [TestMethod]
     public void Abs_Float64()
     {
         // NumPy: abs([-5.5, -1, 0, 1, 2.5, 100])
@@ -268,7 +267,7 @@ public class UnaryOpTests
         result.Should().BeOfValues(5.5, 1.0, 0.0, 1.0, 2.5, 100.0);
     }
 
-    [Test]
+    [TestMethod]
     public void Abs_Int32()
     {
         var input = np.array(new[] { -5, -1, 0, 1, 5 });
@@ -277,7 +276,7 @@ public class UnaryOpTests
         result.Should().BeOfValues(5, 1, 0, 1, 5).And.BeOfType(NPTypeCode.Int32);
     }
 
-    [Test]
+    [TestMethod]
     public void Negative_Float64()
     {
         // NumPy: negative([-5.5, -1, 0, 1, 2.5])
@@ -287,7 +286,7 @@ public class UnaryOpTests
         result.Should().BeOfValues(5.5, 1.0, 0.0, -1.0, -2.5);
     }
 
-    [Test]
+    [TestMethod]
     public void Negative_Int32()
     {
         var input = np.array(new[] { -5, -1, 0, 1, 5 });
@@ -296,7 +295,7 @@ public class UnaryOpTests
         result.Should().BeOfValues(5, 1, 0, -1, -5).And.BeOfType(NPTypeCode.Int32);
     }
 
-    [Test]
+    [TestMethod]
     [OpenBugs] // NumSharp throws NotSupportedException for unsigned negative
     public void Negative_Byte_Overflow()
     {
@@ -307,7 +306,7 @@ public class UnaryOpTests
         result.Should().BeOfValues(255, 254, 253, 252, 251).And.BeOfType(NPTypeCode.Byte);
     }
 
-    [Test]
+    [TestMethod]
     public void Sqrt_Float64()
     {
         var input = np.array(new double[] { 0, 1, 4, 9, 100 });
@@ -320,7 +319,7 @@ public class UnaryOpTests
         Assert.IsTrue(Math.Abs(result.GetDouble(4) - 10.0) < Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void Sign_Float64()
     {
         // NumPy: sign([-5.5, -1, 0, 1, 2.5])
@@ -330,7 +329,7 @@ public class UnaryOpTests
         result.Should().BeOfValues(-1.0, -1.0, 0.0, 1.0, 1.0);
     }
 
-    [Test]
+    [TestMethod]
     public void Sign_Int32()
     {
         var input = np.array(new[] { -5, -1, 0, 1, 5 });
@@ -343,7 +342,7 @@ public class UnaryOpTests
 
     #region Rounding Operations - Banker's Rounding
 
-    [Test]
+    [TestMethod]
     public void Round_BankersRounding()
     {
         // NumPy uses banker's rounding (round half to even)
@@ -363,7 +362,7 @@ public class UnaryOpTests
         Assert.AreEqual(-2.0, result.GetDouble(8)); // -2.5 rounds to -2 (even)
     }
 
-    [Test]
+    [TestMethod]
     public void Floor_Float64()
     {
         // NumPy: floor([0.0, 0.49, 0.5, 0.51, 1.5, 2.5, -0.5, -1.5, -2.5])
@@ -373,7 +372,7 @@ public class UnaryOpTests
         result.Should().BeOfValues(0.0, 0.0, 0.0, 0.0, 1.0, 2.0, -1.0, -2.0, -3.0);
     }
 
-    [Test]
+    [TestMethod]
     public void Ceil_Float64()
     {
         // NumPy: ceil([0.0, 0.49, 0.5, 0.51, 1.5, 2.5, -0.5, -1.5, -2.5])
@@ -387,7 +386,7 @@ public class UnaryOpTests
 
     #region Edge Cases - Special Values
 
-    [Test]
+    [TestMethod]
     public void Sin_EdgeCases()
     {
         // NumPy: sin([0, -0, inf, -inf, nan]) = [0, -0, nan, nan, nan]
@@ -401,7 +400,7 @@ public class UnaryOpTests
         Assert.IsTrue(double.IsNaN(result.GetDouble(4)));
     }
 
-    [Test]
+    [TestMethod]
     public void Exp_EdgeCases()
     {
         // NumPy: exp([0, -0, inf, -inf, nan]) = [1, 1, inf, 0, nan]
@@ -415,7 +414,7 @@ public class UnaryOpTests
         Assert.IsTrue(double.IsNaN(result.GetDouble(4)));
     }
 
-    [Test]
+    [TestMethod]
     public void Log_EdgeCases()
     {
         // NumPy: log([0, -0, inf, -inf, nan]) = [-inf, -inf, inf, nan, nan]
@@ -429,7 +428,7 @@ public class UnaryOpTests
         Assert.IsTrue(double.IsNaN(result.GetDouble(4)));
     }
 
-    [Test]
+    [TestMethod]
     public void Sqrt_EdgeCases()
     {
         // NumPy: sqrt([0, -0, inf, -inf, nan]) = [0, -0, inf, nan, nan]
@@ -443,7 +442,7 @@ public class UnaryOpTests
         Assert.IsTrue(double.IsNaN(result.GetDouble(4)));
     }
 
-    [Test]
+    [TestMethod]
     public void Sign_EdgeCases()
     {
         // NumPy: sign([0, -0, inf, -inf, nan]) = [0, 0, 1, -1, nan]
@@ -461,7 +460,7 @@ public class UnaryOpTests
 
     #region Float32 Tests
 
-    [Test]
+    [TestMethod]
     public void Sin_Float32()
     {
         var input = np.array(new float[] { 0f, 0.5f, 1f, 1.5f, 2f });
@@ -473,7 +472,7 @@ public class UnaryOpTests
         Assert.IsTrue(Math.Abs(result.GetSingle(2) - 0.8414710164070129f) < 1e-6f);
     }
 
-    [Test]
+    [TestMethod]
     public void Cos_Float32()
     {
         var input = np.array(new float[] { 0f, 0.5f, 1f, 1.5f, 2f });
@@ -484,7 +483,7 @@ public class UnaryOpTests
         Assert.IsTrue(Math.Abs(result.GetSingle(2) - 0.5403022766113281f) < 1e-6f);
     }
 
-    [Test]
+    [TestMethod]
     public void Exp_Float32()
     {
         var input = np.array(new float[] { 0f, 0.5f, 1f, 1.5f, 2f });
@@ -499,7 +498,7 @@ public class UnaryOpTests
 
     #region Sliced Array Tests
 
-    [Test]
+    [TestMethod]
     public void Sin_SlicedArray()
     {
         // Test that unary ops work correctly on sliced/strided arrays
@@ -513,7 +512,7 @@ public class UnaryOpTests
         Assert.IsTrue(Math.Abs(result.GetDouble(2) - 1.0) < Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void Abs_2DArray()
     {
         var input = np.array(new[,] { { -1.0, 2.0 }, { -3.0, 4.0 } });

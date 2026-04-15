@@ -9,21 +9,21 @@ namespace NumSharp.UnitTest.Manipulation
 {
     public class NDArray_unique_Test : TestClass
     {
-        [Test]
+        [TestMethod]
         public void Case1()
         {
             arange(10).unique()
                 .Should().BeShaped(10).And.BeOfValues(0, 1, 2, 3, 4, 5, 6, 7, 8, 9);
         }
 
-        [Test]
+        [TestMethod]
         public void Case2()
         {
             np.repeat(arange(10), 10).reshape(10,10).unique()
                 .Should().BeShaped(10).And.BeOfValues(0, 1, 2, 3, 4, 5, 6, 7, 8, 9);
         }
 
-        [Test]
+        [TestMethod]
         public void Case2_Sliced()
         {
             var arr = np.repeat(arange(10), 10).reshape(10, 10)[":, 0"];
@@ -33,7 +33,7 @@ namespace NumSharp.UnitTest.Manipulation
             Console.WriteLine((string)arr.unique());
         }
 
-        [Test]
+        [TestMethod]
         public void Unique_ReturnsSorted_UnsortedInput()
         {
             // NumPy always returns sorted unique values
@@ -43,7 +43,7 @@ namespace NumSharp.UnitTest.Manipulation
             arr.unique().Should().BeShaped(5).And.BeOfValues(1, 2, 5, 8, 9);
         }
 
-        [Test]
+        [TestMethod]
         public void Unique_ReturnsSorted_FloatInput()
         {
             // Test with floats
@@ -51,7 +51,7 @@ namespace NumSharp.UnitTest.Manipulation
             arr.unique().Should().BeShaped(3).And.BeOfValues(1.41, 2.71, 3.14);
         }
 
-        [Test]
+        [TestMethod]
         public void Unique_ReturnsSorted_NegativeValues()
         {
             // Test with negative values

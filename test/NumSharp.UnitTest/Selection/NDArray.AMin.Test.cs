@@ -8,7 +8,7 @@ namespace NumSharp.UnitTest.Selection
 {
     public class NDArrayAMinTest
     {
-        [Test]
+        [TestMethod]
         public void amin()
         {
             //no axis

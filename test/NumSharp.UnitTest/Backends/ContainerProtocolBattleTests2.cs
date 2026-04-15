@@ -4,9 +4,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using NumSharp;
-using TUnit.Core;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
 
 namespace NumSharp.UnitTest.Backends;
 
@@ -18,7 +15,7 @@ public class ContainerProtocolBattleTests2
 {
     #region __len__ Round 2
 
-    [Test]
+    [TestMethod]
     public async Task Len_LargeArray_ReturnsCorrectLength()
     {
         // Test with large first dimension
@@ -26,21 +23,21 @@ public class ContainerProtocolBattleTests2
         await Assert.That(arr.__len__()).IsEqualTo(10000);
     }
 
-    [Test]
+    [TestMethod]
     public async Task Len_FirstDimensionOne_ReturnsOne()
     {
         var arr = np.zeros(new long[] { 1, 100, 100 });
         await Assert.That(arr.__len__()).IsEqualTo(1);
     }
 
-    [Test]
+    [TestMethod]
     public async Task Len_HighDimensional_5D()
     {
         var arr = np.zeros(new long[] { 2, 3, 4, 5, 6 });
         await Assert.That(arr.__len__()).IsEqualTo(2);
     }
 
-    [Test]
+    [TestMethod]
     public async Task Len_AfterTranspose_ChangesFirstDimension()
     {
         var arr = np.arange(24).reshape(2, 3, 4);
@@ -51,7 +48,7 @@ public class ContainerProtocolBattleTests2
         await Assert.That(transposed.__len__()).IsEqualTo(4);
     }
 
-    [Test]
+    [TestMethod]
     public async Task Len_NegativeStridedSlice()
     {
         var arr = np.arange(10);
@@ -59,7 +56,7 @@ public class ContainerProtocolBattleTests2
         await Assert.That(reversed.__len__()).IsEqualTo(5);
     }
 
-    [Test]
+    [TestMethod]
     public async Task Len_SliceOfSlice()
     {
         var arr = np.arange(100);
@@ -72,7 +69,7 @@ public class ContainerProtocolBattleTests2
 
     #region __getitem__ Round 2 - Long Indexing
 
-    [Test]
+    [TestMethod]
     public async Task GetItem_LongIndex_PositiveWorks()
     {
         var arr = np.arange(10);
@@ -80,7 +77,7 @@ public class ContainerProtocolBattleTests2
         await Assert.That((int)result).IsEqualTo(5);
     }
 
-    [Test]
+    [TestMethod]
     public async Task GetItem_LongIndex_NegativeWorks()
     {
         var arr = np.arange(10);
@@ -88,7 +85,7 @@ public class ContainerProtocolBattleTests2
         await Assert.That((int)result).IsEqualTo(9);
     }
 
-    [Test]
+    [TestMethod]
     public async Task GetItem_LongIndex_2DArray()
     {
         var arr = np.arange(12).reshape(3, 4);
@@ -97,7 +94,7 @@ public class ContainerProtocolBattleTests2
         await Assert.That((int)row[0]).IsEqualTo(8);
     }
 
-    [Test]
+    [TestMethod]
     public async Task GetItem_Ellipsis_Basic()
     {
         var arr = np.arange(24).reshape(2, 3, 4);
@@ -106,7 +103,7 @@ public class ContainerProtocolBattleTests2
         await Assert.That(result.shape).IsEquivalentTo(new long[] { 2, 3 });
     }
 
-    [Test]
+    [TestMethod]
     public async Task GetItem_ComplexSlice_StartStopStep()
     {
         var arr = np.arange(20);
@@ -116,7 +113,7 @@ public class ContainerProtocolBattleTests2
         await Assert.That((int)result[5]).IsEqualTo(17);
     }
 
-    [Test]
+    [TestMethod]
     public async Task GetItem_2D_ColumnSlice()
     {
         var arr = np.arange(12).reshape(3, 4);
@@ -127,7 +124,7 @@ public class ContainerProtocolBattleTests2
         await Assert.That((int)column[2]).IsEqualTo(9);
     }
 
-    [Test]
+    [TestMethod]
     public async Task GetItem_2D_SubMatrix()
     {
         var arr = np.arange(20).reshape(4, 5);
@@ -136,7 +133,7 @@ public class ContainerProtocolBattleTests2
         await Assert.That((int)submat[0, 0]).IsEqualTo(7);
     }
 
-    [Test]
+    [TestMethod]
     public async Task GetItem_ViewChaining_PreservesData()
     {
         var original = np.arange(100).reshape(10, 10);
@@ -157,7 +154,7 @@ public class ContainerProtocolBattleTests2
 
     #region __setitem__ Round 2
 
-    [Test]
+    [TestMethod]
     public async Task SetItem_LongIndex_Works()
     {
         var arr = np.array(new[] { 1, 2, 3, 4, 5 });
@@ -165,7 +162,7 @@ public class ContainerProtocolBattleTests2
         await Assert.That((int)arr[3]).IsEqualTo(99);
     }
 
-    [Test]
+    [TestMethod]
     public async Task SetItem_NegativeLongIndex_Works()
     {
         var arr = np.array(new[] { 1, 2, 3, 4, 5 });
@@ -173,7 +170,7 @@ public class ContainerProtocolBattleTests2
         await Assert.That((int)arr[3]).IsEqualTo(88);
     }
 
-    [Test]
+    [TestMethod]
     public async Task SetItem_BroadcastScalarTo2D()
     {
         var arr = np.zeros(new long[] { 3, 4 }, np.int32);
@@ -181,7 +178,7 @@ public class ContainerProtocolBattleTests2
         await Assert.That(np.all(arr == 5)).IsTrue();
     }
 
-    [Test]
+    [TestMethod]
     [OpenBugs] // BUG: NumPy broadcasts row to all rows, NumSharp doesn't
     public async Task SetItem_BroadcastRowTo2D()
     {
@@ -199,7 +196,7 @@ public class ContainerProtocolBattleTests2
         }
     }
 
-    [Test]
+    [TestMethod]
     public async Task SetItem_SliceToSlice()
     {
         var arr = np.zeros(new long[] { 10 }, np.int32);
@@ -215,7 +212,7 @@ public class ContainerProtocolBattleTests2
         await Assert.That((int)arr[5]).IsEqualTo(0);
     }
 
-    [Test]
+    [TestMethod]
     public async Task SetItem_StridedSlice()
     {
         var arr = np.zeros(new long[] { 10 }, np.int32);
@@ -227,7 +224,7 @@ public class ContainerProtocolBattleTests2
         await Assert.That((int)arr[3]).IsEqualTo(0);
     }
 
-    [Test]
+    [TestMethod]
     public async Task SetItem_TypePromotion_IntToDouble()
     {
         var arr = np.array(new[] { 1.5, 2.5, 3.5 });
@@ -235,7 +232,7 @@ public class ContainerProtocolBattleTests2
         await Assert.That((double)arr[1]).IsEqualTo(10.0);
     }
 
-    [Test]
+    [TestMethod]
     [Misaligned] // NumPy truncates (2.9 -> 2), NumSharp rounds (2.9 -> 3)
     public async Task SetItem_TypePromotion_DoubleToInt_Rounds()
     {
@@ -246,7 +243,7 @@ public class ContainerProtocolBattleTests2
         await Assert.That((int)arr[1]).IsEqualTo(3); // NumSharp rounds
     }
 
-    [Test]
+    [TestMethod]
     public async Task SetItem_ViewModifiesOriginal()
     {
         var original = np.arange(10);
@@ -261,7 +258,7 @@ public class ContainerProtocolBattleTests2
 
     #region __contains__ Round 2
 
-    [Test]
+    [TestMethod]
     public async Task Contains_NaN_InFloatArray_ReturnsFalse()
     {
         // NaN != NaN in IEEE 754
@@ -269,14 +266,14 @@ public class ContainerProtocolBattleTests2
         await Assert.That(arr.Contains(float.NaN)).IsFalse();
     }
 
-    [Test]
+    [TestMethod]
     public async Task Contains_NaN_DoubleArray_ReturnsFalse()
     {
         var arr = np.array(new[] { 1.0, double.NaN, 3.0 });
         await Assert.That(arr.Contains(double.NaN)).IsFalse();
     }
 
-    [Test]
+    [TestMethod]
     public async Task Contains_MaxValue_Int32()
     {
         var arr = np.array(new[] { int.MinValue, 0, int.MaxValue });
@@ -284,7 +281,7 @@ public class ContainerProtocolBattleTests2
         await Assert.That(arr.Contains(int.MinValue)).IsTrue();
     }
 
-    [Test]
+    [TestMethod]
     public async Task Contains_MaxValue_Int64()
     {
         var arr = np.array(new[] { long.MinValue, 0L, long.MaxValue });
@@ -292,28 +289,28 @@ public class ContainerProtocolBattleTests2
         await Assert.That(arr.Contains(long.MinValue)).IsTrue();
     }
 
-    [Test]
+    [TestMethod]
     public async Task Contains_TypePromotion_ByteInInt32Array()
     {
         var arr = np.array(new[] { 1, 2, 3, 4, 5 });
         await Assert.That(arr.Contains((byte)3)).IsTrue();
     }
 
-    [Test]
+    [TestMethod]
     public async Task Contains_TypePromotion_Int32InInt64Array()
     {
         var arr = np.array(new long[] { 1, 2, 3, 4, 5 });
         await Assert.That(arr.Contains(3)).IsTrue();
     }
 
-    [Test]
+    [TestMethod]
     public async Task Contains_ZeroInMixedSignArray()
     {
         var arr = np.array(new[] { -5, -3, 0, 3, 5 });
         await Assert.That(arr.Contains(0)).IsTrue();
     }
 
-    [Test]
+    [TestMethod]
     public async Task Contains_SpecialFloats()
     {
         var arr = np.array(new[] {
@@ -330,7 +327,7 @@ public class ContainerProtocolBattleTests2
         await Assert.That(arr.Contains(double.MaxValue)).IsTrue();
     }
 
-    [Test]
+    [TestMethod]
     public async Task Contains_TransposedArray()
     {
         var arr = np.arange(12).reshape(3, 4).T;
@@ -338,7 +335,7 @@ public class ContainerProtocolBattleTests2
         await Assert.That(arr.Contains(100)).IsFalse();
     }
 
-    [Test]
+    [TestMethod]
     public async Task Contains_ReversedArray()
     {
         var arr = np.arange(10)["::-1"];
@@ -350,7 +347,7 @@ public class ContainerProtocolBattleTests2
 
     #region __iter__ Round 2
 
-    [Test]
+    [TestMethod]
     public async Task Iter_ViewIteration_CorrectValues()
     {
         var arr = np.arange(20).reshape(4, 5);
@@ -367,7 +364,7 @@ public class ContainerProtocolBattleTests2
         await Assert.That((int)rows[1][0]).IsEqualTo(10);
     }
 
-    [Test]
+    [TestMethod]
     public async Task Iter_NestedIteration_3DArray()
     {
         var arr = np.arange(24).reshape(2, 3, 4);
@@ -389,7 +386,7 @@ public class ContainerProtocolBattleTests2
         await Assert.That(allValues[23]).IsEqualTo(23);
     }
 
-    [Test]
+    [TestMethod]
     public async Task Iter_MultipleEnumerators_Independent()
     {
         var arr = np.array(new[] { 1, 2, 3 });
@@ -405,7 +402,7 @@ public class ContainerProtocolBattleTests2
         await Assert.That(Convert.ToInt32(enum2.Current)).IsEqualTo(1);
     }
 
-    [Test]
+    [TestMethod]
     public async Task Iter_ResetEnumerator_ThrowsNotSupported()
     {
         // NDIterator does not support Reset - document this behavior
@@ -420,7 +417,7 @@ public class ContainerProtocolBattleTests2
         await Assert.That(() => enumerator.Reset()).Throws<NotSupportedException>();
     }
 
-    [Test]
+    [TestMethod]
     public async Task Iter_TransposedArray_CorrectOrder()
     {
         var arr = np.arange(6).reshape(2, 3).T; // Shape (3, 2)
@@ -437,7 +434,7 @@ public class ContainerProtocolBattleTests2
         await Assert.That((int)rows[0][1]).IsEqualTo(3);
     }
 
-    [Test]
+    [TestMethod]
     public async Task Iter_SlicedArray_CorrectElements()
     {
         var arr = np.arange(20);
@@ -452,7 +449,7 @@ public class ContainerProtocolBattleTests2
         await Assert.That(values).IsEquivalentTo(new[] { 5, 6, 7, 8, 9 });
     }
 
-    [Test]
+    [TestMethod]
     public async Task Iter_StridedArray_CorrectElements()
     {
         var arr = np.arange(10);
@@ -467,7 +464,7 @@ public class ContainerProtocolBattleTests2
         await Assert.That(values).IsEquivalentTo(new[] { 1, 3, 5, 7, 9 });
     }
 
-    [Test]
+    [TestMethod]
     public async Task Iter_ReversedArray_CorrectOrder()
     {
         var arr = np.arange(5)["::-1"]; // [4, 3, 2, 1, 0]
@@ -481,7 +478,7 @@ public class ContainerProtocolBattleTests2
         await Assert.That(values).IsEquivalentTo(new[] { 4, 3, 2, 1, 0 });
     }
 
-    [Test]
+    [TestMethod]
     public async Task Iter_BroadcastArray_IteratesOverBroadcastDimension()
     {
         var arr = np.array(new[] { 1, 2, 3 });
@@ -506,7 +503,7 @@ public class ContainerProtocolBattleTests2
 
     #region Edge Cases and Error Conditions
 
-    [Test]
+    [TestMethod]
     public async Task GetItem_EmptySlice_ReturnsEmpty()
     {
         var arr = np.arange(10);
@@ -514,7 +511,7 @@ public class ContainerProtocolBattleTests2
         await Assert.That(empty.size).IsEqualTo(0);
     }
 
-    [Test]
+    [TestMethod]
     public async Task GetItem_OutOfBoundsStart_ClampsToZero()
     {
         var arr = np.arange(5);
@@ -522,7 +519,7 @@ public class ContainerProtocolBattleTests2
         await Assert.That(result.size).IsEqualTo(3);
     }
 
-    [Test]
+    [TestMethod]
     public async Task GetItem_OutOfBoundsStop_ClampsToEnd()
     {
         var arr = np.arange(5);
@@ -530,14 +527,14 @@ public class ContainerProtocolBattleTests2
         await Assert.That(result.size).IsEqualTo(3);
     }
 
-    [Test]
+    [TestMethod]
     public async Task Len_EmptyHighDimensional()
     {
         var arr = np.zeros(new long[] { 0, 5, 10 });
         await Assert.That(arr.__len__()).IsEqualTo(0);
     }
 
-    [Test]
+    [TestMethod]
     public async Task Contains_WrongType_ReturnsFalse()
     {
         var arr = np.array(new[] { 1, 2, 3 });
@@ -545,7 +542,7 @@ public class ContainerProtocolBattleTests2
         await Assert.That(arr.Contains("hello")).IsFalse();
     }
 
-    [Test]
+    [TestMethod]
     public async Task Iter_EmptyDimension_NoIterations()
     {
         var arr = np.zeros(new long[] { 0, 5 });
@@ -557,7 +554,7 @@ public class ContainerProtocolBattleTests2
         await Assert.That(count).IsEqualTo(0);
     }
 
-    [Test]
+    [TestMethod]
     public async Task Hash_DifferentArrays_AllThrow()
     {
         var arrays = new[]
@@ -578,7 +575,7 @@ public class ContainerProtocolBattleTests2
 
     #region Python API Naming
 
-    [Test]
+    [TestMethod]
     public async Task PythonAPI_AllMethodsAccessible()
     {
         var arr = np.arange(12).reshape(3, 4);
@@ -595,7 +592,7 @@ public class ContainerProtocolBattleTests2
         await Assert.That(iter).IsNotNull();
     }
 
-    [Test]
+    [TestMethod]
     public async Task PythonAPI_SetItem_Works()
     {
         var arr = np.zeros(new long[] { 3, 3 }, np.int32);
@@ -606,7 +603,7 @@ public class ContainerProtocolBattleTests2
         await Assert.That((int)arr[1, 2]).IsEqualTo(5);
     }
 
-    [Test]
+    [TestMethod]
     public async Task PythonAPI_Hash_Throws()
     {
         var arr = np.array(new[] { 1, 2, 3 });

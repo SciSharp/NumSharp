@@ -9,7 +9,7 @@ namespace NumSharp.UnitTest.Creation
 {
     public class np_linspace_tests
     {
-        [Test]
+        [TestMethod]
         public void FromNumpyDocs()
         {
             NDArray nd;

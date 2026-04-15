@@ -10,7 +10,7 @@ namespace NumSharp.UnitTest.RandomSampling;
 /// </summary>
 public class RandomLogisticTests : TestClass
 {
-    [Test]
+    [TestMethod]
     public void Logistic_DefaultParameters_ReturnsScalar()
     {
         var rng = np.random.RandomState(42);
@@ -19,7 +19,7 @@ public class RandomLogisticTests : TestClass
         Assert.AreEqual(typeof(double), result.dtype);
     }
 
-    [Test]
+    [TestMethod]
     public void Logistic_ArraySize_ReturnsCorrectShape()
     {
         var rng = np.random.RandomState(42);
@@ -28,7 +28,7 @@ public class RandomLogisticTests : TestClass
         Assert.AreEqual(typeof(double), result.dtype);
     }
 
-    [Test]
+    [TestMethod]
     public void Logistic_MultiDimensionalSize_ReturnsCorrectShape()
     {
         var rng = np.random.RandomState(42);
@@ -36,7 +36,7 @@ public class RandomLogisticTests : TestClass
         result.Should().BeShaped(2, 3);
     }
 
-    [Test]
+    [TestMethod]
     public void Logistic_ShapeSize_ReturnsCorrectShape()
     {
         var rng = np.random.RandomState(42);
@@ -44,7 +44,7 @@ public class RandomLogisticTests : TestClass
         result.Should().BeShaped(3, 4);
     }
 
-    [Test]
+    [TestMethod]
     public void Logistic_MeanConvergesToLoc()
     {
         // Mean of logistic distribution = loc
@@ -57,7 +57,7 @@ public class RandomLogisticTests : TestClass
             $"Mean {mean} should be close to 0 (loc=0)");
     }
 
-    [Test]
+    [TestMethod]
     public void Logistic_StdConvergesToExpected()
     {
         // Standard deviation = scale * pi / sqrt(3) ≈ 1.814 for scale=1
@@ -72,7 +72,7 @@ public class RandomLogisticTests : TestClass
             $"Std {std} should be close to {expectedStd}");
     }
 
-    [Test]
+    [TestMethod]
     public void Logistic_WithLocAndScale()
     {
         // Mean = loc = 5
@@ -84,7 +84,7 @@ public class RandomLogisticTests : TestClass
             $"Mean {mean} should be close to 5 (loc=5)");
     }
 
-    [Test]
+    [TestMethod]
     public void Logistic_ScaleZero_ReturnsLoc()
     {
         // When scale=0, all values should equal loc
@@ -98,19 +98,19 @@ public class RandomLogisticTests : TestClass
         }
     }
 
-    [Test]
+    [TestMethod]
     public void Logistic_NegativeScale_ThrowsArgumentException()
     {
         Assert.ThrowsException<ArgumentException>(() => np.random.logistic(0, -1, 5));
     }
 
-    [Test]
+    [TestMethod]
     public void Logistic_DefaultScalar_NegativeScale_ThrowsArgumentException()
     {
         Assert.ThrowsException<ArgumentException>(() => np.random.logistic(0, -1));
     }
 
-    [Test]
+    [TestMethod]
     public void Logistic_Reproducibility()
     {
         var rng1 = np.random.RandomState(42);
@@ -126,7 +126,7 @@ public class RandomLogisticTests : TestClass
         }
     }
 
-    [Test]
+    [TestMethod]
     public void Logistic_CanProduceNegativeValues()
     {
         var rng = np.random.RandomState(42);
@@ -145,7 +145,7 @@ public class RandomLogisticTests : TestClass
         Assert.IsTrue(hasPositive, "Logistic distribution should produce positive values");
     }
 
-    [Test]
+    [TestMethod]
     public void Logistic_LargerScaleProducesLargerVariance()
     {
         var rng = np.random.RandomState(42);

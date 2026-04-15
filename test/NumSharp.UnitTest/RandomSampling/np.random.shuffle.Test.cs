@@ -11,7 +11,7 @@ namespace NumSharp.UnitTest.RandomSampling
 {
     public class NpRandomShuffleTest : TestClass
     {
-        [Test]
+        [TestMethod]
         public void Base1DTest()
         {
             // NumPy-aligned: shuffle reorders elements but preserves all values
@@ -28,7 +28,7 @@ namespace NumSharp.UnitTest.RandomSampling
             nd.Shape.Should().BeShaped(10);
         }
 
-        [Test]
+        [TestMethod]
         public void Base4DTest()
         {
             // NumPy-aligned: shuffle along axis 0 (first dimension)

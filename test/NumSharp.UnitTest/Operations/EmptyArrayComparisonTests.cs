@@ -2,9 +2,6 @@ using System;
 using System.Linq;
 using System.Threading.Tasks;
 using NumSharp;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-using TUnit.Core;
 
 namespace NumSharp.UnitTest.Operations;
 
@@ -22,7 +19,7 @@ namespace NumSharp.UnitTest.Operations;
 /// </summary>
 public class EmptyArrayComparisonTests
 {
-    [Test]
+    [TestMethod]
     public async Task EmptyArray_Equals_Scalar_ReturnsEmptyArray()
     {
         // NumPy: (np.array([], dtype=int) == 0).shape returns (0,)
@@ -34,7 +31,7 @@ public class EmptyArrayComparisonTests
         await Assert.That(result.dtype).IsEqualTo(typeof(bool));
     }
 
-    [Test]
+    [TestMethod]
     public async Task EmptyArray_NotEquals_Scalar_ReturnsEmptyArray()
     {
         // NumPy: (np.array([], dtype=int) != 0).shape returns (0,)
@@ -46,7 +43,7 @@ public class EmptyArrayComparisonTests
         await Assert.That(result.dtype).IsEqualTo(typeof(bool));
     }
 
-    [Test]
+    [TestMethod]
     public async Task EmptyArray_GreaterThan_Scalar_ReturnsEmptyArray()
     {
         // NumPy: (np.array([], dtype=int) > 0).shape returns (0,)
@@ -58,7 +55,7 @@ public class EmptyArrayComparisonTests
         await Assert.That(result.dtype).IsEqualTo(typeof(bool));
     }
 
-    [Test]
+    [TestMethod]
     public async Task EmptyArray_GreaterThanOrEqual_Scalar_ReturnsEmptyArray()
     {
         // NumPy: (np.array([], dtype=int) >= 0).shape returns (0,)
@@ -70,7 +67,7 @@ public class EmptyArrayComparisonTests
         await Assert.That(result.dtype).IsEqualTo(typeof(bool));
     }
 
-    [Test]
+    [TestMethod]
     public async Task EmptyArray_LessThan_Scalar_ReturnsEmptyArray()
     {
         // NumPy: (np.array([], dtype=int) < 0).shape returns (0,)
@@ -82,7 +79,7 @@ public class EmptyArrayComparisonTests
         await Assert.That(result.dtype).IsEqualTo(typeof(bool));
     }
 
-    [Test]
+    [TestMethod]
     public async Task EmptyArray_LessThanOrEqual_Scalar_ReturnsEmptyArray()
     {
         // NumPy: (np.array([], dtype=int) <= 0).shape returns (0,)
@@ -94,7 +91,7 @@ public class EmptyArrayComparisonTests
         await Assert.That(result.dtype).IsEqualTo(typeof(bool));
     }
 
-    [Test]
+    [TestMethod]
     public async Task Empty2DArray_Equals_Scalar_PreservesShape()
     {
         // NumPy: (np.zeros((0,3), dtype=int) == 0).shape returns (0, 3)
@@ -106,7 +103,7 @@ public class EmptyArrayComparisonTests
         await Assert.That(result.dtype).IsEqualTo(typeof(bool));
     }
 
-    [Test]
+    [TestMethod]
     public async Task Empty2DArray_Reverse_Equals_Scalar_PreservesShape()
     {
         // NumPy: (np.zeros((3,0), dtype=int) == 0).shape returns (3, 0)
@@ -118,7 +115,7 @@ public class EmptyArrayComparisonTests
         await Assert.That(result.dtype).IsEqualTo(typeof(bool));
     }
 
-    [Test]
+    [TestMethod]
     public async Task EmptyFloatArray_Equals_Scalar_ReturnsEmptyArray()
     {
         // NumPy: (np.array([], dtype=float) == 0.0).shape returns (0,)
@@ -130,7 +127,7 @@ public class EmptyArrayComparisonTests
         await Assert.That(result.dtype).IsEqualTo(typeof(bool));
     }
 
-    [Test]
+    [TestMethod]
     public async Task EmptyArray_ArrayEquals_Preserves_Shape()
     {
         // Compare two empty arrays

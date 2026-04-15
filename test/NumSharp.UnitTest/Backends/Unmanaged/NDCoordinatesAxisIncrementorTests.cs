@@ -9,7 +9,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
 {
     public class NDCoordinatesAxisIncrementorTests : TestClass
     {
-        [Test]
+        [TestMethod]
         public void Case1_Axis0()
         {
             var shape = new Shape(2, 3, 3);
@@ -28,7 +28,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             sh.Next().Should().BeNull();
         }
 
-        [Test]
+        [TestMethod]
         public void Case1_Axis1()
         {
             var shape = new Shape(2, 3, 3);
@@ -44,7 +44,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             sh.Next().Should().BeNull();
         }
 
-        [Test]
+        [TestMethod]
         public void Case1_Axis2()
         {
             var shape = new Shape(2, 3, 3);
@@ -60,7 +60,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             sh.Next().Should().BeNull();
         }
 
-        [Test]
+        [TestMethod]
         public void Case2_Axis2()
         {
             var shape = new Shape(1, 2, 1, 1, 3);
@@ -76,7 +76,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             sh.Next().Should().BeNull();
         }
 
-        [Test]
+        [TestMethod]
         public void Case2_Axis3()
         {
             var shape = new Shape(1, 2, 1, 1, 3);
@@ -92,7 +92,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             sh.Next().Should().BeNull();
         }
 
-        [Test]
+        [TestMethod]
         public void Case2_Axis4()
         {
             var shape = new Shape(1, 2, 1, 1, 3);
@@ -104,28 +104,28 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             sh.Next().Should().BeNull();
         }
 
-        [Test]
+        [TestMethod]
         public void Case3_Empty()
         {
             var shape = new Shape(0);
             new Action(() => new NDCoordinatesAxisIncrementor(ref shape, 0)).Should().Throw<InvalidOperationException>();
         }
 
-        [Test]
+        [TestMethod]
         public void Case4()
         {
             var shape = new Shape(1);
             new Action(() => new NDCoordinatesAxisIncrementor(ref shape, 0)).Should().Throw<InvalidOperationException>();
         }
 
-        [Test]
+        [TestMethod]
         public void Case5()
         {
             var shape = new Shape(2);
             new Action(() => new NDCoordinatesAxisIncrementor(ref shape, 0)).Should().Throw<InvalidOperationException>();
         }
 
-        [Test]
+        [TestMethod]
         public void Case6_Scalar()
         {
             var shape = Shape.Scalar;

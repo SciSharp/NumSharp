@@ -3,7 +3,6 @@ using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp.Backends;
 using NumSharp.UnitTest.Utilities;
-using TUnit.Core;
 
 namespace NumSharp.UnitTest.NumPyPortedTests
 {
@@ -15,7 +14,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
     {
         #region Basic Tests
 
-        [Test]
+        [TestMethod]
         public void Modf_PositiveValues()
         {
             // NumPy: modf([1.5, 2.7]) = ([0.5, 0.7], [1., 2.])
@@ -31,7 +30,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             Assert.AreEqual(2.0, intgData[1]);
         }
 
-        [Test]
+        [TestMethod]
         public void Modf_NegativeValues()
         {
             // NumPy: modf(-3.2) = (-0.2, -3.)
@@ -45,7 +44,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             Assert.AreEqual(-3.0, intgData[0]);
         }
 
-        [Test]
+        [TestMethod]
         public void Modf_MixedValues()
         {
             // NumPy: modf([1.5, 2.7, -3.2, 0.0])
@@ -70,7 +69,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
 
         #region Zero Tests
 
-        [Test]
+        [TestMethod]
         public void Modf_PositiveZero()
         {
             var x = np.array(new double[] { 0.0 });
@@ -80,7 +79,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             Assert.AreEqual(0.0, intg.GetData<double>()[0]);
         }
 
-        [Test]
+        [TestMethod]
         public void Modf_NegativeZero()
         {
             // NumPy: modf(-0.0) = (-0.0, -0.0)
@@ -99,7 +98,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
 
         #region Special Values (Inf, NaN)
 
-        [Test]
+        [TestMethod]
         public void Modf_PositiveInfinity()
         {
             // NumPy: modf(inf) = (0.0, inf)
@@ -110,7 +109,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             Assert.IsTrue(double.IsPositiveInfinity(intg.GetData<double>()[0]));
         }
 
-        [Test]
+        [TestMethod]
         public void Modf_NegativeInfinity()
         {
             // NumPy: modf(-inf) = (-0.0, -inf)
@@ -122,7 +121,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             Assert.IsTrue(double.IsNegativeInfinity(intg.GetData<double>()[0]));
         }
 
-        [Test]
+        [TestMethod]
         public void Modf_NaN()
         {
             // NumPy: modf(nan) = (nan, nan)
@@ -133,7 +132,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             Assert.IsTrue(double.IsNaN(intg.GetData<double>()[0]));
         }
 
-        [Test]
+        [TestMethod]
         public void Modf_MixedSpecialValues()
         {
             // NumPy: modf([inf, -inf, nan])
@@ -157,7 +156,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
 
         #region Dtype Tests
 
-        [Test]
+        [TestMethod]
         public void Modf_Float32_PreservesDtype()
         {
             var x = np.array(new float[] { 1.5f, 2.7f });
@@ -167,7 +166,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
             Assert.AreEqual(np.float32, intg.dtype);
         }
 
-        [Test]
+        [TestMethod]
         public void Modf_Float64_PreservesDtype()
         {
             var x = np.array(new double[] { 1.5, 2.7 });
@@ -181,7 +180,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
 
         #region Large Values
 
-        [Test]
+        [TestMethod]
         public void Modf_LargeValues()
         {
             // NumPy: modf([1e10 + 0.5, -1e10 - 0.5])
@@ -201,7 +200,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
 
         #region Multi-dimensional Arrays
 
-        [Test]
+        [TestMethod]
         public void Modf_2DArray()
         {
             // NumPy: modf([[1.5, 2.7], [3.1, 4.9]])
@@ -228,7 +227,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
 
         #region Whole Numbers
 
-        [Test]
+        [TestMethod]
         public void Modf_WholeNumbers()
         {
             // Whole numbers should have fractional part = 0
@@ -249,7 +248,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
 
         #region Empty Array
 
-        [Test]
+        [TestMethod]
         public void Modf_EmptyArray()
         {
             var x = np.array(new double[0]);
@@ -263,7 +262,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
 
         #region Single Element
 
-        [Test]
+        [TestMethod]
         public void Modf_SingleElement()
         {
             var x = np.array(new double[] { 3.14159 });
@@ -277,7 +276,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
 
         #region Very Small Fractional Parts
 
-        [Test]
+        [TestMethod]
         public void Modf_VerySmallFraction()
         {
             // Values very close to integers

@@ -19,7 +19,7 @@ namespace NumSharp.UnitTest.Maths
         /// Basic cumprod test with double array.
         /// NumPy: np.cumprod([1, 2, 3, 4, 5]) = [1, 2, 6, 24, 120]
         /// </summary>
-        [Test]
+        [TestMethod]
         public void CumprodBasicDouble()
         {
             NDArray arr = new double[] { 1, 2, 3, 4, 5 };
@@ -33,7 +33,7 @@ namespace NumSharp.UnitTest.Maths
         /// Cumprod with zeros - product becomes 0 and stays 0.
         /// NumPy: np.cumprod([1, 2, 0, 4, 5]) = [1, 2, 0, 0, 0]
         /// </summary>
-        [Test]
+        [TestMethod]
         public void CumprodWithZero()
         {
             NDArray arr = new double[] { 1, 2, 0, 4, 5 };
@@ -47,7 +47,7 @@ namespace NumSharp.UnitTest.Maths
         /// Cumprod with negative numbers.
         /// NumPy: np.cumprod([1, -2, 3, -4]) = [1, -2, -6, 24]
         /// </summary>
-        [Test]
+        [TestMethod]
         public void CumprodWithNegatives()
         {
             NDArray arr = new double[] { 1, -2, 3, -4 };
@@ -62,7 +62,7 @@ namespace NumSharp.UnitTest.Maths
         /// NumPy: np.cumprod([[1, 2, 3], [4, 5, 6]]) = [1, 2, 6, 24, 120, 720]
         /// For int32 input, NumPy 2.x returns int64.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Cumprod2dFlattened()
         {
             NDArray arr = new int[,] { { 1, 2, 3 }, { 4, 5, 6 } };
@@ -78,7 +78,7 @@ namespace NumSharp.UnitTest.Maths
         /// NumPy: np.cumprod([[1, 2, 3], [4, 5, 6]], axis=0) = [[1, 2, 3], [4, 10, 18]]
         /// For int32 input, NumPy 2.x returns int64.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Cumprod2dAxis0()
         {
             NDArray arr = new int[,] { { 1, 2, 3 }, { 4, 5, 6 } };
@@ -94,7 +94,7 @@ namespace NumSharp.UnitTest.Maths
         /// NumPy: np.cumprod([[1, 2, 3], [4, 5, 6]], axis=1) = [[1, 2, 6], [4, 20, 120]]
         /// For int32 input, NumPy 2.x returns int64.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Cumprod2dAxis1()
         {
             NDArray arr = new int[,] { { 1, 2, 3 }, { 4, 5, 6 } };
@@ -109,7 +109,7 @@ namespace NumSharp.UnitTest.Maths
         /// Cumprod with single element.
         /// NumPy: np.cumprod([42]) = [42]
         /// </summary>
-        [Test]
+        [TestMethod]
         public void CumprodSingleElement()
         {
             NDArray arr = new double[] { 42 };
@@ -123,7 +123,7 @@ namespace NumSharp.UnitTest.Maths
         /// Cumprod with all ones.
         /// NumPy: np.cumprod([1, 1, 1, 1]) = [1, 1, 1, 1]
         /// </summary>
-        [Test]
+        [TestMethod]
         public void CumprodAllOnes()
         {
             NDArray arr = new double[] { 1, 1, 1, 1 };
@@ -136,7 +136,7 @@ namespace NumSharp.UnitTest.Maths
         /// <summary>
         /// Cumprod with float32 type.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void CumprodFloat32()
         {
             NDArray arr = np.array(new float[] { 1f, 2f, 3f, 4f });

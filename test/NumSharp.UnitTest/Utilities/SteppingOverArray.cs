@@ -9,7 +9,7 @@ namespace NumSharp.UnitTest.Utilities
 {
     public class SteppingOverArray : TestClass
     {
-        [Test]
+        [TestMethod]
         public void Stepping()
         {
             //>>> a =[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]

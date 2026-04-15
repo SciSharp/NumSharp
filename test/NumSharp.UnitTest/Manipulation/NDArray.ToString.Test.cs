@@ -9,7 +9,7 @@ namespace NumSharp.UnitTest.Manipulation
 {
     public class NdArrayToStringTest : TestClass
     {
-        [Test]
+        [TestMethod]
         public void ReShape()
         {
             var nd = np.arange(6);

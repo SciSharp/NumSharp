@@ -11,7 +11,7 @@ namespace NumSharp.UnitTest.LinearAlgebra;
 /// </summary>
 public class OuterBattleTests : TestClass
 {
-    [Test]
+    [TestMethod]
     public void Outer_1D_1D()
     {
         // NumPy: outer([1,2,3], [4,5]) = [[4,5],[8,10],[12,15]]
@@ -28,7 +28,7 @@ public class OuterBattleTests : TestClass
         Assert.AreEqual(15, (int)result[2, 1]);
     }
 
-    [Test]
+    [TestMethod]
     public void Outer_DifferentSizes()
     {
         // NumPy: outer(arange(5), arange(3)) has shape (5,3)
@@ -47,7 +47,7 @@ public class OuterBattleTests : TestClass
         Assert.AreEqual(8, (int)result[4, 2]);
     }
 
-    [Test]
+    [TestMethod]
     public void Outer_2D_Flattened()
     {
         // NumPy flattens 2D inputs: outer([[1,2],[3,4]], [[5,6],[7,8]]) has shape (4,4)
@@ -62,7 +62,7 @@ public class OuterBattleTests : TestClass
         Assert.AreEqual(32, (int)result[3, 3]);
     }
 
-    [Test]
+    [TestMethod]
     public void Outer_WithFloats()
     {
         var a = np.array(new[] { 1.0, 2.0, 3.0 });
@@ -75,7 +75,7 @@ public class OuterBattleTests : TestClass
         Assert.AreEqual(4.5, (double)result[2, 1], 1e-10);  // 3.0 * 1.5
     }
 
-    [Test]
+    [TestMethod]
     public void Outer_SingleElement()
     {
         var a = np.array(new[] { 5 });

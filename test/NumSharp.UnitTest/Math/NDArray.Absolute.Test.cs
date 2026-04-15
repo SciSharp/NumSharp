@@ -8,7 +8,7 @@ namespace NumSharp.UnitTest.Extensions
 {
     public class NDArrayAbsoluteTest
     {
-        [Test]
+        [TestMethod]
         public void absolute()
         {
             //2D - np.abs now correctly preserves int dtype (NumPy-aligned)

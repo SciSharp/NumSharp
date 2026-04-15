@@ -20,7 +20,7 @@ namespace NumSharp.UnitTest.Backends
         /// NumPy: a = np.arange(10); a.base is None
         /// Original array owns its data.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Base_OriginalArray_IsNull()
         {
             var a = np.arange(10);
@@ -31,7 +31,7 @@ namespace NumSharp.UnitTest.Backends
         /// NumPy: b = a[2:5]; b.base is a
         /// Slice creates a view pointing to original.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Base_Slice_PointsToOriginal()
         {
             var a = np.arange(10);
@@ -45,7 +45,7 @@ namespace NumSharp.UnitTest.Backends
         /// NumPy: c = b[1:2]; c.base is a (chains to ORIGINAL, not b)
         /// Slice of slice chains to ultimate owner.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Base_SliceOfSlice_ChainsToOriginal()
         {
             var a = np.arange(10);
@@ -65,7 +65,7 @@ namespace NumSharp.UnitTest.Backends
         /// NumPy: d = a.copy(); d.base is None
         /// Copy owns its data.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Base_Copy_IsNull()
         {
             var a = np.arange(10);
@@ -78,7 +78,7 @@ namespace NumSharp.UnitTest.Backends
         /// NumPy: d = a.reshape(2,5); d.base is a
         /// Reshape returns view with base.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Base_Reshape_PointsToOriginal()
         {
             var a = np.arange(10);
@@ -92,7 +92,7 @@ namespace NumSharp.UnitTest.Backends
         /// NumPy: f = e.T; f.base is a (still chains to original)
         /// Transpose of reshape chains to original.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Base_TransposeOfReshape_ChainsToOriginal()
         {
             var a = np.arange(10);
@@ -107,7 +107,7 @@ namespace NumSharp.UnitTest.Backends
         /// NumPy: g = np.broadcast_to(a, (3, 10)); g.base is a
         /// Broadcast creates view with base.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Base_Broadcast_PointsToOriginal()
         {
             var a = np.arange(10);
@@ -121,7 +121,7 @@ namespace NumSharp.UnitTest.Backends
         /// NumPy: h = np.expand_dims(a, 0); h.base is a
         /// expand_dims creates view with base.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Base_ExpandDims_PointsToOriginal()
         {
             var a = np.arange(10);
@@ -135,7 +135,7 @@ namespace NumSharp.UnitTest.Backends
         /// NumPy: a[...].base is a
         /// Ellipsis subscript creates a view.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Base_EllipsisSubscript_PointsToOriginal()
         {
             var a = np.arange(10);
@@ -149,7 +149,7 @@ namespace NumSharp.UnitTest.Backends
         /// NumPy: a[:].base is a
         /// Full slice creates a view.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Base_FullSlice_PointsToOriginal()
         {
             var a = np.arange(10);
@@ -163,7 +163,7 @@ namespace NumSharp.UnitTest.Backends
         /// NumPy: a.view().base is a
         /// view() creates a view with base.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Base_View_PointsToOriginal()
         {
             var a = np.arange(10);
@@ -177,7 +177,7 @@ namespace NumSharp.UnitTest.Backends
         /// NumPy: a.flatten().base is None
         /// flatten() creates a copy.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Base_Flatten_IsNull()
         {
             var a = np.arange(12).reshape(3, 4);
@@ -190,7 +190,7 @@ namespace NumSharp.UnitTest.Backends
         /// NumPy: a.ravel().base is a (when contiguous)
         /// ravel() returns view when possible.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Base_Ravel_Contiguous_PointsToOriginal()
         {
             // Start with an owned array (not a view)
@@ -213,7 +213,7 @@ namespace NumSharp.UnitTest.Backends
         /// <summary>
         /// Test a chain of operations all pointing to original.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Base_ChainedOperations_AllPointToOriginal()
         {
             var original = np.arange(24);
@@ -232,7 +232,7 @@ namespace NumSharp.UnitTest.Backends
         /// <summary>
         /// Test that copies break the chain.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Base_CopyBreaksChain()
         {
             var a = np.arange(10);
@@ -259,7 +259,7 @@ namespace NumSharp.UnitTest.Backends
         /// Verify that views keep the original data alive.
         /// This tests that the shared memory isn't prematurely freed.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Base_ViewKeepsDataAlive()
         {
             NDArray view;
@@ -284,7 +284,7 @@ namespace NumSharp.UnitTest.Backends
         /// <summary>
         /// Verify nested views keep data alive through the chain.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Base_NestedViews_KeepDataAlive()
         {
             NDArray deepView;
@@ -308,7 +308,7 @@ namespace NumSharp.UnitTest.Backends
         /// <summary>
         /// Verify broadcast views keep original data alive.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Base_BroadcastView_KeepsDataAlive()
         {
             NDArray broadcasted;
@@ -337,7 +337,7 @@ namespace NumSharp.UnitTest.Backends
         /// <summary>
         /// Verify reshape views keep original data alive.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Base_ReshapeView_KeepsDataAlive()
         {
             NDArray reshaped;
@@ -365,7 +365,7 @@ namespace NumSharp.UnitTest.Backends
         /// <summary>
         /// Verify transpose views keep original data alive.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Base_TransposeView_KeepsDataAlive()
         {
             NDArray transposed;
@@ -394,7 +394,7 @@ namespace NumSharp.UnitTest.Backends
         /// <summary>
         /// Test that we can detect if an array is a view using .base
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Base_CanDetectView()
         {
             var owner = np.arange(10);
@@ -415,7 +415,7 @@ namespace NumSharp.UnitTest.Backends
         /// <summary>
         /// Test broadcast_arrays returns views with proper base.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Base_BroadcastArrays_ReturnViews()
         {
             var a = np.array(new[] { 1, 2, 3 });
@@ -442,7 +442,7 @@ namespace NumSharp.UnitTest.Backends
         /// When reduction with keepdims on axis with size 1, returns view.
         /// NumPy optimizes this case to return a view, NumSharp creates a new array.
         /// </summary>
-        [Test]
+        [TestMethod]
         [OpenBugs] // NumSharp always creates new array for reductions - view optimization not implemented
         public void Base_ReductionKeepdims_Size1Axis_ReturnsView()
         {
@@ -465,7 +465,7 @@ namespace NumSharp.UnitTest.Backends
         /// <summary>
         /// Verify _baseStorage is set correctly at storage level.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void BaseStorage_Alias_SetsBaseStorage()
         {
             var original = np.arange(10);
@@ -477,7 +477,7 @@ namespace NumSharp.UnitTest.Backends
         /// <summary>
         /// Verify _baseStorage chains correctly through multiple aliases.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void BaseStorage_MultipleAliases_ChainToOriginal()
         {
             var original = np.arange(10);
@@ -494,7 +494,7 @@ namespace NumSharp.UnitTest.Backends
         /// <summary>
         /// Verify Clone does not set _baseStorage.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void BaseStorage_Clone_IsNull()
         {
             var original = np.arange(10);
@@ -506,7 +506,7 @@ namespace NumSharp.UnitTest.Backends
         /// <summary>
         /// Verify broadcast_to uses CreateBroadcastedUnsafe which sets _baseStorage.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void BaseStorage_BroadcastTo_SetsBaseStorage()
         {
             var original = np.arange(3);
@@ -523,7 +523,7 @@ namespace NumSharp.UnitTest.Backends
         /// <summary>
         /// Scalar arrays should work correctly.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Base_Scalar_Works()
         {
             var scalar = NDArray.Scalar(42);
@@ -538,7 +538,7 @@ namespace NumSharp.UnitTest.Backends
         /// <summary>
         /// Empty array handling.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Base_EmptyArray_Works()
         {
             var empty = np.empty(new Shape(0));
@@ -549,7 +549,7 @@ namespace NumSharp.UnitTest.Backends
         /// <summary>
         /// 0-size dimension handling.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Base_ZeroSizeDimension_Works()
         {
             var a = np.empty(new Shape(3, 0, 4));
@@ -564,14 +564,14 @@ namespace NumSharp.UnitTest.Backends
         /// <summary>
         /// Test with various dtypes.
         /// </summary>
-        [Test]
-        [Arguments(NPTypeCode.Boolean)]
-        [Arguments(NPTypeCode.Byte)]
-        [Arguments(NPTypeCode.Int16)]
-        [Arguments(NPTypeCode.Int32)]
-        [Arguments(NPTypeCode.Int64)]
-        [Arguments(NPTypeCode.Single)]
-        [Arguments(NPTypeCode.Double)]
+        [TestMethod]
+        [DataRow(NPTypeCode.Boolean)]
+        [DataRow(NPTypeCode.Byte)]
+        [DataRow(NPTypeCode.Int16)]
+        [DataRow(NPTypeCode.Int32)]
+        [DataRow(NPTypeCode.Int64)]
+        [DataRow(NPTypeCode.Single)]
+        [DataRow(NPTypeCode.Double)]
         public void Base_AllDTypes_Work(NPTypeCode dtype)
         {
             var a = np.zeros(new Shape(10), dtype);
@@ -588,7 +588,7 @@ namespace NumSharp.UnitTest.Backends
         /// <summary>
         /// Reversed array creates view.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Base_ReversedArray_PointsToOriginal()
         {
             var a = np.arange(10);
@@ -601,7 +601,7 @@ namespace NumSharp.UnitTest.Backends
         /// <summary>
         /// Step slicing creates view.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Base_StepSlice_PointsToOriginal()
         {
             var a = np.arange(20);

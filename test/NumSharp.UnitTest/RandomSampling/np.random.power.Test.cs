@@ -11,7 +11,7 @@ namespace NumSharp.UnitTest.RandomSampling;
 
     public class RandomPowerTests : TestClass
 {
-    [Test]
+    [TestMethod]
     public void Power_ScalarCall_ReturnsDouble()
     {
         var rng = np.random.RandomState(42);
@@ -19,7 +19,7 @@ namespace NumSharp.UnitTest.RandomSampling;
         Assert.IsTrue(result >= 0 && result <= 1, $"Result {result} should be in [0, 1]");
     }
 
-    [Test]
+    [TestMethod]
     public void Power_ArraySize_ReturnsCorrectShape()
     {
         var rng = np.random.RandomState(42);
@@ -28,7 +28,7 @@ namespace NumSharp.UnitTest.RandomSampling;
         Assert.AreEqual(typeof(double), result.dtype);
     }
 
-    [Test]
+    [TestMethod]
     public void Power_MultiDimensionalSize_ReturnsCorrectShape()
     {
         var rng = np.random.RandomState(42);
@@ -36,7 +36,7 @@ namespace NumSharp.UnitTest.RandomSampling;
         result.Should().BeShaped(2, 3);
     }
 
-    [Test]
+    [TestMethod]
     public void Power_ShapeSize_ReturnsCorrectShape()
     {
         var rng = np.random.RandomState(42);
@@ -44,7 +44,7 @@ namespace NumSharp.UnitTest.RandomSampling;
         result.Should().BeShaped(3, 4);
     }
 
-    [Test]
+    [TestMethod]
     public void Power_AllValuesInRange()
     {
         // All values must be in [0, 1]
@@ -58,7 +58,7 @@ namespace NumSharp.UnitTest.RandomSampling;
         Assert.IsTrue(max <= 1, $"Max {max} should be <= 1");
     }
 
-    [Test]
+    [TestMethod]
     public void Power_HigherA_SkewsTowardOne()
     {
         // Higher 'a' skews distribution toward 1
@@ -73,7 +73,7 @@ namespace NumSharp.UnitTest.RandomSampling;
             $"Mean with a=5 ({mean_high}) should be > mean with a=0.5 ({mean_low})");
     }
 
-    [Test]
+    [TestMethod]
     public void Power_A1_IsUniform()
     {
         // When a=1, PDF = 1 for 0<=x<=1, which is uniform
@@ -86,7 +86,7 @@ namespace NumSharp.UnitTest.RandomSampling;
             $"Mean {mean} should be close to 0.5 for a=1 (uniform)");
     }
 
-    [Test]
+    [TestMethod]
     public void Power_MeanConvergesToExpected()
     {
         // For power distribution, mean = a / (a + 1)
@@ -102,31 +102,31 @@ namespace NumSharp.UnitTest.RandomSampling;
             $"Mean {mean} should be close to {expectedMean}");
     }
 
-    [Test]
+    [TestMethod]
     public void Power_ZeroParameter_ThrowsArgumentException()
     {
         Assert.ThrowsException<ArgumentException>(() => np.random.power(0.0, 5L));
     }
 
-    [Test]
+    [TestMethod]
     public void Power_NegativeParameter_ThrowsArgumentException()
     {
         Assert.ThrowsException<ArgumentException>(() => np.random.power(-1.0, 5L));
     }
 
-    [Test]
+    [TestMethod]
     public void Power_ScalarZeroParameter_ThrowsArgumentException()
     {
         Assert.ThrowsException<ArgumentException>(() => np.random.power(0.0));
     }
 
-    [Test]
+    [TestMethod]
     public void Power_ScalarNegativeParameter_ThrowsArgumentException()
     {
         Assert.ThrowsException<ArgumentException>(() => np.random.power(-2.0));
     }
 
-    [Test]
+    [TestMethod]
     public void Power_Reproducibility()
     {
         var rng1 = np.random.RandomState(42);
@@ -142,7 +142,7 @@ namespace NumSharp.UnitTest.RandomSampling;
         }
     }
 
-    [Test]
+    [TestMethod]
     public void Power_SmallA_SkewsTowardZero()
     {
         // Small 'a' (< 1) skews distribution toward 0

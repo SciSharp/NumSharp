@@ -9,7 +9,7 @@ namespace NumSharp.UnitTest.RandomSampling
     /// </summary>
     public class MT19937Tests
     {
-        [Test]
+        [TestMethod]
         public void SaveAndRestore()
         {
             var original = np.random.RandomState(42);
@@ -21,7 +21,7 @@ namespace NumSharp.UnitTest.RandomSampling
             copy.randomizer.NextDouble().Should().Be(expectedNext);
         }
 
-        [Test]
+        [TestMethod]
         public void Seed42_ProducesConsistentSequence()
         {
             var mt = new MT19937(42);
@@ -38,7 +38,7 @@ namespace NumSharp.UnitTest.RandomSampling
             mt.NextUInt32().Should().Be(v3);
         }
 
-        [Test]
+        [TestMethod]
         public void Clone_ProducesIdenticalSequence()
         {
             var mt1 = new MT19937(42);
@@ -53,7 +53,7 @@ namespace NumSharp.UnitTest.RandomSampling
             mt1.NextUInt32().Should().Be(mt2.NextUInt32());
         }
 
-        [Test]
+        [TestMethod]
         public void SetState_RestoresExactState()
         {
             var mt1 = new MT19937(42);
@@ -76,7 +76,7 @@ namespace NumSharp.UnitTest.RandomSampling
             mt2.NextDouble().Should().Be(expected);
         }
 
-        [Test]
+        [TestMethod]
         public void NextBytes_FillsBuffer()
         {
             var mt = new MT19937(42);
@@ -92,7 +92,7 @@ namespace NumSharp.UnitTest.RandomSampling
             hasNonZero.Should().BeTrue();
         }
 
-        [Test]
+        [TestMethod]
         public void Next_WithRange_StaysInBounds()
         {
             var mt = new MT19937(42);
@@ -105,7 +105,7 @@ namespace NumSharp.UnitTest.RandomSampling
             }
         }
 
-        [Test]
+        [TestMethod]
         public void NextLong_WithRange_StaysInBounds()
         {
             var mt = new MT19937(42);
@@ -118,7 +118,7 @@ namespace NumSharp.UnitTest.RandomSampling
             }
         }
 
-        [Test]
+        [TestMethod]
         public void NextDouble_IsInRange()
         {
             var mt = new MT19937(42);
@@ -131,7 +131,7 @@ namespace NumSharp.UnitTest.RandomSampling
             }
         }
 
-        [Test]
+        [TestMethod]
         public void SeedByArray_ProducesConsistentSequence()
         {
             var mt1 = new MT19937();

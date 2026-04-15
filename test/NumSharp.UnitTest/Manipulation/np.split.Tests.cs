@@ -13,7 +13,7 @@ namespace NumSharp.UnitTest.Manipulation
     {
         #region np.split - Equal Division
 
-        [Test]
+        [TestMethod]
         public void Split_1D_EqualParts()
         {
             // NumPy: np.split(np.arange(9), 3) -> [array([0, 1, 2]), array([3, 4, 5]), array([6, 7, 8])]
@@ -26,7 +26,7 @@ namespace NumSharp.UnitTest.Manipulation
             result[2].ToArray<long>().Should().ContainInOrder(6, 7, 8);
         }
 
-        [Test]
+        [TestMethod]
         public void Split_1D_UnequalDivision_ThrowsArgumentException()
         {
             // NumPy: np.split(np.arange(9), 4) raises ValueError
@@ -35,7 +35,7 @@ namespace NumSharp.UnitTest.Manipulation
             Assert.ThrowsException<ArgumentException>(() => np.split(a, 4));
         }
 
-        [Test]
+        [TestMethod]
         public void Split_2D_Axis0()
         {
             // NumPy: np.split(np.arange(12).reshape(3, 4), 3, axis=0)
@@ -49,7 +49,7 @@ namespace NumSharp.UnitTest.Manipulation
             result[2].Should().BeShaped(1, 4);
         }
 
-        [Test]
+        [TestMethod]
         public void Split_2D_Axis1()
         {
             // NumPy: np.split(np.arange(12).reshape(3, 4), 2, axis=1)
@@ -69,7 +69,7 @@ namespace NumSharp.UnitTest.Manipulation
             result[1]["1, :"].ToArray<long>().Should().ContainInOrder(6, 7);
         }
 
-        [Test]
+        [TestMethod]
         public void Split_NegativeAxis()
         {
             // NumPy: np.split(d, 3, axis=-2) == np.split(d, 3, axis=0)
@@ -88,7 +88,7 @@ namespace NumSharp.UnitTest.Manipulation
 
         #region np.split - With Indices
 
-        [Test]
+        [TestMethod]
         public void Split_WithIndices()
         {
             // NumPy: np.split(a, [3, 5, 7]) -> a[:3], a[3:5], a[5:7], a[7:]
@@ -102,7 +102,7 @@ namespace NumSharp.UnitTest.Manipulation
             result[3].ToArray<long>().Should().ContainInOrder(7, 8);
         }
 
-        [Test]
+        [TestMethod]
         public void Split_WithIndices_EmptyAtStart()
         {
             // NumPy: np.split(a, [0, 3, 6]) -> [], a[:3], a[3:6], a[6:]
@@ -116,7 +116,7 @@ namespace NumSharp.UnitTest.Manipulation
             result[3].size.Should().Be(3);
         }
 
-        [Test]
+        [TestMethod]
         public void Split_WithIndices_DuplicateIndices()
         {
             // NumPy: np.split(a, [3, 3, 6]) -> a[:3], [], a[3:6], a[6:]
@@ -130,7 +130,7 @@ namespace NumSharp.UnitTest.Manipulation
             result[3].size.Should().Be(3);
         }
 
-        [Test]
+        [TestMethod]
         public void Split_WithIndices_EmptyIndicesArray()
         {
             // NumPy: np.split(a, []) -> [a]
@@ -145,7 +145,7 @@ namespace NumSharp.UnitTest.Manipulation
 
         #region np.array_split - Unequal Division
 
-        [Test]
+        [TestMethod]
         public void ArraySplit_UnequalDivision_9Into4()
         {
             // NumPy: np.array_split(np.arange(9), 4)
@@ -161,7 +161,7 @@ namespace NumSharp.UnitTest.Manipulation
             result[3].size.Should().Be(2);
         }
 
-        [Test]
+        [TestMethod]
         public void ArraySplit_UnequalDivision_10Into3()
         {
             // NumPy: np.array_split(np.arange(10), 3)
@@ -176,7 +176,7 @@ namespace NumSharp.UnitTest.Manipulation
             result[2].size.Should().Be(3);
         }
 
-        [Test]
+        [TestMethod]
         public void ArraySplit_UnequalDivision_8Into3()
         {
             // NumPy: np.array_split(np.arange(8), 3)
@@ -191,7 +191,7 @@ namespace NumSharp.UnitTest.Manipulation
             result[2].size.Should().Be(2); // 8//3 = 2
         }
 
-        [Test]
+        [TestMethod]
         public void ArraySplit_2D_UnequalAxis0()
         {
             // NumPy: np.array_split(np.arange(12).reshape(3, 4), 2, axis=0)
@@ -204,7 +204,7 @@ namespace NumSharp.UnitTest.Manipulation
             result[1].Should().BeShaped(1, 4);
         }
 
-        [Test]
+        [TestMethod]
         public void ArraySplit_MoreSectionsThanElements()
         {
             // NumPy: np.array_split(np.array([1,2,3]), 5)
@@ -220,7 +220,7 @@ namespace NumSharp.UnitTest.Manipulation
             result[4].size.Should().Be(0);
         }
 
-        [Test]
+        [TestMethod]
         public void ArraySplit_ZeroSections_ThrowsArgumentException()
         {
             // NumPy: np.array_split(a, 0) raises ValueError
@@ -229,7 +229,7 @@ namespace NumSharp.UnitTest.Manipulation
             Assert.ThrowsException<ArgumentException>(() => np.array_split(a, 0));
         }
 
-        [Test]
+        [TestMethod]
         public void ArraySplit_NegativeSections_ThrowsArgumentException()
         {
             // NumPy: np.array_split(a, -1) raises ValueError
@@ -242,7 +242,7 @@ namespace NumSharp.UnitTest.Manipulation
 
         #region Edge Cases
 
-        [Test]
+        [TestMethod]
         public void Split_SingleElement()
         {
             var single = np.array(new[] { 42 });
@@ -252,7 +252,7 @@ namespace NumSharp.UnitTest.Manipulation
             result[0].ToArray<int>().Should().ContainInOrder(42);
         }
 
-        [Test]
+        [TestMethod]
         public void Split_EmptyArray()
         {
             var empty = np.array(new double[0]);
@@ -262,7 +262,7 @@ namespace NumSharp.UnitTest.Manipulation
             result[0].size.Should().Be(0);
         }
 
-        [Test]
+        [TestMethod]
         public void ArraySplit_EmptyArray_MultipleSections()
         {
             var empty = np.array(new double[0]);
@@ -275,7 +275,7 @@ namespace NumSharp.UnitTest.Manipulation
             }
         }
 
-        [Test]
+        [TestMethod]
         public void Split_3D_Array()
         {
             // NumPy: np.split(np.arange(24).reshape(2, 3, 4), 2, axis=0)
@@ -287,7 +287,7 @@ namespace NumSharp.UnitTest.Manipulation
             result[1].Should().BeShaped(1, 3, 4);
         }
 
-        [Test]
+        [TestMethod]
         public void Split_ReturnsViews()
         {
             // NumPy: split returns views, not copies
@@ -299,7 +299,7 @@ namespace NumSharp.UnitTest.Manipulation
             a.GetInt64(0).Should().Be(999);
         }
 
-        [Test]
+        [TestMethod]
         public void Split_DifferentDtypes()
         {
             // Test with float64

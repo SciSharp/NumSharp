@@ -2,9 +2,6 @@ using System;
 using System.Threading.Tasks;
 using NumSharp;
 using NumSharp.UnitTest.Utilities;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-using TUnit.Core;
 
 namespace NumSharp.UnitTest.Sorting;
 
@@ -19,7 +16,7 @@ public class ArgsortNaNTests
 {
     #region NaN Handling
 
-    [Test]
+    [TestMethod]
     public async Task Argsort_NaN_SortsToEnd()
     {
         // NumPy: np.argsort([nan, 1, 2]) = [1, 2, 0]
@@ -32,7 +29,7 @@ public class ArgsortNaNTests
         await Assert.That(result.GetInt64(2)).IsEqualTo(0L);
     }
 
-    [Test]
+    [TestMethod]
     public async Task Argsort_MultipleNaN_SortToEnd()
     {
         // NumPy: np.argsort([nan, 1, nan, 2]) = [1, 3, 0, 2]
@@ -51,7 +48,7 @@ public class ArgsortNaNTests
 
     #region Inf Handling
 
-    [Test]
+    [TestMethod]
     public async Task Argsort_Inf_SortsCorrectly()
     {
         // NumPy: np.argsort([inf, -inf, 0]) = [1, 2, 0]
@@ -64,7 +61,7 @@ public class ArgsortNaNTests
         await Assert.That(result.GetInt64(2)).IsEqualTo(0L); // +inf
     }
 
-    [Test]
+    [TestMethod]
     public async Task Argsort_InfAndNaN_SortsCorrectly()
     {
         // NumPy: np.argsort([nan, inf, -inf, 0]) = [2, 3, 1, 0]
@@ -82,7 +79,7 @@ public class ArgsortNaNTests
 
     #region Float32 Tests
 
-    [Test]
+    [TestMethod]
     public async Task Argsort_Float32_NaN_SortsToEnd()
     {
         // Same behavior for float32
@@ -94,7 +91,7 @@ public class ArgsortNaNTests
         await Assert.That(result.GetInt64(2)).IsEqualTo(0L);
     }
 
-    [Test]
+    [TestMethod]
     public async Task Argsort_Float32_InfAndNaN_SortsCorrectly()
     {
         var a = np.array(new float[] { float.NaN, float.PositiveInfinity, float.NegativeInfinity, 0.0f });
@@ -110,7 +107,7 @@ public class ArgsortNaNTests
 
     #region Basic Argsort (No NaN)
 
-    [Test]
+    [TestMethod]
     public async Task Argsort_Normal_SortsCorrectly()
     {
         // NumPy: np.argsort([3, 1, 2]) = [1, 2, 0]
@@ -122,7 +119,7 @@ public class ArgsortNaNTests
         await Assert.That(result.GetInt64(2)).IsEqualTo(0L);
     }
 
-    [Test]
+    [TestMethod]
     public async Task Argsort_AlreadySorted_ReturnsSequentialIndices()
     {
         // NumPy: np.argsort([1, 2, 3]) = [0, 1, 2]
@@ -134,7 +131,7 @@ public class ArgsortNaNTests
         await Assert.That(result.GetInt64(2)).IsEqualTo(2L);
     }
 
-    [Test]
+    [TestMethod]
     public async Task Argsort_ReverseSorted_ReturnsReverseIndices()
     {
         // NumPy: np.argsort([3, 2, 1]) = [2, 1, 0]
@@ -150,7 +147,7 @@ public class ArgsortNaNTests
 
     #region Integer Types (No NaN)
 
-    [Test]
+    [TestMethod]
     public async Task Argsort_Int32_SortsCorrectly()
     {
         var a = np.array(new int[] { 3, 1, 2 });

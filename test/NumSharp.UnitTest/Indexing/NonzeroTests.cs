@@ -2,9 +2,6 @@ using System;
 using System.Threading.Tasks;
 using NumSharp;
 using NumSharp.UnitTest.Utilities;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-using TUnit.Core;
 
 namespace NumSharp.UnitTest.Indexing;
 
@@ -16,7 +13,7 @@ public class NonzeroTests
 {
     #region 1D Arrays
 
-    [Test]
+    [TestMethod]
     public async Task Nonzero_1D_ReturnsIndices()
     {
         // NumPy: np.nonzero([0, 1, 0, 2]) = (array([1, 3]),)
@@ -29,7 +26,7 @@ public class NonzeroTests
         await Assert.That(result[0].GetInt64(1)).IsEqualTo(3);
     }
 
-    [Test]
+    [TestMethod]
     public async Task Nonzero_1D_Empty_ReturnsEmptyArray()
     {
         // NumPy: np.nonzero([0, 0, 0]) = (array([], dtype=int64),)
@@ -40,7 +37,7 @@ public class NonzeroTests
         await Assert.That(result[0].size).IsEqualTo(0);
     }
 
-    [Test]
+    [TestMethod]
     public async Task Nonzero_1D_AllNonzero_ReturnsAllIndices()
     {
         // NumPy: np.nonzero([1, 2, 3]) = (array([0, 1, 2]),)
@@ -58,7 +55,7 @@ public class NonzeroTests
 
     #region 2D Arrays
 
-    [Test]
+    [TestMethod]
     public async Task Nonzero_2D_ReturnsTupleOfIndices()
     {
         // NumPy: np.nonzero([[0, 1], [2, 0]]) = (array([0, 1]), array([1, 0]))
@@ -79,7 +76,7 @@ public class NonzeroTests
         await Assert.That(result[1].GetInt64(1)).IsEqualTo(0);
     }
 
-    [Test]
+    [TestMethod]
     public async Task Nonzero_2D_ThreeElements()
     {
         // NumPy: np.nonzero([[1, 0], [0, 2], [3, 0]]) = (array([0, 1, 2]), array([0, 1, 0]))
@@ -101,7 +98,7 @@ public class NonzeroTests
         await Assert.That(result[1].GetInt64(2)).IsEqualTo(0);
     }
 
-    [Test]
+    [TestMethod]
     public async Task Nonzero_2D_AllZero_ReturnsEmptyArrays()
     {
         // NumPy: np.nonzero([[0, 0], [0, 0]]) = (array([], dtype=int64), array([], dtype=int64))
@@ -117,7 +114,7 @@ public class NonzeroTests
 
     #region 3D Arrays
 
-    [Test]
+    [TestMethod]
     public async Task Nonzero_3D_ReturnsTupleOfThreeIndices()
     {
         // 3D array: each nonzero element has (depth, row, col) index
@@ -149,7 +146,7 @@ public class NonzeroTests
 
     #region Boolean Arrays
 
-    [Test]
+    [TestMethod]
     public async Task Nonzero_Boolean_TrueIsTreatedAsNonzero()
     {
         // NumPy: np.nonzero([False, True, False, True]) = (array([1, 3]),)
@@ -166,7 +163,7 @@ public class NonzeroTests
 
     #region Float Arrays
 
-    [Test]
+    [TestMethod]
     public async Task Nonzero_Float_ZeroIsExact()
     {
         // NumPy: np.nonzero([0.0, 1.0, 0.0, 2.0]) = (array([1, 3]),)
@@ -179,7 +176,7 @@ public class NonzeroTests
         await Assert.That(result[0].GetInt64(1)).IsEqualTo(3);
     }
 
-    [Test]
+    [TestMethod]
     public async Task Nonzero_Float_NaN_IsNonzero()
     {
         // NumPy: np.nonzero([0.0, nan]) = (array([1]),) - NaN is treated as nonzero

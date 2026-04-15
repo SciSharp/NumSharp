@@ -11,7 +11,7 @@ public class SplitBattleTests : TestClass
 {
     #region hsplit tests
 
-    [Test]
+    [TestMethod]
     public void Hsplit_2D_SplitsColumns()
     {
         // NumPy: a = np.arange(16).reshape(4,4); np.hsplit(a, 2)
@@ -36,7 +36,7 @@ public class SplitBattleTests : TestClass
         Assert.AreEqual(7, (int)result[1][1, 1]);
     }
 
-    [Test]
+    [TestMethod]
     public void Hsplit_1D_SplitsAlongAxis0()
     {
         // NumPy: a = np.arange(6); np.hsplit(a, 3)
@@ -57,7 +57,7 @@ public class SplitBattleTests : TestClass
         Assert.AreEqual(5, (int)result[2][1]);
     }
 
-    [Test]
+    [TestMethod]
     public void Hsplit_3D_SplitsAlongAxis1()
     {
         // NumPy: a = np.arange(24).reshape(2, 4, 3); np.hsplit(a, 2)
@@ -70,7 +70,7 @@ public class SplitBattleTests : TestClass
         result[1].Should().BeShaped(2, 2, 3);
     }
 
-    [Test]
+    [TestMethod]
     public void Hsplit_WithIndices()
     {
         // NumPy: a = np.arange(16).reshape(4,4); np.hsplit(a, [1, 3])
@@ -84,7 +84,7 @@ public class SplitBattleTests : TestClass
         result[2].Should().BeShaped(4, 1);
     }
 
-    [Test]
+    [TestMethod]
     public void Hsplit_0D_ThrowsArgumentException()
     {
         // NumPy: np.hsplit(np.array(5), 1) raises ValueError
@@ -96,7 +96,7 @@ public class SplitBattleTests : TestClass
 
     #region vsplit tests
 
-    [Test]
+    [TestMethod]
     public void Vsplit_2D_SplitsRows()
     {
         // NumPy: a = np.arange(16).reshape(4,4); np.vsplit(a, 2)
@@ -121,7 +121,7 @@ public class SplitBattleTests : TestClass
         Assert.AreEqual(15, (int)result[1][1, 3]);
     }
 
-    [Test]
+    [TestMethod]
     public void Vsplit_3D_SplitsAlongAxis0()
     {
         // NumPy: a = np.arange(8).reshape(2, 2, 2); np.vsplit(a, 2)
@@ -134,7 +134,7 @@ public class SplitBattleTests : TestClass
         result[1].Should().BeShaped(1, 2, 2);
     }
 
-    [Test]
+    [TestMethod]
     public void Vsplit_WithIndices()
     {
         // NumPy: a = np.arange(16).reshape(4,4); np.vsplit(a, [3, 6])
@@ -148,7 +148,7 @@ public class SplitBattleTests : TestClass
         result[2].Should().BeShaped(0, 4);  // Empty array
     }
 
-    [Test]
+    [TestMethod]
     public void Vsplit_1D_ThrowsArgumentException()
     {
         // NumPy: np.vsplit(np.arange(6), 2) raises ValueError
@@ -160,7 +160,7 @@ public class SplitBattleTests : TestClass
 
     #region dsplit tests
 
-    [Test]
+    [TestMethod]
     public void Dsplit_3D_SplitsDepth()
     {
         // NumPy: a = np.arange(24).reshape(2, 3, 4); np.dsplit(a, 2)
@@ -173,7 +173,7 @@ public class SplitBattleTests : TestClass
         result[1].Should().BeShaped(2, 3, 2);
     }
 
-    [Test]
+    [TestMethod]
     public void Dsplit_4D_SplitsAlongAxis2()
     {
         // NumPy: a = np.arange(48).reshape(2, 3, 4, 2); np.dsplit(a, 2)
@@ -186,7 +186,7 @@ public class SplitBattleTests : TestClass
         result[1].Should().BeShaped(2, 3, 2, 2);
     }
 
-    [Test]
+    [TestMethod]
     public void Dsplit_WithIndices()
     {
         // NumPy: a = np.arange(16).reshape(2, 2, 4); np.dsplit(a, [3, 6])
@@ -200,7 +200,7 @@ public class SplitBattleTests : TestClass
         result[2].Should().BeShaped(2, 2, 0);  // Empty array
     }
 
-    [Test]
+    [TestMethod]
     public void Dsplit_2D_ThrowsArgumentException()
     {
         // NumPy: np.dsplit(np.arange(16).reshape(4,4), 2) raises ValueError
@@ -208,7 +208,7 @@ public class SplitBattleTests : TestClass
         Assert.ThrowsException<System.ArgumentException>(() => np.dsplit(a, 2));
     }
 
-    [Test]
+    [TestMethod]
     public void Dsplit_1D_ThrowsArgumentException()
     {
         // NumPy: np.dsplit(np.arange(6), 2) raises ValueError

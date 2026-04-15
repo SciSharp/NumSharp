@@ -7,7 +7,7 @@ namespace NumSharp.UnitTest.Manipulation
     /// </summary>
     public class np_vstack_tests
     {
-        [Test]
+        [TestMethod]
         public void VStackNDArrays()
         {
             //1D

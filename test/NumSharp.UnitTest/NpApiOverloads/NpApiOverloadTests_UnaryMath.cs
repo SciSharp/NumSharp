@@ -1,7 +1,6 @@
 using System;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp;
-using TUnit.Core;
 
 namespace NumSharp.UnitTest.NpApiOverloads;
 
@@ -20,7 +19,7 @@ public class NpApiOverloadTests_UnaryMath
 
     #region Absolute - np.absolute (3 overloads)
 
-    [Test]
+    [TestMethod]
     public void Absolute_NoParams_Compiles()
     {
         var a = np.array(new double[] { -1.5, 2.3, -3.7 });
@@ -31,7 +30,7 @@ public class NpApiOverloadTests_UnaryMath
         Assert.AreEqual(3.7, result.GetDouble(2), Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void Absolute_WithType_Compiles()
     {
         var a = np.array(new double[] { -1.5, 2.3, -3.7 });
@@ -40,7 +39,7 @@ public class NpApiOverloadTests_UnaryMath
         Assert.AreEqual(NPTypeCode.Single, result.typecode);
     }
 
-    [Test]
+    [TestMethod]
     public void Absolute_WithNPTypeCode_Compiles()
     {
         var a = np.array(new double[] { -1.5, 2.3, -3.7 });
@@ -53,7 +52,7 @@ public class NpApiOverloadTests_UnaryMath
 
     #region Abs - np.abs (3 overloads)
 
-    [Test]
+    [TestMethod]
     public void Abs_NoParams_Compiles()
     {
         var a = np.array(new double[] { -1.5, 2.3, -3.7 });
@@ -64,7 +63,7 @@ public class NpApiOverloadTests_UnaryMath
         Assert.AreEqual(3.7, result.GetDouble(2), Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void Abs_WithType_Compiles()
     {
         var a = np.array(new double[] { -1.5, 2.3, -3.7 });
@@ -73,7 +72,7 @@ public class NpApiOverloadTests_UnaryMath
         Assert.AreEqual(NPTypeCode.Single, result.typecode);
     }
 
-    [Test]
+    [TestMethod]
     public void Abs_WithNPTypeCode_Compiles()
     {
         var a = np.array(new double[] { -1.5, 2.3, -3.7 });
@@ -86,7 +85,7 @@ public class NpApiOverloadTests_UnaryMath
 
     #region Sign - np.sign (2 overloads)
 
-    [Test]
+    [TestMethod]
     public void Sign_NoParams_Compiles()
     {
         var a = np.array(new double[] { -1.5, 0.0, 3.7 });
@@ -97,7 +96,7 @@ public class NpApiOverloadTests_UnaryMath
         Assert.AreEqual(1.0, result.GetDouble(2), Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void Sign_WithType_Compiles()
     {
         var a = np.array(new double[] { -1.5, 0.0, 3.7 });
@@ -110,7 +109,7 @@ public class NpApiOverloadTests_UnaryMath
 
     #region Sqrt - np.sqrt (2 overloads)
 
-    [Test]
+    [TestMethod]
     public void Sqrt_NoParams_Compiles()
     {
         var a = np.array(new double[] { 1.0, 4.0, 9.0 });
@@ -121,7 +120,7 @@ public class NpApiOverloadTests_UnaryMath
         Assert.AreEqual(3.0, result.GetDouble(2), Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void Sqrt_WithType_Compiles()
     {
         var a = np.array(new double[] { 1.0, 4.0, 9.0 });
@@ -134,7 +133,7 @@ public class NpApiOverloadTests_UnaryMath
 
     #region Cbrt - np.cbrt (2 overloads)
 
-    [Test]
+    [TestMethod]
     public void Cbrt_NoParams_Compiles()
     {
         var a = np.array(new double[] { 1.0, 8.0, 27.0 });
@@ -145,7 +144,7 @@ public class NpApiOverloadTests_UnaryMath
         Assert.AreEqual(3.0, result.GetDouble(2), Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void Cbrt_WithType_Compiles()
     {
         var a = np.array(new double[] { 1.0, 8.0, 27.0 });
@@ -158,7 +157,7 @@ public class NpApiOverloadTests_UnaryMath
 
     #region Square - np.square (1 overload)
 
-    [Test]
+    [TestMethod]
     public void Square_NoParams_Compiles()
     {
         var a = np.array(new double[] { 1.5, 2.0, 3.0 });
@@ -173,7 +172,7 @@ public class NpApiOverloadTests_UnaryMath
 
     #region Ceil - np.ceil (2 overloads)
 
-    [Test]
+    [TestMethod]
     public void Ceil_NoParams_Compiles()
     {
         var a = np.array(new double[] { 1.5, -2.3, 3.7 });
@@ -184,7 +183,7 @@ public class NpApiOverloadTests_UnaryMath
         Assert.AreEqual(4.0, result.GetDouble(2), Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void Ceil_WithType_Compiles()
     {
         var a = np.array(new double[] { 1.5, -2.3, 3.7 });
@@ -197,7 +196,7 @@ public class NpApiOverloadTests_UnaryMath
 
     #region Floor - np.floor (2 overloads)
 
-    [Test]
+    [TestMethod]
     public void Floor_NoParams_Compiles()
     {
         var a = np.array(new double[] { 1.5, -2.3, 3.7 });
@@ -208,7 +207,7 @@ public class NpApiOverloadTests_UnaryMath
         Assert.AreEqual(3.0, result.GetDouble(2), Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void Floor_WithType_Compiles()
     {
         var a = np.array(new double[] { 1.5, -2.3, 3.7 });
@@ -221,7 +220,7 @@ public class NpApiOverloadTests_UnaryMath
 
     #region Trunc - np.trunc (2 overloads)
 
-    [Test]
+    [TestMethod]
     public void Trunc_NoParams_Compiles()
     {
         var a = np.array(new double[] { 1.5, -2.3, 3.7 });
@@ -232,7 +231,7 @@ public class NpApiOverloadTests_UnaryMath
         Assert.AreEqual(3.0, result.GetDouble(2), Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void Trunc_WithType_Compiles()
     {
         var a = np.array(new double[] { 1.5, -2.3, 3.7 });
@@ -245,7 +244,7 @@ public class NpApiOverloadTests_UnaryMath
 
     #region Round_ - np.round_ (4 overloads)
 
-    [Test]
+    [TestMethod]
     public void Round_NoParams_Compiles()
     {
         var a = np.array(new double[] { 1.5, -2.3, 3.7 });
@@ -257,7 +256,7 @@ public class NpApiOverloadTests_UnaryMath
         Assert.AreEqual(4.0, result.GetDouble(2), Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void Round_WithDecimals_Compiles()
     {
         var a = np.array(new double[] { 1.567, -2.345, 3.789 });
@@ -267,7 +266,7 @@ public class NpApiOverloadTests_UnaryMath
         Assert.AreEqual(3.8, result.GetDouble(2), Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void Round_WithType_Compiles()
     {
         var a = np.array(new double[] { 1.5, -2.3, 3.7 });
@@ -276,7 +275,7 @@ public class NpApiOverloadTests_UnaryMath
         Assert.AreEqual(NPTypeCode.Single, result.typecode);
     }
 
-    [Test]
+    [TestMethod]
     public void Round_WithDecimalsAndType_Compiles()
     {
         var a = np.array(new double[] { 1.567, -2.345, 3.789 });
@@ -289,7 +288,7 @@ public class NpApiOverloadTests_UnaryMath
 
     #region Around - np.around (4 overloads)
 
-    [Test]
+    [TestMethod]
     public void Around_NoParams_Compiles()
     {
         var a = np.array(new double[] { 1.5, -2.3, 3.7 });
@@ -300,7 +299,7 @@ public class NpApiOverloadTests_UnaryMath
         Assert.AreEqual(4.0, result.GetDouble(2), Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void Around_WithDecimals_Compiles()
     {
         var a = np.array(new double[] { 1.567, -2.345, 3.789 });
@@ -310,7 +309,7 @@ public class NpApiOverloadTests_UnaryMath
         Assert.AreEqual(3.8, result.GetDouble(2), Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void Around_WithType_Compiles()
     {
         var a = np.array(new double[] { 1.5, -2.3, 3.7 });
@@ -319,7 +318,7 @@ public class NpApiOverloadTests_UnaryMath
         Assert.AreEqual(NPTypeCode.Single, result.typecode);
     }
 
-    [Test]
+    [TestMethod]
     public void Around_WithDecimalsAndType_Compiles()
     {
         var a = np.array(new double[] { 1.567, -2.345, 3.789 });
@@ -332,7 +331,7 @@ public class NpApiOverloadTests_UnaryMath
 
     #region Exp - np.exp (3 overloads)
 
-    [Test]
+    [TestMethod]
     public void Exp_NoParams_Compiles()
     {
         var a = np.array(new double[] { 0.0, 1.0, 2.0 });
@@ -343,7 +342,7 @@ public class NpApiOverloadTests_UnaryMath
         Assert.AreEqual(Math.E * Math.E, result.GetDouble(2), Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void Exp_WithType_Compiles()
     {
         var a = np.array(new double[] { 0.0, 1.0, 2.0 });
@@ -352,7 +351,7 @@ public class NpApiOverloadTests_UnaryMath
         Assert.AreEqual(NPTypeCode.Single, result.typecode);
     }
 
-    [Test]
+    [TestMethod]
     public void Exp_WithNPTypeCode_Compiles()
     {
         var a = np.array(new double[] { 0.0, 1.0, 2.0 });
@@ -365,7 +364,7 @@ public class NpApiOverloadTests_UnaryMath
 
     #region Exp2 - np.exp2 (3 overloads)
 
-    [Test]
+    [TestMethod]
     public void Exp2_NoParams_Compiles()
     {
         var a = np.array(new double[] { 0.0, 1.0, 2.0 });
@@ -376,7 +375,7 @@ public class NpApiOverloadTests_UnaryMath
         Assert.AreEqual(4.0, result.GetDouble(2), Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     [OpenBugs] // ILKernelGenerator Exp2 type conversion bug - InvalidProgramException
     public void Exp2_WithType_Compiles()
     {
@@ -386,7 +385,7 @@ public class NpApiOverloadTests_UnaryMath
         Assert.AreEqual(NPTypeCode.Single, result.typecode);
     }
 
-    [Test]
+    [TestMethod]
     [OpenBugs] // ILKernelGenerator Exp2 type conversion bug - InvalidProgramException
     public void Exp2_WithNPTypeCode_Compiles()
     {
@@ -400,7 +399,7 @@ public class NpApiOverloadTests_UnaryMath
 
     #region Expm1 - np.expm1 (3 overloads)
 
-    [Test]
+    [TestMethod]
     public void Expm1_NoParams_Compiles()
     {
         var a = np.array(new double[] { 0.0, 1.0, 2.0 });
@@ -410,7 +409,7 @@ public class NpApiOverloadTests_UnaryMath
         Assert.AreEqual(Math.E - 1, result.GetDouble(1), Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void Expm1_WithType_Compiles()
     {
         var a = np.array(new double[] { 0.0, 1.0, 2.0 });
@@ -419,7 +418,7 @@ public class NpApiOverloadTests_UnaryMath
         Assert.AreEqual(NPTypeCode.Single, result.typecode);
     }
 
-    [Test]
+    [TestMethod]
     public void Expm1_WithNPTypeCode_Compiles()
     {
         var a = np.array(new double[] { 0.0, 1.0, 2.0 });
@@ -432,7 +431,7 @@ public class NpApiOverloadTests_UnaryMath
 
     #region Log - np.log (3 overloads)
 
-    [Test]
+    [TestMethod]
     public void Log_NoParams_Compiles()
     {
         var a = np.array(new double[] { 1.0, Math.E, Math.E * Math.E });
@@ -443,7 +442,7 @@ public class NpApiOverloadTests_UnaryMath
         Assert.AreEqual(2.0, result.GetDouble(2), Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void Log_WithType_Compiles()
     {
         var a = np.array(new double[] { 1.0, Math.E, Math.E * Math.E });
@@ -452,7 +451,7 @@ public class NpApiOverloadTests_UnaryMath
         // Note: log(a, Type) doesn't convert dtype in current implementation
     }
 
-    [Test]
+    [TestMethod]
     public void Log_WithNPTypeCode_Compiles()
     {
         var a = np.array(new double[] { 1.0, Math.E, Math.E * Math.E });
@@ -464,7 +463,7 @@ public class NpApiOverloadTests_UnaryMath
 
     #region Log2 - np.log2 (3 overloads)
 
-    [Test]
+    [TestMethod]
     public void Log2_NoParams_Compiles()
     {
         var a = np.array(new double[] { 1.0, 2.0, 4.0 });
@@ -475,7 +474,7 @@ public class NpApiOverloadTests_UnaryMath
         Assert.AreEqual(2.0, result.GetDouble(2), Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void Log2_WithType_Compiles()
     {
         var a = np.array(new double[] { 1.0, 2.0, 4.0 });
@@ -483,7 +482,7 @@ public class NpApiOverloadTests_UnaryMath
         Assert.IsNotNull(result);
     }
 
-    [Test]
+    [TestMethod]
     public void Log2_WithNPTypeCode_Compiles()
     {
         var a = np.array(new double[] { 1.0, 2.0, 4.0 });
@@ -495,7 +494,7 @@ public class NpApiOverloadTests_UnaryMath
 
     #region Log10 - np.log10 (3 overloads)
 
-    [Test]
+    [TestMethod]
     public void Log10_NoParams_Compiles()
     {
         var a = np.array(new double[] { 1.0, 10.0, 100.0 });
@@ -506,7 +505,7 @@ public class NpApiOverloadTests_UnaryMath
         Assert.AreEqual(2.0, result.GetDouble(2), Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void Log10_WithType_Compiles()
     {
         var a = np.array(new double[] { 1.0, 10.0, 100.0 });
@@ -514,7 +513,7 @@ public class NpApiOverloadTests_UnaryMath
         Assert.IsNotNull(result);
     }
 
-    [Test]
+    [TestMethod]
     public void Log10_WithNPTypeCode_Compiles()
     {
         var a = np.array(new double[] { 1.0, 10.0, 100.0 });
@@ -526,7 +525,7 @@ public class NpApiOverloadTests_UnaryMath
 
     #region Log1p - np.log1p (3 overloads)
 
-    [Test]
+    [TestMethod]
     public void Log1p_NoParams_Compiles()
     {
         var a = np.array(new double[] { 0.0, Math.E - 1, Math.E * Math.E - 1 });
@@ -536,7 +535,7 @@ public class NpApiOverloadTests_UnaryMath
         Assert.AreEqual(1.0, result.GetDouble(1), Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void Log1p_WithType_Compiles()
     {
         var a = np.array(new double[] { 0.0, Math.E - 1, Math.E * Math.E - 1 });
@@ -544,7 +543,7 @@ public class NpApiOverloadTests_UnaryMath
         Assert.IsNotNull(result);
     }
 
-    [Test]
+    [TestMethod]
     public void Log1p_WithNPTypeCode_Compiles()
     {
         var a = np.array(new double[] { 0.0, Math.E - 1, Math.E * Math.E - 1 });
@@ -556,7 +555,7 @@ public class NpApiOverloadTests_UnaryMath
 
     #region Sin - np.sin (2 overloads)
 
-    [Test]
+    [TestMethod]
     public void Sin_NoParams_Compiles()
     {
         var a = np.array(new double[] { 0.0, Math.PI / 2, Math.PI });
@@ -567,7 +566,7 @@ public class NpApiOverloadTests_UnaryMath
         Assert.AreEqual(0.0, result.GetDouble(2), 1e-9); // sin(pi) is approximately 0
     }
 
-    [Test]
+    [TestMethod]
     public void Sin_WithType_Compiles()
     {
         var a = np.array(new double[] { 0.0, Math.PI / 2, Math.PI });
@@ -580,7 +579,7 @@ public class NpApiOverloadTests_UnaryMath
 
     #region Cos - np.cos (2 overloads)
 
-    [Test]
+    [TestMethod]
     public void Cos_NoParams_Compiles()
     {
         var a = np.array(new double[] { 0.0, Math.PI / 2, Math.PI });
@@ -591,7 +590,7 @@ public class NpApiOverloadTests_UnaryMath
         Assert.AreEqual(-1.0, result.GetDouble(2), Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void Cos_WithType_Compiles()
     {
         var a = np.array(new double[] { 0.0, Math.PI / 2, Math.PI });
@@ -604,7 +603,7 @@ public class NpApiOverloadTests_UnaryMath
 
     #region Tan - np.tan (2 overloads)
 
-    [Test]
+    [TestMethod]
     public void Tan_NoParams_Compiles()
     {
         var a = np.array(new double[] { 0.0, Math.PI / 4 });
@@ -614,7 +613,7 @@ public class NpApiOverloadTests_UnaryMath
         Assert.AreEqual(1.0, result.GetDouble(1), Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void Tan_WithType_Compiles()
     {
         var a = np.array(new double[] { 0.0, Math.PI / 4 });
@@ -627,7 +626,7 @@ public class NpApiOverloadTests_UnaryMath
 
     #region Arcsin - np.arcsin (2 overloads)
 
-    [Test]
+    [TestMethod]
     public void Arcsin_NoParams_Compiles()
     {
         var a = np.array(new double[] { 0.0, 0.5, 1.0 });
@@ -637,7 +636,7 @@ public class NpApiOverloadTests_UnaryMath
         Assert.AreEqual(Math.PI / 2, result.GetDouble(2), Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void Arcsin_WithType_Compiles()
     {
         var a = np.array(new double[] { 0.0, 0.5, 1.0 });
@@ -650,7 +649,7 @@ public class NpApiOverloadTests_UnaryMath
 
     #region Arccos - np.arccos (2 overloads)
 
-    [Test]
+    [TestMethod]
     public void Arccos_NoParams_Compiles()
     {
         var a = np.array(new double[] { 1.0, 0.5, 0.0 });
@@ -660,7 +659,7 @@ public class NpApiOverloadTests_UnaryMath
         Assert.AreEqual(Math.PI / 2, result.GetDouble(2), Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void Arccos_WithType_Compiles()
     {
         var a = np.array(new double[] { 1.0, 0.5, 0.0 });
@@ -673,7 +672,7 @@ public class NpApiOverloadTests_UnaryMath
 
     #region Arctan - np.arctan (2 overloads)
 
-    [Test]
+    [TestMethod]
     public void Arctan_NoParams_Compiles()
     {
         var a = np.array(new double[] { 0.0, 1.0 });
@@ -683,7 +682,7 @@ public class NpApiOverloadTests_UnaryMath
         Assert.AreEqual(Math.PI / 4, result.GetDouble(1), Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void Arctan_WithType_Compiles()
     {
         var a = np.array(new double[] { 0.0, 1.0 });
@@ -696,7 +695,7 @@ public class NpApiOverloadTests_UnaryMath
 
     #region Sinh - np.sinh (2 overloads)
 
-    [Test]
+    [TestMethod]
     public void Sinh_NoParams_Compiles()
     {
         var a = np.array(new double[] { 0.0, 1.0 });
@@ -706,7 +705,7 @@ public class NpApiOverloadTests_UnaryMath
         Assert.AreEqual(Math.Sinh(1.0), result.GetDouble(1), Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void Sinh_WithType_Compiles()
     {
         var a = np.array(new double[] { 0.0, 1.0 });
@@ -719,7 +718,7 @@ public class NpApiOverloadTests_UnaryMath
 
     #region Cosh - np.cosh (2 overloads)
 
-    [Test]
+    [TestMethod]
     public void Cosh_NoParams_Compiles()
     {
         var a = np.array(new double[] { 0.0, 1.0 });
@@ -729,7 +728,7 @@ public class NpApiOverloadTests_UnaryMath
         Assert.AreEqual(Math.Cosh(1.0), result.GetDouble(1), Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void Cosh_WithType_Compiles()
     {
         var a = np.array(new double[] { 0.0, 1.0 });
@@ -742,7 +741,7 @@ public class NpApiOverloadTests_UnaryMath
 
     #region Tanh - np.tanh (2 overloads)
 
-    [Test]
+    [TestMethod]
     public void Tanh_NoParams_Compiles()
     {
         var a = np.array(new double[] { 0.0, 1.0 });
@@ -752,7 +751,7 @@ public class NpApiOverloadTests_UnaryMath
         Assert.AreEqual(Math.Tanh(1.0), result.GetDouble(1), Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void Tanh_WithType_Compiles()
     {
         var a = np.array(new double[] { 0.0, 1.0 });
@@ -765,7 +764,7 @@ public class NpApiOverloadTests_UnaryMath
 
     #region Deg2Rad - np.deg2rad (2 overloads)
 
-    [Test]
+    [TestMethod]
     public void Deg2Rad_NoParams_Compiles()
     {
         var a = np.array(new double[] { 0.0, 90.0, 180.0 });
@@ -776,7 +775,7 @@ public class NpApiOverloadTests_UnaryMath
         Assert.AreEqual(Math.PI, result.GetDouble(2), Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void Deg2Rad_WithType_Compiles()
     {
         var a = np.array(new double[] { 0.0, 90.0, 180.0 });
@@ -789,7 +788,7 @@ public class NpApiOverloadTests_UnaryMath
 
     #region Rad2Deg - np.rad2deg (2 overloads)
 
-    [Test]
+    [TestMethod]
     public void Rad2Deg_NoParams_Compiles()
     {
         var a = np.array(new double[] { 0.0, Math.PI / 2, Math.PI });
@@ -800,7 +799,7 @@ public class NpApiOverloadTests_UnaryMath
         Assert.AreEqual(180.0, result.GetDouble(2), Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void Rad2Deg_WithType_Compiles()
     {
         var a = np.array(new double[] { 0.0, Math.PI / 2, Math.PI });
@@ -813,7 +812,7 @@ public class NpApiOverloadTests_UnaryMath
 
     #region Radians - np.radians (2 overloads)
 
-    [Test]
+    [TestMethod]
     public void Radians_NoParams_Compiles()
     {
         var a = np.array(new double[] { 0.0, 90.0, 180.0 });
@@ -824,7 +823,7 @@ public class NpApiOverloadTests_UnaryMath
         Assert.AreEqual(Math.PI, result.GetDouble(2), Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void Radians_WithType_Compiles()
     {
         var a = np.array(new double[] { 0.0, 90.0, 180.0 });
@@ -837,7 +836,7 @@ public class NpApiOverloadTests_UnaryMath
 
     #region Degrees - np.degrees (2 overloads)
 
-    [Test]
+    [TestMethod]
     public void Degrees_NoParams_Compiles()
     {
         var a = np.array(new double[] { 0.0, Math.PI / 2, Math.PI });
@@ -848,7 +847,7 @@ public class NpApiOverloadTests_UnaryMath
         Assert.AreEqual(180.0, result.GetDouble(2), Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void Degrees_WithType_Compiles()
     {
         var a = np.array(new double[] { 0.0, Math.PI / 2, Math.PI });
@@ -861,7 +860,7 @@ public class NpApiOverloadTests_UnaryMath
 
     #region Positive - np.positive (1 overload)
 
-    [Test]
+    [TestMethod]
     public void Positive_NoParams_Compiles()
     {
         var a = np.array(new double[] { 1.5, -2.3, 3.7 });
@@ -877,7 +876,7 @@ public class NpApiOverloadTests_UnaryMath
 
     #region Negative - np.negative (1 overload)
 
-    [Test]
+    [TestMethod]
     public void Negative_NoParams_Compiles()
     {
         var a = np.array(new double[] { 1.5, -2.3, 3.7 });
@@ -892,7 +891,7 @@ public class NpApiOverloadTests_UnaryMath
 
     #region Reciprocal - np.reciprocal (2 overloads)
 
-    [Test]
+    [TestMethod]
     public void Reciprocal_NoParams_Compiles()
     {
         var a = np.array(new double[] { 1.0, 2.0, 4.0 });
@@ -903,7 +902,7 @@ public class NpApiOverloadTests_UnaryMath
         Assert.AreEqual(0.25, result.GetDouble(2), Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void Reciprocal_WithType_Compiles()
     {
         var a = np.array(new double[] { 1.0, 2.0, 4.0 });
@@ -916,7 +915,7 @@ public class NpApiOverloadTests_UnaryMath
 
     #region Modf - np.modf (2 overloads)
 
-    [Test]
+    [TestMethod]
     public void Modf_NoParams_Compiles()
     {
         var a = np.array(new double[] { 1.5, -2.3, 3.7 });
@@ -932,7 +931,7 @@ public class NpApiOverloadTests_UnaryMath
         Assert.AreEqual(3.0, integral.GetDouble(2), Tolerance);
     }
 
-    [Test]
+    [TestMethod]
     public void Modf_WithType_Compiles()
     {
         var a = np.array(new double[] { 1.5, -2.3, 3.7 });

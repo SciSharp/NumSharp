@@ -12,7 +12,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
 {
     public class StackedMemoryPoolTests
     {
-        [Test]
+        [TestMethod]
         public void Case1()
         {
 #if DEBUG

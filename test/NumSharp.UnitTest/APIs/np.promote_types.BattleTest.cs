@@ -1,8 +1,5 @@
 using System;
 using System.Threading.Tasks;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-using TUnit.Core;
 
 namespace NumSharp.UnitTest.APIs;
 
@@ -20,7 +17,7 @@ public class NpPromoteTypesBattleTests
 
     #region Same Type
 
-    [Test]
+    [TestMethod]
     public async Task PromoteTypes_SameType_ReturnsSame()
     {
         foreach (var type in AllTypes)
@@ -33,7 +30,7 @@ public class NpPromoteTypesBattleTests
 
     #region Symmetric Property
 
-    [Test]
+    [TestMethod]
     public async Task PromoteTypes_Symmetric()
     {
         foreach (var t1 in AllTypes)
@@ -51,13 +48,13 @@ public class NpPromoteTypesBattleTests
 
     #region Integer Promotion
 
-    [Test]
+    [TestMethod]
     public async Task PromoteTypes_Int16Int32()
     {
         await Assert.That(np.promote_types(NPTypeCode.Int16, NPTypeCode.Int32)).IsEqualTo(NPTypeCode.Int32);
     }
 
-    [Test]
+    [TestMethod]
     public async Task PromoteTypes_Int32Int64()
     {
         await Assert.That(np.promote_types(NPTypeCode.Int32, NPTypeCode.Int64)).IsEqualTo(NPTypeCode.Int64);
@@ -67,7 +64,7 @@ public class NpPromoteTypesBattleTests
 
     #region Float Promotion
 
-    [Test]
+    [TestMethod]
     public async Task PromoteTypes_Float32Float64()
     {
         await Assert.That(np.promote_types(NPTypeCode.Single, NPTypeCode.Double)).IsEqualTo(NPTypeCode.Double);
@@ -77,13 +74,13 @@ public class NpPromoteTypesBattleTests
 
     #region Generic Overload
 
-    [Test]
+    [TestMethod]
     public async Task PromoteTypes_Generic_IntLong()
     {
         await Assert.That(np.promote_types<int, long>()).IsEqualTo(NPTypeCode.Int64);
     }
 
-    [Test]
+    [TestMethod]
     public async Task PromoteTypes_Generic_FloatDouble()
     {
         await Assert.That(np.promote_types<float, double>()).IsEqualTo(NPTypeCode.Double);
@@ -93,7 +90,7 @@ public class NpPromoteTypesBattleTests
 
     #region Type Overload
 
-    [Test]
+    [TestMethod]
     public async Task PromoteTypes_Type_IntLong()
     {
         await Assert.That(np.promote_types(typeof(int), typeof(long))).IsEqualTo(NPTypeCode.Int64);

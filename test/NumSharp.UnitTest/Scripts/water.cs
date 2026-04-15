@@ -14,7 +14,7 @@
 //        public double g;
 //        public double dt;
 
-//        [Test]
+//        [TestMethod]
 //        public void Water()
 //        {
 //            int box_size = 1;

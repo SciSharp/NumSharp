@@ -15,7 +15,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
     /// </summary>
     public class NdArrayMatrixPowerTest
     {
-        [Test]
+        [TestMethod]
         public void ZeroPowerTest()
         {
             var nd1 = new NDArray(typeof(double), new Shape(3, 3));
@@ -29,7 +29,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
                 Assert.IsTrue(expected[idx, jdx] == onces[idx, jdx]);
         }
 
-        //[Test]
+        //[TestMethod]
         public void PowerOf3Test()
         {
             var nd1 = np.arange(9).reshape(3, 3).MakeGeneric<double>();

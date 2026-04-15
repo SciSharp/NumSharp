@@ -9,7 +9,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
 {
     public class NDIteratorTests
     {
-        [Test]
+        [TestMethod]
         public void Case1()
         {
             var sh = new NDIterator<long>(np.arange(10), false);
@@ -22,7 +22,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             acc.Should().Be(Enumerable.Range(0, 10).Sum());
         }
 
-        [Test]
+        [TestMethod]
         public void Case2()
         {
             Console.WriteLine();
@@ -38,7 +38,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             acc.Should().Be(Enumerable.Range(0, 10).Sum() * 10);
         }
 
-        [Test]
+        [TestMethod]
         public void Case3_Sliced()
         {
             var sh = new NDIterator<long>(np.arange(15).reshape((3, 5))["0:2,:"], false);
@@ -51,7 +51,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             acc.Should().Be(Enumerable.Range(0, 10).Sum());
         }
 
-        [Test]
+        [TestMethod]
         public void Case4_Sliced()
         {
             Console.WriteLine();
@@ -65,7 +65,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             acc.Should().Be(Enumerable.Range(0, 10).Sum() * 10);
         }
 
-        [Test]
+        [TestMethod]
         public void Case5_Autoreset()
         {
             var sh = new NDIterator<long>(np.arange(10), true);
@@ -79,7 +79,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             acc.Should().Be(Enumerable.Range(0, 10).Sum()*2);
         }
 
-        [Test]
+        [TestMethod]
         public void Case6_Autoreset()
         {
             Console.WriteLine();
@@ -92,7 +92,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             acc.Should().Be(Enumerable.Range(0, 10).Sum() * 10);
         }
 
-        [Test]
+        [TestMethod]
         public void Case7_Sliced_Autoreset()
         {
             var sh = new NDIterator<long>(np.arange(15).reshape((3, 5))["0:2,:"], false);
@@ -105,7 +105,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             acc.Should().Be(Enumerable.Range(0, 10).Sum());
         }
 
-        [Test]
+        [TestMethod]
         public void Case8_Sliced_Autoreset()
         {
             Console.WriteLine();
@@ -120,7 +120,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
         }
 
 
-        [Test]
+        [TestMethod]
         public void Case17_Reference()
         {
             Console.WriteLine();
@@ -133,7 +133,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             acc.Should().Be(Enumerable.Range(0, 10).Sum());
         }
 
-        [Test]
+        [TestMethod]
         public void Case18_Reference()
         {
             Console.WriteLine();
@@ -151,7 +151,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             acc.Should().Be((int)nd.size);
         }
 
-        [Test]
+        [TestMethod]
         public void Case19_Reference_Autoreset()
         {
             Console.WriteLine();
@@ -167,7 +167,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             acc.Should().Be((int)nd.size);
         }
 
-        [Test]
+        [TestMethod]
         public void Case20_Sliced_Autoreset_Reference()
         {
             var sh = new NDIterator<long>(np.arange(15).reshape((3, 5))["0:2,:"], true);
@@ -181,7 +181,7 @@ namespace NumSharp.UnitTest.Backends.Unmanaged
             acc.Should().Be(20);
         }
 
-        [Test]
+        [TestMethod]
         public void Case21_Sliced_Autoreset_Reference()
         {
             Console.WriteLine();

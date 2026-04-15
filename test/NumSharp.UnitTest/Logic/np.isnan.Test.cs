@@ -13,7 +13,7 @@ namespace NumSharp.UnitTest.Logic
     /// </summary>
     public class np_isnan_Test
     {
-        [Test]
+        [TestMethod]
         public void np_isnan_1D()
         {
             var np1 = new NDArray(new[] {1.0, Math.PI, Math.E, 42, double.MaxValue, double.MinValue, double.NaN});
@@ -31,7 +31,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.AreEqual(1, np.isnan(np3).ndim);
         }
 
-        [Test]
+        [TestMethod]
         public void np_isnan_2D()
         {
             var np1 = new NDArray(new[] {Math.PI, Math.E, 42, double.MaxValue, double.MinValue, double.NaN}, new Shape(2, 3));
@@ -48,7 +48,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.AreEqual(2, np.isnan(np3).ndim);
         }
 
-        [Test]
+        [TestMethod]
         public void np_isnan_Float32()
         {
             // Test with float32 array
@@ -60,7 +60,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.IsTrue(Enumerable.SequenceEqual(result.Data<bool>(), new[] {false, false, false, true, false, false}));
         }
 
-        [Test]
+        [TestMethod]
         public void np_isnan_IntegerTypes_AlwaysFalse()
         {
             // Integer types cannot be NaN
@@ -70,7 +70,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.IsFalse(np.any(np.isnan(np.array(new short[] {0, short.MaxValue, short.MinValue}))));
         }
 
-        [Test]
+        [TestMethod]
         public void np_isnan_Scalar()
         {
             Assert.IsFalse(np.isnan(np.array(1.0)).GetBoolean());
@@ -80,7 +80,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.IsFalse(np.isnan(np.array(double.NegativeInfinity)).GetBoolean());
         }
 
-        [Test]
+        [TestMethod]
         public void np_isnan_EmptyArray()
         {
             var empty = np.array(new double[0]);
@@ -89,7 +89,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.AreEqual(typeof(bool), result.dtype);
         }
 
-        [Test]
+        [TestMethod]
         public void np_isnan_SlicedArray()
         {
             // Test with non-contiguous (sliced) array
@@ -101,7 +101,7 @@ namespace NumSharp.UnitTest.Logic
             Assert.IsTrue(Enumerable.SequenceEqual(result.Data<bool>(), new[] {false, false, false}));
         }
 
-        [Test]
+        [TestMethod]
         public void np_isnan_InfinityIsNotNaN()
         {
             // Important: Infinity is NOT NaN

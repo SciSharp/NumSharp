@@ -8,7 +8,7 @@ namespace NumSharp.UnitTest.Creation
 {
     public class np_dtype_tests
     {
-        [Test]
+        [TestMethod]
         public void Case1()
         {
             np.dtype("?").type.Should().Be<bool>();

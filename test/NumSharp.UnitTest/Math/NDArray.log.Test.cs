@@ -10,7 +10,7 @@ namespace NumSharp.UnitTest
 {
     public class LogTest
     {
-        [Test]
+        [TestMethod]
         public void Case1()
         {
             var np1 = np.array(new double[] {1, Math.E, Math.E * Math.E, 0}); // .MakeGeneric<double>();

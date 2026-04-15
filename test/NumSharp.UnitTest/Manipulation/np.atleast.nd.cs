@@ -5,7 +5,7 @@ namespace NumSharp.UnitTest.Manipulation
 {
     public class np_atleast_tests
     {
-        [Test]
+        [TestMethod]
         public void alteast_3d()
         {
             var a = np.atleast_3d(3.0);
@@ -25,7 +25,7 @@ namespace NumSharp.UnitTest.Manipulation
             a.Shape.Should().BeEquivalentTo(new Shape(4, 3, 1));
         }
 
-        [Test]
+        [TestMethod]
         public void alteast_2d()
         {
             var a = np.atleast_2d(3.0);
@@ -41,7 +41,7 @@ namespace NumSharp.UnitTest.Manipulation
             a.Shape.Should().BeEquivalentTo(new Shape(1, 3));
         }
 
-        [Test]
+        [TestMethod]
         public void alteast_1d()
         {
             var a = np.atleast_1d(3.0);

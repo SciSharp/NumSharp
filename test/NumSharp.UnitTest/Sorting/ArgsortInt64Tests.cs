@@ -3,9 +3,6 @@ using System.Linq;
 using System.Threading.Tasks;
 using NumSharp;
 using NumSharp.UnitTest.Utilities;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-using TUnit.Core;
 
 namespace NumSharp.UnitTest.Sorting;
 
@@ -17,7 +14,7 @@ public class ArgsortInt64Tests
 {
     #region Return Type Tests
 
-    [Test]
+    [TestMethod]
     public async Task Argsort_ReturnsInt64Indices()
     {
         // NumPy: np.argsort([3, 1, 2]).dtype = int64
@@ -27,7 +24,7 @@ public class ArgsortInt64Tests
         await Assert.That(result.typecode).IsEqualTo(NPTypeCode.Int64);
     }
 
-    [Test]
+    [TestMethod]
     public async Task Argsort_Float64_ReturnsInt64Indices()
     {
         var a = np.array(new double[] { 3.0, 1.0, 2.0 });
@@ -36,7 +33,7 @@ public class ArgsortInt64Tests
         await Assert.That(result.typecode).IsEqualTo(NPTypeCode.Int64);
     }
 
-    [Test]
+    [TestMethod]
     public async Task Argsort_Float32_ReturnsInt64Indices()
     {
         var a = np.array(new float[] { 3.0f, 1.0f, 2.0f });
@@ -45,7 +42,7 @@ public class ArgsortInt64Tests
         await Assert.That(result.typecode).IsEqualTo(NPTypeCode.Int64);
     }
 
-    [Test]
+    [TestMethod]
     public async Task Argsort_Byte_ReturnsInt64Indices()
     {
         var a = np.array(new byte[] { 3, 1, 2 });
@@ -54,7 +51,7 @@ public class ArgsortInt64Tests
         await Assert.That(result.typecode).IsEqualTo(NPTypeCode.Int64);
     }
 
-    [Test]
+    [TestMethod]
     public async Task Argsort_Int64_ReturnsInt64Indices()
     {
         var a = np.array(new long[] { 3, 1, 2 });
@@ -67,7 +64,7 @@ public class ArgsortInt64Tests
 
     #region Various DType Tests
 
-    [Test]
+    [TestMethod]
     public async Task Argsort_Int16_SortsCorrectly()
     {
         // NumPy: np.argsort(np.array([30, 10, 20], dtype=np.int16)) = [1, 2, 0]
@@ -79,7 +76,7 @@ public class ArgsortInt64Tests
         await Assert.That(result.GetInt64(2)).IsEqualTo(0L);
     }
 
-    [Test]
+    [TestMethod]
     public async Task Argsort_UInt16_SortsCorrectly()
     {
         var a = np.array(new ushort[] { 30, 10, 20 });
@@ -90,7 +87,7 @@ public class ArgsortInt64Tests
         await Assert.That(result.GetInt64(2)).IsEqualTo(0L);
     }
 
-    [Test]
+    [TestMethod]
     public async Task Argsort_UInt32_SortsCorrectly()
     {
         var a = np.array(new uint[] { 30, 10, 20 });
@@ -101,7 +98,7 @@ public class ArgsortInt64Tests
         await Assert.That(result.GetInt64(2)).IsEqualTo(0L);
     }
 
-    [Test]
+    [TestMethod]
     public async Task Argsort_UInt64_SortsCorrectly()
     {
         var a = np.array(new ulong[] { 30, 10, 20 });
@@ -112,7 +109,7 @@ public class ArgsortInt64Tests
         await Assert.That(result.GetInt64(2)).IsEqualTo(0L);
     }
 
-    [Test]
+    [TestMethod]
     public async Task Argsort_Decimal_SortsCorrectly()
     {
         var a = np.array(new decimal[] { 3.0m, 1.0m, 2.0m });
@@ -127,7 +124,7 @@ public class ArgsortInt64Tests
 
     #region Axis Parameter Tests
 
-    [Test]
+    [TestMethod]
     public async Task Argsort_2D_Axis0_SortsColumns()
     {
         // NumPy:
@@ -151,7 +148,7 @@ public class ArgsortInt64Tests
         await Assert.That(result.GetInt64(2, 1)).IsEqualTo(1L);
     }
 
-    [Test]
+    [TestMethod]
     public async Task Argsort_2D_Axis1_SortsRows()
     {
         // NumPy:
@@ -175,7 +172,7 @@ public class ArgsortInt64Tests
         await Assert.That(result.GetInt64(1, 2)).IsEqualTo(0L);
     }
 
-    [Test]
+    [TestMethod]
     public async Task Argsort_2D_AxisMinus1_SortsLastAxis()
     {
         // NumPy: axis=-1 is equivalent to the last axis
@@ -194,7 +191,7 @@ public class ArgsortInt64Tests
 
     #region Edge Cases
 
-    [Test]
+    [TestMethod]
     public async Task Argsort_SingleElement_ReturnsZero()
     {
         var a = np.array(new int[] { 42 });
@@ -204,7 +201,7 @@ public class ArgsortInt64Tests
         await Assert.That(result.GetInt64(0)).IsEqualTo(0L);
     }
 
-    [Test]
+    [TestMethod]
     public async Task Argsort_TwoElements_SortsCorrectly()
     {
         var a = np.array(new int[] { 2, 1 });
@@ -214,7 +211,7 @@ public class ArgsortInt64Tests
         await Assert.That(result.GetInt64(1)).IsEqualTo(0L);
     }
 
-    [Test]
+    [TestMethod]
     public async Task Argsort_DuplicateValues_StableSort()
     {
         // NumPy uses stable sort by default (mergesort)
@@ -232,7 +229,7 @@ public class ArgsortInt64Tests
         await Assert.That(result.GetInt64(4)).IsEqualTo(3L);
     }
 
-    [Test]
+    [TestMethod]
     public async Task Argsort_LargerArray_SortsCorrectly()
     {
         // Test with a larger array to ensure no issues with indexing
@@ -254,7 +251,7 @@ public class ArgsortInt64Tests
 
     #region Using Result as Index
 
-    [Test]
+    [TestMethod]
     public async Task Argsort_CanBeUsedForIndexing()
     {
         // NumPy pattern: a[np.argsort(a)] gives sorted array

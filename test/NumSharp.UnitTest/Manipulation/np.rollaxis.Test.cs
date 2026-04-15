@@ -5,7 +5,7 @@ namespace NumSharp.UnitTest.Manipulation
 {
     public class np_rollaxis_Test
     {
-        [Test]
+        [TestMethod]
         public void Case1()
         {
             var a = np.ones((3, 4, 5, 6));

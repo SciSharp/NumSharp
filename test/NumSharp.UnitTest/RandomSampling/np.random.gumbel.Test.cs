@@ -11,7 +11,7 @@ namespace NumSharp.UnitTest.RandomSampling
         // Euler-Mascheroni constant
         private const double EulerGamma = 0.5772156649015329;
 
-        [Test]
+        [TestMethod]
         public void Gumbel_1D_ReturnsCorrectShape()
         {
             var rand = np.random.gumbel(0, 1, 5);
@@ -19,7 +19,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.AreEqual(5, rand.size);
         }
 
-        [Test]
+        [TestMethod]
         public void Gumbel_2D_ReturnsCorrectShape()
         {
             var rand = np.random.gumbel(0, 1, new Shape(5, 5));
@@ -27,7 +27,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.AreEqual(25, rand.size);
         }
 
-        [Test]
+        [TestMethod]
         public void Gumbel_2DByShape_ReturnsCorrectShape()
         {
             var rand = np.random.gumbel(0, 1, new Shape(5, 5));
@@ -35,7 +35,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.AreEqual(25, rand.size);
         }
 
-        [Test]
+        [TestMethod]
         public void Gumbel_DefaultParameters_HasCorrectStatistics()
         {
             // Gumbel(0, 1) has mean = γ ≈ 0.5772 (Euler-Mascheroni constant)
@@ -52,7 +52,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.IsTrue(Math.Abs(std - expectedStd) < 0.05, $"Std should be near {expectedStd}, got {std}");
         }
 
-        [Test]
+        [TestMethod]
         public void Gumbel_WithLocScale_TransformsCorrectly()
         {
             // Gumbel(loc, scale) has mean = loc + scale * γ
@@ -67,13 +67,13 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.IsTrue(Math.Abs(mean - expectedMean) < 0.15, $"Mean should be near {expectedMean}, got {mean}");
         }
 
-        [Test]
+        [TestMethod]
         public void Gumbel_NegativeScale_ThrowsArgumentException()
         {
             Assert.ThrowsException<ArgumentException>(() => np.random.gumbel(0, -1, 5));
         }
 
-        [Test]
+        [TestMethod]
         public void Gumbel_ScaleZero_ReturnsConstantAtLoc()
         {
             double loc = 5.0;
@@ -85,7 +85,7 @@ namespace NumSharp.UnitTest.RandomSampling
             }
         }
 
-        [Test]
+        [TestMethod]
         public void Gumbel_Scalar_ReturnsScalar()
         {
             var rng = np.random.RandomState(42);
@@ -95,14 +95,14 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.AreEqual(1, result.size);
         }
 
-        [Test]
+        [TestMethod]
         public void Gumbel_ReturnsFloat64()
         {
             var result = np.random.gumbel(0, 1, 5);
             Assert.AreEqual(NPTypeCode.Double, result.typecode);
         }
 
-        [Test]
+        [TestMethod]
         public void Gumbel_SameSeed_ProducesSameResults()
         {
             var rng1 = np.random.RandomState(42);
@@ -117,7 +117,7 @@ namespace NumSharp.UnitTest.RandomSampling
             }
         }
 
-        [Test]
+        [TestMethod]
         public void Gumbel_DifferentSeeds_ProduceDifferentResults()
         {
             var rng1 = np.random.RandomState(42);
@@ -138,7 +138,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.IsTrue(anyDifferent, "Different seeds should produce different results");
         }
 
-        [Test]
+        [TestMethod]
         public void Gumbel_CanProduceNegativeValues()
         {
             // Gumbel distribution can produce negative values (unlike Rayleigh)
@@ -163,7 +163,7 @@ namespace NumSharp.UnitTest.RandomSampling
         /// Migrated from NumPy test_random.py test_gumbel_0
         /// Tests that scale=0 returns loc (default 0).
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Gumbel_NumPy_ScaleZeroReturnsLoc()
         {
             // From NumPy: assert_equal(np.random.gumbel(scale=0), 0)
@@ -175,7 +175,7 @@ namespace NumSharp.UnitTest.RandomSampling
         /// Migrated from NumPy test_random.py test_gumbel_0
         /// Negative scale should raise ValueError.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Gumbel_NumPy_NegativeScaleRaises()
         {
             // From NumPy: assert_raises(ValueError, np.random.gumbel, scale=-0.)
@@ -187,7 +187,7 @@ namespace NumSharp.UnitTest.RandomSampling
         /// Migrated from NumPy test_smoke.py test_gumbel
         /// Basic smoke test that gumbel produces correct output size.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Gumbel_NumPy_SmokeTest()
         {
             // From NumPy: vals = rg.gumbel(2.0, 2.0, 10); assert_(len(vals) == 10)

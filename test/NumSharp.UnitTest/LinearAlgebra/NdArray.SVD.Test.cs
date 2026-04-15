@@ -12,7 +12,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
 {
     public class NDArraySVDTester
     {
-        //[Test]
+        //[TestMethod]
         public void DefaultTest()
         {
             NDArray A = new NDArray(np.float64, new Shape(6, 5));

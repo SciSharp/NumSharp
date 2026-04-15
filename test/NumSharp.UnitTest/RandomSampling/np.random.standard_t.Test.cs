@@ -8,7 +8,7 @@ namespace NumSharp.UnitTest.RandomSampling
     
     public class StandardTTests
     {
-        [Test]
+        [TestMethod]
         public void StandardT_ReturnsScalar_WhenNoSize()
         {
             var rng = np.random.RandomState(42);
@@ -20,7 +20,7 @@ namespace NumSharp.UnitTest.RandomSampling
             result.dtype.Should().Be(typeof(double));
         }
 
-        [Test]
+        [TestMethod]
         public void StandardT_Returns1DArray()
         {
             var rng = np.random.RandomState(42);
@@ -30,7 +30,7 @@ namespace NumSharp.UnitTest.RandomSampling
             result.size.Should().Be(5);
         }
 
-        [Test]
+        [TestMethod]
         public void StandardT_Returns2DArray()
         {
             var rng = np.random.RandomState(42);
@@ -40,7 +40,7 @@ namespace NumSharp.UnitTest.RandomSampling
             result.size.Should().Be(6);
         }
 
-        [Test]
+        [TestMethod]
         public void StandardT_HasMeanNearZero()
         {
             // For t distribution with df > 1: E[X] = 0
@@ -52,7 +52,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Math.Abs(mean).Should().BeLessThan(0.05);
         }
 
-        [Test]
+        [TestMethod]
         public void StandardT_HasExpectedStd_df10()
         {
             // For t distribution: Var[X] = df/(df-2) for df > 2
@@ -65,7 +65,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Math.Abs(std - expectedStd).Should().BeLessThan(0.05);
         }
 
-        [Test]
+        [TestMethod]
         public void StandardT_HasExpectedStd_df5()
         {
             // df=5: Var = 5/3, Std = sqrt(5/3) ≈ 1.291
@@ -77,7 +77,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Math.Abs(std - expectedStd).Should().BeLessThan(0.1);
         }
 
-        [Test]
+        [TestMethod]
         public void StandardT_IsSymmetric()
         {
             // t distribution is symmetric around 0
@@ -96,7 +96,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Math.Abs(ratio - 1.0).Should().BeLessThan(0.05);
         }
 
-        [Test]
+        [TestMethod]
         public void StandardT_LargeDf_ApproachesNormal()
         {
             // As df → ∞, t distribution approaches standard normal
@@ -111,7 +111,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Math.Abs(std - 1.0).Should().BeLessThan(0.02);
         }
 
-        [Test]
+        [TestMethod]
         public void StandardT_SmallDf_HasHeavierTails()
         {
             // df=3 should have heavier tails than df=100
@@ -127,21 +127,21 @@ namespace NumSharp.UnitTest.RandomSampling
             max3.Should().BeGreaterThan(max100);
         }
 
-        [Test]
+        [TestMethod]
         public void StandardT_DfZero_ThrowsArgumentException()
         {
             Action act = () => np.random.standard_t(0);
             act.Should().Throw<ArgumentException>();
         }
 
-        [Test]
+        [TestMethod]
         public void StandardT_DfNegative_ThrowsArgumentException()
         {
             Action act = () => np.random.standard_t(-1);
             act.Should().Throw<ArgumentException>();
         }
 
-        [Test]
+        [TestMethod]
         public void StandardT_ShapeOverload_Works()
         {
             var rng = np.random.RandomState(42);
@@ -150,7 +150,7 @@ namespace NumSharp.UnitTest.RandomSampling
             result.shape.Should().ContainInOrder(3, 4);
         }
 
-        [Test]
+        [TestMethod]
         public void StandardT_Reproducibility_WithSeed()
         {
             var rng1 = np.random.RandomState(42);
@@ -162,7 +162,7 @@ namespace NumSharp.UnitTest.RandomSampling
             first.Should().BeEquivalentTo(second);
         }
 
-        [Test]
+        [TestMethod]
         public void StandardT_FractionalDf_Works()
         {
             // df can be fractional

@@ -10,14 +10,14 @@ namespace NumSharp.UnitTest.APIs
 {
     public class ApiCreationTest : TestClass
     {
-        [Test]
+        [TestMethod]
         public void arange()
         {
             var nd = np.arange(3);
             AssertAreEqual(nd.Data<int>(), new int[] {0, 1, 2});
         }
 
-        [Test]
+        [TestMethod]
         public void ndarray()
         {
             var x = np.ndarray((2, 3), dtype: np.int32, order: 'C');
@@ -25,7 +25,7 @@ namespace NumSharp.UnitTest.APIs
             x.flat.Cast<int>().Should().AllBeEquivalentTo(0);
         }
 
-        [Test]
+        [TestMethod]
         public void ReshapeDoesNotSelfModify()
         {
             var x = np.arange(9);

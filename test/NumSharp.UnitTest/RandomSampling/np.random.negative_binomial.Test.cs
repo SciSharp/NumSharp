@@ -9,7 +9,7 @@ namespace NumSharp.UnitTest.RandomSampling
     
     public class NpRandomNegativeBinomialTests : TestClass
     {
-        [Test]
+        [TestMethod]
         public void NegativeBinomial_1D_ReturnsCorrectShape()
         {
             var rand = np.random.negative_binomial(10, 0.5, 5L);
@@ -17,7 +17,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.AreEqual(5, rand.size);
         }
 
-        [Test]
+        [TestMethod]
         public void NegativeBinomial_2D_ReturnsCorrectShape()
         {
             var rand = np.random.negative_binomial(10, 0.5, new Shape(5, 5));
@@ -25,7 +25,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.AreEqual(25, rand.size);
         }
 
-        [Test]
+        [TestMethod]
         public void NegativeBinomial_2DByShape_ReturnsCorrectShape()
         {
             var rand = np.random.negative_binomial(10, 0.5, new Shape(5, 5));
@@ -33,14 +33,14 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.AreEqual(25, rand.size);
         }
 
-        [Test]
+        [TestMethod]
         public void NegativeBinomial_ReturnsInt64()
         {
             var result = np.random.negative_binomial(10, 0.5, 5L);
             Assert.AreEqual(NPTypeCode.Int64, result.typecode);
         }
 
-        [Test]
+        [TestMethod]
         public void NegativeBinomial_AllValuesNonNegative()
         {
             // Negative binomial produces non-negative integers (number of failures)
@@ -53,7 +53,7 @@ namespace NumSharp.UnitTest.RandomSampling
             }
         }
 
-        [Test]
+        [TestMethod]
         public void NegativeBinomial_HasCorrectMean()
         {
             // mean = n * (1-p) / p
@@ -70,7 +70,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.IsTrue(Math.Abs(mean - expectedMean) < 0.5, $"Mean should be near {expectedMean}, got {mean}");
         }
 
-        [Test]
+        [TestMethod]
         public void NegativeBinomial_HasCorrectVariance()
         {
             // variance = n * (1-p) / p^2
@@ -92,7 +92,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.IsTrue(Math.Abs(variance - expectedVar) < 2.0, $"Variance should be near {expectedVar}, got {variance}");
         }
 
-        [Test]
+        [TestMethod]
         public void NegativeBinomial_PEqualsOne_ReturnsAllZeros()
         {
             // p=1 means immediate success, so 0 failures
@@ -104,7 +104,7 @@ namespace NumSharp.UnitTest.RandomSampling
             }
         }
 
-        [Test]
+        [TestMethod]
         public void NegativeBinomial_HighP_FewFailures()
         {
             // High p means few failures expected
@@ -120,7 +120,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.IsTrue(mean < 5, $"High p should give low mean, got {mean}");
         }
 
-        [Test]
+        [TestMethod]
         public void NegativeBinomial_LowP_ManyFailures()
         {
             // Low p means many failures expected
@@ -136,7 +136,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.IsTrue(mean > 50, $"Low p should give high mean, got {mean}");
         }
 
-        [Test]
+        [TestMethod]
         public void NegativeBinomial_Scalar_ReturnsScalar()
         {
             var rng = np.random.RandomState(42);
@@ -146,7 +146,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.AreEqual(1, result.size);
         }
 
-        [Test]
+        [TestMethod]
         public void NegativeBinomial_SameSeed_ProducesSameResults()
         {
             var rng1 = np.random.RandomState(42);
@@ -163,37 +163,37 @@ namespace NumSharp.UnitTest.RandomSampling
 
         // ========== Validation Tests ==========
 
-        [Test]
+        [TestMethod]
         public void NegativeBinomial_NZero_ThrowsArgumentException()
         {
             Assert.ThrowsException<ArgumentException>(() => np.random.negative_binomial(0, 0.5, 5L));
         }
 
-        [Test]
+        [TestMethod]
         public void NegativeBinomial_NNegative_ThrowsArgumentException()
         {
             Assert.ThrowsException<ArgumentException>(() => np.random.negative_binomial(-1, 0.5, 5L));
         }
 
-        [Test]
+        [TestMethod]
         public void NegativeBinomial_PZero_ThrowsArgumentException()
         {
             Assert.ThrowsException<ArgumentException>(() => np.random.negative_binomial(10, 0, 5L));
         }
 
-        [Test]
+        [TestMethod]
         public void NegativeBinomial_PNegative_ThrowsArgumentException()
         {
             Assert.ThrowsException<ArgumentException>(() => np.random.negative_binomial(10, -0.1, 5L));
         }
 
-        [Test]
+        [TestMethod]
         public void NegativeBinomial_PGreaterThanOne_ThrowsArgumentException()
         {
             Assert.ThrowsException<ArgumentException>(() => np.random.negative_binomial(10, 1.5, 5L));
         }
 
-        [Test]
+        [TestMethod]
         public void NegativeBinomial_PNaN_ThrowsArgumentException()
         {
             Assert.ThrowsException<ArgumentException>(() => np.random.negative_binomial(10, double.NaN, 5L));
@@ -205,7 +205,7 @@ namespace NumSharp.UnitTest.RandomSampling
         /// Migrated from NumPy test_randomstate.py
         /// Test that negative binomial accepts floating point arguments.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void NegativeBinomial_NumPy_AcceptsFloatN()
         {
             // From NumPy: random_state.negative_binomial(0.5, 0.5)
@@ -218,7 +218,7 @@ namespace NumSharp.UnitTest.RandomSampling
         /// Migrated from NumPy test_smoke.py
         /// Basic smoke test.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void NegativeBinomial_NumPy_SmokeTest()
         {
             var vals = np.random.negative_binomial(10, 0.3, 10L);

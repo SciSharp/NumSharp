@@ -9,36 +9,36 @@ namespace NumSharp.UnitTest.Logic
 {
     public class np_isscalar_tests
     {
-        [Test]
-        [Arguments(typeof(double))]
-        [Arguments(typeof(float))]
-        [Arguments(typeof(byte))]
-        [Arguments(typeof(int))]
-        [Arguments(typeof(long))]
-        [Arguments(typeof(char))]
-        [Arguments(typeof(short))]
-        [Arguments(typeof(uint))]
-        [Arguments(typeof(ulong))]
-        [Arguments(typeof(ushort))]
-        [Arguments(typeof(decimal))]
+        [TestMethod]
+        [DataRow(typeof(double))]
+        [DataRow(typeof(float))]
+        [DataRow(typeof(byte))]
+        [DataRow(typeof(int))]
+        [DataRow(typeof(long))]
+        [DataRow(typeof(char))]
+        [DataRow(typeof(short))]
+        [DataRow(typeof(uint))]
+        [DataRow(typeof(ulong))]
+        [DataRow(typeof(ushort))]
+        [DataRow(typeof(decimal))]
         public void AllPrimitiveTypes(Type type)
         {
             var value = Convert.ChangeType((byte)0, type);
             Assert.IsTrue(np.isscalar(value));
         }
 
-        [Test]
-        [Arguments(typeof(double))]
-        [Arguments(typeof(float))]
-        [Arguments(typeof(byte))]
-        [Arguments(typeof(int))]
-        [Arguments(typeof(long))]
-        [Arguments(typeof(char))]
-        [Arguments(typeof(short))]
-        [Arguments(typeof(uint))]
-        [Arguments(typeof(ulong))]
-        [Arguments(typeof(ushort))]
-        [Arguments(typeof(decimal))]
+        [TestMethod]
+        [DataRow(typeof(double))]
+        [DataRow(typeof(float))]
+        [DataRow(typeof(byte))]
+        [DataRow(typeof(int))]
+        [DataRow(typeof(long))]
+        [DataRow(typeof(char))]
+        [DataRow(typeof(short))]
+        [DataRow(typeof(uint))]
+        [DataRow(typeof(ulong))]
+        [DataRow(typeof(ushort))]
+        [DataRow(typeof(decimal))]
         public void AllPrimitiveArrayTypes(Type type)
         {
             var value = Convert.ChangeType((byte)0, type);
@@ -47,28 +47,28 @@ namespace NumSharp.UnitTest.Logic
             Assert.IsFalse(np.isscalar(arr));
         }
 
-        [Test]
+        [TestMethod]
         public void Complex()
         {
             var value = new Complex(15, 15);
             Assert.IsTrue(np.isscalar(value));
         }
 
-        [Test]
+        [TestMethod]
         public void Null()
         {
             Assert.IsFalse(np.isscalar(null));
         }
 
-        [Test]
-        [Arguments("")]
-        [Arguments("Hi")]
+        [TestMethod]
+        [DataRow("")]
+        [DataRow("Hi")]
         public void String(string value)
         {
             Assert.IsTrue(np.isscalar(value));
         }
 
-        [Test]
+        [TestMethod]
         public void NDArray()
         {
             var value = np.zeros(new Shape(3, 3));

@@ -11,7 +11,7 @@ namespace NumSharp.UnitTest.Indexing
     /// </summary>
     public class np_nonzero_edge_cases : TestClass
     {
-        [Test]
+        [TestMethod]
         public void EmptyArray_ReturnsEmptyIndices()
         {
             // NumPy: np.nonzero(np.array([], dtype=np.int32)) returns (array([], dtype=int64),)
@@ -22,7 +22,7 @@ namespace NumSharp.UnitTest.Indexing
             Assert.AreEqual(0, r[0].size);
         }
 
-        [Test]
+        [TestMethod]
         public void NaN_IsNonZero()
         {
             // NumPy: nonzero([0, nan, 1]) = [1, 2] - NaN is considered nonzero
@@ -32,7 +32,7 @@ namespace NumSharp.UnitTest.Indexing
             r[0].Should().BeOfValues(1, 2);
         }
 
-        [Test]
+        [TestMethod]
         public void PositiveInfinity_IsNonZero()
         {
             // NumPy: nonzero([0, inf, 1]) = [1, 2]
@@ -42,7 +42,7 @@ namespace NumSharp.UnitTest.Indexing
             r[0].Should().BeOfValues(1, 2);
         }
 
-        [Test]
+        [TestMethod]
         public void NegativeInfinity_IsNonZero()
         {
             // NumPy: nonzero([0, -inf, 1]) = [1, 2]
@@ -52,7 +52,7 @@ namespace NumSharp.UnitTest.Indexing
             r[0].Should().BeOfValues(1, 2);
         }
 
-        [Test]
+        [TestMethod]
         public void NegativeZero_IsZero()
         {
             // NumPy: nonzero([0, -0.0, 1]) = [2] - negative zero is still zero
@@ -62,7 +62,7 @@ namespace NumSharp.UnitTest.Indexing
             r[0].Should().BeOfValues(2);
         }
 
-        [Test]
+        [TestMethod]
         public void AllZeros_ReturnsEmptyIndices()
         {
             // NumPy: nonzero(zeros(5)) = []
@@ -72,7 +72,7 @@ namespace NumSharp.UnitTest.Indexing
             Assert.AreEqual(0, r[0].size);
         }
 
-        [Test]
+        [TestMethod]
         public void AllNonZero_ReturnsAllIndices()
         {
             // NumPy: nonzero(ones(5)) = [0, 1, 2, 3, 4]
@@ -82,7 +82,7 @@ namespace NumSharp.UnitTest.Indexing
             r[0].Should().BeOfValues(0, 1, 2, 3, 4);
         }
 
-        [Test]
+        [TestMethod]
         public void NonContiguous_Slice_Works()
         {
             // NumPy: nonzero(arange(10)[::2]) = [1, 2, 3, 4] (values [0, 2, 4, 6, 8])
@@ -97,7 +97,7 @@ namespace NumSharp.UnitTest.Indexing
             r[0].Should().BeOfValues(1, 2, 3, 4);  // indices of nonzero values
         }
 
-        [Test]
+        [TestMethod]
         public void TwoDimensional_Basic()
         {
             // NumPy: nonzero([[0,1,0],[2,0,3]]) = ([0,1,1], [1,0,2])

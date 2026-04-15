@@ -8,7 +8,7 @@ namespace NumSharp.UnitTest.RandomSampling
     /// </summary>
     public class NpRandomLaplaceTests : TestClass
     {
-        [Test]
+        [TestMethod]
         public void Laplace_1D_ReturnsCorrectShape()
         {
             var rand = np.random.laplace(0, 1, 5);
@@ -16,7 +16,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.AreEqual(5, rand.size);
         }
 
-        [Test]
+        [TestMethod]
         public void Laplace_2D_ReturnsCorrectShape()
         {
             var rand = np.random.laplace(0, 1, new Shape(5, 5));
@@ -24,7 +24,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.AreEqual(25, rand.size);
         }
 
-        [Test]
+        [TestMethod]
         public void Laplace_2DByShape_ReturnsCorrectShape()
         {
             var rand = np.random.laplace(0, 1, new Shape(5, 5));
@@ -32,7 +32,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.AreEqual(25, rand.size);
         }
 
-        [Test]
+        [TestMethod]
         public void Laplace_DefaultParameters_HasCorrectStatistics()
         {
             // Laplace(0, 1) has mean=0 and std=sqrt(2)≈1.414, variance=2
@@ -49,7 +49,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.IsTrue(Math.Abs(variance - 2.0) < 0.1, $"Variance should be near 2, got {variance}");
         }
 
-        [Test]
+        [TestMethod]
         public void Laplace_WithLocScale_TransformsCorrectly()
         {
             // Laplace(μ, λ) has mean=μ and variance=2λ²
@@ -66,13 +66,13 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.IsTrue(Math.Abs(variance - expectedVariance) < 0.5, $"Variance should be near {expectedVariance}, got {variance}");
         }
 
-        [Test]
+        [TestMethod]
         public void Laplace_NegativeScale_ThrowsArgumentException()
         {
             Assert.ThrowsException<ArgumentException>(() => np.random.laplace(0, -1, 5));
         }
 
-        [Test]
+        [TestMethod]
         public void Laplace_ScaleZero_ReturnsConstantAtLoc()
         {
             double loc = 5.0;
@@ -84,7 +84,7 @@ namespace NumSharp.UnitTest.RandomSampling
             }
         }
 
-        [Test]
+        [TestMethod]
         public void Laplace_Scalar_ReturnsScalar()
         {
             var rng = np.random.RandomState(42);
@@ -94,14 +94,14 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.AreEqual(1, result.size);
         }
 
-        [Test]
+        [TestMethod]
         public void Laplace_ReturnsFloat64()
         {
             var result = np.random.laplace(0, 1, 5);
             Assert.AreEqual(NPTypeCode.Double, result.typecode);
         }
 
-        [Test]
+        [TestMethod]
         public void Laplace_DifferentSeeds_ProduceDifferentResults()
         {
             var rng1 = np.random.RandomState(42);
@@ -122,7 +122,7 @@ namespace NumSharp.UnitTest.RandomSampling
             Assert.IsTrue(anyDifferent, "Different seeds should produce different results");
         }
 
-        [Test]
+        [TestMethod]
         public void Laplace_SameSeed_ProducesSameResults()
         {
             var rng1 = np.random.RandomState(42);
@@ -143,7 +143,7 @@ namespace NumSharp.UnitTest.RandomSampling
         /// Migrated from NumPy test_random.py test_laplace_0
         /// Tests that scale=0 returns loc, and negative scale raises error.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Laplace_NumPy_ScaleZeroReturnsLoc()
         {
             // From NumPy: assert_equal(np.random.laplace(scale=0), 0)
@@ -156,7 +156,7 @@ namespace NumSharp.UnitTest.RandomSampling
         /// Negative zero scale should raise ValueError in NumPy.
         /// Note: In C#, -0.0 == 0.0, so we test explicit negative values.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Laplace_NumPy_NegativeScaleRaises()
         {
             // From NumPy: assert_raises(ValueError, np.random.laplace, scale=-0.)
@@ -169,7 +169,7 @@ namespace NumSharp.UnitTest.RandomSampling
         /// Migrated from NumPy test_smoke.py test_laplace
         /// Basic smoke test that laplace produces correct output size.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Laplace_NumPy_SmokeTest()
         {
             // From NumPy: vals = rg.laplace(2.0, 2.0, 10); assert_(len(vals) == 10)
@@ -180,7 +180,7 @@ namespace NumSharp.UnitTest.RandomSampling
         /// <summary>
         /// Test that Laplace can produce both positive and negative values.
         /// </summary>
-        [Test]
+        [TestMethod]
         public void Laplace_ProducesBothPositiveAndNegative()
         {
             var rng = np.random.RandomState(42);
