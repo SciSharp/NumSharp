@@ -404,10 +404,15 @@ public fixed long BufStrides[MaxOperands];
 
 1. **GotoIndex()** - Jump to flat C/F index position (requires index stride storage)
 2. **Index stride integration** - Store index stride with operand strides for consistency
-3. **F-order iteration with MULTI_INDEX** - Currently skips axis reordering to preserve indices
-4. **K-order on F-contiguous with MULTI_INDEX** - Same issue as F-order
-5. **Reduction support** - Implement reduce_pos, outer loop handling
-6. **GetIterView()** - Return NDArray with iterator's axis ordering
-7. **Negative stride handling** - Integrate with axis permutation
-8. **Cast support** - Type conversion during buffered iteration
-9. **Copy()** - Create independent copy of iterator at current position
+3. **Reduction support** - Implement reduce_pos, outer loop handling
+4. **GetIterView()** - Return NDArray with iterator's axis ordering
+5. **Negative stride handling** - Integrate with axis permutation
+6. **Cast support** - Type conversion during buffered iteration
+7. **Copy()** - Create independent copy of iterator at current position
+
+### Recently Completed (2026-04-15)
+
+- **F-order with MULTI_INDEX** - Full NumPy parity: first axis changes fastest
+- **K-order with MULTI_INDEX** - Full NumPy parity: follows memory layout (smallest stride innermost)
+- **Axis permutation tracking** - Perm array correctly maps internal to original coordinates
+- **forCoalescing parameter** - Conditional axis sorting for coalescing vs iteration

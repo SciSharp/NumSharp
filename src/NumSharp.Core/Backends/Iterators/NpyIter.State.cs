@@ -218,6 +218,7 @@ namespace NumSharp.Backends.Iteration
         /// <summary>
         /// Allocate dimension-dependent arrays for given ndim and nop.
         /// Must be called before using Shape, Coords, Perm, or Strides.
+        /// Initializes Perm to identity permutation [0, 1, 2, ...].
         /// </summary>
         public void AllocateDimArrays(int ndim, int nop)
         {
@@ -256,6 +257,11 @@ namespace NumSharp.Backends.Iteration
             Coords = (long*)(block + shapeBytes);
             Strides = (long*)(block + shapeBytes + coordsBytes);
             Perm = (sbyte*)(block + shapeBytes + coordsBytes + stridesBytes);
+
+            // Initialize Perm to identity permutation
+            // Perm[internal_axis] = original_axis
+            for (int d = 0; d < ndim; d++)
+                Perm[d] = (sbyte)d;
         }
 
         /// <summary>

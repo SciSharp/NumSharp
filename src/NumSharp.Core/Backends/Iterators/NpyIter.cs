@@ -225,25 +225,34 @@ namespace NumSharp.Backends.Iteration
                 ApplyOpAxes(opAxesNDim, opAxes);
             }
 
-            // Apply axis reordering and coalescing unless multi-index tracking is requested
-            // NumPy always coalesces after construction: nditer_constr.c line 395-396
-            // if (ndim > 1 && !(itflags & NPY_ITFLAG_HASMULTIINDEX)) { npyiter_coalesce_axes(iter); }
+            // Apply axis reordering based on iteration order.
+            // NumPy reorders axes based on the order parameter, then coalesces if MULTI_INDEX is not set.
             //
-            // IMPORTANT: NumPy reorders axes BEFORE coalescing so that axes are sorted by
-            // stride magnitude. This allows contiguous arrays to fully coalesce to 1D.
-            // Without reordering, a C-contiguous (2,3,4) array with strides [12,4,1] cannot
-            // coalesce because stride[0]*shape[0]=24 != stride[1]=4.
-            // After reordering to [4,3,2] with strides [1,4,12]:
-            // - stride[0]*shape[0]=1*4=4 == stride[1]=4 ✓ → coalesce to [12,2], strides [1,12]
-            // - stride[0]*shape[0]=1*12=12 == stride[1]=12 ✓ → coalesce to [24], strides [1]
-            if (_state->NDim > 1 && (flags & NpyIterGlobalFlags.MULTI_INDEX) == 0)
+            // Order semantics:
+            // - C-order: last axis innermost (row-major logical iteration)
+            // - F-order: first axis innermost (column-major logical iteration)
+            // - K-order: smallest stride innermost (memory-order iteration)
+            //
+            // When MULTI_INDEX is set:
+            // - Axes are reordered for the specified iteration order
+            // - No coalescing (would invalidate multi-index tracking)
+            // - GetMultiIndex/GotoMultiIndex use Perm to map between internal and original coords
+            //
+            // When MULTI_INDEX is NOT set:
+            // - Axes are reordered AND coalesced for maximum efficiency
+            bool hasMultiIndex = (flags & NpyIterGlobalFlags.MULTI_INDEX) != 0;
+            if (_state->NDim > 1)
             {
-                // Step 1: Reorder axes by stride (smallest first = innermost in memory)
-                // This matches NumPy's npyiter_apply_order() behavior
-                NpyIterCoalescing.ReorderAxesForCoalescing(ref *_state, order);
+                // Step 1: Reorder axes based on iteration order
+                // Pass forCoalescing=true when we will coalesce (no MULTI_INDEX)
+                // Pass forCoalescing=false when we need memory-order iteration (MULTI_INDEX with K-order)
+                NpyIterCoalescing.ReorderAxesForCoalescing(ref *_state, order, forCoalescing: !hasMultiIndex);
 
-                // Step 2: Now coalesce adjacent axes that have compatible strides
-                NpyIterCoalescing.CoalesceAxes(ref *_state);
+                // Step 2: Coalesce only if not tracking multi-index
+                if (!hasMultiIndex)
+                {
+                    NpyIterCoalescing.CoalesceAxes(ref *_state);
+                }
             }
 
             // Set external loop flag separately (after coalescing)
@@ -707,7 +716,8 @@ namespace NumSharp.Backends.Iteration
         }
 
         /// <summary>
-        /// Get the current multi-index (coordinates).
+        /// Get the current multi-index (coordinates) in original axis order.
+        /// Uses the Perm array to map internal coordinates to original array coordinates.
         /// Requires MULTI_INDEX flag to be set during construction.
         /// </summary>
         public void GetMultiIndex(Span<long> outCoords)
@@ -718,12 +728,18 @@ namespace NumSharp.Backends.Iteration
             if (outCoords.Length < _state->NDim)
                 throw new ArgumentException($"Output span must have at least {_state->NDim} elements", nameof(outCoords));
 
+            // Apply permutation: Perm[internal_axis] = original_axis
+            // So: outCoords[Perm[d]] = Coords[d]
             for (int d = 0; d < _state->NDim; d++)
-                outCoords[d] = _state->Coords[d];
+            {
+                int originalAxis = _state->Perm[d];
+                outCoords[originalAxis] = _state->Coords[d];
+            }
         }
 
         /// <summary>
-        /// Jump to a specific multi-index (coordinates).
+        /// Jump to a specific multi-index (coordinates) given in original axis order.
+        /// Uses the Perm array to map original coordinates to internal iteration order.
         /// Requires MULTI_INDEX flag to be set during construction.
         /// </summary>
         public void GotoMultiIndex(ReadOnlySpan<long> coords)
@@ -734,50 +750,68 @@ namespace NumSharp.Backends.Iteration
             if (coords.Length < _state->NDim)
                 throw new ArgumentException($"Coordinates must have at least {_state->NDim} elements", nameof(coords));
 
-            // Validate coordinates and compute linear index (C-order)
+            // Apply permutation: Perm[internal_axis] = original_axis
+            // So: Coords[d] = coords[Perm[d]]
+            // Also compute iterIndex (based on internal shape order)
             long iterIndex = 0;
             long multiplier = 1;
 
             for (int d = _state->NDim - 1; d >= 0; d--)
             {
-                if (coords[d] < 0 || coords[d] >= _state->Shape[d])
-                    throw new IndexOutOfRangeException($"Coordinate {coords[d]} out of range for axis {d} (size {_state->Shape[d]})");
+                int originalAxis = _state->Perm[d];
+                long coord = coords[originalAxis];
 
-                _state->Coords[d] = coords[d];
-                iterIndex += coords[d] * multiplier;
+                if (coord < 0 || coord >= _state->Shape[d])
+                    throw new IndexOutOfRangeException($"Coordinate {coord} out of range for original axis {originalAxis} (size {_state->Shape[d]})");
+
+                _state->Coords[d] = coord;
+                iterIndex += coord * multiplier;
                 multiplier *= _state->Shape[d];
             }
 
             _state->IterIndex = iterIndex;
 
             // Update flat index if tracking (C_INDEX or F_INDEX)
+            // Note: C_INDEX/F_INDEX are computed in ORIGINAL array order, not iteration order
             if ((_state->ItFlags & (uint)NpyIterFlags.HASINDEX) != 0)
             {
+                // Build original shape for index computation
+                var origShape = stackalloc long[_state->NDim];
+                for (int d = 0; d < _state->NDim; d++)
+                    origShape[_state->Perm[d]] = _state->Shape[d];
+
                 if (_state->IsCIndex)
                 {
-                    // C-order: iterIndex is already the C-order flat index
-                    _state->FlatIndex = iterIndex;
+                    // C-order flat index in original array
+                    long cIndex = 0;
+                    multiplier = 1;
+                    for (int d = _state->NDim - 1; d >= 0; d--)
+                    {
+                        cIndex += coords[d] * multiplier;
+                        multiplier *= origShape[d];
+                    }
+                    _state->FlatIndex = cIndex;
                 }
                 else
                 {
-                    // F-order: compute column-major index
+                    // F-order flat index in original array
                     long fIndex = 0;
                     multiplier = 1;
                     for (int d = 0; d < _state->NDim; d++)
                     {
                         fIndex += coords[d] * multiplier;
-                        multiplier *= _state->Shape[d];
+                        multiplier *= origShape[d];
                     }
                     _state->FlatIndex = fIndex;
                 }
             }
 
-            // Update data pointers
+            // Update data pointers using internal coordinates
             for (int op = 0; op < _state->NOp; op++)
             {
                 long offset = 0;
                 for (int d = 0; d < _state->NDim; d++)
-                    offset += coords[d] * _state->GetStride(d, op);
+                    offset += _state->Coords[d] * _state->GetStride(d, op);
 
                 _state->DataPtrs[op] = _state->ResetDataPtrs[op] + offset * _state->ElementSizes[op];
             }
@@ -799,16 +833,31 @@ namespace NumSharp.Backends.Iteration
         public bool Finished => _state->IterIndex >= _state->IterEnd;
 
         /// <summary>
-        /// Get the current iterator shape.
-        /// This reflects the shape after coalescing (if any).
+        /// Get the current iterator shape in original axis order.
+        /// When MULTI_INDEX is set, returns shape in original axis order.
+        /// Otherwise returns internal (possibly coalesced) shape.
         /// </summary>
         public long[] Shape
         {
             get
             {
                 var result = new long[_state->NDim];
-                for (int d = 0; d < _state->NDim; d++)
-                    result[d] = _state->Shape[d];
+
+                if ((_state->ItFlags & (uint)NpyIterFlags.HASMULTIINDEX) != 0)
+                {
+                    // Return shape in original axis order
+                    for (int d = 0; d < _state->NDim; d++)
+                    {
+                        int originalAxis = _state->Perm[d];
+                        result[originalAxis] = _state->Shape[d];
+                    }
+                }
+                else
+                {
+                    // Return internal (coalesced) shape
+                    for (int d = 0; d < _state->NDim; d++)
+                        result[d] = _state->Shape[d];
+                }
                 return result;
             }
         }
