@@ -2,6 +2,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 
 namespace NumSharp
 {
@@ -66,6 +67,14 @@ namespace NumSharp
                         }
                     }
 
+                    // Handle Tuple<> and ValueTuple<> - they implement ITuple
+                    if (a is ITuple tuple)
+                    {
+                        ret = ConvertTuple(tuple);
+                        if (ret is not null)
+                            break;
+                    }
+
                     // Fallback: non-generic IEnumerable (element type detected from first item)
                     if (a is IEnumerable enumerable)
                     {
@@ -127,6 +136,7 @@ namespace NumSharp
         /// <summary>
         ///     Converts a non-generic IEnumerator to an NDArray.
         ///     Element type is detected from the first item.
+        ///     Empty collections return empty double[] to match NumPy's behavior.
         /// </summary>
         private static NDArray ConvertEnumerator(IEnumerator enumerator)
         {
@@ -144,8 +154,38 @@ namespace NumSharp
                 items.Add(item);
             }
 
+            // Empty collection: return empty double[] (NumPy defaults to float64)
             if (items.Count == 0 || elementType == null)
-                return null; // Can't determine type from empty collection
+                return np.array(Array.Empty<double>());
+
+            return ConvertObjectListToNDArray(items, elementType);
+        }
+
+        /// <summary>
+        ///     Converts a Tuple or ValueTuple to an NDArray.
+        ///     Uses ITuple interface available in .NET Core 2.0+.
+        /// </summary>
+        private static NDArray ConvertTuple(ITuple tuple)
+        {
+            if (tuple.Length == 0)
+                return np.array(Array.Empty<double>());
+
+            // Collect items and detect type from first non-null element
+            var items = new List<object>(tuple.Length);
+            Type elementType = null;
+
+            for (int i = 0; i < tuple.Length; i++)
+            {
+                var item = tuple[i];
+                if (item == null)
+                    continue;
+
+                elementType ??= item.GetType();
+                items.Add(item);
+            }
+
+            if (items.Count == 0 || elementType == null)
+                return np.array(Array.Empty<double>());
 
             return ConvertObjectListToNDArray(items, elementType);
         }

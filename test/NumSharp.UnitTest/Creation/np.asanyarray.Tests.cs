@@ -583,5 +583,157 @@ namespace NumSharp.UnitTest.Creation
         }
 
         #endregion
+
+        #region NumPy Parity - Misaligned Behaviors
+
+        /// <summary>
+        /// NumPy treats strings as scalar Unicode values, NumSharp treats as char arrays.
+        /// NumPy: np.asanyarray("hello") -> dtype=&lt;U5, shape=(), ndim=0 (SCALAR)
+        /// NumSharp: dtype=Char, shape=(5), ndim=1 (ARRAY)
+        /// </summary>
+        [Test]
+        [Misaligned]
+        public void String_IsCharArray_NotScalar()
+        {
+            var result = np.asanyarray("hello");
+
+            // NumSharp behavior: char array
+            result.ndim.Should().Be(1);
+            result.shape.Should().BeEquivalentTo(new[] { 5 });
+            result.dtype.Should().Be(typeof(char));
+
+            // NumPy would be: ndim=0, shape=(), dtype=<U5 (scalar)
+        }
+
+        /// <summary>
+        /// NumPy stores sets as object scalars (not iterated).
+        /// NumSharp iterates sets and converts to array.
+        /// NumPy: np.asanyarray({1,2,3}) -> dtype=object, shape=() (SCALAR)
+        /// NumSharp: dtype=Int32, shape=(3) (ARRAY)
+        /// </summary>
+        [Test]
+        [Misaligned]
+        public void HashSet_IsIterated_NotObjectScalar()
+        {
+            var set = new HashSet<int> { 1, 2, 3 };
+            var result = np.asanyarray(set);
+
+            // NumSharp behavior: iterates and creates array
+            result.ndim.Should().Be(1);
+            result.size.Should().Be(3);
+            result.dtype.Should().Be(typeof(int));
+
+            // NumPy would be: dtype=object, shape=() (object scalar containing set)
+        }
+
+        /// <summary>
+        /// NumPy stores generators as object scalars (NOT consumed).
+        /// NumSharp consumes IEnumerable and converts to array.
+        /// This is arguably more useful behavior for C#.
+        /// </summary>
+        [Test]
+        [Misaligned]
+        public void LinqEnumerable_IsConsumed_NotObjectScalar()
+        {
+            var enumerable = new[] { 1, 2, 3 }.Select(x => x * 2);
+            var result = np.asanyarray(enumerable);
+
+            // NumSharp behavior: consumes and creates array
+            result.ndim.Should().Be(1);
+            result.Should().BeShaped(3).And.BeOfValues(2, 4, 6);
+
+            // NumPy generator would be: dtype=object, shape=() (NOT consumed)
+        }
+
+        /// <summary>
+        /// For typed empty collections (List&lt;T&gt;), NumSharp preserves the generic type parameter.
+        /// NumPy defaults to float64 for untyped empty lists.
+        /// This is a design choice: C# generics provide type information that NumPy doesn't have.
+        /// </summary>
+        [Test]
+        [Misaligned]
+        public void EmptyTypedList_PreservesTypeParameter()
+        {
+            var result = np.asanyarray(new List<int>());
+
+            // NumSharp behavior: preserves int dtype from generic type parameter
+            result.dtype.Should().Be(typeof(int));
+            result.shape.Should().BeEquivalentTo(new[] { 0 });
+
+            // NumPy would be: dtype=float64, shape=(0,)
+            // NumSharp can do better because C# generics provide the type at compile time
+        }
+
+        #endregion
+
+        #region Tuple support
+
+        /// <summary>
+        /// C# ValueTuples are iterable like Python tuples.
+        /// NumPy: np.asanyarray((1,2,3)) -> dtype=int64, shape=(3,)
+        /// </summary>
+        [Test]
+        public void ValueTuple_IsIterable()
+        {
+            var tuple = (1, 2, 3);
+            var result = np.asanyarray(tuple);
+
+            result.Should().BeShaped(3).And.BeOfValues(1, 2, 3);
+            result.dtype.Should().Be(typeof(int));
+        }
+
+        /// <summary>
+        /// C# Tuple class is iterable like Python tuples.
+        /// </summary>
+        [Test]
+        public void Tuple_IsIterable()
+        {
+            var tuple = Tuple.Create(1, 2, 3);
+            var result = np.asanyarray(tuple);
+
+            result.Should().BeShaped(3).And.BeOfValues(1, 2, 3);
+            result.dtype.Should().Be(typeof(int));
+        }
+
+        [Test]
+        public void ValueTuple_MixedTypes_UsesFirstElementType()
+        {
+            // Mixed tuple - type is detected from first element
+            var tuple = (1.5, 2.5, 3.5);
+            var result = np.asanyarray(tuple);
+
+            result.Should().BeShaped(3);
+            result.dtype.Should().Be(typeof(double));
+        }
+
+        [Test]
+        public void EmptyTuple_ReturnsEmptyDoubleArray()
+        {
+            var tuple = ValueTuple.Create();
+            var result = np.asanyarray(tuple);
+
+            result.Should().BeShaped(0);
+            result.dtype.Should().Be(typeof(double));
+        }
+
+        #endregion
+
+        #region Empty non-generic collections
+
+        /// <summary>
+        /// Empty non-generic collections return empty double[] (NumPy defaults to float64).
+        /// </summary>
+        [Test]
+        public void EmptyArrayList_ReturnsEmptyDoubleArray()
+        {
+            var arrayList = new System.Collections.ArrayList();
+            var result = np.asanyarray(arrayList);
+
+            result.size.Should().Be(0);
+            result.ndim.Should().Be(1);
+            result.dtype.Should().Be(typeof(double)); // NumPy: float64
+        }
+
+        #endregion
     }
 }
