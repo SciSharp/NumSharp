@@ -58,7 +58,7 @@ jobs:
         if [[ "$RUNNER_OS" != "Windows" ]]; then
           FILTER="$FILTER&TestCategory!=WindowsOnly"
         fi
-        dotnet test test/NumSharp.UnitTest/NumSharp.UnitTest.csproj \
+        dotnet test --project test/NumSharp.UnitTest/NumSharp.UnitTest.csproj \
           --configuration Release --no-build --framework net8.0 \
           --filter "$FILTER" --logger "trx"
 
@@ -73,7 +73,7 @@ jobs:
         if [[ "$RUNNER_OS" != "Windows" ]]; then
           FILTER="$FILTER&TestCategory!=WindowsOnly"
         fi
-        dotnet test test/NumSharp.UnitTest/NumSharp.UnitTest.csproj \
+        dotnet test --project test/NumSharp.UnitTest/NumSharp.UnitTest.csproj \
           --configuration Release --no-build --framework net10.0 \
           --filter "$FILTER" --logger "trx"
 
