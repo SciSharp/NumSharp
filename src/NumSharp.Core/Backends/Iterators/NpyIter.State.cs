@@ -478,16 +478,9 @@ namespace NumSharp.Backends.Iteration
         {
             IterIndex++;
 
-            // Update flat index if tracking (C_INDEX or F_INDEX)
-            if ((ItFlags & (uint)NpyIterFlags.HASINDEX) != 0)
-            {
-                // For C-order, FlatIndex == IterIndex (assuming no axis reordering)
-                // For F-order, we need to compute from coordinates
-                if (IsCIndex)
-                    FlatIndex++;
-                else
-                    FlatIndex = ComputeFlatIndex();
-            }
+            // Track whether we need to compute FlatIndex (deferred until after coord update)
+            bool needsFlatIndex = (ItFlags & (uint)NpyIterFlags.HASINDEX) != 0;
+            bool usesFastPath = needsFlatIndex && IsCIndex && (ItFlags & (uint)NpyIterFlags.IDENTPERM) != 0;
 
             fixed (long* dataPtrs = DataPtrs)
             fixed (int* elemSizes = ElementSizes)
@@ -504,6 +497,15 @@ namespace NumSharp.Backends.Iteration
                             long stride = Strides[op * StridesNDim + axis];
                             dataPtrs[op] += stride * elemSizes[op];
                         }
+
+                        // Update flat index AFTER coords are updated
+                        if (needsFlatIndex)
+                        {
+                            if (usesFastPath)
+                                FlatIndex++;
+                            else
+                                FlatIndex = ComputeFlatIndex();
+                        }
                         return;
                     }
 
@@ -518,6 +520,16 @@ namespace NumSharp.Backends.Iteration
                         dataPtrs[op] -= stride * (axisShape - 1) * elemSizes[op];
                     }
                 }
+            }
+
+            // If we reach here, all coords wrapped (end of iteration)
+            // Update flat index for completeness
+            if (needsFlatIndex)
+            {
+                if (usesFastPath)
+                    FlatIndex++;
+                else
+                    FlatIndex = ComputeFlatIndex();
             }
         }
 
@@ -602,11 +614,24 @@ namespace NumSharp.Backends.Iteration
 
         /// <summary>
         /// Compute the flat index from current coordinates based on C or F order.
+        /// Uses original (pre-reordering) coordinate order via Perm array.
         /// </summary>
         private long ComputeFlatIndex()
         {
             if (NDim == 0)
                 return 0;
+
+            // Build original coords and shape from internal using Perm
+            // Perm[internal_axis] = original_axis
+            var origCoords = stackalloc long[NDim];
+            var origShape = stackalloc long[NDim];
+
+            for (int d = 0; d < NDim; d++)
+            {
+                int origAxis = Perm[d];
+                origCoords[origAxis] = Coords[d];
+                origShape[origAxis] = Shape[d];
+            }
 
             long index = 0;
             if (IsCIndex)
@@ -615,8 +640,8 @@ namespace NumSharp.Backends.Iteration
                 long multiplier = 1;
                 for (int d = NDim - 1; d >= 0; d--)
                 {
-                    index += Coords[d] * multiplier;
-                    multiplier *= Shape[d];
+                    index += origCoords[d] * multiplier;
+                    multiplier *= origShape[d];
                 }
             }
             else
@@ -625,8 +650,8 @@ namespace NumSharp.Backends.Iteration
                 long multiplier = 1;
                 for (int d = 0; d < NDim; d++)
                 {
-                    index += Coords[d] * multiplier;
-                    multiplier *= Shape[d];
+                    index += origCoords[d] * multiplier;
+                    multiplier *= origShape[d];
                 }
             }
             return index;

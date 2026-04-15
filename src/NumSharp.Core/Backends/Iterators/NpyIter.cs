@@ -880,6 +880,77 @@ namespace NumSharp.Backends.Iteration
         }
 
         /// <summary>
+        /// Jump to a specific flat index position (C or F order based on construction flags).
+        /// Requires C_INDEX or F_INDEX flag to be set during construction.
+        /// Matches NumPy's NpyIter_GotoIndex behavior.
+        /// </summary>
+        /// <param name="flatIndex">The flat index in C or F order (depending on flags)</param>
+        public void GotoIndex(long flatIndex)
+        {
+            if ((_state->ItFlags & (uint)NpyIterFlags.HASINDEX) == 0)
+                throw new InvalidOperationException("Iterator not tracking index. Use NpyIterGlobalFlags.C_INDEX or F_INDEX during construction.");
+
+            if (flatIndex < 0 || flatIndex >= _state->IterSize)
+                throw new IndexOutOfRangeException($"Flat index {flatIndex} out of range [0, {_state->IterSize})");
+
+            // Get original shape (using Perm to map internal to original)
+            var origShape = stackalloc long[_state->NDim];
+            for (int d = 0; d < _state->NDim; d++)
+                origShape[_state->Perm[d]] = _state->Shape[d];
+
+            // Convert flat index to original coordinates
+            var coords = stackalloc long[_state->NDim];
+            long remaining = flatIndex;
+
+            if (_state->IsCIndex)
+            {
+                // C-order: last axis changes fastest
+                // Compute index strides and decompose
+                for (int d = _state->NDim - 1; d >= 0; d--)
+                {
+                    coords[d] = remaining % origShape[d];
+                    remaining /= origShape[d];
+                }
+            }
+            else
+            {
+                // F-order: first axis changes fastest
+                for (int d = 0; d < _state->NDim; d++)
+                {
+                    coords[d] = remaining % origShape[d];
+                    remaining /= origShape[d];
+                }
+            }
+
+            // Update state
+            _state->FlatIndex = flatIndex;
+
+            // Convert original coords to internal coords and update position
+            long iterIndex = 0;
+            long multiplier = 1;
+
+            for (int d = _state->NDim - 1; d >= 0; d--)
+            {
+                int originalAxis = _state->Perm[d];
+                _state->Coords[d] = coords[originalAxis];
+                iterIndex += _state->Coords[d] * multiplier;
+                multiplier *= _state->Shape[d];
+            }
+
+            _state->IterIndex = iterIndex;
+
+            // Update data pointers
+            for (int op = 0; op < _state->NOp; op++)
+            {
+                long offset = 0;
+                for (int d = 0; d < _state->NDim; d++)
+                    offset += _state->Coords[d] * _state->GetStride(d, op);
+
+                _state->DataPtrs[op] = _state->ResetDataPtrs[op] + offset * _state->ElementSizes[op];
+            }
+        }
+
+        /// <summary>
         /// Get operand arrays.
         /// </summary>
         public NDArray[]? GetOperandArray() => _operands;

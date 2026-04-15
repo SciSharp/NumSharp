@@ -402,16 +402,16 @@ public fixed long BufStrides[MaxOperands];
 
 ### Remaining (Priority Order)
 
-1. **GotoIndex()** - Jump to flat C/F index position (requires index stride storage)
-2. **Index stride integration** - Store index stride with operand strides for consistency
-3. **Reduction support** - Implement reduce_pos, outer loop handling
-4. **GetIterView()** - Return NDArray with iterator's axis ordering
-5. **Negative stride handling** - Integrate with axis permutation
-6. **Cast support** - Type conversion during buffered iteration
-7. **Copy()** - Create independent copy of iterator at current position
+1. **Reduction support** - Implement reduce_pos, outer loop handling
+2. **GetIterView()** - Return NDArray with iterator's axis ordering
+3. **Negative stride handling** - Integrate with axis permutation
+4. **Cast support** - Type conversion during buffered iteration
+5. **Copy()** - Create independent copy of iterator at current position
 
 ### Recently Completed (2026-04-15)
 
+- **GotoIndex()** - Jump to flat C/F index position (full NumPy parity)
+- **ComputeFlatIndex fix** - Uses Perm to compute index in original coordinate order
 - **F-order with MULTI_INDEX** - Full NumPy parity: first axis changes fastest
 - **K-order with MULTI_INDEX** - Full NumPy parity: follows memory layout (smallest stride innermost)
 - **Axis permutation tracking** - Perm array correctly maps internal to original coordinates
