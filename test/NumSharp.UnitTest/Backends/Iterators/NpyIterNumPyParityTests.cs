@@ -1874,5 +1874,231 @@ namespace NumSharp.UnitTest.Backends.Iterators
             CollectionAssert.AreEqual(new long[] { 0, 1, 2, 3, 4 }, values.ToArray(),
                 "Without MULTI_INDEX, should still iterate memory order");
         }
+
+        // =========================================================================
+        // GetIterView Tests
+        // =========================================================================
+        // GetIterView returns an NDArray view with the iterator's internal axes
+        // ordering. A C-order iteration of this view is equivalent to the
+        // iterator's iteration order.
+        // =========================================================================
+
+        [TestMethod]
+        public void GetIterView_ContiguousArray_ReturnsCoalescedView()
+        {
+            // NumPy 2.4.2:
+            // >>> arr = np.arange(24).reshape(2, 3, 4)
+            // >>> it = np.nditer(arr)
+            // >>> it.ndim, it.shape
+            // (1, (24,))
+            //
+            // GetIterView should return a 1D view of 24 elements
+            // (coalesced from 2x3x4)
+
+            var arr = np.arange(24).reshape(2, 3, 4);
+
+            using var iter = NpyIterRef.New(arr);
+
+            Assert.AreEqual(1, iter.NDim, "Contiguous 2x3x4 should coalesce to ndim=1");
+
+            var view = iter.GetIterView(0);
+
+            Assert.AreEqual(1, view.ndim, "View should be 1D");
+            Assert.AreEqual(24, view.size, "View should have 24 elements");
+            Assert.AreEqual(24, view.shape[0], "View shape should be (24,)");
+
+            // C-order iteration of view should give 0, 1, 2, ..., 23
+            for (int i = 0; i < 24; i++)
+            {
+                Assert.AreEqual(i, (int)view[i], $"View element {i}");
+            }
+        }
+
+        [TestMethod]
+        public void GetIterView_WithMultiIndex_PreservesOriginalShape()
+        {
+            // NumPy 2.4.2:
+            // >>> arr = np.arange(24).reshape(2, 3, 4)
+            // >>> it = np.nditer(arr, flags=['multi_index'])
+            // >>> it.ndim, it.shape
+            // (3, (2, 3, 4))
+            //
+            // With MULTI_INDEX, no coalescing occurs
+
+            var arr = np.arange(24).reshape(2, 3, 4);
+
+            using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.MULTI_INDEX);
+
+            Assert.AreEqual(3, iter.NDim, "With MULTI_INDEX, should preserve ndim=3");
+
+            var view = iter.GetIterView(0);
+
+            Assert.AreEqual(3, view.ndim, "View should be 3D");
+            Assert.AreEqual(2, view.shape[0]);
+            Assert.AreEqual(3, view.shape[1]);
+            Assert.AreEqual(4, view.shape[2]);
+        }
+
+        [TestMethod]
+        public void GetIterView_TransposedArray_ReflectsInternalOrder()
+        {
+            // NumPy 2.4.2:
+            // >>> arr = np.arange(24).reshape(2, 3, 4).T  # Shape (4, 3, 2)
+            // >>> it = np.nditer(arr, order='K')
+            // >>> it.ndim, it.shape
+            // (1, (24,))  # Coalesced because K-order follows memory layout
+            //
+            // The view should reflect the iterator's internal reordering
+
+            var arr = np.arange(24).reshape(2, 3, 4).T;  // Shape (4, 3, 2)
+
+            // Without MULTI_INDEX, should coalesce
+            using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.None, NPY_ORDER.NPY_KEEPORDER);
+
+            // K-order on transposed array should coalesce to 1D
+            var view = iter.GetIterView(0);
+
+            // C-order iteration of view should match iterator order
+            var iterValues = new List<long>();
+            do
+            {
+                iterValues.Add(iter.GetValue<long>(0));
+            } while (iter.Iternext());
+
+            // View iteration should match
+            iter.Reset();
+            for (int i = 0; i < view.size; i++)
+            {
+                Assert.AreEqual(iterValues[i], (long)view.flat[i], $"View[{i}] should match iterator value");
+            }
+        }
+
+        [TestMethod]
+        public void GetIterView_SlicedArray_HasCorrectStrides()
+        {
+            // Sliced arrays have non-contiguous strides
+            // GetIterView should return a view with the iterator's internal strides
+
+            var arr = np.arange(24).reshape(2, 3, 4);
+            var sliced = arr[":, ::2, :"];  // Shape (2, 2, 4), non-contiguous
+
+            using var iter = NpyIterRef.New(sliced, NpyIterGlobalFlags.MULTI_INDEX);
+
+            var view = iter.GetIterView(0);
+
+            Assert.AreEqual(3, view.ndim);
+            Assert.AreEqual(2, view.shape[0]);
+            Assert.AreEqual(2, view.shape[1]);
+            Assert.AreEqual(4, view.shape[2]);
+
+            // View should have same values as sliced array
+            Assert.AreEqual((int)sliced[0, 0, 0], (int)view[0, 0, 0]);
+            Assert.AreEqual((int)sliced[0, 1, 0], (int)view[0, 1, 0]);
+            Assert.AreEqual((int)sliced[1, 0, 0], (int)view[1, 0, 0]);
+        }
+
+        [TestMethod]
+        public void GetIterView_MultipleOperands_ReturnsCorrectView()
+        {
+            // With multiple operands, each GetIterView(i) returns the i-th operand's view
+
+            var arr1 = np.arange(6).reshape(2, 3);
+            var arr2 = np.arange(6, 12).reshape(2, 3);
+
+            using var iter = NpyIterRef.MultiNew(
+                2,
+                new[] { arr1, arr2 },
+                NpyIterGlobalFlags.MULTI_INDEX,
+                NPY_ORDER.NPY_KEEPORDER,
+                NPY_CASTING.NPY_NO_CASTING,
+                new[] { NpyIterPerOpFlags.READONLY, NpyIterPerOpFlags.READONLY },
+                null);
+
+            var view0 = iter.GetIterView(0);
+            var view1 = iter.GetIterView(1);
+
+            // view0 should have arr1's data
+            Assert.AreEqual(0, (int)view0[0, 0]);
+            Assert.AreEqual(5, (int)view0[1, 2]);
+
+            // view1 should have arr2's data
+            Assert.AreEqual(6, (int)view1[0, 0]);
+            Assert.AreEqual(11, (int)view1[1, 2]);
+        }
+
+        [TestMethod]
+        public void GetIterView_BufferedIterator_ThrowsException()
+        {
+            // NumPy: Cannot provide an iterator view when buffering is enabled
+
+            var arr = np.arange(24).reshape(2, 3, 4);
+
+            using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.BUFFERED);
+
+            bool threw = false;
+            try
+            {
+                iter.GetIterView(0);
+            }
+            catch (InvalidOperationException)
+            {
+                threw = true;
+            }
+
+            Assert.IsTrue(threw, "GetIterView should throw when buffering is enabled");
+        }
+
+        [TestMethod]
+        public void GetIterView_InvalidOperandIndex_ThrowsException()
+        {
+            var arr = np.arange(24);
+
+            using var iter = NpyIterRef.New(arr);
+
+            bool threwNegative = false;
+            try
+            {
+                iter.GetIterView(-1);
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                threwNegative = true;
+            }
+            Assert.IsTrue(threwNegative, "Should throw for negative operand index");
+
+            bool threwOutOfRange = false;
+            try
+            {
+                iter.GetIterView(1);
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                threwOutOfRange = true;
+            }
+            Assert.IsTrue(threwOutOfRange, "Should throw for operand index >= NOp");
+        }
+
+        [TestMethod]
+        public void GetIterView_ReversedArray_ReflectsFlippedStrides()
+        {
+            // After negative stride flipping, GetIterView should return a view
+            // with the flipped (positive) strides
+
+            var arr = np.arange(6).reshape(2, 3);
+            var rev = arr["::-1, :"];  // Reversed first axis
+
+            using var iter = NpyIterRef.New(rev, NpyIterGlobalFlags.MULTI_INDEX);
+
+            var view = iter.GetIterView(0);
+
+            // The view should iterate in memory order (values 0,1,2,3,4,5)
+            // even though the original reversed view would iterate 3,4,5,0,1,2
+            var viewValues = new List<long>();
+            for (int i = 0; i < view.size; i++)
+                viewValues.Add((long)view.flat[i]);
+
+            // After flipping, iteration is in memory order
+            CollectionAssert.AreEqual(new long[] { 0, 1, 2, 3, 4, 5 }, viewValues.ToArray());
+        }
     }
 }

@@ -403,11 +403,13 @@ public fixed long BufStrides[MaxOperands];
 ### Remaining (Priority Order)
 
 1. **Reduction support** - Implement reduce_pos, outer loop handling
-2. **GetIterView()** - Return NDArray with iterator's axis ordering
-3. **Cast support** - Type conversion during buffered iteration
+2. **Cast support** - Type conversion during buffered iteration
 
 ### Recently Completed (2026-04-15)
 
+- **GetIterView()** - Returns NDArray view with iterator's internal axes ordering. A C-order
+  iteration of the view matches the iterator's iteration order. Not available when buffering
+  is enabled. 8 new NumPy parity tests.
 - **Negative stride flipping** - Full NumPy parity: FlipNegativeStrides() negates all-negative
   axes, adjusts base pointers, marks axes with negative Perm entries, sets NEGPERM flag.
   GetMultiIndex/GotoMultiIndex/GotoIndex/ComputeFlatIndex all handle NEGPERM correctly.
