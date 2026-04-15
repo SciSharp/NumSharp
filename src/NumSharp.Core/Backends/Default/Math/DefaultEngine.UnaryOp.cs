@@ -96,12 +96,11 @@ namespace NumSharp.Backends
             var func = ILKernelGenerator.GetUnaryScalarDelegate(key);
 
             // Dispatch based on input type to avoid boxing
-            // Note: SByte, Half, Complex use Storage directly as NDArray lacks wrapper methods
             return inputType switch
             {
                 NPTypeCode.Boolean => InvokeUnaryScalar(func, nd.GetBoolean(Array.Empty<long>()), outputType),
                 NPTypeCode.Byte => InvokeUnaryScalar(func, nd.GetByte(Array.Empty<long>()), outputType),
-                NPTypeCode.SByte => InvokeUnaryScalar(func, nd.Storage.GetSByte(Array.Empty<long>()), outputType),
+                NPTypeCode.SByte => InvokeUnaryScalar(func, nd.GetSByte(Array.Empty<long>()), outputType),
                 NPTypeCode.Int16 => InvokeUnaryScalar(func, nd.GetInt16(Array.Empty<long>()), outputType),
                 NPTypeCode.UInt16 => InvokeUnaryScalar(func, nd.GetUInt16(Array.Empty<long>()), outputType),
                 NPTypeCode.Int32 => InvokeUnaryScalar(func, nd.GetInt32(Array.Empty<long>()), outputType),
@@ -109,11 +108,11 @@ namespace NumSharp.Backends
                 NPTypeCode.Int64 => InvokeUnaryScalar(func, nd.GetInt64(Array.Empty<long>()), outputType),
                 NPTypeCode.UInt64 => InvokeUnaryScalar(func, nd.GetUInt64(Array.Empty<long>()), outputType),
                 NPTypeCode.Char => InvokeUnaryScalar(func, nd.GetChar(Array.Empty<long>()), outputType),
-                NPTypeCode.Half => InvokeUnaryScalar(func, nd.Storage.GetHalf(Array.Empty<long>()), outputType),
+                NPTypeCode.Half => InvokeUnaryScalar(func, nd.GetHalf(Array.Empty<long>()), outputType),
                 NPTypeCode.Single => InvokeUnaryScalar(func, nd.GetSingle(Array.Empty<long>()), outputType),
                 NPTypeCode.Double => InvokeUnaryScalar(func, nd.GetDouble(Array.Empty<long>()), outputType),
                 NPTypeCode.Decimal => InvokeUnaryScalar(func, nd.GetDecimal(Array.Empty<long>()), outputType),
-                NPTypeCode.Complex => InvokeUnaryScalar(func, nd.Storage.GetComplex(Array.Empty<long>()), outputType),
+                NPTypeCode.Complex => InvokeUnaryScalar(func, nd.GetComplex(Array.Empty<long>()), outputType),
                 _ => throw new NotSupportedException($"Input type {inputType} not supported")
             };
         }

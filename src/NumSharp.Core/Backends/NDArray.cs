@@ -790,6 +790,15 @@ namespace NumSharp
         [MethodImpl(Inline)]
         public ulong GetUInt64(int[] indices) => Storage.GetUInt64(indices);
 
+        [MethodImpl(Inline)]
+        public sbyte GetSByte(int[] indices) => Storage.GetSByte(indices);
+
+        [MethodImpl(Inline)]
+        public Half GetHalf(int[] indices) => Storage.GetHalf(indices);
+
+        [MethodImpl(Inline)]
+        public System.Numerics.Complex GetComplex(int[] indices) => Storage.GetComplex(indices);
+
         #region Typed Getters (long[] overloads for int64 indexing)
 
         [MethodImpl(Inline)]
@@ -827,6 +836,15 @@ namespace NumSharp
 
         [MethodImpl(Inline)]
         public ulong GetUInt64(params long[] indices) => Storage.GetUInt64(indices);
+
+        [MethodImpl(Inline)]
+        public sbyte GetSByte(params long[] indices) => Storage.GetSByte(indices);
+
+        [MethodImpl(Inline)]
+        public Half GetHalf(params long[] indices) => Storage.GetHalf(indices);
+
+        [MethodImpl(Inline)]
+        public System.Numerics.Complex GetComplex(params long[] indices) => Storage.GetComplex(indices);
 
         #endregion
 
@@ -1223,6 +1241,15 @@ namespace NumSharp
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
         [MethodImpl(Inline)]
         public void SetDecimal(decimal value, int[] indices) => Storage.SetDecimal(value, indices);
+
+        [MethodImpl(Inline)]
+        public void SetSByte(sbyte value, int[] indices) => Storage.SetSByte(value, indices);
+
+        [MethodImpl(Inline)]
+        public void SetHalf(Half value, int[] indices) => Storage.SetHalf(value, indices);
+
+        [MethodImpl(Inline)]
+        public void SetComplex(System.Numerics.Complex value, int[] indices) => Storage.SetComplex(value, indices);
 #endif
 
         #region Typed Setters (long[] overloads for int64 indexing)
@@ -1298,6 +1325,15 @@ namespace NumSharp
         /// <param name="indices">The coordinates to set <paramref name="value"/> at.</param>
         [MethodImpl(Inline)]
         public void SetDecimal(decimal value, params long[] indices) => Storage.SetDecimal(value, indices);
+
+        [MethodImpl(Inline)]
+        public void SetSByte(sbyte value, params long[] indices) => Storage.SetSByte(value, indices);
+
+        [MethodImpl(Inline)]
+        public void SetHalf(Half value, params long[] indices) => Storage.SetHalf(value, indices);
+
+        [MethodImpl(Inline)]
+        public void SetComplex(System.Numerics.Complex value, params long[] indices) => Storage.SetComplex(value, indices);
 
         #endregion
 
