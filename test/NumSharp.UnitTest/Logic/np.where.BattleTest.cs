@@ -8,6 +8,25 @@ namespace NumSharp.UnitTest.Logic
 {
     /// <summary>
     /// Battle tests for np.where - edge cases, strided arrays, views, etc.
+    ///
+    /// These tests verify NumSharp behavior against NumPy 2.4.2.
+    ///
+    /// KNOWN DIFFERENCES FROM NUMPY 2.x:
+    ///
+    /// 1. Scalar Type Promotion (NEP50):
+    ///    NumPy 2.x uses "weak scalar" semantics where Python scalars adopt array dtype.
+    ///    NumSharp uses C# semantics where literals have fixed types (int=int32, etc).
+    ///
+    ///    Example: np.where(cond, 1, uint8_array)
+    ///    - NumPy 2.x: returns uint8 (weak scalar rule)
+    ///    - NumSharp: returns int32 (C# int literal is int32)
+    ///
+    /// 2. Python int Scalar Default:
+    ///    - NumPy: Python int → int64 (platform default)
+    ///    - NumSharp: C# int literal → int32
+    ///
+    /// 3. Missing sbyte (int8) support:
+    ///    NumSharp does not support sbyte arrays (throws NotSupportedException).
     /// </summary>
     public class np_where_BattleTest
     {
@@ -16,15 +35,15 @@ namespace NumSharp.UnitTest.Logic
         [Test]
         public void Where_SlicedCondition()
         {
-            // Sliced condition array
+            // Sliced condition array (non-contiguous)
             var arr = np.arange(10);
-            var cond = (arr % 2 == 0)["::2"];  // Every other even check
+            var cond = (arr % 2 == 0)["::2"];  // Every other even check: [T,T,T,T,T]
             var x = np.ones(5, NPTypeCode.Int32);
             var y = np.zeros(5, NPTypeCode.Int32);
             var result = np.where(cond, x, y);
 
-            // Should work with sliced condition
             Assert.AreEqual(5, result.size);
+            result.Should().BeOfValues(1, 1, 1, 1, 1);
         }
 
         [Test]
@@ -62,6 +81,7 @@ namespace NumSharp.UnitTest.Logic
             var y = np.zeros(5, NPTypeCode.Int64);
             var result = np.where(cond, x, y);
 
+            // NumPy: [4, 0, 2, 0, 0]
             result.Should().BeOfValues(4L, 0L, 2L, 0L, 0L);
         }
 
@@ -102,6 +122,91 @@ namespace NumSharp.UnitTest.Logic
             Assert.AreEqual(0, (int)result[0, 1]);
             Assert.AreEqual(2, (int)result[1, 0]);
             Assert.AreEqual(0, (int)result[1, 1]);
+        }
+
+        [Test]
+        public void Where_ScalarCondition_True()
+        {
+            // NumPy: np.where(True, [1,2,3], [4,5,6]) -> [1,2,3]
+            var result = np.where(np.array(true), np.array(new[] { 1, 2, 3 }), np.array(new[] { 4, 5, 6 }));
+            result.Should().BeOfValues(1, 2, 3);
+        }
+
+        [Test]
+        public void Where_ScalarCondition_False()
+        {
+            // NumPy: np.where(False, [1,2,3], [4,5,6]) -> [4,5,6]
+            var result = np.where(np.array(false), np.array(new[] { 1, 2, 3 }), np.array(new[] { 4, 5, 6 }));
+            result.Should().BeOfValues(4, 5, 6);
+        }
+
+        #endregion
+
+        #region Non-Boolean Conditions (Truthy/Falsy)
+
+        [Test]
+        public void Where_IntegerCondition_ZeroIsFalsy()
+        {
+            // NumPy: 0 is falsy, non-zero is truthy
+            var cond = np.array(new[] { 0, 1, 2, -1, 0 });
+            var x = np.ones(5);
+            var y = np.zeros(5);
+            var result = np.where(cond, x, y);
+
+            // NumPy: [0, 1, 1, 1, 0]
+            result.Should().BeOfValues(0.0, 1.0, 1.0, 1.0, 0.0);
+        }
+
+        [Test]
+        public void Where_FloatCondition_ZeroIsFalsy()
+        {
+            // NumPy: 0.0 is falsy
+            var cond = np.array(new[] { 0.0, 0.5, 1.0, -0.1, 0.0 });
+            var x = np.ones(5);
+            var y = np.zeros(5);
+            var result = np.where(cond, x, y);
+
+            // NumPy: [0, 1, 1, 1, 0]
+            result.Should().BeOfValues(0.0, 1.0, 1.0, 1.0, 0.0);
+        }
+
+        [Test]
+        public void Where_NaN_IsTruthy()
+        {
+            // NumPy: NaN is truthy (non-zero)
+            var cond = np.array(new[] { 0.0, double.NaN, 1.0 });
+            var x = np.array(new[] { 1, 2, 3 });
+            var y = np.array(new[] { 10, 20, 30 });
+            var result = np.where(cond, x, y);
+
+            // NumPy: [10, 2, 3] (NaN is truthy)
+            result.Should().BeOfValues(10, 2, 3);
+        }
+
+        [Test]
+        public void Where_Infinity_IsTruthy()
+        {
+            // NumPy: Inf and -Inf are truthy
+            var cond = np.array(new[] { 0.0, double.PositiveInfinity, double.NegativeInfinity });
+            var x = np.array(new[] { 1, 2, 3 });
+            var y = np.array(new[] { 10, 20, 30 });
+            var result = np.where(cond, x, y);
+
+            // NumPy: [10, 2, 3]
+            result.Should().BeOfValues(10, 2, 3);
+        }
+
+        [Test]
+        public void Where_NegativeZero_IsFalsy()
+        {
+            // NumPy: -0.0 == 0.0 in IEEE 754, so it's falsy
+            var cond = np.array(new[] { 0.0, -0.0, 1.0 });
+            var x = np.array(new[] { 1, 2, 3 });
+            var y = np.array(new[] { 10, 20, 30 });
+            var result = np.where(cond, x, y);
+
+            // NumPy: [10, 20, 3] (both 0.0 and -0.0 are falsy)
+            result.Should().BeOfValues(10, 20, 3);
         }
 
         #endregion
@@ -153,10 +258,11 @@ namespace NumSharp.UnitTest.Logic
         public void Where_SingleArg_Float_Truthy()
         {
             // 0.0 is falsy, anything else (including -0.0, NaN, Inf) is truthy
+            // Note: -0.0 == 0.0 in IEEE 754, so it's falsy
             var arr = np.array(new[] { 0.0, 1.0, -1.0, 0.5, -0.0 });
             var result = np.where(arr);
 
-            // Note: -0.0 == 0.0 in IEEE 754, so it's falsy
+            // NumPy: indices [1, 2, 3] (-0.0 is falsy)
             result[0].Should().BeOfValues(1L, 2L, 3L);
         }
 
@@ -171,6 +277,16 @@ namespace NumSharp.UnitTest.Logic
         }
 
         [Test]
+        public void Where_SingleArg_Infinity_IsTruthy()
+        {
+            // Inf values are truthy
+            var arr = np.array(new[] { 0.0, double.PositiveInfinity, double.NegativeInfinity, 0.0 });
+            var result = np.where(arr);
+
+            result[0].Should().BeOfValues(1L, 2L);
+        }
+
+        [Test]
         public void Where_SingleArg_4D()
         {
             var arr = np.zeros(new[] { 2, 2, 2, 2 }, NPTypeCode.Int32);
@@ -180,6 +296,120 @@ namespace NumSharp.UnitTest.Logic
 
             Assert.AreEqual(4, result.Length);  // 4 dimensions
             Assert.AreEqual(2, result[0].size); // 2 non-zero elements
+        }
+
+        [Test]
+        public void Where_SingleArg_ReturnsInt64Indices()
+        {
+            // NumPy returns int64 for indices
+            var arr = np.array(new[] { 0, 1, 0, 2 });
+            var result = np.where(arr);
+
+            Assert.AreEqual(typeof(long), result[0].dtype);
+        }
+
+        #endregion
+
+        #region 0D Scalar Arrays
+
+        [Test]
+        public void Where_0D_AllScalars_Returns0D()
+        {
+            // NumPy: when all inputs are 0D, result is 0D
+            var cond = np.array(true).reshape();  // 0D
+            var x = np.array(42).reshape();       // 0D
+            var y = np.array(99).reshape();       // 0D
+            var result = np.where(cond, x, y);
+
+            Assert.AreEqual(0, result.ndim);
+            Assert.AreEqual(42, (int)result.GetValue(0));
+        }
+
+        [Test]
+        public void Where_0D_Cond_With_1D_Arrays()
+        {
+            // 0D condition broadcasts to match x/y shape
+            var cond = np.array(true).reshape();  // 0D
+            var x = np.array(new[] { 1, 2, 3 });
+            var y = np.array(new[] { 10, 20, 30 });
+            var result = np.where(cond, x, y);
+
+            result.Should().BeShaped(3);
+            result.Should().BeOfValues(1, 2, 3);
+        }
+
+        #endregion
+
+        #region Type Promotion (Array-to-Array)
+
+        [Test]
+        public void Where_TypePromotion_Bool_Int16()
+        {
+            var cond = np.array(new[] { true, false });
+            var x = np.array(new bool[] { true, false });
+            var y = np.array(new short[] { 10, 20 });
+            var result = np.where(cond, x, y);
+
+            // NumPy: int16
+            Assert.AreEqual(typeof(short), result.dtype);
+        }
+
+        [Test]
+        public void Where_TwoScalars_Byte_StaysByte()
+        {
+            // C# byte (like np.uint8) stays byte, not widened to int64
+            var cond = np.array(new[] { true, false });
+            var result = np.where(cond, (byte)1, (byte)0);
+
+            Assert.AreEqual(typeof(byte), result.dtype);
+            Assert.AreEqual((byte)1, (byte)result[0]);
+            Assert.AreEqual((byte)0, (byte)result[1]);
+        }
+
+        [Test]
+        public void Where_TwoScalars_Short_StaysShort()
+        {
+            // C# short (like np.int16) stays short
+            var cond = np.array(new[] { true, false });
+            var result = np.where(cond, (short)100, (short)200);
+
+            Assert.AreEqual(typeof(short), result.dtype);
+        }
+
+        [Test]
+        public void Where_TypePromotion_Int32_UInt32()
+        {
+            var cond = np.array(new[] { true, false });
+            var x = np.array(new int[] { 1, 2 });
+            var y = np.array(new uint[] { 10, 20 });
+            var result = np.where(cond, x, y);
+
+            // NumPy: int64 (to accommodate both signed and unsigned 32-bit range)
+            Assert.AreEqual(typeof(long), result.dtype);
+        }
+
+        [Test]
+        public void Where_TypePromotion_Int64_UInt64()
+        {
+            var cond = np.array(new[] { true, false });
+            var x = np.array(new long[] { 1, 2 });
+            var y = np.array(new ulong[] { 10, 20 });
+            var result = np.where(cond, x, y);
+
+            // NumPy: float64 (no integer type can hold both int64 and uint64 full range)
+            Assert.AreEqual(typeof(double), result.dtype);
+        }
+
+        [Test]
+        public void Where_TypePromotion_UInt8_Float32()
+        {
+            var cond = np.array(new[] { true, false });
+            var x = np.array(new byte[] { 1, 2 });
+            var y = np.array(new float[] { 10.5f, 20.5f });
+            var result = np.where(cond, x, y);
+
+            // NumPy: float32
+            Assert.AreEqual(typeof(float), result.dtype);
         }
 
         #endregion
@@ -214,7 +444,49 @@ namespace NumSharp.UnitTest.Logic
             var result = np.where(cond, x, y);
 
             result.Should().BeShaped(2, 3, 2, 2, 2, 3);
-            Assert.AreEqual(1, (int)result[0, 0, 0, 0, 0, 0]);
+            Assert.AreEqual(144, result.size);
+            Assert.AreEqual(144, (long)np.sum(result));  // All 1s
+        }
+
+        [Test]
+        public void Where_AllTrue_LargeArray()
+        {
+            var size = 10000;
+            var cond = np.ones(size, NPTypeCode.Boolean);
+            var x = np.arange(size);
+            var y = np.zeros(size, NPTypeCode.Int64);
+            var result = np.where(cond, x, y);
+
+            // Sum of 0 to 9999 = 49995000
+            Assert.AreEqual(49995000L, (long)np.sum(result));
+        }
+
+        [Test]
+        public void Where_AllFalse_LargeArray()
+        {
+            var size = 10000;
+            var cond = np.zeros(size, NPTypeCode.Boolean);
+            var x = np.arange(size);
+            var y = np.zeros(size, NPTypeCode.Int64);
+            var result = np.where(cond, x, y);
+
+            Assert.AreEqual(0L, (long)np.sum(result));
+        }
+
+        [Test]
+        public void Where_Alternating_LargeArray()
+        {
+            var size = 10000;
+            var cond = np.zeros(size, NPTypeCode.Boolean);
+            for (int i = 0; i < size; i += 2)
+                cond[i] = true;
+
+            var x = np.arange(size);
+            var y = np.zeros(size, NPTypeCode.Int64);
+            var result = np.where(cond, x, y);
+
+            // Sum of even indices: 0+2+4+...+9998 = 24995000
+            Assert.AreEqual(24995000L, (long)np.sum(result));
         }
 
         #endregion
@@ -339,6 +611,147 @@ namespace NumSharp.UnitTest.Logic
                 Assert.AreEqual(1, (int)result[2, j]);
                 Assert.AreEqual(0, (int)result[3, j]);
             }
+        }
+
+        #endregion
+
+        #region Empty Array Edge Cases
+
+        [Test]
+        public void Where_Empty2D()
+        {
+            // Empty (0,3) shape
+            var cond = np.zeros(new[] { 0, 3 }, NPTypeCode.Boolean);
+            var x = np.zeros(new[] { 0, 3 }, NPTypeCode.Double);
+            var y = np.zeros(new[] { 0, 3 }, NPTypeCode.Double);
+            var result = np.where(cond, x, y);
+
+            result.Should().BeShaped(0, 3);
+            Assert.AreEqual(typeof(double), result.dtype);
+        }
+
+        [Test]
+        public void Where_Empty3D()
+        {
+            // Empty (2,0,3) shape
+            var cond = np.zeros(new[] { 2, 0, 3 }, NPTypeCode.Boolean);
+            var x = np.zeros(new[] { 2, 0, 3 }, NPTypeCode.Int32);
+            var y = np.zeros(new[] { 2, 0, 3 }, NPTypeCode.Int32);
+            var result = np.where(cond, x, y);
+
+            result.Should().BeShaped(2, 0, 3);
+            Assert.AreEqual(typeof(int), result.dtype);
+        }
+
+        [Test]
+        public void Where_SingleArg_Empty2D()
+        {
+            var arr = np.zeros(new[] { 0, 3 }, NPTypeCode.Int32);
+            var result = np.where(arr);
+
+            Assert.AreEqual(2, result.Length);  // 2 dimensions
+            Assert.AreEqual(0, result[0].size);
+            Assert.AreEqual(0, result[1].size);
+        }
+
+        #endregion
+
+        #region Error Conditions
+
+        [Test]
+        public void Where_IncompatibleShapes_ThrowsException()
+        {
+            // Shapes (2,) and (3,) cannot be broadcast together
+            var cond = np.array(new[] { true, false });  // (2,)
+            var x = np.array(new[] { 1, 2, 3 });  // (3,)
+            var y = np.array(new[] { 4, 5, 6 });  // (3,)
+
+            Assert.ThrowsException<IncorrectShapeException>(() => np.where(cond, x, y));
+        }
+
+        #endregion
+
+        #region NEP50 Type Promotion (NumPy 2.x Parity)
+
+        /// <summary>
+        /// Verifies NEP50 weak scalar semantics: when a scalar is combined with an array,
+        /// the array's dtype wins for same-kind operations.
+        /// </summary>
+        [Test]
+        public void Where_ScalarTypePromotion_NEP50_WeakScalar()
+        {
+            // NumPy 2.x: np.where(cond, 1, uint8_array) -> uint8 (weak scalar)
+            var cond = np.array(new[] { true, false });
+            var yUint8 = np.array(new byte[] { 10, 20 });
+            var result = np.where(cond, 1, yUint8);
+
+            // Array dtype wins - matches NumPy 2.x NEP50
+            Assert.AreEqual(typeof(byte), result.dtype);
+            Assert.AreEqual((byte)1, (byte)result[0]);
+            Assert.AreEqual((byte)20, (byte)result[1]);
+        }
+
+        /// <summary>
+        /// Two same-type scalars preserve their type.
+        /// Note: NumPy would return int64 for Python int literals, but C# int32 scalars
+        /// cannot be distinguished from explicit np.array(1, dtype=int32), so we preserve.
+        /// </summary>
+        [Test]
+        public void Where_TwoScalars_SameType_Preserved()
+        {
+            var cond = np.array(new[] { true, false });
+
+            // int + int → int (preserved)
+            var result = np.where(cond, 1, 0);
+            Assert.AreEqual(typeof(int), result.dtype);
+            Assert.AreEqual(1, (int)result[0]);
+            Assert.AreEqual(0, (int)result[1]);
+
+            // long + long → long (preserved)
+            result = np.where(cond, 1L, 0L);
+            Assert.AreEqual(typeof(long), result.dtype);
+        }
+
+        /// <summary>
+        /// Verifies C# float scalars stay float32 (like np.float32, not Python float).
+        /// </summary>
+        [Test]
+        public void Where_TwoScalars_Float32_StaysFloat32()
+        {
+            // C# float (1.0f) is like np.float32, not Python's float (which is float64)
+            // np.where(cond, np.float32(1.0), np.float32(0.0)) -> float32
+            var cond = np.array(new[] { true, false });
+            var result = np.where(cond, 1.0f, 0.0f);
+
+            Assert.AreEqual(typeof(float), result.dtype);
+        }
+
+        /// <summary>
+        /// Verifies NEP50: int scalar + float32 array -> float32 (same-kind, array wins).
+        /// </summary>
+        [Test]
+        public void Where_IntScalar_Float32Array_ReturnsFloat32()
+        {
+            var cond = np.array(new[] { true, false });
+            var yFloat32 = np.array(new float[] { 10.5f, 20.5f });
+            var result = np.where(cond, 1, yFloat32);
+
+            // Array dtype wins for same-kind (int->float conversion)
+            Assert.AreEqual(typeof(float), result.dtype);
+        }
+
+        /// <summary>
+        /// Verifies NEP50: float scalar + int32 array -> float64 (cross-kind promotion).
+        /// </summary>
+        [Test]
+        public void Where_FloatScalar_Int32Array_ReturnsFloat64()
+        {
+            var cond = np.array(new[] { true, false });
+            var yInt32 = np.array(new int[] { 10, 20 });
+            var result = np.where(cond, 1.5, yInt32);
+
+            // Cross-kind: float scalar forces float64
+            Assert.AreEqual(typeof(double), result.dtype);
         }
 
         #endregion

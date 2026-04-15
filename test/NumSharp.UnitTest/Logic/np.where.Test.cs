@@ -308,6 +308,7 @@ namespace NumSharp.UnitTest.Logic
             var result = np.where(cond, 42, 0);
 
             Assert.AreEqual(1, result.size);
+            Assert.AreEqual(typeof(int), result.dtype);  // same-type scalars preserve type
             Assert.AreEqual(42, (int)result[0]);
         }
 
