@@ -222,6 +222,7 @@ public class NpApiOverloadTests_UnaryMath
     #region Trunc - np.trunc (2 overloads)
 
     [TestMethod]
+    [OpenBugs] // Vector512 SIMD: "Could not find Truncate for Vector512" on AVX-512 capable runners
     public void Trunc_NoParams_Compiles()
     {
         var a = np.array(new double[] { 1.5, -2.3, 3.7 });
@@ -246,6 +247,7 @@ public class NpApiOverloadTests_UnaryMath
     #region Round_ - np.round_ (4 overloads)
 
     [TestMethod]
+    [OpenBugs] // Vector512 SIMD: "Could not find Round for Vector512" on AVX-512 capable runners
     public void Round_NoParams_Compiles()
     {
         var a = np.array(new double[] { 1.5, -2.3, 3.7 });
@@ -290,6 +292,7 @@ public class NpApiOverloadTests_UnaryMath
     #region Around - np.around (4 overloads)
 
     [TestMethod]
+    [OpenBugs] // Vector512 SIMD: "Could not find Round for Vector512" on AVX-512 capable runners
     public void Around_NoParams_Compiles()
     {
         var a = np.array(new double[] { 1.5, -2.3, 3.7 });

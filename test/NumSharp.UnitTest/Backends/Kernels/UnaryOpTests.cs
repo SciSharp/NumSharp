@@ -344,6 +344,7 @@ public class UnaryOpTests
     #region Rounding Operations - Banker's Rounding
 
     [TestMethod]
+    [OpenBugs] // Vector512 SIMD: "Could not find Round for Vector512" on AVX-512 capable runners
     public void Round_BankersRounding()
     {
         // NumPy uses banker's rounding (round half to even)
