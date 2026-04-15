@@ -49,7 +49,6 @@ namespace NumSharp.UnitTest.NewDtypes
         }
 
         [TestMethod]
-        [OpenBugs] // Min not supported for SByte yet
         public void SByte_Min()
         {
             // NumPy: np.min(np.array([-128, -1, 0, 1, 127], dtype=np.int8)) = -128 (dtype: int8)
@@ -61,7 +60,6 @@ namespace NumSharp.UnitTest.NewDtypes
         }
 
         [TestMethod]
-        [OpenBugs] // Max not supported for SByte yet
         public void SByte_Max()
         {
             // NumPy: np.max(np.array([-128, -1, 0, 1, 127], dtype=np.int8)) = 127 (dtype: int8)
@@ -113,7 +111,6 @@ namespace NumSharp.UnitTest.NewDtypes
         }
 
         [TestMethod]
-        [OpenBugs] // ArgMax not supported for SByte yet
         public void SByte_ArgMax()
         {
             // NumPy: np.argmax(np.array([-5, 10, 3, -2, 8], dtype=np.int8)) = 1
@@ -123,7 +120,6 @@ namespace NumSharp.UnitTest.NewDtypes
         }
 
         [TestMethod]
-        [OpenBugs] // ArgMin not supported for SByte yet
         public void SByte_ArgMin()
         {
             // NumPy: np.argmin(np.array([-5, 10, 3, -2, 8], dtype=np.int8)) = 0
@@ -208,7 +204,6 @@ namespace NumSharp.UnitTest.NewDtypes
         }
 
         [TestMethod]
-        [OpenBugs] // ArgMax not supported for Half yet
         public void Half_ArgMax()
         {
             // NumPy: np.argmax(np.array([1.5, 0.5, 2.5, 1.0], dtype=np.float16)) = 2
@@ -218,7 +213,6 @@ namespace NumSharp.UnitTest.NewDtypes
         }
 
         [TestMethod]
-        [OpenBugs] // ArgMin not supported for Half yet
         public void Half_ArgMin()
         {
             // NumPy: np.argmin(np.array([1.5, 0.5, 2.5, 1.0], dtype=np.float16)) = 1

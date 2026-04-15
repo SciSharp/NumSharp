@@ -44,7 +44,6 @@ namespace NumSharp.UnitTest.NewDtypes
         }
 
         [TestMethod]
-        [OpenBugs] // Half comparison IL kernel not supported yet
         public void Half_NaN_Comparisons()
         {
             // NumPy: NaN == NaN is False, NaN < x is False
@@ -108,7 +107,6 @@ namespace NumSharp.UnitTest.NewDtypes
         #region All/Any
 
         [TestMethod]
-        [OpenBugs] // all/any not supported for SByte yet
         public void SByte_All_Any()
         {
             // NumPy: np.all([0, 1, 2], dtype=int8) = False
@@ -123,7 +121,6 @@ namespace NumSharp.UnitTest.NewDtypes
         }
 
         [TestMethod]
-        [OpenBugs] // all/any not supported for Half yet
         public void Half_All_Any()
         {
             // NumPy: np.all([0.0, 1.0, nan], dtype=float16) = False (0.0 is falsy)
@@ -134,7 +131,6 @@ namespace NumSharp.UnitTest.NewDtypes
         }
 
         [TestMethod]
-        [OpenBugs] // all/any not supported for Complex yet
         public void Complex_All_Any()
         {
             // NumPy: np.all([0+0j, 1+0j, 0+1j]) = False (0+0j is falsy)

@@ -65,7 +65,6 @@ namespace NumSharp.UnitTest.NewDtypes
         #region Half Comparisons
 
         [TestMethod]
-        [OpenBugs] // Half comparison IL kernel not supported yet
         public void Half_Equal()
         {
             var h1 = np.array(new Half[] { (Half)1.0, (Half)2.0, Half.NaN });
@@ -79,7 +78,6 @@ namespace NumSharp.UnitTest.NewDtypes
         }
 
         [TestMethod]
-        [OpenBugs] // Half comparison IL kernel not supported yet
         public void Half_LessThan_WithNaN()
         {
             var h1 = np.array(new Half[] { (Half)1.0, (Half)2.0, Half.NaN });
@@ -97,7 +95,6 @@ namespace NumSharp.UnitTest.NewDtypes
         #region Complex Comparisons
 
         [TestMethod]
-        [OpenBugs] // Complex comparison IL kernel not supported yet
         public void Complex_Equal()
         {
             // NumPy: complex == complex uses exact equality

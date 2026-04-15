@@ -435,6 +435,13 @@ namespace NumSharp.Backends.Kernels
         {
             // Args: void* input (0), long* strides (1), long* shape (2), int ndim (3), long totalSize (4)
 
+            // For Half ArgMax/ArgMin, use helper method (Half comparison via IL doesn't work correctly)
+            if ((key.Op == ReductionOp.ArgMax || key.Op == ReductionOp.ArgMin) && key.InputType == NPTypeCode.Half)
+            {
+                EmitArgMaxMinSimdLoop(il, key, inputSize);
+                return;
+            }
+
             var locI = il.DeclareLocal(typeof(long)); // loop counter
             var locAccum = il.DeclareLocal(GetClrType(key.AccumulatorType)); // accumulator
             var locIdx = il.DeclareLocal(typeof(long)); // index for ArgMax/ArgMin

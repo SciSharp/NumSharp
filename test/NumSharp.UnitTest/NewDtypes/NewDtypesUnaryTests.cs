@@ -99,7 +99,6 @@ namespace NumSharp.UnitTest.NewDtypes
         }
 
         [TestMethod]
-        [OpenBugs] // Sqrt not supported for Half yet
         public void Half_Sqrt()
         {
             // NumPy: np.sqrt(np.array([0, 1, 4, 9], dtype=np.float16))
@@ -115,7 +114,6 @@ namespace NumSharp.UnitTest.NewDtypes
         }
 
         [TestMethod]
-        [OpenBugs] // Floor not supported for Half yet
         public void Half_Floor()
         {
             // NumPy: np.floor(np.array([1.2, 2.7, -1.5, -2.8], dtype=np.float16))
@@ -131,7 +129,6 @@ namespace NumSharp.UnitTest.NewDtypes
         }
 
         [TestMethod]
-        [OpenBugs] // Ceil not supported for Half yet
         public void Half_Ceil()
         {
             // NumPy: np.ceil(np.array([1.2, 2.7, -1.5, -2.8], dtype=np.float16))
@@ -147,7 +144,6 @@ namespace NumSharp.UnitTest.NewDtypes
         }
 
         [TestMethod]
-        [OpenBugs] // Exp not supported for Half yet
         public void Half_Exp()
         {
             // NumPy: np.exp(np.array([0.0, 1.0, 2.0], dtype=np.float16))
@@ -162,7 +158,6 @@ namespace NumSharp.UnitTest.NewDtypes
         }
 
         [TestMethod]
-        [OpenBugs] // Sin not supported for Half yet
         public void Half_Sin()
         {
             // NumPy: np.sin(np.array([0.0, pi/6, pi/4, pi/2], dtype=np.float16))
@@ -222,7 +217,6 @@ namespace NumSharp.UnitTest.NewDtypes
         }
 
         [TestMethod]
-        [OpenBugs] // Sqrt not supported for Complex yet
         public void Complex_Sqrt()
         {
             // NumPy: np.sqrt(np.array([1+0j, 0+1j, 1+1j]))
@@ -244,7 +238,6 @@ namespace NumSharp.UnitTest.NewDtypes
         }
 
         [TestMethod]
-        [OpenBugs] // Exp not supported for Complex yet
         public void Complex_Exp()
         {
             // NumPy: np.exp(np.array([0+0j, 1+0j, 0+1j]))
@@ -265,7 +258,6 @@ namespace NumSharp.UnitTest.NewDtypes
         }
 
         [TestMethod]
-        [OpenBugs] // Log not supported for Complex yet
         public void Complex_Log()
         {
             // NumPy: np.log(np.array([1+0j, 0+1j, 1+1j]))

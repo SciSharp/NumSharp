@@ -24,7 +24,11 @@ namespace NumSharp.Utilities
             if (toutCode == NPTypeCode.Half)
             {
                 return @in => {
-                    double d = @in is IConvertible ic ? ic.ToDouble(null) : Convert.ToDouble(@in);
+                    double d;
+                    if (@in is Half h) d = (double)h;
+                    else if (@in is Complex c) d = c.Real;
+                    else if (@in is IConvertible ic) d = ic.ToDouble(null);
+                    else d = Convert.ToDouble(@in);
                     return (TOut)(object)(Half)d;
                 };
             }
@@ -33,7 +37,10 @@ namespace NumSharp.Utilities
             if (toutCode == NPTypeCode.Complex)
             {
                 return @in => {
-                    double d = @in is IConvertible ic ? ic.ToDouble(null) : Convert.ToDouble(@in);
+                    double d;
+                    if (@in is Half h) d = (double)h;
+                    else if (@in is IConvertible ic) d = ic.ToDouble(null);
+                    else d = Convert.ToDouble(@in);
                     return (TOut)(object)new Complex(d, 0);
                 };
             }

@@ -37,6 +37,20 @@ namespace NumSharp.Backends.Kernels
                 return;
             }
 
+            // Special handling for Complex
+            if (type == NPTypeCode.Complex)
+            {
+                EmitUnaryComplexOperation(il, op);
+                return;
+            }
+
+            // Special handling for Half
+            if (type == NPTypeCode.Half)
+            {
+                EmitUnaryHalfOperation(il, op);
+                return;
+            }
+
             switch (op)
             {
                 case UnaryOp.Negate:

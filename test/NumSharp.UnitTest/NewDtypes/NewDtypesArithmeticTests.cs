@@ -180,7 +180,6 @@ namespace NumSharp.UnitTest.NewDtypes
         }
 
         [TestMethod]
-        [OpenBugs] // Complex negate not fully supported in IL kernel yet
         public void Complex_Negate()
         {
             // NumPy: -np.array([1+2j, 3+4j, 0+0j, -1-1j])

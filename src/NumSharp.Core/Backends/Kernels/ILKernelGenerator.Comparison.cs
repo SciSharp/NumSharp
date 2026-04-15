@@ -969,6 +969,20 @@ namespace NumSharp.Backends.Kernels
                 return;
             }
 
+            // Special handling for Half comparisons (uses operator methods)
+            if (comparisonType == NPTypeCode.Half)
+            {
+                EmitHalfComparison(il, op);
+                return;
+            }
+
+            // Special handling for Complex comparisons (only == and != supported)
+            if (comparisonType == NPTypeCode.Complex)
+            {
+                EmitComplexComparison(il, op);
+                return;
+            }
+
             bool isUnsigned = IsUnsigned(comparisonType);
             bool isFloat = comparisonType == NPTypeCode.Single || comparisonType == NPTypeCode.Double;
 
@@ -1052,6 +1066,72 @@ namespace NumSharp.Backends.Kernels
             );
 
             il.EmitCall(OpCodes.Call, method!, null);
+        }
+
+        /// <summary>
+        /// Emit Half comparison using operator methods.
+        /// </summary>
+        private static void EmitHalfComparison(ILGenerator il, ComparisonOp op)
+        {
+            // Half has comparison operators that return bool
+            string methodName = op switch
+            {
+                ComparisonOp.Equal => "op_Equality",
+                ComparisonOp.NotEqual => "op_Inequality",
+                ComparisonOp.Less => "op_LessThan",
+                ComparisonOp.LessEqual => "op_LessThanOrEqual",
+                ComparisonOp.Greater => "op_GreaterThan",
+                ComparisonOp.GreaterEqual => "op_GreaterThanOrEqual",
+                _ => throw new NotSupportedException($"Comparison {op} not supported for Half")
+            };
+
+            var method = typeof(Half).GetMethod(
+                methodName,
+                BindingFlags.Public | BindingFlags.Static,
+                null,
+                new[] { typeof(Half), typeof(Half) },
+                null
+            );
+
+            if (method == null)
+                throw new InvalidOperationException($"Half.{methodName} not found");
+
+            il.EmitCall(OpCodes.Call, method, null);
+        }
+
+        /// <summary>
+        /// Emit Complex comparison using operator methods.
+        /// Note: Complex only supports == and !=, not ordered comparisons.
+        /// </summary>
+        private static void EmitComplexComparison(ILGenerator il, ComparisonOp op)
+        {
+            // Complex only has equality and inequality operators
+            string? methodName = op switch
+            {
+                ComparisonOp.Equal => "op_Equality",
+                ComparisonOp.NotEqual => "op_Inequality",
+                _ => null
+            };
+
+            if (methodName == null)
+            {
+                throw new NotSupportedException(
+                    $"Comparison {op} not supported for Complex. " +
+                    "Complex numbers do not have a natural ordering - only == and != are valid.");
+            }
+
+            var method = typeof(System.Numerics.Complex).GetMethod(
+                methodName,
+                BindingFlags.Public | BindingFlags.Static,
+                null,
+                new[] { typeof(System.Numerics.Complex), typeof(System.Numerics.Complex) },
+                null
+            );
+
+            if (method == null)
+                throw new InvalidOperationException($"Complex.{methodName} not found");
+
+            il.EmitCall(OpCodes.Call, method, null);
         }
 
         #endregion

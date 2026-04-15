@@ -471,6 +471,48 @@ namespace NumSharp.Backends.Kernels
                 ?? throw new MissingFieldException(typeof(System.Numerics.Complex).FullName, "One");
             public static readonly ConstructorInfo ComplexCtor = typeof(System.Numerics.Complex).GetConstructor(new[] { typeof(double), typeof(double) })
                 ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, ".ctor(double, double)");
+
+            // Complex unary operator methods
+            public static readonly MethodInfo ComplexNegate = typeof(System.Numerics.Complex).GetMethod("op_UnaryNegation", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "op_UnaryNegation");
+            public static readonly MethodInfo ComplexSqrt = typeof(System.Numerics.Complex).GetMethod("Sqrt", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "Sqrt");
+            public static readonly MethodInfo ComplexExp = typeof(System.Numerics.Complex).GetMethod("Exp", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "Exp");
+            public static readonly MethodInfo ComplexLog = typeof(System.Numerics.Complex).GetMethod("Log", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "Log");
+            public static readonly MethodInfo ComplexSin = typeof(System.Numerics.Complex).GetMethod("Sin", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "Sin");
+            public static readonly MethodInfo ComplexCos = typeof(System.Numerics.Complex).GetMethod("Cos", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "Cos");
+            public static readonly MethodInfo ComplexTan = typeof(System.Numerics.Complex).GetMethod("Tan", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "Tan");
+            public static readonly MethodInfo ComplexPow = typeof(System.Numerics.Complex).GetMethod("Pow", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex), typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "Pow");
+
+            // Half unary operator methods
+            public static readonly MethodInfo HalfNegate = typeof(Half).GetMethod("op_UnaryNegation", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
+                ?? throw new MissingMethodException(typeof(Half).FullName, "op_UnaryNegation");
+            public static readonly MethodInfo HalfSqrt = typeof(Half).GetMethod("Sqrt", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
+                ?? throw new MissingMethodException(typeof(Half).FullName, "Sqrt");
+            public static readonly MethodInfo HalfSin = typeof(Half).GetMethod("Sin", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
+                ?? throw new MissingMethodException(typeof(Half).FullName, "Sin");
+            public static readonly MethodInfo HalfCos = typeof(Half).GetMethod("Cos", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
+                ?? throw new MissingMethodException(typeof(Half).FullName, "Cos");
+            public static readonly MethodInfo HalfTan = typeof(Half).GetMethod("Tan", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
+                ?? throw new MissingMethodException(typeof(Half).FullName, "Tan");
+            public static readonly MethodInfo HalfExp = typeof(Half).GetMethod("Exp", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
+                ?? throw new MissingMethodException(typeof(Half).FullName, "Exp");
+            public static readonly MethodInfo HalfLog = typeof(Half).GetMethod("Log", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
+                ?? throw new MissingMethodException(typeof(Half).FullName, "Log");
+            public static readonly MethodInfo HalfFloor = typeof(Half).GetMethod("Floor", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
+                ?? throw new MissingMethodException(typeof(Half).FullName, "Floor");
+            public static readonly MethodInfo HalfCeiling = typeof(Half).GetMethod("Ceiling", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
+                ?? throw new MissingMethodException(typeof(Half).FullName, "Ceiling");
+            public static readonly MethodInfo HalfTruncate = typeof(Half).GetMethod("Truncate", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
+                ?? throw new MissingMethodException(typeof(Half).FullName, "Truncate");
+            public static readonly MethodInfo HalfAbs = typeof(Half).GetMethod("Abs", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })
+                ?? throw new MissingMethodException(typeof(Half).FullName, "Abs");
         }
 
         #endregion
@@ -1456,7 +1498,7 @@ namespace NumSharp.Backends.Kernels
             {
                 BinaryOp.Add => complexType.GetMethod("op_Addition", new[] { complexType, complexType }),
                 BinaryOp.Subtract => complexType.GetMethod("op_Subtraction", new[] { complexType, complexType }),
-                BinaryOp.Multiply => complexType.GetMethod("op_Multiplication", new[] { complexType, complexType }),
+                BinaryOp.Multiply => complexType.GetMethod("op_Multiply", new[] { complexType, complexType }),
                 BinaryOp.Divide => complexType.GetMethod("op_Division", new[] { complexType, complexType }),
                 BinaryOp.Power => complexType.GetMethod("Pow", new[] { complexType, complexType }),
                 _ => throw new NotSupportedException($"Operation {op} not supported for Complex")

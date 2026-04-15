@@ -210,5 +210,214 @@ namespace NumSharp.Backends.Kernels
         }
 
         #endregion
+
+        #region Unary Complex IL Emission
+
+        /// <summary>
+        /// Emit unary operation for Complex type.
+        /// </summary>
+        private static void EmitUnaryComplexOperation(ILGenerator il, UnaryOp op)
+        {
+            switch (op)
+            {
+                case UnaryOp.Negate:
+                    il.EmitCall(OpCodes.Call, CachedMethods.ComplexNegate, null);
+                    break;
+
+                case UnaryOp.Sqrt:
+                    il.EmitCall(OpCodes.Call, CachedMethods.ComplexSqrt, null);
+                    break;
+
+                case UnaryOp.Exp:
+                    il.EmitCall(OpCodes.Call, CachedMethods.ComplexExp, null);
+                    break;
+
+                case UnaryOp.Log:
+                    il.EmitCall(OpCodes.Call, CachedMethods.ComplexLog, null);
+                    break;
+
+                case UnaryOp.Sin:
+                    il.EmitCall(OpCodes.Call, CachedMethods.ComplexSin, null);
+                    break;
+
+                case UnaryOp.Cos:
+                    il.EmitCall(OpCodes.Call, CachedMethods.ComplexCos, null);
+                    break;
+
+                case UnaryOp.Tan:
+                    il.EmitCall(OpCodes.Call, CachedMethods.ComplexTan, null);
+                    break;
+
+                case UnaryOp.Abs:
+                    // Complex.Abs returns magnitude as double
+                    il.EmitCall(OpCodes.Call, CachedMethods.ComplexAbs, null);
+                    // Convert double back to Complex (real part only)
+                    il.Emit(OpCodes.Ldc_R8, 0.0);
+                    il.Emit(OpCodes.Newobj, CachedMethods.ComplexCtor);
+                    break;
+
+                case UnaryOp.Square:
+                    // z * z
+                    il.Emit(OpCodes.Dup);
+                    il.EmitCall(OpCodes.Call, typeof(System.Numerics.Complex).GetMethod("op_Multiply",
+                        BindingFlags.Public | BindingFlags.Static,
+                        new[] { typeof(System.Numerics.Complex), typeof(System.Numerics.Complex) })!, null);
+                    break;
+
+                case UnaryOp.Reciprocal:
+                    // 1 / z
+                    {
+                        var locZ = il.DeclareLocal(typeof(System.Numerics.Complex));
+                        il.Emit(OpCodes.Stloc, locZ);
+                        il.Emit(OpCodes.Ldc_R8, 1.0);
+                        il.Emit(OpCodes.Ldc_R8, 0.0);
+                        il.Emit(OpCodes.Newobj, CachedMethods.ComplexCtor);
+                        il.Emit(OpCodes.Ldloc, locZ);
+                        il.EmitCall(OpCodes.Call, typeof(System.Numerics.Complex).GetMethod("op_Division",
+                            BindingFlags.Public | BindingFlags.Static,
+                            new[] { typeof(System.Numerics.Complex), typeof(System.Numerics.Complex) })!, null);
+                    }
+                    break;
+
+                case UnaryOp.Sign:
+                    // Complex Sign: returns unit vector z / |z|, or 0 if z = 0
+                    // NumPy: sign(1+2j) = (0.447+0.894j), sign(0+0j) = (0+0j)
+                    il.EmitCall(OpCodes.Call, typeof(ILKernelGenerator).GetMethod(nameof(ComplexSignHelper),
+                        BindingFlags.NonPublic | BindingFlags.Static)!, null);
+                    break;
+
+                default:
+                    throw new NotSupportedException($"Unary operation {op} not supported for Complex");
+            }
+        }
+
+        /// <summary>
+        /// Helper for Complex sign: returns unit vector z / |z|, or 0 if z = 0.
+        /// </summary>
+        internal static System.Numerics.Complex ComplexSignHelper(System.Numerics.Complex z)
+        {
+            var magnitude = System.Numerics.Complex.Abs(z);
+            if (magnitude == 0)
+                return System.Numerics.Complex.Zero;
+            return z / magnitude;
+        }
+
+        #endregion
+
+        #region Unary Half IL Emission
+
+        /// <summary>
+        /// Emit unary operation for Half type.
+        /// </summary>
+        private static void EmitUnaryHalfOperation(ILGenerator il, UnaryOp op)
+        {
+            switch (op)
+            {
+                case UnaryOp.Negate:
+                    il.EmitCall(OpCodes.Call, CachedMethods.HalfNegate, null);
+                    break;
+
+                case UnaryOp.Abs:
+                    il.EmitCall(OpCodes.Call, CachedMethods.HalfAbs, null);
+                    break;
+
+                case UnaryOp.Sqrt:
+                    il.EmitCall(OpCodes.Call, CachedMethods.HalfSqrt, null);
+                    break;
+
+                case UnaryOp.Sin:
+                    il.EmitCall(OpCodes.Call, CachedMethods.HalfSin, null);
+                    break;
+
+                case UnaryOp.Cos:
+                    il.EmitCall(OpCodes.Call, CachedMethods.HalfCos, null);
+                    break;
+
+                case UnaryOp.Tan:
+                    il.EmitCall(OpCodes.Call, CachedMethods.HalfTan, null);
+                    break;
+
+                case UnaryOp.Exp:
+                    il.EmitCall(OpCodes.Call, CachedMethods.HalfExp, null);
+                    break;
+
+                case UnaryOp.Log:
+                    il.EmitCall(OpCodes.Call, CachedMethods.HalfLog, null);
+                    break;
+
+                case UnaryOp.Floor:
+                    il.EmitCall(OpCodes.Call, CachedMethods.HalfFloor, null);
+                    break;
+
+                case UnaryOp.Ceil:
+                    il.EmitCall(OpCodes.Call, CachedMethods.HalfCeiling, null);
+                    break;
+
+                case UnaryOp.Truncate:
+                    il.EmitCall(OpCodes.Call, CachedMethods.HalfTruncate, null);
+                    break;
+
+                case UnaryOp.Square:
+                    // x * x
+                    il.Emit(OpCodes.Dup);
+                    il.EmitCall(OpCodes.Call, typeof(Half).GetMethod("op_Multiply",
+                        BindingFlags.Public | BindingFlags.Static,
+                        new[] { typeof(Half), typeof(Half) })!, null);
+                    break;
+
+                case UnaryOp.Reciprocal:
+                    // 1 / x - convert via double
+                    il.EmitCall(OpCodes.Call, CachedMethods.HalfToDouble, null);
+                    {
+                        var locX = il.DeclareLocal(typeof(double));
+                        il.Emit(OpCodes.Stloc, locX);
+                        il.Emit(OpCodes.Ldc_R8, 1.0);
+                        il.Emit(OpCodes.Ldloc, locX);
+                        il.Emit(OpCodes.Div);
+                    }
+                    il.EmitCall(OpCodes.Call, CachedMethods.DoubleToHalf, null);
+                    break;
+
+                case UnaryOp.Sign:
+                    // Half Sign with NaN handling: if NaN, return NaN; else return sign
+                    // NumPy: sign(NaN) = NaN, sign(0) = 0, sign(+x) = 1, sign(-x) = -1
+                    // Use helper method to handle NaN properly
+                    il.EmitCall(OpCodes.Call, typeof(ILKernelGenerator).GetMethod(nameof(HalfSignHelper),
+                        BindingFlags.NonPublic | BindingFlags.Static)!, null);
+                    break;
+
+                case UnaryOp.IsNan:
+                    il.EmitCall(OpCodes.Call, CachedMethods.HalfIsNaN, null);
+                    break;
+
+                case UnaryOp.IsInf:
+                    il.EmitCall(OpCodes.Call, typeof(Half).GetMethod("IsInfinity",
+                        BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })!, null);
+                    break;
+
+                case UnaryOp.IsFinite:
+                    il.EmitCall(OpCodes.Call, typeof(Half).GetMethod("IsFinite",
+                        BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })!, null);
+                    break;
+
+                default:
+                    throw new NotSupportedException($"Unary operation {op} not supported for Half");
+            }
+        }
+
+        /// <summary>
+        /// Helper for Half sign: handles NaN properly (returns NaN).
+        /// NumPy: sign(NaN) = NaN, sign(0) = 0, sign(+x) = 1, sign(-x) = -1
+        /// </summary>
+        internal static Half HalfSignHelper(Half value)
+        {
+            if (Half.IsNaN(value))
+                return Half.NaN;
+            if (value == Half.Zero)
+                return Half.Zero;
+            return value > Half.Zero ? (Half)1.0 : (Half)(-1.0);
+        }
+
+        #endregion
     }
 }
