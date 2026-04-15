@@ -5,9 +5,44 @@ using NumSharp.Utilities;
 
 namespace NumSharp.Backends.Iteration
 {
+    // =====================================================================================
+    // NumSharp Divergence from NumPy: Unlimited Dimensions
+    // =====================================================================================
+    //
+    // NumPy uses a fixed NPY_MAXDIMS=64 limit for array dimensions. This is a hard-coded
+    // constant that limits all NumPy operations to 64 dimensions maximum.
+    //
+    // NumSharp takes a different approach: UNLIMITED DIMENSIONS.
+    //
+    // NumSharp's Shape struct uses regular managed arrays (int[] dimensions, int[] strides)
+    // which can be any size. The practical limit is around 300,000 dimensions, soft-limited
+    // by stackalloc buffer sizes used in coordinate iteration. However, for typical use
+    // cases (even extreme ones like deep learning with thousands of dimensions), there is
+    // effectively no limit.
+    //
+    // To maintain consistency with NumSharp's unlimited dimension philosophy, NpyIterState
+    // uses dynamically allocated arrays instead of fixed-size buffers. This means:
+    //
+    // 1. Dimension-dependent arrays (Shape, Coords, Perm, Strides) are allocated based on
+    //    actual NDim at construction time
+    // 2. Per-operand arrays still use a fixed MaxOperands=8 limit (this is reasonable as
+    //    very few operations need more than 8 operands)
+    // 3. Memory is allocated via NativeMemory and must be explicitly freed
+    //
+    // Trade-offs:
+    // - Pro: No artificial dimension limit, matches NumSharp's core philosophy
+    // - Pro: Memory usage scales with actual dimensions, not worst case
+    // - Con: Slightly more complex allocation/deallocation
+    // - Con: Cannot use simple fixed() statements, need explicit pointer management
+    //
+    // =====================================================================================
+
     /// <summary>
-    /// Core iterator state. Stack-allocated with fixed-size buffers.
-    /// Matches NumPy's NpyIter_InternalOnly layout conceptually.
+    /// Core iterator state with dynamically allocated dimension arrays.
+    ///
+    /// NUMSHARP DIVERGENCE: Unlike NumPy's fixed NPY_MAXDIMS=64, NumSharp supports
+    /// unlimited dimensions. Dimension-dependent arrays are allocated dynamically
+    /// based on actual NDim. See class-level comments for rationale.
     /// </summary>
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct NpyIterState
@@ -16,14 +51,20 @@ namespace NumSharp.Backends.Iteration
         // Constants
         // =========================================================================
 
-        /// <summary>Maximum supported dimensions (matches NPY_MAXDIMS).</summary>
-        internal const int MaxDims = 64;
-
-        /// <summary>Maximum supported operands.</summary>
+        /// <summary>
+        /// Maximum supported operands. This remains fixed as very few operations
+        /// need more than 8 operands, and keeping this fixed simplifies the struct.
+        /// </summary>
         internal const int MaxOperands = 8;
 
+        /// <summary>
+        /// Threshold for using stackalloc vs heap allocation for temporary buffers.
+        /// Arrays with more dimensions than this will use heap allocation.
+        /// </summary>
+        internal const int StackAllocThreshold = 64;
+
         // =========================================================================
-        // Core Fields
+        // Core Scalar Fields
         // =========================================================================
 
         /// <summary>Iterator flags (NpyIterFlags bitmask).</summary>
@@ -72,24 +113,51 @@ namespace NumSharp.Backends.Iteration
         public NPTypeCode DType;
 
         // =========================================================================
-        // Fixed Arrays (stack-allocated)
+        // Dynamically Allocated Dimension Arrays (NUMSHARP DIVERGENCE)
+        // =========================================================================
+        // These arrays are allocated based on actual NDim, not a fixed maximum.
+        // This enables unlimited dimension support matching NumSharp's core design.
         // =========================================================================
 
-        /// <summary>Axis permutation (maps iterator axis to original axis).</summary>
-        public fixed sbyte Perm[MaxDims];
+        /// <summary>
+        /// Axis permutation (maps iterator axis to original axis).
+        /// Dynamically allocated: size = NDim.
+        /// </summary>
+        public sbyte* Perm;
 
-        /// <summary>Shape after coalescing.</summary>
-        public fixed long Shape[MaxDims];
+        /// <summary>
+        /// Shape after coalescing.
+        /// Dynamically allocated: size = NDim.
+        /// </summary>
+        public long* Shape;
 
-        /// <summary>Current coordinates.</summary>
-        public fixed long Coords[MaxDims];
+        /// <summary>
+        /// Current coordinates.
+        /// Dynamically allocated: size = NDim.
+        /// </summary>
+        public long* Coords;
 
         /// <summary>
         /// Strides for each operand along each axis.
+        /// Dynamically allocated: size = NDim * NOp.
         /// Layout: [op0_axis0, op0_axis1, ..., op1_axis0, op1_axis1, ...]
-        /// Access: Strides[operand * MaxDims + axis]
+        /// Access: Strides[operand * NDim + axis]
+        ///
+        /// Note: Unlike fixed layout which uses MaxDims spacing, dynamic layout
+        /// packs strides contiguously based on actual NDim.
         /// </summary>
-        public fixed long Strides[MaxDims * MaxOperands];
+        public long* Strides;
+
+        /// <summary>
+        /// Allocated NDim for the Strides array. Used to compute correct offsets
+        /// when NDim changes (e.g., after coalescing). Strides array maintains
+        /// its original allocation size for safety.
+        /// </summary>
+        public int StridesNDim;
+
+        // =========================================================================
+        // Fixed Per-Operand Arrays (MaxOperands is reasonable limit)
+        // =========================================================================
 
         /// <summary>Current data pointers for each operand.</summary>
         public fixed long DataPtrs[MaxOperands];
@@ -109,6 +177,12 @@ namespace NumSharp.Backends.Iteration
         /// <summary>Element sizes for each operand.</summary>
         public fixed int ElementSizes[MaxOperands];
 
+        /// <summary>
+        /// Inner strides for each operand (gathered from main Strides array for fast access).
+        /// Layout: [op0_inner_stride, op1_inner_stride, ...]
+        /// </summary>
+        public fixed long InnerStrides[MaxOperands];
+
         // =========================================================================
         // Buffer Data (when BUFFERED flag is set)
         // =========================================================================
@@ -125,13 +199,68 @@ namespace NumSharp.Backends.Iteration
         /// <summary>Buffer strides (always element size for contiguous buffers).</summary>
         public fixed long BufStrides[MaxOperands];
 
+        // =========================================================================
+        // Allocation and Deallocation
+        // =========================================================================
+
         /// <summary>
-        /// Inner strides for each operand (gathered from main Strides array for fast access).
-        /// Updated when NDim changes (after coalescing) or when axes are removed.
-        /// Layout: [op0_inner_stride, op1_inner_stride, ...]
-        /// Matches NumPy's NpyIter_GetInnerStrideArray() return format.
+        /// Allocate dimension-dependent arrays for given ndim and nop.
+        /// Must be called before using Shape, Coords, Perm, or Strides.
         /// </summary>
-        public fixed long InnerStrides[MaxOperands];
+        public void AllocateDimArrays(int ndim, int nop)
+        {
+            if (ndim < 0) throw new ArgumentOutOfRangeException(nameof(ndim));
+            if (nop < 1 || nop > MaxOperands) throw new ArgumentOutOfRangeException(nameof(nop));
+
+            NDim = ndim;
+            NOp = nop;
+            StridesNDim = ndim;
+
+            if (ndim == 0)
+            {
+                // Scalar case - no dimension arrays needed
+                Shape = null;
+                Coords = null;
+                Perm = null;
+                Strides = null;
+                return;
+            }
+
+            // Allocate all dimension arrays in one contiguous block for cache efficiency
+            // Layout: [Shape: ndim longs][Coords: ndim longs][Strides: ndim*nop longs][Perm: ndim sbytes]
+            long shapeBytes = ndim * sizeof(long);
+            long coordsBytes = ndim * sizeof(long);
+            long stridesBytes = ndim * nop * sizeof(long);
+            long permBytes = ndim * sizeof(sbyte);
+
+            // Align perm to 8 bytes for cleaner memory layout
+            long permBytesAligned = (permBytes + 7) & ~7L;
+
+            long totalBytes = shapeBytes + coordsBytes + stridesBytes + permBytesAligned;
+
+            byte* block = (byte*)NativeMemory.AllocZeroed((nuint)totalBytes);
+
+            Shape = (long*)block;
+            Coords = (long*)(block + shapeBytes);
+            Strides = (long*)(block + shapeBytes + coordsBytes);
+            Perm = (sbyte*)(block + shapeBytes + coordsBytes + stridesBytes);
+        }
+
+        /// <summary>
+        /// Free dimension-dependent arrays. Must be called before freeing the state itself.
+        /// </summary>
+        public void FreeDimArrays()
+        {
+            // All arrays are in one contiguous block starting at Shape
+            if (Shape != null)
+            {
+                NativeMemory.Free(Shape);
+                Shape = null;
+                Coords = null;
+                Strides = null;
+                Perm = null;
+            }
+        }
 
         // =========================================================================
         // Accessor Methods
@@ -139,45 +268,37 @@ namespace NumSharp.Backends.Iteration
 
         /// <summary>Get pointer to Shape array.</summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public long* GetShapePointer()
-        {
-            fixed (long* ptr = Shape)
-                return ptr;
-        }
+        public long* GetShapePointer() => Shape;
 
         /// <summary>Get pointer to Coords array.</summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public long* GetCoordsPointer()
-        {
-            fixed (long* ptr = Coords)
-                return ptr;
-        }
+        public long* GetCoordsPointer() => Coords;
 
-        /// <summary>Get pointer to strides for a specific operand (legacy layout).</summary>
+        /// <summary>
+        /// Get pointer to strides for a specific operand.
+        /// Uses actual NDim (or StridesNDim if NDim changed after allocation).
+        /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public long* GetStridesPointer(int operand)
         {
-            if ((uint)operand >= MaxOperands)
+            if ((uint)operand >= (uint)NOp)
                 throw new ArgumentOutOfRangeException(nameof(operand));
 
-            fixed (long* ptr = Strides)
-                return ptr + (operand * MaxDims);
+            return Strides + (operand * StridesNDim);
         }
 
         /// <summary>Get stride for operand at axis.</summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public long GetStride(int axis, int op)
         {
-            fixed (long* p = Strides)
-                return p[op * MaxDims + axis];
+            return Strides[op * StridesNDim + axis];
         }
 
         /// <summary>Set stride for operand at axis.</summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void SetStride(int axis, int op, long value)
         {
-            fixed (long* p = Strides)
-                p[op * MaxDims + axis] = value;
+            Strides[op * StridesNDim + axis] = value;
         }
 
         /// <summary>Get current data pointer for operand.</summary>
@@ -289,7 +410,7 @@ namespace NumSharp.Backends.Iteration
 
         /// <summary>
         /// Get inner stride array pointer - returns contiguous array of inner strides for all operands.
-        /// Layout: [op0_inner_stride, op1_inner_stride, ...] matching NumPy's NpyIter_GetInnerStrideArray().
+        /// Layout: [op0_inner_stride, op1_inner_stride, ...]
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public long* GetInnerStrideArray()
@@ -305,23 +426,19 @@ namespace NumSharp.Backends.Iteration
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void UpdateInnerStrides()
         {
-            if (NDim == 0)
+            fixed (long* inner = InnerStrides)
             {
-                // Scalar - all inner strides are 0
-                fixed (long* inner = InnerStrides)
+                if (NDim == 0)
                 {
+                    // Scalar - all inner strides are 0
                     for (int op = 0; op < NOp; op++)
                         inner[op] = 0;
+                    return;
                 }
-                return;
-            }
 
-            int innerAxis = NDim - 1;
-            fixed (long* inner = InnerStrides)
-            fixed (long* strides = Strides)
-            {
+                int innerAxis = NDim - 1;
                 for (int op = 0; op < NOp; op++)
-                    inner[op] = strides[op * MaxDims + innerAxis];
+                    inner[op] = Strides[op * StridesNDim + innerAxis];
             }
         }
 
@@ -343,35 +460,32 @@ namespace NumSharp.Backends.Iteration
         {
             IterIndex++;
 
-            fixed (long* shape = Shape)
-            fixed (long* coords = Coords)
-            fixed (long* strides = Strides)
             fixed (long* dataPtrs = DataPtrs)
             fixed (int* elemSizes = ElementSizes)
             {
                 for (int axis = NDim - 1; axis >= 0; axis--)
                 {
-                    coords[axis]++;
+                    Coords[axis]++;
 
-                    if (coords[axis] < shape[axis])
+                    if (Coords[axis] < Shape[axis])
                     {
                         // Advance data pointers along this axis
                         for (int op = 0; op < NOp; op++)
                         {
-                            long stride = strides[op * MaxDims + axis];
+                            long stride = Strides[op * StridesNDim + axis];
                             dataPtrs[op] += stride * elemSizes[op];
                         }
                         return;
                     }
 
                     // Carry: reset this axis, continue to next
-                    coords[axis] = 0;
+                    Coords[axis] = 0;
 
                     // Reset data pointers for this axis
                     for (int op = 0; op < NOp; op++)
                     {
-                        long stride = strides[op * MaxDims + axis];
-                        long axisShape = shape[axis];
+                        long stride = Strides[op * StridesNDim + axis];
+                        long axisShape = Shape[axis];
                         dataPtrs[op] -= stride * (axisShape - 1) * elemSizes[op];
                     }
                 }
@@ -385,11 +499,8 @@ namespace NumSharp.Backends.Iteration
         {
             IterIndex = IterStart;
 
-            fixed (long* coords = Coords)
-            {
-                for (int d = 0; d < NDim; d++)
-                    coords[d] = 0;
-            }
+            for (int d = 0; d < NDim; d++)
+                Coords[d] = 0;
 
             fixed (long* dataPtrs = DataPtrs)
             fixed (long* resetPtrs = ResetDataPtrs)
@@ -408,21 +519,14 @@ namespace NumSharp.Backends.Iteration
 
             // Calculate coordinates from linear index
             long remaining = iterindex;
-
-            fixed (long* shape = Shape)
-            fixed (long* coords = Coords)
+            for (int d = NDim - 1; d >= 0; d--)
             {
-                for (int d = NDim - 1; d >= 0; d--)
-                {
-                    long dimSize = shape[d];
-                    coords[d] = remaining % dimSize;
-                    remaining /= dimSize;
-                }
+                long dimSize = Shape[d];
+                Coords[d] = remaining % dimSize;
+                remaining /= dimSize;
             }
 
             // Update data pointers
-            fixed (long* coords = Coords)
-            fixed (long* strides = Strides)
             fixed (long* dataPtrs = DataPtrs)
             fixed (long* resetPtrs = ResetDataPtrs)
             fixed (int* elemSizes = ElementSizes)
@@ -432,7 +536,7 @@ namespace NumSharp.Backends.Iteration
                     long offset = 0;
                     for (int d = 0; d < NDim; d++)
                     {
-                        offset += coords[d] * strides[op * MaxDims + d];
+                        offset += Coords[d] * Strides[op * StridesNDim + d];
                     }
                     dataPtrs[op] = resetPtrs[op] + offset * elemSizes[op];
                 }

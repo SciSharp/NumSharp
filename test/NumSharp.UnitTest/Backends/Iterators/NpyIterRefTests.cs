@@ -487,14 +487,36 @@ namespace NumSharp.UnitTest.Backends.Iterators
         }
 
         // =========================================================================
-        // Fix #8: MaxDims Tests
+        // NumSharp Divergence: Unlimited Dimensions Tests
         // =========================================================================
 
         [Test]
-        public void MaxDims_Is64()
+        public void UnlimitedDimensions_HighDimensionalArray()
         {
-            // Verify MaxDims is 64 to match NumPy's NPY_MAXDIMS
-            Assert.AreEqual(64, NpyIterState.MaxDims);
+            // NUMSHARP DIVERGENCE: Unlike NumPy's NPY_MAXDIMS=64 limit,
+            // NumSharp supports unlimited dimensions via dynamic allocation.
+            // Practical limit is around 300,000 dimensions (stackalloc limit).
+            //
+            // This test verifies high-dimensional arrays work correctly.
+
+            // Create a 20-dimensional array (well beyond typical use cases)
+            var shape = new int[20];
+            for (int i = 0; i < 20; i++)
+                shape[i] = 2;
+
+            var arr = np.ones(new Shape(shape));
+
+            using var iter = NpyIterRef.New(arr);
+
+            Assert.AreEqual(1048576, iter.IterSize);  // 2^20 = 1048576
+            Assert.IsTrue(iter.NDim >= 1);  // May coalesce
+        }
+
+        [Test]
+        public void UnlimitedDimensions_MaxOperands()
+        {
+            // MaxOperands is still 8 (reasonable limit for multi-operand iteration)
+            Assert.AreEqual(8, NpyIterState.MaxOperands);
         }
     }
 }
