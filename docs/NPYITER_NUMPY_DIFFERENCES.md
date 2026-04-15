@@ -404,12 +404,14 @@ public fixed long BufStrides[MaxOperands];
 
 1. **Reduction support** - Implement reduce_pos, outer loop handling
 2. **GetIterView()** - Return NDArray with iterator's axis ordering
-3. **Negative stride flipping** - NumPy flips negative strides for memory-order iteration
-   while tracking flipped coordinates. NumSharp currently iterates in view logical order.
-4. **Cast support** - Type conversion during buffered iteration
+3. **Cast support** - Type conversion during buffered iteration
 
 ### Recently Completed (2026-04-15)
 
+- **Negative stride flipping** - Full NumPy parity: FlipNegativeStrides() negates all-negative
+  axes, adjusts base pointers, marks axes with negative Perm entries, sets NEGPERM flag.
+  GetMultiIndex/GotoMultiIndex/GotoIndex/ComputeFlatIndex all handle NEGPERM correctly.
+  DONT_NEGATE_STRIDES flag supported. 13 new NumPy parity tests.
 - **Copy()** - Create independent copy of iterator at current position
 - **GotoIndex()** - Jump to flat C/F index position (full NumPy parity)
 - **ComputeFlatIndex fix** - Uses Perm to compute index in original coordinate order

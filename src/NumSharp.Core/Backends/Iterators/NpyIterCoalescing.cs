@@ -347,5 +347,103 @@ namespace NumSharp.Backends.Iteration
             }
             return min == long.MaxValue ? 0 : min;
         }
+
+        /// <summary>
+        /// Flip axes with all-negative strides for memory-order iteration.
+        ///
+        /// NumPy's npyiter_flip_negative_strides():
+        /// - For each axis, check if ALL operands have negative or zero strides
+        /// - If so, negate the strides, adjust base pointers to start at the end,
+        ///   and mark the axis as flipped in the Perm array (perm[d] = -1 - perm[d])
+        /// - Sets NEGPERM flag and clears IDENTPERM
+        ///
+        /// This allows the iterator to traverse memory in ascending order even for
+        /// reversed arrays, improving cache efficiency.
+        /// </summary>
+        /// <param name="state">Iterator state to modify</param>
+        /// <returns>True if any axes were flipped</returns>
+        public static bool FlipNegativeStrides(ref NpyIterState state)
+        {
+            if (state.NDim == 0)
+                return false;
+
+            var shape = state.Shape;
+            var strides = state.Strides;
+            var perm = state.Perm;
+            int stridesNDim = state.StridesNDim;
+            int nop = state.NOp;
+            bool anyFlipped = false;
+
+            for (int axis = 0; axis < state.NDim; axis++)
+            {
+                // Check if ALL operands have negative or zero strides for this axis
+                bool anyNegative = false;
+                bool allNonPositive = true;
+
+                for (int op = 0; op < nop; op++)
+                {
+                    long stride = strides[op * stridesNDim + axis];
+                    if (stride < 0)
+                    {
+                        anyNegative = true;
+                    }
+                    else if (stride > 0)
+                    {
+                        allNonPositive = false;
+                        break;
+                    }
+                    // stride == 0 is fine (broadcast dimension)
+                }
+
+                // Only flip if at least one stride is negative and none are positive
+                if (anyNegative && allNonPositive)
+                {
+                    long shapeMinus1 = shape[axis] - 1;
+
+                    // Flip strides and adjust reset data pointers
+                    fixed (long* resetPtrs = state.ResetDataPtrs)
+                    fixed (int* elemSizes = state.ElementSizes)
+                    {
+                        for (int op = 0; op < nop; op++)
+                        {
+                            long stride = strides[op * stridesNDim + axis];
+                            int elemSize = elemSizes[op];
+
+                            // Adjust reset pointer to start at the end of this axis
+                            resetPtrs[op] += shapeMinus1 * stride * elemSize;
+
+                            // Negate the stride
+                            strides[op * stridesNDim + axis] = -stride;
+                        }
+                    }
+
+                    // Mark axis as flipped in permutation
+                    // perm[axis] = -1 - perm[axis] makes it negative
+                    // Original axis = perm[axis] when >= 0, or -1 - perm[axis] when < 0
+                    perm[axis] = (sbyte)(-1 - perm[axis]);
+
+                    anyFlipped = true;
+                }
+            }
+
+            if (anyFlipped)
+            {
+                // Also update current data pointers to match reset pointers
+                fixed (long* dataPtrs = state.DataPtrs)
+                fixed (long* resetPtrs = state.ResetDataPtrs)
+                {
+                    for (int op = 0; op < nop; op++)
+                    {
+                        dataPtrs[op] = resetPtrs[op];
+                    }
+                }
+
+                // Set NEGPERM flag and clear IDENTPERM
+                state.ItFlags = (state.ItFlags | (uint)NpyIterFlags.NEGPERM) &
+                                ~(uint)NpyIterFlags.IDENTPERM;
+            }
+
+            return anyFlipped;
+        }
     }
 }

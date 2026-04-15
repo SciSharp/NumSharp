@@ -613,23 +613,54 @@ namespace NumSharp.Backends.Iteration
         }
 
         /// <summary>
+        /// Initialize FlatIndex based on current coordinates.
+        /// Should be called after HASINDEX flag is set and all axis setup is complete.
+        /// </summary>
+        public void InitializeFlatIndex()
+        {
+            if ((ItFlags & (uint)NpyIterFlags.HASINDEX) != 0)
+            {
+                FlatIndex = ComputeFlatIndex();
+            }
+        }
+
+        /// <summary>
         /// Compute the flat index from current coordinates based on C or F order.
         /// Uses original (pre-reordering) coordinate order via Perm array.
+        /// When NEGPERM is set, flipped axes have negative perm entries and their
+        /// coordinates are reversed when computing the original index.
         /// </summary>
         private long ComputeFlatIndex()
         {
             if (NDim == 0)
                 return 0;
 
+            bool hasNegPerm = (ItFlags & (uint)NpyIterFlags.NEGPERM) != 0;
+
             // Build original coords and shape from internal using Perm
-            // Perm[internal_axis] = original_axis
+            // Perm[internal_axis] = original_axis (or -1-original if flipped)
             var origCoords = stackalloc long[NDim];
             var origShape = stackalloc long[NDim];
 
             for (int d = 0; d < NDim; d++)
             {
-                int origAxis = Perm[d];
-                origCoords[origAxis] = Coords[d];
+                int p = Perm[d];
+                int origAxis;
+                long origCoord;
+
+                if (hasNegPerm && p < 0)
+                {
+                    // Flipped axis: original = -1 - p, coord is reversed
+                    origAxis = -1 - p;
+                    origCoord = Shape[d] - Coords[d] - 1;
+                }
+                else
+                {
+                    origAxis = p;
+                    origCoord = Coords[d];
+                }
+
+                origCoords[origAxis] = origCoord;
                 origShape[origAxis] = Shape[d];
             }
 
