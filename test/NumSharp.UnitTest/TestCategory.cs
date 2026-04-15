@@ -1,5 +1,6 @@
 using System;
-using TUnit.Core;
+using System.Collections.Generic;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace NumSharp.UnitTest;
 
@@ -8,35 +9,35 @@ namespace NumSharp.UnitTest;
 ///
 /// <para><b>How Categories Work in CI:</b></para>
 /// <para>
-/// The CI pipeline (<c>.github/workflows/build-and-release.yml</c>) uses TUnit's
-/// <c>--treenode-filter</c> to exclude certain categories from test runs:
+/// The CI pipeline (<c>.github/workflows/build-and-release.yml</c>) uses MSTest's
+/// <c>--filter</c> to exclude certain categories from test runs:
 /// </para>
 /// <code>
-/// TEST_FILTER: '/*/*/*/*[Category!=OpenBugs]'
+/// --filter "TestCategory!=OpenBugs"
 /// </code>
 /// <para>
-/// This filter excludes all tests marked with <c>[Category("OpenBugs")]</c> from CI runs.
+/// This filter excludes all tests marked with <c>[TestCategory("OpenBugs")]</c> from CI runs.
 /// Tests in other categories (like <see cref="Misaligned"/>) still run and can fail CI.
 /// </para>
 ///
 /// <para><b>Local Development Filtering:</b></para>
 /// <code>
 /// # Exclude OpenBugs (same as CI)
-/// dotnet test -- --treenode-filter "/*/*/*/*[Category!=OpenBugs]"
+/// dotnet test --filter "TestCategory!=OpenBugs"
 ///
 /// # Run ONLY OpenBugs tests (to verify fixes)
-/// dotnet test -- --treenode-filter "/*/*/*/*[Category=OpenBugs]"
+/// dotnet test --filter "TestCategory=OpenBugs"
 ///
 /// # Run ONLY Misaligned tests
-/// dotnet test -- --treenode-filter "/*/*/*/*[Category=Misaligned]"
+/// dotnet test --filter "TestCategory=Misaligned"
 /// </code>
 ///
 /// <para><b>Usage:</b></para>
-/// <para>Apply at individual test level (class-level does not work with treenode filters):</para>
+/// <para>Apply at class or method level:</para>
 /// <code>
-/// [Test]
-/// [OpenBugs]  // or [Category(TestCategory.OpenBugs)]
-/// public async Task ReproducesIssue123() { ... }
+/// [TestMethod]
+/// [OpenBugs]  // or [TestCategory(TestCategory.OpenBugs)]
+/// public void ReproducesIssue123() { ... }
 /// </code>
 /// </summary>
 public static class TestCategory
@@ -53,7 +54,7 @@ public static class TestCategory
     ///
     /// <para><b>CI Behavior:</b></para>
     /// <para>
-    /// Excluded from CI runs via <c>--treenode-filter "/*/*/*/*[Category!=OpenBugs]"</c>.
+    /// Excluded from CI runs via <c>--filter "TestCategory!=OpenBugs"</c>.
     /// This prevents known bugs from blocking PRs while keeping them documented.
     /// </para>
     ///
@@ -99,8 +100,8 @@ public static class TestCategory
     ///
     /// <para><b>Usage:</b></para>
     /// <code>
-    /// [Test]
-    /// [Category(TestCategory.Misaligned)]
+    /// [TestMethod]
+    /// [TestCategory(TestCategory.Misaligned)]
     /// public void BroadcastSlice_MaterializesInNumSharp()
     /// {
     ///     // Document: NumSharp copies on slice, NumPy keeps view
@@ -131,7 +132,7 @@ public static class TestCategory
     /// <para><b>Local Development:</b></para>
     /// <para>
     /// When running tests locally on non-Windows, use the filter:
-    /// <c>dotnet test -- --treenode-filter "/*/*/*/*[Category!=WindowsOnly]"</c>
+    /// <c>dotnet test --filter "TestCategory!=WindowsOnly"</c>
     /// </para>
     ///
     /// <para><b>Note:</b></para>
@@ -171,13 +172,13 @@ public static class TestCategory
     ///
     /// <para><b>CI Behavior:</b></para>
     /// <para>
-    /// Excluded from CI runs via <c>--treenode-filter "/*/*/*/*[Category!=HighMemory]"</c>.
+    /// Excluded from CI runs via <c>--filter "TestCategory!=HighMemory"</c>.
     /// </para>
     ///
     /// <para><b>Local Development:</b></para>
     /// <code>
     /// # Run ONLY HighMemory tests (requires 8GB+ RAM)
-    /// dotnet test -- --treenode-filter "/*/*/*/*[Category=HighMemory]"
+    /// dotnet test --filter "TestCategory=HighMemory"
     /// </code>
     /// </summary>
     public const string HighMemory = "HighMemory";
@@ -185,27 +186,24 @@ public static class TestCategory
 
 /// <summary>
 /// Attribute for tests documenting known bugs that are expected to fail.
-/// Shorthand for <c>[Category("OpenBugs")]</c>.
-///
-/// <para><b>NOTE:</b> Must be applied to individual test methods, not classes.
-/// Class-level attributes do not work correctly with TUnit's treenode filters.</para>
+/// Shorthand for <c>[TestCategory("OpenBugs")]</c>.
 ///
 /// <para>See <see cref="TestCategory.OpenBugs"/> for full documentation.</para>
 /// </summary>
 /// <example>
 /// <code>
 /// // Basic usage
-/// [Test]
+/// [TestMethod]
 /// [OpenBugs]
-/// public async Task BroadcastArrayWriteThrows() { ... }
+/// public void BroadcastArrayWriteThrows() { ... }
 ///
 /// // With GitHub issue URL (clickable in IDE)
-/// [Test]
+/// [TestMethod]
 /// [OpenBugs(IssueUrl = "https://github.com/SciSharp/NumSharp/issues/396")]
-/// public async Task OddWidthBitmapCorruption() { ... }
+/// public void OddWidthBitmapCorruption() { ... }
 /// </code>
 /// </example>
-public class OpenBugsAttribute : CategoryAttribute
+public class OpenBugsAttribute : TestCategoryBaseAttribute
 {
     /// <summary>
     /// URL to the GitHub issue tracking this bug.
@@ -218,18 +216,18 @@ public class OpenBugsAttribute : CategoryAttribute
     /// </example>
     public string? IssueUrl { get; set; }
 
-    public OpenBugsAttribute() : base(TestCategory.OpenBugs) { }
+    public override IList<string> TestCategories => [TestCategory.OpenBugs];
 }
 
 /// <summary>
 /// Attribute for tests documenting behavioral differences between NumSharp and NumPy.
-/// Shorthand for <c>[Category("Misaligned")]</c>.
+/// Shorthand for <c>[TestCategory("Misaligned")]</c>.
 ///
 /// <para>See <see cref="TestCategory.Misaligned"/> for full documentation.</para>
 /// </summary>
 /// <example>
 /// <code>
-/// [Test]
+/// [TestMethod]
 /// [Misaligned]
 /// public void SlicingBroadcast_MaterializesData()
 /// {
@@ -239,44 +237,44 @@ public class OpenBugsAttribute : CategoryAttribute
 /// }
 /// </code>
 /// </example>
-public class MisalignedAttribute : CategoryAttribute
+public class MisalignedAttribute : TestCategoryBaseAttribute
 {
-    public MisalignedAttribute() : base(TestCategory.Misaligned) { }
+    public override IList<string> TestCategories => [TestCategory.Misaligned];
 }
 
 /// <summary>
 /// Attribute for tests requiring Windows (GDI+/System.Drawing.Common).
-/// Shorthand for <c>[Category("WindowsOnly")]</c>.
+/// Shorthand for <c>[TestCategory("WindowsOnly")]</c>.
 ///
 /// <para>See <see cref="TestCategory.WindowsOnly"/> for full documentation.</para>
 /// </summary>
-public class WindowsOnlyAttribute : CategoryAttribute
+public class WindowsOnlyAttribute : TestCategoryBaseAttribute
 {
-    public WindowsOnlyAttribute() : base(TestCategory.WindowsOnly) { }
+    public override IList<string> TestCategories => [TestCategory.WindowsOnly];
 }
 
 /// <summary>
 /// Attribute for tests verifying long indexing (> int.MaxValue elements).
-/// Shorthand for <c>[Category("LongIndexing")]</c>.
+/// Shorthand for <c>[TestCategory("LongIndexing")]</c>.
 ///
 /// <para>See <see cref="TestCategory.LongIndexing"/> for full documentation.</para>
 /// </summary>
-public class LongIndexingAttribute : CategoryAttribute
+public class LongIndexingAttribute : TestCategoryBaseAttribute
 {
-    public LongIndexingAttribute() : base(TestCategory.LongIndexing) { }
+    public override IList<string> TestCategories => [TestCategory.LongIndexing];
 }
 
 /// <summary>
 /// Attribute for tests requiring high memory (8GB+ RAM).
-/// Shorthand for <c>[Category("HighMemory")]</c>.
+/// Shorthand for <c>[TestCategory("HighMemory")]</c>.
 ///
 /// <para>See <see cref="TestCategory.HighMemory"/> for full documentation.</para>
 /// </summary>
 /// <example>
 /// <code>
-/// [Test]
+/// [TestMethod]
 /// [HighMemory]
-/// public async Task LargeArraySum()
+/// public void LargeArraySum()
 /// {
 ///     // Allocates ~2.4GB
 ///     using var arr = np.ones&lt;byte&gt;((long)(int.MaxValue * 1.1));
@@ -284,36 +282,29 @@ public class LongIndexingAttribute : CategoryAttribute
 /// }
 /// </code>
 /// </example>
-public class HighMemoryAttribute : CategoryAttribute
+public class HighMemoryAttribute : TestCategoryBaseAttribute
 {
-    public HighMemoryAttribute() : base(TestCategory.HighMemory) { }
+    public override IList<string> TestCategories => [TestCategory.HighMemory];
 }
 
 /// <summary>
 /// Attribute for tests that allocate large amounts of memory and crash CI runners.
-/// Inherits from <see cref="OpenBugsAttribute"/> so tests are automatically excluded
-/// from CI via the <c>[Category!=OpenBugs]</c> filter.
-///
-/// <para><b>NOTE:</b> Must be applied to individual test methods, not classes.
-/// Class-level attributes do not work correctly with TUnit's treenode filters.</para>
+/// Combines OpenBugs category so tests are automatically excluded from CI.
 ///
 /// <para>Use this instead of [OpenBugs] for memory-intensive tests that aren't actually bugs,
 /// just too heavy for CI runners.</para>
 /// </summary>
 /// <example>
 /// <code>
-/// [Test]
+/// [TestMethod]
 /// [LargeMemoryTest]  // Auto-excluded from CI
-/// public async Task Allocate_4GB()
+/// public void Allocate_4GB()
 /// {
 ///     var arr = np.ones&lt;int&gt;((4L * 1024 * 1024 * 1024 / 4));  // 4GB
 /// }
 /// </code>
 /// </example>
-public class LargeMemoryTestAttribute : OpenBugsAttribute
+public class LargeMemoryTestAttribute : TestCategoryBaseAttribute
 {
-    public LargeMemoryTestAttribute()
-    {
-        // Inherits OpenBugs category for CI exclusion
-    }
+    public override IList<string> TestCategories => [TestCategory.OpenBugs, TestCategory.HighMemory];
 }

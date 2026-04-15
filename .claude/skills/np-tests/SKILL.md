@@ -12,7 +12,7 @@ To interact/develop/create tests for np.* functions, high-level development cycl
 Definition of Done:
 - At the end of this step you understand 100% what numpy tests: inputs, outputs, edge cases, error conditions, dtype behaviors.
 - You have identified all test files and test methods related to your function.
-2. Migrate numpy's tests to C# following TUnit framework patterns in test/NumSharp.UnitTest. Match numpy's test structure and assertions exactly.
+2. Migrate numpy's tests to C# following MSTest v3 framework patterns in test/NumSharp.UnitTest. Match numpy's test structure and assertions exactly.
 Definition of Done:
     - Every numpy test case has a corresponding C# test.
     - We cover all dtypes NumSharp supports (Boolean, Byte, Int16, UInt16, Int32, UInt32, Int64, UInt64, Char, Single, Double, Decimal).
@@ -32,8 +32,8 @@ Use battletesting to validate behavior matches numpy: 'dotnet run << 'EOF'' and 
 
 ### Test Patterns
 ```csharp
-[Test]
-public async Task FunctionName_Scenario_Dtype()
+[TestMethod]
+public void FunctionName_Scenario_Dtype()
 {
     // Arrange
     var input = np.array(new[] { 3, 1, 2 });
@@ -42,8 +42,8 @@ public async Task FunctionName_Scenario_Dtype()
     var result = np.sort(input);
 
     // Assert - values from running actual numpy
-    Assert.That(result.IsContiguous, Is.True);
-    Assert.That(result.GetAtIndex<int>(0), Is.EqualTo(1));
+    Assert.IsTrue(result.IsContiguous);
+    Assert.AreEqual(1, result.GetAtIndex<int>(0));
 }
 ```
 
