@@ -472,6 +472,12 @@ namespace NumSharp.Backends.Kernels
             public static readonly ConstructorInfo ComplexCtor = typeof(System.Numerics.Complex).GetConstructor(new[] { typeof(double), typeof(double) })
                 ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, ".ctor(double, double)");
 
+            // Complex binary operator methods
+            public static readonly MethodInfo ComplexOpAddition = typeof(System.Numerics.Complex).GetMethod("op_Addition", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex), typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "op_Addition");
+            public static readonly MethodInfo ComplexOpMultiply = typeof(System.Numerics.Complex).GetMethod("op_Multiply", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex), typeof(System.Numerics.Complex) })
+                ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "op_Multiply");
+
             // Complex unary operator methods
             public static readonly MethodInfo ComplexNegate = typeof(System.Numerics.Complex).GetMethod("op_UnaryNegation", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })
                 ?? throw new MissingMethodException(typeof(System.Numerics.Complex).FullName, "op_UnaryNegation");

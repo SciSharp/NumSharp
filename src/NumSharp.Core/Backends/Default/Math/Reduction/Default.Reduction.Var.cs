@@ -280,6 +280,25 @@ namespace NumSharp.Backends
                 return Converts.ChangeType(variance, retType);
             }
 
+            // Handle Complex separately - var uses |x - mean|^2 and returns float64
+            if (arr.GetTypeCode == NPTypeCode.Complex)
+            {
+                var iter = arr.AsIterator<System.Numerics.Complex>();
+                var moveNext = iter.MoveNext;
+                var hasNext = iter.HasNext;
+                var xmean = (System.Numerics.Complex)mean_elementwise_il(arr, null);
+
+                double sum = 0;
+                while (hasNext())
+                {
+                    var diff = moveNext() - xmean;
+                    sum += diff.Real * diff.Real + diff.Imaginary * diff.Imaginary; // |diff|^2
+                }
+
+                var variance = sum / (arr.size - _ddof);
+                return variance; // Complex var returns float64
+            }
+
             // All other types: iterate as double
             {
                 var iter = arr.AsIterator<double>();

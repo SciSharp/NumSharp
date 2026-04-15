@@ -303,17 +303,26 @@ namespace NumSharp.Backends
             if (arr.Shape.IsScalar || (arr.Shape.NDim == 1 && arr.Shape.size == 1))
             {
                 var val = arr.GetAtIndex(0);
+                if (arr.GetTypeCode == NPTypeCode.Complex)
+                    return val; // Complex mean of single element is the element itself
                 return typeCode.HasValue ? Converts.ChangeType(val, typeCode.Value) : Convert.ToDouble(val);
+            }
+
+            long count = arr.size;
+            var sumType = arr.GetTypeCode.GetAccumulatingType();
+
+            // Handle Complex separately - mean is Complex, not double
+            if (sumType == NPTypeCode.Complex)
+            {
+                var sum = ExecuteElementReduction<System.Numerics.Complex>(arr, ReductionOp.Sum, sumType);
+                return sum / count;
             }
 
             // Mean always computes in double for precision
             var retType = typeCode ?? NPTypeCode.Double;
-            long count = arr.size;
 
             // Sum in accumulating type, then divide
-            var sumType = arr.GetTypeCode.GetAccumulatingType();
-
-            double sum = sumType switch
+            double sum2 = sumType switch
             {
                 NPTypeCode.Int32 => ExecuteElementReduction<int>(arr, ReductionOp.Sum, sumType),
                 NPTypeCode.UInt32 => ExecuteElementReduction<uint>(arr, ReductionOp.Sum, sumType),
@@ -322,10 +331,11 @@ namespace NumSharp.Backends
                 NPTypeCode.Single => ExecuteElementReduction<float>(arr, ReductionOp.Sum, sumType),
                 NPTypeCode.Double => ExecuteElementReduction<double>(arr, ReductionOp.Sum, sumType),
                 NPTypeCode.Decimal => (double)ExecuteElementReduction<decimal>(arr, ReductionOp.Sum, sumType),
+                NPTypeCode.Half => (double)ExecuteElementReduction<Half>(arr, ReductionOp.Sum, sumType),
                 _ => throw new NotSupportedException($"Mean not supported for accumulator type {sumType}")
             };
 
-            double mean = sum / count;
+            double mean = sum2 / count;
             return Converts.ChangeType(mean, retType);
         }
 

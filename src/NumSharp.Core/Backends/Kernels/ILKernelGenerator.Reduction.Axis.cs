@@ -115,10 +115,12 @@ namespace NumSharp.Backends.Kernels
             // Dispatch based on input and accumulator type combination
             return (key.InputType, key.AccumulatorType) switch
             {
-                // Same-type scalar paths (for non-SIMD types like Decimal)
+                // Same-type scalar paths (for non-SIMD types like Decimal, Half, Complex)
                 (NPTypeCode.Decimal, NPTypeCode.Decimal) => CreateAxisReductionKernelScalar<decimal, decimal>(key),
                 (NPTypeCode.Boolean, NPTypeCode.Boolean) => CreateAxisReductionKernelScalar<bool, bool>(key),
                 (NPTypeCode.Char, NPTypeCode.Char) => CreateAxisReductionKernelScalar<char, char>(key),
+                (NPTypeCode.Half, NPTypeCode.Half) => CreateAxisReductionKernelScalar<Half, Half>(key),
+                (NPTypeCode.Complex, NPTypeCode.Complex) => CreateAxisReductionKernelScalar<System.Numerics.Complex, System.Numerics.Complex>(key),
 
                 // Common type promotion paths (input -> wider accumulator)
                 // byte -> int32/int64/double
@@ -407,6 +409,42 @@ namespace NumSharp.Backends.Kernels
             where TInput : unmanaged
             where TAccum : unmanaged
         {
+            // Special handling for Complex - cannot use double intermediate
+            if (typeof(TAccum) == typeof(System.Numerics.Complex))
+            {
+                var cAccum = (System.Numerics.Complex)(object)accum;
+                var cVal = typeof(TInput) == typeof(System.Numerics.Complex)
+                    ? (System.Numerics.Complex)(object)val
+                    : new System.Numerics.Complex(ConvertToDouble(val), 0);
+
+                var cResult = op switch
+                {
+                    ReductionOp.Sum or ReductionOp.Mean => cAccum + cVal,
+                    ReductionOp.Prod => cAccum * cVal,
+                    _ => cAccum // Min/Max not supported for Complex
+                };
+                return (TAccum)(object)cResult;
+            }
+
+            // Special handling for Half - use double intermediate for precision
+            if (typeof(TAccum) == typeof(Half))
+            {
+                double hAccum = (double)(Half)(object)accum;
+                double hVal = typeof(TInput) == typeof(Half)
+                    ? (double)(Half)(object)val
+                    : ConvertToDouble(val);
+
+                double hResult = op switch
+                {
+                    ReductionOp.Sum or ReductionOp.Mean => hAccum + hVal,
+                    ReductionOp.Prod => hAccum * hVal,
+                    ReductionOp.Min => Math.Min(hAccum, hVal),
+                    ReductionOp.Max => Math.Max(hAccum, hVal),
+                    _ => hAccum
+                };
+                return (TAccum)(object)(Half)hResult;
+            }
+
             // Convert input to double for arithmetic, then to accumulator type
             double dAccum = ConvertToDouble(accum);
             double dVal = ConvertToDouble(val);
@@ -428,6 +466,20 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         private static TAccum DivideByCount<TAccum>(TAccum accum, long count) where TAccum : unmanaged
         {
+            // Special handling for Complex
+            if (typeof(TAccum) == typeof(System.Numerics.Complex))
+            {
+                var cAccum = (System.Numerics.Complex)(object)accum;
+                return (TAccum)(object)(cAccum / count);
+            }
+
+            // Special handling for Half
+            if (typeof(TAccum) == typeof(Half))
+            {
+                double hAccum = (double)(Half)(object)accum;
+                return (TAccum)(object)(Half)(hAccum / count);
+            }
+
             double result = ConvertToDouble(accum) / count;
             return ConvertFromDouble<TAccum>(result);
         }
@@ -483,7 +535,33 @@ namespace NumSharp.Backends.Kernels
         /// </summary>
         private static T GetIdentityValueTyped<T>(ReductionOp op) where T : unmanaged
         {
-            double identity = op switch
+            // Special handling for Complex
+            if (typeof(T) == typeof(System.Numerics.Complex))
+            {
+                var identity = op switch
+                {
+                    ReductionOp.Sum or ReductionOp.Mean => System.Numerics.Complex.Zero,
+                    ReductionOp.Prod => System.Numerics.Complex.One,
+                    _ => System.Numerics.Complex.Zero // Min/Max not supported for Complex
+                };
+                return (T)(object)identity;
+            }
+
+            // Special handling for Half
+            if (typeof(T) == typeof(Half))
+            {
+                var identity = op switch
+                {
+                    ReductionOp.Sum or ReductionOp.Mean => Half.Zero,
+                    ReductionOp.Prod => (Half)1.0,
+                    ReductionOp.Min => Half.PositiveInfinity,
+                    ReductionOp.Max => Half.NegativeInfinity,
+                    _ => Half.Zero
+                };
+                return (T)(object)identity;
+            }
+
+            double dIdentity = op switch
             {
                 ReductionOp.Sum or ReductionOp.Mean => 0.0,
                 ReductionOp.Prod => 1.0,
@@ -491,7 +569,7 @@ namespace NumSharp.Backends.Kernels
                 ReductionOp.Max => double.NegativeInfinity,
                 _ => 0.0
             };
-            return ConvertFromDouble<T>(identity);
+            return ConvertFromDouble<T>(dIdentity);
         }
 
         #endregion

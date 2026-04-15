@@ -1161,6 +1161,29 @@ namespace NumSharp.Backends.Kernels
         }
 
         /// <summary>
+        /// Emit Half binary operation: convert both operands to double, perform op, convert back.
+        /// Stack has [half1, half2], result is half.
+        /// </summary>
+        private static void EmitHalfBinaryOp(ILGenerator il, OpCode scalarOp)
+        {
+            var locRight = il.DeclareLocal(typeof(Half));
+            il.Emit(OpCodes.Stloc, locRight);
+
+            // Convert left to double
+            il.EmitCall(OpCodes.Call, CachedMethods.HalfToDouble, null);
+
+            // Convert right to double
+            il.Emit(OpCodes.Ldloc, locRight);
+            il.EmitCall(OpCodes.Call, CachedMethods.HalfToDouble, null);
+
+            // Perform operation in double
+            il.Emit(scalarOp);
+
+            // Convert result back to Half
+            il.EmitCall(OpCodes.Call, CachedMethods.DoubleToHalf, null);
+        }
+
+        /// <summary>
         /// Emit scalar min/max comparison.
         /// Stack has [value1, value2], result is min or max.
         /// </summary>
@@ -1228,6 +1251,15 @@ namespace NumSharp.Backends.Kernels
                     {
                         il.EmitCall(OpCodes.Call, CachedMethods.DecimalOpAddition, null);
                     }
+                    else if (type == NPTypeCode.Complex)
+                    {
+                        il.EmitCall(OpCodes.Call, CachedMethods.ComplexOpAddition, null);
+                    }
+                    else if (type == NPTypeCode.Half)
+                    {
+                        // Half: convert to double, add, convert back
+                        EmitHalfBinaryOp(il, OpCodes.Add);
+                    }
                     else
                     {
                         il.Emit(OpCodes.Add);
@@ -1239,6 +1271,15 @@ namespace NumSharp.Backends.Kernels
                     if (type == NPTypeCode.Decimal)
                     {
                         il.EmitCall(OpCodes.Call, CachedMethods.DecimalOpMultiply, null);
+                    }
+                    else if (type == NPTypeCode.Complex)
+                    {
+                        il.EmitCall(OpCodes.Call, CachedMethods.ComplexOpMultiply, null);
+                    }
+                    else if (type == NPTypeCode.Half)
+                    {
+                        // Half: convert to double, multiply, convert back
+                        EmitHalfBinaryOp(il, OpCodes.Mul);
                     }
                     else
                     {
