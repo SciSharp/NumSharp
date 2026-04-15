@@ -37,6 +37,9 @@ namespace NumSharp.Utilities
                 case NPTypeCode.Char:
                     Size = 2;
                     break;
+                case NPTypeCode.SByte:
+                    Size = 1;
+                    break;
                 case NPTypeCode.Byte:
                     Size = 1;
                     break;
@@ -57,6 +60,9 @@ namespace NumSharp.Utilities
                     break;
                 case NPTypeCode.UInt64:
                     Size = 8;
+                    break;
+                case NPTypeCode.Half:
+                    Size = 2;
                     break;
                 case NPTypeCode.Single:
                     Size = 4;

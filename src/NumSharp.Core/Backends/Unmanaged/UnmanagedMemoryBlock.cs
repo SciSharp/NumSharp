@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Numerics;
 
 namespace NumSharp.Backends.Unmanaged
 {
@@ -27,6 +28,8 @@ namespace NumSharp.Backends.Unmanaged
 #else
 	            case NPTypeCode.Boolean:
                     return UnmanagedMemoryBlock<bool>.FromArray((bool[])arr);
+	            case NPTypeCode.SByte:
+                    return UnmanagedMemoryBlock<sbyte>.FromArray((sbyte[])arr);
 	            case NPTypeCode.Byte:
                     return UnmanagedMemoryBlock<byte>.FromArray((byte[])arr);
 	            case NPTypeCode.Int16:
@@ -43,12 +46,16 @@ namespace NumSharp.Backends.Unmanaged
                     return UnmanagedMemoryBlock<ulong>.FromArray((ulong[])arr);
 	            case NPTypeCode.Char:
                     return UnmanagedMemoryBlock<char>.FromArray((char[])arr);
+	            case NPTypeCode.Half:
+                    return UnmanagedMemoryBlock<Half>.FromArray((Half[])arr);
 	            case NPTypeCode.Double:
                     return UnmanagedMemoryBlock<double>.FromArray((double[])arr);
 	            case NPTypeCode.Single:
                     return UnmanagedMemoryBlock<float>.FromArray((float[])arr);
 	            case NPTypeCode.Decimal:
                     return UnmanagedMemoryBlock<decimal>.FromArray((decimal[])arr);
+	            case NPTypeCode.Complex:
+                    return UnmanagedMemoryBlock<Complex>.FromArray((Complex[])arr);
 	            default:
 		            throw new NotSupportedException();
 #endif
@@ -61,6 +68,8 @@ namespace NumSharp.Backends.Unmanaged
             {
                 case NPTypeCode.Boolean:
                     return new UnmanagedMemoryBlock<bool>(count);
+                case NPTypeCode.SByte:
+                    return new UnmanagedMemoryBlock<sbyte>(count);
                 case NPTypeCode.Byte:
                     return new UnmanagedMemoryBlock<byte>(count);
                 case NPTypeCode.Int16:
@@ -77,12 +86,16 @@ namespace NumSharp.Backends.Unmanaged
                     return new UnmanagedMemoryBlock<ulong>(count);
                 case NPTypeCode.Char:
                     return new UnmanagedMemoryBlock<char>(count);
+                case NPTypeCode.Half:
+                    return new UnmanagedMemoryBlock<Half>(count);
                 case NPTypeCode.Double:
                     return new UnmanagedMemoryBlock<double>(count);
                 case NPTypeCode.Single:
                     return new UnmanagedMemoryBlock<float>(count);
                 case NPTypeCode.Decimal:
                     return new UnmanagedMemoryBlock<decimal>(count);
+                case NPTypeCode.Complex:
+                    return new UnmanagedMemoryBlock<Complex>(count);
                 default:
                     throw new NotSupportedException();
             }
@@ -100,6 +113,8 @@ namespace NumSharp.Backends.Unmanaged
             {
                 case NPTypeCode.Boolean:
                     return new UnmanagedMemoryBlock<bool>(count, (bool)fill);
+                case NPTypeCode.SByte:
+                    return new UnmanagedMemoryBlock<sbyte>(count, (sbyte)fill);
                 case NPTypeCode.Byte:
                     return new UnmanagedMemoryBlock<byte>(count, (byte)fill);
                 case NPTypeCode.Int16:
@@ -116,12 +131,16 @@ namespace NumSharp.Backends.Unmanaged
                     return new UnmanagedMemoryBlock<ulong>(count, (ulong)fill);
                 case NPTypeCode.Char:
                     return new UnmanagedMemoryBlock<char>(count, (char)fill);
+                case NPTypeCode.Half:
+                    return new UnmanagedMemoryBlock<Half>(count, (Half)fill);
                 case NPTypeCode.Double:
                     return new UnmanagedMemoryBlock<double>(count, (double)fill);
                 case NPTypeCode.Single:
                     return new UnmanagedMemoryBlock<float>(count, (float)fill);
                 case NPTypeCode.Decimal:
                     return new UnmanagedMemoryBlock<decimal>(count, (decimal)fill);
+                case NPTypeCode.Complex:
+                    return new UnmanagedMemoryBlock<Complex>(count, (Complex)fill);
                 default:
                     throw new NotSupportedException();
             }

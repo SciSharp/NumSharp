@@ -31,6 +31,7 @@ namespace NumSharp.Backends
         protected ArraySlice<#2> _array#1;
 #else
         protected ArraySlice<bool> _arrayBoolean;
+        protected ArraySlice<sbyte> _arraySByte;
         protected ArraySlice<byte> _arrayByte;
         protected ArraySlice<short> _arrayInt16;
         protected ArraySlice<ushort> _arrayUInt16;
@@ -39,9 +40,11 @@ namespace NumSharp.Backends
         protected ArraySlice<long> _arrayInt64;
         protected ArraySlice<ulong> _arrayUInt64;
         protected ArraySlice<char> _arrayChar;
+        protected ArraySlice<Half> _arrayHalf;
         protected ArraySlice<double> _arrayDouble;
         protected ArraySlice<float> _arraySingle;
         protected ArraySlice<decimal> _arrayDecimal;
+        protected ArraySlice<System.Numerics.Complex> _arrayComplex;
 #endif
         public IArraySlice InternalArray;
         public unsafe byte* Address;
@@ -740,6 +743,14 @@ namespace NumSharp.Backends
                     break;
                 }
 
+                case NPTypeCode.SByte:
+                {
+                    InternalArray = _arraySByte = ArraySlice.FromArray<sbyte>((sbyte[])array);
+                    Address = (byte*)_arraySByte.Address;
+                    Count = _arraySByte.Count;
+                    break;
+                }
+
                 case NPTypeCode.Byte:
                 {
                     InternalArray = _arrayByte = ArraySlice.FromArray<byte>((byte[])array);
@@ -804,6 +815,14 @@ namespace NumSharp.Backends
                     break;
                 }
 
+                case NPTypeCode.Half:
+                {
+                    InternalArray = _arrayHalf = ArraySlice.FromArray<Half>((Half[])array);
+                    Address = (byte*)_arrayHalf.Address;
+                    Count = _arrayHalf.Count;
+                    break;
+                }
+
                 case NPTypeCode.Double:
                 {
                     InternalArray = _arrayDouble = ArraySlice.FromArray<double>((double[])array);
@@ -825,6 +844,14 @@ namespace NumSharp.Backends
                     InternalArray = _arrayDecimal = ArraySlice.FromArray<decimal>((decimal[])array);
                     Address = (byte*)_arrayDecimal.Address;
                     Count = _arrayDecimal.Count;
+                    break;
+                }
+
+                case NPTypeCode.Complex:
+                {
+                    InternalArray = _arrayComplex = ArraySlice.FromArray<System.Numerics.Complex>((System.Numerics.Complex[])array);
+                    Address = (byte*)_arrayComplex.Address;
+                    Count = _arrayComplex.Count;
                     break;
                 }
 
@@ -863,6 +890,14 @@ namespace NumSharp.Backends
                     InternalArray = _arrayBoolean = (ArraySlice<bool>)array;
                     Address = (byte*)_arrayBoolean.Address;
                     Count = _arrayBoolean.Count;
+                    break;
+                }
+
+                case NPTypeCode.SByte:
+                {
+                    InternalArray = _arraySByte = (ArraySlice<sbyte>)array;
+                    Address = (byte*)_arraySByte.Address;
+                    Count = _arraySByte.Count;
                     break;
                 }
 
@@ -930,6 +965,14 @@ namespace NumSharp.Backends
                     break;
                 }
 
+                case NPTypeCode.Half:
+                {
+                    InternalArray = _arrayHalf = (ArraySlice<Half>)array;
+                    Address = (byte*)_arrayHalf.Address;
+                    Count = _arrayHalf.Count;
+                    break;
+                }
+
                 case NPTypeCode.Double:
                 {
                     InternalArray = _arrayDouble = (ArraySlice<double>)array;
@@ -951,6 +994,14 @@ namespace NumSharp.Backends
                     InternalArray = _arrayDecimal = (ArraySlice<decimal>)array;
                     Address = (byte*)_arrayDecimal.Address;
                     Count = _arrayDecimal.Count;
+                    break;
+                }
+
+                case NPTypeCode.Complex:
+                {
+                    InternalArray = _arrayComplex = (ArraySlice<System.Numerics.Complex>)array;
+                    Address = (byte*)_arrayComplex.Address;
+                    Count = _arrayComplex.Count;
                     break;
                 }
 

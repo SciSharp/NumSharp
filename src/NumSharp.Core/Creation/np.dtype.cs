@@ -15,7 +15,8 @@ namespace NumSharp
         {
             {NPTypeCode.Complex, 'c'},
             {NPTypeCode.Boolean, '?'},
-            {NPTypeCode.Byte, 'b'},
+            {NPTypeCode.SByte, 'i'},
+            {NPTypeCode.Byte, 'u'},
             {NPTypeCode.Int16, 'i'},
             {NPTypeCode.UInt16, 'u'},
             {NPTypeCode.Int32, 'i'},
@@ -23,6 +24,7 @@ namespace NumSharp
             {NPTypeCode.Int64, 'i'},
             {NPTypeCode.UInt64, 'u'},
             {NPTypeCode.Char, 'S'},
+            {NPTypeCode.Half, 'f'},
             {NPTypeCode.Double, 'f'},
             {NPTypeCode.Single, 'f'},
             {NPTypeCode.Decimal, 'f'},
@@ -194,6 +196,7 @@ namespace NumSharp
 #else
                     case NPTypeCode.Complex: return new DType(typeof(Complex));
 	                case NPTypeCode.Boolean: return new DType(typeof(Boolean));
+	                case NPTypeCode.SByte: return new DType(typeof(SByte));
 	                case NPTypeCode.Byte: return new DType(typeof(Byte));
 	                case NPTypeCode.Int16: return new DType(typeof(Int16));
 	                case NPTypeCode.UInt16: return new DType(typeof(UInt16));
@@ -202,6 +205,7 @@ namespace NumSharp
 	                case NPTypeCode.Int64: return new DType(typeof(Int64));
 	                case NPTypeCode.UInt64: return new DType(typeof(UInt64));
 	                case NPTypeCode.Char: return new DType(typeof(Char));
+	                case NPTypeCode.Half: return new DType(typeof(Half));
 	                case NPTypeCode.Double: return new DType(typeof(Double));
 	                case NPTypeCode.Single: return new DType(typeof(Single));
 	                case NPTypeCode.Decimal: return new DType(typeof(Decimal));
@@ -232,6 +236,7 @@ namespace NumSharp
                 case "c":
                 case "complex":
                 case "Complex":
+                case "complex128":
                     return new DType(typeof(Complex));
                 case "string":
                 case "chars":
@@ -242,13 +247,23 @@ namespace NumSharp
                 case "b":
                 case "byte":
                 case "Byte":
+                case "uint8":
                     return new DType(typeof(byte));
+                case "int8":
+                case "sbyte":
+                case "SByte":
+                    return new DType(typeof(sbyte));
                 case "bool":
                 case "Bool":
                 case "Boolean":
                 case "boolean":
                 case "?":
                     return new DType(typeof(bool));
+                case "e":
+                case "half":
+                case "Half":
+                case "float16":
+                    return new DType(typeof(Half));
             }
 
             //size-specific
@@ -307,9 +322,10 @@ namespace NumSharp
                         case "f":
                         case "float":
                         case "Float":
-                        case "single":
-                        case "Single":
-                            return new DType(typeof(float));
+                        case "e":
+                        case "half":
+                        case "Half":
+                            return new DType(typeof(Half));
                     }
 
                     break;
