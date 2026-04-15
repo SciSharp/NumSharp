@@ -404,7 +404,8 @@ public fixed long BufStrides[MaxOperands];
 
 1. **Reduction support** - Implement reduce_pos, outer loop handling
 2. **GetIterView()** - Return NDArray with iterator's axis ordering
-3. **Negative stride handling** - Integrate with axis permutation
+3. **Negative stride flipping** - NumPy flips negative strides for memory-order iteration
+   while tracking flipped coordinates. NumSharp currently iterates in view logical order.
 4. **Cast support** - Type conversion during buffered iteration
 
 ### Recently Completed (2026-04-15)
