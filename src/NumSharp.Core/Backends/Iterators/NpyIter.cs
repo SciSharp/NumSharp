@@ -209,11 +209,24 @@ namespace NumSharp.Backends.Iteration
                 ApplyOpAxes(opAxesNDim, opAxes);
             }
 
-            // Apply coalescing unless multi-index tracking is requested
+            // Apply axis reordering and coalescing unless multi-index tracking is requested
             // NumPy always coalesces after construction: nditer_constr.c line 395-396
             // if (ndim > 1 && !(itflags & NPY_ITFLAG_HASMULTIINDEX)) { npyiter_coalesce_axes(iter); }
+            //
+            // IMPORTANT: NumPy reorders axes BEFORE coalescing so that axes are sorted by
+            // stride magnitude. This allows contiguous arrays to fully coalesce to 1D.
+            // Without reordering, a C-contiguous (2,3,4) array with strides [12,4,1] cannot
+            // coalesce because stride[0]*shape[0]=24 != stride[1]=4.
+            // After reordering to [4,3,2] with strides [1,4,12]:
+            // - stride[0]*shape[0]=1*4=4 == stride[1]=4 ✓ → coalesce to [12,2], strides [1,12]
+            // - stride[0]*shape[0]=1*12=12 == stride[1]=12 ✓ → coalesce to [24], strides [1]
             if (_state->NDim > 1 && (flags & NpyIterGlobalFlags.MULTI_INDEX) == 0)
             {
+                // Step 1: Reorder axes by stride (smallest first = innermost in memory)
+                // This matches NumPy's npyiter_apply_order() behavior
+                NpyIterCoalescing.ReorderAxesForCoalescing(ref *_state, order);
+
+                // Step 2: Now coalesce adjacent axes that have compatible strides
                 NpyIterCoalescing.CoalesceAxes(ref *_state);
             }
 

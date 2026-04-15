@@ -15,8 +15,8 @@ namespace NumSharp.UnitTest.Backends.Iterators
 
             using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP);
 
-            // With external loop, we expect coalescing (NDim may vary based on implementation)
-            Assert.IsTrue(iter.NDim >= 1 && iter.NDim <= 3);
+            // Contiguous arrays fully coalesce to ndim=1 (NumPy parity)
+            Assert.AreEqual(1, iter.NDim, "Contiguous array should coalesce to ndim=1");
             Assert.AreEqual(24, iter.IterSize);
             Assert.IsTrue(iter.IsContiguous);
         }
@@ -231,15 +231,16 @@ namespace NumSharp.UnitTest.Backends.Iterators
         {
             var arr = np.arange(24).reshape(2, 3, 4);
 
-            // Without external loop, no coalescing
+            // Coalescing always runs (unless MULTI_INDEX is set)
+            // Contiguous arrays fully coalesce to 1D
             using var iter1 = NpyIterRef.New(arr);
-            Assert.AreEqual(3, iter1.NDim);
+            Assert.AreEqual(1, iter1.NDim, "Contiguous array should coalesce to ndim=1");
 
-            // With external loop, coalescing may reduce dimensions
-            // (exact reduction depends on implementation)
+            // With external loop, same behavior (coalescing already ran)
             using var iter2 = NpyIterRef.New(arr, NpyIterGlobalFlags.EXTERNAL_LOOP);
             Assert.IsTrue(iter2.HasExternalLoop);
             Assert.IsTrue(iter2.IsContiguous);
+            Assert.AreEqual(1, iter2.NDim, "With EXTERNAL_LOOP, still ndim=1");
         }
 
         [TestMethod]
@@ -267,26 +268,26 @@ namespace NumSharp.UnitTest.Backends.Iterators
         [TestMethod]
         public void Coalescing_AlwaysRunsWithoutMultiIndex()
         {
-            // NumPy coalesces contiguous arrays more aggressively due to axis reordering
-            // before coalescing. NumSharp's current implementation coalesces adjacent
-            // axes with compatible strides but doesn't fully reorder axes first.
-            //
-            // NumPy behavior:
+            // NumPy behavior: contiguous arrays fully coalesce to ndim=1
             // >>> arr = np.arange(24).reshape(2, 3, 4)
             // >>> it = np.nditer(arr)
             // >>> it.ndim  # Returns 1 (fully coalesced)
             //
-            // NumSharp behavior: coalescing runs but may not fully reduce to 1D
-            // because axis reordering is not implemented.
+            // NumSharp now matches this behavior by:
+            // 1. Reordering axes by stride (smallest first) before coalescing
+            // 2. Then coalescing adjacent axes with compatible strides
+            //
+            // For C-contiguous (2,3,4) with strides [12,4,1]:
+            // - Reorder to [4,3,2] with strides [1,4,12]
+            // - Coalesce: 1*4=4==4 ✓ → [12,2] with strides [1,12]
+            // - Coalesce: 1*12=12==12 ✓ → [24] with strides [1]
 
             var arr = np.arange(24).reshape(2, 3, 4);
 
-            // Verify coalescing runs (may not fully coalesce to 1D)
             using var iter = NpyIterRef.New(arr);
 
-            // Coalescing should run and attempt to reduce dimensions
-            // For contiguous array, at minimum the iteration should work correctly
-            Assert.IsTrue(iter.NDim >= 1 && iter.NDim <= 3, "NDim should be between 1 and 3");
+            // Contiguous array should fully coalesce to 1D (NumPy parity)
+            Assert.AreEqual(1, iter.NDim, "Contiguous array should coalesce to ndim=1 (NumPy behavior)");
             Assert.AreEqual(24, iter.IterSize, "IterSize should be 24");
         }
 
