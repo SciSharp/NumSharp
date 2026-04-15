@@ -23,8 +23,7 @@ public class ContainsNumPyAlignmentTests
         // NumPy: [1,2] in np.array([1,2,3]) throws ValueError
         var arr = np.array(new[] { 1, 2, 3 });
 
-        await Assert.That(() => arr.Contains(new[] { 1, 2 }))
-            .Throws<IncorrectShapeException>();
+        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<IncorrectShapeException>(() => arr.Contains(new[] { 1, 2 }));
     }
 
     [TestMethod]
@@ -34,8 +33,7 @@ public class ContainsNumPyAlignmentTests
         var arr = np.array(new[] { 1, 2, 3 });
         var search = np.array(new[] { 1, 2 });
 
-        await Assert.That(() => arr.Contains(search))
-            .Throws<IncorrectShapeException>();
+        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<IncorrectShapeException>(() => arr.Contains(search));
     }
 
     [TestMethod]
@@ -44,8 +42,7 @@ public class ContainsNumPyAlignmentTests
         // NumPy: [1,2,3,4,5] in np.array([1,2,3]) throws ValueError
         var arr = np.array(new[] { 1, 2, 3 });
 
-        await Assert.That(() => arr.Contains(new[] { 1, 2, 3, 4, 5 }))
-            .Throws<IncorrectShapeException>();
+        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<IncorrectShapeException>(() => arr.Contains(new[] { 1, 2, 3, 4, 5 }));
     }
 
     [TestMethod]
@@ -55,8 +52,7 @@ public class ContainsNumPyAlignmentTests
         var arr = np.array(new[] { 1, 2, 3 });
         var search = np.array(new[,] { { 1, 2 }, { 3, 4 } });
 
-        await Assert.That(() => arr.Contains(search))
-            .Throws<IncorrectShapeException>();
+        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<IncorrectShapeException>(() => arr.Contains(search));
     }
 
     [TestMethod]
@@ -66,8 +62,7 @@ public class ContainsNumPyAlignmentTests
         var arr = np.array(new[] { 1, 2, 3 });
         var empty = np.array(new int[0]);
 
-        await Assert.That(() => arr.Contains(empty))
-            .Throws<IncorrectShapeException>();
+        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<IncorrectShapeException>(() => arr.Contains(empty));
     }
 
     #endregion
@@ -79,8 +74,8 @@ public class ContainsNumPyAlignmentTests
     {
         var arr = np.array(new[] { 1, 2, 3 });
 
-        await Assert.That(arr.Contains(2)).IsTrue();
-        await Assert.That(arr.Contains(10)).IsFalse();
+        arr.Contains(2).Should().BeTrue();
+        arr.Contains(10).Should().BeFalse();
     }
 
     [TestMethod]
@@ -89,8 +84,8 @@ public class ContainsNumPyAlignmentTests
         // NumPy: 3 in np.array([[1,2],[3,4]]) returns True
         var arr = np.array(new[,] { { 1, 2 }, { 3, 4 } });
 
-        await Assert.That(arr.Contains(3)).IsTrue();
-        await Assert.That(arr.Contains(10)).IsFalse();
+        arr.Contains(3).Should().BeTrue();
+        arr.Contains(10).Should().BeFalse();
     }
 
     [TestMethod]
@@ -100,10 +95,10 @@ public class ContainsNumPyAlignmentTests
         // Broadcasting: [1,2] compares element-wise, then any() checks if ANY match
         var arr = np.array(new[,] { { 1, 2 }, { 3, 4 } });
 
-        await Assert.That(arr.Contains(new[] { 1, 2 })).IsTrue();  // All match first row
-        await Assert.That(arr.Contains(new[] { 3, 4 })).IsTrue();  // All match second row
-        await Assert.That(arr.Contains(new[] { 1, 3 })).IsTrue();  // 1 matches [0,0], so any()=True
-        await Assert.That(arr.Contains(new[] { 5, 6 })).IsFalse(); // No element matches
+        arr.Contains(new[] { 1, 2 }).Should().BeTrue();  // All match first row
+        arr.Contains(new[] { 3, 4 }).Should().BeTrue();  // All match second row
+        arr.Contains(new[] { 1, 3 }).Should().BeTrue();  // 1 matches [0,0], so any()=True
+        arr.Contains(new[] { 5, 6 }).Should().BeFalse(); // No element matches
     }
 
     [TestMethod]
@@ -112,7 +107,7 @@ public class ContainsNumPyAlignmentTests
         var arr = np.array(new[,] { { 1, 2 }, { 3, 4 } });
         var row = np.array(new[] { 1, 2 });
 
-        await Assert.That(arr.Contains(row)).IsTrue();
+        arr.Contains(row).Should().BeTrue();
     }
 
     [TestMethod]
@@ -122,7 +117,7 @@ public class ContainsNumPyAlignmentTests
         var arr = np.array(new[,] { { 1, 2 }, { 3, 4 } });
         var col = np.array(new[,] { { 1 }, { 3 } });
 
-        await Assert.That(arr.Contains(col)).IsTrue();
+        arr.Contains(col).Should().BeTrue();
     }
 
     [TestMethod]
@@ -130,9 +125,9 @@ public class ContainsNumPyAlignmentTests
     {
         var arr = np.arange(24).reshape(2, 3, 4);
 
-        await Assert.That(arr.Contains(0)).IsTrue();
-        await Assert.That(arr.Contains(23)).IsTrue();
-        await Assert.That(arr.Contains(100)).IsFalse();
+        arr.Contains(0).Should().BeTrue();
+        arr.Contains(23).Should().BeTrue();
+        arr.Contains(100).Should().BeFalse();
     }
 
     [TestMethod]
@@ -140,8 +135,8 @@ public class ContainsNumPyAlignmentTests
     {
         var scalar = NDArray.Scalar(42);
 
-        await Assert.That(scalar.Contains(42)).IsTrue();
-        await Assert.That(scalar.Contains(0)).IsFalse();
+        scalar.Contains(42).Should().BeTrue();
+        scalar.Contains(0).Should().BeFalse();
     }
 
     #endregion
@@ -154,7 +149,7 @@ public class ContainsNumPyAlignmentTests
         // NumPy: "hello" in np.array([1,2,3]) returns False
         var arr = np.array(new[] { 1, 2, 3 });
 
-        await Assert.That(arr.Contains("hello")).IsFalse();
+        arr.Contains("hello").Should().BeFalse();
     }
 
     [TestMethod]
@@ -162,7 +157,7 @@ public class ContainsNumPyAlignmentTests
     {
         var arr = np.array(new[] { 1.0, 2.0, 3.0 });
 
-        await Assert.That(arr.Contains("test")).IsFalse();
+        arr.Contains("test").Should().BeFalse();
     }
 
     [TestMethod]
@@ -170,7 +165,7 @@ public class ContainsNumPyAlignmentTests
     {
         var arr = np.array(new[] { true, false });
 
-        await Assert.That(arr.Contains("true")).IsFalse();
+        arr.Contains("true").Should().BeFalse();
     }
 
     [TestMethod]
@@ -179,7 +174,7 @@ public class ContainsNumPyAlignmentTests
         // NumPy: None in np.array([1,2,3]) returns False
         var arr = np.array(new[] { 1, 2, 3 });
 
-        await Assert.That(arr.Contains(null)).IsFalse();
+        arr.Contains(null).Should().BeFalse();
     }
 
     #endregion
@@ -191,8 +186,8 @@ public class ContainsNumPyAlignmentTests
     {
         var arr = np.array(new[] { 'a', 'b', 'c' });
 
-        await Assert.That(arr.Contains('a')).IsTrue();
-        await Assert.That(arr.Contains('d')).IsFalse();
+        arr.Contains('a').Should().BeTrue();
+        arr.Contains('d').Should().BeFalse();
     }
 
     [TestMethod]
@@ -201,7 +196,7 @@ public class ContainsNumPyAlignmentTests
         // "abc" creates char[3], broadcasts element-wise with char[3]
         var arr = np.array(new[] { 'a', 'b', 'c' });
 
-        await Assert.That(arr.Contains("abc")).IsTrue();
+        arr.Contains("abc").Should().BeTrue();
     }
 
     [TestMethod]
@@ -210,8 +205,7 @@ public class ContainsNumPyAlignmentTests
         // "hello" creates char[5], can't broadcast with char[3]
         var arr = np.array(new[] { 'a', 'b', 'c' });
 
-        await Assert.That(() => arr.Contains("hello"))
-            .Throws<IncorrectShapeException>();
+        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<IncorrectShapeException>(() => arr.Contains("hello"));
     }
 
     [TestMethod]
@@ -221,7 +215,7 @@ public class ContainsNumPyAlignmentTests
         var arr = np.array(new[] { 'a', 'b', 'c' });
 
         // This broadcasts [a] against [a,b,c] -> [True, False, False].any() = True
-        await Assert.That(arr.Contains("a")).IsTrue();
+        arr.Contains("a").Should().BeTrue();
     }
 
     #endregion
@@ -232,96 +226,84 @@ public class ContainsNumPyAlignmentTests
     public async Task Contains_ShapeMismatch_Boolean_Throws()
     {
         var arr = np.array(new[] { true, false, true });
-        await Assert.That(() => arr.Contains(new[] { true, false }))
-            .Throws<IncorrectShapeException>();
+        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<IncorrectShapeException>(() => arr.Contains(new[] { true, false }));
     }
 
     [TestMethod]
     public async Task Contains_ShapeMismatch_Byte_Throws()
     {
         var arr = np.array(new byte[] { 1, 2, 3 });
-        await Assert.That(() => arr.Contains(new byte[] { 1, 2 }))
-            .Throws<IncorrectShapeException>();
+        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<IncorrectShapeException>(() => arr.Contains(new byte[] { 1, 2 }));
     }
 
     [TestMethod]
     public async Task Contains_ShapeMismatch_Int16_Throws()
     {
         var arr = np.array(new short[] { 1, 2, 3 });
-        await Assert.That(() => arr.Contains(new short[] { 1, 2 }))
-            .Throws<IncorrectShapeException>();
+        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<IncorrectShapeException>(() => arr.Contains(new short[] { 1, 2 }));
     }
 
     [TestMethod]
     public async Task Contains_ShapeMismatch_UInt16_Throws()
     {
         var arr = np.array(new ushort[] { 1, 2, 3 });
-        await Assert.That(() => arr.Contains(new ushort[] { 1, 2 }))
-            .Throws<IncorrectShapeException>();
+        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<IncorrectShapeException>(() => arr.Contains(new ushort[] { 1, 2 }));
     }
 
     [TestMethod]
     public async Task Contains_ShapeMismatch_Int32_Throws()
     {
         var arr = np.array(new[] { 1, 2, 3 });
-        await Assert.That(() => arr.Contains(new[] { 1, 2 }))
-            .Throws<IncorrectShapeException>();
+        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<IncorrectShapeException>(() => arr.Contains(new[] { 1, 2 }));
     }
 
     [TestMethod]
     public async Task Contains_ShapeMismatch_UInt32_Throws()
     {
         var arr = np.array(new uint[] { 1, 2, 3 });
-        await Assert.That(() => arr.Contains(new uint[] { 1, 2 }))
-            .Throws<IncorrectShapeException>();
+        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<IncorrectShapeException>(() => arr.Contains(new uint[] { 1, 2 }));
     }
 
     [TestMethod]
     public async Task Contains_ShapeMismatch_Int64_Throws()
     {
         var arr = np.array(new long[] { 1, 2, 3 });
-        await Assert.That(() => arr.Contains(new long[] { 1, 2 }))
-            .Throws<IncorrectShapeException>();
+        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<IncorrectShapeException>(() => arr.Contains(new long[] { 1, 2 }));
     }
 
     [TestMethod]
     public async Task Contains_ShapeMismatch_UInt64_Throws()
     {
         var arr = np.array(new ulong[] { 1, 2, 3 });
-        await Assert.That(() => arr.Contains(new ulong[] { 1, 2 }))
-            .Throws<IncorrectShapeException>();
+        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<IncorrectShapeException>(() => arr.Contains(new ulong[] { 1, 2 }));
     }
 
     [TestMethod]
     public async Task Contains_ShapeMismatch_Single_Throws()
     {
         var arr = np.array(new[] { 1f, 2f, 3f });
-        await Assert.That(() => arr.Contains(new[] { 1f, 2f }))
-            .Throws<IncorrectShapeException>();
+        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<IncorrectShapeException>(() => arr.Contains(new[] { 1f, 2f }));
     }
 
     [TestMethod]
     public async Task Contains_ShapeMismatch_Double_Throws()
     {
         var arr = np.array(new[] { 1.0, 2.0, 3.0 });
-        await Assert.That(() => arr.Contains(new[] { 1.0, 2.0 }))
-            .Throws<IncorrectShapeException>();
+        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<IncorrectShapeException>(() => arr.Contains(new[] { 1.0, 2.0 }));
     }
 
     [TestMethod]
     public async Task Contains_ShapeMismatch_Decimal_Throws()
     {
         var arr = np.array(new[] { 1m, 2m, 3m });
-        await Assert.That(() => arr.Contains(new[] { 1m, 2m }))
-            .Throws<IncorrectShapeException>();
+        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<IncorrectShapeException>(() => arr.Contains(new[] { 1m, 2m }));
     }
 
     [TestMethod]
     public async Task Contains_ShapeMismatch_Char_Throws()
     {
         var arr = np.array(new[] { 'a', 'b', 'c' });
-        await Assert.That(() => arr.Contains(new[] { 'a', 'b' }))
-            .Throws<IncorrectShapeException>();
+        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<IncorrectShapeException>(() => arr.Contains(new[] { 'a', 'b' }));
     }
 
     #endregion
@@ -333,7 +315,7 @@ public class ContainsNumPyAlignmentTests
     {
         var empty = np.array(new int[0]);
 
-        await Assert.That(empty.Contains(1)).IsFalse();
+        empty.Contains(1).Should().BeFalse();
     }
 
     [TestMethod]
@@ -342,7 +324,7 @@ public class ContainsNumPyAlignmentTests
         // NaN == NaN is false in IEEE 754
         var arr = np.array(new[] { 1.0, double.NaN, 3.0 });
 
-        await Assert.That(arr.Contains(double.NaN)).IsFalse();
+        arr.Contains(double.NaN).Should().BeFalse();
     }
 
     [TestMethod]
@@ -350,8 +332,8 @@ public class ContainsNumPyAlignmentTests
     {
         var arr = np.array(new[] { 1.0, double.PositiveInfinity, 3.0 });
 
-        await Assert.That(arr.Contains(double.PositiveInfinity)).IsTrue();
-        await Assert.That(arr.Contains(double.NegativeInfinity)).IsFalse();
+        arr.Contains(double.PositiveInfinity).Should().BeTrue();
+        arr.Contains(double.NegativeInfinity).Should().BeFalse();
     }
 
     [TestMethod]
@@ -360,7 +342,7 @@ public class ContainsNumPyAlignmentTests
         // 2 (int) should match 2.0 (double) after promotion
         var arr = np.array(new[] { 1.0, 2.0, 3.0 });
 
-        await Assert.That(arr.Contains(2)).IsTrue();
+        arr.Contains(2).Should().BeTrue();
     }
 
     [TestMethod]
@@ -369,7 +351,7 @@ public class ContainsNumPyAlignmentTests
         // 2.0 should match 2 (int) after promotion
         var arr = np.array(new[] { 1, 2, 3 });
 
-        await Assert.That(arr.Contains(2.0)).IsTrue();
+        arr.Contains(2.0).Should().BeTrue();
     }
 
     [TestMethod]
@@ -378,9 +360,9 @@ public class ContainsNumPyAlignmentTests
         // NumPy: 1 in np.array([True, False]) returns True (1 == True)
         var arr = np.array(new[] { true, false });
 
-        await Assert.That(arr.Contains(1)).IsTrue();
-        await Assert.That(arr.Contains(0)).IsTrue();
-        await Assert.That(arr.Contains(2)).IsFalse();
+        arr.Contains(1).Should().BeTrue();
+        arr.Contains(0).Should().BeTrue();
+        arr.Contains(2).Should().BeFalse();
     }
 
     [TestMethod]
@@ -389,8 +371,8 @@ public class ContainsNumPyAlignmentTests
         var arr = np.arange(10);
         var sliced = arr["2:8:2"]; // [2, 4, 6]
 
-        await Assert.That(sliced.Contains(4)).IsTrue();
-        await Assert.That(sliced.Contains(3)).IsFalse();
+        sliced.Contains(4).Should().BeTrue();
+        sliced.Contains(3).Should().BeFalse();
     }
 
     [TestMethod]
@@ -399,8 +381,7 @@ public class ContainsNumPyAlignmentTests
         var arr = np.arange(10);
         var sliced = arr["2:5"]; // [2, 3, 4] - shape (3,)
 
-        await Assert.That(() => sliced.Contains(new[] { 1, 2 }))
-            .Throws<IncorrectShapeException>();
+        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<IncorrectShapeException>(() => sliced.Contains(new[] { 1, 2 }));
     }
 
     [TestMethod]
@@ -409,7 +390,7 @@ public class ContainsNumPyAlignmentTests
         var arr = np.array(new[,] { { 1, 2 }, { 3, 4 } });
         var transposed = arr.T;
 
-        await Assert.That(transposed.Contains(3)).IsTrue();
+        transposed.Contains(3).Should().BeTrue();
     }
 
     [TestMethod]
@@ -418,8 +399,8 @@ public class ContainsNumPyAlignmentTests
         var arr = np.array(new[] { 1, 2, 3 });
         var broadcast = np.broadcast_to(arr, new Shape(4, 3));
 
-        await Assert.That(broadcast.Contains(2)).IsTrue();
-        await Assert.That(broadcast.Contains(10)).IsFalse();
+        broadcast.Contains(2).Should().BeTrue();
+        broadcast.Contains(10).Should().BeFalse();
     }
 
     [TestMethod]
@@ -427,8 +408,8 @@ public class ContainsNumPyAlignmentTests
     {
         var arr = np.arange(5)["::-1"]; // [4, 3, 2, 1, 0]
 
-        await Assert.That(arr.Contains(3)).IsTrue();
-        await Assert.That(arr.Contains(10)).IsFalse();
+        arr.Contains(3).Should().BeTrue();
+        arr.Contains(10).Should().BeFalse();
     }
 
     [TestMethod]
@@ -436,8 +417,8 @@ public class ContainsNumPyAlignmentTests
     {
         var arr = np.arange(1_000_000);
 
-        await Assert.That(arr.Contains(500_000)).IsTrue();
-        await Assert.That(arr.Contains(2_000_000)).IsFalse();
+        arr.Contains(500_000).Should().BeTrue();
+        arr.Contains(2_000_000).Should().BeFalse();
     }
 
     #endregion
@@ -449,8 +430,8 @@ public class ContainsNumPyAlignmentTests
     {
         var arr = np.arange(24).reshape(2, 3, 4);
 
-        await Assert.That(arr.Contains(15)).IsTrue();
-        await Assert.That(arr.Contains(100)).IsFalse();
+        arr.Contains(15).Should().BeTrue();
+        arr.Contains(100).Should().BeFalse();
     }
 
     [TestMethod]
@@ -461,7 +442,7 @@ public class ContainsNumPyAlignmentTests
         var arr = np.arange(24).reshape(2, 3, 4);
         var search = np.array(new[] { 0, 1, 2, 3 });
 
-        await Assert.That(arr.Contains(search)).IsTrue();
+        arr.Contains(search).Should().BeTrue();
     }
 
     [TestMethod]
@@ -471,7 +452,7 @@ public class ContainsNumPyAlignmentTests
         var arr = np.arange(24).reshape(2, 3, 4);
         var search = np.arange(12).reshape(3, 4); // First 2D slice
 
-        await Assert.That(arr.Contains(search)).IsTrue();
+        arr.Contains(search).Should().BeTrue();
     }
 
     [TestMethod]
@@ -480,8 +461,7 @@ public class ContainsNumPyAlignmentTests
         var arr = np.arange(24).reshape(2, 3, 4);
         var search = np.array(new[] { 1, 2 }); // Can't broadcast (2,) with (2,3,4)
 
-        await Assert.That(() => arr.Contains(search))
-            .Throws<IncorrectShapeException>();
+        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<IncorrectShapeException>(() => arr.Contains(search));
     }
 
     #endregion
@@ -493,8 +473,8 @@ public class ContainsNumPyAlignmentTests
     {
         var arr = np.array(new[] { 1, 2, 3 });
 
-        await Assert.That(arr.__contains__(2)).IsTrue();
-        await Assert.That(arr.__contains__(10)).IsFalse();
+        arr.__contains__(2).Should().BeTrue();
+        arr.__contains__(10).Should().BeFalse();
     }
 
     [TestMethod]
@@ -502,8 +482,7 @@ public class ContainsNumPyAlignmentTests
     {
         var arr = np.array(new[] { 1, 2, 3 });
 
-        await Assert.That(() => arr.__contains__(new[] { 1, 2 }))
-            .Throws<IncorrectShapeException>();
+        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<IncorrectShapeException>(() => arr.__contains__(new[] { 1, 2 }));
     }
 
     #endregion

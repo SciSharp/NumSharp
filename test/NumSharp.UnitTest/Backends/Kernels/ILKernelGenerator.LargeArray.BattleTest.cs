@@ -36,15 +36,15 @@ public class ILKernelGenerator_LargeArray_BattleTest
         var result = a + b;
 
         // Verify first, middle, and last elements
-        await Assert.That((byte)result[0]).IsEqualTo((byte)2);
-        await Assert.That((byte)result[DualArraySize / 2]).IsEqualTo((byte)2);
-        await Assert.That((byte)result[DualArraySize - 1]).IsEqualTo((byte)2);
+        ((byte)result[0]).Should().Be((byte)2);
+        ((byte)result[DualArraySize / 2]).Should().Be((byte)2);
+        ((byte)result[DualArraySize - 1]).Should().Be((byte)2);
 
         // Verify element beyond int.MaxValue
         long beyondIntMax = (long)int.MaxValue + 1000;
         if (beyondIntMax < DualArraySize)
         {
-            await Assert.That((byte)result[beyondIntMax]).IsEqualTo((byte)2);
+            ((byte)result[beyondIntMax]).Should().Be((byte)2);
         }
     }
 
@@ -56,13 +56,13 @@ public class ILKernelGenerator_LargeArray_BattleTest
 
         var result = a - b;
 
-        await Assert.That((byte)result[0]).IsEqualTo((byte)9);
-        await Assert.That((byte)result[DualArraySize - 1]).IsEqualTo((byte)9);
+        ((byte)result[0]).Should().Be((byte)9);
+        ((byte)result[DualArraySize - 1]).Should().Be((byte)9);
 
         long beyondIntMax = (long)int.MaxValue + 1000;
         if (beyondIntMax < DualArraySize)
         {
-            await Assert.That((byte)result[beyondIntMax]).IsEqualTo((byte)9);
+            ((byte)result[beyondIntMax]).Should().Be((byte)9);
         }
     }
 
@@ -74,8 +74,8 @@ public class ILKernelGenerator_LargeArray_BattleTest
 
         var result = a * b;
 
-        await Assert.That((byte)result[0]).IsEqualTo((byte)6);
-        await Assert.That((byte)result[DualArraySize - 1]).IsEqualTo((byte)6);
+        ((byte)result[0]).Should().Be((byte)6);
+        ((byte)result[DualArraySize - 1]).Should().Be((byte)6);
     }
 
     #endregion
@@ -90,13 +90,13 @@ public class ILKernelGenerator_LargeArray_BattleTest
 
         var result = -a;
 
-        await Assert.That((short)result[0]).IsEqualTo((short)-1);
-        await Assert.That((short)result[DualArraySize - 1]).IsEqualTo((short)-1);
+        ((short)result[0]).Should().Be((short)-1);
+        ((short)result[DualArraySize - 1]).Should().Be((short)-1);
 
         long beyondIntMax = (long)int.MaxValue + 1000;
         if (beyondIntMax < DualArraySize)
         {
-            await Assert.That((short)result[beyondIntMax]).IsEqualTo((short)-1);
+            ((short)result[beyondIntMax]).Should().Be((short)-1);
         }
     }
 
@@ -107,8 +107,8 @@ public class ILKernelGenerator_LargeArray_BattleTest
 
         var result = np.abs(a);
 
-        await Assert.That((short)result[0]).IsEqualTo((short)5);
-        await Assert.That((short)result[DualArraySize - 1]).IsEqualTo((short)5);
+        ((short)result[0]).Should().Be((short)5);
+        ((short)result[DualArraySize - 1]).Should().Be((short)5);
     }
 
     #endregion
@@ -124,7 +124,7 @@ public class ILKernelGenerator_LargeArray_BattleTest
         // Sum of bytes promotes to int64
         var result = np.sum(a);
 
-        await Assert.That((long)result).IsEqualTo(LargeSize);
+        ((long)result).Should().Be(LargeSize);
     }
 
     [TestMethod, LargeMemoryTest]
@@ -137,7 +137,7 @@ public class ILKernelGenerator_LargeArray_BattleTest
 
         var result = np.min(a);
 
-        await Assert.That((byte)result).IsEqualTo((byte)0);
+        ((byte)result).Should().Be((byte)0);
     }
 
     [TestMethod, LargeMemoryTest]
@@ -150,7 +150,7 @@ public class ILKernelGenerator_LargeArray_BattleTest
 
         var result = np.max(a);
 
-        await Assert.That((byte)result).IsEqualTo((byte)255);
+        ((byte)result).Should().Be((byte)255);
     }
 
     [TestMethod, LargeMemoryTest]
@@ -161,7 +161,7 @@ public class ILKernelGenerator_LargeArray_BattleTest
 
         var result = np.mean(a);
 
-        await Assert.That((double)result).IsEqualTo(1.0);
+        ((double)result).Should().Be(1.0);
     }
 
     [TestMethod, LargeMemoryTest]
@@ -174,7 +174,7 @@ public class ILKernelGenerator_LargeArray_BattleTest
 
         var result = np.any(a);
 
-        await Assert.That((bool)result).IsTrue();
+        ((bool)result).Should().BeTrue();
     }
 
     [TestMethod, LargeMemoryTest]
@@ -184,7 +184,7 @@ public class ILKernelGenerator_LargeArray_BattleTest
 
         var result = np.all(a);
 
-        await Assert.That((bool)result).IsTrue();
+        ((bool)result).Should().BeTrue();
 
         // Now set one element to 0 and verify all returns false
         long targetIdx = (long)int.MaxValue + 50000;
@@ -192,7 +192,7 @@ public class ILKernelGenerator_LargeArray_BattleTest
 
         result = np.all(a);
 
-        await Assert.That((bool)result).IsFalse();
+        ((bool)result).Should().BeFalse();
     }
 
     #endregion
@@ -214,7 +214,7 @@ public class ILKernelGenerator_LargeArray_BattleTest
 
         var result = np.array_equal(a, b);
 
-        await Assert.That(result).IsFalse();
+        result.Should().BeFalse();
 
         // Fix it and verify equal
         if (targetIdx < DualArraySize)
@@ -224,7 +224,7 @@ public class ILKernelGenerator_LargeArray_BattleTest
 
         result = np.array_equal(a, b);
 
-        await Assert.That(result).IsTrue();
+        result.Should().BeTrue();
     }
 
     [TestMethod, LargeMemoryTest]
@@ -236,13 +236,13 @@ public class ILKernelGenerator_LargeArray_BattleTest
         var result = a > b;
 
         // All should be true
-        await Assert.That((bool)result[0]).IsTrue();
-        await Assert.That((bool)result[DualArraySize - 1]).IsTrue();
+        ((bool)result[0]).Should().BeTrue();
+        ((bool)result[DualArraySize - 1]).Should().BeTrue();
 
         long beyondIntMax = (long)int.MaxValue + 1000;
         if (beyondIntMax < DualArraySize)
         {
-            await Assert.That((bool)result[beyondIntMax]).IsTrue();
+            ((bool)result[beyondIntMax]).Should().BeTrue();
         }
     }
 
@@ -267,13 +267,13 @@ public class ILKernelGenerator_LargeArray_BattleTest
         var result = np.clip(large, (byte)5, (byte)200);
 
         // 0 should be clipped to 5
-        await Assert.That((byte)result[0]).IsEqualTo((byte)5);
+        ((byte)result[0]).Should().Be((byte)5);
 
         // 10 should stay 10
-        await Assert.That((byte)result[idx1]).IsEqualTo((byte)10);
+        ((byte)result[idx1]).Should().Be((byte)10);
 
         // 250 should be clipped to 200
-        await Assert.That((byte)result[idx2]).IsEqualTo((byte)200);
+        ((byte)result[idx2]).Should().Be((byte)200);
     }
 
     #endregion
@@ -304,7 +304,7 @@ public class ILKernelGenerator_LargeArray_BattleTest
         // Verify values
         for (int i = 0; i < testIndices.Length; i++)
         {
-            await Assert.That((byte)a[testIndices[i]]).IsEqualTo((byte)(i + 1));
+            ((byte)a[testIndices[i]]).Should().Be((byte)(i + 1));
         }
     }
 
@@ -328,13 +328,13 @@ public class ILKernelGenerator_LargeArray_BattleTest
         var slice = a[$"{start}:{stop}"];
 
         // The target element should be at index 10 in the slice
-        await Assert.That((byte)slice[10]).IsEqualTo((byte)42);
+        ((byte)slice[10]).Should().Be((byte)42);
 
         // Modify through slice
         slice[10] = (byte)99;
 
         // Verify original array is modified (view semantics)
-        await Assert.That((byte)a[targetIdx]).IsEqualTo((byte)99);
+        ((byte)a[targetIdx]).Should().Be((byte)99);
     }
 
     #endregion
@@ -364,11 +364,11 @@ public class ILKernelGenerator_LargeArray_BattleTest
         var sliced = a[$"0:{LargeSize}:{step}"];
 
         // Should have 3 elements (0, 1B, 2B)
-        await Assert.That(sliced.size).IsEqualTo(3);
+        sliced.size.Should().Be(3);
 
         // Sum should be 3
         var sum = np.sum(sliced);
-        await Assert.That((long)sum).IsEqualTo(3);
+        ((long)sum).Should().Be(3);
     }
 
     [TestMethod, LargeMemoryTest]
@@ -383,13 +383,13 @@ public class ILKernelGenerator_LargeArray_BattleTest
         var bSliced = b[$"0:{LargeSize}:{step}"];
 
         // Should have 2 elements (0, ~2.1B)
-        await Assert.That(aSliced.size).IsEqualTo(2);
+        aSliced.size.Should().Be(2);
 
         // Add sliced arrays - tests binary ops with large strides
         var result = aSliced + bSliced;
 
-        await Assert.That((byte)result[0]).IsEqualTo((byte)2);
-        await Assert.That((byte)result[1]).IsEqualTo((byte)2);
+        ((byte)result[0]).Should().Be((byte)2);
+        ((byte)result[1]).Should().Be((byte)2);
     }
 
     [TestMethod, LargeMemoryTest]
@@ -414,7 +414,7 @@ public class ILKernelGenerator_LargeArray_BattleTest
         sliced = a[$"0:{LargeSize}:{step}"];
         var max = np.max(sliced);
 
-        await Assert.That((byte)max).IsEqualTo((byte)99);
+        ((byte)max).Should().Be((byte)99);
     }
 
     #endregion
@@ -437,9 +437,9 @@ public class ILKernelGenerator_LargeArray_BattleTest
 
         var result = a + b;
 
-        await Assert.That((float)result[0]).IsEqualTo(2.0f);
-        await Assert.That((float)result[floatSize - 1]).IsEqualTo(2.0f);
-        await Assert.That((float)result[floatSize / 2]).IsEqualTo(2.0f);
+        ((float)result[0]).Should().Be(2.0f);
+        ((float)result[floatSize - 1]).Should().Be(2.0f);
+        ((float)result[floatSize / 2]).Should().Be(2.0f);
     }
 
     [TestMethod, LargeMemoryTest]
@@ -451,7 +451,7 @@ public class ILKernelGenerator_LargeArray_BattleTest
         var result = np.sum(a);
 
         // Due to float precision, just verify it's close
-        await Assert.That(Math.Abs((double)result - (double)floatSize)).IsLessThan(floatSize * 0.001);
+        Math.Abs((double)result - ((double)floatSize)).Should().BeLessThan(floatSize * 0.001);
     }
 
     #endregion

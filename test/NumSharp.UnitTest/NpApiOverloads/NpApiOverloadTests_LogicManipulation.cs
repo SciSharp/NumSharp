@@ -26,10 +26,10 @@ public class NpApiOverloadTests_LogicManipulation
         var b = np.array(new int[] { 1, 2, 4 });
         var result = np.equal(a, b);
 
-        await Assert.That(result).IsNotNull();
-        await Assert.That(result.GetBoolean(0)).IsTrue();
-        await Assert.That(result.GetBoolean(1)).IsTrue();
-        await Assert.That(result.GetBoolean(2)).IsFalse();
+        result.Should().NotBeNull();
+        result.GetBoolean(0).Should().BeTrue();
+        result.GetBoolean(1).Should().BeTrue();
+        result.GetBoolean(2).Should().BeFalse();
     }
 
     [TestMethod]
@@ -39,10 +39,10 @@ public class NpApiOverloadTests_LogicManipulation
         var a = np.array(new int[] { 1, 2, 3 });
         var result = np.equal(a, 2);
 
-        await Assert.That(result).IsNotNull();
-        await Assert.That(result.GetBoolean(0)).IsFalse();
-        await Assert.That(result.GetBoolean(1)).IsTrue();
-        await Assert.That(result.GetBoolean(2)).IsFalse();
+        result.Should().NotBeNull();
+        result.GetBoolean(0).Should().BeFalse();
+        result.GetBoolean(1).Should().BeTrue();
+        result.GetBoolean(2).Should().BeFalse();
     }
 
     [TestMethod]
@@ -52,10 +52,10 @@ public class NpApiOverloadTests_LogicManipulation
         var b = np.array(new int[] { 1, 2, 3 });
         var result = np.equal(2, b);
 
-        await Assert.That(result).IsNotNull();
-        await Assert.That(result.GetBoolean(0)).IsFalse();
-        await Assert.That(result.GetBoolean(1)).IsTrue();
-        await Assert.That(result.GetBoolean(2)).IsFalse();
+        result.Should().NotBeNull();
+        result.GetBoolean(0).Should().BeFalse();
+        result.GetBoolean(1).Should().BeTrue();
+        result.GetBoolean(2).Should().BeFalse();
     }
 
     #endregion
@@ -70,10 +70,10 @@ public class NpApiOverloadTests_LogicManipulation
         var b = np.array(new int[] { 1, 2, 4 });
         var result = np.not_equal(a, b);
 
-        await Assert.That(result).IsNotNull();
-        await Assert.That(result.GetBoolean(0)).IsFalse();
-        await Assert.That(result.GetBoolean(1)).IsFalse();
-        await Assert.That(result.GetBoolean(2)).IsTrue();
+        result.Should().NotBeNull();
+        result.GetBoolean(0).Should().BeFalse();
+        result.GetBoolean(1).Should().BeFalse();
+        result.GetBoolean(2).Should().BeTrue();
     }
 
     [TestMethod]
@@ -83,10 +83,10 @@ public class NpApiOverloadTests_LogicManipulation
         var a = np.array(new int[] { 1, 2, 3 });
         var result = np.not_equal(a, 2);
 
-        await Assert.That(result).IsNotNull();
-        await Assert.That(result.GetBoolean(0)).IsTrue();
-        await Assert.That(result.GetBoolean(1)).IsFalse();
-        await Assert.That(result.GetBoolean(2)).IsTrue();
+        result.Should().NotBeNull();
+        result.GetBoolean(0).Should().BeTrue();
+        result.GetBoolean(1).Should().BeFalse();
+        result.GetBoolean(2).Should().BeTrue();
     }
 
     [TestMethod]
@@ -96,10 +96,10 @@ public class NpApiOverloadTests_LogicManipulation
         var b = np.array(new int[] { 1, 2, 3 });
         var result = np.not_equal(2, b);
 
-        await Assert.That(result).IsNotNull();
-        await Assert.That(result.GetBoolean(0)).IsTrue();
-        await Assert.That(result.GetBoolean(1)).IsFalse();
-        await Assert.That(result.GetBoolean(2)).IsTrue();
+        result.Should().NotBeNull();
+        result.GetBoolean(0).Should().BeTrue();
+        result.GetBoolean(1).Should().BeFalse();
+        result.GetBoolean(2).Should().BeTrue();
     }
 
     #endregion
@@ -114,10 +114,10 @@ public class NpApiOverloadTests_LogicManipulation
         var b = np.array(new int[] { 2, 2, 2 });
         var result = np.less(a, b);
 
-        await Assert.That(result).IsNotNull();
-        await Assert.That(result.GetBoolean(0)).IsTrue();
-        await Assert.That(result.GetBoolean(1)).IsFalse();
-        await Assert.That(result.GetBoolean(2)).IsFalse();
+        result.Should().NotBeNull();
+        result.GetBoolean(0).Should().BeTrue();
+        result.GetBoolean(1).Should().BeFalse();
+        result.GetBoolean(2).Should().BeFalse();
     }
 
     [TestMethod]
@@ -127,10 +127,10 @@ public class NpApiOverloadTests_LogicManipulation
         var a = np.array(new int[] { 1, 2, 3 });
         var result = np.less(a, 2);
 
-        await Assert.That(result).IsNotNull();
-        await Assert.That(result.GetBoolean(0)).IsTrue();
-        await Assert.That(result.GetBoolean(1)).IsFalse();
-        await Assert.That(result.GetBoolean(2)).IsFalse();
+        result.Should().NotBeNull();
+        result.GetBoolean(0).Should().BeTrue();
+        result.GetBoolean(1).Should().BeFalse();
+        result.GetBoolean(2).Should().BeFalse();
     }
 
     [TestMethod]
@@ -140,10 +140,10 @@ public class NpApiOverloadTests_LogicManipulation
         var b = np.array(new int[] { 1, 2, 3 });
         var result = np.less(2, b);
 
-        await Assert.That(result).IsNotNull();
-        await Assert.That(result.GetBoolean(0)).IsFalse();
-        await Assert.That(result.GetBoolean(1)).IsFalse();
-        await Assert.That(result.GetBoolean(2)).IsTrue();
+        result.Should().NotBeNull();
+        result.GetBoolean(0).Should().BeFalse();
+        result.GetBoolean(1).Should().BeFalse();
+        result.GetBoolean(2).Should().BeTrue();
     }
 
     #endregion
@@ -158,10 +158,10 @@ public class NpApiOverloadTests_LogicManipulation
         var b = np.array(new int[] { 2, 2, 2 });
         var result = np.greater(a, b);
 
-        await Assert.That(result).IsNotNull();
-        await Assert.That(result.GetBoolean(0)).IsFalse();
-        await Assert.That(result.GetBoolean(1)).IsFalse();
-        await Assert.That(result.GetBoolean(2)).IsTrue();
+        result.Should().NotBeNull();
+        result.GetBoolean(0).Should().BeFalse();
+        result.GetBoolean(1).Should().BeFalse();
+        result.GetBoolean(2).Should().BeTrue();
     }
 
     [TestMethod]
@@ -171,10 +171,10 @@ public class NpApiOverloadTests_LogicManipulation
         var a = np.array(new int[] { 1, 2, 3 });
         var result = np.greater(a, 2);
 
-        await Assert.That(result).IsNotNull();
-        await Assert.That(result.GetBoolean(0)).IsFalse();
-        await Assert.That(result.GetBoolean(1)).IsFalse();
-        await Assert.That(result.GetBoolean(2)).IsTrue();
+        result.Should().NotBeNull();
+        result.GetBoolean(0).Should().BeFalse();
+        result.GetBoolean(1).Should().BeFalse();
+        result.GetBoolean(2).Should().BeTrue();
     }
 
     [TestMethod]
@@ -184,10 +184,10 @@ public class NpApiOverloadTests_LogicManipulation
         var b = np.array(new int[] { 1, 2, 3 });
         var result = np.greater(2, b);
 
-        await Assert.That(result).IsNotNull();
-        await Assert.That(result.GetBoolean(0)).IsTrue();
-        await Assert.That(result.GetBoolean(1)).IsFalse();
-        await Assert.That(result.GetBoolean(2)).IsFalse();
+        result.Should().NotBeNull();
+        result.GetBoolean(0).Should().BeTrue();
+        result.GetBoolean(1).Should().BeFalse();
+        result.GetBoolean(2).Should().BeFalse();
     }
 
     #endregion
@@ -202,10 +202,10 @@ public class NpApiOverloadTests_LogicManipulation
         var b = np.array(new int[] { 2, 2, 2 });
         var result = np.less_equal(a, b);
 
-        await Assert.That(result).IsNotNull();
-        await Assert.That(result.GetBoolean(0)).IsTrue();
-        await Assert.That(result.GetBoolean(1)).IsTrue();
-        await Assert.That(result.GetBoolean(2)).IsFalse();
+        result.Should().NotBeNull();
+        result.GetBoolean(0).Should().BeTrue();
+        result.GetBoolean(1).Should().BeTrue();
+        result.GetBoolean(2).Should().BeFalse();
     }
 
     [TestMethod]
@@ -215,10 +215,10 @@ public class NpApiOverloadTests_LogicManipulation
         var a = np.array(new int[] { 1, 2, 3 });
         var result = np.less_equal(a, 2);
 
-        await Assert.That(result).IsNotNull();
-        await Assert.That(result.GetBoolean(0)).IsTrue();
-        await Assert.That(result.GetBoolean(1)).IsTrue();
-        await Assert.That(result.GetBoolean(2)).IsFalse();
+        result.Should().NotBeNull();
+        result.GetBoolean(0).Should().BeTrue();
+        result.GetBoolean(1).Should().BeTrue();
+        result.GetBoolean(2).Should().BeFalse();
     }
 
     [TestMethod]
@@ -228,10 +228,10 @@ public class NpApiOverloadTests_LogicManipulation
         var b = np.array(new int[] { 1, 2, 3 });
         var result = np.less_equal(2, b);
 
-        await Assert.That(result).IsNotNull();
-        await Assert.That(result.GetBoolean(0)).IsFalse();
-        await Assert.That(result.GetBoolean(1)).IsTrue();
-        await Assert.That(result.GetBoolean(2)).IsTrue();
+        result.Should().NotBeNull();
+        result.GetBoolean(0).Should().BeFalse();
+        result.GetBoolean(1).Should().BeTrue();
+        result.GetBoolean(2).Should().BeTrue();
     }
 
     #endregion
@@ -246,10 +246,10 @@ public class NpApiOverloadTests_LogicManipulation
         var b = np.array(new int[] { 2, 2, 2 });
         var result = np.greater_equal(a, b);
 
-        await Assert.That(result).IsNotNull();
-        await Assert.That(result.GetBoolean(0)).IsFalse();
-        await Assert.That(result.GetBoolean(1)).IsTrue();
-        await Assert.That(result.GetBoolean(2)).IsTrue();
+        result.Should().NotBeNull();
+        result.GetBoolean(0).Should().BeFalse();
+        result.GetBoolean(1).Should().BeTrue();
+        result.GetBoolean(2).Should().BeTrue();
     }
 
     [TestMethod]
@@ -259,10 +259,10 @@ public class NpApiOverloadTests_LogicManipulation
         var a = np.array(new int[] { 1, 2, 3 });
         var result = np.greater_equal(a, 2);
 
-        await Assert.That(result).IsNotNull();
-        await Assert.That(result.GetBoolean(0)).IsFalse();
-        await Assert.That(result.GetBoolean(1)).IsTrue();
-        await Assert.That(result.GetBoolean(2)).IsTrue();
+        result.Should().NotBeNull();
+        result.GetBoolean(0).Should().BeFalse();
+        result.GetBoolean(1).Should().BeTrue();
+        result.GetBoolean(2).Should().BeTrue();
     }
 
     [TestMethod]
@@ -272,10 +272,10 @@ public class NpApiOverloadTests_LogicManipulation
         var b = np.array(new int[] { 1, 2, 3 });
         var result = np.greater_equal(2, b);
 
-        await Assert.That(result).IsNotNull();
-        await Assert.That(result.GetBoolean(0)).IsTrue();
-        await Assert.That(result.GetBoolean(1)).IsTrue();
-        await Assert.That(result.GetBoolean(2)).IsFalse();
+        result.Should().NotBeNull();
+        result.GetBoolean(0).Should().BeTrue();
+        result.GetBoolean(1).Should().BeTrue();
+        result.GetBoolean(2).Should().BeFalse();
     }
 
     #endregion
@@ -291,11 +291,11 @@ public class NpApiOverloadTests_LogicManipulation
         var y = np.array(new bool[] { true, false, true, false });
         var result = np.logical_and(x, y);
 
-        await Assert.That(result).IsNotNull();
-        await Assert.That(result.GetBoolean(0)).IsTrue();
-        await Assert.That(result.GetBoolean(1)).IsFalse();
-        await Assert.That(result.GetBoolean(2)).IsFalse();
-        await Assert.That(result.GetBoolean(3)).IsFalse();
+        result.Should().NotBeNull();
+        result.GetBoolean(0).Should().BeTrue();
+        result.GetBoolean(1).Should().BeFalse();
+        result.GetBoolean(2).Should().BeFalse();
+        result.GetBoolean(3).Should().BeFalse();
     }
 
     [TestMethod]
@@ -307,11 +307,11 @@ public class NpApiOverloadTests_LogicManipulation
         var y = np.array(new bool[] { true, false, true, false });
         var result = np.logical_or(x, y);
 
-        await Assert.That(result).IsNotNull();
-        await Assert.That(result.GetBoolean(0)).IsTrue();
-        await Assert.That(result.GetBoolean(1)).IsTrue();
-        await Assert.That(result.GetBoolean(2)).IsTrue();
-        await Assert.That(result.GetBoolean(3)).IsFalse();
+        result.Should().NotBeNull();
+        result.GetBoolean(0).Should().BeTrue();
+        result.GetBoolean(1).Should().BeTrue();
+        result.GetBoolean(2).Should().BeTrue();
+        result.GetBoolean(3).Should().BeFalse();
     }
 
     [TestMethod]
@@ -321,11 +321,11 @@ public class NpApiOverloadTests_LogicManipulation
         var x = np.array(new bool[] { true, true, false, false });
         var result = np.logical_not(x);
 
-        await Assert.That(result).IsNotNull();
-        await Assert.That(result.GetBoolean(0)).IsFalse();
-        await Assert.That(result.GetBoolean(1)).IsFalse();
-        await Assert.That(result.GetBoolean(2)).IsTrue();
-        await Assert.That(result.GetBoolean(3)).IsTrue();
+        result.Should().NotBeNull();
+        result.GetBoolean(0).Should().BeFalse();
+        result.GetBoolean(1).Should().BeFalse();
+        result.GetBoolean(2).Should().BeTrue();
+        result.GetBoolean(3).Should().BeTrue();
     }
 
     [TestMethod]
@@ -337,11 +337,11 @@ public class NpApiOverloadTests_LogicManipulation
         var y = np.array(new bool[] { true, false, true, false });
         var result = np.logical_xor(x, y);
 
-        await Assert.That(result).IsNotNull();
-        await Assert.That(result.GetBoolean(0)).IsFalse();
-        await Assert.That(result.GetBoolean(1)).IsTrue();
-        await Assert.That(result.GetBoolean(2)).IsTrue();
-        await Assert.That(result.GetBoolean(3)).IsFalse();
+        result.Should().NotBeNull();
+        result.GetBoolean(0).Should().BeFalse();
+        result.GetBoolean(1).Should().BeTrue();
+        result.GetBoolean(2).Should().BeTrue();
+        result.GetBoolean(3).Should().BeFalse();
     }
 
     #endregion
@@ -355,10 +355,10 @@ public class NpApiOverloadTests_LogicManipulation
         var a = np.zeros(new Shape(2, 3, 4));
         var result = np.moveaxis(a, 0, -1);
 
-        await Assert.That(result).IsNotNull();
-        await Assert.That(result.shape[0]).IsEqualTo(3);
-        await Assert.That(result.shape[1]).IsEqualTo(4);
-        await Assert.That(result.shape[2]).IsEqualTo(2);
+        result.Should().NotBeNull();
+        result.shape[0].Should().Be(3);
+        result.shape[1].Should().Be(4);
+        result.shape[2].Should().Be(2);
     }
 
     [TestMethod]
@@ -372,8 +372,8 @@ public class NpApiOverloadTests_LogicManipulation
         // This should move axis 0 to position 2 (equivalent to int, int)
         var result = np.moveaxis(a, new int[] { 0 }, 2);
 
-        await Assert.That(result).IsNotNull();
-        await Assert.That(result.ndim).IsEqualTo(3);
+        result.Should().NotBeNull();
+        result.ndim.Should().Be(3);
     }
 
     [TestMethod]
@@ -383,8 +383,8 @@ public class NpApiOverloadTests_LogicManipulation
         var a = np.zeros(new Shape(2, 3, 4));
         var result = np.moveaxis(a, 0, new int[] { 2 });
 
-        await Assert.That(result).IsNotNull();
-        await Assert.That(result.ndim).IsEqualTo(3);
+        result.Should().NotBeNull();
+        result.ndim.Should().Be(3);
     }
 
     [TestMethod]
@@ -394,10 +394,10 @@ public class NpApiOverloadTests_LogicManipulation
         var a = np.zeros(new Shape(2, 3, 4));
         var result = np.moveaxis(a, new int[] { 0, 1 }, new int[] { 1, 0 });
 
-        await Assert.That(result).IsNotNull();
-        await Assert.That(result.shape[0]).IsEqualTo(3);
-        await Assert.That(result.shape[1]).IsEqualTo(2);
-        await Assert.That(result.shape[2]).IsEqualTo(4);
+        result.Should().NotBeNull();
+        result.shape[0].Should().Be(3);
+        result.shape[1].Should().Be(2);
+        result.shape[2].Should().Be(4);
     }
 
     #endregion
@@ -411,10 +411,10 @@ public class NpApiOverloadTests_LogicManipulation
         var a = np.zeros(new Shape(2, 3, 4));
         var result = np.rollaxis(a, 2, 0);
 
-        await Assert.That(result).IsNotNull();
-        await Assert.That(result.shape[0]).IsEqualTo(4);
-        await Assert.That(result.shape[1]).IsEqualTo(2);
-        await Assert.That(result.shape[2]).IsEqualTo(3);
+        result.Should().NotBeNull();
+        result.shape[0].Should().Be(4);
+        result.shape[1].Should().Be(2);
+        result.shape[2].Should().Be(3);
     }
 
     [TestMethod]
@@ -424,10 +424,10 @@ public class NpApiOverloadTests_LogicManipulation
         var a = np.zeros(new Shape(2, 3, 4));
         var result = np.rollaxis(a, 2);
 
-        await Assert.That(result).IsNotNull();
-        await Assert.That(result.shape[0]).IsEqualTo(4);
-        await Assert.That(result.shape[1]).IsEqualTo(2);
-        await Assert.That(result.shape[2]).IsEqualTo(3);
+        result.Should().NotBeNull();
+        result.shape[0].Should().Be(4);
+        result.shape[1].Should().Be(2);
+        result.shape[2].Should().Be(3);
     }
 
     #endregion
@@ -441,10 +441,10 @@ public class NpApiOverloadTests_LogicManipulation
         var a = np.zeros(new Shape(2, 3, 4));
         var result = np.swapaxes(a, 0, 2);
 
-        await Assert.That(result).IsNotNull();
-        await Assert.That(result.shape[0]).IsEqualTo(4);
-        await Assert.That(result.shape[1]).IsEqualTo(3);
-        await Assert.That(result.shape[2]).IsEqualTo(2);
+        result.Should().NotBeNull();
+        result.shape[0].Should().Be(4);
+        result.shape[1].Should().Be(3);
+        result.shape[2].Should().Be(2);
     }
 
     #endregion
@@ -458,9 +458,9 @@ public class NpApiOverloadTests_LogicManipulation
         var a = np.arange(6).reshape(2, 3);
         var result = np.transpose(a);
 
-        await Assert.That(result).IsNotNull();
-        await Assert.That(result.shape[0]).IsEqualTo(3);
-        await Assert.That(result.shape[1]).IsEqualTo(2);
+        result.Should().NotBeNull();
+        result.shape[0].Should().Be(3);
+        result.shape[1].Should().Be(2);
     }
 
     [TestMethod]
@@ -470,9 +470,9 @@ public class NpApiOverloadTests_LogicManipulation
         var a = np.arange(6).reshape(2, 3);
         var result = np.transpose(a, new int[] { 1, 0 });
 
-        await Assert.That(result).IsNotNull();
-        await Assert.That(result.shape[0]).IsEqualTo(3);
-        await Assert.That(result.shape[1]).IsEqualTo(2);
+        result.Should().NotBeNull();
+        result.shape[0].Should().Be(3);
+        result.shape[1].Should().Be(2);
     }
 
     [TestMethod]
@@ -482,10 +482,10 @@ public class NpApiOverloadTests_LogicManipulation
         var a = np.arange(24).reshape(2, 3, 4);
         var result = np.transpose(a, new int[] { 2, 0, 1 });
 
-        await Assert.That(result).IsNotNull();
-        await Assert.That(result.shape[0]).IsEqualTo(4);
-        await Assert.That(result.shape[1]).IsEqualTo(2);
-        await Assert.That(result.shape[2]).IsEqualTo(3);
+        result.Should().NotBeNull();
+        result.shape[0].Should().Be(4);
+        result.shape[1].Should().Be(2);
+        result.shape[2].Should().Be(3);
     }
 
     #endregion
@@ -499,11 +499,11 @@ public class NpApiOverloadTests_LogicManipulation
         var a = np.array(new int[] { 1, 2, 2, 3, 3, 3 });
         var result = np.unique(a);
 
-        await Assert.That(result).IsNotNull();
-        await Assert.That(result.size).IsEqualTo(3);
-        await Assert.That(result.GetInt32(0)).IsEqualTo(1);
-        await Assert.That(result.GetInt32(1)).IsEqualTo(2);
-        await Assert.That(result.GetInt32(2)).IsEqualTo(3);
+        result.Should().NotBeNull();
+        result.size.Should().Be(3);
+        result.GetInt32(0).Should().Be(1);
+        result.GetInt32(1).Should().Be(2);
+        result.GetInt32(2).Should().Be(3);
     }
 
     [TestMethod]
@@ -513,9 +513,9 @@ public class NpApiOverloadTests_LogicManipulation
         var a = np.array(new int[,] { { 1, 1 }, { 2, 3 } });
         var result = np.unique(a);
 
-        await Assert.That(result).IsNotNull();
-        await Assert.That(result.ndim).IsEqualTo(1);
-        await Assert.That(result.size).IsEqualTo(3);
+        result.Should().NotBeNull();
+        result.ndim.Should().Be(1);
+        result.size.Should().Be(3);
     }
 
     #endregion
@@ -529,7 +529,7 @@ public class NpApiOverloadTests_LogicManipulation
         var a = np.array(new int[] { 0, 1, 0, 2, 0, 3 });
         long result = np.count_nonzero(a);
 
-        await Assert.That(result).IsEqualTo(3);
+        result.Should().Be(3);
     }
 
     [TestMethod]
@@ -539,11 +539,11 @@ public class NpApiOverloadTests_LogicManipulation
         var a = np.array(new int[,] { { 0, 1, 2 }, { 3, 0, 5 } });
         var result = np.count_nonzero(a, axis: 0);
 
-        await Assert.That(result).IsNotNull();
-        await Assert.That(result.shape).IsEquivalentTo(new long[] { 3 });
-        await Assert.That(result.GetInt64(0)).IsEqualTo(1L);
-        await Assert.That(result.GetInt64(1)).IsEqualTo(1L);
-        await Assert.That(result.GetInt64(2)).IsEqualTo(2L);
+        result.Should().NotBeNull();
+        result.shape.Should().BeEquivalentTo(new long[] { 3 });
+        result.GetInt64(0).Should().Be(1L);
+        result.GetInt64(1).Should().Be(1L);
+        result.GetInt64(2).Should().Be(2L);
     }
 
     [TestMethod]
@@ -553,8 +553,8 @@ public class NpApiOverloadTests_LogicManipulation
         var a = np.array(new int[,] { { 0, 1, 2 }, { 3, 0, 5 } });
         var result = np.count_nonzero(a, axis: 1, keepdims: true);
 
-        await Assert.That(result).IsNotNull();
-        await Assert.That(result.shape).IsEquivalentTo(new long[] { 2, 1 });
+        result.Should().NotBeNull();
+        result.shape.Should().BeEquivalentTo(new long[] { 2, 1 });
     }
 
     #endregion
@@ -568,11 +568,11 @@ public class NpApiOverloadTests_LogicManipulation
         var a = np.array(new int[] { 0, 1, 0, 2 });
         NDArray<long>[] result = np.nonzero(a);
 
-        await Assert.That(result).IsNotNull();
-        await Assert.That(result.Length).IsEqualTo(1);
-        await Assert.That(result[0].size).IsEqualTo(2);
-        await Assert.That(result[0].GetInt64(0)).IsEqualTo(1L);
-        await Assert.That(result[0].GetInt64(1)).IsEqualTo(3L);
+        result.Should().NotBeNull();
+        result.Length.Should().Be(1);
+        result[0].size.Should().Be(2);
+        result[0].GetInt64(0).Should().Be(1L);
+        result[0].GetInt64(1).Should().Be(3L);
     }
 
     [TestMethod]
@@ -582,12 +582,12 @@ public class NpApiOverloadTests_LogicManipulation
         var a = np.array(new int[,] { { 0, 1 }, { 2, 0 } });
         NDArray<long>[] result = np.nonzero(a);
 
-        await Assert.That(result).IsNotNull();
-        await Assert.That(result.Length).IsEqualTo(2);
+        result.Should().NotBeNull();
+        result.Length.Should().Be(2);
         // Row indices of nonzero elements
-        await Assert.That(result[0].size).IsEqualTo(2);
+        result[0].size.Should().Be(2);
         // Column indices of nonzero elements
-        await Assert.That(result[1].size).IsEqualTo(2);
+        result[1].size.Should().Be(2);
     }
 
     #endregion
@@ -602,12 +602,12 @@ public class NpApiOverloadTests_LogicManipulation
         var b = np.array(new int[,] { { 5, 6 }, { 7, 8 } });
         var result = np.dot(a, b);
 
-        await Assert.That(result).IsNotNull();
-        await Assert.That(result.shape).IsEquivalentTo(new long[] { 2, 2 });
-        await Assert.That(result.GetInt32(0, 0)).IsEqualTo(19);
-        await Assert.That(result.GetInt32(0, 1)).IsEqualTo(22);
-        await Assert.That(result.GetInt32(1, 0)).IsEqualTo(43);
-        await Assert.That(result.GetInt32(1, 1)).IsEqualTo(50);
+        result.Should().NotBeNull();
+        result.shape.Should().BeEquivalentTo(new long[] { 2, 2 });
+        result.GetInt32(0, 0).Should().Be(19);
+        result.GetInt32(0, 1).Should().Be(22);
+        result.GetInt32(1, 0).Should().Be(43);
+        result.GetInt32(1, 1).Should().Be(50);
     }
 
     [TestMethod]
@@ -618,9 +618,9 @@ public class NpApiOverloadTests_LogicManipulation
         var b = np.array(new int[] { 4, 5, 6 });
         var result = np.dot(a, b);
 
-        await Assert.That(result).IsNotNull();
+        result.Should().NotBeNull();
         // For 1D vectors, dot returns a scalar (0D array)
-        await Assert.That(result.size).IsEqualTo(1);
+        result.size.Should().Be(1);
     }
 
     #endregion
@@ -635,12 +635,12 @@ public class NpApiOverloadTests_LogicManipulation
         var b = np.array(new int[,] { { 5, 6 }, { 7, 8 } });
         var result = np.matmul(a, b);
 
-        await Assert.That(result).IsNotNull();
-        await Assert.That(result.shape).IsEquivalentTo(new long[] { 2, 2 });
-        await Assert.That(result.GetInt32(0, 0)).IsEqualTo(19);
-        await Assert.That(result.GetInt32(0, 1)).IsEqualTo(22);
-        await Assert.That(result.GetInt32(1, 0)).IsEqualTo(43);
-        await Assert.That(result.GetInt32(1, 1)).IsEqualTo(50);
+        result.Should().NotBeNull();
+        result.shape.Should().BeEquivalentTo(new long[] { 2, 2 });
+        result.GetInt32(0, 0).Should().Be(19);
+        result.GetInt32(0, 1).Should().Be(22);
+        result.GetInt32(1, 0).Should().Be(43);
+        result.GetInt32(1, 1).Should().Be(50);
     }
 
     #endregion
@@ -658,17 +658,17 @@ public class NpApiOverloadTests_LogicManipulation
         var b = np.array(new int[] { 4, 5, 6 });
         var result = np.outer(a, b);
 
-        await Assert.That(result).IsNotNull();
-        await Assert.That(result.shape).IsEquivalentTo(new long[] { 3, 3 });
-        await Assert.That(result.GetInt32(0, 0)).IsEqualTo(4);
-        await Assert.That(result.GetInt32(0, 1)).IsEqualTo(5);
-        await Assert.That(result.GetInt32(0, 2)).IsEqualTo(6);
-        await Assert.That(result.GetInt32(1, 0)).IsEqualTo(8);
-        await Assert.That(result.GetInt32(1, 1)).IsEqualTo(10);
-        await Assert.That(result.GetInt32(1, 2)).IsEqualTo(12);
-        await Assert.That(result.GetInt32(2, 0)).IsEqualTo(12);
-        await Assert.That(result.GetInt32(2, 1)).IsEqualTo(15);
-        await Assert.That(result.GetInt32(2, 2)).IsEqualTo(18);
+        result.Should().NotBeNull();
+        result.shape.Should().BeEquivalentTo(new long[] { 3, 3 });
+        result.GetInt32(0, 0).Should().Be(4);
+        result.GetInt32(0, 1).Should().Be(5);
+        result.GetInt32(0, 2).Should().Be(6);
+        result.GetInt32(1, 0).Should().Be(8);
+        result.GetInt32(1, 1).Should().Be(10);
+        result.GetInt32(1, 2).Should().Be(12);
+        result.GetInt32(2, 0).Should().Be(12);
+        result.GetInt32(2, 1).Should().Be(15);
+        result.GetInt32(2, 2).Should().Be(18);
     }
 
     #endregion
@@ -682,7 +682,7 @@ public class NpApiOverloadTests_LogicManipulation
         var a = np.array(new int[] { 1, 2, 3, 4, 5 });
         int result = np.amin<int>(a);
 
-        await Assert.That(result).IsEqualTo(1);
+        result.Should().Be(1);
     }
 
     [TestMethod]
@@ -692,7 +692,7 @@ public class NpApiOverloadTests_LogicManipulation
         var a = np.array(new double[] { 1.5, 2.5, 0.5 });
         double result = np.amin<double>(a);
 
-        await Assert.That(result).IsEqualTo(0.5);
+        result.Should().Be(0.5);
     }
 
     [TestMethod]
@@ -702,11 +702,11 @@ public class NpApiOverloadTests_LogicManipulation
         var a = np.array(new int[,] { { 0, 1, 2 }, { 3, 0, 5 } });
         var result = np.amin(a, axis: 0);
 
-        await Assert.That(result).IsNotNull();
-        await Assert.That(result.shape).IsEquivalentTo(new long[] { 3 });
-        await Assert.That(result.GetInt32(0)).IsEqualTo(0);
-        await Assert.That(result.GetInt32(1)).IsEqualTo(0);
-        await Assert.That(result.GetInt32(2)).IsEqualTo(2);
+        result.Should().NotBeNull();
+        result.shape.Should().BeEquivalentTo(new long[] { 3 });
+        result.GetInt32(0).Should().Be(0);
+        result.GetInt32(1).Should().Be(0);
+        result.GetInt32(2).Should().Be(2);
     }
 
     [TestMethod]
@@ -716,8 +716,8 @@ public class NpApiOverloadTests_LogicManipulation
         var a = np.array(new int[,] { { 0, 1, 2 }, { 3, 0, 5 } });
         var result = np.amin(a, axis: 1, keepdims: true);
 
-        await Assert.That(result).IsNotNull();
-        await Assert.That(result.shape).IsEquivalentTo(new long[] { 2, 1 });
+        result.Should().NotBeNull();
+        result.shape.Should().BeEquivalentTo(new long[] { 2, 1 });
     }
 
     [TestMethod]
@@ -727,7 +727,7 @@ public class NpApiOverloadTests_LogicManipulation
         var a = np.array(new int[] { 1, 2, 3, 4, 5 });
         var result = np.amin(a, dtype: typeof(double));
 
-        await Assert.That(result).IsNotNull();
+        result.Should().NotBeNull();
     }
 
     #endregion
@@ -741,11 +741,11 @@ public class NpApiOverloadTests_LogicManipulation
         var a = np.array(new int[,] { { 0, 1, 2 }, { 3, 0, 5 } });
         var result = np.min(a, axis: 0);
 
-        await Assert.That(result).IsNotNull();
-        await Assert.That(result.shape).IsEquivalentTo(new long[] { 3 });
-        await Assert.That(result.GetInt32(0)).IsEqualTo(0);
-        await Assert.That(result.GetInt32(1)).IsEqualTo(0);
-        await Assert.That(result.GetInt32(2)).IsEqualTo(2);
+        result.Should().NotBeNull();
+        result.shape.Should().BeEquivalentTo(new long[] { 3 });
+        result.GetInt32(0).Should().Be(0);
+        result.GetInt32(1).Should().Be(0);
+        result.GetInt32(2).Should().Be(2);
     }
 
     [TestMethod]
@@ -755,7 +755,7 @@ public class NpApiOverloadTests_LogicManipulation
         var a = np.array(new int[] { 1, 2, 3, 4, 5 });
         var result = np.min(a, dtype: typeof(double));
 
-        await Assert.That(result).IsNotNull();
+        result.Should().NotBeNull();
     }
 
     [TestMethod]
@@ -765,8 +765,8 @@ public class NpApiOverloadTests_LogicManipulation
         var a = np.array(new int[,] { { 0, 1, 2 }, { 3, 0, 5 } });
         var result = np.min(a, axis: 1, keepdims: true, dtype: null);
 
-        await Assert.That(result).IsNotNull();
-        await Assert.That(result.shape).IsEquivalentTo(new long[] { 2, 1 });
+        result.Should().NotBeNull();
+        result.shape.Should().BeEquivalentTo(new long[] { 2, 1 });
     }
 
     #endregion
@@ -781,10 +781,10 @@ public class NpApiOverloadTests_LogicManipulation
         var b = np.array(new double[] { 1.0, 2.1, 3.0 });
         var result = np.equal(a, b);
 
-        await Assert.That(result).IsNotNull();
-        await Assert.That(result.GetBoolean(0)).IsTrue();
-        await Assert.That(result.GetBoolean(1)).IsFalse();
-        await Assert.That(result.GetBoolean(2)).IsTrue();
+        result.Should().NotBeNull();
+        result.GetBoolean(0).Should().BeTrue();
+        result.GetBoolean(1).Should().BeFalse();
+        result.GetBoolean(2).Should().BeTrue();
     }
 
     [TestMethod]
@@ -796,10 +796,10 @@ public class NpApiOverloadTests_LogicManipulation
         var y = np.array(new int[] { 1, 1, 0 });
         var result = np.logical_and(x, y);
 
-        await Assert.That(result).IsNotNull();
-        await Assert.That(result.GetBoolean(0)).IsTrue();
-        await Assert.That(result.GetBoolean(1)).IsFalse();
-        await Assert.That(result.GetBoolean(2)).IsFalse();
+        result.Should().NotBeNull();
+        result.GetBoolean(0).Should().BeTrue();
+        result.GetBoolean(1).Should().BeFalse();
+        result.GetBoolean(2).Should().BeFalse();
     }
 
     [TestMethod]
@@ -809,8 +809,8 @@ public class NpApiOverloadTests_LogicManipulation
         var a = np.array(new int[] { 1, 2, 3 });
         var result = np.transpose(a);
 
-        await Assert.That(result).IsNotNull();
-        await Assert.That(result.shape).IsEquivalentTo(new long[] { 3 });
+        result.Should().NotBeNull();
+        result.shape.Should().BeEquivalentTo(new long[] { 3 });
     }
 
     [TestMethod]
@@ -820,8 +820,8 @@ public class NpApiOverloadTests_LogicManipulation
         var a = np.array(new int[0]);
         var result = np.unique(a);
 
-        await Assert.That(result).IsNotNull();
-        await Assert.That(result.size).IsEqualTo(0);
+        result.Should().NotBeNull();
+        result.size.Should().Be(0);
     }
 
     [TestMethod]
@@ -835,10 +835,10 @@ public class NpApiOverloadTests_LogicManipulation
         var b = np.array(new int[] { 1, 1 });
         var result = np.dot(a, b);
 
-        await Assert.That(result).IsNotNull();
-        await Assert.That(result.shape).IsEquivalentTo(new long[] { 2 });
-        await Assert.That(result.GetInt32(0)).IsEqualTo(3);
-        await Assert.That(result.GetInt32(1)).IsEqualTo(7);
+        result.Should().NotBeNull();
+        result.shape.Should().BeEquivalentTo(new long[] { 2 });
+        result.GetInt32(0).Should().Be(3);
+        result.GetInt32(1).Should().Be(7);
     }
 
     #endregion

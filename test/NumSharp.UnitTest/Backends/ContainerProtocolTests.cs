@@ -19,8 +19,8 @@ public class ContainerProtocolTests
         // NumPy: 3 in np.array([1, 2, 3, 4, 5]) = True
         var arr = np.array(new[] { 1, 2, 3, 4, 5 });
 
-        await Assert.That(arr.Contains(3)).IsTrue();
-        await Assert.That(arr.__contains__(3)).IsTrue();
+        arr.Contains(3).Should().BeTrue();
+        arr.__contains__(3).Should().BeTrue();
     }
 
     [TestMethod]
@@ -29,8 +29,8 @@ public class ContainerProtocolTests
         // NumPy: 10 in np.array([1, 2, 3, 4, 5]) = False
         var arr = np.array(new[] { 1, 2, 3, 4, 5 });
 
-        await Assert.That(arr.Contains(10)).IsFalse();
-        await Assert.That(arr.__contains__(10)).IsFalse();
+        arr.Contains(10).Should().BeFalse();
+        arr.__contains__(10).Should().BeFalse();
     }
 
     [TestMethod]
@@ -39,7 +39,7 @@ public class ContainerProtocolTests
         // NumPy: 2.5 in np.array([1.0, 2.5, 3.0]) = True
         var arr = np.array(new[] { 1.0, 2.5, 3.0 });
 
-        await Assert.That(arr.Contains(2.5)).IsTrue();
+        arr.Contains(2.5).Should().BeTrue();
     }
 
     [TestMethod]
@@ -49,7 +49,7 @@ public class ContainerProtocolTests
         // NaN != NaN in IEEE 754, so Contains returns False
         var arr = np.array(new[] { 1.0, double.NaN, 3.0 });
 
-        await Assert.That(arr.Contains(double.NaN)).IsFalse();
+        arr.Contains(double.NaN).Should().BeFalse();
     }
 
     [TestMethod]
@@ -58,7 +58,7 @@ public class ContainerProtocolTests
         // NumPy: 1 in np.array([]) = False
         var arr = np.array(Array.Empty<int>());
 
-        await Assert.That(arr.Contains(1)).IsFalse();
+        arr.Contains(1).Should().BeFalse();
     }
 
     [TestMethod]
@@ -67,8 +67,8 @@ public class ContainerProtocolTests
         // NumPy: 5 in np.array([[1, 2], [3, 4], [5, 6]]) = True
         var arr = np.array(new[,] { { 1, 2 }, { 3, 4 }, { 5, 6 } });
 
-        await Assert.That(arr.Contains(5)).IsTrue();
-        await Assert.That(arr.Contains(10)).IsFalse();
+        arr.Contains(5).Should().BeTrue();
+        arr.Contains(10).Should().BeFalse();
     }
 
     [TestMethod]
@@ -77,8 +77,8 @@ public class ContainerProtocolTests
         // NumPy: True in np.array([False, True, False]) = True
         var arr = np.array(new[] { false, true, false });
 
-        await Assert.That(arr.Contains(true)).IsTrue();
-        await Assert.That(arr.Contains(false)).IsTrue();
+        arr.Contains(true).Should().BeTrue();
+        arr.Contains(false).Should().BeTrue();
     }
 
     [TestMethod]
@@ -88,7 +88,7 @@ public class ContainerProtocolTests
         // Type promotion: int 2 is compared with float 2.0
         var arr = np.array(new[] { 1.0, 2.0, 3.0 });
 
-        await Assert.That(arr.Contains(2)).IsTrue();
+        arr.Contains(2).Should().BeTrue();
     }
 
     [TestMethod]
@@ -96,7 +96,7 @@ public class ContainerProtocolTests
     {
         var arr = np.array(new[] { 1, 2, 3 });
 
-        await Assert.That(arr.Contains(null)).IsFalse();
+        arr.Contains(null).Should().BeFalse();
     }
 
     [TestMethod]
@@ -104,7 +104,7 @@ public class ContainerProtocolTests
     {
         var arr = np.array(new[] { 42, 1, 2, 3 });
 
-        await Assert.That(arr.Contains(42)).IsTrue();
+        arr.Contains(42).Should().BeTrue();
     }
 
     [TestMethod]
@@ -112,7 +112,7 @@ public class ContainerProtocolTests
     {
         var arr = np.array(new[] { 1, 2, 3, 42 });
 
-        await Assert.That(arr.Contains(42)).IsTrue();
+        arr.Contains(42).Should().BeTrue();
     }
 
     #endregion
@@ -125,7 +125,7 @@ public class ContainerProtocolTests
         // NumPy: hash(np.array([1, 2, 3])) -> TypeError: unhashable type: 'numpy.ndarray'
         var arr = np.array(new[] { 1, 2, 3 });
 
-        await Assert.That(() => arr.GetHashCode()).Throws<NotSupportedException>();
+        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<NotSupportedException>(() => arr.GetHashCode());
     }
 
     [TestMethod]
@@ -134,7 +134,7 @@ public class ContainerProtocolTests
         // NumPy: hash(np.array([1, 2, 3])) -> TypeError: unhashable type: 'numpy.ndarray'
         var arr = np.array(new[] { 1, 2, 3 });
 
-        await Assert.That(() => arr.__hash__()).Throws<NotSupportedException>();
+        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<NotSupportedException>(() => arr.__hash__());
     }
 
     [TestMethod]
@@ -145,7 +145,7 @@ public class ContainerProtocolTests
         var dict = new Dictionary<object, string>();
 
         // Adding to dictionary calls GetHashCode, which throws
-        await Assert.That(() => dict.Add(arr, "value")).Throws<NotSupportedException>();
+        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<NotSupportedException>(() => dict.Add(arr, "value"));
     }
 
     [TestMethod]
@@ -159,9 +159,9 @@ public class ContainerProtocolTests
         dict[arr1] = "first";
         dict[arr2] = "second";
 
-        await Assert.That(dict[arr1]).IsEqualTo("first");
-        await Assert.That(dict[arr2]).IsEqualTo("second");
-        await Assert.That(dict.Count).IsEqualTo(2); // Two distinct references
+        dict[arr1].Should().Be("first");
+        dict[arr2].Should().Be("second");
+        dict.Count.Should().Be(2); // Two distinct references
     }
 
     #endregion
@@ -174,8 +174,8 @@ public class ContainerProtocolTests
         var arr = np.array(new[] { 1, 2, 3, 4, 5 });
 
         // Both methods should return the same result
-        await Assert.That(arr.__contains__(3)).IsEqualTo(arr.Contains(3));
-        await Assert.That(arr.__contains__(10)).IsEqualTo(arr.Contains(10));
+        arr.__contains__(3).Should().Be(arr.Contains(3));
+        arr.__contains__(10).Should().Be(arr.Contains(10));
     }
 
     #endregion
@@ -188,7 +188,7 @@ public class ContainerProtocolTests
         // NumPy: len(np.array([1, 2, 3])) = 3
         var arr = np.array(new[] { 1, 2, 3 });
 
-        await Assert.That(arr.__len__()).IsEqualTo(3);
+        arr.__len__().Should().Be(3);
     }
 
     [TestMethod]
@@ -197,7 +197,7 @@ public class ContainerProtocolTests
         // NumPy: len(np.array([[1, 2], [3, 4], [5, 6]])) = 3
         var arr = np.array(new[,] { { 1, 2 }, { 3, 4 }, { 5, 6 } });
 
-        await Assert.That(arr.__len__()).IsEqualTo(3);
+        arr.__len__().Should().Be(3);
     }
 
     [TestMethod]
@@ -207,8 +207,8 @@ public class ContainerProtocolTests
         // Note: NDArray.Scalar creates a true 0-d array, while np.array(5) creates 1-d
         var scalar = NDArray.Scalar(5);
 
-        await Assert.That(scalar.ndim).IsEqualTo(0); // Verify it's a true scalar
-        await Assert.That(() => scalar.__len__()).Throws<TypeError>();
+        scalar.ndim.Should().Be(0); // Verify it's a true scalar
+        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<TypeError>(() => scalar.__len__());
     }
 
     #endregion
@@ -221,8 +221,8 @@ public class ContainerProtocolTests
         var arr = np.array(new[] { 1, 2, 3 });
         var iter = arr.__iter__();
 
-        await Assert.That(iter).IsNotNull();
-        await Assert.That(iter.MoveNext()).IsTrue();
+        iter.Should().NotBeNull();
+        iter.MoveNext().Should().BeTrue();
     }
 
     #endregion
@@ -235,7 +235,7 @@ public class ContainerProtocolTests
         var arr = np.array(new[] { 10, 20, 30 });
 
         var result = arr.__getitem__(1);
-        await Assert.That((int)result).IsEqualTo(20);
+        ((int)result).Should().Be(20);
     }
 
     [TestMethod]
@@ -244,7 +244,7 @@ public class ContainerProtocolTests
         var arr = np.array(new[] { 10, 20, 30 });
 
         var result = arr.__getitem__(-1);
-        await Assert.That((int)result).IsEqualTo(30);
+        ((int)result).Should().Be(30);
     }
 
     [TestMethod]
@@ -253,8 +253,8 @@ public class ContainerProtocolTests
         var arr = np.array(new[] { 10, 20, 30, 40, 50 });
 
         var result = arr.__getitem__("1:4");
-        await Assert.That(result.size).IsEqualTo(3);
-        await Assert.That((int)result[0]).IsEqualTo(20);
+        result.size.Should().Be(3);
+        ((int)result[0]).Should().Be(20);
     }
 
     [TestMethod]
@@ -263,7 +263,7 @@ public class ContainerProtocolTests
         var arr = np.array(new[] { 10, 20, 30 });
 
         arr.__setitem__(1, 99);
-        await Assert.That((int)arr[1]).IsEqualTo(99);
+        ((int)arr[1]).Should().Be(99);
     }
 
     [TestMethod]
@@ -272,10 +272,10 @@ public class ContainerProtocolTests
         var arr = np.array(new[] { 10, 20, 30, 40, 50 });
 
         arr.__setitem__(":3", 0);
-        await Assert.That((int)arr[0]).IsEqualTo(0);
-        await Assert.That((int)arr[1]).IsEqualTo(0);
-        await Assert.That((int)arr[2]).IsEqualTo(0);
-        await Assert.That((int)arr[3]).IsEqualTo(40); // Unchanged
+        ((int)arr[0]).Should().Be(0);
+        ((int)arr[1]).Should().Be(0);
+        ((int)arr[2]).Should().Be(0);
+        ((int)arr[3]).Should().Be(40); // Unchanged
     }
 
     #endregion

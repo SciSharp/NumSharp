@@ -14,46 +14,46 @@ public class NpFInfoBattleTests
     public async Task FInfo_Single_AllProperties()
     {
         var info = np.finfo(NPTypeCode.Single);
-        await Assert.That(info.bits).IsEqualTo(32);
-        await Assert.That(info.precision).IsEqualTo(6);
-        await Assert.That(info.maxexp).IsEqualTo(128);
-        await Assert.That(info.minexp).IsEqualTo(-125);
+        info.bits.Should().Be(32);
+        info.precision.Should().Be(6);
+        info.maxexp.Should().Be(128);
+        info.minexp.Should().Be(-125);
         // max/min are stored as double, so compare with tolerance
-        await Assert.That(info.max).IsGreaterThan(3.4e38);
-        await Assert.That(info.min).IsLessThan(-3.4e38);
-        await Assert.That(info.tiny).IsEqualTo(info.smallest_normal);
+        info.max.Should().BeGreaterThan(3.4e38);
+        info.min.Should().BeLessThan(-3.4e38);
+        info.tiny.Should().Be(info.smallest_normal);
         // smallest_subnormal for float is ~1.4e-45
-        await Assert.That(info.smallest_subnormal).IsLessThan(1e-44);
-        await Assert.That(info.resolution).IsEqualTo(1e-6);
+        info.smallest_subnormal.Should().BeLessThan(1e-44);
+        info.resolution.Should().Be(1e-6);
         // eps for float32 ~ 1.19e-07
-        await Assert.That(info.eps).IsGreaterThan(1e-7);
-        await Assert.That(info.eps).IsLessThan(2e-7);
+        info.eps.Should().BeGreaterThan(1e-7);
+        info.eps.Should().BeLessThan(2e-7);
     }
 
     [TestMethod]
     public async Task FInfo_Double_AllProperties()
     {
         var info = np.finfo(NPTypeCode.Double);
-        await Assert.That(info.bits).IsEqualTo(64);
-        await Assert.That(info.precision).IsEqualTo(15);
-        await Assert.That(info.maxexp).IsEqualTo(1024);
-        await Assert.That(info.minexp).IsEqualTo(-1021);
-        await Assert.That(info.max).IsEqualTo(double.MaxValue);
-        await Assert.That(info.min).IsEqualTo(-double.MaxValue);
-        await Assert.That(info.smallest_subnormal).IsEqualTo(double.Epsilon);
-        await Assert.That(info.resolution).IsEqualTo(1e-15);
+        info.bits.Should().Be(64);
+        info.precision.Should().Be(15);
+        info.maxexp.Should().Be(1024);
+        info.minexp.Should().Be(-1021);
+        info.max.Should().Be(double.MaxValue);
+        info.min.Should().Be(-double.MaxValue);
+        info.smallest_subnormal.Should().Be(double.Epsilon);
+        info.resolution.Should().Be(1e-15);
         // eps ~ 2.22e-16
-        await Assert.That(info.eps).IsGreaterThan(2e-16);
-        await Assert.That(info.eps).IsLessThan(3e-16);
+        info.eps.Should().BeGreaterThan(2e-16);
+        info.eps.Should().BeLessThan(3e-16);
     }
 
     [TestMethod]
     public async Task FInfo_Decimal_AllProperties()
     {
         var info = np.finfo(NPTypeCode.Decimal);
-        await Assert.That(info.bits).IsEqualTo(128);
-        await Assert.That(info.precision).IsEqualTo(28);
-        await Assert.That(info.resolution).IsEqualTo(1e-28);
+        info.bits.Should().Be(128);
+        info.precision.Should().Be(28);
+        info.resolution.Should().Be(1e-28);
     }
 
     #endregion
@@ -63,49 +63,49 @@ public class NpFInfoBattleTests
     [TestMethod]
     public async Task FInfo_Int32_Throws()
     {
-        await Assert.That(() => np.finfo(NPTypeCode.Int32)).ThrowsException();
+        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<Exception>(() => np.finfo(NPTypeCode.Int32));
     }
 
     [TestMethod]
     public async Task FInfo_Boolean_Throws()
     {
-        await Assert.That(() => np.finfo(NPTypeCode.Boolean)).ThrowsException();
+        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<Exception>(() => np.finfo(NPTypeCode.Boolean));
     }
 
     [TestMethod]
     public async Task FInfo_Byte_Throws()
     {
-        await Assert.That(() => np.finfo(NPTypeCode.Byte)).ThrowsException();
+        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<Exception>(() => np.finfo(NPTypeCode.Byte));
     }
 
     [TestMethod]
     public async Task FInfo_Empty_Throws()
     {
-        await Assert.That(() => np.finfo(NPTypeCode.Empty)).ThrowsException();
+        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<Exception>(() => np.finfo(NPTypeCode.Empty));
     }
 
     [TestMethod]
     public async Task FInfo_NullType_Throws()
     {
-        await Assert.That(() => np.finfo((Type)null!)).ThrowsException();
+        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<Exception>(() => np.finfo((Type)null!));
     }
 
     [TestMethod]
     public async Task FInfo_NullArray_Throws()
     {
-        await Assert.That(() => np.finfo((NDArray)null!)).ThrowsException();
+        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<Exception>(() => np.finfo((NDArray)null!));
     }
 
     [TestMethod]
     public async Task FInfo_EmptyDtypeString_Throws()
     {
-        await Assert.That(() => np.finfo("")).ThrowsException();
+        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<Exception>(() => np.finfo(""));
     }
 
     [TestMethod]
     public async Task FInfo_InvalidDtypeString_Throws()
     {
-        await Assert.That(() => np.finfo("int32")).ThrowsException();
+        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<Exception>(() => np.finfo("int32"));
     }
 
     #endregion
@@ -116,29 +116,29 @@ public class NpFInfoBattleTests
     public async Task FInfo_Generic_Float()
     {
         var info = np.finfo<float>();
-        await Assert.That(info.bits).IsEqualTo(32);
-        await Assert.That(info.precision).IsEqualTo(6);
+        info.bits.Should().Be(32);
+        info.precision.Should().Be(6);
     }
 
     [TestMethod]
     public async Task FInfo_Generic_Double()
     {
         var info = np.finfo<double>();
-        await Assert.That(info.bits).IsEqualTo(64);
-        await Assert.That(info.precision).IsEqualTo(15);
+        info.bits.Should().Be(64);
+        info.precision.Should().Be(15);
     }
 
     [TestMethod]
     public async Task FInfo_Generic_Decimal()
     {
         var info = np.finfo<decimal>();
-        await Assert.That(info.bits).IsEqualTo(128);
+        info.bits.Should().Be(128);
     }
 
     [TestMethod]
     public async Task FInfo_Generic_Int_Throws()
     {
-        await Assert.That(() => np.finfo<int>()).ThrowsException();
+        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<Exception>(() => np.finfo<int>());
     }
 
     #endregion
@@ -150,7 +150,7 @@ public class NpFInfoBattleTests
     {
         var arr = np.array(new float[] { 1.0f, 2.0f, 3.0f });
         var info = np.finfo(arr);
-        await Assert.That(info.bits).IsEqualTo(32);
+        info.bits.Should().Be(32);
     }
 
     [TestMethod]
@@ -158,14 +158,14 @@ public class NpFInfoBattleTests
     {
         var arr = np.array(new double[] { 1.0, 2.0, 3.0 });
         var info = np.finfo(arr);
-        await Assert.That(info.bits).IsEqualTo(64);
+        info.bits.Should().Be(64);
     }
 
     [TestMethod]
     public async Task FInfo_NDArray_Int_Throws()
     {
         var arr = np.array(new int[] { 1, 2, 3 });
-        await Assert.That(() => np.finfo(arr)).ThrowsException();
+        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<Exception>(() => np.finfo(arr));
     }
 
     #endregion
@@ -179,21 +179,21 @@ public class NpFInfoBattleTests
     public async Task FInfo_String_Float()
     {
         var info = np.finfo("float");  // defaults to float (single)
-        await Assert.That(info.bits).IsEqualTo(32);
+        info.bits.Should().Be(32);
     }
 
     [TestMethod]
     public async Task FInfo_String_Single()
     {
         var info = np.finfo("single");
-        await Assert.That(info.bits).IsEqualTo(32);
+        info.bits.Should().Be(32);
     }
 
     [TestMethod]
     public async Task FInfo_String_Double()
     {
         var info = np.finfo("double");
-        await Assert.That(info.bits).IsEqualTo(64);
+        info.bits.Should().Be(64);
     }
 
     #endregion
@@ -205,7 +205,7 @@ public class NpFInfoBattleTests
     {
         var info = np.finfo(NPTypeCode.Double);
         double expected = Math.BitIncrement(1.0) - 1.0;
-        await Assert.That(info.eps).IsEqualTo(expected);
+        info.eps.Should().Be(expected);
     }
 
     [TestMethod]
@@ -214,7 +214,7 @@ public class NpFInfoBattleTests
         var info = np.finfo(NPTypeCode.Single);
         // Must use MathF for float operations
         double expected = MathF.BitIncrement(1.0f) - 1.0f;
-        await Assert.That(info.eps).IsEqualTo(expected);
+        info.eps.Should().Be(expected);
     }
 
     #endregion
@@ -226,8 +226,8 @@ public class NpFInfoBattleTests
     {
         var info = np.finfo(NPTypeCode.Double);
         var str = info.ToString();
-        await Assert.That(str).Contains("resolution=");
-        await Assert.That(str).Contains("float64");
+        str.Should().Contain("resolution=");
+        str.Should().Contain("float64");
     }
 
     #endregion

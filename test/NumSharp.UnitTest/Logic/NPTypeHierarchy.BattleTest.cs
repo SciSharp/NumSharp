@@ -32,39 +32,39 @@ public class NPTypeHierarchyBattleTest
 
     [TestMethod]
     public async Task Int16_BelongsTo_Generic() =>
-        await Assert.That(np.issubdtype(NPTypeCode.Int16, "generic")).IsTrue();
+        np.issubdtype(NPTypeCode.Int16, "generic").Should().BeTrue();
 
     [TestMethod]
     public async Task Int16_BelongsTo_Number() =>
-        await Assert.That(np.issubdtype(NPTypeCode.Int16, "number")).IsTrue();
+        np.issubdtype(NPTypeCode.Int16, "number").Should().BeTrue();
 
     [TestMethod]
     public async Task Int16_BelongsTo_Integer() =>
-        await Assert.That(np.issubdtype(NPTypeCode.Int16, "integer")).IsTrue();
+        np.issubdtype(NPTypeCode.Int16, "integer").Should().BeTrue();
 
     [TestMethod]
     public async Task Int16_BelongsTo_SignedInteger() =>
-        await Assert.That(np.issubdtype(NPTypeCode.Int16, "signedinteger")).IsTrue();
+        np.issubdtype(NPTypeCode.Int16, "signedinteger").Should().BeTrue();
 
     [TestMethod]
     public async Task Int16_NotBelongsTo_UnsignedInteger() =>
-        await Assert.That(np.issubdtype(NPTypeCode.Int16, "unsignedinteger")).IsFalse();
+        np.issubdtype(NPTypeCode.Int16, "unsignedinteger").Should().BeFalse();
 
     [TestMethod]
     public async Task Int16_NotBelongsTo_Inexact() =>
-        await Assert.That(np.issubdtype(NPTypeCode.Int16, "inexact")).IsFalse();
+        np.issubdtype(NPTypeCode.Int16, "inexact").Should().BeFalse();
 
     [TestMethod]
     public async Task Int16_NotBelongsTo_Floating() =>
-        await Assert.That(np.issubdtype(NPTypeCode.Int16, "floating")).IsFalse();
+        np.issubdtype(NPTypeCode.Int16, "floating").Should().BeFalse();
 
     [TestMethod]
     public async Task Int32_BelongsTo_SignedInteger() =>
-        await Assert.That(np.issubdtype(NPTypeCode.Int32, "signedinteger")).IsTrue();
+        np.issubdtype(NPTypeCode.Int32, "signedinteger").Should().BeTrue();
 
     [TestMethod]
     public async Task Int64_BelongsTo_SignedInteger() =>
-        await Assert.That(np.issubdtype(NPTypeCode.Int64, "signedinteger")).IsTrue();
+        np.issubdtype(NPTypeCode.Int64, "signedinteger").Should().BeTrue();
 
     // ==========================================================================
     // UNSIGNED INTEGERS: belong to generic, number, integer, unsignedinteger
@@ -72,35 +72,35 @@ public class NPTypeHierarchyBattleTest
 
     [TestMethod]
     public async Task Byte_BelongsTo_Generic() =>
-        await Assert.That(np.issubdtype(NPTypeCode.Byte, "generic")).IsTrue();
+        np.issubdtype(NPTypeCode.Byte, "generic").Should().BeTrue();
 
     [TestMethod]
     public async Task Byte_BelongsTo_Number() =>
-        await Assert.That(np.issubdtype(NPTypeCode.Byte, "number")).IsTrue();
+        np.issubdtype(NPTypeCode.Byte, "number").Should().BeTrue();
 
     [TestMethod]
     public async Task Byte_BelongsTo_Integer() =>
-        await Assert.That(np.issubdtype(NPTypeCode.Byte, "integer")).IsTrue();
+        np.issubdtype(NPTypeCode.Byte, "integer").Should().BeTrue();
 
     [TestMethod]
     public async Task Byte_BelongsTo_UnsignedInteger() =>
-        await Assert.That(np.issubdtype(NPTypeCode.Byte, "unsignedinteger")).IsTrue();
+        np.issubdtype(NPTypeCode.Byte, "unsignedinteger").Should().BeTrue();
 
     [TestMethod]
     public async Task Byte_NotBelongsTo_SignedInteger() =>
-        await Assert.That(np.issubdtype(NPTypeCode.Byte, "signedinteger")).IsFalse();
+        np.issubdtype(NPTypeCode.Byte, "signedinteger").Should().BeFalse();
 
     [TestMethod]
     public async Task UInt16_BelongsTo_UnsignedInteger() =>
-        await Assert.That(np.issubdtype(NPTypeCode.UInt16, "unsignedinteger")).IsTrue();
+        np.issubdtype(NPTypeCode.UInt16, "unsignedinteger").Should().BeTrue();
 
     [TestMethod]
     public async Task UInt32_BelongsTo_UnsignedInteger() =>
-        await Assert.That(np.issubdtype(NPTypeCode.UInt32, "unsignedinteger")).IsTrue();
+        np.issubdtype(NPTypeCode.UInt32, "unsignedinteger").Should().BeTrue();
 
     [TestMethod]
     public async Task UInt64_BelongsTo_UnsignedInteger() =>
-        await Assert.That(np.issubdtype(NPTypeCode.UInt64, "unsignedinteger")).IsTrue();
+        np.issubdtype(NPTypeCode.UInt64, "unsignedinteger").Should().BeTrue();
 
     // ==========================================================================
     // FLOATING: belong to generic, number, inexact, floating
@@ -108,35 +108,35 @@ public class NPTypeHierarchyBattleTest
 
     [TestMethod]
     public async Task Single_BelongsTo_Generic() =>
-        await Assert.That(np.issubdtype(NPTypeCode.Single, "generic")).IsTrue();
+        np.issubdtype(NPTypeCode.Single, "generic").Should().BeTrue();
 
     [TestMethod]
     public async Task Single_BelongsTo_Number() =>
-        await Assert.That(np.issubdtype(NPTypeCode.Single, "number")).IsTrue();
+        np.issubdtype(NPTypeCode.Single, "number").Should().BeTrue();
 
     [TestMethod]
     public async Task Single_BelongsTo_Inexact() =>
-        await Assert.That(np.issubdtype(NPTypeCode.Single, "inexact")).IsTrue();
+        np.issubdtype(NPTypeCode.Single, "inexact").Should().BeTrue();
 
     [TestMethod]
     public async Task Single_BelongsTo_Floating() =>
-        await Assert.That(np.issubdtype(NPTypeCode.Single, "floating")).IsTrue();
+        np.issubdtype(NPTypeCode.Single, "floating").Should().BeTrue();
 
     [TestMethod]
     public async Task Single_NotBelongsTo_Integer() =>
-        await Assert.That(np.issubdtype(NPTypeCode.Single, "integer")).IsFalse();
+        np.issubdtype(NPTypeCode.Single, "integer").Should().BeFalse();
 
     [TestMethod]
     public async Task Single_NotBelongsTo_ComplexFloating() =>
-        await Assert.That(np.issubdtype(NPTypeCode.Single, "complexfloating")).IsFalse();
+        np.issubdtype(NPTypeCode.Single, "complexfloating").Should().BeFalse();
 
     [TestMethod]
     public async Task Double_BelongsTo_Floating() =>
-        await Assert.That(np.issubdtype(NPTypeCode.Double, "floating")).IsTrue();
+        np.issubdtype(NPTypeCode.Double, "floating").Should().BeTrue();
 
     [TestMethod]
     public async Task Decimal_BelongsTo_Floating() =>
-        await Assert.That(np.issubdtype(NPTypeCode.Decimal, "floating")).IsTrue();
+        np.issubdtype(NPTypeCode.Decimal, "floating").Should().BeTrue();
 
     // ==========================================================================
     // COMPLEX: belong to generic, number, inexact, complexfloating
@@ -144,27 +144,27 @@ public class NPTypeHierarchyBattleTest
 
     [TestMethod]
     public async Task Complex_BelongsTo_Generic() =>
-        await Assert.That(np.issubdtype(NPTypeCode.Complex, "generic")).IsTrue();
+        np.issubdtype(NPTypeCode.Complex, "generic").Should().BeTrue();
 
     [TestMethod]
     public async Task Complex_BelongsTo_Number() =>
-        await Assert.That(np.issubdtype(NPTypeCode.Complex, "number")).IsTrue();
+        np.issubdtype(NPTypeCode.Complex, "number").Should().BeTrue();
 
     [TestMethod]
     public async Task Complex_BelongsTo_Inexact() =>
-        await Assert.That(np.issubdtype(NPTypeCode.Complex, "inexact")).IsTrue();
+        np.issubdtype(NPTypeCode.Complex, "inexact").Should().BeTrue();
 
     [TestMethod]
     public async Task Complex_BelongsTo_ComplexFloating() =>
-        await Assert.That(np.issubdtype(NPTypeCode.Complex, "complexfloating")).IsTrue();
+        np.issubdtype(NPTypeCode.Complex, "complexfloating").Should().BeTrue();
 
     [TestMethod]
     public async Task Complex_NotBelongsTo_Floating() =>
-        await Assert.That(np.issubdtype(NPTypeCode.Complex, "floating")).IsFalse();
+        np.issubdtype(NPTypeCode.Complex, "floating").Should().BeFalse();
 
     [TestMethod]
     public async Task Complex_NotBelongsTo_Integer() =>
-        await Assert.That(np.issubdtype(NPTypeCode.Complex, "integer")).IsFalse();
+        np.issubdtype(NPTypeCode.Complex, "integer").Should().BeFalse();
 
     // ==========================================================================
     // BOOLEAN: belongs to generic ONLY (NumPy 2.x critical behavior!)
@@ -172,27 +172,27 @@ public class NPTypeHierarchyBattleTest
 
     [TestMethod]
     public async Task Bool_BelongsTo_Generic() =>
-        await Assert.That(np.issubdtype(NPTypeCode.Boolean, "generic")).IsTrue();
+        np.issubdtype(NPTypeCode.Boolean, "generic").Should().BeTrue();
 
     [TestMethod]
     public async Task Bool_BelongsTo_Boolean() =>
-        await Assert.That(np.issubdtype(NPTypeCode.Boolean, "boolean")).IsTrue();
+        np.issubdtype(NPTypeCode.Boolean, "boolean").Should().BeTrue();
 
     [TestMethod]
     public async Task Bool_NotBelongsTo_Number() =>
-        await Assert.That(np.issubdtype(NPTypeCode.Boolean, "number")).IsFalse();
+        np.issubdtype(NPTypeCode.Boolean, "number").Should().BeFalse();
 
     [TestMethod]
     public async Task Bool_NotBelongsTo_Integer() =>
-        await Assert.That(np.issubdtype(NPTypeCode.Boolean, "integer")).IsFalse();
+        np.issubdtype(NPTypeCode.Boolean, "integer").Should().BeFalse();
 
     [TestMethod]
     public async Task Bool_NotBelongsTo_SignedInteger() =>
-        await Assert.That(np.issubdtype(NPTypeCode.Boolean, "signedinteger")).IsFalse();
+        np.issubdtype(NPTypeCode.Boolean, "signedinteger").Should().BeFalse();
 
     [TestMethod]
     public async Task Bool_NotBelongsTo_UnsignedInteger() =>
-        await Assert.That(np.issubdtype(NPTypeCode.Boolean, "unsignedinteger")).IsFalse();
+        np.issubdtype(NPTypeCode.Boolean, "unsignedinteger").Should().BeFalse();
 
     #endregion
 
@@ -204,49 +204,49 @@ public class NPTypeHierarchyBattleTest
     [TestMethod]
     public async Task ConcreteType_SameType_ReturnsTrue_Int32()
     {
-        await Assert.That(np.issubdtype(NPTypeCode.Int32, NPTypeCode.Int32)).IsTrue();
+        np.issubdtype(NPTypeCode.Int32, NPTypeCode.Int32).Should().BeTrue();
     }
 
     [TestMethod]
     public async Task ConcreteType_SameType_ReturnsTrue_Double()
     {
-        await Assert.That(np.issubdtype(NPTypeCode.Double, NPTypeCode.Double)).IsTrue();
+        np.issubdtype(NPTypeCode.Double, NPTypeCode.Double).Should().BeTrue();
     }
 
     [TestMethod]
     public async Task ConcreteType_DifferentType_SameKind_ReturnsFalse()
     {
-        await Assert.That(np.issubdtype(NPTypeCode.Int32, NPTypeCode.Int64)).IsFalse();
+        np.issubdtype(NPTypeCode.Int32, NPTypeCode.Int64).Should().BeFalse();
     }
 
     [TestMethod]
     public async Task ConcreteType_DifferentType_SameKind_ReturnsFalse_Reverse()
     {
-        await Assert.That(np.issubdtype(NPTypeCode.Int64, NPTypeCode.Int32)).IsFalse();
+        np.issubdtype(NPTypeCode.Int64, NPTypeCode.Int32).Should().BeFalse();
     }
 
     [TestMethod]
     public async Task ConcreteType_Float32_Float64_ReturnsFalse()
     {
-        await Assert.That(np.issubdtype(NPTypeCode.Single, NPTypeCode.Double)).IsFalse();
+        np.issubdtype(NPTypeCode.Single, NPTypeCode.Double).Should().BeFalse();
     }
 
     [TestMethod]
     public async Task ConcreteType_Uint8_Uint64_ReturnsFalse()
     {
-        await Assert.That(np.issubdtype(NPTypeCode.Byte, NPTypeCode.UInt64)).IsFalse();
+        np.issubdtype(NPTypeCode.Byte, NPTypeCode.UInt64).Should().BeFalse();
     }
 
     [TestMethod]
     public async Task ConcreteType_DifferentKind_ReturnsFalse()
     {
-        await Assert.That(np.issubdtype(NPTypeCode.Int32, NPTypeCode.Double)).IsFalse();
+        np.issubdtype(NPTypeCode.Int32, NPTypeCode.Double).Should().BeFalse();
     }
 
     [TestMethod]
     public async Task ConcreteType_Bool_Int32_ReturnsFalse()
     {
-        await Assert.That(np.issubdtype(NPTypeCode.Boolean, NPTypeCode.Int32)).IsFalse();
+        np.issubdtype(NPTypeCode.Boolean, NPTypeCode.Int32).Should().BeFalse();
     }
 
     #endregion
@@ -256,58 +256,58 @@ public class NPTypeHierarchyBattleTest
     [TestMethod]
     public async Task Isdtype_Int32_Integral()
     {
-        await Assert.That(np.isdtype(NPTypeCode.Int32, "integral")).IsTrue();
+        np.isdtype(NPTypeCode.Int32, "integral").Should().BeTrue();
     }
 
     [TestMethod]
     public async Task Isdtype_Float64_RealFloating()
     {
-        await Assert.That(np.isdtype(NPTypeCode.Double, "real floating")).IsTrue();
+        np.isdtype(NPTypeCode.Double, "real floating").Should().BeTrue();
     }
 
     [TestMethod]
     public async Task Isdtype_Complex_ComplexFloating()
     {
-        await Assert.That(np.isdtype(NPTypeCode.Complex, "complex floating")).IsTrue();
+        np.isdtype(NPTypeCode.Complex, "complex floating").Should().BeTrue();
     }
 
     [TestMethod]
     public async Task Isdtype_Bool_Bool()
     {
-        await Assert.That(np.isdtype(NPTypeCode.Boolean, "bool")).IsTrue();
+        np.isdtype(NPTypeCode.Boolean, "bool").Should().BeTrue();
     }
 
     [TestMethod]
     public async Task Isdtype_Int32_Numeric()
     {
-        await Assert.That(np.isdtype(NPTypeCode.Int32, "numeric")).IsTrue();
+        np.isdtype(NPTypeCode.Int32, "numeric").Should().BeTrue();
     }
 
     [TestMethod]
     public async Task Isdtype_Bool_Numeric_IsFalse()
     {
         // Bool is excluded from 'numeric' in NumPy's isdtype
-        await Assert.That(np.isdtype(NPTypeCode.Boolean, "numeric")).IsFalse();
+        np.isdtype(NPTypeCode.Boolean, "numeric").Should().BeFalse();
     }
 
     [TestMethod]
     public async Task Isdtype_AllIntegerTypes_AreIntegral()
     {
-        await Assert.That(np.isdtype(NPTypeCode.Byte, "integral")).IsTrue();
-        await Assert.That(np.isdtype(NPTypeCode.Int16, "integral")).IsTrue();
-        await Assert.That(np.isdtype(NPTypeCode.UInt16, "integral")).IsTrue();
-        await Assert.That(np.isdtype(NPTypeCode.Int32, "integral")).IsTrue();
-        await Assert.That(np.isdtype(NPTypeCode.UInt32, "integral")).IsTrue();
-        await Assert.That(np.isdtype(NPTypeCode.Int64, "integral")).IsTrue();
-        await Assert.That(np.isdtype(NPTypeCode.UInt64, "integral")).IsTrue();
+        np.isdtype(NPTypeCode.Byte, "integral").Should().BeTrue();
+        np.isdtype(NPTypeCode.Int16, "integral").Should().BeTrue();
+        np.isdtype(NPTypeCode.UInt16, "integral").Should().BeTrue();
+        np.isdtype(NPTypeCode.Int32, "integral").Should().BeTrue();
+        np.isdtype(NPTypeCode.UInt32, "integral").Should().BeTrue();
+        np.isdtype(NPTypeCode.Int64, "integral").Should().BeTrue();
+        np.isdtype(NPTypeCode.UInt64, "integral").Should().BeTrue();
     }
 
     [TestMethod]
     public async Task Isdtype_AllFloatTypes_AreRealFloating()
     {
-        await Assert.That(np.isdtype(NPTypeCode.Single, "real floating")).IsTrue();
-        await Assert.That(np.isdtype(NPTypeCode.Double, "real floating")).IsTrue();
-        await Assert.That(np.isdtype(NPTypeCode.Decimal, "real floating")).IsTrue();
+        np.isdtype(NPTypeCode.Single, "real floating").Should().BeTrue();
+        np.isdtype(NPTypeCode.Double, "real floating").Should().BeTrue();
+        np.isdtype(NPTypeCode.Decimal, "real floating").Should().BeTrue();
     }
 
     #endregion
@@ -317,63 +317,63 @@ public class NPTypeHierarchyBattleTest
     [TestMethod]
     public async Task MaximumSctype_Int16_ReturnsInt64()
     {
-        await Assert.That(np.maximum_sctype(NPTypeCode.Int16)).IsEqualTo(NPTypeCode.Int64);
+        np.maximum_sctype(NPTypeCode.Int16).Should().Be(NPTypeCode.Int64);
     }
 
     [TestMethod]
     public async Task MaximumSctype_Int32_ReturnsInt64()
     {
-        await Assert.That(np.maximum_sctype(NPTypeCode.Int32)).IsEqualTo(NPTypeCode.Int64);
+        np.maximum_sctype(NPTypeCode.Int32).Should().Be(NPTypeCode.Int64);
     }
 
     [TestMethod]
     public async Task MaximumSctype_Int64_ReturnsInt64()
     {
-        await Assert.That(np.maximum_sctype(NPTypeCode.Int64)).IsEqualTo(NPTypeCode.Int64);
+        np.maximum_sctype(NPTypeCode.Int64).Should().Be(NPTypeCode.Int64);
     }
 
     [TestMethod]
     public async Task MaximumSctype_Byte_ReturnsUInt64()
     {
-        await Assert.That(np.maximum_sctype(NPTypeCode.Byte)).IsEqualTo(NPTypeCode.UInt64);
+        np.maximum_sctype(NPTypeCode.Byte).Should().Be(NPTypeCode.UInt64);
     }
 
     [TestMethod]
     public async Task MaximumSctype_UInt32_ReturnsUInt64()
     {
-        await Assert.That(np.maximum_sctype(NPTypeCode.UInt32)).IsEqualTo(NPTypeCode.UInt64);
+        np.maximum_sctype(NPTypeCode.UInt32).Should().Be(NPTypeCode.UInt64);
     }
 
     [TestMethod]
     public async Task MaximumSctype_Single_ReturnsDouble()
     {
         // NumPy returns longdouble, NumSharp doesn't have longdouble so we return Double
-        await Assert.That(np.maximum_sctype(NPTypeCode.Single)).IsEqualTo(NPTypeCode.Double);
+        np.maximum_sctype(NPTypeCode.Single).Should().Be(NPTypeCode.Double);
     }
 
     [TestMethod]
     public async Task MaximumSctype_Double_ReturnsDouble()
     {
-        await Assert.That(np.maximum_sctype(NPTypeCode.Double)).IsEqualTo(NPTypeCode.Double);
+        np.maximum_sctype(NPTypeCode.Double).Should().Be(NPTypeCode.Double);
     }
 
     [TestMethod]
     public async Task MaximumSctype_Bool_ReturnsBool()
     {
-        await Assert.That(np.maximum_sctype(NPTypeCode.Boolean)).IsEqualTo(NPTypeCode.Boolean);
+        np.maximum_sctype(NPTypeCode.Boolean).Should().Be(NPTypeCode.Boolean);
     }
 
     [TestMethod]
     public async Task MaximumSctype_Decimal_ReturnsDecimal()
     {
         // NumSharp-specific: Decimal stays Decimal
-        await Assert.That(np.maximum_sctype(NPTypeCode.Decimal)).IsEqualTo(NPTypeCode.Decimal);
+        np.maximum_sctype(NPTypeCode.Decimal).Should().Be(NPTypeCode.Decimal);
     }
 
     [TestMethod]
     public async Task MaximumSctype_Complex_ReturnsComplex()
     {
-        await Assert.That(np.maximum_sctype(NPTypeCode.Complex)).IsEqualTo(NPTypeCode.Complex);
+        np.maximum_sctype(NPTypeCode.Complex).Should().Be(NPTypeCode.Complex);
     }
 
     #endregion
@@ -383,38 +383,38 @@ public class NPTypeHierarchyBattleTest
     [TestMethod]
     public async Task IsSameKind_SignedIntegers()
     {
-        await Assert.That(NPTypeHierarchy.IsSameKind(NPTypeCode.Int16, NPTypeCode.Int32)).IsTrue();
-        await Assert.That(NPTypeHierarchy.IsSameKind(NPTypeCode.Int32, NPTypeCode.Int64)).IsTrue();
+        NPTypeHierarchy.IsSameKind(NPTypeCode.Int16, NPTypeCode.Int32).Should().BeTrue();
+        NPTypeHierarchy.IsSameKind(NPTypeCode.Int32, NPTypeCode.Int64).Should().BeTrue();
     }
 
     [TestMethod]
     public async Task IsSameKind_UnsignedIntegers()
     {
-        await Assert.That(NPTypeHierarchy.IsSameKind(NPTypeCode.Byte, NPTypeCode.UInt16)).IsTrue();
-        await Assert.That(NPTypeHierarchy.IsSameKind(NPTypeCode.UInt32, NPTypeCode.UInt64)).IsTrue();
+        NPTypeHierarchy.IsSameKind(NPTypeCode.Byte, NPTypeCode.UInt16).Should().BeTrue();
+        NPTypeHierarchy.IsSameKind(NPTypeCode.UInt32, NPTypeCode.UInt64).Should().BeTrue();
     }
 
     [TestMethod]
     public async Task IsSameKind_SignedAndUnsigned_AreInSameKind()
     {
         // In NumPy, same_kind casting allows int <-> uint (they're both integers)
-        await Assert.That(NPTypeHierarchy.IsSameKind(NPTypeCode.Int32, NPTypeCode.UInt32)).IsTrue();
-        await Assert.That(NPTypeHierarchy.IsSameKind(NPTypeCode.Int64, NPTypeCode.Byte)).IsTrue();
+        NPTypeHierarchy.IsSameKind(NPTypeCode.Int32, NPTypeCode.UInt32).Should().BeTrue();
+        NPTypeHierarchy.IsSameKind(NPTypeCode.Int64, NPTypeCode.Byte).Should().BeTrue();
     }
 
     [TestMethod]
     public async Task IsSameKind_Floats()
     {
-        await Assert.That(NPTypeHierarchy.IsSameKind(NPTypeCode.Single, NPTypeCode.Double)).IsTrue();
-        await Assert.That(NPTypeHierarchy.IsSameKind(NPTypeCode.Double, NPTypeCode.Decimal)).IsTrue();
+        NPTypeHierarchy.IsSameKind(NPTypeCode.Single, NPTypeCode.Double).Should().BeTrue();
+        NPTypeHierarchy.IsSameKind(NPTypeCode.Double, NPTypeCode.Decimal).Should().BeTrue();
     }
 
     [TestMethod]
     public async Task IsSameKind_DifferentKinds_ReturnsFalse()
     {
-        await Assert.That(NPTypeHierarchy.IsSameKind(NPTypeCode.Int32, NPTypeCode.Double)).IsFalse();
-        await Assert.That(NPTypeHierarchy.IsSameKind(NPTypeCode.Single, NPTypeCode.Complex)).IsFalse();
-        await Assert.That(NPTypeHierarchy.IsSameKind(NPTypeCode.Boolean, NPTypeCode.Int32)).IsFalse();
+        NPTypeHierarchy.IsSameKind(NPTypeCode.Int32, NPTypeCode.Double).Should().BeFalse();
+        NPTypeHierarchy.IsSameKind(NPTypeCode.Single, NPTypeCode.Complex).Should().BeFalse();
+        NPTypeHierarchy.IsSameKind(NPTypeCode.Boolean, NPTypeCode.Int32).Should().BeFalse();
     }
 
     #endregion
@@ -424,29 +424,29 @@ public class NPTypeHierarchyBattleTest
     [TestMethod]
     public async Task CategoryAlias_Signed_EqualsSignedInteger()
     {
-        await Assert.That(np.issubdtype(NPTypeCode.Int32, "signed")).IsTrue();
-        await Assert.That(np.issubdtype(NPTypeCode.Byte, "signed")).IsFalse();
+        np.issubdtype(NPTypeCode.Int32, "signed").Should().BeTrue();
+        np.issubdtype(NPTypeCode.Byte, "signed").Should().BeFalse();
     }
 
     [TestMethod]
     public async Task CategoryAlias_Unsigned_EqualsUnsignedInteger()
     {
-        await Assert.That(np.issubdtype(NPTypeCode.Byte, "unsigned")).IsTrue();
-        await Assert.That(np.issubdtype(NPTypeCode.Int32, "unsigned")).IsFalse();
+        np.issubdtype(NPTypeCode.Byte, "unsigned").Should().BeTrue();
+        np.issubdtype(NPTypeCode.Int32, "unsigned").Should().BeFalse();
     }
 
     [TestMethod]
     public async Task CategoryAlias_Float_EqualsFloating()
     {
-        await Assert.That(np.issubdtype(NPTypeCode.Double, "float")).IsTrue();
-        await Assert.That(np.issubdtype(NPTypeCode.Int32, "float")).IsFalse();
+        np.issubdtype(NPTypeCode.Double, "float").Should().BeTrue();
+        np.issubdtype(NPTypeCode.Int32, "float").Should().BeFalse();
     }
 
     [TestMethod]
     public async Task CategoryAlias_Complex_EqualsComplexFloating()
     {
-        await Assert.That(np.issubdtype(NPTypeCode.Complex, "complex")).IsTrue();
-        await Assert.That(np.issubdtype(NPTypeCode.Double, "complex")).IsFalse();
+        np.issubdtype(NPTypeCode.Complex, "complex").Should().BeTrue();
+        np.issubdtype(NPTypeCode.Double, "complex").Should().BeFalse();
     }
 
     #endregion
@@ -457,15 +457,15 @@ public class NPTypeHierarchyBattleTest
     public async Task Char_TreatedAsUnsignedInteger()
     {
         // Char is treated like uint16 in NumSharp
-        await Assert.That(np.issubdtype(NPTypeCode.Char, "unsignedinteger")).IsTrue();
-        await Assert.That(np.issubdtype(NPTypeCode.Char, "integer")).IsTrue();
-        await Assert.That(np.issubdtype(NPTypeCode.Char, "number")).IsTrue();
+        np.issubdtype(NPTypeCode.Char, "unsignedinteger").Should().BeTrue();
+        np.issubdtype(NPTypeCode.Char, "integer").Should().BeTrue();
+        np.issubdtype(NPTypeCode.Char, "number").Should().BeTrue();
     }
 
     [TestMethod]
     public async Task Char_MaximumSctype_ReturnsUInt64()
     {
-        await Assert.That(np.maximum_sctype(NPTypeCode.Char)).IsEqualTo(NPTypeCode.UInt64);
+        np.maximum_sctype(NPTypeCode.Char).Should().Be(NPTypeCode.UInt64);
     }
 
     #endregion

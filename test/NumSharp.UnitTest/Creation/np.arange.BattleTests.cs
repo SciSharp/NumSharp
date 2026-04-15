@@ -20,9 +20,9 @@ public class ArangeBattleTests
         // np.arange(0): array([], dtype=int64)
         var result = np.arange(0);
 
-        await Assert.That(result.size).IsEqualTo(0);
-        await Assert.That(result.dtype).IsEqualTo(typeof(long));
-        await Assert.That(result.shape).IsEquivalentTo(new long[] { 0 });
+        result.size.Should().Be(0);
+        result.dtype.Should().Be(typeof(long));
+        result.shape.Should().BeEquivalentTo(new long[] { 0 });
     }
 
     [TestMethod]
@@ -31,7 +31,7 @@ public class ArangeBattleTests
         // np.arange(1): array([0]) dtype=int64
         var result = np.arange(1);
 
-        await Assert.That(result.dtype).IsEqualTo(typeof(long));
+        result.dtype.Should().Be(typeof(long));
         result.Should().BeOfValues(0L);
     }
 
@@ -41,7 +41,7 @@ public class ArangeBattleTests
         // np.arange(5): array([0, 1, 2, 3, 4]) dtype=int64
         var result = np.arange(5);
 
-        await Assert.That(result.dtype).IsEqualTo(typeof(long));
+        result.dtype.Should().Be(typeof(long));
         result.Should().BeOfValues(0L, 1L, 2L, 3L, 4L);
     }
 
@@ -51,7 +51,7 @@ public class ArangeBattleTests
         // np.arange(10): array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]) dtype=int64
         var result = np.arange(10);
 
-        await Assert.That(result.dtype).IsEqualTo(typeof(long));
+        result.dtype.Should().Be(typeof(long));
         result.Should().BeOfValues(0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L);
     }
 
@@ -65,7 +65,7 @@ public class ArangeBattleTests
         // np.arange(0, 5): array([0, 1, 2, 3, 4]) dtype=int64
         var result = np.arange(0, 5);
 
-        await Assert.That(result.dtype).IsEqualTo(typeof(long));
+        result.dtype.Should().Be(typeof(long));
         result.Should().BeOfValues(0L, 1L, 2L, 3L, 4L);
     }
 
@@ -75,7 +75,7 @@ public class ArangeBattleTests
         // np.arange(1, 5): array([1, 2, 3, 4]) dtype=int64
         var result = np.arange(1, 5);
 
-        await Assert.That(result.dtype).IsEqualTo(typeof(long));
+        result.dtype.Should().Be(typeof(long));
         result.Should().BeOfValues(1L, 2L, 3L, 4L);
     }
 
@@ -85,7 +85,7 @@ public class ArangeBattleTests
         // np.arange(5, 10): array([5, 6, 7, 8, 9]) dtype=int64
         var result = np.arange(5, 10);
 
-        await Assert.That(result.dtype).IsEqualTo(typeof(long));
+        result.dtype.Should().Be(typeof(long));
         result.Should().BeOfValues(5L, 6L, 7L, 8L, 9L);
     }
 
@@ -95,7 +95,7 @@ public class ArangeBattleTests
         // np.arange(-5, 5): array([-5, -4, -3, -2, -1, 0, 1, 2, 3, 4]) dtype=int64
         var result = np.arange(-5, 5);
 
-        await Assert.That(result.dtype).IsEqualTo(typeof(long));
+        result.dtype.Should().Be(typeof(long));
         result.Should().BeOfValues(-5L, -4L, -3L, -2L, -1L, 0L, 1L, 2L, 3L, 4L);
     }
 
@@ -105,7 +105,7 @@ public class ArangeBattleTests
         // np.arange(-10, -5): array([-10, -9, -8, -7, -6]) dtype=int64
         var result = np.arange(-10, -5);
 
-        await Assert.That(result.dtype).IsEqualTo(typeof(long));
+        result.dtype.Should().Be(typeof(long));
         result.Should().BeOfValues(-10L, -9L, -8L, -7L, -6L);
     }
 
@@ -119,7 +119,7 @@ public class ArangeBattleTests
         // np.arange(0, 10, 2): array([0, 2, 4, 6, 8]) dtype=int64
         var result = np.arange(0, 10, 2);
 
-        await Assert.That(result.dtype).IsEqualTo(typeof(long));
+        result.dtype.Should().Be(typeof(long));
         result.Should().BeOfValues(0L, 2L, 4L, 6L, 8L);
     }
 
@@ -129,7 +129,7 @@ public class ArangeBattleTests
         // np.arange(0, 10, 3): array([0, 3, 6, 9]) dtype=int64
         var result = np.arange(0, 10, 3);
 
-        await Assert.That(result.dtype).IsEqualTo(typeof(long));
+        result.dtype.Should().Be(typeof(long));
         result.Should().BeOfValues(0L, 3L, 6L, 9L);
     }
 
@@ -139,7 +139,7 @@ public class ArangeBattleTests
         // np.arange(1, 10, 2): array([1, 3, 5, 7, 9]) dtype=int64
         var result = np.arange(1, 10, 2);
 
-        await Assert.That(result.dtype).IsEqualTo(typeof(long));
+        result.dtype.Should().Be(typeof(long));
         result.Should().BeOfValues(1L, 3L, 5L, 7L, 9L);
     }
 
@@ -153,7 +153,7 @@ public class ArangeBattleTests
         // np.arange(10, 0, -1): array([10, 9, 8, 7, 6, 5, 4, 3, 2, 1]) dtype=int64
         var result = np.arange(10, 0, -1);
 
-        await Assert.That(result.dtype).IsEqualTo(typeof(long));
+        result.dtype.Should().Be(typeof(long));
         result.Should().BeOfValues(10L, 9L, 8L, 7L, 6L, 5L, 4L, 3L, 2L, 1L);
     }
 
@@ -163,7 +163,7 @@ public class ArangeBattleTests
         // np.arange(10, 0, -2): array([10, 8, 6, 4, 2]) dtype=int64
         var result = np.arange(10, 0, -2);
 
-        await Assert.That(result.dtype).IsEqualTo(typeof(long));
+        result.dtype.Should().Be(typeof(long));
         result.Should().BeOfValues(10L, 8L, 6L, 4L, 2L);
     }
 
@@ -173,7 +173,7 @@ public class ArangeBattleTests
         // np.arange(5, -5, -1): array([5, 4, 3, 2, 1, 0, -1, -2, -3, -4]) dtype=int64
         var result = np.arange(5, -5, -1);
 
-        await Assert.That(result.dtype).IsEqualTo(typeof(long));
+        result.dtype.Should().Be(typeof(long));
         result.Should().BeOfValues(5L, 4L, 3L, 2L, 1L, 0L, -1L, -2L, -3L, -4L);
     }
 
@@ -183,7 +183,7 @@ public class ArangeBattleTests
         // np.arange(5, -5, -2): array([5, 3, 1, -1, -3]) dtype=int64
         var result = np.arange(5, -5, -2);
 
-        await Assert.That(result.dtype).IsEqualTo(typeof(long));
+        result.dtype.Should().Be(typeof(long));
         result.Should().BeOfValues(5L, 3L, 1L, -1L, -3L);
     }
 
@@ -193,7 +193,7 @@ public class ArangeBattleTests
         // np.arange(-1, -10, -1): array([-1, -2, -3, -4, -5, -6, -7, -8, -9]) dtype=int64
         var result = np.arange(-1, -10, -1);
 
-        await Assert.That(result.dtype).IsEqualTo(typeof(long));
+        result.dtype.Should().Be(typeof(long));
         result.Should().BeOfValues(-1L, -2L, -3L, -4L, -5L, -6L, -7L, -8L, -9L);
     }
 
@@ -207,8 +207,8 @@ public class ArangeBattleTests
         // np.arange(5, 0): array([], dtype=int64)
         var result = np.arange(5, 0);
 
-        await Assert.That(result.size).IsEqualTo(0);
-        await Assert.That(result.dtype).IsEqualTo(typeof(long));
+        result.size.Should().Be(0);
+        result.dtype.Should().Be(typeof(long));
     }
 
     [TestMethod]
@@ -217,8 +217,8 @@ public class ArangeBattleTests
         // np.arange(5, 5): array([], dtype=int64)
         var result = np.arange(5, 5);
 
-        await Assert.That(result.size).IsEqualTo(0);
-        await Assert.That(result.dtype).IsEqualTo(typeof(long));
+        result.size.Should().Be(0);
+        result.dtype.Should().Be(typeof(long));
     }
 
     [TestMethod]
@@ -227,8 +227,8 @@ public class ArangeBattleTests
         // np.arange(0, -5): array([], dtype=int64)
         var result = np.arange(0, -5);
 
-        await Assert.That(result.size).IsEqualTo(0);
-        await Assert.That(result.dtype).IsEqualTo(typeof(long));
+        result.size.Should().Be(0);
+        result.dtype.Should().Be(typeof(long));
     }
 
     [TestMethod]
@@ -237,8 +237,8 @@ public class ArangeBattleTests
         // np.arange(0, 5, -1): array([], dtype=int64)
         var result = np.arange(0, 5, -1);
 
-        await Assert.That(result.size).IsEqualTo(0);
-        await Assert.That(result.dtype).IsEqualTo(typeof(long));
+        result.size.Should().Be(0);
+        result.dtype.Should().Be(typeof(long));
     }
 
     #endregion
@@ -251,7 +251,7 @@ public class ArangeBattleTests
         // np.arange(0.0, 5.0): array([0., 1., 2., 3., 4.]) dtype=float64
         var result = np.arange(0.0, 5.0);
 
-        await Assert.That(result.dtype).IsEqualTo(typeof(double));
+        result.dtype.Should().Be(typeof(double));
         result.Should().BeOfValues(0.0, 1.0, 2.0, 3.0, 4.0);
     }
 
@@ -261,11 +261,11 @@ public class ArangeBattleTests
         // np.arange(0.0, 1.0, 0.1): array([0., 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]) dtype=float64
         var result = np.arange(0.0, 1.0, 0.1);
 
-        await Assert.That(result.dtype).IsEqualTo(typeof(double));
-        await Assert.That(result.size).IsEqualTo(10);
+        result.dtype.Should().Be(typeof(double));
+        result.size.Should().Be(10);
         // Check first and last due to floating point precision
-        await Assert.That((double)result[0]).IsEqualTo(0.0);
-        await Assert.That((double)result[9]).IsEqualTo(0.9).Within(1e-10);
+        ((double)result[0]).Should().Be(0.0);
+        ((double)result[9]).Should().BeApproximately(0.9, 1e-10);
     }
 
     [TestMethod]
@@ -274,8 +274,8 @@ public class ArangeBattleTests
         // np.arange(0.0, 1.0, 0.2): array([0., 0.2, 0.4, 0.6, 0.8]) dtype=float64
         var result = np.arange(0.0, 1.0, 0.2);
 
-        await Assert.That(result.dtype).IsEqualTo(typeof(double));
-        await Assert.That(result.size).IsEqualTo(5);
+        result.dtype.Should().Be(typeof(double));
+        result.size.Should().Be(5);
     }
 
     [TestMethod]
@@ -284,8 +284,8 @@ public class ArangeBattleTests
         // np.arange(0.0, 1.0, 0.3): array([0., 0.3, 0.6, 0.9]) dtype=float64
         var result = np.arange(0.0, 1.0, 0.3);
 
-        await Assert.That(result.dtype).IsEqualTo(typeof(double));
-        await Assert.That(result.size).IsEqualTo(4);
+        result.dtype.Should().Be(typeof(double));
+        result.size.Should().Be(4);
     }
 
     [TestMethod]
@@ -294,7 +294,7 @@ public class ArangeBattleTests
         // np.arange(0.5, 5.5): array([0.5, 1.5, 2.5, 3.5, 4.5]) dtype=float64
         var result = np.arange(0.5, 5.5);
 
-        await Assert.That(result.dtype).IsEqualTo(typeof(double));
+        result.dtype.Should().Be(typeof(double));
         result.Should().BeOfValues(0.5, 1.5, 2.5, 3.5, 4.5);
     }
 
@@ -304,7 +304,7 @@ public class ArangeBattleTests
         // np.arange(1.5, 5.5, 0.5): array([1.5, 2., 2.5, 3., 3.5, 4., 4.5, 5.]) dtype=float64
         var result = np.arange(1.5, 5.5, 0.5);
 
-        await Assert.That(result.dtype).IsEqualTo(typeof(double));
+        result.dtype.Should().Be(typeof(double));
         result.Should().BeOfValues(1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0);
     }
 
@@ -318,7 +318,7 @@ public class ArangeBattleTests
         // np.arange(5.0, 0.0, -1.0): array([5., 4., 3., 2., 1.]) dtype=float64
         var result = np.arange(5.0, 0.0, -1.0);
 
-        await Assert.That(result.dtype).IsEqualTo(typeof(double));
+        result.dtype.Should().Be(typeof(double));
         result.Should().BeOfValues(5.0, 4.0, 3.0, 2.0, 1.0);
     }
 
@@ -328,10 +328,10 @@ public class ArangeBattleTests
         // np.arange(1.0, 0.0, -0.2): array([1., 0.8, 0.6, 0.4, 0.2]) dtype=float64
         var result = np.arange(1.0, 0.0, -0.2);
 
-        await Assert.That(result.dtype).IsEqualTo(typeof(double));
-        await Assert.That(result.size).IsEqualTo(5);
-        await Assert.That((double)result[0]).IsEqualTo(1.0);
-        await Assert.That((double)result[4]).IsEqualTo(0.2).Within(1e-10);
+        result.dtype.Should().Be(typeof(double));
+        result.size.Should().Be(5);
+        ((double)result[0]).Should().Be(1.0);
+        ((double)result[4]).Should().BeApproximately(0.2, 1e-10);
     }
 
     #endregion
@@ -344,7 +344,7 @@ public class ArangeBattleTests
         // np.arange(5, dtype=np.int32): array([0, 1, 2, 3, 4], dtype=int32)
         var result = np.arange(5, typeof(int));
 
-        await Assert.That(result.dtype).IsEqualTo(typeof(int));
+        result.dtype.Should().Be(typeof(int));
         result.Should().BeOfValues(0, 1, 2, 3, 4);
     }
 
@@ -354,7 +354,7 @@ public class ArangeBattleTests
         // np.arange(5, dtype=np.int64): array([0, 1, 2, 3, 4]) dtype=int64
         var result = np.arange(5, typeof(long));
 
-        await Assert.That(result.dtype).IsEqualTo(typeof(long));
+        result.dtype.Should().Be(typeof(long));
         result.Should().BeOfValues(0L, 1L, 2L, 3L, 4L);
     }
 
@@ -364,7 +364,7 @@ public class ArangeBattleTests
         // np.arange(5, dtype=np.float32): array([0., 1., 2., 3., 4.], dtype=float32)
         var result = np.arange(5, typeof(float));
 
-        await Assert.That(result.dtype).IsEqualTo(typeof(float));
+        result.dtype.Should().Be(typeof(float));
         result.Should().BeOfValues(0f, 1f, 2f, 3f, 4f);
     }
 
@@ -374,7 +374,7 @@ public class ArangeBattleTests
         // np.arange(5, dtype=np.float64): array([0., 1., 2., 3., 4.]) dtype=float64
         var result = np.arange(5, typeof(double));
 
-        await Assert.That(result.dtype).IsEqualTo(typeof(double));
+        result.dtype.Should().Be(typeof(double));
         result.Should().BeOfValues(0.0, 1.0, 2.0, 3.0, 4.0);
     }
 
@@ -384,7 +384,7 @@ public class ArangeBattleTests
         // np.arange(5.0, dtype=np.int32): array([0, 1, 2, 3, 4], dtype=int32)
         var result = np.arange(5.0, typeof(int));
 
-        await Assert.That(result.dtype).IsEqualTo(typeof(int));
+        result.dtype.Should().Be(typeof(int));
         result.Should().BeOfValues(0, 1, 2, 3, 4);
     }
 
@@ -394,7 +394,7 @@ public class ArangeBattleTests
         // np.arange(0, 10, 2, dtype=np.float32): array([0., 2., 4., 6., 8.], dtype=float32)
         var result = np.arange(0, 10, 2, typeof(float));
 
-        await Assert.That(result.dtype).IsEqualTo(typeof(float));
+        result.dtype.Should().Be(typeof(float));
         result.Should().BeOfValues(0f, 2f, 4f, 6f, 8f);
     }
 
@@ -404,7 +404,7 @@ public class ArangeBattleTests
         // np.arange(0.0, 5.0, dtype=np.int32): array([0, 1, 2, 3, 4], dtype=int32)
         var result = np.arange(0.0, 5.0, 1.0, typeof(int));
 
-        await Assert.That(result.dtype).IsEqualTo(typeof(int));
+        result.dtype.Should().Be(typeof(int));
         result.Should().BeOfValues(0, 1, 2, 3, 4);
     }
 
@@ -418,7 +418,7 @@ public class ArangeBattleTests
         // np.arange(10, dtype=np.uint8): array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9], dtype=uint8)
         var result = np.arange(10, typeof(byte));
 
-        await Assert.That(result.dtype).IsEqualTo(typeof(byte));
+        result.dtype.Should().Be(typeof(byte));
         result.Should().BeOfValues((byte)0, (byte)1, (byte)2, (byte)3, (byte)4, (byte)5, (byte)6, (byte)7, (byte)8, (byte)9);
     }
 
@@ -428,7 +428,7 @@ public class ArangeBattleTests
         // np.arange(10, dtype=np.int16): array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9], dtype=int16)
         var result = np.arange(10, typeof(short));
 
-        await Assert.That(result.dtype).IsEqualTo(typeof(short));
+        result.dtype.Should().Be(typeof(short));
         result.Should().BeOfValues((short)0, (short)1, (short)2, (short)3, (short)4, (short)5, (short)6, (short)7, (short)8, (short)9);
     }
 
@@ -438,7 +438,7 @@ public class ArangeBattleTests
         // np.arange(10, dtype=np.uint16): array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9], dtype=uint16)
         var result = np.arange(10, typeof(ushort));
 
-        await Assert.That(result.dtype).IsEqualTo(typeof(ushort));
+        result.dtype.Should().Be(typeof(ushort));
         result.Should().BeOfValues((ushort)0, (ushort)1, (ushort)2, (ushort)3, (ushort)4, (ushort)5, (ushort)6, (ushort)7, (ushort)8, (ushort)9);
     }
 
@@ -448,7 +448,7 @@ public class ArangeBattleTests
         // np.arange(10, dtype=np.uint32): array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9], dtype=uint32)
         var result = np.arange(10, typeof(uint));
 
-        await Assert.That(result.dtype).IsEqualTo(typeof(uint));
+        result.dtype.Should().Be(typeof(uint));
         result.Should().BeOfValues(0u, 1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u, 9u);
     }
 
@@ -458,7 +458,7 @@ public class ArangeBattleTests
         // np.arange(10, dtype=np.uint64): array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9], dtype=uint64)
         var result = np.arange(10, typeof(ulong));
 
-        await Assert.That(result.dtype).IsEqualTo(typeof(ulong));
+        result.dtype.Should().Be(typeof(ulong));
         result.Should().BeOfValues(0ul, 1ul, 2ul, 3ul, 4ul, 5ul, 6ul, 7ul, 8ul, 9ul);
     }
 
@@ -472,10 +472,10 @@ public class ArangeBattleTests
         // np.arange(1000).shape: (1000,)
         var result = np.arange(1000);
 
-        await Assert.That(result.shape).IsEquivalentTo(new long[] { 1000 });
-        await Assert.That(result.size).IsEqualTo(1000);
-        await Assert.That((long)result[0]).IsEqualTo(0L);
-        await Assert.That((long)result[999]).IsEqualTo(999L);
+        result.shape.Should().BeEquivalentTo(new long[] { 1000 });
+        result.size.Should().Be(1000);
+        ((long)result[0]).Should().Be(0L);
+        ((long)result[999]).Should().Be(999L);
     }
 
     [TestMethod]
@@ -485,12 +485,12 @@ public class ArangeBattleTests
         // np.arange(0, 1000000, 1000)[-5:]: array([995000, 996000, 997000, 998000, 999000])
         var result = np.arange(0, 1000000, 1000);
 
-        await Assert.That(result.shape).IsEquivalentTo(new long[] { 1000 });
-        await Assert.That((long)result[995]).IsEqualTo(995000L);
-        await Assert.That((long)result[996]).IsEqualTo(996000L);
-        await Assert.That((long)result[997]).IsEqualTo(997000L);
-        await Assert.That((long)result[998]).IsEqualTo(998000L);
-        await Assert.That((long)result[999]).IsEqualTo(999000L);
+        result.shape.Should().BeEquivalentTo(new long[] { 1000 });
+        ((long)result[995]).Should().Be(995000L);
+        ((long)result[996]).Should().Be(996000L);
+        ((long)result[997]).Should().Be(997000L);
+        ((long)result[998]).Should().Be(998000L);
+        ((long)result[999]).Should().Be(999000L);
     }
 
     #endregion
@@ -504,9 +504,9 @@ public class ArangeBattleTests
         // Note: NumPy includes 0.4 due to floating point rounding
         var result = np.arange(0.1, 0.4, 0.1);
 
-        await Assert.That(result.dtype).IsEqualTo(typeof(double));
+        result.dtype.Should().Be(typeof(double));
         // NumPy returns 4 elements due to floating point math
-        await Assert.That(result.size).IsEqualTo(4);
+        result.size.Should().Be(4);
     }
 
     [TestMethod]
@@ -515,8 +515,8 @@ public class ArangeBattleTests
         // np.arange(0.0, 0.6, 0.1): array([0., 0.1, 0.2, 0.3, 0.4, 0.5]) len=6
         var result = np.arange(0.0, 0.6, 0.1);
 
-        await Assert.That(result.dtype).IsEqualTo(typeof(double));
-        await Assert.That(result.size).IsEqualTo(6);
+        result.dtype.Should().Be(typeof(double));
+        result.size.Should().Be(6);
     }
 
     [TestMethod]
@@ -525,8 +525,8 @@ public class ArangeBattleTests
         // np.arange(0.0, 0.7, 0.1): array([0., 0.1, 0.2, 0.3, 0.4, 0.5, 0.6]) len=7
         var result = np.arange(0.0, 0.7, 0.1);
 
-        await Assert.That(result.dtype).IsEqualTo(typeof(double));
-        await Assert.That(result.size).IsEqualTo(7);
+        result.dtype.Should().Be(typeof(double));
+        result.size.Should().Be(7);
     }
 
     #endregion
@@ -538,7 +538,7 @@ public class ArangeBattleTests
     {
         var result = np.arange(5, NPTypeCode.Int32);
 
-        await Assert.That(result.dtype).IsEqualTo(typeof(int));
+        result.dtype.Should().Be(typeof(int));
         result.Should().BeOfValues(0, 1, 2, 3, 4);
     }
 
@@ -547,7 +547,7 @@ public class ArangeBattleTests
     {
         var result = np.arange(2, 8, NPTypeCode.Int16);
 
-        await Assert.That(result.dtype).IsEqualTo(typeof(short));
+        result.dtype.Should().Be(typeof(short));
         result.Should().BeOfValues((short)2, (short)3, (short)4, (short)5, (short)6, (short)7);
     }
 
@@ -556,7 +556,7 @@ public class ArangeBattleTests
     {
         var result = np.arange(0, 10, 2, NPTypeCode.Single);
 
-        await Assert.That(result.dtype).IsEqualTo(typeof(float));
+        result.dtype.Should().Be(typeof(float));
         result.Should().BeOfValues(0f, 2f, 4f, 6f, 8f);
     }
 
@@ -570,7 +570,7 @@ public class ArangeBattleTests
         // Explicit float overload
         var result = np.arange(0f, 5f);
 
-        await Assert.That(result.dtype).IsEqualTo(typeof(float));
+        result.dtype.Should().Be(typeof(float));
         result.Should().BeOfValues(0f, 1f, 2f, 3f, 4f);
     }
 
@@ -579,7 +579,7 @@ public class ArangeBattleTests
     {
         var result = np.arange(0f, 2f, 0.5f);
 
-        await Assert.That(result.dtype).IsEqualTo(typeof(float));
+        result.dtype.Should().Be(typeof(float));
         result.Should().BeOfValues(0f, 0.5f, 1f, 1.5f);
     }
 
@@ -588,7 +588,7 @@ public class ArangeBattleTests
     {
         var result = np.arange(5f, 0f, -1f);
 
-        await Assert.That(result.dtype).IsEqualTo(typeof(float));
+        result.dtype.Should().Be(typeof(float));
         result.Should().BeOfValues(5f, 4f, 3f, 2f, 1f);
     }
 
@@ -623,8 +623,8 @@ public class ArangeBattleTests
         // NumPy: int(0)=0, int(0+0.5)=0, delta=0, all values=0
         var result = np.arange(0, 5, 0.5, typeof(int));
 
-        await Assert.That(result.dtype).IsEqualTo(typeof(int));
-        await Assert.That(result.size).IsEqualTo(10);
+        result.dtype.Should().Be(typeof(int));
+        result.size.Should().Be(10);
         // NumPy returns all zeros because delta=0
         result.Should().BeOfValues(0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
     }
@@ -640,8 +640,8 @@ public class ArangeBattleTests
         // NumPy: int(5)=5, int(5-0.5)=4, delta=-1
         var result = np.arange(5, 0, -0.5, typeof(int));
 
-        await Assert.That(result.dtype).IsEqualTo(typeof(int));
-        await Assert.That(result.size).IsEqualTo(10);
+        result.dtype.Should().Be(typeof(int));
+        result.size.Should().Be(10);
         // NumPy decrements by 1 (the integer delta), not by 0.5
         result.Should().BeOfValues(5, 4, 3, 2, 1, 0, -1, -2, -3, -4);
     }
@@ -655,8 +655,8 @@ public class ArangeBattleTests
         // np.arange(0, 5, 0.7, dtype=np.int32) → [0,0,0,0,0,0,0,0]
         var result = np.arange(0, 5, 0.7, typeof(int));
 
-        await Assert.That(result.dtype).IsEqualTo(typeof(int));
-        await Assert.That(result.size).IsEqualTo(8);
+        result.dtype.Should().Be(typeof(int));
+        result.size.Should().Be(8);
         result.Should().BeOfValues(0, 0, 0, 0, 0, 0, 0, 0);
     }
 
@@ -669,8 +669,8 @@ public class ArangeBattleTests
         // np.arange(5, 0, -0.7, dtype=np.int32) → [5,4,3,2,1,0,-1,-2]
         var result = np.arange(5, 0, -0.7, typeof(int));
 
-        await Assert.That(result.dtype).IsEqualTo(typeof(int));
-        await Assert.That(result.size).IsEqualTo(8);
+        result.dtype.Should().Be(typeof(int));
+        result.size.Should().Be(8);
         result.Should().BeOfValues(5, 4, 3, 2, 1, 0, -1, -2);
     }
 
@@ -684,7 +684,7 @@ public class ArangeBattleTests
         // NumPy: int(0.5)=0, int(1.5)=1, delta=1
         var result = np.arange(0.5, 5.5, 1, typeof(int));
 
-        await Assert.That(result.dtype).IsEqualTo(typeof(int));
+        result.dtype.Should().Be(typeof(int));
         result.Should().BeOfValues(0, 1, 2, 3, 4);
     }
 
@@ -697,7 +697,7 @@ public class ArangeBattleTests
         // np.arange(0.9, 5.9, 1, dtype=np.int32) → [0,1,2,3,4]
         var result = np.arange(0.9, 5.9, 1, typeof(int));
 
-        await Assert.That(result.dtype).IsEqualTo(typeof(int));
+        result.dtype.Should().Be(typeof(int));
         result.Should().BeOfValues(0, 1, 2, 3, 4);
     }
 

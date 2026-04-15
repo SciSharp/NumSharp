@@ -22,7 +22,7 @@ public class NpPromoteTypesBattleTests
     {
         foreach (var type in AllTypes)
         {
-            await Assert.That(np.promote_types(type, type)).IsEqualTo(type);
+            np.promote_types(type, type).Should().Be(type);
         }
     }
 
@@ -39,7 +39,7 @@ public class NpPromoteTypesBattleTests
             {
                 var result1 = np.promote_types(t1, t2);
                 var result2 = np.promote_types(t2, t1);
-                await Assert.That(result1).IsEqualTo(result2);
+                result1.Should().Be(result2);
             }
         }
     }
@@ -51,13 +51,13 @@ public class NpPromoteTypesBattleTests
     [TestMethod]
     public async Task PromoteTypes_Int16Int32()
     {
-        await Assert.That(np.promote_types(NPTypeCode.Int16, NPTypeCode.Int32)).IsEqualTo(NPTypeCode.Int32);
+        np.promote_types(NPTypeCode.Int16, NPTypeCode.Int32).Should().Be(NPTypeCode.Int32);
     }
 
     [TestMethod]
     public async Task PromoteTypes_Int32Int64()
     {
-        await Assert.That(np.promote_types(NPTypeCode.Int32, NPTypeCode.Int64)).IsEqualTo(NPTypeCode.Int64);
+        np.promote_types(NPTypeCode.Int32, NPTypeCode.Int64).Should().Be(NPTypeCode.Int64);
     }
 
     #endregion
@@ -67,7 +67,7 @@ public class NpPromoteTypesBattleTests
     [TestMethod]
     public async Task PromoteTypes_Float32Float64()
     {
-        await Assert.That(np.promote_types(NPTypeCode.Single, NPTypeCode.Double)).IsEqualTo(NPTypeCode.Double);
+        np.promote_types(NPTypeCode.Single, NPTypeCode.Double).Should().Be(NPTypeCode.Double);
     }
 
     #endregion
@@ -77,13 +77,13 @@ public class NpPromoteTypesBattleTests
     [TestMethod]
     public async Task PromoteTypes_Generic_IntLong()
     {
-        await Assert.That(np.promote_types<int, long>()).IsEqualTo(NPTypeCode.Int64);
+        np.promote_types<int, long>().Should().Be(NPTypeCode.Int64);
     }
 
     [TestMethod]
     public async Task PromoteTypes_Generic_FloatDouble()
     {
-        await Assert.That(np.promote_types<float, double>()).IsEqualTo(NPTypeCode.Double);
+        np.promote_types<float, double>().Should().Be(NPTypeCode.Double);
     }
 
     #endregion
@@ -93,7 +93,7 @@ public class NpPromoteTypesBattleTests
     [TestMethod]
     public async Task PromoteTypes_Type_IntLong()
     {
-        await Assert.That(np.promote_types(typeof(int), typeof(long))).IsEqualTo(NPTypeCode.Int64);
+        np.promote_types(typeof(int), typeof(long)).Should().Be(NPTypeCode.Int64);
     }
 
     #endregion

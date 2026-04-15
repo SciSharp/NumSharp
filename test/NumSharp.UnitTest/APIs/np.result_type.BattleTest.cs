@@ -13,8 +13,8 @@ public class NpResultTypeBattleTests
     [TestMethod]
     public async Task ResultType_SingleType_ReturnsSame()
     {
-        await Assert.That(np.result_type(NPTypeCode.Int32)).IsEqualTo(NPTypeCode.Int32);
-        await Assert.That(np.result_type(NPTypeCode.Double)).IsEqualTo(NPTypeCode.Double);
+        np.result_type(NPTypeCode.Int32).Should().Be(NPTypeCode.Int32);
+        np.result_type(NPTypeCode.Double).Should().Be(NPTypeCode.Double);
     }
 
     #endregion
@@ -24,20 +24,20 @@ public class NpResultTypeBattleTests
     [TestMethod]
     public async Task ResultType_Int32Int64_ReturnsInt64()
     {
-        await Assert.That(np.result_type(NPTypeCode.Int32, NPTypeCode.Int64)).IsEqualTo(NPTypeCode.Int64);
+        np.result_type(NPTypeCode.Int32, NPTypeCode.Int64).Should().Be(NPTypeCode.Int64);
     }
 
     [TestMethod]
     public async Task ResultType_Int16Int32_ReturnsInt32()
     {
-        await Assert.That(np.result_type(NPTypeCode.Int16, NPTypeCode.Int32)).IsEqualTo(NPTypeCode.Int32);
+        np.result_type(NPTypeCode.Int16, NPTypeCode.Int32).Should().Be(NPTypeCode.Int32);
     }
 
     [TestMethod]
     public async Task ResultType_SignedUnsigned_PromotesToContainBoth()
     {
         var result = np.result_type(NPTypeCode.UInt32, NPTypeCode.Int32);
-        await Assert.That(result).IsEqualTo(NPTypeCode.Int64);
+        result.Should().Be(NPTypeCode.Int64);
     }
 
     #endregion
@@ -47,7 +47,7 @@ public class NpResultTypeBattleTests
     [TestMethod]
     public async Task ResultType_Float32Float64_ReturnsFloat64()
     {
-        await Assert.That(np.result_type(NPTypeCode.Single, NPTypeCode.Double)).IsEqualTo(NPTypeCode.Double);
+        np.result_type(NPTypeCode.Single, NPTypeCode.Double).Should().Be(NPTypeCode.Double);
     }
 
     #endregion
@@ -57,13 +57,13 @@ public class NpResultTypeBattleTests
     [TestMethod]
     public async Task ResultType_Empty_Throws()
     {
-        await Assert.That(() => np.result_type(Array.Empty<NPTypeCode>())).ThrowsException();
+        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<Exception>(() => np.result_type(Array.Empty<NPTypeCode>()));
     }
 
     [TestMethod]
     public async Task ResultType_NullArray_Throws()
     {
-        await Assert.That(() => np.result_type((NPTypeCode[])null!)).ThrowsException();
+        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<Exception>(() => np.result_type((NPTypeCode[])null!));
     }
 
     #endregion
@@ -73,13 +73,13 @@ public class NpResultTypeBattleTests
     [TestMethod]
     public async Task ResultType_TwoArg_NPTypeCode()
     {
-        await Assert.That(np.result_type(NPTypeCode.Int32, NPTypeCode.Int64)).IsEqualTo(NPTypeCode.Int64);
+        np.result_type(NPTypeCode.Int32, NPTypeCode.Int64).Should().Be(NPTypeCode.Int64);
     }
 
     [TestMethod]
     public async Task ResultType_TwoArg_Type()
     {
-        await Assert.That(np.result_type(typeof(int), typeof(long))).IsEqualTo(NPTypeCode.Int64);
+        np.result_type(typeof(int), typeof(long)).Should().Be(NPTypeCode.Int64);
     }
 
     [TestMethod]
@@ -87,21 +87,21 @@ public class NpResultTypeBattleTests
     {
         var a = np.array(new int[] { 1, 2 });
         var b = np.array(new long[] { 1, 2 });
-        await Assert.That(np.result_type(a, b)).IsEqualTo(NPTypeCode.Int64);
+        np.result_type(a, b).Should().Be(NPTypeCode.Int64);
     }
 
     [TestMethod]
     public async Task ResultType_TwoArg_NDArray_NullFirst_Throws()
     {
         var b = np.array(new int[] { 1, 2 });
-        await Assert.That(() => np.result_type((NDArray)null!, b)).ThrowsException();
+        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<Exception>(() => np.result_type((NDArray)null!, b));
     }
 
     [TestMethod]
     public async Task ResultType_TwoArg_NDArray_NullSecond_Throws()
     {
         var a = np.array(new int[] { 1, 2 });
-        await Assert.That(() => np.result_type(a, (NDArray)null!)).ThrowsException();
+        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<Exception>(() => np.result_type(a, (NDArray)null!));
     }
 
     #endregion
@@ -111,8 +111,7 @@ public class NpResultTypeBattleTests
     [TestMethod]
     public async Task ResultType_Symmetric()
     {
-        await Assert.That(np.result_type(NPTypeCode.Int32, NPTypeCode.Int64))
-            .IsEqualTo(np.result_type(NPTypeCode.Int64, NPTypeCode.Int32));
+        np.result_type(NPTypeCode.Int32, NPTypeCode.Int64).Should().Be(np.result_type(NPTypeCode.Int64, NPTypeCode.Int32));
     }
 
     #endregion

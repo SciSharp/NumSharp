@@ -14,21 +14,21 @@ public class NpCommonTypeBattleTests
     public async Task CommonType_Int32Array_ReturnsDouble()
     {
         var arr = np.array(new int[] { 1, 2, 3 });
-        await Assert.That(np.common_type_code(arr)).IsEqualTo(NPTypeCode.Double);
+        np.common_type_code(arr).Should().Be(NPTypeCode.Double);
     }
 
     [TestMethod]
     public async Task CommonType_ByteArray_ReturnsDouble()
     {
         var arr = np.array(new byte[] { 1, 2, 3 });
-        await Assert.That(np.common_type_code(arr)).IsEqualTo(NPTypeCode.Double);
+        np.common_type_code(arr).Should().Be(NPTypeCode.Double);
     }
 
     [TestMethod]
     public async Task CommonType_BoolArray_ReturnsDouble()
     {
         var arr = np.array(new bool[] { true, false });
-        await Assert.That(np.common_type_code(arr)).IsEqualTo(NPTypeCode.Double);
+        np.common_type_code(arr).Should().Be(NPTypeCode.Double);
     }
 
     #endregion
@@ -39,14 +39,14 @@ public class NpCommonTypeBattleTests
     public async Task CommonType_Float32Array_ReturnsSingle()
     {
         var arr = np.array(new float[] { 1.0f, 2.0f });
-        await Assert.That(np.common_type_code(arr)).IsEqualTo(NPTypeCode.Single);
+        np.common_type_code(arr).Should().Be(NPTypeCode.Single);
     }
 
     [TestMethod]
     public async Task CommonType_Float64Array_ReturnsDouble()
     {
         var arr = np.array(new double[] { 1.0, 2.0 });
-        await Assert.That(np.common_type_code(arr)).IsEqualTo(NPTypeCode.Double);
+        np.common_type_code(arr).Should().Be(NPTypeCode.Double);
     }
 
     #endregion
@@ -58,7 +58,7 @@ public class NpCommonTypeBattleTests
     {
         var a = np.array(new float[] { 1.0f });
         var b = np.array(new double[] { 1.0 });
-        await Assert.That(np.common_type_code(a, b)).IsEqualTo(NPTypeCode.Double);
+        np.common_type_code(a, b).Should().Be(NPTypeCode.Double);
     }
 
     [TestMethod]
@@ -66,7 +66,7 @@ public class NpCommonTypeBattleTests
     {
         var a = np.array(new float[] { 1.0f });
         var b = np.array(new float[] { 2.0f });
-        await Assert.That(np.common_type_code(a, b)).IsEqualTo(NPTypeCode.Single);
+        np.common_type_code(a, b).Should().Be(NPTypeCode.Single);
     }
 
     #endregion
@@ -76,13 +76,13 @@ public class NpCommonTypeBattleTests
     [TestMethod]
     public async Task CommonTypeCode_SingleInt_ReturnsDouble()
     {
-        await Assert.That(np.common_type_code(NPTypeCode.Int32)).IsEqualTo(NPTypeCode.Double);
+        np.common_type_code(NPTypeCode.Int32).Should().Be(NPTypeCode.Double);
     }
 
     [TestMethod]
     public async Task CommonTypeCode_SingleFloat_ReturnsSingle()
     {
-        await Assert.That(np.common_type_code(NPTypeCode.Single)).IsEqualTo(NPTypeCode.Single);
+        np.common_type_code(NPTypeCode.Single).Should().Be(NPTypeCode.Single);
     }
 
     #endregion
@@ -94,7 +94,7 @@ public class NpCommonTypeBattleTests
     {
         var arr = np.array(new int[] { 1, 2 });
         var result = np.common_type(arr);
-        await Assert.That(result).IsEqualTo(typeof(double));
+        result.Should().Be(typeof(double));
     }
 
     [TestMethod]
@@ -102,7 +102,7 @@ public class NpCommonTypeBattleTests
     {
         var arr = np.array(new float[] { 1.0f, 2.0f });
         var result = np.common_type(arr);
-        await Assert.That(result).IsEqualTo(typeof(float));
+        result.Should().Be(typeof(float));
     }
 
     #endregion
@@ -112,19 +112,19 @@ public class NpCommonTypeBattleTests
     [TestMethod]
     public async Task CommonType_Empty_Throws()
     {
-        await Assert.That(() => np.common_type_code(Array.Empty<NDArray>())).ThrowsException();
+        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<Exception>(() => np.common_type_code(Array.Empty<NDArray>()));
     }
 
     [TestMethod]
     public async Task CommonType_Null_Throws()
     {
-        await Assert.That(() => np.common_type_code((NDArray[])null!)).ThrowsException();
+        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<Exception>(() => np.common_type_code((NDArray[])null!));
     }
 
     [TestMethod]
     public async Task CommonTypeCode_Empty_Throws()
     {
-        await Assert.That(() => np.common_type_code(Array.Empty<NPTypeCode>())).ThrowsException();
+        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<Exception>(() => np.common_type_code(Array.Empty<NPTypeCode>()));
     }
 
     #endregion

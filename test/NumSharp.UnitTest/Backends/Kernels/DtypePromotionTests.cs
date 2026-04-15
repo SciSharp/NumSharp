@@ -28,8 +28,8 @@ public class DtypePromotionTests
         var a = np.array(new int[] { 1, 2, 3 });
         var result = np.sum(a);
 
-        await Assert.That(result.typecode).IsEqualTo(NPTypeCode.Int64);
-        await Assert.That(result.GetInt64(0)).IsEqualTo(6L);
+        result.typecode.Should().Be(NPTypeCode.Int64);
+        result.GetInt64(0).Should().Be(6L);
     }
 
     [TestMethod]
@@ -39,8 +39,8 @@ public class DtypePromotionTests
         var a = np.array(new uint[] { 1, 2, 3 });
         var result = np.sum(a);
 
-        await Assert.That(result.typecode).IsEqualTo(NPTypeCode.UInt64);
-        await Assert.That(result.GetUInt64(0)).IsEqualTo(6UL);
+        result.typecode.Should().Be(NPTypeCode.UInt64);
+        result.GetUInt64(0).Should().Be(6UL);
     }
 
     [TestMethod]
@@ -50,8 +50,8 @@ public class DtypePromotionTests
         var a = np.array(new short[] { 1, 2, 3 });
         var result = np.sum(a);
 
-        await Assert.That(result.typecode).IsEqualTo(NPTypeCode.Int64);
-        await Assert.That(result.GetInt64(0)).IsEqualTo(6L);
+        result.typecode.Should().Be(NPTypeCode.Int64);
+        result.GetInt64(0).Should().Be(6L);
     }
 
     [TestMethod]
@@ -61,8 +61,8 @@ public class DtypePromotionTests
         var a = np.array(new ushort[] { 1, 2, 3 });
         var result = np.sum(a);
 
-        await Assert.That(result.typecode).IsEqualTo(NPTypeCode.UInt64);
-        await Assert.That(result.GetUInt64(0)).IsEqualTo(6UL);
+        result.typecode.Should().Be(NPTypeCode.UInt64);
+        result.GetUInt64(0).Should().Be(6UL);
     }
 
     [TestMethod]
@@ -72,8 +72,8 @@ public class DtypePromotionTests
         var a = np.array(new byte[] { 1, 2, 3 });
         var result = np.sum(a);
 
-        await Assert.That(result.typecode).IsEqualTo(NPTypeCode.UInt64);
-        await Assert.That(result.GetUInt64(0)).IsEqualTo(6UL);
+        result.typecode.Should().Be(NPTypeCode.UInt64);
+        result.GetUInt64(0).Should().Be(6UL);
     }
 
     [TestMethod]
@@ -83,8 +83,8 @@ public class DtypePromotionTests
         var a = np.array(new float[] { 1.0f, 2.0f, 3.0f });
         var result = np.sum(a);
 
-        await Assert.That(result.typecode).IsEqualTo(NPTypeCode.Single);
-        await Assert.That(result.GetSingle(0)).IsEqualTo(6.0f);
+        result.typecode.Should().Be(NPTypeCode.Single);
+        result.GetSingle(0).Should().Be(6.0f);
     }
 
     [TestMethod]
@@ -94,8 +94,8 @@ public class DtypePromotionTests
         var a = np.array(new double[] { 1.0, 2.0, 3.0 });
         var result = np.sum(a);
 
-        await Assert.That(result.typecode).IsEqualTo(NPTypeCode.Double);
-        await Assert.That(result.GetDouble(0)).IsEqualTo(6.0);
+        result.typecode.Should().Be(NPTypeCode.Double);
+        result.GetDouble(0).Should().Be(6.0);
     }
 
     [TestMethod]
@@ -105,8 +105,8 @@ public class DtypePromotionTests
         var a = np.array(new long[] { 1, 2, 3 });
         var result = np.sum(a);
 
-        await Assert.That(result.typecode).IsEqualTo(NPTypeCode.Int64);
-        await Assert.That(result.GetInt64(0)).IsEqualTo(6L);
+        result.typecode.Should().Be(NPTypeCode.Int64);
+        result.GetInt64(0).Should().Be(6L);
     }
 
     #endregion
@@ -120,8 +120,8 @@ public class DtypePromotionTests
         var a = np.array(new int[] { 1, 2, 3 });
         var result = np.prod(a);
 
-        await Assert.That(result.typecode).IsEqualTo(NPTypeCode.Int64);
-        await Assert.That(result.GetInt64(0)).IsEqualTo(6L);
+        result.typecode.Should().Be(NPTypeCode.Int64);
+        result.GetInt64(0).Should().Be(6L);
     }
 
     [TestMethod]
@@ -131,8 +131,8 @@ public class DtypePromotionTests
         var a = np.array(new float[] { 1.0f, 2.0f, 3.0f });
         var result = np.prod(a);
 
-        await Assert.That(result.typecode).IsEqualTo(NPTypeCode.Single);
-        await Assert.That(result.GetSingle(0)).IsEqualTo(6.0f);
+        result.typecode.Should().Be(NPTypeCode.Single);
+        result.GetSingle(0).Should().Be(6.0f);
     }
 
     #endregion
@@ -146,8 +146,8 @@ public class DtypePromotionTests
         var a = np.array(new int[] { 1, 2, 3 });
         var result = np.mean(a);
 
-        await Assert.That(result.typecode).IsEqualTo(NPTypeCode.Double);
-        await Assert.That(result.GetDouble(0)).IsEqualTo(2.0);
+        result.typecode.Should().Be(NPTypeCode.Double);
+        result.GetDouble(0).Should().Be(2.0);
     }
 
     [TestMethod]
@@ -158,8 +158,8 @@ public class DtypePromotionTests
         var a = np.array(new float[] { 1.0f, 2.0f, 3.0f });
         var result = np.mean(a);
 
-        await Assert.That(result.typecode).IsEqualTo(NPTypeCode.Double);
-        await Assert.That(result.GetDouble(0)).IsEqualTo(2.0);
+        result.typecode.Should().Be(NPTypeCode.Double);
+        result.GetDouble(0).Should().Be(2.0);
     }
 
     [TestMethod]
@@ -169,8 +169,8 @@ public class DtypePromotionTests
         var a = np.array(new double[] { 1.0, 2.0, 3.0 });
         var result = np.mean(a);
 
-        await Assert.That(result.typecode).IsEqualTo(NPTypeCode.Double);
-        await Assert.That(result.GetDouble(0)).IsEqualTo(2.0);
+        result.typecode.Should().Be(NPTypeCode.Double);
+        result.GetDouble(0).Should().Be(2.0);
     }
 
     #endregion
@@ -184,8 +184,8 @@ public class DtypePromotionTests
         var a = np.array(new int[] { 1, 2, 3 });
         var result = np.amin(a);
 
-        await Assert.That(result.typecode).IsEqualTo(NPTypeCode.Int32);
-        await Assert.That(result.GetInt32(0)).IsEqualTo(1);
+        result.typecode.Should().Be(NPTypeCode.Int32);
+        result.GetInt32(0).Should().Be(1);
     }
 
     [TestMethod]
@@ -195,8 +195,8 @@ public class DtypePromotionTests
         var a = np.array(new int[] { 1, 2, 3 });
         var result = np.amax(a);
 
-        await Assert.That(result.typecode).IsEqualTo(NPTypeCode.Int32);
-        await Assert.That(result.GetInt32(0)).IsEqualTo(3);
+        result.typecode.Should().Be(NPTypeCode.Int32);
+        result.GetInt32(0).Should().Be(3);
     }
 
     [TestMethod]
@@ -206,8 +206,8 @@ public class DtypePromotionTests
         var a = np.array(new float[] { 1.0f, 2.0f, 3.0f });
         var result = np.amin(a);
 
-        await Assert.That(result.typecode).IsEqualTo(NPTypeCode.Single);
-        await Assert.That(result.GetSingle(0)).IsEqualTo(1.0f);
+        result.typecode.Should().Be(NPTypeCode.Single);
+        result.GetSingle(0).Should().Be(1.0f);
     }
 
     [TestMethod]
@@ -217,8 +217,8 @@ public class DtypePromotionTests
         var a = np.array(new double[] { 1.0, 2.0, 3.0 });
         var result = np.amax(a);
 
-        await Assert.That(result.typecode).IsEqualTo(NPTypeCode.Double);
-        await Assert.That(result.GetDouble(0)).IsEqualTo(3.0);
+        result.typecode.Should().Be(NPTypeCode.Double);
+        result.GetDouble(0).Should().Be(3.0);
     }
 
     #endregion
@@ -232,7 +232,7 @@ public class DtypePromotionTests
         var a = np.array(new int[] { 1, 2, 3 });
         var result = np.var(a);
 
-        await Assert.That(result.typecode).IsEqualTo(NPTypeCode.Double);
+        result.typecode.Should().Be(NPTypeCode.Double);
     }
 
     [TestMethod]
@@ -242,7 +242,7 @@ public class DtypePromotionTests
         var a = np.array(new int[] { 1, 2, 3 });
         var result = np.std(a);
 
-        await Assert.That(result.typecode).IsEqualTo(NPTypeCode.Double);
+        result.typecode.Should().Be(NPTypeCode.Double);
     }
 
     [TestMethod]
@@ -256,7 +256,7 @@ public class DtypePromotionTests
         var result = np.var(a);
 
         // This test documents NumPy expected behavior (fails currently)
-        await Assert.That(result.typecode).IsEqualTo(NPTypeCode.Double);
+        result.typecode.Should().Be(NPTypeCode.Double);
     }
 
     [TestMethod]
@@ -267,7 +267,7 @@ public class DtypePromotionTests
         var a = np.array(new float[] { 1.0f, 2.0f, 3.0f });
         var result = np.var(a);
 
-        await Assert.That(result.typecode).IsEqualTo(NPTypeCode.Single);
+        result.typecode.Should().Be(NPTypeCode.Single);
     }
 
     #endregion
@@ -281,7 +281,7 @@ public class DtypePromotionTests
         var a = np.array(new int[,] { { 1, 2 }, { 3, 4 } });
         var result = np.sum(a, axis: 0);
 
-        await Assert.That(result.typecode).IsEqualTo(NPTypeCode.Int64);
+        result.typecode.Should().Be(NPTypeCode.Int64);
         result.Should().BeOfValues(4L, 6L);
     }
 
@@ -292,7 +292,7 @@ public class DtypePromotionTests
         var a = np.array(new float[,] { { 1.0f, 2.0f }, { 3.0f, 4.0f } });
         var result = np.sum(a, axis: 0);
 
-        await Assert.That(result.typecode).IsEqualTo(NPTypeCode.Single);
+        result.typecode.Should().Be(NPTypeCode.Single);
         result.Should().BeOfValues(4.0f, 6.0f);
     }
 
@@ -303,7 +303,7 @@ public class DtypePromotionTests
         var a = np.array(new int[,] { { 1, 2 }, { 3, 4 } });
         var result = np.amin(a, axis: 0);
 
-        await Assert.That(result.typecode).IsEqualTo(NPTypeCode.Int32);
+        result.typecode.Should().Be(NPTypeCode.Int32);
         result.Should().BeOfValues(1, 2);
     }
 
@@ -314,7 +314,7 @@ public class DtypePromotionTests
         var a = np.array(new int[,] { { 1, 2 }, { 3, 4 } });
         var result = np.mean(a, axis: 0);
 
-        await Assert.That(result.typecode).IsEqualTo(NPTypeCode.Double);
+        result.typecode.Should().Be(NPTypeCode.Double);
         result.Should().BeOfValues(2.0, 3.0);
     }
 
@@ -329,7 +329,7 @@ public class DtypePromotionTests
         var a = np.array(new int[] { 1, 2, 3 });
         var result = np.cumsum(a);
 
-        await Assert.That(result.typecode).IsEqualTo(NPTypeCode.Int64);
+        result.typecode.Should().Be(NPTypeCode.Int64);
         result.Should().BeOfValues(1L, 3L, 6L);
     }
 
@@ -340,7 +340,7 @@ public class DtypePromotionTests
         var a = np.array(new float[] { 1.0f, 2.0f, 3.0f });
         var result = np.cumsum(a);
 
-        await Assert.That(result.typecode).IsEqualTo(NPTypeCode.Single);
+        result.typecode.Should().Be(NPTypeCode.Single);
         result.Should().BeOfValues(1.0f, 3.0f, 6.0f);
     }
 

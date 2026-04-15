@@ -24,9 +24,9 @@ public class ArgsortNaNTests
         var a = np.array(new double[] { double.NaN, 1.0, 2.0 });
         var result = np.argsort<double>(a);
 
-        await Assert.That(result.GetInt64(0)).IsEqualTo(1L);
-        await Assert.That(result.GetInt64(1)).IsEqualTo(2L);
-        await Assert.That(result.GetInt64(2)).IsEqualTo(0L);
+        result.GetInt64(0).Should().Be(1L);
+        result.GetInt64(1).Should().Be(2L);
+        result.GetInt64(2).Should().Be(0L);
     }
 
     [TestMethod]
@@ -37,11 +37,11 @@ public class ArgsortNaNTests
         var a = np.array(new double[] { double.NaN, 1.0, double.NaN, 2.0 });
         var result = np.argsort<double>(a);
 
-        await Assert.That(result.GetInt64(0)).IsEqualTo(1L); // 1.0
-        await Assert.That(result.GetInt64(1)).IsEqualTo(3L); // 2.0
+        result.GetInt64(0).Should().Be(1L); // 1.0
+        result.GetInt64(1).Should().Be(3L); // 2.0
         // NaN values at end
-        await Assert.That(double.IsNaN(a.GetDouble((int)result.GetInt64(2)))).IsTrue();
-        await Assert.That(double.IsNaN(a.GetDouble((int)result.GetInt64(3)))).IsTrue();
+        double.IsNaN(a.GetDouble((int)result.GetInt64(2))).Should().BeTrue();
+        double.IsNaN(a.GetDouble((int)result.GetInt64(3))).Should().BeTrue();
     }
 
     #endregion
@@ -56,9 +56,9 @@ public class ArgsortNaNTests
         var a = np.array(new double[] { double.PositiveInfinity, double.NegativeInfinity, 0.0 });
         var result = np.argsort<double>(a);
 
-        await Assert.That(result.GetInt64(0)).IsEqualTo(1L); // -inf
-        await Assert.That(result.GetInt64(1)).IsEqualTo(2L); // 0
-        await Assert.That(result.GetInt64(2)).IsEqualTo(0L); // +inf
+        result.GetInt64(0).Should().Be(1L); // -inf
+        result.GetInt64(1).Should().Be(2L); // 0
+        result.GetInt64(2).Should().Be(0L); // +inf
     }
 
     [TestMethod]
@@ -69,10 +69,10 @@ public class ArgsortNaNTests
         var a = np.array(new double[] { double.NaN, double.PositiveInfinity, double.NegativeInfinity, 0.0 });
         var result = np.argsort<double>(a);
 
-        await Assert.That(result.GetInt64(0)).IsEqualTo(2L); // -inf
-        await Assert.That(result.GetInt64(1)).IsEqualTo(3L); // 0
-        await Assert.That(result.GetInt64(2)).IsEqualTo(1L); // +inf
-        await Assert.That(result.GetInt64(3)).IsEqualTo(0L); // nan
+        result.GetInt64(0).Should().Be(2L); // -inf
+        result.GetInt64(1).Should().Be(3L); // 0
+        result.GetInt64(2).Should().Be(1L); // +inf
+        result.GetInt64(3).Should().Be(0L); // nan
     }
 
     #endregion
@@ -86,9 +86,9 @@ public class ArgsortNaNTests
         var a = np.array(new float[] { float.NaN, 1.0f, 2.0f });
         var result = np.argsort<float>(a);
 
-        await Assert.That(result.GetInt64(0)).IsEqualTo(1L);
-        await Assert.That(result.GetInt64(1)).IsEqualTo(2L);
-        await Assert.That(result.GetInt64(2)).IsEqualTo(0L);
+        result.GetInt64(0).Should().Be(1L);
+        result.GetInt64(1).Should().Be(2L);
+        result.GetInt64(2).Should().Be(0L);
     }
 
     [TestMethod]
@@ -97,10 +97,10 @@ public class ArgsortNaNTests
         var a = np.array(new float[] { float.NaN, float.PositiveInfinity, float.NegativeInfinity, 0.0f });
         var result = np.argsort<float>(a);
 
-        await Assert.That(result.GetInt64(0)).IsEqualTo(2L); // -inf
-        await Assert.That(result.GetInt64(1)).IsEqualTo(3L); // 0
-        await Assert.That(result.GetInt64(2)).IsEqualTo(1L); // +inf
-        await Assert.That(result.GetInt64(3)).IsEqualTo(0L); // nan
+        result.GetInt64(0).Should().Be(2L); // -inf
+        result.GetInt64(1).Should().Be(3L); // 0
+        result.GetInt64(2).Should().Be(1L); // +inf
+        result.GetInt64(3).Should().Be(0L); // nan
     }
 
     #endregion
@@ -114,9 +114,9 @@ public class ArgsortNaNTests
         var a = np.array(new double[] { 3.0, 1.0, 2.0 });
         var result = np.argsort<double>(a);
 
-        await Assert.That(result.GetInt64(0)).IsEqualTo(1L);
-        await Assert.That(result.GetInt64(1)).IsEqualTo(2L);
-        await Assert.That(result.GetInt64(2)).IsEqualTo(0L);
+        result.GetInt64(0).Should().Be(1L);
+        result.GetInt64(1).Should().Be(2L);
+        result.GetInt64(2).Should().Be(0L);
     }
 
     [TestMethod]
@@ -126,9 +126,9 @@ public class ArgsortNaNTests
         var a = np.array(new double[] { 1.0, 2.0, 3.0 });
         var result = np.argsort<double>(a);
 
-        await Assert.That(result.GetInt64(0)).IsEqualTo(0L);
-        await Assert.That(result.GetInt64(1)).IsEqualTo(1L);
-        await Assert.That(result.GetInt64(2)).IsEqualTo(2L);
+        result.GetInt64(0).Should().Be(0L);
+        result.GetInt64(1).Should().Be(1L);
+        result.GetInt64(2).Should().Be(2L);
     }
 
     [TestMethod]
@@ -138,9 +138,9 @@ public class ArgsortNaNTests
         var a = np.array(new double[] { 3.0, 2.0, 1.0 });
         var result = np.argsort<double>(a);
 
-        await Assert.That(result.GetInt64(0)).IsEqualTo(2L);
-        await Assert.That(result.GetInt64(1)).IsEqualTo(1L);
-        await Assert.That(result.GetInt64(2)).IsEqualTo(0L);
+        result.GetInt64(0).Should().Be(2L);
+        result.GetInt64(1).Should().Be(1L);
+        result.GetInt64(2).Should().Be(0L);
     }
 
     #endregion
@@ -153,9 +153,9 @@ public class ArgsortNaNTests
         var a = np.array(new int[] { 3, 1, 2 });
         var result = np.argsort<int>(a);
 
-        await Assert.That(result.GetInt64(0)).IsEqualTo(1L);
-        await Assert.That(result.GetInt64(1)).IsEqualTo(2L);
-        await Assert.That(result.GetInt64(2)).IsEqualTo(0L);
+        result.GetInt64(0).Should().Be(1L);
+        result.GetInt64(1).Should().Be(2L);
+        result.GetInt64(2).Should().Be(0L);
     }
 
     #endregion

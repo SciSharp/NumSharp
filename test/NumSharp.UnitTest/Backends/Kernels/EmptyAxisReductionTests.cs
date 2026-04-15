@@ -19,10 +19,10 @@ namespace NumSharp.UnitTest.Backends.Kernels
             var arr = np.zeros(new Shape(0, 3));
             var result = np.sum(arr, axis: 0);
 
-            await Assert.That(result.shape).IsEquivalentTo(new long[] { 3 });
-            await Assert.That(result.GetDouble(0)).IsEqualTo(0.0);
-            await Assert.That(result.GetDouble(1)).IsEqualTo(0.0);
-            await Assert.That(result.GetDouble(2)).IsEqualTo(0.0);
+            result.shape.Should().BeEquivalentTo(new long[] { 3 });
+            result.GetDouble(0).Should().Be(0.0);
+            result.GetDouble(1).Should().Be(0.0);
+            result.GetDouble(2).Should().Be(0.0);
         }
 
         [TestMethod]
@@ -32,8 +32,8 @@ namespace NumSharp.UnitTest.Backends.Kernels
             var arr = np.zeros(new Shape(0, 3));
             var result = np.sum(arr, axis: 1);
 
-            await Assert.That(result.shape).IsEquivalentTo(new long[] { 0 });
-            await Assert.That(result.size).IsEqualTo(0);
+            result.shape.Should().BeEquivalentTo(new long[] { 0 });
+            result.size.Should().Be(0);
         }
 
         [TestMethod]
@@ -43,7 +43,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
             var arr = np.zeros(new Shape(0, 3));
             var result = np.sum(arr, axis: 0, keepdims: true);
 
-            await Assert.That(result.shape).IsEquivalentTo(new long[] { 1, 3 });
+            result.shape.Should().BeEquivalentTo(new long[] { 1, 3 });
         }
 
         [TestMethod]
@@ -53,7 +53,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
             var arr = np.zeros(new Shape(0, 3));
             var result = np.sum(arr, axis: 1, keepdims: true);
 
-            await Assert.That(result.shape).IsEquivalentTo(new long[] { 0, 1 });
+            result.shape.Should().BeEquivalentTo(new long[] { 0, 1 });
         }
 
         [TestMethod]
@@ -63,8 +63,8 @@ namespace NumSharp.UnitTest.Backends.Kernels
             var arr = np.zeros(new Shape(2, 0, 4));
             var result = np.sum(arr, axis: 1);
 
-            await Assert.That(result.shape).IsEquivalentTo(new long[] { 2, 4 });
-            await Assert.That(result.size).IsEqualTo(8);
+            result.shape.Should().BeEquivalentTo(new long[] { 2, 4 });
+            result.size.Should().Be(8);
         }
 
         #endregion
@@ -78,10 +78,10 @@ namespace NumSharp.UnitTest.Backends.Kernels
             var arr = np.zeros(new Shape(0, 3));
             var result = np.prod(arr, axis: 0);
 
-            await Assert.That(result.shape).IsEquivalentTo(new long[] { 3 });
-            await Assert.That(result.GetDouble(0)).IsEqualTo(1.0);
-            await Assert.That(result.GetDouble(1)).IsEqualTo(1.0);
-            await Assert.That(result.GetDouble(2)).IsEqualTo(1.0);
+            result.shape.Should().BeEquivalentTo(new long[] { 3 });
+            result.GetDouble(0).Should().Be(1.0);
+            result.GetDouble(1).Should().Be(1.0);
+            result.GetDouble(2).Should().Be(1.0);
         }
 
         [TestMethod]
@@ -91,8 +91,8 @@ namespace NumSharp.UnitTest.Backends.Kernels
             var arr = np.zeros(new Shape(0, 3));
             var result = np.prod(arr, axis: 1);
 
-            await Assert.That(result.shape).IsEquivalentTo(new long[] { 0 });
-            await Assert.That(result.size).IsEqualTo(0);
+            result.shape.Should().BeEquivalentTo(new long[] { 0 });
+            result.size.Should().Be(0);
         }
 
         #endregion
@@ -105,8 +105,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
             // NumPy: np.min(np.zeros((0, 3)), axis=0) raises ValueError
             var arr = np.zeros(new Shape(0, 3));
 
-            await Assert.That(() => np.amin(arr, axis: 0))
-                .Throws<ArgumentException>();
+            Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<ArgumentException>(() => np.amin(arr, axis: 0));
         }
 
         [TestMethod]
@@ -116,8 +115,8 @@ namespace NumSharp.UnitTest.Backends.Kernels
             var arr = np.zeros(new Shape(0, 3));
             var result = np.amin(arr, axis: 1);
 
-            await Assert.That(result.shape).IsEquivalentTo(new long[] { 0 });
-            await Assert.That(result.size).IsEqualTo(0);
+            result.shape.Should().BeEquivalentTo(new long[] { 0 });
+            result.size.Should().Be(0);
         }
 
         [TestMethod]
@@ -126,8 +125,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
             // NumPy: np.max(np.zeros((0, 3)), axis=0) raises ValueError
             var arr = np.zeros(new Shape(0, 3));
 
-            await Assert.That(() => np.amax(arr, axis: 0))
-                .Throws<ArgumentException>();
+            Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<ArgumentException>(() => np.amax(arr, axis: 0));
         }
 
         [TestMethod]
@@ -137,8 +135,8 @@ namespace NumSharp.UnitTest.Backends.Kernels
             var arr = np.zeros(new Shape(0, 3));
             var result = np.amax(arr, axis: 1);
 
-            await Assert.That(result.shape).IsEquivalentTo(new long[] { 0 });
-            await Assert.That(result.size).IsEqualTo(0);
+            result.shape.Should().BeEquivalentTo(new long[] { 0 });
+            result.size.Should().Be(0);
         }
 
         #endregion
@@ -151,8 +149,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
             // NumPy: np.argmax(np.zeros((0, 3)), axis=0) raises ValueError
             var arr = np.zeros(new Shape(0, 3));
 
-            await Assert.That(() => np.argmax(arr, axis: 0))
-                .Throws<ArgumentException>();
+            Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<ArgumentException>(() => np.argmax(arr, axis: 0));
         }
 
         [TestMethod]
@@ -162,9 +159,9 @@ namespace NumSharp.UnitTest.Backends.Kernels
             var arr = np.zeros(new Shape(0, 3));
             var result = np.argmax(arr, axis: 1);
 
-            await Assert.That(result.shape).IsEquivalentTo(new long[] { 0 });
-            await Assert.That(result.size).IsEqualTo(0);
-            await Assert.That(result.typecode).IsEqualTo(NPTypeCode.Int64);
+            result.shape.Should().BeEquivalentTo(new long[] { 0 });
+            result.size.Should().Be(0);
+            result.typecode.Should().Be(NPTypeCode.Int64);
         }
 
         [TestMethod]
@@ -173,8 +170,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
             // NumPy: np.argmin(np.zeros((0, 3)), axis=0) raises ValueError
             var arr = np.zeros(new Shape(0, 3));
 
-            await Assert.That(() => np.argmin(arr, axis: 0))
-                .Throws<ArgumentException>();
+            Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<ArgumentException>(() => np.argmin(arr, axis: 0));
         }
 
         [TestMethod]
@@ -184,9 +180,9 @@ namespace NumSharp.UnitTest.Backends.Kernels
             var arr = np.zeros(new Shape(0, 3));
             var result = np.argmin(arr, axis: 1);
 
-            await Assert.That(result.shape).IsEquivalentTo(new long[] { 0 });
-            await Assert.That(result.size).IsEqualTo(0);
-            await Assert.That(result.typecode).IsEqualTo(NPTypeCode.Int64);
+            result.shape.Should().BeEquivalentTo(new long[] { 0 });
+            result.size.Should().Be(0);
+            result.typecode.Should().Be(NPTypeCode.Int64);
         }
 
         #endregion
@@ -200,10 +196,10 @@ namespace NumSharp.UnitTest.Backends.Kernels
             var arr = np.zeros(new Shape(0, 3));
             var result = np.mean(arr, axis: 0);
 
-            await Assert.That(result.shape).IsEquivalentTo(new long[] { 3 });
-            await Assert.That(double.IsNaN(result.GetDouble(0))).IsTrue();
-            await Assert.That(double.IsNaN(result.GetDouble(1))).IsTrue();
-            await Assert.That(double.IsNaN(result.GetDouble(2))).IsTrue();
+            result.shape.Should().BeEquivalentTo(new long[] { 3 });
+            double.IsNaN(result.GetDouble(0)).Should().BeTrue();
+            double.IsNaN(result.GetDouble(1)).Should().BeTrue();
+            double.IsNaN(result.GetDouble(2)).Should().BeTrue();
         }
 
         [TestMethod]
@@ -213,8 +209,8 @@ namespace NumSharp.UnitTest.Backends.Kernels
             var arr = np.zeros(new Shape(0, 3));
             var result = np.mean(arr, axis: 1);
 
-            await Assert.That(result.shape).IsEquivalentTo(new long[] { 0 });
-            await Assert.That(result.size).IsEqualTo(0);
+            result.shape.Should().BeEquivalentTo(new long[] { 0 });
+            result.size.Should().Be(0);
         }
 
         [TestMethod]
@@ -224,10 +220,10 @@ namespace NumSharp.UnitTest.Backends.Kernels
             var arr = np.zeros(new Shape(0, 3));
             var result = np.std(arr, axis: 0);
 
-            await Assert.That(result.shape).IsEquivalentTo(new long[] { 3 });
-            await Assert.That(double.IsNaN(result.GetDouble(0))).IsTrue();
-            await Assert.That(double.IsNaN(result.GetDouble(1))).IsTrue();
-            await Assert.That(double.IsNaN(result.GetDouble(2))).IsTrue();
+            result.shape.Should().BeEquivalentTo(new long[] { 3 });
+            double.IsNaN(result.GetDouble(0)).Should().BeTrue();
+            double.IsNaN(result.GetDouble(1)).Should().BeTrue();
+            double.IsNaN(result.GetDouble(2)).Should().BeTrue();
         }
 
         [TestMethod]
@@ -237,10 +233,10 @@ namespace NumSharp.UnitTest.Backends.Kernels
             var arr = np.zeros(new Shape(0, 3));
             var result = np.var(arr, axis: 0);
 
-            await Assert.That(result.shape).IsEquivalentTo(new long[] { 3 });
-            await Assert.That(double.IsNaN(result.GetDouble(0))).IsTrue();
-            await Assert.That(double.IsNaN(result.GetDouble(1))).IsTrue();
-            await Assert.That(double.IsNaN(result.GetDouble(2))).IsTrue();
+            result.shape.Should().BeEquivalentTo(new long[] { 3 });
+            double.IsNaN(result.GetDouble(0)).Should().BeTrue();
+            double.IsNaN(result.GetDouble(1)).Should().BeTrue();
+            double.IsNaN(result.GetDouble(2)).Should().BeTrue();
         }
 
         #endregion
@@ -254,10 +250,10 @@ namespace NumSharp.UnitTest.Backends.Kernels
             var arr = np.zeros(new Shape(3, 0));
             var result = np.sum(arr, axis: 1);
 
-            await Assert.That(result.shape).IsEquivalentTo(new long[] { 3 });
-            await Assert.That(result.GetDouble(0)).IsEqualTo(0.0);
-            await Assert.That(result.GetDouble(1)).IsEqualTo(0.0);
-            await Assert.That(result.GetDouble(2)).IsEqualTo(0.0);
+            result.shape.Should().BeEquivalentTo(new long[] { 3 });
+            result.GetDouble(0).Should().Be(0.0);
+            result.GetDouble(1).Should().Be(0.0);
+            result.GetDouble(2).Should().Be(0.0);
         }
 
         [TestMethod]
@@ -267,8 +263,8 @@ namespace NumSharp.UnitTest.Backends.Kernels
             var arr = np.zeros(new Shape(0));
             var result = np.sum(arr);
 
-            await Assert.That(result.shape).IsEquivalentTo(Array.Empty<int>());
-            await Assert.That((double)result).IsEqualTo(0.0);
+            result.shape.Should().BeEquivalentTo(Array.Empty<int>());
+            ((double)result).Should().Be(0.0);
         }
 
         [TestMethod]
@@ -278,7 +274,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
             var arr = np.zeros(new Shape(0));
             var result = np.prod(arr);
 
-            await Assert.That((double)result).IsEqualTo(1.0);
+            ((double)result).Should().Be(1.0);
         }
 
         #endregion

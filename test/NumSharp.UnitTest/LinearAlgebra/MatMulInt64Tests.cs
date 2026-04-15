@@ -26,10 +26,10 @@ public class MatMulInt64Tests
 
         var result = np.matmul(a, b);
 
-        await Assert.That(result.GetDouble(0, 0)).IsEqualTo(19.0);
-        await Assert.That(result.GetDouble(0, 1)).IsEqualTo(22.0);
-        await Assert.That(result.GetDouble(1, 0)).IsEqualTo(43.0);
-        await Assert.That(result.GetDouble(1, 1)).IsEqualTo(50.0);
+        result.GetDouble(0, 0).Should().Be(19.0);
+        result.GetDouble(0, 1).Should().Be(22.0);
+        result.GetDouble(1, 0).Should().Be(43.0);
+        result.GetDouble(1, 1).Should().Be(50.0);
     }
 
     [TestMethod]
@@ -40,10 +40,10 @@ public class MatMulInt64Tests
 
         var result = np.matmul(a, b);
 
-        await Assert.That(result.GetSingle(0, 0)).IsEqualTo(19.0f);
-        await Assert.That(result.GetSingle(0, 1)).IsEqualTo(22.0f);
-        await Assert.That(result.GetSingle(1, 0)).IsEqualTo(43.0f);
-        await Assert.That(result.GetSingle(1, 1)).IsEqualTo(50.0f);
+        result.GetSingle(0, 0).Should().Be(19.0f);
+        result.GetSingle(0, 1).Should().Be(22.0f);
+        result.GetSingle(1, 0).Should().Be(43.0f);
+        result.GetSingle(1, 1).Should().Be(50.0f);
     }
 
     [TestMethod]
@@ -54,10 +54,10 @@ public class MatMulInt64Tests
 
         var result = np.matmul(a, b);
 
-        await Assert.That(result.GetInt32(0, 0)).IsEqualTo(19);
-        await Assert.That(result.GetInt32(0, 1)).IsEqualTo(22);
-        await Assert.That(result.GetInt32(1, 0)).IsEqualTo(43);
-        await Assert.That(result.GetInt32(1, 1)).IsEqualTo(50);
+        result.GetInt32(0, 0).Should().Be(19);
+        result.GetInt32(0, 1).Should().Be(22);
+        result.GetInt32(1, 0).Should().Be(43);
+        result.GetInt32(1, 1).Should().Be(50);
     }
 
     #endregion
@@ -72,19 +72,19 @@ public class MatMulInt64Tests
         var b = np.arange(100).reshape(10, 10).astype(NPTypeCode.Double);
 
         // Verify arrays are contiguous
-        await Assert.That(a.Shape.IsContiguous).IsTrue();
-        await Assert.That(b.Shape.IsContiguous).IsTrue();
+        a.Shape.IsContiguous.Should().BeTrue();
+        b.Shape.IsContiguous.Should().BeTrue();
 
         var result = np.matmul(a, b);
 
         // Verify shape
-        await Assert.That(result.shape[0]).IsEqualTo(10);
-        await Assert.That(result.shape[1]).IsEqualTo(10);
+        result.shape[0].Should().Be(10);
+        result.shape[1].Should().Be(10);
 
         // Verify a specific element: result[0,0] = sum(a[0,:] * b[:,0])
         // a[0,:] = [0,1,2,...,9], b[:,0] = [0,10,20,...,90]
         // sum = 0*0 + 1*10 + 2*20 + ... + 9*90 = 10+40+90+160+250+360+490+640+810 = 2850
-        await Assert.That(result.GetDouble(0, 0)).IsEqualTo(2850.0);
+        result.GetDouble(0, 0).Should().Be(2850.0);
     }
 
     [TestMethod]
@@ -97,9 +97,9 @@ public class MatMulInt64Tests
         var result = np.matmul(a, b);
 
         // All elements should be 64 (sum of 64 ones)
-        await Assert.That(result.GetDouble(0, 0)).IsEqualTo(64.0);
-        await Assert.That(result.GetDouble(32, 32)).IsEqualTo(64.0);
-        await Assert.That(result.GetDouble(63, 63)).IsEqualTo(64.0);
+        result.GetDouble(0, 0).Should().Be(64.0);
+        result.GetDouble(32, 32).Should().Be(64.0);
+        result.GetDouble(63, 63).Should().Be(64.0);
     }
 
     [TestMethod]
@@ -110,16 +110,16 @@ public class MatMulInt64Tests
         var a = np.arange(12).reshape(3, 4).astype(NPTypeCode.Double);
         var b = np.arange(20).reshape(4, 5).astype(NPTypeCode.Double);
 
-        await Assert.That(a.Shape.IsContiguous).IsTrue();
-        await Assert.That(b.Shape.IsContiguous).IsTrue();
+        a.Shape.IsContiguous.Should().BeTrue();
+        b.Shape.IsContiguous.Should().BeTrue();
 
         var result = np.matmul(a, b);
 
-        await Assert.That(result.shape[0]).IsEqualTo(3);
-        await Assert.That(result.shape[1]).IsEqualTo(5);
+        result.shape[0].Should().Be(3);
+        result.shape[1].Should().Be(5);
 
         // NumPy: result[0,0] = 0*0 + 1*5 + 2*10 + 3*15 = 70
-        await Assert.That(result.GetDouble(0, 0)).IsEqualTo(70.0);
+        result.GetDouble(0, 0).Should().Be(70.0);
     }
 
     #endregion
@@ -135,7 +135,7 @@ public class MatMulInt64Tests
 
         var result = np.dot(a, b);
 
-        await Assert.That((double)result).IsEqualTo(32.0);
+        ((double)result).Should().Be(32.0);
     }
 
     [TestMethod]
@@ -146,7 +146,7 @@ public class MatMulInt64Tests
 
         var result = np.dot(a, b);
 
-        await Assert.That((float)result).IsEqualTo(32.0f);
+        ((float)result).Should().Be(32.0f);
     }
 
     [TestMethod]
@@ -158,9 +158,9 @@ public class MatMulInt64Tests
 
         var result = np.dot(a, b);
 
-        await Assert.That(result.shape[0]).IsEqualTo(2);
-        await Assert.That(result.GetDouble(0)).IsEqualTo(17.0);
-        await Assert.That(result.GetDouble(1)).IsEqualTo(39.0);
+        result.shape[0].Should().Be(2);
+        result.GetDouble(0).Should().Be(17.0);
+        result.GetDouble(1).Should().Be(39.0);
     }
 
     [TestMethod]
@@ -173,10 +173,10 @@ public class MatMulInt64Tests
         var matmulResult = np.matmul(a, b);
 
         // For 2D arrays, dot and matmul should give same result
-        await Assert.That(dotResult.GetDouble(0, 0)).IsEqualTo(matmulResult.GetDouble(0, 0));
-        await Assert.That(dotResult.GetDouble(0, 1)).IsEqualTo(matmulResult.GetDouble(0, 1));
-        await Assert.That(dotResult.GetDouble(1, 0)).IsEqualTo(matmulResult.GetDouble(1, 0));
-        await Assert.That(dotResult.GetDouble(1, 1)).IsEqualTo(matmulResult.GetDouble(1, 1));
+        dotResult.GetDouble(0, 0).Should().Be(matmulResult.GetDouble(0, 0));
+        dotResult.GetDouble(0, 1).Should().Be(matmulResult.GetDouble(0, 1));
+        dotResult.GetDouble(1, 0).Should().Be(matmulResult.GetDouble(1, 0));
+        dotResult.GetDouble(1, 1).Should().Be(matmulResult.GetDouble(1, 1));
     }
 
     #endregion
@@ -191,9 +191,9 @@ public class MatMulInt64Tests
 
         var result = np.matmul(a, b);
 
-        await Assert.That(result.shape[0]).IsEqualTo(1);
-        await Assert.That(result.shape[1]).IsEqualTo(1);
-        await Assert.That(result.GetDouble(0, 0)).IsEqualTo(12.0);
+        result.shape[0].Should().Be(1);
+        result.shape[1].Should().Be(1);
+        result.GetDouble(0, 0).Should().Be(12.0);
     }
 
     [TestMethod]
@@ -204,10 +204,10 @@ public class MatMulInt64Tests
 
         var result = np.matmul(a, identity);
 
-        await Assert.That(result.GetDouble(0, 0)).IsEqualTo(1.0);
-        await Assert.That(result.GetDouble(0, 1)).IsEqualTo(2.0);
-        await Assert.That(result.GetDouble(1, 0)).IsEqualTo(3.0);
-        await Assert.That(result.GetDouble(1, 1)).IsEqualTo(4.0);
+        result.GetDouble(0, 0).Should().Be(1.0);
+        result.GetDouble(0, 1).Should().Be(2.0);
+        result.GetDouble(1, 0).Should().Be(3.0);
+        result.GetDouble(1, 1).Should().Be(4.0);
     }
 
     [TestMethod]
@@ -218,10 +218,10 @@ public class MatMulInt64Tests
 
         var result = np.matmul(a, zeros);
 
-        await Assert.That(result.GetDouble(0, 0)).IsEqualTo(0.0);
-        await Assert.That(result.GetDouble(0, 1)).IsEqualTo(0.0);
-        await Assert.That(result.GetDouble(1, 0)).IsEqualTo(0.0);
-        await Assert.That(result.GetDouble(1, 1)).IsEqualTo(0.0);
+        result.GetDouble(0, 0).Should().Be(0.0);
+        result.GetDouble(0, 1).Should().Be(0.0);
+        result.GetDouble(1, 0).Should().Be(0.0);
+        result.GetDouble(1, 1).Should().Be(0.0);
     }
 
     #endregion
@@ -236,8 +236,8 @@ public class MatMulInt64Tests
 
         var result = np.matmul(a, b);
 
-        await Assert.That(result.GetInt64(0, 0)).IsEqualTo(19L);
-        await Assert.That(result.GetInt64(1, 1)).IsEqualTo(50L);
+        result.GetInt64(0, 0).Should().Be(19L);
+        result.GetInt64(1, 1).Should().Be(50L);
     }
 
     [TestMethod]
@@ -251,8 +251,8 @@ public class MatMulInt64Tests
         // Should not throw
         var result = np.dot(a, b);
 
-        await Assert.That(result.shape[0]).IsEqualTo(100);
-        await Assert.That(result.shape[1]).IsEqualTo(100);
+        result.shape[0].Should().Be(100);
+        result.shape[1].Should().Be(100);
     }
 
     #endregion

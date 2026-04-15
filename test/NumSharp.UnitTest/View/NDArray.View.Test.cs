@@ -65,7 +65,7 @@ namespace NumSharp.UnitTest.View
             // negative step!
             view = data["::-1"];
             Assert.AreEqual(new Shape(10), new Shape(view.shape));
-            AssertAreEqual(data.ToArray<long>().Reverse().ToArray(), view.ToArray<long>());
+            AssertAreEqual((data.ToArray<long>() as IEnumerable<long>).Reverse().ToArray(), view.ToArray<long>());
             view = data["::-2"];
             Assert.AreEqual(new Shape(5), new Shape(view.shape));
             AssertAreEqual(new long[] { 9, 7, 5, 3, 1 }, view.ToArray<long>());

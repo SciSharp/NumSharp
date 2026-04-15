@@ -20,7 +20,7 @@ public class NonzeroInt64Tests
         var a = np.array(new int[] { 0, 1, 0, 2 });
         var result = np.nonzero(a);
 
-        await Assert.That(result[0].typecode).IsEqualTo(NPTypeCode.Int64);
+        result[0].typecode.Should().Be(NPTypeCode.Int64);
     }
 
     [TestMethod]
@@ -29,9 +29,9 @@ public class NonzeroInt64Tests
         var a = np.array(new int[,] { { 0, 1 }, { 2, 0 } });
         var result = np.nonzero(a);
 
-        await Assert.That(result.Length).IsEqualTo(2);
-        await Assert.That(result[0].typecode).IsEqualTo(NPTypeCode.Int64);
-        await Assert.That(result[1].typecode).IsEqualTo(NPTypeCode.Int64);
+        result.Length.Should().Be(2);
+        result[0].typecode.Should().Be(NPTypeCode.Int64);
+        result[1].typecode.Should().Be(NPTypeCode.Int64);
     }
 
     [TestMethod]
@@ -43,10 +43,10 @@ public class NonzeroInt64Tests
 
         var result = np.nonzero(a);
 
-        await Assert.That(result.Length).IsEqualTo(3);
-        await Assert.That(result[0].typecode).IsEqualTo(NPTypeCode.Int64);
-        await Assert.That(result[1].typecode).IsEqualTo(NPTypeCode.Int64);
-        await Assert.That(result[2].typecode).IsEqualTo(NPTypeCode.Int64);
+        result.Length.Should().Be(3);
+        result[0].typecode.Should().Be(NPTypeCode.Int64);
+        result[1].typecode.Should().Be(NPTypeCode.Int64);
+        result[2].typecode.Should().Be(NPTypeCode.Int64);
     }
 
     #endregion
@@ -59,9 +59,9 @@ public class NonzeroInt64Tests
         var a = np.array(new byte[] { 0, 1, 0, 2, 0 });
         var result = np.nonzero(a);
 
-        await Assert.That(result[0].size).IsEqualTo(2);
-        await Assert.That(result[0].GetInt64(0)).IsEqualTo(1L);
-        await Assert.That(result[0].GetInt64(1)).IsEqualTo(3L);
+        result[0].size.Should().Be(2);
+        result[0].GetInt64(0).Should().Be(1L);
+        result[0].GetInt64(1).Should().Be(3L);
     }
 
     [TestMethod]
@@ -70,9 +70,9 @@ public class NonzeroInt64Tests
         var a = np.array(new short[] { 0, -1, 0, 2, 0 });
         var result = np.nonzero(a);
 
-        await Assert.That(result[0].size).IsEqualTo(2);
-        await Assert.That(result[0].GetInt64(0)).IsEqualTo(1L);
-        await Assert.That(result[0].GetInt64(1)).IsEqualTo(3L);
+        result[0].size.Should().Be(2);
+        result[0].GetInt64(0).Should().Be(1L);
+        result[0].GetInt64(1).Should().Be(3L);
     }
 
     [TestMethod]
@@ -81,9 +81,9 @@ public class NonzeroInt64Tests
         var a = np.array(new ushort[] { 0, 1, 0, 2, 0 });
         var result = np.nonzero(a);
 
-        await Assert.That(result[0].size).IsEqualTo(2);
-        await Assert.That(result[0].GetInt64(0)).IsEqualTo(1L);
-        await Assert.That(result[0].GetInt64(1)).IsEqualTo(3L);
+        result[0].size.Should().Be(2);
+        result[0].GetInt64(0).Should().Be(1L);
+        result[0].GetInt64(1).Should().Be(3L);
     }
 
     [TestMethod]
@@ -92,9 +92,9 @@ public class NonzeroInt64Tests
         var a = np.array(new long[] { 0, 1, 0, 2, 0 });
         var result = np.nonzero(a);
 
-        await Assert.That(result[0].size).IsEqualTo(2);
-        await Assert.That(result[0].GetInt64(0)).IsEqualTo(1L);
-        await Assert.That(result[0].GetInt64(1)).IsEqualTo(3L);
+        result[0].size.Should().Be(2);
+        result[0].GetInt64(0).Should().Be(1L);
+        result[0].GetInt64(1).Should().Be(3L);
     }
 
     [TestMethod]
@@ -103,9 +103,9 @@ public class NonzeroInt64Tests
         var a = np.array(new ulong[] { 0, 1, 0, 2, 0 });
         var result = np.nonzero(a);
 
-        await Assert.That(result[0].size).IsEqualTo(2);
-        await Assert.That(result[0].GetInt64(0)).IsEqualTo(1L);
-        await Assert.That(result[0].GetInt64(1)).IsEqualTo(3L);
+        result[0].size.Should().Be(2);
+        result[0].GetInt64(0).Should().Be(1L);
+        result[0].GetInt64(1).Should().Be(3L);
     }
 
     [TestMethod]
@@ -114,9 +114,9 @@ public class NonzeroInt64Tests
         var a = np.array(new float[] { 0f, 1.5f, 0f, -2.5f, 0f });
         var result = np.nonzero(a);
 
-        await Assert.That(result[0].size).IsEqualTo(2);
-        await Assert.That(result[0].GetInt64(0)).IsEqualTo(1L);
-        await Assert.That(result[0].GetInt64(1)).IsEqualTo(3L);
+        result[0].size.Should().Be(2);
+        result[0].GetInt64(0).Should().Be(1L);
+        result[0].GetInt64(1).Should().Be(3L);
     }
 
     [TestMethod]
@@ -125,9 +125,9 @@ public class NonzeroInt64Tests
         var a = np.array(new double[] { 0.0, 1.5, 0.0, -2.5, 0.0 });
         var result = np.nonzero(a);
 
-        await Assert.That(result[0].size).IsEqualTo(2);
-        await Assert.That(result[0].GetInt64(0)).IsEqualTo(1L);
-        await Assert.That(result[0].GetInt64(1)).IsEqualTo(3L);
+        result[0].size.Should().Be(2);
+        result[0].GetInt64(0).Should().Be(1L);
+        result[0].GetInt64(1).Should().Be(3L);
     }
 
     [TestMethod]
@@ -136,9 +136,9 @@ public class NonzeroInt64Tests
         var a = np.array(new decimal[] { 0m, 1.5m, 0m, -2.5m, 0m });
         var result = np.nonzero(a);
 
-        await Assert.That(result[0].size).IsEqualTo(2);
-        await Assert.That(result[0].GetInt64(0)).IsEqualTo(1L);
-        await Assert.That(result[0].GetInt64(1)).IsEqualTo(3L);
+        result[0].size.Should().Be(2);
+        result[0].GetInt64(0).Should().Be(1L);
+        result[0].GetInt64(1).Should().Be(3L);
     }
 
     #endregion
@@ -151,10 +151,10 @@ public class NonzeroInt64Tests
         var a = np.array(new bool[] { false, true, false, true, false });
         var result = np.nonzero(a);
 
-        await Assert.That(result[0].typecode).IsEqualTo(NPTypeCode.Int64);
-        await Assert.That(result[0].size).IsEqualTo(2);
-        await Assert.That(result[0].GetInt64(0)).IsEqualTo(1L);
-        await Assert.That(result[0].GetInt64(1)).IsEqualTo(3L);
+        result[0].typecode.Should().Be(NPTypeCode.Int64);
+        result[0].size.Should().Be(2);
+        result[0].GetInt64(0).Should().Be(1L);
+        result[0].GetInt64(1).Should().Be(3L);
     }
 
     [TestMethod]
@@ -163,14 +163,14 @@ public class NonzeroInt64Tests
         var a = np.array(new bool[,] { { false, true }, { true, false } });
         var result = np.nonzero(a);
 
-        await Assert.That(result.Length).IsEqualTo(2);
-        await Assert.That(result[0].size).IsEqualTo(2);
+        result.Length.Should().Be(2);
+        result[0].size.Should().Be(2);
 
         // (0,1) and (1,0) are true
-        await Assert.That(result[0].GetInt64(0)).IsEqualTo(0L);
-        await Assert.That(result[0].GetInt64(1)).IsEqualTo(1L);
-        await Assert.That(result[1].GetInt64(0)).IsEqualTo(1L);
-        await Assert.That(result[1].GetInt64(1)).IsEqualTo(0L);
+        result[0].GetInt64(0).Should().Be(0L);
+        result[0].GetInt64(1).Should().Be(1L);
+        result[1].GetInt64(0).Should().Be(1L);
+        result[1].GetInt64(1).Should().Be(0L);
     }
 
     #endregion
@@ -184,8 +184,8 @@ public class NonzeroInt64Tests
         var a = np.array(new double[] { 0.0, double.NaN, 0.0 });
         var result = np.nonzero(a);
 
-        await Assert.That(result[0].size).IsEqualTo(1);
-        await Assert.That(result[0].GetInt64(0)).IsEqualTo(1L);
+        result[0].size.Should().Be(1);
+        result[0].GetInt64(0).Should().Be(1L);
     }
 
     [TestMethod]
@@ -194,8 +194,8 @@ public class NonzeroInt64Tests
         var a = np.array(new double[] { 0.0, double.PositiveInfinity, 0.0 });
         var result = np.nonzero(a);
 
-        await Assert.That(result[0].size).IsEqualTo(1);
-        await Assert.That(result[0].GetInt64(0)).IsEqualTo(1L);
+        result[0].size.Should().Be(1);
+        result[0].GetInt64(0).Should().Be(1L);
     }
 
     [TestMethod]
@@ -204,8 +204,8 @@ public class NonzeroInt64Tests
         var a = np.array(new double[] { 0.0, double.NegativeInfinity, 0.0 });
         var result = np.nonzero(a);
 
-        await Assert.That(result[0].size).IsEqualTo(1);
-        await Assert.That(result[0].GetInt64(0)).IsEqualTo(1L);
+        result[0].size.Should().Be(1);
+        result[0].GetInt64(0).Should().Be(1L);
     }
 
     [TestMethod]
@@ -215,9 +215,9 @@ public class NonzeroInt64Tests
         var a = np.array(new double[] { 1.0, -0.0, 2.0 });
         var result = np.nonzero(a);
 
-        await Assert.That(result[0].size).IsEqualTo(2);
-        await Assert.That(result[0].GetInt64(0)).IsEqualTo(0L);
-        await Assert.That(result[0].GetInt64(1)).IsEqualTo(2L);
+        result[0].size.Should().Be(2);
+        result[0].GetInt64(0).Should().Be(0L);
+        result[0].GetInt64(1).Should().Be(2L);
     }
 
     #endregion
@@ -230,8 +230,8 @@ public class NonzeroInt64Tests
         var a = np.zeros(new Shape(10), NPTypeCode.Int32);
         var result = np.nonzero(a);
 
-        await Assert.That(result[0].size).IsEqualTo(0);
-        await Assert.That(result[0].typecode).IsEqualTo(NPTypeCode.Int64);
+        result[0].size.Should().Be(0);
+        result[0].typecode.Should().Be(NPTypeCode.Int64);
     }
 
     [TestMethod]
@@ -240,10 +240,10 @@ public class NonzeroInt64Tests
         var a = np.ones(new Shape(5), NPTypeCode.Int32);
         var result = np.nonzero(a);
 
-        await Assert.That(result[0].size).IsEqualTo(5);
+        result[0].size.Should().Be(5);
         for (int i = 0; i < 5; i++)
         {
-            await Assert.That(result[0].GetInt64(i)).IsEqualTo((long)i);
+            result[0].GetInt64(i).Should().Be((long)i);
         }
     }
 
@@ -255,8 +255,8 @@ public class NonzeroInt64Tests
 
         var result = np.nonzero(a);
 
-        await Assert.That(result[0].size).IsEqualTo(1);
-        await Assert.That(result[0].GetInt64(0)).IsEqualTo(5L);
+        result[0].size.Should().Be(1);
+        result[0].GetInt64(0).Should().Be(5L);
     }
 
     #endregion
@@ -272,10 +272,10 @@ public class NonzeroInt64Tests
 
         var nonzeroValues = a[indices];
 
-        await Assert.That(nonzeroValues.size).IsEqualTo(3);
-        await Assert.That(nonzeroValues.GetInt32(0)).IsEqualTo(3);
-        await Assert.That(nonzeroValues.GetInt32(1)).IsEqualTo(1);
-        await Assert.That(nonzeroValues.GetInt32(2)).IsEqualTo(2);
+        nonzeroValues.size.Should().Be(3);
+        nonzeroValues.GetInt32(0).Should().Be(3);
+        nonzeroValues.GetInt32(1).Should().Be(1);
+        nonzeroValues.GetInt32(2).Should().Be(2);
     }
 
     #endregion

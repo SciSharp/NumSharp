@@ -193,7 +193,7 @@ public class AxisReductionMemoryTests
         var result = np.var(original, axis: 0, keepdims: true);
 
         result.shape.Should().BeEquivalentTo(new long[] { 1, 3 });
-        (double)result[0, 0].Should().Be(0.0);
+        ((double)result[0, 0]).Should().Be(0.0);
     }
 
     // ===== Std (returns zeros for single element) =====

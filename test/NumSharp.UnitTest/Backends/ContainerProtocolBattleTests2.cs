@@ -20,32 +20,32 @@ public class ContainerProtocolBattleTests2
     {
         // Test with large first dimension
         var arr = np.zeros(new long[] { 10000, 10 });
-        await Assert.That(arr.__len__()).IsEqualTo(10000);
+        arr.__len__().Should().Be(10000);
     }
 
     [TestMethod]
     public async Task Len_FirstDimensionOne_ReturnsOne()
     {
         var arr = np.zeros(new long[] { 1, 100, 100 });
-        await Assert.That(arr.__len__()).IsEqualTo(1);
+        arr.__len__().Should().Be(1);
     }
 
     [TestMethod]
     public async Task Len_HighDimensional_5D()
     {
         var arr = np.zeros(new long[] { 2, 3, 4, 5, 6 });
-        await Assert.That(arr.__len__()).IsEqualTo(2);
+        arr.__len__().Should().Be(2);
     }
 
     [TestMethod]
     public async Task Len_AfterTranspose_ChangesFirstDimension()
     {
         var arr = np.arange(24).reshape(2, 3, 4);
-        await Assert.That(arr.__len__()).IsEqualTo(2);
+        arr.__len__().Should().Be(2);
 
         // After transpose, dimensions are reversed
         var transposed = arr.T;
-        await Assert.That(transposed.__len__()).IsEqualTo(4);
+        transposed.__len__().Should().Be(4);
     }
 
     [TestMethod]
@@ -53,7 +53,7 @@ public class ContainerProtocolBattleTests2
     {
         var arr = np.arange(10);
         var reversed = arr["::-2"]; // [9, 7, 5, 3, 1]
-        await Assert.That(reversed.__len__()).IsEqualTo(5);
+        reversed.__len__().Should().Be(5);
     }
 
     [TestMethod]
@@ -62,7 +62,7 @@ public class ContainerProtocolBattleTests2
         var arr = np.arange(100);
         var slice1 = arr["10:90"];
         var slice2 = slice1["20:60"];
-        await Assert.That(slice2.__len__()).IsEqualTo(40);
+        slice2.__len__().Should().Be(40);
     }
 
     #endregion
@@ -74,7 +74,7 @@ public class ContainerProtocolBattleTests2
     {
         var arr = np.arange(10);
         var result = arr.__getitem__(5L);
-        await Assert.That((int)result).IsEqualTo(5);
+        ((int)result).Should().Be(5);
     }
 
     [TestMethod]
@@ -82,7 +82,7 @@ public class ContainerProtocolBattleTests2
     {
         var arr = np.arange(10);
         var result = arr.__getitem__(-1L);
-        await Assert.That((int)result).IsEqualTo(9);
+        ((int)result).Should().Be(9);
     }
 
     [TestMethod]
@@ -90,8 +90,8 @@ public class ContainerProtocolBattleTests2
     {
         var arr = np.arange(12).reshape(3, 4);
         var row = arr.__getitem__(2L);
-        await Assert.That(row.size).IsEqualTo(4);
-        await Assert.That((int)row[0]).IsEqualTo(8);
+        row.size.Should().Be(4);
+        ((int)row[0]).Should().Be(8);
     }
 
     [TestMethod]
@@ -100,7 +100,7 @@ public class ContainerProtocolBattleTests2
         var arr = np.arange(24).reshape(2, 3, 4);
         // "..., 0" = all dimensions except last, then index 0 on last
         var result = arr["..., 0"];
-        await Assert.That(result.shape).IsEquivalentTo(new long[] { 2, 3 });
+        result.shape.Should().BeEquivalentTo(new long[] { 2, 3 });
     }
 
     [TestMethod]
@@ -108,9 +108,9 @@ public class ContainerProtocolBattleTests2
     {
         var arr = np.arange(20);
         var result = arr["2:18:3"]; // [2, 5, 8, 11, 14, 17]
-        await Assert.That(result.size).IsEqualTo(6);
-        await Assert.That((int)result[0]).IsEqualTo(2);
-        await Assert.That((int)result[5]).IsEqualTo(17);
+        result.size.Should().Be(6);
+        ((int)result[0]).Should().Be(2);
+        ((int)result[5]).Should().Be(17);
     }
 
     [TestMethod]
@@ -118,10 +118,10 @@ public class ContainerProtocolBattleTests2
     {
         var arr = np.arange(12).reshape(3, 4);
         var column = arr[":, 1"]; // All rows, column 1
-        await Assert.That(column.size).IsEqualTo(3);
-        await Assert.That((int)column[0]).IsEqualTo(1);
-        await Assert.That((int)column[1]).IsEqualTo(5);
-        await Assert.That((int)column[2]).IsEqualTo(9);
+        column.size.Should().Be(3);
+        ((int)column[0]).Should().Be(1);
+        ((int)column[1]).Should().Be(5);
+        ((int)column[2]).Should().Be(9);
     }
 
     [TestMethod]
@@ -129,8 +129,8 @@ public class ContainerProtocolBattleTests2
     {
         var arr = np.arange(20).reshape(4, 5);
         var submat = arr["1:3, 2:5"];
-        await Assert.That(submat.shape).IsEquivalentTo(new long[] { 2, 3 });
-        await Assert.That((int)submat[0, 0]).IsEqualTo(7);
+        submat.shape.Should().BeEquivalentTo(new long[] { 2, 3 });
+        ((int)submat[0, 0]).Should().Be(7);
     }
 
     [TestMethod]
@@ -145,9 +145,9 @@ public class ContainerProtocolBattleTests2
         original[3, 5] = 999;
 
         // Check all views see the change
-        await Assert.That((int)view1[1, 5]).IsEqualTo(999);
-        await Assert.That((int)view2[1, 2]).IsEqualTo(999);
-        await Assert.That((int)view3[0, 2]).IsEqualTo(999);
+        ((int)view1[1, 5]).Should().Be(999);
+        ((int)view2[1, 2]).Should().Be(999);
+        ((int)view3[0, 2]).Should().Be(999);
     }
 
     #endregion
@@ -159,7 +159,7 @@ public class ContainerProtocolBattleTests2
     {
         var arr = np.array(new[] { 1, 2, 3, 4, 5 });
         arr.__setitem__(3L, 99);
-        await Assert.That((int)arr[3]).IsEqualTo(99);
+        ((int)arr[3]).Should().Be(99);
     }
 
     [TestMethod]
@@ -167,7 +167,7 @@ public class ContainerProtocolBattleTests2
     {
         var arr = np.array(new[] { 1, 2, 3, 4, 5 });
         arr.__setitem__(-2L, 88);
-        await Assert.That((int)arr[3]).IsEqualTo(88);
+        ((int)arr[3]).Should().Be(88);
     }
 
     [TestMethod]
@@ -175,7 +175,7 @@ public class ContainerProtocolBattleTests2
     {
         var arr = np.zeros(new long[] { 3, 4 }, np.int32);
         arr.__setitem__(":", 5);
-        await Assert.That(np.all(arr == 5)).IsTrue();
+        np.all(arr == 5).Should().BeTrue();
     }
 
     [TestMethod]
@@ -191,8 +191,8 @@ public class ContainerProtocolBattleTests2
         // When fixed, all rows should be [1, 2, 3, 4]
         for (int i = 0; i < 3; i++)
         {
-            await Assert.That((int)arr[i, 0]).IsEqualTo(1);
-            await Assert.That((int)arr[i, 3]).IsEqualTo(4);
+            ((int)arr[i, 0]).Should().Be(1);
+            ((int)arr[i, 3]).Should().Be(4);
         }
     }
 
@@ -204,12 +204,12 @@ public class ContainerProtocolBattleTests2
 
         arr.__setitem__("2:5", source);
 
-        await Assert.That((int)arr[0]).IsEqualTo(0);
-        await Assert.That((int)arr[1]).IsEqualTo(0);
-        await Assert.That((int)arr[2]).IsEqualTo(1);
-        await Assert.That((int)arr[3]).IsEqualTo(2);
-        await Assert.That((int)arr[4]).IsEqualTo(3);
-        await Assert.That((int)arr[5]).IsEqualTo(0);
+        ((int)arr[0]).Should().Be(0);
+        ((int)arr[1]).Should().Be(0);
+        ((int)arr[2]).Should().Be(1);
+        ((int)arr[3]).Should().Be(2);
+        ((int)arr[4]).Should().Be(3);
+        ((int)arr[5]).Should().Be(0);
     }
 
     [TestMethod]
@@ -218,10 +218,10 @@ public class ContainerProtocolBattleTests2
         var arr = np.zeros(new long[] { 10 }, np.int32);
         arr.__setitem__("::2", 1); // Set every other element
 
-        await Assert.That((int)arr[0]).IsEqualTo(1);
-        await Assert.That((int)arr[1]).IsEqualTo(0);
-        await Assert.That((int)arr[2]).IsEqualTo(1);
-        await Assert.That((int)arr[3]).IsEqualTo(0);
+        ((int)arr[0]).Should().Be(1);
+        ((int)arr[1]).Should().Be(0);
+        ((int)arr[2]).Should().Be(1);
+        ((int)arr[3]).Should().Be(0);
     }
 
     [TestMethod]
@@ -229,7 +229,7 @@ public class ContainerProtocolBattleTests2
     {
         var arr = np.array(new[] { 1.5, 2.5, 3.5 });
         arr.__setitem__(1, 10); // int assigned to double array
-        await Assert.That((double)arr[1]).IsEqualTo(10.0);
+        ((double)arr[1]).Should().Be(10.0);
     }
 
     [TestMethod]
@@ -240,7 +240,7 @@ public class ContainerProtocolBattleTests2
         // NumSharp rounds: arr[1] = 2.9 becomes 3
         var arr = np.array(new[] { 1, 2, 3 });
         arr.__setitem__(1, 2.9);
-        await Assert.That((int)arr[1]).IsEqualTo(3); // NumSharp rounds
+        ((int)arr[1]).Should().Be(3); // NumSharp rounds
     }
 
     [TestMethod]
@@ -251,7 +251,7 @@ public class ContainerProtocolBattleTests2
 
         view.__setitem__(1, 999);
 
-        await Assert.That((int)original[4]).IsEqualTo(999);
+        ((int)original[4]).Should().Be(999);
     }
 
     #endregion
@@ -263,51 +263,51 @@ public class ContainerProtocolBattleTests2
     {
         // NaN != NaN in IEEE 754
         var arr = np.array(new[] { 1.0f, float.NaN, 3.0f });
-        await Assert.That(arr.Contains(float.NaN)).IsFalse();
+        arr.Contains(float.NaN).Should().BeFalse();
     }
 
     [TestMethod]
     public async Task Contains_NaN_DoubleArray_ReturnsFalse()
     {
         var arr = np.array(new[] { 1.0, double.NaN, 3.0 });
-        await Assert.That(arr.Contains(double.NaN)).IsFalse();
+        arr.Contains(double.NaN).Should().BeFalse();
     }
 
     [TestMethod]
     public async Task Contains_MaxValue_Int32()
     {
         var arr = np.array(new[] { int.MinValue, 0, int.MaxValue });
-        await Assert.That(arr.Contains(int.MaxValue)).IsTrue();
-        await Assert.That(arr.Contains(int.MinValue)).IsTrue();
+        arr.Contains(int.MaxValue).Should().BeTrue();
+        arr.Contains(int.MinValue).Should().BeTrue();
     }
 
     [TestMethod]
     public async Task Contains_MaxValue_Int64()
     {
         var arr = np.array(new[] { long.MinValue, 0L, long.MaxValue });
-        await Assert.That(arr.Contains(long.MaxValue)).IsTrue();
-        await Assert.That(arr.Contains(long.MinValue)).IsTrue();
+        arr.Contains(long.MaxValue).Should().BeTrue();
+        arr.Contains(long.MinValue).Should().BeTrue();
     }
 
     [TestMethod]
     public async Task Contains_TypePromotion_ByteInInt32Array()
     {
         var arr = np.array(new[] { 1, 2, 3, 4, 5 });
-        await Assert.That(arr.Contains((byte)3)).IsTrue();
+        arr.Contains(((byte)3)).Should().BeTrue();
     }
 
     [TestMethod]
     public async Task Contains_TypePromotion_Int32InInt64Array()
     {
         var arr = np.array(new long[] { 1, 2, 3, 4, 5 });
-        await Assert.That(arr.Contains(3)).IsTrue();
+        arr.Contains(3).Should().BeTrue();
     }
 
     [TestMethod]
     public async Task Contains_ZeroInMixedSignArray()
     {
         var arr = np.array(new[] { -5, -3, 0, 3, 5 });
-        await Assert.That(arr.Contains(0)).IsTrue();
+        arr.Contains(0).Should().BeTrue();
     }
 
     [TestMethod]
@@ -321,26 +321,26 @@ public class ContainerProtocolBattleTests2
             double.PositiveInfinity
         });
 
-        await Assert.That(arr.Contains(double.NegativeInfinity)).IsTrue();
-        await Assert.That(arr.Contains(double.PositiveInfinity)).IsTrue();
-        await Assert.That(arr.Contains(double.MinValue)).IsTrue();
-        await Assert.That(arr.Contains(double.MaxValue)).IsTrue();
+        arr.Contains(double.NegativeInfinity).Should().BeTrue();
+        arr.Contains(double.PositiveInfinity).Should().BeTrue();
+        arr.Contains(double.MinValue).Should().BeTrue();
+        arr.Contains(double.MaxValue).Should().BeTrue();
     }
 
     [TestMethod]
     public async Task Contains_TransposedArray()
     {
         var arr = np.arange(12).reshape(3, 4).T;
-        await Assert.That(arr.Contains(5)).IsTrue();
-        await Assert.That(arr.Contains(100)).IsFalse();
+        arr.Contains(5).Should().BeTrue();
+        arr.Contains(100).Should().BeFalse();
     }
 
     [TestMethod]
     public async Task Contains_ReversedArray()
     {
         var arr = np.arange(10)["::-1"];
-        await Assert.That(arr.Contains(5)).IsTrue();
-        await Assert.That(arr.Contains(100)).IsFalse();
+        arr.Contains(5).Should().BeTrue();
+        arr.Contains(100).Should().BeFalse();
     }
 
     #endregion
@@ -359,9 +359,9 @@ public class ContainerProtocolBattleTests2
             rows.Add((NDArray)item);
         }
 
-        await Assert.That(rows.Count).IsEqualTo(2);
-        await Assert.That((int)rows[0][0]).IsEqualTo(5);
-        await Assert.That((int)rows[1][0]).IsEqualTo(10);
+        rows.Count.Should().Be(2);
+        ((int)rows[0][0]).Should().Be(5);
+        ((int)rows[1][0]).Should().Be(10);
     }
 
     [TestMethod]
@@ -381,9 +381,9 @@ public class ContainerProtocolBattleTests2
             }
         }
 
-        await Assert.That(allValues.Count).IsEqualTo(24);
-        await Assert.That(allValues[0]).IsEqualTo(0);
-        await Assert.That(allValues[23]).IsEqualTo(23);
+        allValues.Count.Should().Be(24);
+        allValues[0].Should().Be(0);
+        allValues[23].Should().Be(23);
     }
 
     [TestMethod]
@@ -398,8 +398,8 @@ public class ContainerProtocolBattleTests2
         enum1.MoveNext();
         enum2.MoveNext();
 
-        await Assert.That(Convert.ToInt32(enum1.Current)).IsEqualTo(2);
-        await Assert.That(Convert.ToInt32(enum2.Current)).IsEqualTo(1);
+        Convert.ToInt32(enum1.Current).Should().Be(2);
+        Convert.ToInt32(enum2.Current).Should().Be(1);
     }
 
     [TestMethod]
@@ -411,10 +411,10 @@ public class ContainerProtocolBattleTests2
 
         enumerator.MoveNext();
         enumerator.MoveNext();
-        await Assert.That(Convert.ToInt32(enumerator.Current)).IsEqualTo(2);
+        Convert.ToInt32(enumerator.Current).Should().Be(2);
 
         // Reset throws NotSupportedException
-        await Assert.That(() => enumerator.Reset()).Throws<NotSupportedException>();
+        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<NotSupportedException>(() => enumerator.Reset());
     }
 
     [TestMethod]
@@ -428,10 +428,10 @@ public class ContainerProtocolBattleTests2
             rows.Add((NDArray)item);
         }
 
-        await Assert.That(rows.Count).IsEqualTo(3);
+        rows.Count.Should().Be(3);
         // First row of transposed is [0, 3]
-        await Assert.That((int)rows[0][0]).IsEqualTo(0);
-        await Assert.That((int)rows[0][1]).IsEqualTo(3);
+        ((int)rows[0][0]).Should().Be(0);
+        ((int)rows[0][1]).Should().Be(3);
     }
 
     [TestMethod]
@@ -446,7 +446,7 @@ public class ContainerProtocolBattleTests2
             values.Add(Convert.ToInt32(item));
         }
 
-        await Assert.That(values).IsEquivalentTo(new[] { 5, 6, 7, 8, 9 });
+        values.Should().BeEquivalentTo(new[] { 5, 6, 7, 8, 9 });
     }
 
     [TestMethod]
@@ -461,7 +461,7 @@ public class ContainerProtocolBattleTests2
             values.Add(Convert.ToInt32(item));
         }
 
-        await Assert.That(values).IsEquivalentTo(new[] { 1, 3, 5, 7, 9 });
+        values.Should().BeEquivalentTo(new[] { 1, 3, 5, 7, 9 });
     }
 
     [TestMethod]
@@ -475,7 +475,7 @@ public class ContainerProtocolBattleTests2
             values.Add(Convert.ToInt32(item));
         }
 
-        await Assert.That(values).IsEquivalentTo(new[] { 4, 3, 2, 1, 0 });
+        values.Should().BeEquivalentTo(new[] { 4, 3, 2, 1, 0 });
     }
 
     [TestMethod]
@@ -490,12 +490,12 @@ public class ContainerProtocolBattleTests2
             rows.Add((NDArray)item);
         }
 
-        await Assert.That(rows.Count).IsEqualTo(4);
+        rows.Count.Should().Be(4);
         // All rows should be [1, 2, 3]
         foreach (var row in rows)
         {
-            await Assert.That((int)row[0]).IsEqualTo(1);
-            await Assert.That((int)row[2]).IsEqualTo(3);
+            ((int)row[0]).Should().Be(1);
+            ((int)row[2]).Should().Be(3);
         }
     }
 
@@ -508,7 +508,7 @@ public class ContainerProtocolBattleTests2
     {
         var arr = np.arange(10);
         var empty = arr["5:5"]; // Empty slice
-        await Assert.That(empty.size).IsEqualTo(0);
+        empty.size.Should().Be(0);
     }
 
     [TestMethod]
@@ -516,7 +516,7 @@ public class ContainerProtocolBattleTests2
     {
         var arr = np.arange(5);
         var result = arr["-100:3"]; // Should be equivalent to [:3]
-        await Assert.That(result.size).IsEqualTo(3);
+        result.size.Should().Be(3);
     }
 
     [TestMethod]
@@ -524,14 +524,14 @@ public class ContainerProtocolBattleTests2
     {
         var arr = np.arange(5);
         var result = arr["2:100"]; // Should be equivalent to [2:]
-        await Assert.That(result.size).IsEqualTo(3);
+        result.size.Should().Be(3);
     }
 
     [TestMethod]
     public async Task Len_EmptyHighDimensional()
     {
         var arr = np.zeros(new long[] { 0, 5, 10 });
-        await Assert.That(arr.__len__()).IsEqualTo(0);
+        arr.__len__().Should().Be(0);
     }
 
     [TestMethod]
@@ -539,7 +539,7 @@ public class ContainerProtocolBattleTests2
     {
         var arr = np.array(new[] { 1, 2, 3 });
         // String can't be in int array
-        await Assert.That(arr.Contains("hello")).IsFalse();
+        arr.Contains("hello").Should().BeFalse();
     }
 
     [TestMethod]
@@ -551,7 +551,7 @@ public class ContainerProtocolBattleTests2
         {
             count++;
         }
-        await Assert.That(count).IsEqualTo(0);
+        count.Should().Be(0);
     }
 
     [TestMethod]
@@ -567,7 +567,7 @@ public class ContainerProtocolBattleTests2
 
         foreach (var arr in arrays)
         {
-            await Assert.That(() => arr.GetHashCode()).Throws<NotSupportedException>();
+            Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<NotSupportedException>(() => arr.GetHashCode());
         }
     }
 
@@ -586,10 +586,10 @@ public class ContainerProtocolBattleTests2
         var item = arr.__getitem__(1);
         var iter = arr.__iter__();
 
-        await Assert.That(len).IsEqualTo(3);
-        await Assert.That(contains).IsTrue();
-        await Assert.That(item.size).IsEqualTo(4);
-        await Assert.That(iter).IsNotNull();
+        len.Should().Be(3);
+        contains.Should().BeTrue();
+        item.size.Should().Be(4);
+        iter.Should().NotBeNull();
     }
 
     [TestMethod]
@@ -598,16 +598,16 @@ public class ContainerProtocolBattleTests2
         var arr = np.zeros(new long[] { 3, 3 }, np.int32);
         arr.__setitem__(1, 5);
 
-        await Assert.That((int)arr[1, 0]).IsEqualTo(5);
-        await Assert.That((int)arr[1, 1]).IsEqualTo(5);
-        await Assert.That((int)arr[1, 2]).IsEqualTo(5);
+        ((int)arr[1, 0]).Should().Be(5);
+        ((int)arr[1, 1]).Should().Be(5);
+        ((int)arr[1, 2]).Should().Be(5);
     }
 
     [TestMethod]
     public async Task PythonAPI_Hash_Throws()
     {
         var arr = np.array(new[] { 1, 2, 3 });
-        await Assert.That(() => arr.__hash__()).Throws<NotSupportedException>();
+        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<NotSupportedException>(() => arr.__hash__());
     }
 
     #endregion
