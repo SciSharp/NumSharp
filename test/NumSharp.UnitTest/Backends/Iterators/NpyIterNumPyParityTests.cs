@@ -1039,18 +1039,15 @@ namespace NumSharp.UnitTest.Backends.Iterators
         // =========================================================================
 
         [TestMethod]
-        [Misaligned]  // NUMSHARP DIVERGENCE: F-order with MULTI_INDEX not fully implemented
         public void IterationOrder_FOrder_ColumnMajor()
         {
             // NumPy 2.4.2:
-            // >>> it = np.nditer(np.arange(6).reshape(2,3), flags=['multi_index'], order='F')
+            // >>> a = np.arange(6).reshape(2, 3)
+            // >>> it = np.nditer(a, flags=['multi_index'], order='F')
             // >>> [(it.multi_index, int(x)) for x in it]
             // [((0, 0), 0), ((1, 0), 3), ((0, 1), 1), ((1, 1), 4), ((0, 2), 2), ((1, 2), 5)]
             //
-            // NUMSHARP DIVERGENCE: When MULTI_INDEX is set, NumSharp skips axis reordering
-            // to preserve original index mapping. F-order iteration with MULTI_INDEX
-            // requires tracking both iteration order and original indices, which is not
-            // yet implemented. Without MULTI_INDEX, F-order works correctly (axes coalesce).
+            // F-order iteration: first axis changes fastest (column-major)
 
             var arr = np.arange(6).reshape(2, 3);
             using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.MULTI_INDEX, NPY_ORDER.NPY_FORTRANORDER);
@@ -1065,12 +1062,14 @@ namespace NumSharp.UnitTest.Backends.Iterators
                 iter.Iternext();
             }
 
-            // Current NumSharp behavior: iterates in C-order even with F flag when MULTI_INDEX set
-            // This is a known divergence from NumPy
+            // F-order: iterates column by column (first axis changes fastest)
+            Assert.AreEqual(6, results.Count);
             Assert.AreEqual(0, results[0].Item3);  // (0,0) = 0
-            Assert.AreEqual(1, results[1].Item3);  // (0,1) = 1 (C-order)
-            Assert.AreEqual(2, results[2].Item3);  // (0,2) = 2 (C-order)
-            Assert.AreEqual(3, results[3].Item3);  // (1,0) = 3 (C-order)
+            Assert.AreEqual(3, results[1].Item3);  // (1,0) = 3
+            Assert.AreEqual(1, results[2].Item3);  // (0,1) = 1
+            Assert.AreEqual(4, results[3].Item3);  // (1,1) = 4
+            Assert.AreEqual(2, results[4].Item3);  // (0,2) = 2
+            Assert.AreEqual(5, results[5].Item3);  // (1,2) = 5
         }
 
         // =========================================================================
@@ -1147,22 +1146,20 @@ namespace NumSharp.UnitTest.Backends.Iterators
         // =========================================================================
 
         [TestMethod]
-        [Misaligned]  // NUMSHARP DIVERGENCE: K-order with MULTI_INDEX on transposed arrays not fully implemented
         public void Transposed_OrderK_FollowsMemoryLayout()
         {
             // NumPy 2.4.2:
             // >>> a = np.arange(6).reshape(2, 3)
-            // >>> b = a.T  # Shape (3, 2), strides (8, 24)
+            // >>> b = a.T  # Shape (3, 2), strides (8, 24) - effectively F-contiguous
             // >>> it = np.nditer(b, flags=['multi_index'], order='K')
             // >>> [int(x) for x in it]
             // [0, 1, 2, 3, 4, 5]
             //
-            // NUMSHARP DIVERGENCE: When MULTI_INDEX is set, NumSharp skips axis reordering
-            // to preserve original index mapping. K-order on F-contiguous arrays with
-            // MULTI_INDEX requires tracking both iteration order and original indices.
+            // K-order follows memory layout: smallest stride (8) is axis 0, so iterate axis 0 first
+            // Values are accessed in memory order: 0, 1, 2, 3, 4, 5
 
             var arr = np.arange(6).reshape(2, 3);
-            var transposed = arr.T;
+            var transposed = arr.T;  // (3, 2) with strides [1, 3] in element units
 
             using var iter = NpyIterRef.New(transposed, NpyIterGlobalFlags.MULTI_INDEX, NPY_ORDER.NPY_KEEPORDER);
 
@@ -1174,10 +1171,8 @@ namespace NumSharp.UnitTest.Backends.Iterators
                 iter.Iternext();
             }
 
-            // Current NumSharp behavior: iterates in logical C-order of the transposed shape
-            // This follows the view's logical structure rather than underlying memory layout
-            // Transposed (3,2) iterates: (0,0)=0, (0,1)=3, (1,0)=1, (1,1)=4, (2,0)=2, (2,1)=5
-            CollectionAssert.AreEqual(new[] { 0, 3, 1, 4, 2, 5 }, results.ToArray());
+            // K-order on transposed: follows memory layout (values 0,1,2,3,4,5)
+            CollectionAssert.AreEqual(new[] { 0, 1, 2, 3, 4, 5 }, results.ToArray());
         }
 
         // =========================================================================

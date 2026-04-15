@@ -164,36 +164,75 @@ namespace NumSharp.Backends.Iteration
         }
 
         /// <summary>
-        /// Reorder axes for optimal coalescing based on iteration order.
+        /// Reorder axes for iteration based on the specified order.
         /// This is called BEFORE CoalesceAxes to enable full coalescing of contiguous arrays.
         ///
-        /// For C-order (row-major) iteration, axes are sorted so smallest strides come FIRST.
-        /// This allows the coalescing formula stride[i]*shape[i]==stride[i+1] to work correctly.
+        /// Order semantics (matching NumPy):
+        /// - C-order (NPY_CORDER): Last axis innermost (row-major logical order)
+        ///   Forces axes to [n-1, n-2, ..., 0] order regardless of memory layout
+        /// - F-order (NPY_FORTRANORDER): First axis innermost (column-major logical order)
+        ///   Forces axes to [0, 1, ..., n-1] order regardless of memory layout
+        /// - K-order (NPY_KEEPORDER): Follow memory layout (smallest stride innermost)
+        ///   Sorts by stride to maximize cache efficiency
+        /// - A-order (NPY_ANYORDER): Same as K-order
         ///
-        /// Example: C-contiguous (2,3,4) with strides [12,4,1]
-        /// - Before reorder: (0,1) check: 12*2=24 != 4 → can't coalesce
-        /// - After reorder to [4,3,2] with strides [1,4,12]:
-        ///   (0,1) check: 1*4=4 == 4 ✓ → coalesce to [12,2], strides [1,12]
-        ///   (0,1) check: 1*12=12 == 12 ✓ → coalesce to [24], strides [1]
+        /// The Perm array tracks the mapping: Perm[internal_axis] = original_axis
+        /// This allows GetMultiIndex to return coordinates in the original axis order.
         /// </summary>
-        public static void ReorderAxesForCoalescing(ref NpyIterState state, NPY_ORDER order)
+        /// <param name="state">Iterator state to modify</param>
+        /// <param name="order">Iteration order</param>
+        /// <param name="forCoalescing">If true, sort for coalescing (ascending).
+        /// If false, sort for memory-order iteration with MULTI_INDEX (descending).
+        /// Only affects K-order; C and F orders are deterministic.</param>
+        public static void ReorderAxesForCoalescing(ref NpyIterState state, NPY_ORDER order, bool forCoalescing = true)
         {
             if (state.NDim <= 1)
                 return;
-
-            // KEEPORDER and ANYORDER: sort by stride to maximize coalescing
-            // CORDER: sort ascending (smallest stride first = inner dimension first)
-            // FORTRANORDER: sort descending (largest stride first)
-            bool ascending = order != NPY_ORDER.NPY_FORTRANORDER;
 
             var shape = state.Shape;
             var strides = state.Strides;
             var perm = state.Perm;
             int stridesNDim = state.StridesNDim;
+            int ndim = state.NDim;
+
+            // For C and F orders, we need deterministic axis ordering (not stride-based)
+            // Note: In Advance(), axis NDim-1 is innermost (changes fastest)
+            //
+            // C-order (row-major): last axis changes fastest
+            //   - Want original axis n-1 at internal position n-1 (innermost)
+            //   - No reordering needed, identity permutation
+            //
+            // F-order (column-major): first axis changes fastest
+            //   - Want original axis 0 at internal position n-1 (innermost)
+            //   - Reverse axis order so internal = [n-1, n-2, ..., 0]
+            //   - Perm = [n-1, n-2, ..., 0] (internal axis d = original axis n-1-d)
+            if (order == NPY_ORDER.NPY_CORDER)
+            {
+                // C-order: no reordering needed, already identity
+                state.ItFlags |= (uint)NpyIterFlags.IDENTPERM;
+                return;
+            }
+            else if (order == NPY_ORDER.NPY_FORTRANORDER)
+            {
+                // F-order: reverse axis order so first axis is innermost
+                ReverseAxes(ref state);
+                state.ItFlags &= ~(uint)NpyIterFlags.IDENTPERM;
+                return;
+            }
+
+            // K-order (KEEPORDER) and A-order (ANYORDER): sort by stride
+            //
+            // The sort order depends on whether coalescing will follow:
+            // - forCoalescing=true (without MULTI_INDEX): ascending sort (smallest first)
+            //   This allows the coalescing formula stride[i] * shape[i] == stride[i+1] to work.
+            // - forCoalescing=false (with MULTI_INDEX): descending sort (largest first)
+            //   This puts the smallest stride at position NDim-1, where Advance() starts,
+            //   resulting in memory-order iteration.
+            bool ascending = forCoalescing;  // Ascending for coalescing, descending for iteration
 
             // Simple insertion sort by minimum absolute stride across all operands
             // Using insertion sort for stability and good performance on nearly-sorted data
-            for (int i = 1; i < state.NDim; i++)
+            for (int i = 1; i < ndim; i++)
             {
                 long keyShape = shape[i];
                 sbyte keyPerm = perm[i];
@@ -210,7 +249,7 @@ namespace NumSharp.Backends.Iteration
                 {
                     long jMinStride = GetMinStride(strides, state.NOp, j, stridesNDim);
 
-                    // Compare based on order
+                    // Compare based on order (ascending = smallest first)
                     bool shouldShift = ascending
                         ? jMinStride > keyMinStride
                         : jMinStride < keyMinStride;
@@ -237,9 +276,53 @@ namespace NumSharp.Backends.Iteration
                     strides[op * stridesNDim + j + 1] = keyStrides[op];
             }
 
-            // Mark that permutation may have changed
-            state.ItFlags &= ~(uint)NpyIterFlags.IDENTPERM;
-            state.ItFlags |= (uint)NpyIterFlags.NEGPERM;  // Indicate non-identity permutation
+            // Check if permutation is still identity
+            bool isIdentity = true;
+            for (int d = 0; d < ndim; d++)
+            {
+                if (perm[d] != d)
+                {
+                    isIdentity = false;
+                    break;
+                }
+            }
+
+            if (isIdentity)
+                state.ItFlags |= (uint)NpyIterFlags.IDENTPERM;
+            else
+                state.ItFlags &= ~(uint)NpyIterFlags.IDENTPERM;
+        }
+
+        /// <summary>
+        /// Reverse the axis order for C-order iteration.
+        /// Internal order becomes [n-1, n-2, ..., 0].
+        /// </summary>
+        private static void ReverseAxes(ref NpyIterState state)
+        {
+            var shape = state.Shape;
+            var strides = state.Strides;
+            var perm = state.Perm;
+            int stridesNDim = state.StridesNDim;
+            int ndim = state.NDim;
+
+            // Reverse shape and perm
+            for (int i = 0; i < ndim / 2; i++)
+            {
+                int j = ndim - 1 - i;
+
+                // Swap shape
+                (shape[i], shape[j]) = (shape[j], shape[i]);
+
+                // Swap perm
+                (perm[i], perm[j]) = (perm[j], perm[i]);
+
+                // Swap strides for all operands
+                for (int op = 0; op < state.NOp; op++)
+                {
+                    int baseIdx = op * stridesNDim;
+                    (strides[baseIdx + i], strides[baseIdx + j]) = (strides[baseIdx + j], strides[baseIdx + i]);
+                }
+            }
         }
 
         /// <summary>
