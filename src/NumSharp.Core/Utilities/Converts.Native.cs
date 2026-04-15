@@ -234,6 +234,18 @@ namespace NumSharp.Utilities
         }
 
         [MethodImpl(OptimizeAndInline)]
+        public static bool ToBoolean(Half value)
+        {
+            return value != (Half)0;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static bool ToBoolean(System.Numerics.Complex value)
+        {
+            return value != System.Numerics.Complex.Zero;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
         public static bool ToBoolean(DateTime value)
         {
             return ((IConvertible)value).ToBoolean(null);
@@ -381,6 +393,18 @@ namespace NumSharp.Utilities
         }
 
         [MethodImpl(OptimizeAndInline)]
+        public static char ToChar(Half value)
+        {
+            return (char)(ushort)value;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static char ToChar(System.Numerics.Complex value)
+        {
+            return (char)(ushort)value.Real;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
         public static char ToChar(DateTime value)
         {
             return ((IConvertible)value).ToChar(null);
@@ -512,6 +536,18 @@ namespace NumSharp.Utilities
         {
             // NumPy uses truncation toward zero
             return decimal.ToSByte(decimal.Truncate(value));
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static sbyte ToSByte(Half value)
+        {
+            return (sbyte)value;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static sbyte ToSByte(System.Numerics.Complex value)
+        {
+            return (sbyte)value.Real;
         }
 
 
@@ -654,6 +690,18 @@ namespace NumSharp.Utilities
         }
 
         [MethodImpl(OptimizeAndInline)]
+        public static byte ToByte(Half value)
+        {
+            return (byte)value;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static byte ToByte(System.Numerics.Complex value)
+        {
+            return (byte)value.Real;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
         public static byte ToByte(string value)
         {
             if (value == null)
@@ -786,6 +834,18 @@ namespace NumSharp.Utilities
         {
             // NumPy uses truncation toward zero
             return decimal.ToInt16(decimal.Truncate(value));
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static short ToInt16(Half value)
+        {
+            return (short)value;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static short ToInt16(System.Numerics.Complex value)
+        {
+            return (short)value.Real;
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -933,6 +993,18 @@ namespace NumSharp.Utilities
             return decimal.ToUInt16(decimal.Truncate(value));
         }
 
+        [MethodImpl(OptimizeAndInline)]
+        public static ushort ToUInt16(Half value)
+        {
+            return (ushort)value;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static ushort ToUInt16(System.Numerics.Complex value)
+        {
+            return (ushort)value.Real;
+        }
+
 
         [MethodImpl(OptimizeAndInline)]
         public static ushort ToUInt16(string value)
@@ -1071,6 +1143,18 @@ namespace NumSharp.Utilities
         {
             // NumPy uses truncation toward zero for decimal->int conversion
             return decimal.ToInt32(decimal.Truncate(value));
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static int ToInt32(Half value)
+        {
+            return (int)value;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static int ToInt32(System.Numerics.Complex value)
+        {
+            return (int)value.Real;
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -1223,6 +1307,18 @@ namespace NumSharp.Utilities
             return decimal.ToUInt32(decimal.Truncate(value));
         }
 
+        [MethodImpl(OptimizeAndInline)]
+        public static uint ToUInt32(Half value)
+        {
+            return (uint)value;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static uint ToUInt32(System.Numerics.Complex value)
+        {
+            return (uint)value.Real;
+        }
+
 
         [MethodImpl(OptimizeAndInline)]
         public static uint ToUInt32(string value)
@@ -1351,6 +1447,18 @@ namespace NumSharp.Utilities
         {
             // NumPy uses truncation toward zero
             return decimal.ToInt64(decimal.Truncate(value));
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static long ToInt64(Half value)
+        {
+            return (long)value;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static long ToInt64(System.Numerics.Complex value)
+        {
+            return (long)value.Real;
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -1495,6 +1603,18 @@ namespace NumSharp.Utilities
             return decimal.ToUInt64(decimal.Truncate(value));
         }
 
+        [MethodImpl(OptimizeAndInline)]
+        public static ulong ToUInt64(Half value)
+        {
+            return (ulong)value;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static ulong ToUInt64(System.Numerics.Complex value)
+        {
+            return (ulong)value.Real;
+        }
+
 
         [MethodImpl(OptimizeAndInline)]
         public static ulong ToUInt64(string value)
@@ -1611,6 +1731,18 @@ namespace NumSharp.Utilities
         public static float ToSingle(decimal value)
         {
             return (float)value;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static float ToSingle(Half value)
+        {
+            return (float)value;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static float ToSingle(System.Numerics.Complex value)
+        {
+            return (float)value.Real;
         }
 
         [MethodImpl(OptimizeAndInline)]
@@ -1736,6 +1868,18 @@ namespace NumSharp.Utilities
         }
 
         [MethodImpl(OptimizeAndInline)]
+        public static double ToDouble(Half value)
+        {
+            return (double)value;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static double ToDouble(System.Numerics.Complex value)
+        {
+            return value.Real;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
         public static double ToDouble(string value)
         {
             if (value == null)
@@ -1851,6 +1995,18 @@ namespace NumSharp.Utilities
         }
 
         [MethodImpl(OptimizeAndInline)]
+        public static decimal ToDecimal(Half value)
+        {
+            return (decimal)(double)value;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static decimal ToDecimal(System.Numerics.Complex value)
+        {
+            return (decimal)value.Real;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
         public static decimal ToDecimal(string value)
         {
             if (value == null)
@@ -1886,6 +2042,230 @@ namespace NumSharp.Utilities
 
         // Disallowed conversions to Decimal
         // [MethodImpl(OptimizeAndInline)] public static decimal ToDecimal(TimeSpan value)
+
+        // Conversions to Half (float16)
+        // Note: Half doesn't implement IConvertible, so all conversions go through double
+
+        [MethodImpl(OptimizeAndInline)]
+        public static Half ToHalf(object value)
+        {
+            return value == null ? default : (Half)((IConvertible)value).ToDouble(null);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static Half ToHalf(object value, IFormatProvider provider)
+        {
+            return value == null ? default : (Half)((IConvertible)value).ToDouble(provider);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static Half ToHalf(bool value)
+        {
+            return value ? (Half)1.0 : (Half)0.0;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static Half ToHalf(Half value)
+        {
+            return value;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static Half ToHalf(sbyte value)
+        {
+            return (Half)value;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static Half ToHalf(byte value)
+        {
+            return (Half)value;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static Half ToHalf(char value)
+        {
+            return (Half)value;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static Half ToHalf(short value)
+        {
+            return (Half)value;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static Half ToHalf(ushort value)
+        {
+            return (Half)value;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static Half ToHalf(int value)
+        {
+            return (Half)value;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static Half ToHalf(uint value)
+        {
+            return (Half)value;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static Half ToHalf(long value)
+        {
+            return (Half)value;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static Half ToHalf(ulong value)
+        {
+            return (Half)value;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static Half ToHalf(float value)
+        {
+            return (Half)value;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static Half ToHalf(double value)
+        {
+            return (Half)value;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static Half ToHalf(decimal value)
+        {
+            return (Half)(double)value;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static Half ToHalf(string value)
+        {
+            if (value == null)
+                return default;
+            return Half.Parse(value, CultureInfo.CurrentCulture);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static Half ToHalf(string value, IFormatProvider provider)
+        {
+            if (value == null)
+                return default;
+            return Half.Parse(value, provider);
+        }
+
+        // Conversions to Complex (complex128)
+        // Note: Complex doesn't implement IConvertible
+
+        [MethodImpl(OptimizeAndInline)]
+        public static System.Numerics.Complex ToComplex(object value)
+        {
+            if (value == null) return default;
+            if (value is System.Numerics.Complex c) return c;
+            return new System.Numerics.Complex(((IConvertible)value).ToDouble(null), 0);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static System.Numerics.Complex ToComplex(object value, IFormatProvider provider)
+        {
+            if (value == null) return default;
+            if (value is System.Numerics.Complex c) return c;
+            return new System.Numerics.Complex(((IConvertible)value).ToDouble(provider), 0);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static System.Numerics.Complex ToComplex(bool value)
+        {
+            return new System.Numerics.Complex(value ? 1.0 : 0.0, 0);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static System.Numerics.Complex ToComplex(System.Numerics.Complex value)
+        {
+            return value;
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static System.Numerics.Complex ToComplex(Half value)
+        {
+            return new System.Numerics.Complex((double)value, 0);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static System.Numerics.Complex ToComplex(sbyte value)
+        {
+            return new System.Numerics.Complex(value, 0);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static System.Numerics.Complex ToComplex(byte value)
+        {
+            return new System.Numerics.Complex(value, 0);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static System.Numerics.Complex ToComplex(char value)
+        {
+            return new System.Numerics.Complex(value, 0);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static System.Numerics.Complex ToComplex(short value)
+        {
+            return new System.Numerics.Complex(value, 0);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static System.Numerics.Complex ToComplex(ushort value)
+        {
+            return new System.Numerics.Complex(value, 0);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static System.Numerics.Complex ToComplex(int value)
+        {
+            return new System.Numerics.Complex(value, 0);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static System.Numerics.Complex ToComplex(uint value)
+        {
+            return new System.Numerics.Complex(value, 0);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static System.Numerics.Complex ToComplex(long value)
+        {
+            return new System.Numerics.Complex(value, 0);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static System.Numerics.Complex ToComplex(ulong value)
+        {
+            return new System.Numerics.Complex(value, 0);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static System.Numerics.Complex ToComplex(float value)
+        {
+            return new System.Numerics.Complex(value, 0);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static System.Numerics.Complex ToComplex(double value)
+        {
+            return new System.Numerics.Complex(value, 0);
+        }
+
+        [MethodImpl(OptimizeAndInline)]
+        public static System.Numerics.Complex ToComplex(decimal value)
+        {
+            return new System.Numerics.Complex((double)value, 0);
+        }
 
         // Conversions to DateTime
 

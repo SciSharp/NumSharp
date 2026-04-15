@@ -291,6 +291,9 @@ namespace NumSharp
                 case NPTypeCode.Byte:
                     SetIndices<byte>(src.MakeGeneric<byte>(), indices, values);
                     break;
+                case NPTypeCode.SByte:
+                    SetIndices<sbyte>(src.MakeGeneric<sbyte>(), indices, values);
+                    break;
                 case NPTypeCode.Int16:
                     SetIndices<short>(src.MakeGeneric<short>(), indices, values);
                     break;
@@ -312,6 +315,9 @@ namespace NumSharp
                 case NPTypeCode.Char:
                     SetIndices<char>(src.MakeGeneric<char>(), indices, values);
                     break;
+                case NPTypeCode.Half:
+                    SetIndices<Half>(src.MakeGeneric<Half>(), indices, values);
+                    break;
                 case NPTypeCode.Double:
                     SetIndices<double>(src.MakeGeneric<double>(), indices, values);
                     break;
@@ -320,6 +326,9 @@ namespace NumSharp
                     break;
                 case NPTypeCode.Decimal:
                     SetIndices<decimal>(src.MakeGeneric<decimal>(), indices, values);
+                    break;
+                case NPTypeCode.Complex:
+                    SetIndices<System.Numerics.Complex>(src.MakeGeneric<System.Numerics.Complex>(), indices, values);
                     break;
                 default:
                     throw new NotSupportedException();

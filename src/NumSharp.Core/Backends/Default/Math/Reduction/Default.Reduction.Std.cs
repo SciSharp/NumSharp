@@ -218,6 +218,9 @@ namespace NumSharp.Backends
                         case NPTypeCode.Byte:
                             std = ILKernelGenerator.StdSimdHelper((byte*)arr.Address, arr.size, _ddof);
                             break;
+                        case NPTypeCode.SByte:
+                            std = ILKernelGenerator.StdSimdHelper((sbyte*)arr.Address, arr.size, _ddof);
+                            break;
                         case NPTypeCode.Int16:
                             std = ILKernelGenerator.StdSimdHelper((short*)arr.Address, arr.size, _ddof);
                             break;

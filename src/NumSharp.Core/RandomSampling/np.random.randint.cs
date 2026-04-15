@@ -107,6 +107,13 @@ namespace NumSharp
                         data[i] = (byte)randomizer.Next(low, high);
                     break;
                 }
+                case NPTypeCode.SByte:
+                {
+                    var data = (ArraySlice<sbyte>)nd.Array;
+                    for (long i = 0; i < data.Count; i++)
+                        data[i] = (sbyte)randomizer.Next(low, high);
+                    break;
+                }
                 case NPTypeCode.Int16:
                 {
                     var data = (ArraySlice<short>)nd.Array;
@@ -191,6 +198,13 @@ namespace NumSharp
                     var data = (ArraySlice<byte>)nd.Array;
                     for (long i = 0; i < data.Count; i++)
                         data[i] = (byte)randomizer.NextLong(low, high);
+                    break;
+                }
+                case NPTypeCode.SByte:
+                {
+                    var data = (ArraySlice<sbyte>)nd.Array;
+                    for (long i = 0; i < data.Count; i++)
+                        data[i] = (sbyte)randomizer.NextLong(low, high);
                     break;
                 }
                 case NPTypeCode.Int16:

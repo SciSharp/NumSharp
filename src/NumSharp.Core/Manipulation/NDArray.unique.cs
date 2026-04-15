@@ -72,6 +72,7 @@ namespace NumSharp
 #else
                 case NPTypeCode.Boolean: return unique<bool>();
                 case NPTypeCode.Byte: return unique<byte>();
+                case NPTypeCode.SByte: return unique<sbyte>();
                 case NPTypeCode.Int16: return unique<short>();
                 case NPTypeCode.UInt16: return unique<ushort>();
                 case NPTypeCode.Int32: return unique<int>();
@@ -79,6 +80,7 @@ namespace NumSharp
                 case NPTypeCode.Int64: return unique<long>();
                 case NPTypeCode.UInt64: return unique<ulong>();
                 case NPTypeCode.Char: return unique<char>();
+                case NPTypeCode.Half: return unique<Half>();
                 case NPTypeCode.Double: return unique<double>();
                 case NPTypeCode.Single: return unique<float>();
                 case NPTypeCode.Decimal: return unique<decimal>();

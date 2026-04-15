@@ -181,6 +181,16 @@ namespace NumSharp.Backends
                         }
                         break;
                     }
+                    case NPTypeCode.SByte:
+                    {
+                        var addr = (sbyte*)ret.Address;
+                        while (hasNext())
+                        {
+                            product *= moveNext();
+                            addr[i++] = (sbyte)product;
+                        }
+                        break;
+                    }
                     case NPTypeCode.Int16:
                     {
                         var addr = (short*)ret.Address;
@@ -248,6 +258,16 @@ namespace NumSharp.Backends
                         {
                             product *= moveNext();
                             addr[i++] = (float)product;
+                        }
+                        break;
+                    }
+                    case NPTypeCode.Half:
+                    {
+                        var addr = (Half*)ret.Address;
+                        while (hasNext())
+                        {
+                            product *= moveNext();
+                            addr[i++] = (Half)product;
                         }
                         break;
                     }

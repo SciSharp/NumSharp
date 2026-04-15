@@ -240,6 +240,7 @@ namespace NumSharp.Backends
             {
                 case NPTypeCode.Boolean: return AliasAs<bool>();
                 case NPTypeCode.Byte: return AliasAs<byte>();
+                case NPTypeCode.SByte: return AliasAs<sbyte>();
                 case NPTypeCode.Int16: return AliasAs<short>();
                 case NPTypeCode.UInt16: return AliasAs<ushort>();
                 case NPTypeCode.Int32: return AliasAs<int>();
@@ -247,9 +248,11 @@ namespace NumSharp.Backends
                 case NPTypeCode.Int64: return AliasAs<long>();
                 case NPTypeCode.UInt64: return AliasAs<ulong>();
                 case NPTypeCode.Char: return AliasAs<char>();
+                case NPTypeCode.Half: return AliasAs<Half>();
                 case NPTypeCode.Single: return AliasAs<float>();
                 case NPTypeCode.Double: return AliasAs<double>();
                 case NPTypeCode.Decimal: return AliasAs<decimal>();
+                case NPTypeCode.Complex: return AliasAs<System.Numerics.Complex>();
                 default:
                     throw new NotSupportedException($"Type code {typeCode} is not supported.");
             }

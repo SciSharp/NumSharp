@@ -218,6 +218,21 @@ namespace NumSharp
 
             }
 
+            // Handle common NumPy dtype strings that might be parsed incorrectly by the regex
+            // (e.g., "int8" gets split into type="int", size=8, but we want sbyte)
+            switch (dtype)
+            {
+                case "int8":
+                case "sbyte":
+                    return new DType(typeof(sbyte));
+                case "float16":
+                case "half":
+                    return new DType(typeof(Half));
+                case "complex128":
+                case "complex":
+                    return new DType(typeof(Complex));
+            }
+
             var match = Regex.Match(dtype, regex);
             if (!match.Success)
                 return null;

@@ -99,6 +99,8 @@ namespace NumSharp
                     return new ArraySlice<bool>(UnmanagedMemoryBlock<bool>.FromBuffer(buffer, byteOffset, count, copy: false));
                 case NPTypeCode.Byte:
                     return new ArraySlice<byte>(UnmanagedMemoryBlock<byte>.FromBuffer(buffer, byteOffset, count, copy: false));
+                case NPTypeCode.SByte:
+                    return new ArraySlice<sbyte>(UnmanagedMemoryBlock<sbyte>.FromBuffer(buffer, byteOffset, count, copy: false));
                 case NPTypeCode.Int16:
                     return new ArraySlice<short>(UnmanagedMemoryBlock<short>.FromBuffer(buffer, byteOffset, count, copy: false));
                 case NPTypeCode.UInt16:
@@ -113,12 +115,16 @@ namespace NumSharp
                     return new ArraySlice<ulong>(UnmanagedMemoryBlock<ulong>.FromBuffer(buffer, byteOffset, count, copy: false));
                 case NPTypeCode.Char:
                     return new ArraySlice<char>(UnmanagedMemoryBlock<char>.FromBuffer(buffer, byteOffset, count, copy: false));
+                case NPTypeCode.Half:
+                    return new ArraySlice<Half>(UnmanagedMemoryBlock<Half>.FromBuffer(buffer, byteOffset, count, copy: false));
                 case NPTypeCode.Single:
                     return new ArraySlice<float>(UnmanagedMemoryBlock<float>.FromBuffer(buffer, byteOffset, count, copy: false));
                 case NPTypeCode.Double:
                     return new ArraySlice<double>(UnmanagedMemoryBlock<double>.FromBuffer(buffer, byteOffset, count, copy: false));
                 case NPTypeCode.Decimal:
                     return new ArraySlice<decimal>(UnmanagedMemoryBlock<decimal>.FromBuffer(buffer, byteOffset, count, copy: false));
+                case NPTypeCode.Complex:
+                    return new ArraySlice<System.Numerics.Complex>(UnmanagedMemoryBlock<System.Numerics.Complex>.FromBuffer(buffer, byteOffset, count, copy: false));
                 default:
                     throw new NotSupportedException($"dtype {dtype} is not supported");
             }
@@ -209,6 +215,8 @@ namespace NumSharp
                     return new ArraySlice<bool>(UnmanagedMemoryBlock<bool>.FromBuffer(buffer, byteOffset, count, copy: true));
                 case NPTypeCode.Byte:
                     return new ArraySlice<byte>(UnmanagedMemoryBlock<byte>.FromBuffer(buffer, byteOffset, count, copy: true));
+                case NPTypeCode.SByte:
+                    return new ArraySlice<sbyte>(UnmanagedMemoryBlock<sbyte>.FromBuffer(buffer, byteOffset, count, copy: true));
                 case NPTypeCode.Int16:
                     return new ArraySlice<short>(UnmanagedMemoryBlock<short>.FromBuffer(buffer, byteOffset, count, copy: true));
                 case NPTypeCode.UInt16:
@@ -223,12 +231,16 @@ namespace NumSharp
                     return new ArraySlice<ulong>(UnmanagedMemoryBlock<ulong>.FromBuffer(buffer, byteOffset, count, copy: true));
                 case NPTypeCode.Char:
                     return new ArraySlice<char>(UnmanagedMemoryBlock<char>.FromBuffer(buffer, byteOffset, count, copy: true));
+                case NPTypeCode.Half:
+                    return new ArraySlice<Half>(UnmanagedMemoryBlock<Half>.FromBuffer(buffer, byteOffset, count, copy: true));
                 case NPTypeCode.Single:
                     return new ArraySlice<float>(UnmanagedMemoryBlock<float>.FromBuffer(buffer, byteOffset, count, copy: true));
                 case NPTypeCode.Double:
                     return new ArraySlice<double>(UnmanagedMemoryBlock<double>.FromBuffer(buffer, byteOffset, count, copy: true));
                 case NPTypeCode.Decimal:
                     return new ArraySlice<decimal>(UnmanagedMemoryBlock<decimal>.FromBuffer(buffer, byteOffset, count, copy: true));
+                case NPTypeCode.Complex:
+                    return new ArraySlice<System.Numerics.Complex>(UnmanagedMemoryBlock<System.Numerics.Complex>.FromBuffer(buffer, byteOffset, count, copy: true));
                 default:
                     throw new NotSupportedException($"dtype {dtype} is not supported");
             }
@@ -535,6 +547,8 @@ namespace NumSharp
                     return new ArraySlice<bool>(new UnmanagedMemoryBlock<bool>((bool*)address, count, dispose));
                 case NPTypeCode.Byte:
                     return new ArraySlice<byte>(new UnmanagedMemoryBlock<byte>(address, count, dispose));
+                case NPTypeCode.SByte:
+                    return new ArraySlice<sbyte>(new UnmanagedMemoryBlock<sbyte>((sbyte*)address, count, dispose));
                 case NPTypeCode.Int16:
                     return new ArraySlice<short>(new UnmanagedMemoryBlock<short>((short*)address, count, dispose));
                 case NPTypeCode.UInt16:
@@ -549,12 +563,16 @@ namespace NumSharp
                     return new ArraySlice<ulong>(new UnmanagedMemoryBlock<ulong>((ulong*)address, count, dispose));
                 case NPTypeCode.Char:
                     return new ArraySlice<char>(new UnmanagedMemoryBlock<char>((char*)address, count, dispose));
+                case NPTypeCode.Half:
+                    return new ArraySlice<Half>(new UnmanagedMemoryBlock<Half>((Half*)address, count, dispose));
                 case NPTypeCode.Single:
                     return new ArraySlice<float>(new UnmanagedMemoryBlock<float>((float*)address, count, dispose));
                 case NPTypeCode.Double:
                     return new ArraySlice<double>(new UnmanagedMemoryBlock<double>((double*)address, count, dispose));
                 case NPTypeCode.Decimal:
                     return new ArraySlice<decimal>(new UnmanagedMemoryBlock<decimal>((decimal*)address, count, dispose));
+                case NPTypeCode.Complex:
+                    return new ArraySlice<System.Numerics.Complex>(new UnmanagedMemoryBlock<System.Numerics.Complex>((System.Numerics.Complex*)address, count, dispose));
                 default:
                     throw new NotSupportedException($"dtype {dtype} is not supported");
             }
@@ -571,6 +589,8 @@ namespace NumSharp
                     return new ArraySlice<bool>(new UnmanagedMemoryBlock<bool>((bool*)address, count));
                 case NPTypeCode.Byte:
                     return new ArraySlice<byte>(new UnmanagedMemoryBlock<byte>(address, count));
+                case NPTypeCode.SByte:
+                    return new ArraySlice<sbyte>(new UnmanagedMemoryBlock<sbyte>((sbyte*)address, count));
                 case NPTypeCode.Int16:
                     return new ArraySlice<short>(new UnmanagedMemoryBlock<short>((short*)address, count));
                 case NPTypeCode.UInt16:
@@ -585,12 +605,16 @@ namespace NumSharp
                     return new ArraySlice<ulong>(new UnmanagedMemoryBlock<ulong>((ulong*)address, count));
                 case NPTypeCode.Char:
                     return new ArraySlice<char>(new UnmanagedMemoryBlock<char>((char*)address, count));
+                case NPTypeCode.Half:
+                    return new ArraySlice<Half>(new UnmanagedMemoryBlock<Half>((Half*)address, count));
                 case NPTypeCode.Single:
                     return new ArraySlice<float>(new UnmanagedMemoryBlock<float>((float*)address, count));
                 case NPTypeCode.Double:
                     return new ArraySlice<double>(new UnmanagedMemoryBlock<double>((double*)address, count));
                 case NPTypeCode.Decimal:
                     return new ArraySlice<decimal>(new UnmanagedMemoryBlock<decimal>((decimal*)address, count));
+                case NPTypeCode.Complex:
+                    return new ArraySlice<System.Numerics.Complex>(new UnmanagedMemoryBlock<System.Numerics.Complex>((System.Numerics.Complex*)address, count));
                 default:
                     throw new NotSupportedException($"dtype {dtype} is not supported");
             }
@@ -608,6 +632,8 @@ namespace NumSharp
                     return new ArraySlice<bool>(new UnmanagedMemoryBlock<bool>((bool*)address, count, dispose));
                 case NPTypeCode.Byte:
                     return new ArraySlice<byte>(new UnmanagedMemoryBlock<byte>(address, count, dispose));
+                case NPTypeCode.SByte:
+                    return new ArraySlice<sbyte>(new UnmanagedMemoryBlock<sbyte>((sbyte*)address, count, dispose));
                 case NPTypeCode.Int16:
                     return new ArraySlice<short>(new UnmanagedMemoryBlock<short>((short*)address, count, dispose));
                 case NPTypeCode.UInt16:
@@ -622,12 +648,16 @@ namespace NumSharp
                     return new ArraySlice<ulong>(new UnmanagedMemoryBlock<ulong>((ulong*)address, count, dispose));
                 case NPTypeCode.Char:
                     return new ArraySlice<char>(new UnmanagedMemoryBlock<char>((char*)address, count, dispose));
+                case NPTypeCode.Half:
+                    return new ArraySlice<Half>(new UnmanagedMemoryBlock<Half>((Half*)address, count, dispose));
                 case NPTypeCode.Single:
                     return new ArraySlice<float>(new UnmanagedMemoryBlock<float>((float*)address, count, dispose));
                 case NPTypeCode.Double:
                     return new ArraySlice<double>(new UnmanagedMemoryBlock<double>((double*)address, count, dispose));
                 case NPTypeCode.Decimal:
                     return new ArraySlice<decimal>(new UnmanagedMemoryBlock<decimal>((decimal*)address, count, dispose));
+                case NPTypeCode.Complex:
+                    return new ArraySlice<System.Numerics.Complex>(new UnmanagedMemoryBlock<System.Numerics.Complex>((System.Numerics.Complex*)address, count, dispose));
                 default:
                     throw new NotSupportedException($"dtype {dtype} is not supported");
             }

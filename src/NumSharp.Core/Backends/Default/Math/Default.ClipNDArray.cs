@@ -93,6 +93,9 @@ namespace NumSharp.Backends
                     case NPTypeCode.Byte:
                         ILKernelGenerator.ClipArrayBounds((byte*)@out.Address, (byte*)min.Address, (byte*)max.Address, len);
                         return @out;
+                    case NPTypeCode.SByte:
+                        ILKernelGenerator.ClipArrayBounds((sbyte*)@out.Address, (sbyte*)min.Address, (sbyte*)max.Address, len);
+                        return @out;
                     case NPTypeCode.Int16:
                         ILKernelGenerator.ClipArrayBounds((short*)@out.Address, (short*)min.Address, (short*)max.Address, len);
                         return @out;
@@ -135,6 +138,9 @@ namespace NumSharp.Backends
                     case NPTypeCode.Byte:
                         ILKernelGenerator.ClipArrayMin((byte*)@out.Address, (byte*)min.Address, len);
                         return @out;
+                    case NPTypeCode.SByte:
+                        ILKernelGenerator.ClipArrayMin((sbyte*)@out.Address, (sbyte*)min.Address, len);
+                        return @out;
                     case NPTypeCode.Int16:
                         ILKernelGenerator.ClipArrayMin((short*)@out.Address, (short*)min.Address, len);
                         return @out;
@@ -176,6 +182,9 @@ namespace NumSharp.Backends
                 {
                     case NPTypeCode.Byte:
                         ILKernelGenerator.ClipArrayMax((byte*)@out.Address, (byte*)max.Address, len);
+                        return @out;
+                    case NPTypeCode.SByte:
+                        ILKernelGenerator.ClipArrayMax((sbyte*)@out.Address, (sbyte*)max.Address, len);
                         return @out;
                     case NPTypeCode.Int16:
                         ILKernelGenerator.ClipArrayMax((short*)@out.Address, (short*)max.Address, len);
@@ -225,6 +234,9 @@ namespace NumSharp.Backends
                     case NPTypeCode.Byte:
                         ClipNDArrayGeneralCore<byte>(@out, min, max, len);
                         return @out;
+                    case NPTypeCode.SByte:
+                        ClipNDArrayGeneralCore<sbyte>(@out, min, max, len);
+                        return @out;
                     case NPTypeCode.Int16:
                         ClipNDArrayGeneralCore<short>(@out, min, max, len);
                         return @out;
@@ -266,6 +278,9 @@ namespace NumSharp.Backends
                     case NPTypeCode.Byte:
                         ClipNDArrayMinGeneralCore<byte>(@out, min, len);
                         return @out;
+                    case NPTypeCode.SByte:
+                        ClipNDArrayMinGeneralCore<sbyte>(@out, min, len);
+                        return @out;
                     case NPTypeCode.Int16:
                         ClipNDArrayMinGeneralCore<short>(@out, min, len);
                         return @out;
@@ -306,6 +321,9 @@ namespace NumSharp.Backends
                 {
                     case NPTypeCode.Byte:
                         ClipNDArrayMaxGeneralCore<byte>(@out, max, len);
+                        return @out;
+                    case NPTypeCode.SByte:
+                        ClipNDArrayMaxGeneralCore<sbyte>(@out, max, len);
                         return @out;
                     case NPTypeCode.Int16:
                         ClipNDArrayMaxGeneralCore<short>(@out, max, len);

@@ -218,6 +218,9 @@ namespace NumSharp.Backends
                         case NPTypeCode.Byte:
                             variance = ILKernelGenerator.VarSimdHelper((byte*)arr.Address, arr.size, _ddof);
                             break;
+                        case NPTypeCode.SByte:
+                            variance = ILKernelGenerator.VarSimdHelper((sbyte*)arr.Address, arr.size, _ddof);
+                            break;
                         case NPTypeCode.Int16:
                             variance = ILKernelGenerator.VarSimdHelper((short*)arr.Address, arr.size, _ddof);
                             break;

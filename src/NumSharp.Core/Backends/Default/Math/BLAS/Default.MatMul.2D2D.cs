@@ -126,6 +126,9 @@ namespace NumSharp.Backends
                 case NPTypeCode.Byte:
                     MatMulCore<byte>(left, right, result, M, K, N);
                     break;
+                case NPTypeCode.SByte:
+                    MatMulCore<sbyte>(left, right, result, M, K, N);
+                    break;
                 case NPTypeCode.Int16:
                     MatMulCore<short>(left, right, result, M, K, N);
                     break;
@@ -147,6 +150,9 @@ namespace NumSharp.Backends
                 case NPTypeCode.Char:
                     MatMulCore<char>(left, right, result, M, K, N);
                     break;
+                case NPTypeCode.Half:
+                    MatMulCore<Half>(left, right, result, M, K, N);
+                    break;
                 case NPTypeCode.Single:
                     MatMulCore<float>(left, right, result, M, K, N);
                     break;
@@ -155,6 +161,9 @@ namespace NumSharp.Backends
                     break;
                 case NPTypeCode.Decimal:
                     MatMulCore<decimal>(left, right, result, M, K, N);
+                    break;
+                case NPTypeCode.Complex:
+                    MatMulCore<System.Numerics.Complex>(left, right, result, M, K, N);
                     break;
                 default:
                     throw new NotSupportedException($"MatMul not supported for type {result.typecode}");

@@ -270,6 +270,7 @@ namespace NumSharp
             {
                 case NPTypeCode.Boolean: return FetchIndices<bool>(src.MakeGeneric<bool>(), indices, @out, extraDim);
                 case NPTypeCode.Byte:    return FetchIndices<byte>(src.MakeGeneric<byte>(), indices, @out, extraDim);
+                case NPTypeCode.SByte:   return FetchIndices<sbyte>(src.MakeGeneric<sbyte>(), indices, @out, extraDim);
                 case NPTypeCode.Int16:   return FetchIndices<short>(src.MakeGeneric<short>(), indices, @out, extraDim);
                 case NPTypeCode.UInt16:  return FetchIndices<ushort>(src.MakeGeneric<ushort>(), indices, @out, extraDim);
                 case NPTypeCode.Int32:   return FetchIndices<int>(src.MakeGeneric<int>(), indices, @out, extraDim);
@@ -277,9 +278,11 @@ namespace NumSharp
                 case NPTypeCode.Int64:   return FetchIndices<long>(src.MakeGeneric<long>(), indices, @out, extraDim);
                 case NPTypeCode.UInt64:  return FetchIndices<ulong>(src.MakeGeneric<ulong>(), indices, @out, extraDim);
                 case NPTypeCode.Char:    return FetchIndices<char>(src.MakeGeneric<char>(), indices, @out, extraDim);
+                case NPTypeCode.Half:    return FetchIndices<Half>(src.MakeGeneric<Half>(), indices, @out, extraDim);
                 case NPTypeCode.Double:  return FetchIndices<double>(src.MakeGeneric<double>(), indices, @out, extraDim);
                 case NPTypeCode.Single:  return FetchIndices<float>(src.MakeGeneric<float>(), indices, @out, extraDim);
                 case NPTypeCode.Decimal: return FetchIndices<decimal>(src.MakeGeneric<decimal>(), indices, @out, extraDim);
+                case NPTypeCode.Complex: return FetchIndices<System.Numerics.Complex>(src.MakeGeneric<System.Numerics.Complex>(), indices, @out, extraDim);
                 default:
                     throw new NotSupportedException();
             }

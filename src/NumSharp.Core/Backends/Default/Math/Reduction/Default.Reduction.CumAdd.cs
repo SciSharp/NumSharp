@@ -196,6 +196,16 @@ namespace NumSharp.Backends
                         }
                         break;
                     }
+                    case NPTypeCode.SByte:
+                    {
+                        var addr = (sbyte*)ret.Address;
+                        while (hasNext())
+                        {
+                            sum += moveNext();
+                            addr[i++] = (sbyte)sum;
+                        }
+                        break;
+                    }
                     case NPTypeCode.Int16:
                     {
                         var addr = (short*)ret.Address;
@@ -263,6 +273,16 @@ namespace NumSharp.Backends
                         {
                             sum += moveNext();
                             addr[i++] = (float)sum;
+                        }
+                        break;
+                    }
+                    case NPTypeCode.Half:
+                    {
+                        var addr = (Half*)ret.Address;
+                        while (hasNext())
+                        {
+                            sum += moveNext();
+                            addr[i++] = (Half)sum;
                         }
                         break;
                     }

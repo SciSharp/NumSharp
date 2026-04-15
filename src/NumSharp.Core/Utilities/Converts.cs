@@ -11,6 +11,52 @@ namespace NumSharp.Utilities
     /// </summary>
     public static partial class Converts
     {
+        /// <summary>
+        /// Creates a converter function that handles all types including Half and Complex.
+        /// Used as fallback when explicit type pair not found in FindConverter.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal static Func<TIn, TOut> CreateFallbackConverter<TIn, TOut>()
+        {
+            var toutCode = InfoOf<TOut>.NPTypeCode;
+
+            // Special handling for Half (doesn't implement IConvertible)
+            if (toutCode == NPTypeCode.Half)
+            {
+                return @in => {
+                    double d = @in is IConvertible ic ? ic.ToDouble(null) : Convert.ToDouble(@in);
+                    return (TOut)(object)(Half)d;
+                };
+            }
+
+            // Special handling for Complex (doesn't implement IConvertible)
+            if (toutCode == NPTypeCode.Complex)
+            {
+                return @in => {
+                    double d = @in is IConvertible ic ? ic.ToDouble(null) : Convert.ToDouble(@in);
+                    return (TOut)(object)new Complex(d, 0);
+                };
+            }
+
+            // Special handling for SByte conversion from non-IConvertible types
+            if (toutCode == NPTypeCode.SByte)
+            {
+                return @in => {
+                    if (@in is Half h) return (TOut)(object)(sbyte)h;
+                    if (@in is Complex c) return (TOut)(object)(sbyte)c.Real;
+                    return (TOut)Convert.ChangeType(@in, typeof(TOut));
+                };
+            }
+
+            // Default: use Convert.ChangeType (works for IConvertible types)
+            var tout = typeof(TOut);
+            return @in => {
+                if (@in is Half h) return (TOut)Convert.ChangeType((double)h, tout);
+                if (@in is Complex c) return (TOut)Convert.ChangeType(c.Real, tout);
+                return (TOut)Convert.ChangeType(@in, tout);
+            };
+        }
+
         /// <summary>Returns an object of the specified type whose value is equivalent to the specified object.</summary>
         /// <param name="value">An object that implements the <see cref="T:System.IConvertible"></see> interface.</param>
         /// <param name="typeCode">The type of object to return.</param>
@@ -42,6 +88,8 @@ namespace NumSharp.Utilities
                     return (TOut)(object)((IConvertible)value).ToChar(CultureInfo.InvariantCulture);
                 case NPTypeCode.Byte:
                     return (TOut)(object)((IConvertible)value).ToByte(CultureInfo.InvariantCulture);
+                case NPTypeCode.SByte:
+                    return (TOut)(object)((IConvertible)value).ToSByte(CultureInfo.InvariantCulture);
                 case NPTypeCode.Int16:
                     return (TOut)(object)((IConvertible)value).ToInt16(CultureInfo.InvariantCulture);
                 case NPTypeCode.UInt16:
@@ -60,6 +108,14 @@ namespace NumSharp.Utilities
                     return (TOut)(object)((IConvertible)value).ToDouble(CultureInfo.InvariantCulture);
                 case NPTypeCode.Decimal:
                     return (TOut)(object)((IConvertible)value).ToDecimal(CultureInfo.InvariantCulture);
+                case NPTypeCode.Half:
+                    // Half doesn't implement IConvertible, convert through double
+                    if (value is Half h) return (TOut)(object)h;
+                    return (TOut)(object)(Half)((IConvertible)value).ToDouble(CultureInfo.InvariantCulture);
+                case NPTypeCode.Complex:
+                    // Complex doesn't implement IConvertible
+                    if (value is System.Numerics.Complex c) return (TOut)(object)c;
+                    return (TOut)(object)new System.Numerics.Complex(((IConvertible)value).ToDouble(CultureInfo.InvariantCulture), 0);
                 case NPTypeCode.String:
                     return (TOut)(object)((IConvertible)value).ToString(CultureInfo.InvariantCulture);
                 case NPTypeCode.Empty:
@@ -101,6 +157,8 @@ namespace NumSharp.Utilities
                     return ((IConvertible)value).ToChar(CultureInfo.InvariantCulture);
                 case NPTypeCode.Byte:
                     return ((IConvertible)value).ToByte(CultureInfo.InvariantCulture);
+                case NPTypeCode.SByte:
+                    return ((IConvertible)value).ToSByte(CultureInfo.InvariantCulture);
                 case NPTypeCode.Int16:
                     return ((IConvertible)value).ToInt16(CultureInfo.InvariantCulture);
                 case NPTypeCode.UInt16:
@@ -119,6 +177,14 @@ namespace NumSharp.Utilities
                     return ((IConvertible)value).ToDouble(CultureInfo.InvariantCulture);
                 case NPTypeCode.Decimal:
                     return ((IConvertible)value).ToDecimal(CultureInfo.InvariantCulture);
+                case NPTypeCode.Half:
+                    // Half doesn't implement IConvertible, convert through double
+                    if (value is Half h) return h;
+                    return (Half)((IConvertible)value).ToDouble(CultureInfo.InvariantCulture);
+                case NPTypeCode.Complex:
+                    // Complex doesn't implement IConvertible
+                    if (value is System.Numerics.Complex c) return c;
+                    return new System.Numerics.Complex(((IConvertible)value).ToDouble(CultureInfo.InvariantCulture), 0);
                 case NPTypeCode.String:
                     return ((IConvertible)value).ToString(CultureInfo.InvariantCulture);
                 case NPTypeCode.Empty:
@@ -842,10 +908,7 @@ namespace NumSharp.Utilities
                                     return (Func<TIn, TOut>)(object)ret;
                                 }
                             default:
-                                {
-                                    var tout = typeof(TOut);
-                                    return @in => (TOut)Convert.ChangeType(@in, tout);
-                                }
+                                    return CreateFallbackConverter<TIn, TOut>();
                         }
                     }
                 case NPTypeCode.Byte:
@@ -913,10 +976,7 @@ namespace NumSharp.Utilities
                                     return (Func<TIn, TOut>)(object)ret;
                                 }
                             default:
-                                {
-                                    var tout = typeof(TOut);
-                                    return @in => (TOut)Convert.ChangeType(@in, tout);
-                                }
+                                    return CreateFallbackConverter<TIn, TOut>();
                         }
                     }
                 case NPTypeCode.Int16:
@@ -984,10 +1044,7 @@ namespace NumSharp.Utilities
                                     return (Func<TIn, TOut>)(object)ret;
                                 }
                             default:
-                                {
-                                    var tout = typeof(TOut);
-                                    return @in => (TOut)Convert.ChangeType(@in, tout);
-                                }
+                                    return CreateFallbackConverter<TIn, TOut>();
                         }
                     }
                 case NPTypeCode.UInt16:
@@ -1055,10 +1112,7 @@ namespace NumSharp.Utilities
                                     return (Func<TIn, TOut>)(object)ret;
                                 }
                             default:
-                                {
-                                    var tout = typeof(TOut);
-                                    return @in => (TOut)Convert.ChangeType(@in, tout);
-                                }
+                                    return CreateFallbackConverter<TIn, TOut>();
                         }
                     }
                 case NPTypeCode.Int32:
@@ -1126,10 +1180,7 @@ namespace NumSharp.Utilities
                                     return (Func<TIn, TOut>)(object)ret;
                                 }
                             default:
-                                {
-                                    var tout = typeof(TOut);
-                                    return @in => (TOut)Convert.ChangeType(@in, tout);
-                                }
+                                    return CreateFallbackConverter<TIn, TOut>();
                         }
                     }
                 case NPTypeCode.UInt32:
@@ -1197,10 +1248,7 @@ namespace NumSharp.Utilities
                                     return (Func<TIn, TOut>)(object)ret;
                                 }
                             default:
-                                {
-                                    var tout = typeof(TOut);
-                                    return @in => (TOut)Convert.ChangeType(@in, tout);
-                                }
+                                    return CreateFallbackConverter<TIn, TOut>();
                         }
                     }
                 case NPTypeCode.Int64:
@@ -1268,10 +1316,7 @@ namespace NumSharp.Utilities
                                     return (Func<TIn, TOut>)(object)ret;
                                 }
                             default:
-                                {
-                                    var tout = typeof(TOut);
-                                    return @in => (TOut)Convert.ChangeType(@in, tout);
-                                }
+                                    return CreateFallbackConverter<TIn, TOut>();
                         }
                     }
                 case NPTypeCode.UInt64:
@@ -1339,10 +1384,7 @@ namespace NumSharp.Utilities
                                     return (Func<TIn, TOut>)(object)ret;
                                 }
                             default:
-                                {
-                                    var tout = typeof(TOut);
-                                    return @in => (TOut)Convert.ChangeType(@in, tout);
-                                }
+                                    return CreateFallbackConverter<TIn, TOut>();
                         }
                     }
                 case NPTypeCode.Char:
@@ -1410,10 +1452,7 @@ namespace NumSharp.Utilities
                                     return (Func<TIn, TOut>)(object)ret;
                                 }
                             default:
-                                {
-                                    var tout = typeof(TOut);
-                                    return @in => (TOut)Convert.ChangeType(@in, tout);
-                                }
+                                    return CreateFallbackConverter<TIn, TOut>();
                         }
                     }
                 case NPTypeCode.Double:
@@ -1481,10 +1520,7 @@ namespace NumSharp.Utilities
                                     return (Func<TIn, TOut>)(object)ret;
                                 }
                             default:
-                                {
-                                    var tout = typeof(TOut);
-                                    return @in => (TOut)Convert.ChangeType(@in, tout);
-                                }
+                                    return CreateFallbackConverter<TIn, TOut>();
                         }
                     }
                 case NPTypeCode.Single:
@@ -1552,10 +1588,7 @@ namespace NumSharp.Utilities
                                     return (Func<TIn, TOut>)(object)ret;
                                 }
                             default:
-                                {
-                                    var tout = typeof(TOut);
-                                    return @in => (TOut)Convert.ChangeType(@in, tout);
-                                }
+                                    return CreateFallbackConverter<TIn, TOut>();
                         }
                     }
                 case NPTypeCode.Decimal:
@@ -1623,17 +1656,11 @@ namespace NumSharp.Utilities
                                     return (Func<TIn, TOut>)(object)ret;
                                 }
                             default:
-                                {
-                                    var tout = typeof(TOut);
-                                    return @in => (TOut)Convert.ChangeType(@in, tout);
-                                }
+                                    return CreateFallbackConverter<TIn, TOut>();
                         }
                     }
                 default:
-                    {
-                        var tout = typeof(TOut);
-                        return @in => (TOut)Convert.ChangeType(@in, tout);
-                    }
+                    return CreateFallbackConverter<TIn, TOut>();
             }
 
 #endregion
