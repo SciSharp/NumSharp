@@ -179,10 +179,18 @@ namespace NumSharp.Utilities
                 case NPTypeCode.UInt64:
                     return ((IConvertible)value).ToUInt64(CultureInfo.InvariantCulture);
                 case NPTypeCode.Single:
+                    // Half doesn't implement IConvertible
+                    if (value is Half hs) return (float)(double)hs;
                     return ((IConvertible)value).ToSingle(CultureInfo.InvariantCulture);
                 case NPTypeCode.Double:
+                    // Half doesn't implement IConvertible
+                    if (value is Half hd) return (double)hd;
+                    // Complex doesn't implement IConvertible - return real part
+                    if (value is System.Numerics.Complex cd) return cd.Real;
                     return ((IConvertible)value).ToDouble(CultureInfo.InvariantCulture);
                 case NPTypeCode.Decimal:
+                    // Half doesn't implement IConvertible
+                    if (value is Half hdec) return (decimal)(double)hdec;
                     return ((IConvertible)value).ToDecimal(CultureInfo.InvariantCulture);
                 case NPTypeCode.Half:
                     // Half doesn't implement IConvertible, convert through double
@@ -458,6 +466,26 @@ namespace NumSharp.Utilities
                         case NPTypeCode.Double:  return Converts.ToDecimal(Unsafe.As<T, double>(ref value));
                         case NPTypeCode.Single:  return Converts.ToDecimal(Unsafe.As<T, float>(ref value));
                         case NPTypeCode.Decimal: return Converts.ToDecimal(Unsafe.As<T, decimal>(ref value));
+                        default:
+                            throw new NotSupportedException();
+                    }
+                case NPTypeCode.Half:
+                    // Half target type - convert source to double first, then to Half
+                    switch (InfoOf<T>.NPTypeCode)
+                    {
+                        case NPTypeCode.Boolean: return (Half)(Unsafe.As<T, bool>(ref value) ? 1.0 : 0.0);
+                        case NPTypeCode.Byte:    return (Half)(double)Unsafe.As<T, byte>(ref value);
+                        case NPTypeCode.SByte:   return (Half)(double)Unsafe.As<T, sbyte>(ref value);
+                        case NPTypeCode.Int16:   return (Half)(double)Unsafe.As<T, short>(ref value);
+                        case NPTypeCode.UInt16:  return (Half)(double)Unsafe.As<T, ushort>(ref value);
+                        case NPTypeCode.Int32:   return (Half)(double)Unsafe.As<T, int>(ref value);
+                        case NPTypeCode.UInt32:  return (Half)(double)Unsafe.As<T, uint>(ref value);
+                        case NPTypeCode.Int64:   return (Half)(double)Unsafe.As<T, long>(ref value);
+                        case NPTypeCode.UInt64:  return (Half)(double)Unsafe.As<T, ulong>(ref value);
+                        case NPTypeCode.Char:    return (Half)(double)Unsafe.As<T, char>(ref value);
+                        case NPTypeCode.Double:  return (Half)Unsafe.As<T, double>(ref value);
+                        case NPTypeCode.Single:  return (Half)(double)Unsafe.As<T, float>(ref value);
+                        case NPTypeCode.Decimal: return (Half)(double)Unsafe.As<T, decimal>(ref value);
                         default:
                             throw new NotSupportedException();
                     }

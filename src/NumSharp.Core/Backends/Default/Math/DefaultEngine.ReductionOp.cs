@@ -318,8 +318,20 @@ namespace NumSharp.Backends
                 return sum / count;
             }
 
-            // Mean always computes in double for precision
-            var retType = typeCode ?? NPTypeCode.Double;
+            // Handle Half separately - NumPy 2.x preserves float16 dtype for mean
+            if (sumType == NPTypeCode.Half)
+            {
+                var sum = ExecuteElementReduction<Half>(arr, ReductionOp.Sum, sumType);
+                return (Half)((double)sum / count);
+            }
+
+            // NumPy 2.x: mean preserves float types, promotes int to float64
+            var retType = typeCode ?? (arr.GetTypeCode switch
+            {
+                NPTypeCode.Single => NPTypeCode.Single,
+                NPTypeCode.Double => NPTypeCode.Double,
+                _ => NPTypeCode.Double
+            });
 
             // Sum in accumulating type, then divide
             double sum2 = sumType switch

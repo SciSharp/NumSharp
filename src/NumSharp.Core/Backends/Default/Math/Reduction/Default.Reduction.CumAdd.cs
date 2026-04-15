@@ -175,6 +175,23 @@ namespace NumSharp.Backends
                 return ret;
             }
 
+            // Handle Complex separately - requires Complex accumulator
+            if (arr.GetTypeCode == NPTypeCode.Complex && retType == NPTypeCode.Complex)
+            {
+                var iter = arr.AsIterator<System.Numerics.Complex>();
+                var addr = (System.Numerics.Complex*)ret.Address;
+                var moveNext = iter.MoveNext;
+                var hasNext = iter.HasNext;
+                int i = 0;
+                var sum = System.Numerics.Complex.Zero;
+                while (hasNext())
+                {
+                    sum += moveNext();
+                    addr[i++] = sum;
+                }
+                return ret;
+            }
+
             // All other types: use double for accumulation, convert at output
             {
                 var iter = arr.AsIterator<double>();

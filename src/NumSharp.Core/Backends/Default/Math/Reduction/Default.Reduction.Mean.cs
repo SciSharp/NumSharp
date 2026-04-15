@@ -59,7 +59,15 @@ namespace NumSharp.Backends
             }
 
             var axis2 = NormalizeAxis(axis_.Value, arr.ndim);
-            var outputType2 = typeCode ?? NPTypeCode.Double;
+            // NumPy 2.x: mean preserves floating point types, promotes int to float64
+            var outputType2 = typeCode ?? (arr.GetTypeCode switch
+            {
+                NPTypeCode.Half => NPTypeCode.Half,
+                NPTypeCode.Single => NPTypeCode.Single,
+                NPTypeCode.Double => NPTypeCode.Double,
+                NPTypeCode.Complex => NPTypeCode.Complex,
+                _ => NPTypeCode.Double
+            });
 
             if (shape[axis2] == 1)
                 return HandleTrivialAxisReduction(arr, axis2, keepdims, outputType2, null);
