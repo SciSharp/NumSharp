@@ -123,7 +123,7 @@ public class NpIsSubdtypeBattleTests
     [TestMethod]
     public async Task IsSubdtype_NDArray_Null_Throws()
     {
-        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<Exception>(() => np.issubdtype((NDArray)null!, "integer"));
+        new Action(() => np.issubdtype((NDArray)null!, "integer")).Should().Throw<Exception>();
     }
 
     #endregion

@@ -113,7 +113,7 @@ public class NpTypeChecksBattleTests
     [TestMethod]
     public async Task IsDtype_NDArray_Null_Throws()
     {
-        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<Exception>(() => np.isdtype((NDArray)null!, "integral"));
+        new Action(() => np.isdtype((NDArray)null!, "integral")).Should().Throw<Exception>();
     }
 
     #endregion

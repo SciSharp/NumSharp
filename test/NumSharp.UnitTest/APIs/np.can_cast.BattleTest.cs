@@ -106,7 +106,7 @@ public class NpCanCastBattleTests
     [TestMethod]
     public async Task CanCast_InvalidMode_Throws()
     {
-        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<Exception>(() => np.can_cast(NPTypeCode.Int32, NPTypeCode.Int64, "invalid"));
+        new Action(() => np.can_cast(NPTypeCode.Int32, NPTypeCode.Int64, "invalid")).Should().Throw<Exception>();
     }
 
     #endregion

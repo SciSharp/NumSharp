@@ -58,13 +58,13 @@ public class NpResultTypeBattleTests
     [TestMethod]
     public async Task ResultType_Empty_Throws()
     {
-        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<Exception>(() => np.result_type(Array.Empty<NPTypeCode>()));
+        new Action(() => np.result_type(Array.Empty<NPTypeCode>())).Should().Throw<Exception>();
     }
 
     [TestMethod]
     public async Task ResultType_NullArray_Throws()
     {
-        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<Exception>(() => np.result_type((NPTypeCode[])null!));
+        new Action(() => np.result_type((NPTypeCode[])null!)).Should().Throw<Exception>();
     }
 
     #endregion
@@ -95,14 +95,14 @@ public class NpResultTypeBattleTests
     public async Task ResultType_TwoArg_NDArray_NullFirst_Throws()
     {
         var b = np.array(new int[] { 1, 2 });
-        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<Exception>(() => np.result_type((NDArray)null!, b));
+        new Action(() => np.result_type((NDArray)null!, b)).Should().Throw<Exception>();
     }
 
     [TestMethod]
     public async Task ResultType_TwoArg_NDArray_NullSecond_Throws()
     {
         var a = np.array(new int[] { 1, 2 });
-        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<Exception>(() => np.result_type(a, (NDArray)null!));
+        new Action(() => np.result_type(a, (NDArray)null!)).Should().Throw<Exception>();
     }
 
     #endregion

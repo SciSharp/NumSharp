@@ -136,7 +136,7 @@ public class NpMinScalarTypeBattleTests
     [TestMethod]
     public async Task MinScalarType_Null_Throws()
     {
-        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<Exception>(() => np.min_scalar_type(null!));
+        new Action(() => np.min_scalar_type(null!)).Should().Throw<Exception>();
     }
 
     #endregion

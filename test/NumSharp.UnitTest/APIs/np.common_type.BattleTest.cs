@@ -113,19 +113,19 @@ public class NpCommonTypeBattleTests
     [TestMethod]
     public async Task CommonType_Empty_Throws()
     {
-        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<Exception>(() => np.common_type_code(Array.Empty<NDArray>()));
+        new Action(() => np.common_type_code(Array.Empty<NDArray>())).Should().Throw<Exception>();
     }
 
     [TestMethod]
     public async Task CommonType_Null_Throws()
     {
-        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<Exception>(() => np.common_type_code((NDArray[])null!));
+        new Action(() => np.common_type_code((NDArray[])null!)).Should().Throw<Exception>();
     }
 
     [TestMethod]
     public async Task CommonTypeCode_Empty_Throws()
     {
-        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<Exception>(() => np.common_type_code(Array.Empty<NPTypeCode>()));
+        new Action(() => np.common_type_code(Array.Empty<NPTypeCode>())).Should().Throw<Exception>();
     }
 
     #endregion

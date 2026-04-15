@@ -94,7 +94,7 @@ namespace NumSharp.UnitTest
 
 
         [TestMethod, Timeout(10000)]
-        public void ExtractShape_FromArray(CancellationToken cancellationToken)
+        public void ExtractShape_FromArray()
         {
             // @formatter:off — disable formatter after this line
             var v = Shape.ExtractShape((Array)new int[][][]

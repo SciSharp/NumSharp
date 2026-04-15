@@ -64,49 +64,49 @@ public class NpFInfoBattleTests
     [TestMethod]
     public async Task FInfo_Int32_Throws()
     {
-        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<Exception>(() => np.finfo(NPTypeCode.Int32));
+        new Action(() => np.finfo(NPTypeCode.Int32)).Should().Throw<Exception>();
     }
 
     [TestMethod]
     public async Task FInfo_Boolean_Throws()
     {
-        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<Exception>(() => np.finfo(NPTypeCode.Boolean));
+        new Action(() => np.finfo(NPTypeCode.Boolean)).Should().Throw<Exception>();
     }
 
     [TestMethod]
     public async Task FInfo_Byte_Throws()
     {
-        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<Exception>(() => np.finfo(NPTypeCode.Byte));
+        new Action(() => np.finfo(NPTypeCode.Byte)).Should().Throw<Exception>();
     }
 
     [TestMethod]
     public async Task FInfo_Empty_Throws()
     {
-        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<Exception>(() => np.finfo(NPTypeCode.Empty));
+        new Action(() => np.finfo(NPTypeCode.Empty)).Should().Throw<Exception>();
     }
 
     [TestMethod]
     public async Task FInfo_NullType_Throws()
     {
-        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<Exception>(() => np.finfo((Type)null!));
+        new Action(() => np.finfo((Type)null!)).Should().Throw<Exception>();
     }
 
     [TestMethod]
     public async Task FInfo_NullArray_Throws()
     {
-        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<Exception>(() => np.finfo((NDArray)null!));
+        new Action(() => np.finfo((NDArray)null!)).Should().Throw<Exception>();
     }
 
     [TestMethod]
     public async Task FInfo_EmptyDtypeString_Throws()
     {
-        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<Exception>(() => np.finfo(""));
+        new Action(() => np.finfo("")).Should().Throw<Exception>();
     }
 
     [TestMethod]
     public async Task FInfo_InvalidDtypeString_Throws()
     {
-        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<Exception>(() => np.finfo("int32"));
+        new Action(() => np.finfo("int32")).Should().Throw<Exception>();
     }
 
     #endregion
@@ -139,7 +139,7 @@ public class NpFInfoBattleTests
     [TestMethod]
     public async Task FInfo_Generic_Int_Throws()
     {
-        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<Exception>(() => np.finfo<int>());
+        new Action(() => np.finfo<int>()).Should().Throw<Exception>();
     }
 
     #endregion
@@ -166,7 +166,7 @@ public class NpFInfoBattleTests
     public async Task FInfo_NDArray_Int_Throws()
     {
         var arr = np.array(new int[] { 1, 2, 3 });
-        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<Exception>(() => np.finfo(arr));
+        new Action(() => np.finfo(arr)).Should().Throw<Exception>();
     }
 
     #endregion

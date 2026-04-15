@@ -112,49 +112,49 @@ public class NpIInfoBattleTests
     [TestMethod]
     public async Task IInfo_Single_Throws()
     {
-        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<Exception>(() => np.iinfo(NPTypeCode.Single));
+        new Action(() => np.iinfo(NPTypeCode.Single)).Should().Throw<Exception>();
     }
 
     [TestMethod]
     public async Task IInfo_Double_Throws()
     {
-        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<Exception>(() => np.iinfo(NPTypeCode.Double));
+        new Action(() => np.iinfo(NPTypeCode.Double)).Should().Throw<Exception>();
     }
 
     [TestMethod]
     public async Task IInfo_Decimal_Throws()
     {
-        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<Exception>(() => np.iinfo(NPTypeCode.Decimal));
+        new Action(() => np.iinfo(NPTypeCode.Decimal)).Should().Throw<Exception>();
     }
 
     [TestMethod]
     public async Task IInfo_Empty_Throws()
     {
-        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<Exception>(() => np.iinfo(NPTypeCode.Empty));
+        new Action(() => np.iinfo(NPTypeCode.Empty)).Should().Throw<Exception>();
     }
 
     [TestMethod]
     public async Task IInfo_NullType_Throws()
     {
-        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<Exception>(() => np.iinfo((Type)null!));
+        new Action(() => np.iinfo((Type)null!)).Should().Throw<Exception>();
     }
 
     [TestMethod]
     public async Task IInfo_NullArray_Throws()
     {
-        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<Exception>(() => np.iinfo((NDArray)null!));
+        new Action(() => np.iinfo((NDArray)null!)).Should().Throw<Exception>();
     }
 
     [TestMethod]
     public async Task IInfo_EmptyDtypeString_Throws()
     {
-        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<Exception>(() => np.iinfo(""));
+        new Action(() => np.iinfo("")).Should().Throw<Exception>();
     }
 
     [TestMethod]
     public async Task IInfo_InvalidDtypeString_Throws()
     {
-        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<Exception>(() => np.iinfo("float32"));
+        new Action(() => np.iinfo("float32")).Should().Throw<Exception>();
     }
 
     #endregion
@@ -196,7 +196,7 @@ public class NpIInfoBattleTests
     [TestMethod]
     public async Task IInfo_Generic_Float_Throws()
     {
-        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<Exception>(() => np.iinfo<float>());
+        new Action(() => np.iinfo<float>()).Should().Throw<Exception>();
     }
 
     #endregion
@@ -224,7 +224,7 @@ public class NpIInfoBattleTests
     public async Task IInfo_NDArray_Float_Throws()
     {
         var arr = np.array(new float[] { 1.0f, 2.0f });
-        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<Exception>(() => np.iinfo(arr));
+        new Action(() => np.iinfo(arr)).Should().Throw<Exception>();
     }
 
     #endregion

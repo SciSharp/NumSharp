@@ -48,7 +48,7 @@ public class NpIsRealIsComplexBattleTests
     [TestMethod]
     public async Task IsReal_Null_Throws()
     {
-        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<Exception>(() => np.isreal(null!));
+        new Action(() => np.isreal(null!)).Should().Throw<Exception>();
     }
 
     #endregion
@@ -84,7 +84,7 @@ public class NpIsRealIsComplexBattleTests
     [TestMethod]
     public async Task IsComplex_Null_Throws()
     {
-        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<Exception>(() => np.iscomplex(null!));
+        new Action(() => np.iscomplex(null!)).Should().Throw<Exception>();
     }
 
     #endregion
@@ -125,7 +125,7 @@ public class NpIsRealIsComplexBattleTests
     [TestMethod]
     public async Task IsRealObj_Null_Throws()
     {
-        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<Exception>(() => np.isrealobj(null!));
+        new Action(() => np.isrealobj(null!)).Should().Throw<Exception>();
     }
 
     #endregion
@@ -158,7 +158,7 @@ public class NpIsRealIsComplexBattleTests
     [TestMethod]
     public async Task IsComplexObj_Null_Throws()
     {
-        Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowsException<Exception>(() => np.iscomplexobj(null!));
+        new Action(() => np.iscomplexobj(null!)).Should().Throw<Exception>();
     }
 
     #endregion
