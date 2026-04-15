@@ -877,9 +877,8 @@ namespace NumSharp.Backends.Kernels
             // Half -> other: convert Half to double first, then to target
             if (from == NPTypeCode.Half)
             {
-                // Half.op_Explicit(Half) -> double
-                il.EmitCall(OpCodes.Call, typeof(Half).GetMethod("op_Explicit", new[] { typeof(Half) }, null)
-                    ?? throw new InvalidOperationException("Half.op_Explicit not found"), null);
+                // Half.op_Explicit(Half) -> double (use cached method to avoid ambiguous match)
+                il.EmitCall(OpCodes.Call, CachedMethods.HalfToDouble, null);
 
                 if (to == NPTypeCode.Double)
                     return;  // Already double
@@ -914,9 +913,8 @@ namespace NumSharp.Backends.Kernels
                 else if (from == NPTypeCode.Single)
                     il.Emit(OpCodes.Conv_R8);  // float to double
 
-                // double -> Half via explicit cast
-                il.EmitCall(OpCodes.Call, typeof(Half).GetMethod("op_Explicit", new[] { typeof(double) }, null)
-                    ?? throw new InvalidOperationException("Half.op_Explicit(double) not found"), null);
+                // double -> Half via explicit cast (use cached method to avoid ambiguous match)
+                il.EmitCall(OpCodes.Call, CachedMethods.DoubleToHalf, null);
                 return;
             }
 
