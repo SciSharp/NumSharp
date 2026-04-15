@@ -1,14 +1,14 @@
 using System;
-using TUnit.Core;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp;
 using NumSharp.Backends.Iteration;
-using Assert = Microsoft.VisualStudio.TestTools.UnitTesting.Assert;
 
 namespace NumSharp.UnitTest.Backends.Iterators
 {
+    [TestClass]
     public class NpyIterRefTests
     {
-        [Test]
+        [TestMethod]
         public void New_SingleOperand_Contiguous()
         {
             var arr = np.arange(24).reshape(2, 3, 4);
@@ -21,7 +21,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
             Assert.IsTrue(iter.IsContiguous);
         }
 
-        [Test]
+        [TestMethod]
         public void New_SingleOperand_Sliced()
         {
             var arr = np.arange(24).reshape(2, 3, 4);
@@ -33,7 +33,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
             Assert.AreEqual(1, iter.NOp);
         }
 
-        [Test]
+        [TestMethod]
         public void MultiNew_TwoOperands_SameShape()
         {
             var a = np.arange(12).reshape(3, 4);
@@ -51,7 +51,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
             Assert.AreEqual(2, iter.NOp);
         }
 
-        [Test]
+        [TestMethod]
         public void MultiNew_TwoOperands_Broadcasting()
         {
             var a = np.arange(12).reshape(3, 4);
@@ -69,7 +69,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
             Assert.AreEqual(2, iter.NDim);
         }
 
-        [Test]
+        [TestMethod]
         public void MultiNew_ThreeOperands_OutputArray()
         {
             var a = np.arange(12).reshape(3, 4);
@@ -93,7 +93,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
             Assert.AreEqual(3, iter.NOp);
         }
 
-        [Test]
+        [TestMethod]
         public void GetIterNext_ReturnsValidDelegate()
         {
             var arr = np.array(new double[] { 1, 2, 3, 4, 5 });
@@ -106,7 +106,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
             Assert.IsNotNull(iternext);
         }
 
-        [Test]
+        [TestMethod]
         public void Reset_ResetsIteration()
         {
             var arr = np.arange(10);
@@ -122,7 +122,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
             Assert.AreEqual(0, iter.IterIndex);
         }
 
-        [Test]
+        [TestMethod]
         public void GotoIterIndex_JumpsToPosition()
         {
             var arr = np.arange(100);
@@ -139,7 +139,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
             Assert.AreEqual(0, iter.IterIndex);
         }
 
-        [Test]
+        [TestMethod]
         public void Properties_ReturnCorrectValues()
         {
             var arr = np.arange(24).reshape(2, 3, 4);
@@ -152,7 +152,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
             Assert.IsFalse(iter.RequiresBuffering);
         }
 
-        [Test]
+        [TestMethod]
         public void GetDescrArray_ReturnsCorrectDtypes()
         {
             var a = np.array(new int[] { 1, 2, 3 });
@@ -173,7 +173,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
             Assert.AreEqual(NPTypeCode.Double, dtypes[1]);
         }
 
-        [Test]
+        [TestMethod]
         public void ZeroSizeArray_HandledCorrectly()
         {
             var arr = np.empty(new Shape(0));
@@ -183,7 +183,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
             Assert.AreEqual(0, iter.IterSize);
         }
 
-        [Test]
+        [TestMethod]
         public void ScalarArray_HandledCorrectly()
         {
             var arr = np.array(42.0);
@@ -194,7 +194,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
             Assert.AreEqual(0, iter.NDim);
         }
 
-        [Test]
+        [TestMethod]
         public void EnableExternalLoop_ModifiesFlags()
         {
             var arr = np.arange(10);
@@ -208,7 +208,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
             Assert.IsTrue(iter.HasExternalLoop);
         }
 
-        [Test]
+        [TestMethod]
         public void AdvancedNew_WithBuffering()
         {
             var arr = np.arange(1000);
@@ -226,7 +226,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
             Assert.AreEqual(1000, iter.IterSize);
         }
 
-        [Test]
+        [TestMethod]
         public void Coalescing_ReducesDimensions()
         {
             var arr = np.arange(24).reshape(2, 3, 4);
@@ -242,7 +242,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
             Assert.IsTrue(iter2.IsContiguous);
         }
 
-        [Test]
+        [TestMethod]
         public void BroadcastError_ThrowsException()
         {
             var a = np.arange(12).reshape(3, 4);
@@ -264,7 +264,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
         // Fix #1: Coalescing Always Runs Tests
         // =========================================================================
 
-        [Test]
+        [TestMethod]
         public void Coalescing_AlwaysRunsWithoutMultiIndex()
         {
             // NumPy coalesces contiguous arrays more aggressively due to axis reordering
@@ -290,7 +290,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
             Assert.AreEqual(24, iter.IterSize, "IterSize should be 24");
         }
 
-        [Test]
+        [TestMethod]
         public void Coalescing_1DArray_StaysAt1D()
         {
             // 1D arrays should remain at ndim=1
@@ -302,7 +302,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
             Assert.AreEqual(100, iter.IterSize);
         }
 
-        [Test]
+        [TestMethod]
         public void Coalescing_DisabledWithMultiIndex()
         {
             // NumPy behavior: MULTI_INDEX prevents coalescing
@@ -320,7 +320,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
             Assert.IsTrue(iter.HasMultiIndex);
         }
 
-        [Test]
+        [TestMethod]
         public void Coalescing_PartialForStridedArrays()
         {
             // Non-contiguous arrays may partially coalesce
@@ -338,7 +338,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
         // Fix #4: Multi-Index Support Tests
         // =========================================================================
 
-        [Test]
+        [TestMethod]
         public void MultiIndex_GetCoordinates()
         {
             var arr = np.arange(12).reshape(3, 4);
@@ -355,7 +355,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
             Assert.AreEqual(0, coords[1]);
         }
 
-        [Test]
+        [TestMethod]
         public void MultiIndex_GotoPosition()
         {
             var arr = np.arange(12).reshape(3, 4);
@@ -372,7 +372,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
             Assert.AreEqual(2, coords[1]);
         }
 
-        [Test]
+        [TestMethod]
         public void MultiIndex_ThrowsWithoutFlag()
         {
             var arr = np.arange(12);
@@ -381,7 +381,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
 
             Assert.IsFalse(iter.HasMultiIndex);
 
-            // Direct call to verify exception
+            // Direct call to verify exception (can't use lambda with ref struct)
             bool threwException = false;
             try
             {
@@ -399,7 +399,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
         // Fix #5: Ranged Iteration Tests
         // =========================================================================
 
-        [Test]
+        [TestMethod]
         public void RangedIteration_ValidRange()
         {
             var arr = np.arange(100);
@@ -416,7 +416,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
             Assert.AreEqual(20, iter.IterIndex);
         }
 
-        [Test]
+        [TestMethod]
         public void RangedIteration_InvalidRange()
         {
             var arr = np.arange(100);
@@ -433,7 +433,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
             Assert.IsFalse(iter.ResetToIterIndexRange(-10, 50));
         }
 
-        [Test]
+        [TestMethod]
         public void RangedIteration_FullRange()
         {
             var arr = np.arange(100);
@@ -452,7 +452,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
         // Fix #2: Inner Stride Array Tests
         // =========================================================================
 
-        [Test]
+        [TestMethod]
         public unsafe void InnerStrides_SingleOperand()
         {
             var arr = np.arange(12).reshape(3, 4);
@@ -465,7 +465,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
             Assert.AreEqual(1, innerStrides[0]);
         }
 
-        [Test]
+        [TestMethod]
         public unsafe void InnerStrides_MultipleOperands()
         {
             var a = np.arange(12).reshape(3, 4);
@@ -490,7 +490,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
         // NumSharp Divergence: Unlimited Dimensions Tests
         // =========================================================================
 
-        [Test]
+        [TestMethod]
         public void UnlimitedDimensions_HighDimensionalArray()
         {
             // NUMSHARP DIVERGENCE: Unlike NumPy's NPY_MAXDIMS=64 limit,
@@ -512,7 +512,7 @@ namespace NumSharp.UnitTest.Backends.Iterators
             Assert.IsTrue(iter.NDim >= 1);  // May coalesce
         }
 
-        [Test]
+        [TestMethod]
         public void UnlimitedDimensions_MaxOperands()
         {
             // MaxOperands is still 8 (reasonable limit for multi-operand iteration)
