@@ -115,6 +115,8 @@ namespace NumSharp.Backends.Iteration
             }
             catch
             {
+                // Free dimension arrays if they were allocated
+                statePtr->FreeDimArrays();
                 NativeMemory.Free(statePtr);
                 throw;
             }
@@ -133,14 +135,19 @@ namespace NumSharp.Backends.Iteration
             long[]? iterShape,
             long bufferSize)
         {
-            _state->NOp = nop;
             _state->MaskOp = -1;
             _state->IterStart = 0;
 
             // Calculate broadcast shape
             var broadcastShape = CalculateBroadcastShape(nop, op, opFlags);
 
-            _state->NDim = broadcastShape.Length;
+            // =========================================================================
+            // NUMSHARP DIVERGENCE: Allocate dimension arrays dynamically
+            // Unlike NumPy's fixed NPY_MAXDIMS=64, NumSharp supports unlimited dimensions.
+            // Arrays are allocated based on actual ndim for memory efficiency.
+            // =========================================================================
+            _state->AllocateDimArrays(broadcastShape.Length, nop);
+
             _state->IterSize = 1;
 
             for (int d = 0; d < _state->NDim; d++)
@@ -388,7 +395,8 @@ namespace NumSharp.Backends.Iteration
                 var stridePtr = _state->GetStridesPointer(op);
 
                 // Gather original strides before remapping
-                var originalStrides = stackalloc long[NpyIterState.MaxDims];
+                // NUMSHARP DIVERGENCE: Use actual ndim, not fixed MaxDims
+                var originalStrides = stackalloc long[iterNDim];
                 for (int d = 0; d < iterNDim; d++)
                     originalStrides[d] = stridePtr[d];
 
@@ -534,7 +542,7 @@ namespace NumSharp.Backends.Iteration
         public long* GetInnerStrideArray()
         {
             // For each operand, return the stride for the innermost dimension
-            // These are stored at offset [op * MaxDims + (NDim - 1)]
+            // These are stored at offset [op * StridesNDim + (NDim - 1)]
             return _state->GetInnerStrideArray();
         }
 
@@ -745,6 +753,10 @@ namespace NumSharp.Backends.Iteration
                     }
                 }
 
+                // Free dynamically allocated dimension arrays
+                // NUMSHARP DIVERGENCE: Unlike NumPy's fixed arrays, we allocate dynamically
+                _state->FreeDimArrays();
+
                 NativeMemory.Free(_state);
                 _state = null;
                 _ownsState = false;
@@ -758,6 +770,9 @@ namespace NumSharp.Backends.Iteration
 
     /// <summary>
     /// Static iterator helper methods (backward compatible API).
+    ///
+    /// NUMSHARP DIVERGENCE: These methods support unlimited dimensions via dynamic allocation.
+    /// Dimension arrays are allocated on demand and freed after use.
     /// </summary>
     internal static unsafe class NpyIter
     {
@@ -766,18 +781,26 @@ namespace NumSharp.Backends.Iteration
             where TKernel : struct, INpyBooleanReductionKernel<T>
         {
             var state = CreateReductionState(src);
-            if (state.Size == 0)
-                return TKernel.Identity;
-
-            if ((state.Flags & NpyIterFlags.SourceContiguous) != 0)
+            try
             {
-                var input = (void*)state.GetDataPointer(0);
-                return TKernel.Identity
-                    ? ILKernelGenerator.AllSimdHelper<T>(input, state.Size)
-                    : ILKernelGenerator.AnySimdHelper<T>(input, state.Size);
-            }
+                if (state.Size == 0)
+                    return TKernel.Identity;
 
-            return ReduceBoolGeneral<T, TKernel>(ref state);
+                if ((state.Flags & NpyIterFlags.SourceContiguous) != 0)
+                {
+                    var input = (void*)state.GetDataPointer(0);
+                    return TKernel.Identity
+                        ? ILKernelGenerator.AllSimdHelper<T>(input, state.Size)
+                        : ILKernelGenerator.AnySimdHelper<T>(input, state.Size);
+                }
+
+                return ReduceBoolGeneral<T, TKernel>(ref state);
+            }
+            finally
+            {
+                // Free dynamically allocated dimension arrays
+                state.FreeDimArrays();
+            }
         }
 
         internal static bool TryCopySameType(UnmanagedStorage dst, UnmanagedStorage src)
@@ -788,28 +811,36 @@ namespace NumSharp.Backends.Iteration
             NumSharpException.ThrowIfNotWriteable(dst.Shape);
 
             var state = CreateCopyState(src, dst);
-            if (state.Size == 0)
+            try
+            {
+                if (state.Size == 0)
+                    return true;
+
+                var path = state.IsContiguousCopy ? CopyExecutionPath.Contiguous : CopyExecutionPath.General;
+                var kernel = ILKernelGenerator.TryGetCopyKernel(new CopyKernelKey(dst.TypeCode, path));
+                if (kernel == null)
+                    return false;
+
+                var shape = state.GetShapePointer();
+                var srcStrides = state.GetStridesPointer(0);
+                var dstStrides = state.GetStridesPointer(1);
+
+                kernel(
+                    (void*)state.GetDataPointer(0),
+                    (void*)state.GetDataPointer(1),
+                    srcStrides,
+                    dstStrides,
+                    shape,
+                    state.NDim,
+                    state.Size);
+
                 return true;
-
-            var path = state.IsContiguousCopy ? CopyExecutionPath.Contiguous : CopyExecutionPath.General;
-            var kernel = ILKernelGenerator.TryGetCopyKernel(new CopyKernelKey(dst.TypeCode, path));
-            if (kernel == null)
-                return false;
-
-            var shape = state.GetShapePointer();
-            var srcStrides = state.GetStridesPointer(0);
-            var dstStrides = state.GetStridesPointer(1);
-
-            kernel(
-                (void*)state.GetDataPointer(0),
-                (void*)state.GetDataPointer(1),
-                srcStrides,
-                dstStrides,
-                shape,
-                state.NDim,
-                state.Size);
-
-            return true;
+            }
+            finally
+            {
+                // Free dynamically allocated dimension arrays
+                state.FreeDimArrays();
+            }
         }
 
         private static bool ReduceBoolGeneral<T, TKernel>(ref NpyIterState state)
@@ -836,21 +867,25 @@ namespace NumSharp.Backends.Iteration
             return accumulator;
         }
 
+        /// <summary>
+        /// Create state for copy operation.
+        /// IMPORTANT: Caller must call state.FreeDimArrays() when done!
+        /// </summary>
         internal static NpyIterState CreateCopyState(UnmanagedStorage src, UnmanagedStorage dst)
         {
             var broadcastSrcShape = np.broadcast_to(src.Shape, dst.Shape);
             int ndim = checked((int)dst.Shape.NDim);
-            if (ndim > NpyIterState.MaxDims)
-                throw new NotSupportedException($"NpyIter currently supports up to {NpyIterState.MaxDims} dimensions.");
 
+            // NUMSHARP DIVERGENCE: No MaxDims limit - supports unlimited dimensions
             var state = new NpyIterState
             {
-                NDim = ndim,
-                NOp = 2,
                 Size = dst.Shape.size,
                 DType = dst.TypeCode,
                 Flags = NpyIterFlags.None,
             };
+
+            // Allocate dimension arrays dynamically
+            state.AllocateDimArrays(ndim, 2);
 
             state.SetOpDType(0, src.TypeCode);
             state.SetOpDType(1, dst.TypeCode);
@@ -878,20 +913,24 @@ namespace NumSharp.Backends.Iteration
             return state;
         }
 
+        /// <summary>
+        /// Create state for reduction operation.
+        /// IMPORTANT: Caller must call state.FreeDimArrays() when done!
+        /// </summary>
         internal static NpyIterState CreateReductionState(UnmanagedStorage src)
         {
             int ndim = checked((int)src.Shape.NDim);
-            if (ndim > NpyIterState.MaxDims)
-                throw new NotSupportedException($"NpyIter currently supports up to {NpyIterState.MaxDims} dimensions.");
 
+            // NUMSHARP DIVERGENCE: No MaxDims limit - supports unlimited dimensions
             var state = new NpyIterState
             {
-                NDim = ndim,
-                NOp = 1,
                 Size = src.Shape.size,
                 DType = src.TypeCode,
                 Flags = src.Shape.IsContiguous ? NpyIterFlags.SourceContiguous : NpyIterFlags.None,
             };
+
+            // Allocate dimension arrays dynamically
+            state.AllocateDimArrays(ndim, 1);
 
             state.SetOpDType(0, src.TypeCode);
             state.SetDataPointer(0, (IntPtr)((byte*)src.Address + (src.Shape.offset * src.InternalArray.ItemLength)));

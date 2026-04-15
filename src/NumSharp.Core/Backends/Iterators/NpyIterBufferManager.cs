@@ -134,23 +134,24 @@ namespace NumSharp.Backends.Iteration
 
             long expected = 1;
 
-            fixed (long* shape = state.Shape)
-            fixed (long* strides = state.Strides)
+            // Access dynamically allocated arrays directly (not fixed arrays)
+            var shape = state.Shape;
+            var strides = state.Strides;
+            int stridesNDim = state.StridesNDim;
+
+            for (int axis = state.NDim - 1; axis >= 0; axis--)
             {
-                for (int axis = state.NDim - 1; axis >= 0; axis--)
+                long dim = shape[axis];
+                if (dim == 0)
+                    return true;
+
+                long stride = strides[op * stridesNDim + axis];
+
+                if (dim != 1)
                 {
-                    long dim = shape[axis];
-                    if (dim == 0)
-                        return true;
-
-                    long stride = strides[op * NpyIterState.MaxDims + axis];
-
-                    if (dim != 1)
-                    {
-                        if (stride != expected)
-                            return false;
-                        expected *= dim;
-                    }
+                    if (stride != expected)
+                        return false;
+                    expected *= dim;
                 }
             }
 

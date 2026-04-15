@@ -6,6 +6,9 @@ namespace NumSharp.Backends.Iteration
     /// <summary>
     /// Axis coalescing logic for NpyIter.
     /// Merges adjacent compatible axes to reduce iteration overhead.
+    ///
+    /// NUMSHARP DIVERGENCE: This implementation supports unlimited dimensions.
+    /// Uses StridesNDim for stride array indexing (allocated based on actual ndim).
     /// </summary>
     internal static unsafe class NpyIterCoalescing
     {
@@ -21,86 +24,87 @@ namespace NumSharp.Backends.Iteration
             int writeAxis = 0;
             int newNDim = 1;
 
-            fixed (long* shape = state.Shape)
-            fixed (long* strides = state.Strides)
-            fixed (sbyte* perm = state.Perm)
+            // Access dynamically allocated arrays directly (not fixed arrays)
+            var shape = state.Shape;
+            var strides = state.Strides;
+            var perm = state.Perm;
+            int stridesNDim = state.StridesNDim;
+
+            for (int readAxis = 0; readAxis < state.NDim - 1; readAxis++)
             {
-                for (int readAxis = 0; readAxis < state.NDim - 1; readAxis++)
+                int nextAxis = readAxis + 1;
+                long shape0 = shape[writeAxis];
+                long shape1 = shape[nextAxis];
+
+                // Check if all operands can be coalesced
+                bool canCoalesce = true;
+
+                for (int op = 0; op < state.NOp; op++)
                 {
-                    int nextAxis = readAxis + 1;
-                    long shape0 = shape[writeAxis];
-                    long shape1 = shape[nextAxis];
+                    long stride0 = strides[op * stridesNDim + writeAxis];
+                    long stride1 = strides[op * stridesNDim + nextAxis];
 
-                    // Check if all operands can be coalesced
-                    bool canCoalesce = true;
+                    // Can coalesce if:
+                    // - Either axis has shape 1 (trivial dimension)
+                    // - Strides are compatible: stride0 * shape0 == stride1
+                    bool opCanCoalesce =
+                        (shape0 == 1 && stride0 == 0) ||
+                        (shape1 == 1 && stride1 == 0) ||
+                        (stride0 * shape0 == stride1);
 
-                    for (int op = 0; op < state.NOp; op++)
+                    if (!opCanCoalesce)
                     {
-                        long stride0 = strides[op * NpyIterState.MaxDims + writeAxis];
-                        long stride1 = strides[op * NpyIterState.MaxDims + nextAxis];
-
-                        // Can coalesce if:
-                        // - Either axis has shape 1 (trivial dimension)
-                        // - Strides are compatible: stride0 * shape0 == stride1
-                        bool opCanCoalesce =
-                            (shape0 == 1 && stride0 == 0) ||
-                            (shape1 == 1 && stride1 == 0) ||
-                            (stride0 * shape0 == stride1);
-
-                        if (!opCanCoalesce)
-                        {
-                            canCoalesce = false;
-                            break;
-                        }
-                    }
-
-                    if (canCoalesce)
-                    {
-                        // Merge nextAxis into writeAxis
-                        shape[writeAxis] *= shape1;
-
-                        // Update strides (take non-zero stride)
-                        for (int op = 0; op < state.NOp; op++)
-                        {
-                            int baseIdx = op * NpyIterState.MaxDims;
-                            long stride0 = strides[baseIdx + writeAxis];
-                            long stride1 = strides[baseIdx + nextAxis];
-
-                            if (stride0 == 0)
-                                strides[baseIdx + writeAxis] = stride1;
-                        }
-                    }
-                    else
-                    {
-                        // Move to next write position
-                        writeAxis++;
-                        if (writeAxis != nextAxis)
-                        {
-                            shape[writeAxis] = shape[nextAxis];
-
-                            for (int op = 0; op < state.NOp; op++)
-                            {
-                                int baseIdx = op * NpyIterState.MaxDims;
-                                strides[baseIdx + writeAxis] = strides[baseIdx + nextAxis];
-                            }
-                        }
-                        newNDim++;
+                        canCoalesce = false;
+                        break;
                     }
                 }
 
-                // Update state
-                state.NDim = newNDim;
+                if (canCoalesce)
+                {
+                    // Merge nextAxis into writeAxis
+                    shape[writeAxis] *= shape1;
 
-                // Reset permutation to identity
-                for (int d = 0; d < newNDim; d++)
-                    perm[d] = (sbyte)d;
+                    // Update strides (take non-zero stride)
+                    for (int op = 0; op < state.NOp; op++)
+                    {
+                        int baseIdx = op * stridesNDim;
+                        long stride0 = strides[baseIdx + writeAxis];
+                        long stride1 = strides[baseIdx + nextAxis];
 
-                // Set IDENTPERM flag
-                state.ItFlags |= (uint)NpyIterFlags.IDENTPERM;
+                        if (stride0 == 0)
+                            strides[baseIdx + writeAxis] = stride1;
+                    }
+                }
+                else
+                {
+                    // Move to next write position
+                    writeAxis++;
+                    if (writeAxis != nextAxis)
+                    {
+                        shape[writeAxis] = shape[nextAxis];
 
-                // Clear HASMULTIINDEX flag since coalescing invalidates original indices
-                state.ItFlags &= ~(uint)NpyIterFlags.HASMULTIINDEX;
+                        for (int op = 0; op < state.NOp; op++)
+                        {
+                            int baseIdx = op * stridesNDim;
+                            strides[baseIdx + writeAxis] = strides[baseIdx + nextAxis];
+                        }
+                    }
+                    newNDim++;
+                }
             }
+
+            // Update state
+            state.NDim = newNDim;
+
+            // Reset permutation to identity
+            for (int d = 0; d < newNDim; d++)
+                perm[d] = (sbyte)d;
+
+            // Set IDENTPERM flag
+            state.ItFlags |= (uint)NpyIterFlags.IDENTPERM;
+
+            // Clear HASMULTIINDEX flag since coalescing invalidates original indices
+            state.ItFlags &= ~(uint)NpyIterFlags.HASMULTIINDEX;
 
             // Update inner strides cache after dimension change
             state.UpdateInnerStrides();
@@ -118,45 +122,45 @@ namespace NumSharp.Backends.Iteration
             int innerAxis = state.NDim - 1;
             int prevAxis = state.NDim - 2;
 
-            fixed (long* shape = state.Shape)
-            fixed (long* strides = state.Strides)
-            {
-                long innerShape = shape[innerAxis];
-                long prevShape = shape[prevAxis];
+            var shape = state.Shape;
+            var strides = state.Strides;
+            int stridesNDim = state.StridesNDim;
 
-                // Check if all operands allow coalescing these two axes
+            long innerShape = shape[innerAxis];
+            long prevShape = shape[prevAxis];
+
+            // Check if all operands allow coalescing these two axes
+            for (int op = 0; op < state.NOp; op++)
+            {
+                int baseIdx = op * stridesNDim;
+                long innerStride = strides[baseIdx + innerAxis];
+                long prevStride = strides[baseIdx + prevAxis];
+
+                // For contiguous inner loop, inner stride must be 1
+                // and prev stride must be innerShape
+                if (innerStride != 1 || prevStride != innerShape)
+                    return false;
+            }
+
+            // Coalesce: merge prevAxis into innerAxis
+            shape[innerAxis] = innerShape * prevShape;
+
+            // Shift down outer axes
+            for (int d = prevAxis; d < state.NDim - 2; d++)
+            {
+                shape[d] = shape[d + 1];
                 for (int op = 0; op < state.NOp; op++)
                 {
-                    int baseIdx = op * NpyIterState.MaxDims;
-                    long innerStride = strides[baseIdx + innerAxis];
-                    long prevStride = strides[baseIdx + prevAxis];
-
-                    // For contiguous inner loop, inner stride must be 1
-                    // and prev stride must be innerShape
-                    if (innerStride != 1 || prevStride != innerShape)
-                        return false;
+                    int baseIdx = op * stridesNDim;
+                    strides[baseIdx + d] = strides[baseIdx + d + 1];
                 }
-
-                // Coalesce: merge prevAxis into innerAxis
-                shape[innerAxis] = innerShape * prevShape;
-
-                // Shift down outer axes
-                for (int d = prevAxis; d < state.NDim - 2; d++)
-                {
-                    shape[d] = shape[d + 1];
-                    for (int op = 0; op < state.NOp; op++)
-                    {
-                        int baseIdx = op * NpyIterState.MaxDims;
-                        strides[baseIdx + d] = strides[baseIdx + d + 1];
-                    }
-                }
-
-                state.NDim--;
-
-                // Update inner strides cache after dimension change
-                state.UpdateInnerStrides();
-                return true;
             }
+
+            state.NDim--;
+
+            // Update inner strides cache after dimension change
+            state.UpdateInnerStrides();
+            return true;
         }
 
         /// <summary>
@@ -168,51 +172,51 @@ namespace NumSharp.Backends.Iteration
             if (state.NDim <= 1)
                 return;
 
-            fixed (long* shape = state.Shape)
-            fixed (long* strides = state.Strides)
-            fixed (sbyte* perm = state.Perm)
+            var shape = state.Shape;
+            var strides = state.Strides;
+            var perm = state.Perm;
+            int stridesNDim = state.StridesNDim;
+
+            // Simple bubble sort by minimum stride (prefer contiguous axes as inner)
+            for (int i = 0; i < state.NDim - 1; i++)
             {
-                // Simple bubble sort by minimum stride (prefer contiguous axes as inner)
-                for (int i = 0; i < state.NDim - 1; i++)
+                for (int j = 0; j < state.NDim - 1 - i; j++)
                 {
-                    for (int j = 0; j < state.NDim - 1 - i; j++)
+                    long minStrideJ = GetMinStride(strides, state.NOp, j, stridesNDim);
+                    long minStrideJ1 = GetMinStride(strides, state.NOp, j + 1, stridesNDim);
+
+                    // Swap if j has larger minimum stride than j+1
+                    // (we want smaller strides at higher indices = inner)
+                    if (minStrideJ > minStrideJ1)
                     {
-                        long minStrideJ = GetMinStride(strides, state.NOp, j);
-                        long minStrideJ1 = GetMinStride(strides, state.NOp, j + 1);
+                        // Swap shapes
+                        (shape[j], shape[j + 1]) = (shape[j + 1], shape[j]);
 
-                        // Swap if j has larger minimum stride than j+1
-                        // (we want smaller strides at higher indices = inner)
-                        if (minStrideJ > minStrideJ1)
+                        // Swap permutation
+                        (perm[j], perm[j + 1]) = (perm[j + 1], perm[j]);
+
+                        // Swap strides for all operands
+                        for (int op = 0; op < state.NOp; op++)
                         {
-                            // Swap shapes
-                            (shape[j], shape[j + 1]) = (shape[j + 1], shape[j]);
-
-                            // Swap permutation
-                            (perm[j], perm[j + 1]) = (perm[j + 1], perm[j]);
-
-                            // Swap strides for all operands
-                            for (int op = 0; op < state.NOp; op++)
-                            {
-                                int baseIdx = op * NpyIterState.MaxDims;
-                                (strides[baseIdx + j], strides[baseIdx + j + 1]) =
-                                    (strides[baseIdx + j + 1], strides[baseIdx + j]);
-                            }
+                            int baseIdx = op * stridesNDim;
+                            (strides[baseIdx + j], strides[baseIdx + j + 1]) =
+                                (strides[baseIdx + j + 1], strides[baseIdx + j]);
                         }
                     }
                 }
-
-                // Clear IDENTPERM if we reordered
-                state.ItFlags &= ~(uint)NpyIterFlags.IDENTPERM;
             }
+
+            // Clear IDENTPERM if we reordered
+            state.ItFlags &= ~(uint)NpyIterFlags.IDENTPERM;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static long GetMinStride(long* strides, int nop, int axis)
+        private static long GetMinStride(long* strides, int nop, int axis, int stridesNDim)
         {
             long min = long.MaxValue;
             for (int op = 0; op < nop; op++)
             {
-                long stride = Math.Abs(strides[op * NpyIterState.MaxDims + axis]);
+                long stride = Math.Abs(strides[op * stridesNDim + axis]);
                 if (stride > 0 && stride < min)
                     min = stride;
             }
