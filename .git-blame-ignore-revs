@@ -1,2 +1,5 @@
 # TUnit to MSTest v3 attribute migration
 ac020336
+
+# TUnit assertions to AwesomeAssertions migration
+b1d1d543
