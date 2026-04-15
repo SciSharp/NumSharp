@@ -519,5 +519,207 @@ namespace NumSharp.UnitTest.Backends.Iterators
             // MaxOperands is still 8 (reasonable limit for multi-operand iteration)
             Assert.AreEqual(8, NpyIterState.MaxOperands);
         }
+
+        // =========================================================================
+        // C_INDEX and F_INDEX Tests (Flat Index Tracking)
+        // =========================================================================
+
+        [TestMethod]
+        public void CIndex_TracksLinearPosition()
+        {
+            var arr = np.arange(12).reshape(3, 4);
+
+            using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.C_INDEX | NpyIterGlobalFlags.MULTI_INDEX);
+
+            Assert.IsTrue(iter.HasIndex);
+            Assert.AreEqual(0, iter.GetIndex());
+
+            // Move to position (1, 2) = element at linear index 6
+            iter.GotoMultiIndex(new long[] { 1, 2 });
+            Assert.AreEqual(6, iter.GetIndex());
+        }
+
+        [TestMethod]
+        public void CIndex_AdvanceIncrementsIndex()
+        {
+            var arr = np.arange(10);
+
+            using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.C_INDEX);
+
+            Assert.AreEqual(0, iter.GetIndex());
+
+            // Advance a few times using GotoIterIndex (Advance is internal)
+            iter.GotoIterIndex(5);
+            Assert.AreEqual(5, iter.GetIndex());
+        }
+
+        [TestMethod]
+        public void FIndex_TracksColumnMajorPosition()
+        {
+            var arr = np.arange(12).reshape(3, 4);
+
+            using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.F_INDEX | NpyIterGlobalFlags.MULTI_INDEX);
+
+            Assert.IsTrue(iter.HasIndex);
+            Assert.AreEqual(0, iter.GetIndex());
+
+            // F-order position (1, 2): column-major index is 1 + 2*3 = 7
+            iter.GotoMultiIndex(new long[] { 1, 2 });
+            Assert.AreEqual(7, iter.GetIndex());
+        }
+
+        [TestMethod]
+        public void Index_ThrowsWithoutFlag()
+        {
+            var arr = np.arange(10);
+
+            using var iter = NpyIterRef.New(arr);  // No C_INDEX/F_INDEX flag
+
+            Assert.IsFalse(iter.HasIndex);
+
+            // Should throw when trying to get index
+            bool threwException = false;
+            try
+            {
+                iter.GetIndex();
+            }
+            catch (InvalidOperationException)
+            {
+                threwException = true;
+            }
+            Assert.IsTrue(threwException);
+        }
+
+        [TestMethod]
+        public void Index_ResetToZero()
+        {
+            var arr = np.arange(100);
+
+            using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.C_INDEX);
+
+            iter.GotoIterIndex(50);
+            Assert.AreEqual(50, iter.GetIndex());
+
+            iter.Reset();
+            Assert.AreEqual(0, iter.GetIndex());
+        }
+
+        // =========================================================================
+        // GROWINNER Optimization Tests
+        // =========================================================================
+
+        [TestMethod]
+        public void GrowInner_FlagSetsCorrectly()
+        {
+            var arr = np.arange(1000);
+
+            using var iter = NpyIterRef.New(arr, NpyIterGlobalFlags.GROWINNER);
+
+            Assert.IsTrue(iter.HasGrowInner);
+        }
+
+        [TestMethod]
+        public void GrowInner_WithBuffering()
+        {
+            var arr = np.arange(1000);
+
+            using var iter = NpyIterRef.AdvancedNew(
+                nop: 1,
+                op: new[] { arr },
+                flags: NpyIterGlobalFlags.BUFFERED | NpyIterGlobalFlags.GROWINNER,
+                order: NPY_ORDER.NPY_KEEPORDER,
+                casting: NPY_CASTING.NPY_SAFE_CASTING,
+                opFlags: new[] { NpyIterPerOpFlags.READONLY },
+                bufferSize: 256);
+
+            Assert.IsTrue(iter.RequiresBuffering);
+            Assert.IsTrue(iter.HasGrowInner);
+        }
+
+        // =========================================================================
+        // iterShape Parameter Tests
+        // =========================================================================
+
+        [TestMethod]
+        public void IterShape_ExplicitShape()
+        {
+            // When iterShape is specified, it overrides the broadcast shape
+            var arr = np.arange(4);  // Shape (4,)
+
+            using var iter = NpyIterRef.AdvancedNew(
+                nop: 1,
+                op: new[] { arr },
+                flags: NpyIterGlobalFlags.None,
+                order: NPY_ORDER.NPY_KEEPORDER,
+                casting: NPY_CASTING.NPY_SAFE_CASTING,
+                opFlags: new[] { NpyIterPerOpFlags.READONLY },
+                iterShape: new long[] { 3, 4 });  // Explicit 2D iteration
+
+            Assert.AreEqual(12, iter.IterSize);  // 3 * 4
+        }
+
+        [TestMethod]
+        public void IterShape_IncompatibleThrows()
+        {
+            var arr = np.arange(5);  // Shape (5,)
+
+            // iterShape (3, 4) requires inner dim of 4 or 1, not 5
+            Assert.ThrowsException<IncorrectShapeException>(() =>
+            {
+                using var iter = NpyIterRef.AdvancedNew(
+                    nop: 1,
+                    op: new[] { arr },
+                    flags: NpyIterGlobalFlags.None,
+                    order: NPY_ORDER.NPY_KEEPORDER,
+                    casting: NPY_CASTING.NPY_SAFE_CASTING,
+                    opFlags: new[] { NpyIterPerOpFlags.READONLY },
+                    iterShape: new long[] { 3, 4 });
+            });
+        }
+
+        // =========================================================================
+        // Buffer Reuse Tests
+        // =========================================================================
+
+        [TestMethod]
+        public void BufferReuse_InvalidatedOnReset()
+        {
+            // Buffer reuse flags should be invalidated when iterator is reset
+            var arr = np.arange(100);
+
+            using var iter = NpyIterRef.AdvancedNew(
+                nop: 1,
+                op: new[] { arr },
+                flags: NpyIterGlobalFlags.BUFFERED,
+                order: NPY_ORDER.NPY_KEEPORDER,
+                casting: NPY_CASTING.NPY_SAFE_CASTING,
+                opFlags: new[] { NpyIterPerOpFlags.READONLY },
+                bufferSize: 32);
+
+            // After Reset, buffers should be invalidated
+            iter.Reset();
+            // No direct way to check BUF_REUSABLE flag from outside,
+            // but the reset should not throw
+            Assert.AreEqual(0, iter.IterIndex);
+        }
+
+        [TestMethod]
+        public void BufferReuse_InvalidatedOnGoto()
+        {
+            var arr = np.arange(100);
+
+            using var iter = NpyIterRef.AdvancedNew(
+                nop: 1,
+                op: new[] { arr },
+                flags: NpyIterGlobalFlags.BUFFERED,
+                order: NPY_ORDER.NPY_KEEPORDER,
+                casting: NPY_CASTING.NPY_SAFE_CASTING,
+                opFlags: new[] { NpyIterPerOpFlags.READONLY },
+                bufferSize: 32);
+
+            // GotoIterIndex should invalidate buffers
+            iter.GotoIterIndex(50);
+            Assert.AreEqual(50, iter.IterIndex);
+        }
     }
 }

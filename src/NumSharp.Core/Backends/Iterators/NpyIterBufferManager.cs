@@ -366,5 +366,179 @@ namespace NumSharp.Backends.Iteration
                 }
             }
         }
+
+        // =========================================================================
+        // GROWINNER Optimization
+        // =========================================================================
+        // When GROWINNER flag is set, the iterator tries to make the inner loop
+        // as large as possible by coalescing contiguous dimensions into the buffer.
+        // This maximizes SIMD efficiency at the cost of larger buffers.
+        // =========================================================================
+
+        /// <summary>
+        /// Calculate optimal inner loop size with GROWINNER optimization.
+        /// NumPy: npyiter_grow_buffers() in nditer_api.c
+        ///
+        /// When GROWINNER is enabled, we try to grow the inner loop to include
+        /// as many elements as possible while still fitting in the buffer.
+        /// </summary>
+        public static long CalculateGrowInnerSize(ref NpyIterState state, long bufferSize)
+        {
+            // If GROWINNER is not set, return the innermost dimension size
+            if ((state.ItFlags & (uint)NpyIterFlags.GROWINNER) == 0)
+            {
+                return state.NDim > 0 ? state.Shape[state.NDim - 1] : 1;
+            }
+
+            // Try to fit as many elements as possible in the buffer
+            long innerSize = 1;
+            for (int d = state.NDim - 1; d >= 0; d--)
+            {
+                long dimSize = state.Shape[d];
+                long newSize = innerSize * dimSize;
+
+                if (newSize > bufferSize)
+                    break;
+
+                // Check if all operands are contiguous up to this dimension
+                bool allContiguous = true;
+                long expectedStride = 1;
+
+                for (int op = 0; op < state.NOp; op++)
+                {
+                    // Only check operands that are being buffered
+                    if (state.GetBuffer(op) == null)
+                        continue;
+
+                    for (int axis = state.NDim - 1; axis >= d; axis--)
+                    {
+                        long stride = state.GetStride(axis, op);
+                        if (state.Shape[axis] > 1 && stride != expectedStride)
+                        {
+                            allContiguous = false;
+                            break;
+                        }
+                        expectedStride *= state.Shape[axis];
+                    }
+
+                    if (!allContiguous)
+                        break;
+                }
+
+                if (!allContiguous)
+                    break;
+
+                innerSize = newSize;
+            }
+
+            return Math.Min(innerSize, bufferSize);
+        }
+
+        // =========================================================================
+        // Buffer Reuse Tracking
+        // =========================================================================
+        // The BUF_REUSABLE flag indicates that a buffer's contents are still valid
+        // and can be reused without re-copying from the source array. This is useful
+        // for reduction operations where the same input is used multiple times.
+        // =========================================================================
+
+        /// <summary>
+        /// Mark operand buffer as reusable (contents are still valid).
+        /// Call this after CopyToBuffer when the source data hasn't changed.
+        /// </summary>
+        public static void MarkBufferReusable(ref NpyIterState state, int op)
+        {
+            var flags = state.GetOpFlags(op);
+            state.SetOpFlags(op, flags | NpyIterOpFlags.BUF_REUSABLE);
+        }
+
+        /// <summary>
+        /// Check if operand buffer can be reused (contents still valid).
+        /// </summary>
+        public static bool IsBufferReusable(ref NpyIterState state, int op)
+        {
+            return (state.GetOpFlags(op) & NpyIterOpFlags.BUF_REUSABLE) != 0;
+        }
+
+        /// <summary>
+        /// Clear buffer reusable flag (contents are no longer valid).
+        /// Call this when the source data or iteration position changes.
+        /// </summary>
+        public static void InvalidateBuffer(ref NpyIterState state, int op)
+        {
+            var flags = state.GetOpFlags(op);
+            state.SetOpFlags(op, flags & ~NpyIterOpFlags.BUF_REUSABLE);
+        }
+
+        /// <summary>
+        /// Invalidate all buffers (e.g., after Reset or GotoIterIndex).
+        /// </summary>
+        public static void InvalidateAllBuffers(ref NpyIterState state)
+        {
+            for (int op = 0; op < state.NOp; op++)
+            {
+                InvalidateBuffer(ref state, op);
+            }
+        }
+
+        /// <summary>
+        /// Copy data to buffer only if not reusable.
+        /// Returns true if copy was performed, false if buffer was reused.
+        /// </summary>
+        public static bool CopyToBufferIfNeeded(ref NpyIterState state, int op, long count)
+        {
+            if (IsBufferReusable(ref state, op))
+                return false;
+
+            CopyToBuffer(ref state, op, count);
+            MarkBufferReusable(ref state, op);
+            return true;
+        }
+
+        /// <summary>
+        /// Prepare buffers for an iteration block.
+        /// Handles GROWINNER and buffer reuse.
+        /// </summary>
+        public static long PrepareBuffers(ref NpyIterState state)
+        {
+            long innerSize = CalculateGrowInnerSize(ref state, state.BufferSize);
+
+            // Copy input operands to buffers (with reuse check)
+            for (int op = 0; op < state.NOp; op++)
+            {
+                if (state.GetBuffer(op) == null)
+                    continue;
+
+                var flags = state.GetOpFlags(op);
+                if ((flags & NpyIterOpFlags.READ) != 0)
+                {
+                    CopyToBufferIfNeeded(ref state, op, innerSize);
+                }
+            }
+
+            return innerSize;
+        }
+
+        /// <summary>
+        /// Finalize buffers after an iteration block.
+        /// Writes back output operands.
+        /// </summary>
+        public static void FinalizeBuffers(ref NpyIterState state, long count)
+        {
+            // Copy output operands from buffers
+            for (int op = 0; op < state.NOp; op++)
+            {
+                if (state.GetBuffer(op) == null)
+                    continue;
+
+                var flags = state.GetOpFlags(op);
+                if ((flags & NpyIterOpFlags.WRITE) != 0)
+                {
+                    CopyFromBuffer(ref state, op, count);
+                    // Output buffers are no longer reusable after write-back
+                    InvalidateBuffer(ref state, op);
+                }
+            }
+        }
     }
 }
