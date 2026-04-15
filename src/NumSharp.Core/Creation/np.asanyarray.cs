@@ -106,6 +106,7 @@ namespace NumSharp
         ///     Optimized ToArray for IEnumerable&lt;T&gt;.
         ///     Uses CopyTo for ICollection&lt;T&gt; (3-7x faster for small collections).
         ///     For List&lt;T&gt;, uses CollectionsMarshal.AsSpan for direct memory access.
+        ///     Uses GC.AllocateUninitializedArray to skip zeroing (4x faster allocation).
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static T[] ToArrayFast<T>(IEnumerable<T> source)
@@ -114,7 +115,8 @@ namespace NumSharp
             if (source is List<T> list)
             {
                 var span = CollectionsMarshal.AsSpan(list);
-                var arr = new T[span.Length];
+                // Use uninitialized array - we're about to overwrite all elements
+                var arr = GC.AllocateUninitializedArray<T>(span.Length);
                 span.CopyTo(arr);
                 return arr;
             }
@@ -122,7 +124,8 @@ namespace NumSharp
             // Fast path for ICollection<T> - use CopyTo (avoids enumerator overhead)
             if (source is ICollection<T> collection)
             {
-                var arr = new T[collection.Count];
+                // Use uninitialized array - CopyTo will overwrite all elements
+                var arr = GC.AllocateUninitializedArray<T>(collection.Count);
                 collection.CopyTo(arr, 0);
                 return arr;
             }
@@ -292,7 +295,7 @@ namespace NumSharp
             // collections while still handling mixed types correctly
             if (elementType == typeof(bool))
             {
-                var arr = new bool[items.Count];
+                var arr = GC.AllocateUninitializedArray<bool>(items.Count);
                 for (int i = 0; i < items.Count; i++)
                 {
                     var item = items[i];
@@ -302,7 +305,7 @@ namespace NumSharp
             }
             if (elementType == typeof(byte))
             {
-                var arr = new byte[items.Count];
+                var arr = GC.AllocateUninitializedArray<byte>(items.Count);
                 for (int i = 0; i < items.Count; i++)
                 {
                     var item = items[i];
@@ -312,7 +315,7 @@ namespace NumSharp
             }
             if (elementType == typeof(short))
             {
-                var arr = new short[items.Count];
+                var arr = GC.AllocateUninitializedArray<short>(items.Count);
                 for (int i = 0; i < items.Count; i++)
                 {
                     var item = items[i];
@@ -322,7 +325,7 @@ namespace NumSharp
             }
             if (elementType == typeof(ushort))
             {
-                var arr = new ushort[items.Count];
+                var arr = GC.AllocateUninitializedArray<ushort>(items.Count);
                 for (int i = 0; i < items.Count; i++)
                 {
                     var item = items[i];
@@ -332,7 +335,7 @@ namespace NumSharp
             }
             if (elementType == typeof(int))
             {
-                var arr = new int[items.Count];
+                var arr = GC.AllocateUninitializedArray<int>(items.Count);
                 for (int i = 0; i < items.Count; i++)
                 {
                     var item = items[i];
@@ -342,7 +345,7 @@ namespace NumSharp
             }
             if (elementType == typeof(uint))
             {
-                var arr = new uint[items.Count];
+                var arr = GC.AllocateUninitializedArray<uint>(items.Count);
                 for (int i = 0; i < items.Count; i++)
                 {
                     var item = items[i];
@@ -352,7 +355,7 @@ namespace NumSharp
             }
             if (elementType == typeof(long))
             {
-                var arr = new long[items.Count];
+                var arr = GC.AllocateUninitializedArray<long>(items.Count);
                 for (int i = 0; i < items.Count; i++)
                 {
                     var item = items[i];
@@ -362,7 +365,7 @@ namespace NumSharp
             }
             if (elementType == typeof(ulong))
             {
-                var arr = new ulong[items.Count];
+                var arr = GC.AllocateUninitializedArray<ulong>(items.Count);
                 for (int i = 0; i < items.Count; i++)
                 {
                     var item = items[i];
@@ -372,7 +375,7 @@ namespace NumSharp
             }
             if (elementType == typeof(char))
             {
-                var arr = new char[items.Count];
+                var arr = GC.AllocateUninitializedArray<char>(items.Count);
                 for (int i = 0; i < items.Count; i++)
                 {
                     var item = items[i];
@@ -382,7 +385,7 @@ namespace NumSharp
             }
             if (elementType == typeof(float))
             {
-                var arr = new float[items.Count];
+                var arr = GC.AllocateUninitializedArray<float>(items.Count);
                 for (int i = 0; i < items.Count; i++)
                 {
                     var item = items[i];
@@ -392,7 +395,7 @@ namespace NumSharp
             }
             if (elementType == typeof(double))
             {
-                var arr = new double[items.Count];
+                var arr = GC.AllocateUninitializedArray<double>(items.Count);
                 for (int i = 0; i < items.Count; i++)
                 {
                     var item = items[i];
@@ -402,7 +405,7 @@ namespace NumSharp
             }
             if (elementType == typeof(decimal))
             {
-                var arr = new decimal[items.Count];
+                var arr = GC.AllocateUninitializedArray<decimal>(items.Count);
                 for (int i = 0; i < items.Count; i++)
                 {
                     var item = items[i];
