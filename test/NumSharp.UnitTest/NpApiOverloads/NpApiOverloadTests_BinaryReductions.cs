@@ -11,6 +11,7 @@ namespace NumSharp.UnitTest.NpApiOverloads;
 /// Tests verifying that binary math operations and reduction overloads compile and work correctly
 /// after removing the `in` parameter modifier from method signatures.
 /// </summary>
+[TestClass]
 public class NpApiOverloadTests_BinaryReductions
 {
     #region Basic Binary Operations

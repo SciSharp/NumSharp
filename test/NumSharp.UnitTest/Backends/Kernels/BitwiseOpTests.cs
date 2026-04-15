@@ -10,6 +10,7 @@ namespace NumSharp.UnitTest.Backends.Kernels;
 /// Comprehensive tests for bitwise operations (And, Or, Xor).
 /// All expected values are verified against NumPy 2.x output.
 /// </summary>
+[TestClass]
 public class BitwiseOpTests
 {
     #region Boolean AND Tests

@@ -10,6 +10,7 @@ using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.Creation
 {
+    [TestClass]
     public class NumPyArangeTest
     {
         [TestMethod]

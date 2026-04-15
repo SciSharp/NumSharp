@@ -11,6 +11,7 @@ namespace NumSharp.UnitTest.LinearAlgebra;
 /// Battle tests for np.dot to ensure NumPy alignment.
 /// Based on running actual NumPy code and verifying NumSharp matches.
 /// </summary>
+[TestClass]
 public class DotBattleTests : TestClass
 {
     [TestMethod]

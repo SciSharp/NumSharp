@@ -17,6 +17,7 @@ namespace NumSharp.UnitTest.Backends.Kernels;
 /// - Edge cases (single element, identical values, NaN handling)
 /// - Shape variations (square, rectangular, higher dimensional)
 /// </summary>
+[TestClass]
 public class VarStdComprehensiveTests
 {
     private const double Tolerance = 1e-10;

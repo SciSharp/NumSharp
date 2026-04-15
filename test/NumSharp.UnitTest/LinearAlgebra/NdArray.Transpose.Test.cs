@@ -11,6 +11,7 @@ using NumSharp.Generic;
 
 namespace NumSharp.UnitTest.LinearAlgebra
 {
+    [TestClass]
     public class TransposeTest
     {
         [TestMethod]

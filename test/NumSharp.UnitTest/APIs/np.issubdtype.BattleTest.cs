@@ -6,6 +6,7 @@ namespace NumSharp.UnitTest.APIs;
 /// <summary>
 /// Battle tests for np.issubdtype - comprehensive coverage of type hierarchy.
 /// </summary>
+[TestClass]
 public class NpIsSubdtypeBattleTests
 {
     private static readonly NPTypeCode[] AllTypes = new[]

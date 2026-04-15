@@ -10,6 +10,7 @@ namespace NumSharp.UnitTest.LinearAlgebra;
 /// Tests for np.matmul and np.dot with int64 indexing support.
 /// Verifies SIMD path works correctly for contiguous arrays.
 /// </summary>
+[TestClass]
 public class MatMulInt64Tests
 {
     #region Basic Correctness Tests

@@ -10,6 +10,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
     /// Tests for np.cumsum covering edge cases.
     /// Ported from NumPy test patterns.
     /// </summary>
+    [TestClass]
     public class CumSumEdgeCaseTests
     {
         #region Basic Tests

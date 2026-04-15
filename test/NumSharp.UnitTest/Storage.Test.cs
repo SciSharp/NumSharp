@@ -11,6 +11,7 @@ using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp.UnitTest
 {
+    [TestClass]
     public class StorageTester
     {
         public UnmanagedStorage strg1D;

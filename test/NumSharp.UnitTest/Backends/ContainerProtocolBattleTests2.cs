@@ -11,6 +11,7 @@ namespace NumSharp.UnitTest.Backends;
 /// Second round of battle tests for container protocol.
 /// Focuses on edge cases, long indexing, and complex scenarios.
 /// </summary>
+[TestClass]
 public class ContainerProtocolBattleTests2
 {
     #region __len__ Round 2

@@ -2,6 +2,7 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace NumSharp.UnitTest.Operations {
+    [TestClass]
     public class NDArrayNotTest
     {
         [TestMethod]

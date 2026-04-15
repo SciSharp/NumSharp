@@ -7,6 +7,7 @@ using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp.UnitTest.Backends.Unmanaged.Math
 {
+    [TestClass]
     public class np_add_tests
     {
         [TestMethod]

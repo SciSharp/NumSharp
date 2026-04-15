@@ -8,6 +8,7 @@ using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.Indexing
 {
+    [TestClass]
     public class np_nonzero_tests : TestClass
     {
         [TestMethod]

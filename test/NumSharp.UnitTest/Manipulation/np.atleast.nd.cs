@@ -3,6 +3,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace NumSharp.UnitTest.Manipulation
 {
+    [TestClass]
     public class np_atleast_tests
     {
         [TestMethod]

@@ -8,6 +8,7 @@ namespace NumSharp.UnitTest.Logic
     /// Tests for NumPy 2.x type promotion rules (NEP50).
     /// Verifies that mixed-type operations produce correct result dtypes.
     /// </summary>
+    [TestClass]
     public class TypePromotionTests
     {
         #region Integer Promotions

@@ -10,6 +10,7 @@ using NumSharp.UnitTest;
 
 namespace NumSharp.UnitTest.Operations
 {
+    [TestClass]
     public class NDArrayAndTest
     {
         [TestMethod]

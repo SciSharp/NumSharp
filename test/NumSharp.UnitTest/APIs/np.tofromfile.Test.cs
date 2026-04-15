@@ -7,6 +7,7 @@ using System.Linq;
 
 namespace NumSharp.UnitTest.APIs
 {
+    [TestClass]
     public class NumpyToFromFileTest : TestClass
     {
         [TestMethod]

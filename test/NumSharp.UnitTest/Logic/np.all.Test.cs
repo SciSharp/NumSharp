@@ -6,6 +6,7 @@ using Assert = Microsoft.VisualStudio.TestTools.UnitTesting.Assert;
 
 namespace NumSharp.UnitTest.Logic
 {
+    [TestClass]
     public class np_all_Test
     {
         [TestMethod]

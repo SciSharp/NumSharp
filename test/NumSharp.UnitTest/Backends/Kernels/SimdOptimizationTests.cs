@@ -15,6 +15,7 @@ namespace NumSharp.UnitTest.Backends.Kernels;
 /// - src/numpy/numpy/_core/tests/test_multiarray.py (argmax/argmin, masking)
 /// - src/numpy/numpy/_core/tests/test_indexing.py (boolean indexing)
 /// </summary>
+[TestClass]
 public class SimdOptimizationTests
 {
     #region NonZero Tests (from NumPy test_numeric.py)

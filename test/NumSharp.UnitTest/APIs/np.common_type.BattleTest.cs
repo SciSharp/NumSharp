@@ -6,6 +6,7 @@ namespace NumSharp.UnitTest.APIs;
 /// <summary>
 /// Battle tests for np.common_type - comprehensive coverage.
 /// </summary>
+[TestClass]
 public class NpCommonTypeBattleTests
 {
     #region Integer Arrays - Always Return Double

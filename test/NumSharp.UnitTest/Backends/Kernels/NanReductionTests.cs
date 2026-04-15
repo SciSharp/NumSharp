@@ -9,6 +9,7 @@ namespace NumSharp.UnitTest.Backends.Kernels;
 /// Tests for NaN-aware reduction operations (nansum, nanprod, nanmin, nanmax).
 /// All expected values are verified against NumPy 2.4.2.
 /// </summary>
+[TestClass]
 public class NanReductionTests
 {
     #region np.nansum Tests

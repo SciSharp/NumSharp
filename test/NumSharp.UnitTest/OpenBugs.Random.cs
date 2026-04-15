@@ -19,6 +19,7 @@ namespace NumSharp.UnitTest
     ///     print(np.random.rand())  # etc.
     ///     </code>
     /// </summary>
+    [TestClass]
     public class OpenBugsRandom : TestClass
     {
         // ===== CRITICAL: RNG Algorithm Mismatch =====

@@ -11,6 +11,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
     /// Tests ported from NumPy test_umath.py TestPower class.
     /// Covers edge cases for np.power operation.
     /// </summary>
+    [TestClass]
     public class PowerEdgeCaseTests
     {
         #region Float Power Tests (from test_power_float)

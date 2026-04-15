@@ -5,6 +5,7 @@ using System.Linq;
 namespace NumSharp.UnitTest.RandomSampling
 {
     
+    [TestClass]
     public class NpRandomStandardCauchyTest : TestClass
     {
         [TestMethod]

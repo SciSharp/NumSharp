@@ -10,6 +10,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
     /// Tests ported from NumPy for np.argmax and np.argmin.
     /// Covers edge cases including NaN handling, axis combinations, and keepdims.
     /// </summary>
+    [TestClass]
     public class ArgMaxArgMinEdgeCaseTests
     {
         #region Basic ArgMax Tests

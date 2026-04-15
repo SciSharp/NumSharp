@@ -8,6 +8,7 @@ namespace NumSharp.UnitTest.Manipulation
     /// Tests for np.repeat matching NumPy 2.x behavior.
     /// Based on NumPy tests from numpy/_core/tests/test_multiarray.py and test_numeric.py.
     /// </summary>
+    [TestClass]
     public class np_repeat_tests
     {
         #region Basic Scalar Repeat Tests

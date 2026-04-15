@@ -9,6 +9,7 @@ namespace NumSharp.UnitTest.LinearAlgebra;
 /// <summary>
 /// Battle tests for np.matmul (@ operator) to ensure NumPy alignment.
 /// </summary>
+[TestClass]
 public class MatmulBattleTests : TestClass
 {
     [TestMethod]

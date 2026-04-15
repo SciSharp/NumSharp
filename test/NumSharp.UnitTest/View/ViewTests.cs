@@ -7,6 +7,7 @@ namespace NumSharp.UnitTest.View
     ///     Battle tests for NDArray.view() - NumPy parity verification.
     ///     Tests byte reinterpretation, not value conversion.
     /// </summary>
+    [TestClass]
     public class ViewTests
     {
         #region Same Type Views

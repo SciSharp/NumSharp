@@ -7,6 +7,7 @@ namespace NumSharp.UnitTest.Manipulation;
 /// Battle tests for np.hsplit, np.vsplit, np.dsplit to ensure NumPy alignment.
 /// Based on NumPy 2.4.2 behavior.
 /// </summary>
+[TestClass]
 public class SplitBattleTests : TestClass
 {
     #region hsplit tests

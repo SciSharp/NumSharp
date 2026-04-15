@@ -6,6 +6,7 @@ namespace NumSharp.UnitTest.APIs;
 /// <summary>
 /// Tests for NumPy type introspection and promotion functions.
 /// </summary>
+[TestClass]
 public class NpTypingTests
 {
 #region iinfo tests

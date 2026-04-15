@@ -11,6 +11,7 @@ namespace NumSharp.UnitTest.RandomSampling
     /// Based on NumPy 2.4.2 behavior.
     /// </summary>
     
+    [TestClass]
     public class np_random_logseries_Tests
     {
         #region Basic Functionality

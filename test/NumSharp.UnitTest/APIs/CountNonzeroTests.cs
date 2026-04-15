@@ -9,6 +9,7 @@ namespace NumSharp.UnitTest.APIs;
 /// Tests for np.count_nonzero.
 /// NumPy: np.count_nonzero([0, 1, 0, 2]) = 2
 /// </summary>
+[TestClass]
 public class CountNonzeroTests
 {
     #region Element-wise (No Axis)

@@ -8,6 +8,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
     /// Tests for empty array axis reduction behavior.
     /// NumPy: np.sum(np.zeros((0,3)), axis=0) returns array([0., 0., 0.]) with shape (3,)
     /// </summary>
+    [TestClass]
     public class EmptyAxisReductionTests
     {
         #region Sum Tests

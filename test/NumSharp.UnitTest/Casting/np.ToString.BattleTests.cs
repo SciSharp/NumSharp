@@ -14,6 +14,7 @@ namespace NumSharp.UnitTest;
 /// - Edge cases (empty, scalar, single element)
 /// - All supported dtypes
 /// </summary>
+[TestClass]
 public class np_ToString_BattleTests
 {
     private static string Normalize(string s) =>

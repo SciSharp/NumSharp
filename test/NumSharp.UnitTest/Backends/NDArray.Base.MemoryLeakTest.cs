@@ -13,6 +13,7 @@ namespace NumSharp.UnitTest.Backends
     /// 2. Originals aren't collected while views exist
     /// 3. Circular reference scenarios are handled
     /// </summary>
+    [TestClass]
     public class NDArray_Base_MemoryLeakTest
     {
         #region Memory Pressure Tests

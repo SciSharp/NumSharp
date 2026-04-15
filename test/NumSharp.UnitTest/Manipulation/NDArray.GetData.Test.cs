@@ -6,6 +6,7 @@ using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.Manipulation
 {
+    [TestClass]
     public class NDArrayGetData
     {
         [TestMethod]

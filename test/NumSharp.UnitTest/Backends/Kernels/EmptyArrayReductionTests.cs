@@ -9,6 +9,7 @@ namespace NumSharp.UnitTest.Backends.Kernels;
 /// NumPy raises ValueError for max/min of empty arrays (no identity element).
 /// NumPy returns identity values for sum/prod (0 and 1 respectively).
 /// </summary>
+[TestClass]
 public class EmptyArrayReductionTests
 {
     #region Max/Min Should Throw

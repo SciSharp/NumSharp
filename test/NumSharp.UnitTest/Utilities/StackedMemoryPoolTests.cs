@@ -8,6 +8,7 @@ using NumSharp.Unmanaged.Memory;
 
 namespace NumSharp.UnitTest.Utilities
 {
+    [TestClass]
     public class StackedMemoryPoolTests
     {
         [TestMethod]

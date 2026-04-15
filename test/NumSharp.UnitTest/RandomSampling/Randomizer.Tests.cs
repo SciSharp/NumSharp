@@ -7,6 +7,7 @@ namespace NumSharp.UnitTest.RandomSampling
     ///     Tests for the MT19937 Mersenne Twister random number generator.
     ///     These tests verify NumPy compatibility.
     /// </summary>
+    [TestClass]
     public class MT19937Tests
     {
         [TestMethod]

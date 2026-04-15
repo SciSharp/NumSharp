@@ -11,6 +11,7 @@ namespace NumSharp.UnitTest.Logic
     /// Tests for np.isnan - test element-wise for NaN.
     /// NumPy reference: https://numpy.org/doc/stable/reference/generated/numpy.isnan.html
     /// </summary>
+    [TestClass]
     public class np_isnan_Test
     {
         [TestMethod]

@@ -9,6 +9,7 @@ namespace NumSharp.UnitTest.RandomSampling;
 /// Mean = df + nonc
 /// </summary>
 
+    [TestClass]
     public class RandomNoncentralChisquareTests : TestClass
 {
     [TestMethod]

@@ -9,6 +9,7 @@ using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp.UnitTest.Creation
 {
+    [TestClass]
     public class NdArrayRollTest
     {
         [TestMethod]

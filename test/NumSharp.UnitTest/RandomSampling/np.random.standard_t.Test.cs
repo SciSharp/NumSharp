@@ -6,6 +6,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 namespace NumSharp.UnitTest.RandomSampling
 {
     
+    [TestClass]
     public class StandardTTests
     {
         [TestMethod]

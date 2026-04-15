@@ -9,6 +9,7 @@ namespace NumSharp.UnitTest.Backends.Kernels;
 /// Comprehensive tests for binary operations (Add, Subtract, Multiply, Divide, Mod).
 /// All expected values are verified against NumPy 2.x output.
 /// </summary>
+[TestClass]
 public class BinaryOpTests
 {
     #region Same-Type Add Tests

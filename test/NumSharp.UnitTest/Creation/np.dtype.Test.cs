@@ -6,6 +6,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace NumSharp.UnitTest.Creation
 {
+    [TestClass]
     public class np_dtype_tests
     {
         [TestMethod]

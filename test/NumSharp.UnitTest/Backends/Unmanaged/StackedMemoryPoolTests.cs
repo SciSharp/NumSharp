@@ -10,6 +10,7 @@ using NumSharp.Unmanaged.Memory;
 
 namespace NumSharp.UnitTest.Backends.Unmanaged
 {
+    [TestClass]
     public class StackedMemoryPoolTests
     {
         [TestMethod]

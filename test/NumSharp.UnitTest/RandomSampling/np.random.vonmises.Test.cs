@@ -10,6 +10,7 @@ namespace NumSharp.UnitTest.RandomSampling
     /// Based on NumPy 2.4.2 behavior.
     /// </summary>
     
+    [TestClass]
     public class np_random_vonmises_Tests : TestClass
     {
         #region Basic Functionality

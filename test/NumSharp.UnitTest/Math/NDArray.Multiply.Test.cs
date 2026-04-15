@@ -7,6 +7,7 @@ using System.Linq;
 
 namespace NumSharp.UnitTest
 {
+    [TestClass]
     public class MultiplyTest : TestClass
     {
         [TestMethod]

@@ -9,6 +9,7 @@ namespace NumSharp.UnitTest.Indexing;
 /// Tests for np.nonzero behavior.
 /// NumPy: Returns a tuple of arrays, one for each dimension.
 /// </summary>
+[TestClass]
 public class NonzeroTests
 {
     #region 1D Arrays

@@ -7,6 +7,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace NumSharp.UnitTest.Logic
 {
+    [TestClass]
     public class np_isscalar_tests
     {
         [TestMethod]

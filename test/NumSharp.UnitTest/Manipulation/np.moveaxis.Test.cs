@@ -4,6 +4,7 @@ using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.Manipulation
 {
+    [TestClass]
     public class np_moveaxis_Test
     {
         [TestMethod]

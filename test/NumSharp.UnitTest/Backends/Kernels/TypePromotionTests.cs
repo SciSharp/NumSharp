@@ -16,6 +16,7 @@ namespace NumSharp.UnitTest.Backends.Kernels;
 /// - Division always returns float64 (true division)
 /// - Floor division preserves integer type
 /// </summary>
+[TestClass]
 public class TypePromotionTests
 {
     #region Reduction Promotion Tests

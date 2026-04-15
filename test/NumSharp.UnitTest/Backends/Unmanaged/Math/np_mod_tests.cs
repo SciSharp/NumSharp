@@ -8,6 +8,7 @@ using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp.UnitTest.Backends.Unmanaged.Math
 {
+    [TestClass]
     public class np_mod_tests
     {
         #region Regular Tests

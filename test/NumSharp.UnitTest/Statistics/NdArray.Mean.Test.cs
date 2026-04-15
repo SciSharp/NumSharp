@@ -5,6 +5,7 @@ using NumSharp.UnitTest;
 
 namespace NumSharp.UnitTest.Statistics
 {
+    [TestClass]
     public class NdArrayMeanTest
     {
         [TestMethod]

@@ -7,6 +7,7 @@ namespace NumSharp.UnitTest.MathTests;
 ///     Tests for np.minimum element-wise minimum operation.
 ///     All tests verified against NumPy v2.4.2.
 /// </summary>
+[TestClass]
 public class NpMinimumTests : TestClass
 {
     [TestMethod]

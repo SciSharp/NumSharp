@@ -9,6 +9,7 @@ using NumSharp;
 
 namespace NumSharp.UnitTest.LinearAlgebra
 {
+    [TestClass]
     public class NDArrayLinSqTester
     {
         //[TestMethod]

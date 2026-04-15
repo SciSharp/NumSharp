@@ -8,6 +8,7 @@ using System.IO;
 
 namespace NumSharp.UnitTest
 {
+    [TestClass]
     public class NumpySaveLoad
     {
         [TestMethod]

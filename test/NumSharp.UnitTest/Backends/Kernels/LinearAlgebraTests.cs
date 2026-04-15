@@ -9,6 +9,7 @@ namespace NumSharp.UnitTest.Backends.Kernels;
 /// Tests for linear algebra operations.
 /// All expected values are verified against NumPy 2.x output.
 /// </summary>
+[TestClass]
 public class LinearAlgebraTests
 {
     #region Dot Product

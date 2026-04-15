@@ -10,6 +10,7 @@ namespace NumSharp.UnitTest.Extensions
     /// <summary>
     /// Tests following https://numpy.org/doc/stable/reference/generated/numpy.hstack.html
     /// </summary>
+    [TestClass]
     public class NdArrayArgSortTest
     {
         [TestMethod]

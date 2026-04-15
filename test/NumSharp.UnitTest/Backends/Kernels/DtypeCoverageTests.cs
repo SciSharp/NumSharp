@@ -19,6 +19,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
     ///
     /// Known limitations documented inline.
     /// </summary>
+    [TestClass]
     public class DtypeCoverageTests
     {
         #region Dtype Lists

@@ -8,6 +8,7 @@ namespace NumSharp.UnitTest
     ///     NumPy-aligned offset parity tests: Verify element access uses the formula
     ///     offset + sum(indices * strides) for all shape types (simple, sliced, broadcast).
     /// </summary>
+    [TestClass]
     public class ShapeOffsetParityTests
     {
         [TestMethod]

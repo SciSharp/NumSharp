@@ -6,6 +6,7 @@ namespace NumSharp.UnitTest.RandomSampling
     /// <summary>
     /// Tests for np.random.gumbel (Gumbel/extreme value type I distribution)
     /// </summary>
+    [TestClass]
     public class NpRandomGumbelTests : TestClass
     {
         // Euler-Mascheroni constant

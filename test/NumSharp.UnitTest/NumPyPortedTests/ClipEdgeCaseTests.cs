@@ -10,6 +10,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
     /// Tests ported from NumPy test_numeric.py TestClip class.
     /// Covers edge cases for np.clip operation.
     /// </summary>
+    [TestClass]
     public class ClipEdgeCaseTests
     {
         #region Basic Clip Tests

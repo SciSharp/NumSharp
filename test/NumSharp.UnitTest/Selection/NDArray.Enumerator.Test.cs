@@ -8,6 +8,7 @@ using NumSharp;
 
 namespace NumSharp.UnitTest.Selection
 {
+    [TestClass]
     public class EnumeratorTest
     {
         [TestMethod]

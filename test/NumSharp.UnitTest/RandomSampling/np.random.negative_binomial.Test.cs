@@ -7,6 +7,7 @@ namespace NumSharp.UnitTest.RandomSampling
     /// Tests for np.random.negative_binomial (negative binomial distribution)
     /// </summary>
     
+    [TestClass]
     public class NpRandomNegativeBinomialTests : TestClass
     {
         [TestMethod]

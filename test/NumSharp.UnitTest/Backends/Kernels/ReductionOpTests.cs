@@ -11,6 +11,7 @@ namespace NumSharp.UnitTest.Backends.Kernels;
 /// These tests validate existing reduction functionality and serve as
 /// regression tests for future IL kernel Phase 5 implementation.
 /// </summary>
+[TestClass]
 public class ReductionOpTests
 {
     private const double Tolerance = 1e-10;

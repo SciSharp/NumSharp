@@ -9,6 +9,7 @@ namespace NumSharp.UnitTest.Backends.Kernels;
 /// Edge case tests discovered through NumPy battle testing.
 /// All expected values are verified against NumPy 2.x output.
 /// </summary>
+[TestClass]
 public class EdgeCaseTests
 {
     #region Modulo Edge Cases - Python vs C Semantics

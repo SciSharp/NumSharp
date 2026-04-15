@@ -8,6 +8,7 @@ using NumSharp;
 
 namespace NumSharp.UnitTest.LinearAlgebra
 {
+    [TestClass]
     public class NdArrayInvTest
     {
         //[TestMethod]

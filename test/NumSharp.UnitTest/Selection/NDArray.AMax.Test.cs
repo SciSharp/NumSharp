@@ -6,6 +6,7 @@ using AwesomeAssertions;
 
 namespace NumSharp.UnitTest.Selection
 {
+    [TestClass]
     public class NDArrayAMaxTest
     {
         [TestMethod]

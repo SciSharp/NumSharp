@@ -8,6 +8,7 @@ using NumSharp;
 
 namespace NumSharp.UnitTest
 {
+    [TestClass]
     public class PowerTest
     {
         [TestMethod]

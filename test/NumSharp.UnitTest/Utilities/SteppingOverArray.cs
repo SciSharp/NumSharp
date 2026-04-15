@@ -7,6 +7,7 @@ using NumSharp.Utilities;
 
 namespace NumSharp.UnitTest.Utilities
 {
+    [TestClass]
     public class SteppingOverArray : TestClass
     {
         [TestMethod]

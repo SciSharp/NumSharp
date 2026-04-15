@@ -17,6 +17,7 @@ namespace NumSharp.UnitTest.LongIndexing;
 /// - Verifies Shape, NDArray, and np.* APIs accept long indices
 /// - Fast execution (~1-2 seconds total)
 /// </summary>
+[TestClass]
 public class LongIndexingSmokeTest
 {
     /// <summary>

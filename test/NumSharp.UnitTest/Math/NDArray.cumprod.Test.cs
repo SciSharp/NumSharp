@@ -13,6 +13,7 @@ namespace NumSharp.UnitTest.Maths
     /// Tests for cumulative product (cumprod) functionality.
     /// These test the ILKernelGenerator.Scan.cs CumProd implementation.
     /// </summary>
+    [TestClass]
     public class NDArrayCumprodTest : TestClass
     {
         /// <summary>

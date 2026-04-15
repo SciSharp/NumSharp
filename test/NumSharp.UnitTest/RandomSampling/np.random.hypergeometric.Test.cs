@@ -9,6 +9,7 @@ namespace NumSharp.UnitTest.RandomSampling;
 /// Samples from hypergeometric distribution without replacement.
 /// Mean = nsample * ngood / (ngood + nbad)
 /// </summary>
+[TestClass]
 public class RandomHypergeometricTests : TestClass
 {
     [TestMethod]

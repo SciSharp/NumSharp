@@ -17,6 +17,7 @@ namespace NumSharp.UnitTest.Backends.Kernels;
 /// - min/max preserve input dtype
 /// - var/std always return float64
 /// </summary>
+[TestClass]
 public class DtypePromotionTests
 {
     #region Sum Dtype Promotion

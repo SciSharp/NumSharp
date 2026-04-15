@@ -11,6 +11,7 @@ namespace NumSharp.UnitTest.Backends;
 /// Comprehensive battle tests for container protocol implementation.
 /// Tests all edge cases, dtypes, and memory layouts.
 /// </summary>
+[TestClass]
 public class ContainerProtocolBattleTests
 {
     #region __len__ Battle Tests

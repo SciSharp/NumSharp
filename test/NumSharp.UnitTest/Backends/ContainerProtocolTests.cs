@@ -9,6 +9,7 @@ namespace NumSharp.UnitTest.Backends;
 /// Tests for container protocol implementation (__contains__, __hash__).
 /// Verifies NumPy-compatible behavior for Contains and GetHashCode.
 /// </summary>
+[TestClass]
 public class ContainerProtocolTests
 {
     #region Contains Tests

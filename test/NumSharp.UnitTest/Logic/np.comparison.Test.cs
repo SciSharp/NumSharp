@@ -8,6 +8,7 @@ namespace NumSharp.UnitTest.Logic
     /// Tests for np.equal, np.not_equal, np.less, np.greater, np.less_equal, np.greater_equal
     /// These are thin wrappers around operators that exist for NumPy API compatibility.
     /// </summary>
+    [TestClass]
     public class np_comparison_Test
     {
         #region np.equal

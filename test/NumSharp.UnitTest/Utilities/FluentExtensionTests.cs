@@ -12,6 +12,7 @@ namespace NumSharp.UnitTest.Utilities
     /// Verifies that each assertion method produces correct pass/fail behavior
     /// and that error messages contain meaningful information.
     /// </summary>
+    [TestClass]
     public class FluentExtensionTests
     {
         #region ShapeAssertions

@@ -8,6 +8,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
     /// <summary>
     /// Comprehensive tests for ArgMax/ArgMin based on NumPy 2.4.2 behavior.
     /// </summary>
+    [TestClass]
     public class ArgMaxMinTests
     {
         #region NaN Handling

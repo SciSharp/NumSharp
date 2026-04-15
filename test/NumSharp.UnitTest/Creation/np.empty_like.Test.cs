@@ -20,6 +20,7 @@ namespace NumSharp.UnitTest.Creation
     /// - Content is uninitialized (no zeroing guarantee)
     /// - Since NumSharp is C-order only, result is always C-contiguous
     /// </summary>
+    [TestClass]
     public class np_empty_like_Test
     {
         // ==========================================================

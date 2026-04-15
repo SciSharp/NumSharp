@@ -8,6 +8,7 @@ using System.Linq;
 namespace NumSharp.UnitTest.APIs
 {
     [DoNotParallelize]
+    [TestClass]
     public class NumpyLoad
     {
         [TestMethod]

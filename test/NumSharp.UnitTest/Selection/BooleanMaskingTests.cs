@@ -9,6 +9,7 @@ namespace NumSharp.UnitTest.Selection
     /// <summary>
     /// Tests for boolean masking based on NumPy 2.4.2 behavior.
     /// </summary>
+    [TestClass]
     public class BooleanMaskingTests
     {
         [TestMethod]

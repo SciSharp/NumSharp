@@ -13,6 +13,7 @@ namespace NumSharp.UnitTest.Manipulation
     /// NumPy reference: https://numpy.org/doc/stable/reference/generated/numpy.roll.html
     /// NumPy test source: numpy/_core/tests/test_numeric.py, class TestRoll
     /// </summary>
+    [TestClass]
     public class np_roll_Test
     {
         // ================================================================

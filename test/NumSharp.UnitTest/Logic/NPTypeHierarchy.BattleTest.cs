@@ -22,6 +22,7 @@ namespace NumSharp.UnitTest.Logic;
 ///           ├── Floating (float16, float32, float64)
 ///           └── ComplexFloating (complex64, complex128)
 /// </summary>
+[TestClass]
 public class NPTypeHierarchyBattleTest
 {
     #region issubdtype - Type Hierarchy Tests (NumPy verified)

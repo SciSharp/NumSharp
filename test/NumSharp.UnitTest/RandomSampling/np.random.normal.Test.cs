@@ -8,6 +8,7 @@ using NumSharp;
 
 namespace NumSharp.UnitTest.RandomSampling
 {
+    [TestClass]
     public class NpRandomNormalTest
     {
         [TestMethod]

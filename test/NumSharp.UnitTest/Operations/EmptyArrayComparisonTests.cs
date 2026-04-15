@@ -17,6 +17,7 @@ namespace NumSharp.UnitTest.Operations;
 /// >>> (np.array([], dtype=int) > 0).shape
 /// (0,)
 /// </summary>
+[TestClass]
 public class EmptyArrayComparisonTests
 {
     [TestMethod]

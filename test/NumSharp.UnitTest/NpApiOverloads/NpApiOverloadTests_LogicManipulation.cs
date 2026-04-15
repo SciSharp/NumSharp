@@ -14,6 +14,7 @@ namespace NumSharp.UnitTest.NpApiOverloads;
 /// These tests verify that the overloads compile and work correctly after
 /// removing the 'in' modifier from NDArray parameters.
 /// </summary>
+[TestClass]
 public class NpApiOverloadTests_LogicManipulation
 {
     #region Comparison Operations - np.equal (3 overloads)

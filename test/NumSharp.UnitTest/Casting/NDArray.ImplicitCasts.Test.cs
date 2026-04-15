@@ -6,6 +6,7 @@ using System.Linq;
 
 namespace NumSharp.UnitTest
 {
+    [TestClass]
     public class ImplicitCastTester
     {
         [TestMethod]

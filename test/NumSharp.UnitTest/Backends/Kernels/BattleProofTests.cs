@@ -10,6 +10,7 @@ namespace NumSharp.UnitTest.Backends.Kernels;
 /// Battle-proof tests verifying IL kernel fixes against NumPy behavior.
 /// Each test documents the NumPy output and verifies NumSharp matches.
 /// </summary>
+[TestClass]
 public class BattleProofTests : TestClass
 {
     #region Fix 1: Sliced Array × Scalar (ClassifyPath contiguity check)

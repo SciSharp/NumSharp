@@ -13,6 +13,7 @@ namespace NumSharp.UnitTest.Backends;
 /// - Type mismatch (string in int array) returns False
 /// - Broadcastable shapes work correctly
 /// </summary>
+[TestClass]
 public class ContainsNumPyAlignmentTests
 {
     #region Gap #1: Broadcasting Errors Should Propagate

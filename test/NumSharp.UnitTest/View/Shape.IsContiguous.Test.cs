@@ -17,6 +17,7 @@ namespace NumSharp.UnitTest.View
     ///     PYTHON VERIFICATION (NumPy 2.4.2):
     ///       All expected values and view/copy semantics verified against NumPy.
     /// </summary>
+    [TestClass]
     public class ShapeIsContiguousTest
     {
         // ================================================================

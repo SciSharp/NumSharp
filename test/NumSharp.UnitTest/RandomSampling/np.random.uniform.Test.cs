@@ -7,6 +7,7 @@ using System.Linq;
 
 namespace NumSharp.UnitTest.RandomSampling
 {
+    [TestClass]
     public class NpRandomUniformTests : TestClass
     {
         [TestMethod]

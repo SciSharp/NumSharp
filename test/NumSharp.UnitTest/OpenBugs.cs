@@ -61,6 +61,7 @@ namespace NumSharp.UnitTest
     ///     Bug 68:           swapaxes on empty arrays crashes (NDIterator limitation)
     ///     Bug 69:           Out-of-bounds axis error is IndexOutOfRangeException, not AxisError
     /// </summary>
+    [TestClass]
     public partial class OpenBugs : TestClass
     {
         // ================================================================

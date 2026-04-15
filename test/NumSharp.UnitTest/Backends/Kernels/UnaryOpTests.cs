@@ -9,6 +9,7 @@ namespace NumSharp.UnitTest.Backends.Kernels;
 /// Comprehensive tests for unary operations.
 /// All expected values are verified against NumPy 2.x output.
 /// </summary>
+[TestClass]
 public class UnaryOpTests
 {
     private const double Tolerance = 1e-10;

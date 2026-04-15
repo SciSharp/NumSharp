@@ -9,6 +9,7 @@ namespace NumSharp.UnitTest.Indexing
     /// <summary>
     /// Edge case tests for np.nonzero based on actual NumPy 2.4.2 behavior.
     /// </summary>
+    [TestClass]
     public class np_nonzero_edge_cases : TestClass
     {
         [TestMethod]

@@ -9,6 +9,7 @@ namespace NumSharp.UnitTest.Indexing
     /// Tests for np.nonzero with strided (non-contiguous) arrays.
     /// Based on NumPy 2.4.2 behavior.
     /// </summary>
+    [TestClass]
     public class np_nonzero_strided_tests : TestClass
     {
         [TestMethod]

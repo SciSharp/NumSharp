@@ -9,6 +9,7 @@ namespace NumSharp.UnitTest.APIs;
 /// Edge case tests for np.searchsorted to verify fix from commit 40a5c831.
 /// Tests validated against NumPy 2.4.2.
 /// </summary>
+[TestClass]
 public class NpSearchsortedEdgeCaseTests
 {
     #region Scalar Input Tests (Main Fix)

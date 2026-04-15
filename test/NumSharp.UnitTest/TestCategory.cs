@@ -203,6 +203,7 @@ public static class TestCategory
 /// public void OddWidthBitmapCorruption() { ... }
 /// </code>
 /// </example>
+[TestClass]
 public class OpenBugsAttribute : TestCategoryBaseAttribute
 {
     /// <summary>
@@ -237,6 +238,7 @@ public class OpenBugsAttribute : TestCategoryBaseAttribute
 /// }
 /// </code>
 /// </example>
+[TestClass]
 public class MisalignedAttribute : TestCategoryBaseAttribute
 {
     public override IList<string> TestCategories => [TestCategory.Misaligned];
@@ -248,6 +250,7 @@ public class MisalignedAttribute : TestCategoryBaseAttribute
 ///
 /// <para>See <see cref="TestCategory.WindowsOnly"/> for full documentation.</para>
 /// </summary>
+[TestClass]
 public class WindowsOnlyAttribute : TestCategoryBaseAttribute
 {
     public override IList<string> TestCategories => [TestCategory.WindowsOnly];
@@ -259,6 +262,7 @@ public class WindowsOnlyAttribute : TestCategoryBaseAttribute
 ///
 /// <para>See <see cref="TestCategory.LongIndexing"/> for full documentation.</para>
 /// </summary>
+[TestClass]
 public class LongIndexingAttribute : TestCategoryBaseAttribute
 {
     public override IList<string> TestCategories => [TestCategory.LongIndexing];
@@ -282,6 +286,7 @@ public class LongIndexingAttribute : TestCategoryBaseAttribute
 /// }
 /// </code>
 /// </example>
+[TestClass]
 public class HighMemoryAttribute : TestCategoryBaseAttribute
 {
     public override IList<string> TestCategories => [TestCategory.HighMemory];
@@ -304,6 +309,7 @@ public class HighMemoryAttribute : TestCategoryBaseAttribute
 /// }
 /// </code>
 /// </example>
+[TestClass]
 public class LargeMemoryTestAttribute : TestCategoryBaseAttribute
 {
     public override IList<string> TestCategories => [TestCategory.OpenBugs, TestCategory.HighMemory];

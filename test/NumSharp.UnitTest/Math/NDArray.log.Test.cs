@@ -8,6 +8,7 @@ using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest
 {
+    [TestClass]
     public class LogTest
     {
         [TestMethod]

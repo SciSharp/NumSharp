@@ -12,6 +12,7 @@ namespace NumSharp.UnitTest.Sorting;
 /// - -Inf sorts to the beginning
 /// - +Inf sorts between normal values and NaN
 /// </summary>
+[TestClass]
 public class ArgsortNaNTests
 {
     #region NaN Handling

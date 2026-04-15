@@ -8,6 +8,7 @@ namespace NumSharp.UnitTest.Manipulation
     /// <summary>
     ///     Battle tests for NDArray.tolist() - NumPy parity verification.
     /// </summary>
+    [TestClass]
     public class TolistTests
     {
         #region Basic Functionality

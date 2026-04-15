@@ -6,6 +6,7 @@ using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.Backends.Unmanaged
 {
+    [TestClass]
     public class StringArrayApiTests
     {
         private static string[] strArray = new string[] { "Hello,", " SciSharp Team!"};

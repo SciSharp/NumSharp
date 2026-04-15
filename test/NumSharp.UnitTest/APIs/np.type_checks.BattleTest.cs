@@ -6,6 +6,7 @@ namespace NumSharp.UnitTest.APIs;
 /// <summary>
 /// Battle tests for type checking functions: issctype, isdtype, sctype2char, maximum_sctype.
 /// </summary>
+[TestClass]
 public class NpTypeChecksBattleTests
 {
     #region issctype Tests

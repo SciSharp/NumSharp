@@ -36,6 +36,7 @@ namespace NumSharp.UnitTest.Backends.Kernels;
 /// - BUG-25: np.power(int, float) returns int instead of float64 (MEDIUM) - FIXED
 /// - BUG-32: np.random.choice replace=False parameter ignored (HIGH)
 /// </summary>
+[TestClass]
 public class NumpyAlignmentBugTests
 {
     private const double Tolerance = 1e-10;
@@ -1454,6 +1455,7 @@ public class NumpyAlignmentBugTests
 /// Tests documenting missing or dead-code NumPy functions.
 /// Note: IsNaN and IsFinite have been fixed and moved to np.isnan.Test.cs and np.isfinite.Test.cs
 /// </summary>
+[TestClass]
 public class MissingFunctionTests
 {
     [TestMethod, OpenBugs]
@@ -1495,6 +1497,7 @@ public class MissingFunctionTests
 /// <summary>
 /// Tests documenting type promotion differences between NumSharp and NumPy.
 /// </summary>
+[TestClass]
 public class TypePromotionDifferenceTests
 {
     [TestMethod, OpenBugs]

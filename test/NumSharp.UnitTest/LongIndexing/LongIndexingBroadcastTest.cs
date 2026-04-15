@@ -23,6 +23,7 @@ namespace NumSharp.UnitTest.LongIndexing;
 /// NOTE: Marked [LargeMemoryTest] because iterating over 2.36 billion elements causes
 /// excessive CPU/memory pressure when MSTest runs tests in parallel.
 /// </summary>
+[TestClass]
 public class LongIndexingBroadcastTest
 {
     /// <summary>

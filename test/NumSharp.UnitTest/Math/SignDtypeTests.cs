@@ -6,6 +6,7 @@ namespace NumSharp.UnitTest
     /// <summary>
     ///     Tests for np.sign dtype preservation.
     /// </summary>
+    [TestClass]
     public class SignDtypeTests
     {
         /// <summary>

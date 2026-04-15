@@ -9,6 +9,7 @@ using NumSharp;
 
 namespace NumSharp.UnitTest.Extensions
 {
+    [TestClass]
     public class np_zeros_like_Test
     {
         [TestMethod]

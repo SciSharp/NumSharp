@@ -11,6 +11,7 @@ using NumSharp.Backends;
 
 namespace NumSharp.UnitTest.Creation
 {
+    [TestClass]
     public class BroadcastTests
     {
         [TestMethod]

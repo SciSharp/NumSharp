@@ -12,6 +12,7 @@ using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.View
 {
+    [TestClass]
     public class ShapeUnmanagedTests
     {
         private unsafe void TestGetOffset(Shape shape, int[] indices)

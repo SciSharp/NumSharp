@@ -10,6 +10,7 @@ namespace NumSharp.UnitTest.Sorting;
 /// Tests for np.argsort int64 migration.
 /// Verifies argsort returns long (int64) indices, matching NumPy behavior.
 /// </summary>
+[TestClass]
 public class ArgsortInt64Tests
 {
     #region Return Type Tests

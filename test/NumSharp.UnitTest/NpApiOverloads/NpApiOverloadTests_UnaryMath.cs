@@ -13,6 +13,7 @@ namespace NumSharp.UnitTest.NpApiOverloads;
 /// 2. Returns the correct type
 /// 3. Produces approximately correct values
 /// </summary>
+[TestClass]
 public class NpApiOverloadTests_UnaryMath
 {
     private const double Tolerance = 1e-10;

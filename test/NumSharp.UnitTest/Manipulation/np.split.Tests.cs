@@ -9,6 +9,7 @@ namespace NumSharp.UnitTest.Manipulation
     /// Tests for np.split and np.array_split functions.
     /// Based on NumPy 2.4.2 behavior.
     /// </summary>
+    [TestClass]
     public class np_split_Tests : TestClass
     {
         #region np.split - Equal Division

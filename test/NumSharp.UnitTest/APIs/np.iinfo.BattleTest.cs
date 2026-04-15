@@ -6,6 +6,7 @@ namespace NumSharp.UnitTest.APIs;
 /// <summary>
 /// Battle tests for np.iinfo - comprehensive coverage of all integer types and edge cases.
 /// </summary>
+[TestClass]
 public class NpIInfoBattleTests
 {
     #region All Integer Types Coverage

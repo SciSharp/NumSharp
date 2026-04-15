@@ -10,6 +10,7 @@ namespace NumSharp.UnitTest.Backends.Kernels;
 /// All expected values are verified against NumPy 2.x output.
 /// Sliced arrays test the strided path of IL kernels rather than the SIMD contiguous path.
 /// </summary>
+[TestClass]
 public class SlicedArrayOpTests
 {
     #region Binary Operations on Sliced Arrays

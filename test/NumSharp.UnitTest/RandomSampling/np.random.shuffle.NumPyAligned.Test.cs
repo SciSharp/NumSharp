@@ -13,6 +13,7 @@ namespace NumSharp.UnitTest.RandomSampling;
 /// For axis support, use the Generator API (not yet implemented in NumSharp).
 /// </summary>
 
+    [TestClass]
     public class ShuffleNumPyAlignedTests : TestClass
 {
     [TestMethod]

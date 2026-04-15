@@ -3,6 +3,7 @@ using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.Maths
 {
+    [TestClass]
     public class SinTest
     {
         [TestMethod]

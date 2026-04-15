@@ -7,6 +7,7 @@ using System.Text;
 
 namespace NumSharp.UnitTest.RandomSampling
 {
+    [TestClass]
     public class NpRandomChoiceTests : TestClass
     {
         [TestMethod]

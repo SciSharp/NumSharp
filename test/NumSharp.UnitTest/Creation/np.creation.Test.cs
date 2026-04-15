@@ -8,6 +8,7 @@ using AwesomeAssertions;
 
 namespace NumSharp.UnitTest.APIs
 {
+    [TestClass]
     public class ApiCreationTest : TestClass
     {
         [TestMethod]

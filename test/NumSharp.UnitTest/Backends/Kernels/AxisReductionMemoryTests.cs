@@ -8,6 +8,7 @@ namespace NumSharp.UnitTest.Backends.Kernels;
 /// not views that share memory with the original array (matching NumPy behavior).
 /// Bug: Single-element axis reduction was returning views causing corruption when modified.
 /// </summary>
+[TestClass]
 public class AxisReductionMemoryTests
 {
     // ===== Sum =====

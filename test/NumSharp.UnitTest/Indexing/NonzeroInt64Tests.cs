@@ -9,6 +9,7 @@ namespace NumSharp.UnitTest.Indexing;
 /// Tests for np.nonzero with int64 indexing support.
 /// Verifies nonzero returns int64 indices and handles various dtypes.
 /// </summary>
+[TestClass]
 public class NonzeroInt64Tests
 {
     #region Return Type Tests

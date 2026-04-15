@@ -8,6 +8,7 @@ using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.LinearAlgebra
 {
+    [TestClass]
     public class np_prod_tests
     {
 

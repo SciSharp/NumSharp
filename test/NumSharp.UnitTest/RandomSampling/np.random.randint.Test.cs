@@ -10,6 +10,7 @@ using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp.UnitTest.RandomSampling
 {
+    [TestClass]
     public class NpRandomRandintTest
     {
         [TestMethod]

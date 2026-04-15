@@ -7,6 +7,7 @@ using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest
 {
+    [TestClass]
     public class np_clip_test
     {
         [TestMethod]

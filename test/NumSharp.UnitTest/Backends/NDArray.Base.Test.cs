@@ -12,6 +12,7 @@ namespace NumSharp.UnitTest.Backends
     /// - numpy/_core/tests/test_multiarray.py
     /// - numpy/_core/tests/test_indexing.py
     /// </summary>
+    [TestClass]
     public class NDArray_Base_Test
     {
         #region NumPy Behavior Tests (Ported)

@@ -18,6 +18,7 @@ namespace NumSharp.UnitTest.Manipulation
     /// Fixed in commit 40a5c831 - changed Converts.Native.cs to use C# cast
     /// truncation instead of Convert.ToInt32.
     /// </summary>
+    [TestClass]
     public class astypeTruncationTests
     {
         // ================================================================

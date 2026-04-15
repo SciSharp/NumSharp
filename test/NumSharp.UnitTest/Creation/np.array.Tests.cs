@@ -6,6 +6,7 @@ using NumSharp.Utilities;
 
 namespace NumSharp.UnitTest.Creation
 {
+    [TestClass]
     public class np_array_tests
     {
         [TestMethod]

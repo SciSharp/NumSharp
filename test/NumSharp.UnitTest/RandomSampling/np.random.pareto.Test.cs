@@ -9,6 +9,7 @@ namespace NumSharp.UnitTest.RandomSampling;
 /// NumPy's pareto returns samples from Pareto II (Lomax) distribution.
 /// </summary>
 
+    [TestClass]
     public class RandomParetoTests : TestClass
 {
     [TestMethod]

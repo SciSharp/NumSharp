@@ -11,6 +11,7 @@ namespace NumSharp.UnitTest.Backends.Kernels;
 /// Tests correctness of strided SIMD (AVX2 gather) and parallel outer loop.
 /// Issue #576: Complete SIMD axis reductions
 /// </summary>
+[TestClass]
 public class AxisReductionBenchmarkTests
 {
     #region Correctness Tests - Strided Access with SIMD Gather

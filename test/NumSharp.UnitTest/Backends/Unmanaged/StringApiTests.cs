@@ -6,6 +6,7 @@ using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.Backends.Unmanaged
 {
+    [TestClass]
     public class StringApiTests
     {
         private static string hello = "hello";

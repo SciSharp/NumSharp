@@ -7,6 +7,7 @@ namespace NumSharp.UnitTest
     /// <summary>
     ///     Tests for reshaping to scalar shape.
     /// </summary>
+    [TestClass]
     public class ReshapeScalarTests
     {
         /// <summary>

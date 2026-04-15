@@ -9,6 +9,7 @@ namespace NumSharp.UnitTest.LinearAlgebra;
 /// <summary>
 /// Battle tests for np.outer to ensure NumPy alignment.
 /// </summary>
+[TestClass]
 public class OuterBattleTests : TestClass
 {
     [TestMethod]

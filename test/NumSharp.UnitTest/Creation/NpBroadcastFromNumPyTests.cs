@@ -14,6 +14,7 @@ namespace NumSharp.UnitTest.Creation
     ///       - numpy/_core/tests/test_numeric.py (np.broadcast class)
     ///     Verifies NumSharp's broadcasting against NumPy 2.x behavior.
     /// </summary>
+    [TestClass]
     public class NpBroadcastFromNumPyTests : TestClass
     {
         #region Helpers

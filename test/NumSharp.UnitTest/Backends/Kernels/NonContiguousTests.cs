@@ -12,6 +12,7 @@ namespace NumSharp.UnitTest.Backends.Kernels;
 ///
 /// This complements SlicedArrayOpTests.cs which focuses on step-based slices.
 /// </summary>
+[TestClass]
 public class NonContiguousTests
 {
     #region Transposed Array Operations

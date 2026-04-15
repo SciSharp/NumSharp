@@ -24,6 +24,7 @@ namespace NumSharp.UnitTest.Logic;
 ///
 /// Each test is verified against NumPy 2.4.2 output.
 /// </summary>
+[TestClass]
 public class NEP50_TypePromotion
 {
     #region 1. Unsigned Array + Python Int (array dtype wins)

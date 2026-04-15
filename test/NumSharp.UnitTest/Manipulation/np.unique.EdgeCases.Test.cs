@@ -10,6 +10,7 @@ namespace NumSharp.UnitTest.Manipulation;
 /// Comprehensive edge case tests for np.unique sorting fix (commit c0eed5d1).
 /// Verifies that np.unique returns SORTED unique values, matching NumPy 2.x behavior.
 /// </summary>
+[TestClass]
 public class np_unique_EdgeCases_Test
 {
         #region Empty Arrays

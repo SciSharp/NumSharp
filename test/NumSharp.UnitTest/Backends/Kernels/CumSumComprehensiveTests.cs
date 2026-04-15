@@ -17,6 +17,7 @@ namespace NumSharp.UnitTest.Backends.Kernels;
 /// - Shape variations (square, rectangular, higher dimensional)
 /// - Type promotion (int32 -> int64)
 /// </summary>
+[TestClass]
 public class CumSumComprehensiveTests
 {
     #region CumSum 1D Tests

@@ -11,6 +11,7 @@ namespace NumSharp.UnitTest.RandomSampling
     /// same seed is applied. No testing of the actual output from the random state is expected here. Just test
     /// the consistent output after repeatedly setting the same seed value.
     /// </summary>
+    [TestClass]
     public class NpRandomSeedTests : TestClass
     {
         [TestMethod]

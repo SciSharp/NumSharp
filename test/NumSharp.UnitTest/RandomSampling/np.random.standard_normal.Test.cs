@@ -8,6 +8,7 @@ namespace NumSharp.UnitTest.RandomSampling
     /// Tests for np.random.standard_normal (standard normal distribution with mean=0, std=1).
     /// NumPy reference: https://numpy.org/doc/stable/reference/random/generated/numpy.random.standard_normal.html
     /// </summary>
+    [TestClass]
     public class NpRandomStandardNormalTest : TestClass
     {
         [TestMethod]

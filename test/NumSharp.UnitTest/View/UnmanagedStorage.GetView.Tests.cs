@@ -10,6 +10,7 @@ using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.View
 {
+    [TestClass]
     public class UnmanagedStorageTest : TestClass
     {
         [TestMethod]

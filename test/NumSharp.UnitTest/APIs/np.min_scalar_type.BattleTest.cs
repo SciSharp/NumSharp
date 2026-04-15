@@ -6,6 +6,7 @@ namespace NumSharp.UnitTest.APIs;
 /// <summary>
 /// Battle tests for np.min_scalar_type - comprehensive coverage of scalar type inference.
 /// </summary>
+[TestClass]
 public class NpMinScalarTypeBattleTests
 {
     #region Unsigned Integer Boundaries

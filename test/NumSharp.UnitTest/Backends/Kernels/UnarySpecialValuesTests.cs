@@ -8,6 +8,7 @@ namespace NumSharp.UnitTest.Backends.Kernels
     /// Tests for unary operations with special IEEE 754 float values.
     /// Verifies correct handling of: 0.0, -0.0, +inf, -inf, NaN
     /// </summary>
+    [TestClass]
     public class UnarySpecialValuesTests
     {
         // Helper to check if a value is negative zero

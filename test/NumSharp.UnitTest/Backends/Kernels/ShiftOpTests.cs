@@ -9,6 +9,7 @@ namespace NumSharp.UnitTest.Backends.Kernels;
 /// Tests for bit shift operations (left_shift, right_shift).
 /// All expected values are verified against NumPy 2.x output.
 /// </summary>
+[TestClass]
 public class ShiftOpTests
 {
     #region Left Shift Tests

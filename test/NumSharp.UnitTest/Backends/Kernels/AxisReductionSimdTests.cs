@@ -7,6 +7,7 @@ namespace NumSharp.UnitTest.Backends.Kernels;
 /// <summary>
 /// Tests for SIMD-optimized axis reduction kernels.
 /// </summary>
+[TestClass]
 public class AxisReductionSimdTests
 {
     [TestMethod]

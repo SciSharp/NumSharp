@@ -7,6 +7,7 @@ using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.Backends.Unmanaged.Math.Reduction
 {
+    [TestClass]
     public class ReduceAddTests
     {
         [TestMethod]

@@ -11,6 +11,7 @@ namespace NumSharp.UnitTest.Utilities
 /// Verifies that the Hashset supports indexing beyond int.MaxValue
 /// and uses 33% growth for large collections.
 /// </summary>
+[TestClass]
 public class HashsetLongIndexingTests
 {
     #region Basic Functionality Tests

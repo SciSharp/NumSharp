@@ -6,6 +6,7 @@ using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp.UnitTest.Backends.Unmanaged
 {
+    [TestClass]
     public class UnmanagedStorageTests
     {
         [TestMethod]

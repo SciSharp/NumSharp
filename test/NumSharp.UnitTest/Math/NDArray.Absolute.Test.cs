@@ -6,6 +6,7 @@ using NumSharp;
 
 namespace NumSharp.UnitTest.Extensions
 {
+    [TestClass]
     public class NDArrayAbsoluteTest
     {
         [TestMethod]

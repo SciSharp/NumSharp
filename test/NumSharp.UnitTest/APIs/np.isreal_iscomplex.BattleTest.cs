@@ -6,6 +6,7 @@ namespace NumSharp.UnitTest.APIs;
 /// <summary>
 /// Battle tests for np.isreal, np.iscomplex, np.isrealobj, np.iscomplexobj.
 /// </summary>
+[TestClass]
 public class NpIsRealIsComplexBattleTests
 {
     #region isreal Tests

@@ -9,6 +9,7 @@ namespace NumSharp.UnitTest.Backends.Kernels;
 /// Comprehensive tests for comparison operations (==, !=, &lt;, &gt;, &lt;=, &gt;=).
 /// All expected values are verified against NumPy 2.x output.
 /// </summary>
+[TestClass]
 public class ComparisonOpTests
 {
     #region Basic Equality Tests (Test 1)

@@ -6,6 +6,7 @@ namespace NumSharp.UnitTest.APIs;
 /// <summary>
 /// Battle tests for np.finfo - comprehensive coverage of all floating point types.
 /// </summary>
+[TestClass]
 public class NpFInfoBattleTests
 {
     #region All Float Types Coverage

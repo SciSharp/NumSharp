@@ -8,6 +8,7 @@ namespace NumSharp.UnitTest.Backends.Kernels;
 /// Tests documenting NumSharp vs NumPy misalignments in kernel operations.
 /// These tests verify current NumSharp behavior which differs from NumPy.
 /// </summary>
+[TestClass]
 public class KernelMisalignmentTests
 {
     /// <summary>

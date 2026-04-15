@@ -10,6 +10,7 @@ namespace NumSharp.UnitTest.Creation;
 /// Battle tests for np.arange - verifies NumSharp matches NumPy behavior exactly.
 /// All expected values captured from NumPy 2.x.
 /// </summary>
+[TestClass]
 public class ArangeBattleTests
 {
     #region Basic Integer Ranges

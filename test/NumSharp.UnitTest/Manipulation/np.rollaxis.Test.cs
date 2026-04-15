@@ -3,6 +3,7 @@ using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.Manipulation
 {
+    [TestClass]
     public class np_rollaxis_Test
     {
         [TestMethod]

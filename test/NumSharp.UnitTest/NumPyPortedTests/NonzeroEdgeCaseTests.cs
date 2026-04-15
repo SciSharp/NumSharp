@@ -10,6 +10,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
     /// Tests ported from NumPy test_numeric.py TestNonzero class.
     /// Covers edge cases for np.nonzero operation.
     /// </summary>
+    [TestClass]
     public class NonzeroEdgeCaseTests
     {
         #region Trivial Cases (from test_nonzero_trivial)

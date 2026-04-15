@@ -6,6 +6,7 @@ using NumSharp.Backends;
 
 namespace NumSharp.UnitTest.Logic
 {
+    [TestClass]
     public class np_find_common_type_test
     {
         [TestMethod]

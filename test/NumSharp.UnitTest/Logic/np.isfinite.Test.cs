@@ -12,6 +12,7 @@ namespace NumSharp.UnitTest.Logic
     /// Tests for np.isfinite - test element-wise for finiteness (not infinity and not NaN).
     /// NumPy reference: https://numpy.org/doc/stable/reference/generated/numpy.isfinite.html
     /// </summary>
+    [TestClass]
     public class np_isfinite_Test
     {
         [TestMethod]

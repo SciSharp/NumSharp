@@ -9,6 +9,7 @@ namespace NumSharp.UnitTest.RandomSampling;
 /// Power distribution with PDF: P(x; a) = a * x^(a-1), 0 <= x <= 1, a > 0
 /// </summary>
 
+    [TestClass]
     public class RandomPowerTests : TestClass
 {
     [TestMethod]

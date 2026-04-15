@@ -9,6 +9,7 @@ using NumSharp.Generic;
 
 namespace NumSharp.UnitTest.Generic
 {
+    [TestClass]
     public class NDArrayGenericTest
     {
         [TestMethod]

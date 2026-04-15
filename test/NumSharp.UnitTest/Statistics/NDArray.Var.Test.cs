@@ -4,6 +4,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace NumSharp.UnitTest.Statistics
 {
+    [TestClass]
     public class np_var_tests
     {
         [TestMethod]

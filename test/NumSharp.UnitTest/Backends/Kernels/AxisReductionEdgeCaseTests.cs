@@ -7,6 +7,7 @@ namespace NumSharp.UnitTest.Backends.Kernels;
 /// Edge case tests for axis reduction operations.
 /// Covers scenarios from Task #118: Battle-test axis reduction SIMD kernels.
 /// </summary>
+[TestClass]
 public class AxisReductionEdgeCaseTests
 {
     #region Basic axis parameter tests

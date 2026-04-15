@@ -28,6 +28,7 @@ namespace NumSharp.UnitTest.LongIndexing;
 /// 3. We don't exceed available system memory
 /// </summary>
 [HighMemory]
+[TestClass]
 public class LongIndexingMasterTest
 {
     /// <summary>

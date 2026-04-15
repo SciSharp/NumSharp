@@ -10,6 +10,7 @@ namespace NumSharp.UnitTest.Selection;
 /// Comprehensive battle tests for boolean indexing covering all NumPy behaviors.
 /// These tests are based on actual NumPy 2.4.2 output and verify NumSharp matches exactly.
 /// </summary>
+[TestClass]
 public class BooleanIndexing_BattleTests
 {
     #region Case 1: Same-Shape Boolean Mask (Element-wise)

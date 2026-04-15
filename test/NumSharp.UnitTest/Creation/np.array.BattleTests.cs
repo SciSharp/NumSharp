@@ -13,6 +13,7 @@ namespace NumSharp.UnitTest;
 /// - With ndmin parameter
 /// - With copy parameter
 /// </summary>
+[TestClass]
 public class np_array_BattleTests
 {
     #region Scalars (0-dimensional)

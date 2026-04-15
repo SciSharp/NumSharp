@@ -6,6 +6,7 @@ namespace NumSharp.UnitTest.APIs;
 /// <summary>
 /// Battle tests for np.promote_types - comprehensive coverage of type promotion.
 /// </summary>
+[TestClass]
 public class NpPromoteTypesBattleTests
 {
     private static readonly NPTypeCode[] AllTypes = new[]

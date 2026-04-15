@@ -2,6 +2,7 @@
 
 namespace NumSharp.UnitTest.Issues
 {
+    [TestClass]
     public class Issue443
     {
         /// <summary>

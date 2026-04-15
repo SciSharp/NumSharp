@@ -5,6 +5,7 @@ using NumSharp.Backends;
 
 namespace NumSharp.UnitTest.Manipulation
 {
+    [TestClass]
     public class astypeTests
     {
         [TestMethod]

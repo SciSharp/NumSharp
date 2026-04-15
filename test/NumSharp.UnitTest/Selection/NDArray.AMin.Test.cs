@@ -6,6 +6,7 @@ using NumSharp;
 
 namespace NumSharp.UnitTest.Selection
 {
+    [TestClass]
     public class NDArrayAMinTest
     {
         [TestMethod]

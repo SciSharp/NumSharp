@@ -8,6 +8,7 @@ namespace NumSharp.UnitTest
     ///     These verify that implicit/explicit casts perform proper type conversion
     ///     rather than raw byte reinterpretation.
     /// </summary>
+    [TestClass]
     public class ScalarConversionTests
     {
         /// <summary>

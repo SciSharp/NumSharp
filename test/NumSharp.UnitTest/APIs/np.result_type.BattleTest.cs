@@ -6,6 +6,7 @@ namespace NumSharp.UnitTest.APIs;
 /// <summary>
 /// Battle tests for np.result_type - comprehensive coverage of type promotion.
 /// </summary>
+[TestClass]
 public class NpResultTypeBattleTests
 {
     #region Single Type

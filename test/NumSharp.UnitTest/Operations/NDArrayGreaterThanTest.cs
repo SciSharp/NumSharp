@@ -5,6 +5,7 @@ using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.Operations
 {
+    [TestClass]
     public class NDArrayGreaterThanTest : TestClass
     {
         private void PerformGreaterThanTests (NDArray nd)

@@ -7,6 +7,7 @@ using NumSharp.Utilities;
 
 namespace NumSharp.UnitTest.Backends.Unmanaged
 {
+    [TestClass]
     public class NDCoordinatesIncrementorTests : TestClass
     {
         [TestMethod]

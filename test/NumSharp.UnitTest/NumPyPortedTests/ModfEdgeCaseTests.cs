@@ -10,6 +10,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
     /// Tests for np.modf operation covering edge cases.
     /// modf returns (fractional_part, integer_part).
     /// </summary>
+    [TestClass]
     public class ModfEdgeCaseTests
     {
         #region Basic Tests

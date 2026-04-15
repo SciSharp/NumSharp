@@ -7,6 +7,7 @@ namespace NumSharp.UnitTest.RandomSampling
     /// Tests for np.random.standard_exponential (standard exponential distribution)
     /// </summary>
     
+    [TestClass]
     public class NpRandomStandardExponentialTests : TestClass
     {
         [TestMethod]

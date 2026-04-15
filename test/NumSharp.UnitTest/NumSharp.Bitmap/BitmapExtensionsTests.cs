@@ -8,6 +8,7 @@ using NumSharp.UnitTest.Utilities;
 namespace NumSharp.UnitTest
 {
     [WindowsOnly]
+    [TestClass]
     public class BitmapExtensionsTests : TestClass
     {
         // ================================================================

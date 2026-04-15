@@ -11,6 +11,7 @@ using NumSharp.Generic;
 
 namespace NumSharp.UnitTest.Operations
 {
+    [TestClass]
     public class NDArrayEqualsTest
     {
         [TestMethod]

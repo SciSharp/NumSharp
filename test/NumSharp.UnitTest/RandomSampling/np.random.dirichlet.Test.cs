@@ -6,6 +6,7 @@ namespace NumSharp.UnitTest.RandomSampling
     /// <summary>
     /// Tests for np.random.dirichlet (Dirichlet distribution)
     /// </summary>
+    [TestClass]
     public class NpRandomDirichletTests : TestClass
     {
         [TestMethod]

@@ -7,6 +7,7 @@ using AwesomeAssertions;
 
 namespace NumSharp.UnitTest
 {
+    [TestClass]
     public class CastingTester
     {
         [TestMethod]

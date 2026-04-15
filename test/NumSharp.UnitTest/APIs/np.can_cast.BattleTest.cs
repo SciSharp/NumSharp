@@ -6,6 +6,7 @@ namespace NumSharp.UnitTest.APIs;
 /// <summary>
 /// Battle tests for np.can_cast - comprehensive coverage of type casting rules.
 /// </summary>
+[TestClass]
 public class NpCanCastBattleTests
 {
     #region Safe Casting - Type to Type

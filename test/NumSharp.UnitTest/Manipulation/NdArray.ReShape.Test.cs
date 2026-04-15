@@ -7,6 +7,7 @@ using static NumSharp.Slice;
 
 namespace NumSharp.UnitTest.Manipulation
 {
+    [TestClass]
     public class NdArrayReShapeTest
     {
         [TestMethod]

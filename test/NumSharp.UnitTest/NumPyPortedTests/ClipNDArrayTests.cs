@@ -9,6 +9,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
     /// Tests for np.clip with array-valued min/max bounds.
     /// Validates the IL kernel migration of Default.ClipNDArray.cs.
     /// </summary>
+    [TestClass]
     public class ClipNDArrayTests
     {
         #region Basic Array Bounds Tests

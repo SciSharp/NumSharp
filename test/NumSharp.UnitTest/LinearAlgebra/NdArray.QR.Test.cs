@@ -13,6 +13,7 @@ namespace NumSharp.UnitTest.LinearAlgebra
     /// Test concolve with standard example from 
     /// https://www.numpy.org/devdocs/reference/generated/numpy.convolve.html
     /// </summary>
+    [TestClass]
     public class NdArrayQRTest
     {
         //[TestMethod]

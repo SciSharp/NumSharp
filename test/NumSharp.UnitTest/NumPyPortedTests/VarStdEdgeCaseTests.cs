@@ -10,6 +10,7 @@ namespace NumSharp.UnitTest.NumPyPortedTests
     /// Tests ported from NumPy test_numeric.py for np.std and np.var.
     /// Covers edge cases including empty arrays, ddof, keepdims, and axis combinations.
     /// </summary>
+    [TestClass]
     public class VarStdEdgeCaseTests
     {
         #region Basic std Tests (from test_std)

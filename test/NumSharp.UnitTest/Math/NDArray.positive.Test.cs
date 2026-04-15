@@ -9,6 +9,7 @@ using NumSharp;
 
 namespace NumSharp.UnitTest.Maths
 {
+    [TestClass]
     public class NDArrayPositiveTest
     {
         [TestMethod]

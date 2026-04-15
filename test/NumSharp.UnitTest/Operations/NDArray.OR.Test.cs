@@ -4,6 +4,7 @@ using NumSharp.UnitTest;
 
 namespace NumSharp.UnitTest.Operations
 {
+    [TestClass]
     public class NDArrayOrTest
     {
         [TestMethod]

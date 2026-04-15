@@ -7,6 +7,7 @@ using NumSharp.UnitTest;
 
 namespace NumSharp.UnitTest.Logic
 {
+    [TestClass]
     public class np_allclose_Test
     {
         [TestMethod]

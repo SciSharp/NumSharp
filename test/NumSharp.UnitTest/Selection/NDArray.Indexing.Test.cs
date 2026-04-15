@@ -13,6 +13,7 @@ using NumSharp.UnitTest.Utilities;
 
 namespace NumSharp.UnitTest.Selection
 {
+    [TestClass]
     public class IndexingTest : TestClass
     {
         [TestMethod]

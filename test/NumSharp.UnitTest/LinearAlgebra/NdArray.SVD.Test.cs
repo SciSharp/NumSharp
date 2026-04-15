@@ -10,6 +10,7 @@ using NumSharp.Backends.Unmanaged;
 
 namespace NumSharp.UnitTest.LinearAlgebra
 {
+    [TestClass]
     public class NDArraySVDTester
     {
         //[TestMethod]

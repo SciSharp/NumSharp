@@ -9,6 +9,7 @@ using System.Numerics;
 
 namespace NumSharp.UnitTest.Creation
 {
+    [TestClass]
     public class NdArrayMGridTest
     {
         // These C# NDArray declarations were generated using ndarray-generatory.py,
