@@ -302,6 +302,23 @@ namespace NumSharp.Backends.Kernels
                     // Value is already on stack, nothing to do
                     break;
 
+                case NPTypeCode.SByte:
+                    // abs(x) = (x ^ (x >> 7)) - (x >> 7)
+                    // Stack: x
+                    {
+                        var locSign = il.DeclareLocal(typeof(int));
+                        il.Emit(OpCodes.Dup);           // x, x
+                        il.Emit(OpCodes.Ldc_I4, 7);     // x, x, 7
+                        il.Emit(OpCodes.Shr);           // x, (x >> 7) = sign extension (-1 or 0)
+                        il.Emit(OpCodes.Stloc, locSign);// x            ; locSign = s
+                        il.Emit(OpCodes.Ldloc, locSign);// x, s
+                        il.Emit(OpCodes.Xor);           // x ^ s
+                        il.Emit(OpCodes.Ldloc, locSign);// (x ^ s), s
+                        il.Emit(OpCodes.Sub);           // (x ^ s) - s = abs(x)
+                        il.Emit(OpCodes.Conv_I1);       // Ensure result fits in sbyte
+                    }
+                    break;
+
                 case NPTypeCode.Int16:
                     // abs(x) = (x ^ (x >> 15)) - (x >> 15)
                     // Stack: x
@@ -348,6 +365,42 @@ namespace NumSharp.Backends.Kernels
                         il.Emit(OpCodes.Xor);           // x ^ s
                         il.Emit(OpCodes.Ldloc, locSign);// (x ^ s), s
                         il.Emit(OpCodes.Sub);           // (x ^ s) - s = abs(x)
+                    }
+                    break;
+
+                case NPTypeCode.Half:
+                    // Half.Abs - convert to double, call Math.Abs, convert back
+                    {
+                        // Half -> double (via explicit operator)
+                        var halfToDouble = typeof(Half).GetMethods(BindingFlags.Public | BindingFlags.Static)
+                            .First(m => m.Name == "op_Explicit" && m.ReturnType == typeof(double) && m.GetParameters().Length == 1 && m.GetParameters()[0].ParameterType == typeof(Half));
+                        il.EmitCall(OpCodes.Call, halfToDouble, null);
+                        // Call Math.Abs(double)
+                        il.EmitCall(OpCodes.Call, CachedMethods.MathAbsDouble, null);
+                        // double -> Half (via explicit operator)
+                        var doubleToHalf = typeof(Half).GetMethods(BindingFlags.Public | BindingFlags.Static)
+                            .First(m => m.Name == "op_Explicit" && m.ReturnType == typeof(Half) && m.GetParameters().Length == 1 && m.GetParameters()[0].ParameterType == typeof(double));
+                        il.EmitCall(OpCodes.Call, doubleToHalf, null);
+                    }
+                    break;
+
+                case NPTypeCode.Complex:
+                    // Complex.Abs returns double magnitude
+                    // For element-wise abs, we return a Complex with magnitude as real, 0 imaginary
+                    // NumPy: np.abs(complex) returns the magnitude as a float, but we keep Complex type
+                    {
+                        // Complex is a value type, need to load address for method call
+                        var locComplex = il.DeclareLocal(typeof(System.Numerics.Complex));
+                        il.Emit(OpCodes.Stloc, locComplex);
+                        il.Emit(OpCodes.Ldloca, locComplex);
+                        // Call Complex.Abs (static method takes Complex, returns double)
+                        var absMethod = typeof(System.Numerics.Complex).GetMethod("Abs", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })!;
+                        il.Emit(OpCodes.Ldloc, locComplex);
+                        il.EmitCall(OpCodes.Call, absMethod, null);
+                        // Create new Complex(magnitude, 0)
+                        il.Emit(OpCodes.Ldc_R8, 0.0);
+                        var ctor = typeof(System.Numerics.Complex).GetConstructor(new[] { typeof(double), typeof(double) })!;
+                        il.Emit(OpCodes.Newobj, ctor);
                     }
                     break;
 
@@ -533,6 +586,29 @@ namespace NumSharp.Backends.Kernels
                     EmitConvertFromInt(il, type);
                     break;
 
+                case NPTypeCode.SByte:
+                    // sign(x) = (x > 0) - (x < 0)
+                    // Stack: x
+                    {
+                        var locX = il.DeclareLocal(typeof(int));
+                        il.Emit(OpCodes.Stloc, locX);   // save x
+
+                        // (x > 0) ? 1 : 0
+                        il.Emit(OpCodes.Ldloc, locX);   // x
+                        il.Emit(OpCodes.Ldc_I4_0);      // x, 0
+                        il.Emit(OpCodes.Cgt);           // (x > 0) as 0 or 1
+
+                        // (x < 0) ? 1 : 0
+                        il.Emit(OpCodes.Ldloc, locX);   // (x>0), x
+                        il.Emit(OpCodes.Ldc_I4_0);      // (x>0), x, 0
+                        il.Emit(OpCodes.Clt);           // (x>0), (x<0)
+
+                        // result = (x > 0) - (x < 0)
+                        il.Emit(OpCodes.Sub);           // (x>0) - (x<0) = -1, 0, or 1
+                        il.Emit(OpCodes.Conv_I1);       // Convert to sbyte
+                    }
+                    break;
+
                 case NPTypeCode.Int16:
                     // sign(x) = (x >> 15) | ((int)(-x) >> 31 & 1)
                     // Simplified: (x > 0) - (x < 0)
@@ -602,6 +678,79 @@ namespace NumSharp.Backends.Kernels
                     }
                     break;
 
+                case NPTypeCode.Half:
+                    {
+                        // NumPy: sign(NaN) = NaN. Half.IsNaN check.
+                        var lblNotNaN = il.DefineLabel();
+                        var lblEnd = il.DefineLabel();
+
+                        // Store Half value
+                        var locX = il.DeclareLocal(typeof(Half));
+                        il.Emit(OpCodes.Stloc, locX);
+
+                        // Check for NaN
+                        il.Emit(OpCodes.Ldloc, locX);
+                        var halfIsNaN = typeof(Half).GetMethod("IsNaN", BindingFlags.Public | BindingFlags.Static, new[] { typeof(Half) })!;
+                        il.EmitCall(OpCodes.Call, halfIsNaN, null);
+                        il.Emit(OpCodes.Brfalse, lblNotNaN);
+
+                        // Is NaN - return NaN
+                        il.Emit(OpCodes.Ldsfld, typeof(Half).GetField("NaN", BindingFlags.Public | BindingFlags.Static)!);
+                        il.Emit(OpCodes.Br, lblEnd);
+
+                        il.MarkLabel(lblNotNaN);
+                        // Convert to double, call Math.Sign, convert back to Half
+                        il.Emit(OpCodes.Ldloc, locX);
+                        var halfToDouble = typeof(Half).GetMethods(BindingFlags.Public | BindingFlags.Static)
+                            .First(m => m.Name == "op_Explicit" && m.ReturnType == typeof(double) && m.GetParameters().Length == 1 && m.GetParameters()[0].ParameterType == typeof(Half));
+                        il.EmitCall(OpCodes.Call, halfToDouble, null);
+                        il.EmitCall(OpCodes.Call, CachedMethods.MathSignDouble, null);
+                        il.Emit(OpCodes.Conv_R8);
+                        var doubleToHalf = typeof(Half).GetMethods(BindingFlags.Public | BindingFlags.Static)
+                            .First(m => m.Name == "op_Explicit" && m.ReturnType == typeof(Half) && m.GetParameters().Length == 1 && m.GetParameters()[0].ParameterType == typeof(double));
+                        il.EmitCall(OpCodes.Call, doubleToHalf, null);
+
+                        il.MarkLabel(lblEnd);
+                    }
+                    break;
+
+                case NPTypeCode.Complex:
+                    // NumPy: sign(z) = z / |z| for complex numbers (unit vector in same direction)
+                    // For z = 0, return 0
+                    {
+                        var locZ = il.DeclareLocal(typeof(System.Numerics.Complex));
+                        var locMag = il.DeclareLocal(typeof(double));
+                        var lblNonZero = il.DefineLabel();
+                        var lblEnd = il.DefineLabel();
+
+                        il.Emit(OpCodes.Stloc, locZ);
+
+                        // Get magnitude
+                        il.Emit(OpCodes.Ldloc, locZ);
+                        var absMethod = typeof(System.Numerics.Complex).GetMethod("Abs", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex) })!;
+                        il.EmitCall(OpCodes.Call, absMethod, null);
+                        il.Emit(OpCodes.Stloc, locMag);
+
+                        // Check if magnitude is zero
+                        il.Emit(OpCodes.Ldloc, locMag);
+                        il.Emit(OpCodes.Ldc_R8, 0.0);
+                        il.Emit(OpCodes.Bne_Un, lblNonZero);
+
+                        // Magnitude is zero - return Zero
+                        il.Emit(OpCodes.Ldsfld, typeof(System.Numerics.Complex).GetField("Zero", BindingFlags.Public | BindingFlags.Static)!);
+                        il.Emit(OpCodes.Br, lblEnd);
+
+                        il.MarkLabel(lblNonZero);
+                        // return z / |z|
+                        il.Emit(OpCodes.Ldloc, locZ);
+                        il.Emit(OpCodes.Ldloc, locMag);
+                        var divMethod = typeof(System.Numerics.Complex).GetMethod("op_Division", BindingFlags.Public | BindingFlags.Static, new[] { typeof(System.Numerics.Complex), typeof(double) })!;
+                        il.EmitCall(OpCodes.Call, divMethod, null);
+
+                        il.MarkLabel(lblEnd);
+                    }
+                    break;
+
                 default:
                     throw new NotSupportedException($"Sign not supported for type {type}");
             }
@@ -620,6 +769,9 @@ namespace NumSharp.Backends.Kernels
                     break;
                 case NPTypeCode.Byte:
                     il.Emit(OpCodes.Conv_U1);
+                    break;
+                case NPTypeCode.SByte:
+                    il.Emit(OpCodes.Conv_I1);
                     break;
                 case NPTypeCode.Int16:
                     il.Emit(OpCodes.Conv_I2);
@@ -645,6 +797,24 @@ namespace NumSharp.Backends.Kernels
                     break;
                 case NPTypeCode.Double:
                     il.Emit(OpCodes.Conv_R8);
+                    break;
+                case NPTypeCode.Half:
+                    // int -> double -> Half
+                    il.Emit(OpCodes.Conv_R8);
+                    var doubleToHalf = typeof(Half).GetMethods(BindingFlags.Public | BindingFlags.Static)
+                        .First(m => m.Name == "op_Explicit" && m.ReturnType == typeof(Half) && m.GetParameters().Length == 1 && m.GetParameters()[0].ParameterType == typeof(double));
+                    il.EmitCall(OpCodes.Call, doubleToHalf, null);
+                    break;
+                case NPTypeCode.Decimal:
+                    // int -> decimal via implicit cast
+                    il.EmitCall(OpCodes.Call, CachedMethods.DecimalImplicitFromInt, null);
+                    break;
+                case NPTypeCode.Complex:
+                    // int -> double -> Complex(real, 0)
+                    il.Emit(OpCodes.Conv_R8);
+                    il.Emit(OpCodes.Ldc_R8, 0.0);
+                    var ctor = typeof(System.Numerics.Complex).GetConstructor(new[] { typeof(double), typeof(double) })!;
+                    il.Emit(OpCodes.Newobj, ctor);
                     break;
                 default:
                     throw new NotSupportedException($"Conversion from int to {to} not supported");

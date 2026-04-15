@@ -722,6 +722,7 @@ namespace NumSharp.Backends.Kernels
             {
                 case NPTypeCode.Boolean:
                 case NPTypeCode.Byte:
+                case NPTypeCode.SByte:
                 case NPTypeCode.Int16:
                 case NPTypeCode.UInt16:
                 case NPTypeCode.Char:
@@ -742,6 +743,14 @@ namespace NumSharp.Backends.Kernels
                 case NPTypeCode.Decimal:
                     il.Emit(OpCodes.Ldsfld, CachedMethods.DecimalZero);
                     break;
+                case NPTypeCode.Half:
+                    // Load Half.Zero via static field
+                    il.Emit(OpCodes.Ldsfld, typeof(Half).GetField("Zero", BindingFlags.Public | BindingFlags.Static)!);
+                    break;
+                case NPTypeCode.Complex:
+                    // Load Complex.Zero via static field
+                    il.Emit(OpCodes.Ldsfld, typeof(System.Numerics.Complex).GetField("Zero", BindingFlags.Public | BindingFlags.Static)!);
+                    break;
                 default:
                     throw new NotSupportedException($"Type {type} not supported");
             }
@@ -756,6 +765,7 @@ namespace NumSharp.Backends.Kernels
             {
                 case NPTypeCode.Boolean:
                 case NPTypeCode.Byte:
+                case NPTypeCode.SByte:
                 case NPTypeCode.Int16:
                 case NPTypeCode.UInt16:
                 case NPTypeCode.Char:
@@ -776,6 +786,15 @@ namespace NumSharp.Backends.Kernels
                 case NPTypeCode.Decimal:
                     il.Emit(OpCodes.Ldsfld, CachedMethods.DecimalOne);
                     break;
+                case NPTypeCode.Half:
+                    // Load Half.One via static field (Half doesn't have One, use conversion)
+                    il.Emit(OpCodes.Ldc_R8, 1.0);
+                    il.EmitCall(OpCodes.Call, typeof(Half).GetMethod("op_Explicit", new[] { typeof(double) })!, null);
+                    break;
+                case NPTypeCode.Complex:
+                    // Load Complex.One via static field
+                    il.Emit(OpCodes.Ldsfld, typeof(System.Numerics.Complex).GetField("One", BindingFlags.Public | BindingFlags.Static)!);
+                    break;
                 default:
                     throw new NotSupportedException($"Type {type} not supported");
             }
@@ -794,6 +813,9 @@ namespace NumSharp.Backends.Kernels
                     break;
                 case NPTypeCode.Byte:
                     il.Emit(OpCodes.Ldc_I4, (int)byte.MinValue);
+                    break;
+                case NPTypeCode.SByte:
+                    il.Emit(OpCodes.Ldc_I4, (int)sbyte.MinValue);
                     break;
                 case NPTypeCode.Int16:
                     il.Emit(OpCodes.Ldc_I4, (int)short.MinValue);
@@ -820,9 +842,16 @@ namespace NumSharp.Backends.Kernels
                 case NPTypeCode.Double:
                     il.Emit(OpCodes.Ldc_R8, double.NegativeInfinity);
                     break;
+                case NPTypeCode.Half:
+                    // Half.NegativeInfinity
+                    il.Emit(OpCodes.Ldsfld, typeof(Half).GetField("NegativeInfinity", BindingFlags.Public | BindingFlags.Static)!);
+                    break;
                 case NPTypeCode.Decimal:
                     il.Emit(OpCodes.Ldsfld, CachedMethods.DecimalMinValue);
                     break;
+                case NPTypeCode.Complex:
+                    // Complex doesn't support comparison operations (Min/Max)
+                    throw new NotSupportedException("Complex type does not support Min/Max operations");
                 default:
                     throw new NotSupportedException($"Type {type} not supported");
             }
@@ -841,6 +870,9 @@ namespace NumSharp.Backends.Kernels
                     break;
                 case NPTypeCode.Byte:
                     il.Emit(OpCodes.Ldc_I4, (int)byte.MaxValue);
+                    break;
+                case NPTypeCode.SByte:
+                    il.Emit(OpCodes.Ldc_I4, (int)sbyte.MaxValue);
                     break;
                 case NPTypeCode.Int16:
                     il.Emit(OpCodes.Ldc_I4, (int)short.MaxValue);
@@ -867,9 +899,16 @@ namespace NumSharp.Backends.Kernels
                 case NPTypeCode.Double:
                     il.Emit(OpCodes.Ldc_R8, double.PositiveInfinity);
                     break;
+                case NPTypeCode.Half:
+                    // Half.PositiveInfinity
+                    il.Emit(OpCodes.Ldsfld, typeof(Half).GetField("PositiveInfinity", BindingFlags.Public | BindingFlags.Static)!);
+                    break;
                 case NPTypeCode.Decimal:
                     il.Emit(OpCodes.Ldsfld, CachedMethods.DecimalMaxValue);
                     break;
+                case NPTypeCode.Complex:
+                    // Complex doesn't support comparison operations (Min/Max)
+                    throw new NotSupportedException("Complex type does not support Min/Max operations");
                 default:
                     throw new NotSupportedException($"Type {type} not supported");
             }

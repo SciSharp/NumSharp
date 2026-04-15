@@ -92,6 +92,7 @@ namespace NumSharp.Backends.Kernels
             return key.InputType switch
             {
                 NPTypeCode.Byte => CreateAxisReductionKernelTyped<byte>(key),
+                NPTypeCode.SByte => CreateAxisReductionKernelTyped<sbyte>(key),
                 NPTypeCode.Int16 => CreateAxisReductionKernelTyped<short>(key),
                 NPTypeCode.UInt16 => CreateAxisReductionKernelTyped<ushort>(key),
                 NPTypeCode.Int32 => CreateAxisReductionKernelTyped<int>(key),
@@ -100,7 +101,7 @@ namespace NumSharp.Backends.Kernels
                 NPTypeCode.UInt64 => CreateAxisReductionKernelTyped<ulong>(key),
                 NPTypeCode.Single => CreateAxisReductionKernelTyped<float>(key),
                 NPTypeCode.Double => CreateAxisReductionKernelTyped<double>(key),
-                _ => CreateAxisReductionKernelGeneral(key) // Fallback for Boolean, Char, Decimal
+                _ => CreateAxisReductionKernelGeneral(key) // Fallback for Boolean, Char, Decimal, Half, Complex
             };
         }
 
@@ -276,6 +277,7 @@ namespace NumSharp.Backends.Kernels
             return type switch
             {
                 NPTypeCode.Byte => *(byte*)ptr,
+                NPTypeCode.SByte => *(sbyte*)ptr,
                 NPTypeCode.Int16 => *(short*)ptr,
                 NPTypeCode.UInt16 => *(ushort*)ptr,
                 NPTypeCode.Int32 => *(int*)ptr,
@@ -284,9 +286,11 @@ namespace NumSharp.Backends.Kernels
                 NPTypeCode.UInt64 => *(ulong*)ptr,
                 NPTypeCode.Single => *(float*)ptr,
                 NPTypeCode.Double => *(double*)ptr,
+                NPTypeCode.Half => (double)*(Half*)ptr,
                 NPTypeCode.Decimal => (double)*(decimal*)ptr,
                 NPTypeCode.Char => *(char*)ptr,
                 NPTypeCode.Boolean => *(bool*)ptr ? 1.0 : 0.0,
+                NPTypeCode.Complex => (*(System.Numerics.Complex*)ptr).Real, // Use real part for reductions
                 _ => 0.0
             };
         }
@@ -299,6 +303,7 @@ namespace NumSharp.Backends.Kernels
             switch (type)
             {
                 case NPTypeCode.Byte: *(byte*)ptr = (byte)value; break;
+                case NPTypeCode.SByte: *(sbyte*)ptr = (sbyte)value; break;
                 case NPTypeCode.Int16: *(short*)ptr = (short)value; break;
                 case NPTypeCode.UInt16: *(ushort*)ptr = (ushort)value; break;
                 case NPTypeCode.Int32: *(int*)ptr = (int)value; break;
@@ -307,9 +312,11 @@ namespace NumSharp.Backends.Kernels
                 case NPTypeCode.UInt64: *(ulong*)ptr = (ulong)value; break;
                 case NPTypeCode.Single: *(float*)ptr = (float)value; break;
                 case NPTypeCode.Double: *(double*)ptr = value; break;
+                case NPTypeCode.Half: *(Half*)ptr = (Half)value; break;
                 case NPTypeCode.Decimal: *(decimal*)ptr = (decimal)value; break;
                 case NPTypeCode.Char: *(char*)ptr = (char)(int)value; break;
                 case NPTypeCode.Boolean: *(bool*)ptr = value != 0; break;
+                case NPTypeCode.Complex: *(System.Numerics.Complex*)ptr = new System.Numerics.Complex(value, 0); break;
             }
         }
 
@@ -431,6 +438,7 @@ namespace NumSharp.Backends.Kernels
         private static double ConvertToDouble<T>(T value) where T : unmanaged
         {
             if (typeof(T) == typeof(byte)) return (byte)(object)value;
+            if (typeof(T) == typeof(sbyte)) return (sbyte)(object)value;
             if (typeof(T) == typeof(short)) return (short)(object)value;
             if (typeof(T) == typeof(ushort)) return (ushort)(object)value;
             if (typeof(T) == typeof(int)) return (int)(object)value;
@@ -439,9 +447,11 @@ namespace NumSharp.Backends.Kernels
             if (typeof(T) == typeof(ulong)) return (ulong)(object)value;
             if (typeof(T) == typeof(float)) return (float)(object)value;
             if (typeof(T) == typeof(double)) return (double)(object)value;
+            if (typeof(T) == typeof(Half)) return (double)(Half)(object)value;
             if (typeof(T) == typeof(decimal)) return (double)(decimal)(object)value;
             if (typeof(T) == typeof(char)) return (char)(object)value;
             if (typeof(T) == typeof(bool)) return (bool)(object)value ? 1.0 : 0.0;
+            if (typeof(T) == typeof(System.Numerics.Complex)) return ((System.Numerics.Complex)(object)value).Real;
             return 0.0;
         }
 
@@ -451,6 +461,7 @@ namespace NumSharp.Backends.Kernels
         private static T ConvertFromDouble<T>(double value) where T : unmanaged
         {
             if (typeof(T) == typeof(byte)) return (T)(object)(byte)value;
+            if (typeof(T) == typeof(sbyte)) return (T)(object)(sbyte)value;
             if (typeof(T) == typeof(short)) return (T)(object)(short)value;
             if (typeof(T) == typeof(ushort)) return (T)(object)(ushort)value;
             if (typeof(T) == typeof(int)) return (T)(object)(int)value;
@@ -459,9 +470,11 @@ namespace NumSharp.Backends.Kernels
             if (typeof(T) == typeof(ulong)) return (T)(object)(ulong)value;
             if (typeof(T) == typeof(float)) return (T)(object)(float)value;
             if (typeof(T) == typeof(double)) return (T)(object)value;
+            if (typeof(T) == typeof(Half)) return (T)(object)(Half)value;
             if (typeof(T) == typeof(decimal)) return (T)(object)(decimal)value;
             if (typeof(T) == typeof(char)) return (T)(object)(char)(int)value;
             if (typeof(T) == typeof(bool)) return (T)(object)(value != 0);
+            if (typeof(T) == typeof(System.Numerics.Complex)) return (T)(object)new System.Numerics.Complex(value, 0);
             return default;
         }
 
