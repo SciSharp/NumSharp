@@ -2430,5 +2430,283 @@ namespace NumSharp.UnitTest.Backends.Iterators
 
             Assert.IsTrue(threw, "Casting without BUFFERED should throw");
         }
+
+        // =========================================================================
+        // Reduction Support Tests
+        // =========================================================================
+        // NumPy nditer supports reduction operations where output operands have
+        // fewer dimensions than inputs. This is achieved using op_axes with -1
+        // entries for reduction dimensions. The iterator marks such operands
+        // with stride=0 for reduction axes.
+        // =========================================================================
+
+        [TestMethod]
+        public void Reduction_1DToScalar_IteratesCorrectly()
+        {
+            // NumPy 2.4.2:
+            // >>> a = np.arange(6)
+            // >>> it = np.nditer([a, None], ['reduce_ok'],
+            // ...                [['readonly'], ['readwrite', 'allocate']],
+            // ...                op_axes=[[0], [-1]])
+            // >>> it.operands[1][...] = 0
+            // >>> for x, y in it:
+            // ...     y[...] += x
+            // >>> int(it.operands[1])
+            // 15
+            //
+            // -1 in op_axes means "newaxis" / broadcast / reduce on that axis
+
+            var a = np.arange(6);
+            var result = np.array(new long[] { 0 });  // Scalar output (1D of size 1)
+
+            using var iter = NpyIterRef.AdvancedNew(
+                2,
+                new[] { a, result },
+                NpyIterGlobalFlags.REDUCE_OK,
+                NPY_ORDER.NPY_KEEPORDER,
+                NPY_CASTING.NPY_NO_CASTING,
+                new[] { NpyIterPerOpFlags.READONLY, NpyIterPerOpFlags.READWRITE },
+                null,
+                1,  // opAxesNDim = 1
+                new[] { new[] { 0 }, new[] { -1 } });  // op_axes
+
+            // Verify reduction is detected
+            Assert.IsTrue(iter.IsReduction, "Should detect reduction");
+            Assert.IsTrue(iter.IsOperandReduction(1), "Output operand should be marked as reduction");
+
+            // Iterate and accumulate
+            do
+            {
+                var x = iter.GetValue<long>(0);
+                var y = iter.GetValue<long>(1);
+                iter.SetValue(y + x, 1);
+            } while (iter.Iternext());
+
+            // Sum of 0+1+2+3+4+5 = 15
+            Assert.AreEqual(15L, (long)result[0]);
+        }
+
+        [TestMethod]
+        public void Reduction_2DToScalar_IteratesCorrectly()
+        {
+            // NumPy 2.4.2:
+            // >>> a = np.arange(6).reshape(2, 3)
+            // >>> it = np.nditer([a, None], ['reduce_ok', 'external_loop'],
+            // ...                [['readonly'], ['readwrite', 'allocate']],
+            // ...                op_axes=[[0, 1], [-1, -1]])
+            // >>> it.operands[1][...] = 0
+            // >>> for x, y in it:
+            // ...     for j in range(len(y)):
+            // ...         y[j] += x[j]
+            // >>> int(it.operands[1])
+            // 15
+
+            var a = np.arange(6).reshape(2, 3);
+            var result = np.array(new long[] { 0 });
+
+            using var iter = NpyIterRef.AdvancedNew(
+                2,
+                new[] { a, result },
+                NpyIterGlobalFlags.REDUCE_OK,
+                NPY_ORDER.NPY_KEEPORDER,
+                NPY_CASTING.NPY_NO_CASTING,
+                new[] { NpyIterPerOpFlags.READONLY, NpyIterPerOpFlags.READWRITE },
+                null,
+                2,  // opAxesNDim = 2
+                new[] { new[] { 0, 1 }, new[] { -1, -1 } });
+
+            // Iterate and accumulate
+            do
+            {
+                var x = iter.GetValue<long>(0);
+                var y = iter.GetValue<long>(1);
+                iter.SetValue(y + x, 1);
+            } while (iter.Iternext());
+
+            Assert.AreEqual(15L, (long)result[0]);
+        }
+
+        [TestMethod]
+        public void Reduction_2DAlongAxis1_ProducesCorrectResult()
+        {
+            // NumPy 2.4.2:
+            // >>> a = np.arange(6).reshape(2, 3)
+            // >>> b = np.zeros(2, dtype=np.int64)
+            // >>> it = np.nditer([a, b], ['reduce_ok'],
+            // ...                [['readonly'], ['readwrite']],
+            // ...                op_axes=[[0, 1], [0, -1]])
+            // >>> for x, y in it:
+            // ...     y[...] += x
+            // >>> b
+            // array([ 3, 12])  # Sum along axis 1: [0+1+2, 3+4+5]
+
+            var a = np.arange(6).reshape(2, 3);
+            var b = np.zeros(new Shape(2), NPTypeCode.Int64);
+
+            using var iter = NpyIterRef.AdvancedNew(
+                2,
+                new[] { a, b },
+                NpyIterGlobalFlags.REDUCE_OK,
+                NPY_ORDER.NPY_KEEPORDER,
+                NPY_CASTING.NPY_NO_CASTING,
+                new[] { NpyIterPerOpFlags.READONLY, NpyIterPerOpFlags.READWRITE },
+                null,
+                2,
+                new[] { new[] { 0, 1 }, new[] { 0, -1 } },  // axis 1 reduced
+                new long[] { 2, 3 });  // Explicit iterShape needed when operands don't broadcast
+
+            do
+            {
+                var x = iter.GetValue<long>(0);
+                var y = iter.GetValue<long>(1);
+                iter.SetValue(y + x, 1);
+            } while (iter.Iternext());
+
+            Assert.AreEqual(3L, (long)b[0], "Sum of row 0: 0+1+2=3");
+            Assert.AreEqual(12L, (long)b[1], "Sum of row 1: 3+4+5=12");
+        }
+
+        [TestMethod]
+        public void Reduction_IsFirstVisit_ReturnsTrueOnFirstElement()
+        {
+            // NumPy's IsFirstVisit() returns true when the current element of
+            // a reduction operand is being visited for the first time.
+            // This is used for initialization (e.g., set to 0 before summing).
+            //
+            // NumPy 2.4.2:
+            // >>> a = np.arange(6).reshape(2, 3)
+            // >>> b = np.zeros(2)
+            // >>> it = np.nditer([a, b], ['reduce_ok', 'external_loop'],
+            // ...                [['readonly'], ['readwrite']],
+            // ...                op_axes=[[0, 1], [0, -1]])
+            // >>> # At start, IsFirstVisit(1) is True for first row
+            // >>> # After iterating past axis 1 values, IsFirstVisit(1) becomes False
+            // >>> # When we move to row 1, IsFirstVisit(1) becomes True again
+
+            var a = np.arange(6).reshape(2, 3);
+            var b = np.zeros(new Shape(2), NPTypeCode.Int64);
+
+            using var iter = NpyIterRef.AdvancedNew(
+                2,
+                new[] { a, b },
+                NpyIterGlobalFlags.REDUCE_OK,
+                NPY_ORDER.NPY_KEEPORDER,
+                NPY_CASTING.NPY_NO_CASTING,
+                new[] { NpyIterPerOpFlags.READONLY, NpyIterPerOpFlags.READWRITE },
+                null,
+                2,
+                new[] { new[] { 0, 1 }, new[] { 0, -1 } },
+                new long[] { 2, 3 });  // Explicit iterShape
+
+            // First element (0,0): should be first visit to output[0]
+            Assert.IsTrue(iter.IsFirstVisit(1), "First visit to output[0] at (0,0)");
+
+            iter.Iternext();  // Move to (0,1)
+            Assert.IsFalse(iter.IsFirstVisit(1), "Not first visit to output[0] at (0,1)");
+
+            iter.Iternext();  // Move to (0,2)
+            Assert.IsFalse(iter.IsFirstVisit(1), "Not first visit to output[0] at (0,2)");
+
+            iter.Iternext();  // Move to (1,0) - first visit to output[1]
+            Assert.IsTrue(iter.IsFirstVisit(1), "First visit to output[1] at (1,0)");
+
+            iter.Iternext();  // Move to (1,1)
+            Assert.IsFalse(iter.IsFirstVisit(1), "Not first visit to output[1] at (1,1)");
+        }
+
+        [TestMethod]
+        public void Reduction_WithoutReduceOK_Throws()
+        {
+            // NumPy 2.4.2:
+            // >>> a = np.arange(6)
+            // >>> it = np.nditer([a, None], [],  # No reduce_ok
+            // ...                [['readonly'], ['readwrite', 'allocate']],
+            // ...                op_axes=[[0], [-1]])
+            // ValueError: output operand requires a reduction along dimension 0,
+            //             but the reduction is not enabled
+
+            var a = np.arange(6);
+            var result = np.array(new long[] { 0 });
+
+            bool threw = false;
+            try
+            {
+                using var iter = NpyIterRef.AdvancedNew(
+                    2,
+                    new[] { a, result },
+                    NpyIterGlobalFlags.None,  // No REDUCE_OK
+                    NPY_ORDER.NPY_KEEPORDER,
+                    NPY_CASTING.NPY_NO_CASTING,
+                    new[] { NpyIterPerOpFlags.READONLY, NpyIterPerOpFlags.READWRITE },
+                    null,
+                    1,
+                    new[] { new[] { 0 }, new[] { -1 } });
+            }
+            catch (ArgumentException)
+            {
+                threw = true;
+            }
+
+            Assert.IsTrue(threw, "Should throw when reduction detected but REDUCE_OK not set");
+        }
+
+        [TestMethod]
+        public void Reduction_ReadOnlyOperand_DoesNotThrow()
+        {
+            // Reduction axes on READONLY operands should not require REDUCE_OK
+            // because it's just broadcasting, not accumulation
+            //
+            // NumPy 2.4.2:
+            // >>> a = np.arange(6).reshape(2, 3)
+            // >>> scalar = np.array(10)
+            // >>> it = np.nditer([a, scalar], [],  # No reduce_ok needed
+            // ...                [['readonly'], ['readonly']],
+            // ...                op_axes=[[0, 1], [-1, -1]])
+            // >>> # Works fine - scalar is just broadcast
+
+            var a = np.arange(6).reshape(2, 3);
+            var scalar = np.array(new long[] { 10 });
+
+            // Should not throw - readonly operand with stride 0 is just broadcasting
+            using var iter = NpyIterRef.AdvancedNew(
+                2,
+                new[] { a, scalar },
+                NpyIterGlobalFlags.None,  // No REDUCE_OK - should be fine for readonly
+                NPY_ORDER.NPY_KEEPORDER,
+                NPY_CASTING.NPY_NO_CASTING,
+                new[] { NpyIterPerOpFlags.READONLY, NpyIterPerOpFlags.READONLY },
+                null,
+                2,
+                new[] { new[] { 0, 1 }, new[] { -1, -1 } });
+
+            // Verify scalar broadcasts correctly
+            Assert.AreEqual(10L, iter.GetValue<long>(1));
+            iter.Iternext();
+            Assert.AreEqual(10L, iter.GetValue<long>(1));  // Same value due to stride 0
+        }
+
+        [TestMethod]
+        public void Reduction_HasReduceFlag_WhenReductionDetected()
+        {
+            // The REDUCE flag should be set when reduction is detected
+
+            var a = np.arange(6);
+            var result = np.array(new long[] { 0 });
+
+            using var iter = NpyIterRef.AdvancedNew(
+                2,
+                new[] { a, result },
+                NpyIterGlobalFlags.REDUCE_OK,
+                NPY_ORDER.NPY_KEEPORDER,
+                NPY_CASTING.NPY_NO_CASTING,
+                new[] { NpyIterPerOpFlags.READONLY, NpyIterPerOpFlags.READWRITE },
+                null,
+                1,
+                new[] { new[] { 0 }, new[] { -1 } });
+
+            Assert.IsTrue(iter.IsReduction, "REDUCE flag should be set");
+            Assert.IsTrue(iter.IsOperandReduction(1), "Output operand should be marked as reduction");
+            Assert.IsFalse(iter.IsOperandReduction(0), "Input operand should not be reduction");
+        }
     }
 }
