@@ -136,28 +136,39 @@ namespace NumSharp
 
         /// <summary>
         ///     Converts Memory&lt;T&gt; or ReadOnlyMemory&lt;T&gt; to an NDArray.
-        ///     These types don't implement IEnumerable&lt;T&gt;, so we handle them specially.
+        ///     Uses Span.CopyTo + GC.AllocateUninitializedArray for optimal performance.
         /// </summary>
         private static NDArray ConvertMemory(object a, Type type)
         {
             var elementType = type.GetGenericArguments()[0];
             var isReadOnly = type.GetGenericTypeDefinition() == typeof(ReadOnlyMemory<>);
 
-            // Single type switch - extract array via the appropriate cast
-            if (elementType == typeof(bool)) return np.array(isReadOnly ? ((ReadOnlyMemory<bool>)a).ToArray() : ((Memory<bool>)a).ToArray());
-            if (elementType == typeof(byte)) return np.array(isReadOnly ? ((ReadOnlyMemory<byte>)a).ToArray() : ((Memory<byte>)a).ToArray());
-            if (elementType == typeof(short)) return np.array(isReadOnly ? ((ReadOnlyMemory<short>)a).ToArray() : ((Memory<short>)a).ToArray());
-            if (elementType == typeof(ushort)) return np.array(isReadOnly ? ((ReadOnlyMemory<ushort>)a).ToArray() : ((Memory<ushort>)a).ToArray());
-            if (elementType == typeof(int)) return np.array(isReadOnly ? ((ReadOnlyMemory<int>)a).ToArray() : ((Memory<int>)a).ToArray());
-            if (elementType == typeof(uint)) return np.array(isReadOnly ? ((ReadOnlyMemory<uint>)a).ToArray() : ((Memory<uint>)a).ToArray());
-            if (elementType == typeof(long)) return np.array(isReadOnly ? ((ReadOnlyMemory<long>)a).ToArray() : ((Memory<long>)a).ToArray());
-            if (elementType == typeof(ulong)) return np.array(isReadOnly ? ((ReadOnlyMemory<ulong>)a).ToArray() : ((Memory<ulong>)a).ToArray());
-            if (elementType == typeof(char)) return np.array(isReadOnly ? ((ReadOnlyMemory<char>)a).ToArray() : ((Memory<char>)a).ToArray());
-            if (elementType == typeof(float)) return np.array(isReadOnly ? ((ReadOnlyMemory<float>)a).ToArray() : ((Memory<float>)a).ToArray());
-            if (elementType == typeof(double)) return np.array(isReadOnly ? ((ReadOnlyMemory<double>)a).ToArray() : ((Memory<double>)a).ToArray());
-            if (elementType == typeof(decimal)) return np.array(isReadOnly ? ((ReadOnlyMemory<decimal>)a).ToArray() : ((Memory<decimal>)a).ToArray());
+            // Use Span.CopyTo + GC.AllocateUninitializedArray instead of ToArray()
+            if (elementType == typeof(bool)) return np.array(SpanToArrayFast(isReadOnly ? ((ReadOnlyMemory<bool>)a).Span : ((Memory<bool>)a).Span));
+            if (elementType == typeof(byte)) return np.array(SpanToArrayFast(isReadOnly ? ((ReadOnlyMemory<byte>)a).Span : ((Memory<byte>)a).Span));
+            if (elementType == typeof(short)) return np.array(SpanToArrayFast(isReadOnly ? ((ReadOnlyMemory<short>)a).Span : ((Memory<short>)a).Span));
+            if (elementType == typeof(ushort)) return np.array(SpanToArrayFast(isReadOnly ? ((ReadOnlyMemory<ushort>)a).Span : ((Memory<ushort>)a).Span));
+            if (elementType == typeof(int)) return np.array(SpanToArrayFast(isReadOnly ? ((ReadOnlyMemory<int>)a).Span : ((Memory<int>)a).Span));
+            if (elementType == typeof(uint)) return np.array(SpanToArrayFast(isReadOnly ? ((ReadOnlyMemory<uint>)a).Span : ((Memory<uint>)a).Span));
+            if (elementType == typeof(long)) return np.array(SpanToArrayFast(isReadOnly ? ((ReadOnlyMemory<long>)a).Span : ((Memory<long>)a).Span));
+            if (elementType == typeof(ulong)) return np.array(SpanToArrayFast(isReadOnly ? ((ReadOnlyMemory<ulong>)a).Span : ((Memory<ulong>)a).Span));
+            if (elementType == typeof(char)) return np.array(SpanToArrayFast(isReadOnly ? ((ReadOnlyMemory<char>)a).Span : ((Memory<char>)a).Span));
+            if (elementType == typeof(float)) return np.array(SpanToArrayFast(isReadOnly ? ((ReadOnlyMemory<float>)a).Span : ((Memory<float>)a).Span));
+            if (elementType == typeof(double)) return np.array(SpanToArrayFast(isReadOnly ? ((ReadOnlyMemory<double>)a).Span : ((Memory<double>)a).Span));
+            if (elementType == typeof(decimal)) return np.array(SpanToArrayFast(isReadOnly ? ((ReadOnlyMemory<decimal>)a).Span : ((Memory<decimal>)a).Span));
 
             return null;
+        }
+
+        /// <summary>
+        ///     Optimized Span to Array conversion using GC.AllocateUninitializedArray.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static T[] SpanToArrayFast<T>(ReadOnlySpan<T> span)
+        {
+            var arr = GC.AllocateUninitializedArray<T>(span.Length);
+            span.CopyTo(arr);
+            return arr;
         }
 
         /// <summary>
@@ -174,8 +185,12 @@ namespace NumSharp
         /// </summary>
         private static NDArray ConvertEnumerator(IEnumerator enumerator)
         {
-            // Collect items
-            var items = new List<object>();
+            // Pre-size list if count is known (optimization #4)
+            List<object> items;
+            if (enumerator is ICollection collection)
+                items = new List<object>(collection.Count);
+            else
+                items = new List<object>();
 
             while (enumerator.MoveNext())
             {
@@ -194,80 +209,70 @@ namespace NumSharp
 
         /// <summary>
         ///     Finds the common numeric type for a list of objects (NumPy-like promotion).
-        ///     Promotes to the widest type: bool -> int -> long -> float -> double -> decimal
+        ///     Uses existing _FindCommonType_Scalar for consistent type promotion.
+        ///     Early exit when highest-priority types (decimal/double) are found.
         /// </summary>
         private static Type FindCommonNumericType(List<object> items)
         {
-            // NumPy type promotion priority (simplified):
-            // bool < byte < short < ushort < int < uint < long < ulong < float < double
-            // If any float/double is present, result is float/double
-            // decimal is separate (highest priority if present)
+            // Use CollectionsMarshal.AsSpan for faster iteration (no bounds checks)
+            var span = CollectionsMarshal.AsSpan(items);
 
+            // Early exit optimization: track highest-priority types seen
             bool hasDecimal = false;
             bool hasDouble = false;
             bool hasFloat = false;
-            bool hasULong = false;
-            bool hasLong = false;
-            bool hasUInt = false;
-            bool hasInt = false;
-            bool hasUShort = false;
-            bool hasShort = false;
-            bool hasByte = false;
-            bool hasBool = false;
-            bool hasChar = false;
             Type firstType = null;
 
-            foreach (var item in items)
+            // Collect unique type codes for _FindCommonType_Scalar
+            Span<NPTypeCode> typeCodes = stackalloc NPTypeCode[span.Length];
+            int uniqueCount = 0;
+            uint seenMask = 0; // Bitmask for deduplication (NPTypeCode values are small)
+
+            for (int i = 0; i < span.Length; i++)
             {
-                var t = item.GetType();
+                var t = span[i].GetType();
                 firstType ??= t;
 
-                if (t == typeof(decimal)) hasDecimal = true;
-                else if (t == typeof(double)) hasDouble = true;
+                // Early exit: decimal wins everything
+                if (t == typeof(decimal))
+                    return typeof(decimal);
+
+                // Track floating point for early double detection
+                if (t == typeof(double)) hasDouble = true;
                 else if (t == typeof(float)) hasFloat = true;
-                else if (t == typeof(ulong)) hasULong = true;
-                else if (t == typeof(long)) hasLong = true;
-                else if (t == typeof(uint)) hasUInt = true;
-                else if (t == typeof(int)) hasInt = true;
-                else if (t == typeof(ushort)) hasUShort = true;
-                else if (t == typeof(short)) hasShort = true;
-                else if (t == typeof(byte)) hasByte = true;
-                else if (t == typeof(bool)) hasBool = true;
-                else if (t == typeof(char)) hasChar = true;
+
+                var code = t.GetTypeCode();
+                var bit = 1u << (int)code;
+                if ((seenMask & bit) == 0)
+                {
+                    seenMask |= bit;
+                    typeCodes[uniqueCount++] = code;
+                }
             }
 
-            // Promotion rules (NumPy-like):
-            // decimal wins if present
-            if (hasDecimal) return typeof(decimal);
+            // Early exit: any floating point promotes to double
+            if (hasDouble || hasFloat)
+                return typeof(double);
 
-            // Any floating point promotes to double (NumPy uses float64 for mixed int+float)
-            if (hasDouble || hasFloat) return typeof(double);
+            // Use existing type promotion logic for remaining cases
+            if (uniqueCount == 1)
+                return firstType ?? typeof(double);
 
-            // Integer promotion
-            if (hasULong) return typeof(ulong);
-            if (hasLong || hasUInt) return typeof(long); // uint + anything signed -> long
-            if (hasUInt) return typeof(uint);
-            if (hasInt || hasUShort) return typeof(int); // ushort + anything signed -> int
-            if (hasUShort) return typeof(ushort);
-            if (hasShort || hasByte) return typeof(int); // byte + short -> int (safe promotion)
-            if (hasByte) return typeof(byte);
-            if (hasChar) return typeof(char);
-            if (hasBool) return typeof(bool);
-
-            // Fallback to first type
-            return firstType ?? typeof(double);
+            var resultCode = _FindCommonType_Scalar(typeCodes.Slice(0, uniqueCount).ToArray());
+            return resultCode.AsType();
         }
 
         /// <summary>
         ///     Converts a Tuple or ValueTuple to an NDArray.
         ///     Uses ITuple interface available in .NET Core 2.0+.
+        ///     Optimized: pre-sized List, early exit for decimal/double.
         /// </summary>
         private static NDArray ConvertTuple(ITuple tuple)
         {
             if (tuple.Length == 0)
                 return np.array(Array.Empty<double>());
 
-            // Collect items and find common type (NumPy-like promotion)
+            // Pre-sized list (optimization: avoid resize for known count)
             var items = new List<object>(tuple.Length);
 
             for (int i = 0; i < tuple.Length; i++)
@@ -286,131 +291,99 @@ namespace NumSharp
 
         /// <summary>
         ///     Converts a list of objects to an NDArray of the specified element type.
+        ///     Uses CollectionsMarshal.AsSpan for bounds-check-free iteration.
         ///     Uses pattern matching for fast direct cast when types match, with Convert fallback.
         ///     This is ~4x faster than always using Convert for homogeneous collections.
         /// </summary>
         private static NDArray ConvertObjectListToNDArray(List<object> items, Type elementType)
         {
+            // Use CollectionsMarshal.AsSpan for faster iteration (no bounds checks)
+            var span = CollectionsMarshal.AsSpan(items);
+
             // Pattern: `is T v ? v : Convert.ToT(item)` gives direct cast speed for homogeneous
             // collections while still handling mixed types correctly
             if (elementType == typeof(bool))
             {
-                var arr = GC.AllocateUninitializedArray<bool>(items.Count);
-                for (int i = 0; i < items.Count; i++)
-                {
-                    var item = items[i];
-                    arr[i] = item is bool v ? v : Convert.ToBoolean(item);
-                }
+                var arr = GC.AllocateUninitializedArray<bool>(span.Length);
+                for (int i = 0; i < span.Length; i++)
+                    arr[i] = span[i] is bool v ? v : Convert.ToBoolean(span[i]);
                 return np.array(arr);
             }
             if (elementType == typeof(byte))
             {
-                var arr = GC.AllocateUninitializedArray<byte>(items.Count);
-                for (int i = 0; i < items.Count; i++)
-                {
-                    var item = items[i];
-                    arr[i] = item is byte v ? v : Convert.ToByte(item);
-                }
+                var arr = GC.AllocateUninitializedArray<byte>(span.Length);
+                for (int i = 0; i < span.Length; i++)
+                    arr[i] = span[i] is byte v ? v : Convert.ToByte(span[i]);
                 return np.array(arr);
             }
             if (elementType == typeof(short))
             {
-                var arr = GC.AllocateUninitializedArray<short>(items.Count);
-                for (int i = 0; i < items.Count; i++)
-                {
-                    var item = items[i];
-                    arr[i] = item is short v ? v : Convert.ToInt16(item);
-                }
+                var arr = GC.AllocateUninitializedArray<short>(span.Length);
+                for (int i = 0; i < span.Length; i++)
+                    arr[i] = span[i] is short v ? v : Convert.ToInt16(span[i]);
                 return np.array(arr);
             }
             if (elementType == typeof(ushort))
             {
-                var arr = GC.AllocateUninitializedArray<ushort>(items.Count);
-                for (int i = 0; i < items.Count; i++)
-                {
-                    var item = items[i];
-                    arr[i] = item is ushort v ? v : Convert.ToUInt16(item);
-                }
+                var arr = GC.AllocateUninitializedArray<ushort>(span.Length);
+                for (int i = 0; i < span.Length; i++)
+                    arr[i] = span[i] is ushort v ? v : Convert.ToUInt16(span[i]);
                 return np.array(arr);
             }
             if (elementType == typeof(int))
             {
-                var arr = GC.AllocateUninitializedArray<int>(items.Count);
-                for (int i = 0; i < items.Count; i++)
-                {
-                    var item = items[i];
-                    arr[i] = item is int v ? v : Convert.ToInt32(item);
-                }
+                var arr = GC.AllocateUninitializedArray<int>(span.Length);
+                for (int i = 0; i < span.Length; i++)
+                    arr[i] = span[i] is int v ? v : Convert.ToInt32(span[i]);
                 return np.array(arr);
             }
             if (elementType == typeof(uint))
             {
-                var arr = GC.AllocateUninitializedArray<uint>(items.Count);
-                for (int i = 0; i < items.Count; i++)
-                {
-                    var item = items[i];
-                    arr[i] = item is uint v ? v : Convert.ToUInt32(item);
-                }
+                var arr = GC.AllocateUninitializedArray<uint>(span.Length);
+                for (int i = 0; i < span.Length; i++)
+                    arr[i] = span[i] is uint v ? v : Convert.ToUInt32(span[i]);
                 return np.array(arr);
             }
             if (elementType == typeof(long))
             {
-                var arr = GC.AllocateUninitializedArray<long>(items.Count);
-                for (int i = 0; i < items.Count; i++)
-                {
-                    var item = items[i];
-                    arr[i] = item is long v ? v : Convert.ToInt64(item);
-                }
+                var arr = GC.AllocateUninitializedArray<long>(span.Length);
+                for (int i = 0; i < span.Length; i++)
+                    arr[i] = span[i] is long v ? v : Convert.ToInt64(span[i]);
                 return np.array(arr);
             }
             if (elementType == typeof(ulong))
             {
-                var arr = GC.AllocateUninitializedArray<ulong>(items.Count);
-                for (int i = 0; i < items.Count; i++)
-                {
-                    var item = items[i];
-                    arr[i] = item is ulong v ? v : Convert.ToUInt64(item);
-                }
+                var arr = GC.AllocateUninitializedArray<ulong>(span.Length);
+                for (int i = 0; i < span.Length; i++)
+                    arr[i] = span[i] is ulong v ? v : Convert.ToUInt64(span[i]);
                 return np.array(arr);
             }
             if (elementType == typeof(char))
             {
-                var arr = GC.AllocateUninitializedArray<char>(items.Count);
-                for (int i = 0; i < items.Count; i++)
-                {
-                    var item = items[i];
-                    arr[i] = item is char v ? v : Convert.ToChar(item);
-                }
+                var arr = GC.AllocateUninitializedArray<char>(span.Length);
+                for (int i = 0; i < span.Length; i++)
+                    arr[i] = span[i] is char v ? v : Convert.ToChar(span[i]);
                 return np.array(arr);
             }
             if (elementType == typeof(float))
             {
-                var arr = GC.AllocateUninitializedArray<float>(items.Count);
-                for (int i = 0; i < items.Count; i++)
-                {
-                    var item = items[i];
-                    arr[i] = item is float v ? v : Convert.ToSingle(item);
-                }
+                var arr = GC.AllocateUninitializedArray<float>(span.Length);
+                for (int i = 0; i < span.Length; i++)
+                    arr[i] = span[i] is float v ? v : Convert.ToSingle(span[i]);
                 return np.array(arr);
             }
             if (elementType == typeof(double))
             {
-                var arr = GC.AllocateUninitializedArray<double>(items.Count);
-                for (int i = 0; i < items.Count; i++)
-                {
-                    var item = items[i];
-                    arr[i] = item is double v ? v : Convert.ToDouble(item);
-                }
+                var arr = GC.AllocateUninitializedArray<double>(span.Length);
+                for (int i = 0; i < span.Length; i++)
+                    arr[i] = span[i] is double v ? v : Convert.ToDouble(span[i]);
                 return np.array(arr);
             }
             if (elementType == typeof(decimal))
             {
-                var arr = GC.AllocateUninitializedArray<decimal>(items.Count);
-                for (int i = 0; i < items.Count; i++)
-                {
-                    var item = items[i];
-                    arr[i] = item is decimal v ? v : Convert.ToDecimal(item);
-                }
+                var arr = GC.AllocateUninitializedArray<decimal>(span.Length);
+                for (int i = 0; i < span.Length; i++)
+                    arr[i] = span[i] is decimal v ? v : Convert.ToDecimal(span[i]);
                 return np.array(arr);
             }
 
