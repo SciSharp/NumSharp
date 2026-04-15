@@ -135,30 +135,93 @@ namespace NumSharp
 
         /// <summary>
         ///     Converts a non-generic IEnumerator to an NDArray.
-        ///     Element type is detected from the first item.
+        ///     Element type is detected from items with NumPy-like type promotion.
         ///     Empty collections return empty double[] to match NumPy's behavior.
         /// </summary>
         private static NDArray ConvertEnumerator(IEnumerator enumerator)
         {
-            // Collect items and detect type from first element
+            // Collect items
             var items = new List<object>();
-            Type elementType = null;
 
             while (enumerator.MoveNext())
             {
                 var item = enumerator.Current;
-                if (item == null)
-                    continue;
-
-                elementType ??= item.GetType();
-                items.Add(item);
+                if (item != null)
+                    items.Add(item);
             }
 
             // Empty collection: return empty double[] (NumPy defaults to float64)
-            if (items.Count == 0 || elementType == null)
+            if (items.Count == 0)
                 return np.array(Array.Empty<double>());
 
+            var elementType = FindCommonNumericType(items);
             return ConvertObjectListToNDArray(items, elementType);
+        }
+
+        /// <summary>
+        ///     Finds the common numeric type for a list of objects (NumPy-like promotion).
+        ///     Promotes to the widest type: bool -> int -> long -> float -> double -> decimal
+        /// </summary>
+        private static Type FindCommonNumericType(List<object> items)
+        {
+            // NumPy type promotion priority (simplified):
+            // bool < byte < short < ushort < int < uint < long < ulong < float < double
+            // If any float/double is present, result is float/double
+            // decimal is separate (highest priority if present)
+
+            bool hasDecimal = false;
+            bool hasDouble = false;
+            bool hasFloat = false;
+            bool hasULong = false;
+            bool hasLong = false;
+            bool hasUInt = false;
+            bool hasInt = false;
+            bool hasUShort = false;
+            bool hasShort = false;
+            bool hasByte = false;
+            bool hasBool = false;
+            bool hasChar = false;
+            Type firstType = null;
+
+            foreach (var item in items)
+            {
+                var t = item.GetType();
+                firstType ??= t;
+
+                if (t == typeof(decimal)) hasDecimal = true;
+                else if (t == typeof(double)) hasDouble = true;
+                else if (t == typeof(float)) hasFloat = true;
+                else if (t == typeof(ulong)) hasULong = true;
+                else if (t == typeof(long)) hasLong = true;
+                else if (t == typeof(uint)) hasUInt = true;
+                else if (t == typeof(int)) hasInt = true;
+                else if (t == typeof(ushort)) hasUShort = true;
+                else if (t == typeof(short)) hasShort = true;
+                else if (t == typeof(byte)) hasByte = true;
+                else if (t == typeof(bool)) hasBool = true;
+                else if (t == typeof(char)) hasChar = true;
+            }
+
+            // Promotion rules (NumPy-like):
+            // decimal wins if present
+            if (hasDecimal) return typeof(decimal);
+
+            // Any floating point promotes to double (NumPy uses float64 for mixed int+float)
+            if (hasDouble || hasFloat) return typeof(double);
+
+            // Integer promotion
+            if (hasULong) return typeof(ulong);
+            if (hasLong || hasUInt) return typeof(long); // uint + anything signed -> long
+            if (hasUInt) return typeof(uint);
+            if (hasInt || hasUShort) return typeof(int); // ushort + anything signed -> int
+            if (hasUShort) return typeof(ushort);
+            if (hasShort || hasByte) return typeof(int); // byte + short -> int (safe promotion)
+            if (hasByte) return typeof(byte);
+            if (hasChar) return typeof(char);
+            if (hasBool) return typeof(bool);
+
+            // Fallback to first type
+            return firstType ?? typeof(double);
         }
 
         /// <summary>
@@ -170,102 +233,101 @@ namespace NumSharp
             if (tuple.Length == 0)
                 return np.array(Array.Empty<double>());
 
-            // Collect items and detect type from first non-null element
+            // Collect items and find common type (NumPy-like promotion)
             var items = new List<object>(tuple.Length);
-            Type elementType = null;
 
             for (int i = 0; i < tuple.Length; i++)
             {
                 var item = tuple[i];
-                if (item == null)
-                    continue;
-
-                elementType ??= item.GetType();
-                items.Add(item);
+                if (item != null)
+                    items.Add(item);
             }
 
-            if (items.Count == 0 || elementType == null)
+            if (items.Count == 0)
                 return np.array(Array.Empty<double>());
 
+            var elementType = FindCommonNumericType(items);
             return ConvertObjectListToNDArray(items, elementType);
         }
 
         /// <summary>
         ///     Converts a list of objects to an NDArray of the specified element type.
+        ///     Uses Convert.ChangeType for mixed-type support (e.g., int + double -> double).
         /// </summary>
         private static NDArray ConvertObjectListToNDArray(List<object> items, Type elementType)
         {
             // Type switch to create typed array without reflection
+            // Use Convert.ChangeType to handle mixed numeric types (NumPy-like promotion)
             if (elementType == typeof(bool))
             {
                 var arr = new bool[items.Count];
-                for (int i = 0; i < items.Count; i++) arr[i] = (bool)items[i];
+                for (int i = 0; i < items.Count; i++) arr[i] = Convert.ToBoolean(items[i]);
                 return np.array(arr);
             }
             if (elementType == typeof(byte))
             {
                 var arr = new byte[items.Count];
-                for (int i = 0; i < items.Count; i++) arr[i] = (byte)items[i];
+                for (int i = 0; i < items.Count; i++) arr[i] = Convert.ToByte(items[i]);
                 return np.array(arr);
             }
             if (elementType == typeof(short))
             {
                 var arr = new short[items.Count];
-                for (int i = 0; i < items.Count; i++) arr[i] = (short)items[i];
+                for (int i = 0; i < items.Count; i++) arr[i] = Convert.ToInt16(items[i]);
                 return np.array(arr);
             }
             if (elementType == typeof(ushort))
             {
                 var arr = new ushort[items.Count];
-                for (int i = 0; i < items.Count; i++) arr[i] = (ushort)items[i];
+                for (int i = 0; i < items.Count; i++) arr[i] = Convert.ToUInt16(items[i]);
                 return np.array(arr);
             }
             if (elementType == typeof(int))
             {
                 var arr = new int[items.Count];
-                for (int i = 0; i < items.Count; i++) arr[i] = (int)items[i];
+                for (int i = 0; i < items.Count; i++) arr[i] = Convert.ToInt32(items[i]);
                 return np.array(arr);
             }
             if (elementType == typeof(uint))
             {
                 var arr = new uint[items.Count];
-                for (int i = 0; i < items.Count; i++) arr[i] = (uint)items[i];
+                for (int i = 0; i < items.Count; i++) arr[i] = Convert.ToUInt32(items[i]);
                 return np.array(arr);
             }
             if (elementType == typeof(long))
             {
                 var arr = new long[items.Count];
-                for (int i = 0; i < items.Count; i++) arr[i] = (long)items[i];
+                for (int i = 0; i < items.Count; i++) arr[i] = Convert.ToInt64(items[i]);
                 return np.array(arr);
             }
             if (elementType == typeof(ulong))
             {
                 var arr = new ulong[items.Count];
-                for (int i = 0; i < items.Count; i++) arr[i] = (ulong)items[i];
+                for (int i = 0; i < items.Count; i++) arr[i] = Convert.ToUInt64(items[i]);
                 return np.array(arr);
             }
             if (elementType == typeof(char))
             {
                 var arr = new char[items.Count];
-                for (int i = 0; i < items.Count; i++) arr[i] = (char)items[i];
+                for (int i = 0; i < items.Count; i++) arr[i] = Convert.ToChar(items[i]);
                 return np.array(arr);
             }
             if (elementType == typeof(float))
             {
                 var arr = new float[items.Count];
-                for (int i = 0; i < items.Count; i++) arr[i] = (float)items[i];
+                for (int i = 0; i < items.Count; i++) arr[i] = Convert.ToSingle(items[i]);
                 return np.array(arr);
             }
             if (elementType == typeof(double))
             {
                 var arr = new double[items.Count];
-                for (int i = 0; i < items.Count; i++) arr[i] = (double)items[i];
+                for (int i = 0; i < items.Count; i++) arr[i] = Convert.ToDouble(items[i]);
                 return np.array(arr);
             }
             if (elementType == typeof(decimal))
             {
                 var arr = new decimal[items.Count];
-                for (int i = 0; i < items.Count; i++) arr[i] = (decimal)items[i];
+                for (int i = 0; i < items.Count; i++) arr[i] = Convert.ToDecimal(items[i]);
                 return np.array(arr);
             }
 

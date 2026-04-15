@@ -696,14 +696,25 @@ namespace NumSharp.UnitTest.Creation
         }
 
         [Test]
-        public void ValueTuple_MixedTypes_UsesFirstElementType()
+        public void ValueTuple_MixedTypes_PromotesToCommonType()
         {
-            // Mixed tuple - type is detected from first element
-            var tuple = (1.5, 2.5, 3.5);
+            // Mixed int + double promotes to double (NumPy behavior)
+            var tuple = (1, 2.5, 3);
             var result = np.asanyarray(tuple);
 
             result.Should().BeShaped(3);
-            result.dtype.Should().Be(typeof(double));
+            result.dtype.Should().Be(typeof(double)); // Promoted from int to double
+        }
+
+        [Test]
+        public void ValueTuple_IntAndBool_PromotesToInt()
+        {
+            // Mixed int + bool promotes to int (NumPy behavior)
+            var tuple = (1, true, 3);
+            var result = np.asanyarray(tuple);
+
+            result.Should().BeShaped(3);
+            result.dtype.Should().Be(typeof(int));
         }
 
         [Test]
