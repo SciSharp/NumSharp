@@ -41,14 +41,7 @@ jobs:
         dotnet-quality: 'preview'
 
     - name: Build
-      shell: bash
-      run: |
-        # Disable MSTest Testing Platform for CI due to .NET 10 SDK protocol version mismatch
-        dotnet build test/NumSharp.UnitTest/NumSharp.UnitTest.csproj \
-          --configuration Release \
-          -p:NoWarn=${{ env.DOTNET_NOWARN }} \
-          -p:EnableMSTestRunner=false \
-          -p:TestingPlatformDotnetTestSupport=false
+      run: dotnet build test/NumSharp.UnitTest/NumSharp.UnitTest.csproj --configuration Release -p:NoWarn=${{ env.DOTNET_NOWARN }}
 
     # Test filtering:
     #   - OpenBugs: excluded (known-failing bug reproductions)
@@ -65,9 +58,8 @@ jobs:
         if [[ "$RUNNER_OS" != "Windows" ]]; then
           FILTER="$FILTER&TestCategory!=WindowsOnly"
         fi
-        dotnet test --project test/NumSharp.UnitTest/NumSharp.UnitTest.csproj \
+        dotnet test test/NumSharp.UnitTest/NumSharp.UnitTest.csproj \
           --configuration Release --no-build --framework net8.0 \
-          -p:EnableMSTestRunner=false -p:TestingPlatformDotnetTestSupport=false \
           --filter "$FILTER" --logger "trx"
 
     - name: Test (net10.0)
@@ -81,9 +73,8 @@ jobs:
         if [[ "$RUNNER_OS" != "Windows" ]]; then
           FILTER="$FILTER&TestCategory!=WindowsOnly"
         fi
-        dotnet test --project test/NumSharp.UnitTest/NumSharp.UnitTest.csproj \
+        dotnet test test/NumSharp.UnitTest/NumSharp.UnitTest.csproj \
           --configuration Release --no-build --framework net10.0 \
-          -p:EnableMSTestRunner=false -p:TestingPlatformDotnetTestSupport=false \
           --filter "$FILTER" --logger "trx"
 
     - name: Upload Test Results
