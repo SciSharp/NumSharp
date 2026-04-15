@@ -97,42 +97,22 @@ namespace NumSharp
         /// </summary>
         private static NDArray ConvertMemory(object a, Type type)
         {
-            var genericDef = type.GetGenericTypeDefinition();
             var elementType = type.GetGenericArguments()[0];
+            var isReadOnly = type.GetGenericTypeDefinition() == typeof(ReadOnlyMemory<>);
 
-            // Handle ReadOnlyMemory<T> first (it cannot be cast to Memory<T>)
-            if (genericDef == typeof(ReadOnlyMemory<>))
-            {
-                if (elementType == typeof(bool)) return np.array(((ReadOnlyMemory<bool>)a).ToArray());
-                if (elementType == typeof(byte)) return np.array(((ReadOnlyMemory<byte>)a).ToArray());
-                if (elementType == typeof(short)) return np.array(((ReadOnlyMemory<short>)a).ToArray());
-                if (elementType == typeof(ushort)) return np.array(((ReadOnlyMemory<ushort>)a).ToArray());
-                if (elementType == typeof(int)) return np.array(((ReadOnlyMemory<int>)a).ToArray());
-                if (elementType == typeof(uint)) return np.array(((ReadOnlyMemory<uint>)a).ToArray());
-                if (elementType == typeof(long)) return np.array(((ReadOnlyMemory<long>)a).ToArray());
-                if (elementType == typeof(ulong)) return np.array(((ReadOnlyMemory<ulong>)a).ToArray());
-                if (elementType == typeof(char)) return np.array(((ReadOnlyMemory<char>)a).ToArray());
-                if (elementType == typeof(float)) return np.array(((ReadOnlyMemory<float>)a).ToArray());
-                if (elementType == typeof(double)) return np.array(((ReadOnlyMemory<double>)a).ToArray());
-                if (elementType == typeof(decimal)) return np.array(((ReadOnlyMemory<decimal>)a).ToArray());
-            }
-
-            // Handle Memory<T>
-            if (genericDef == typeof(Memory<>))
-            {
-                if (elementType == typeof(bool)) return np.array(((Memory<bool>)a).ToArray());
-                if (elementType == typeof(byte)) return np.array(((Memory<byte>)a).ToArray());
-                if (elementType == typeof(short)) return np.array(((Memory<short>)a).ToArray());
-                if (elementType == typeof(ushort)) return np.array(((Memory<ushort>)a).ToArray());
-                if (elementType == typeof(int)) return np.array(((Memory<int>)a).ToArray());
-                if (elementType == typeof(uint)) return np.array(((Memory<uint>)a).ToArray());
-                if (elementType == typeof(long)) return np.array(((Memory<long>)a).ToArray());
-                if (elementType == typeof(ulong)) return np.array(((Memory<ulong>)a).ToArray());
-                if (elementType == typeof(char)) return np.array(((Memory<char>)a).ToArray());
-                if (elementType == typeof(float)) return np.array(((Memory<float>)a).ToArray());
-                if (elementType == typeof(double)) return np.array(((Memory<double>)a).ToArray());
-                if (elementType == typeof(decimal)) return np.array(((Memory<decimal>)a).ToArray());
-            }
+            // Single type switch - extract array via the appropriate cast
+            if (elementType == typeof(bool)) return np.array(isReadOnly ? ((ReadOnlyMemory<bool>)a).ToArray() : ((Memory<bool>)a).ToArray());
+            if (elementType == typeof(byte)) return np.array(isReadOnly ? ((ReadOnlyMemory<byte>)a).ToArray() : ((Memory<byte>)a).ToArray());
+            if (elementType == typeof(short)) return np.array(isReadOnly ? ((ReadOnlyMemory<short>)a).ToArray() : ((Memory<short>)a).ToArray());
+            if (elementType == typeof(ushort)) return np.array(isReadOnly ? ((ReadOnlyMemory<ushort>)a).ToArray() : ((Memory<ushort>)a).ToArray());
+            if (elementType == typeof(int)) return np.array(isReadOnly ? ((ReadOnlyMemory<int>)a).ToArray() : ((Memory<int>)a).ToArray());
+            if (elementType == typeof(uint)) return np.array(isReadOnly ? ((ReadOnlyMemory<uint>)a).ToArray() : ((Memory<uint>)a).ToArray());
+            if (elementType == typeof(long)) return np.array(isReadOnly ? ((ReadOnlyMemory<long>)a).ToArray() : ((Memory<long>)a).ToArray());
+            if (elementType == typeof(ulong)) return np.array(isReadOnly ? ((ReadOnlyMemory<ulong>)a).ToArray() : ((Memory<ulong>)a).ToArray());
+            if (elementType == typeof(char)) return np.array(isReadOnly ? ((ReadOnlyMemory<char>)a).ToArray() : ((Memory<char>)a).ToArray());
+            if (elementType == typeof(float)) return np.array(isReadOnly ? ((ReadOnlyMemory<float>)a).ToArray() : ((Memory<float>)a).ToArray());
+            if (elementType == typeof(double)) return np.array(isReadOnly ? ((ReadOnlyMemory<double>)a).ToArray() : ((Memory<double>)a).ToArray());
+            if (elementType == typeof(decimal)) return np.array(isReadOnly ? ((ReadOnlyMemory<decimal>)a).ToArray() : ((Memory<decimal>)a).ToArray());
 
             return null;
         }
@@ -142,25 +122,7 @@ namespace NumSharp
         ///     Element type is detected from the first item.
         /// </summary>
         private static NDArray ConvertNonGenericEnumerable(IEnumerable enumerable)
-        {
-            // Collect items and detect type from first element
-            var items = new List<object>();
-            Type elementType = null;
-
-            foreach (var item in enumerable)
-            {
-                if (item == null)
-                    continue;
-
-                elementType ??= item.GetType();
-                items.Add(item);
-            }
-
-            if (items.Count == 0 || elementType == null)
-                return null; // Can't determine type from empty collection
-
-            return ConvertObjectListToNDArray(items, elementType);
-        }
+            => ConvertEnumerator(enumerable.GetEnumerator());
 
         /// <summary>
         ///     Converts a non-generic IEnumerator to an NDArray.
