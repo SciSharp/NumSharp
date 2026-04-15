@@ -403,10 +403,14 @@ public fixed long BufStrides[MaxOperands];
 ### Remaining (Priority Order)
 
 1. **Reduction support** - Implement reduce_pos, outer loop handling
-2. **Cast support** - Type conversion during buffered iteration
 
-### Recently Completed (2026-04-15)
+### Recently Completed (2026-04-16)
 
+- **Cast support** - Full NumPy parity: Type conversion during buffered iteration via
+  BUFFERED flag, op_dtypes parameter, and COMMON_DTYPE flag. Supports all casting rules
+  (no_casting, equiv, safe, same_kind, unsafe). NpyIterCasting validates casts and performs
+  type conversion via double intermediate. Fixed critical bug: Dispose was freeing aligned
+  buffers with wrong function (Free vs AlignedFree). 13 new NumPy parity tests.
 - **GetIterView()** - Returns NDArray view with iterator's internal axes ordering. A C-order
   iteration of the view matches the iterator's iteration order. Not available when buffering
   is enabled. 8 new NumPy parity tests.

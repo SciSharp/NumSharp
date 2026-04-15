@@ -160,10 +160,19 @@ namespace NumSharp.Backends.Iteration
 
         /// <summary>
         /// Copy data from operand to buffer (strided to contiguous).
+        /// If operand needs casting, performs type conversion during copy.
         /// Runtime dtype dispatch version - handles any NumSharp dtype.
         /// </summary>
         public static void CopyToBuffer(ref NpyIterState state, int op, long count)
         {
+            // Check if casting is needed
+            if (state.NeedsCast(op))
+            {
+                CopyToBufferWithCast(ref state, op, count);
+                return;
+            }
+
+            // No casting - use same-type copy
             var dtype = state.GetOpDType(op);
 
             switch (dtype)
@@ -186,10 +195,19 @@ namespace NumSharp.Backends.Iteration
 
         /// <summary>
         /// Copy data from buffer to operand (contiguous to strided).
+        /// If operand needs casting, performs type conversion during copy.
         /// Runtime dtype dispatch version - handles any NumSharp dtype.
         /// </summary>
         public static void CopyFromBuffer(ref NpyIterState state, int op, long count)
         {
+            // Check if casting is needed
+            if (state.NeedsCast(op))
+            {
+                CopyFromBufferWithCast(ref state, op, count);
+                return;
+            }
+
+            // No casting - use same-type copy
             var dtype = state.GetOpDType(op);
 
             switch (dtype)
@@ -207,6 +225,81 @@ namespace NumSharp.Backends.Iteration
                 case NPTypeCode.Decimal: CopyFromBuffer<decimal>(ref state, op, count); break;
                 case NPTypeCode.Char: CopyFromBuffer<char>(ref state, op, count); break;
                 default: throw new NotSupportedException($"Buffer copy not supported for dtype {dtype}");
+            }
+        }
+
+        /// <summary>
+        /// Copy data from operand to buffer with type conversion.
+        /// </summary>
+        public static void CopyToBufferWithCast(ref NpyIterState state, int op, long count)
+        {
+            var buffer = state.GetBuffer(op);
+            if (buffer == null || count <= 0)
+                return;
+
+            var srcType = state.GetOpSrcDType(op);
+            var dstType = state.GetOpDType(op);
+            var src = state.GetDataPtr(op);
+
+            if (src == null)
+                return;
+
+            if (state.NDim == 0)
+            {
+                // Scalar - just convert one value
+                NpyIterCasting.ConvertValue(src, buffer, srcType, dstType);
+                return;
+            }
+
+            var stridePtr = state.GetStridesPointer(op);
+
+            if (state.NDim == 1)
+            {
+                // Simple 1D copy with cast
+                long stride = stridePtr[0];
+                NpyIterCasting.CopyWithCast(src, stride, srcType, buffer, 1, dstType, count);
+            }
+            else
+            {
+                // Multi-dimensional strided copy with cast
+                NpyIterCasting.CopyStridedToContiguousWithCast(
+                    src, stridePtr, srcType,
+                    buffer, dstType,
+                    state.GetShapePointer(), state.NDim, count);
+            }
+        }
+
+        /// <summary>
+        /// Copy data from buffer to operand with type conversion.
+        /// </summary>
+        public static void CopyFromBufferWithCast(ref NpyIterState state, int op, long count)
+        {
+            var buffer = state.GetBuffer(op);
+            if (buffer == null)
+                return;
+
+            var opFlags = state.GetOpFlags(op);
+            if ((opFlags & NpyIterOpFlags.WRITE) == 0)
+                return;  // Read-only operand
+
+            var srcType = state.GetOpDType(op);  // Buffer dtype
+            var dstType = state.GetOpSrcDType(op);  // Array dtype
+            var dst = state.GetDataPtr(op);
+            var stridePtr = state.GetStridesPointer(op);
+
+            if (state.NDim == 1)
+            {
+                // Simple 1D copy with cast
+                long stride = stridePtr[0];
+                NpyIterCasting.CopyWithCast(buffer, 1, srcType, dst, stride, dstType, count);
+            }
+            else
+            {
+                // Multi-dimensional strided copy with cast
+                NpyIterCasting.CopyContiguousToStridedWithCast(
+                    buffer, srcType,
+                    dst, stridePtr, dstType,
+                    state.GetShapePointer(), state.NDim, count);
             }
         }
 
