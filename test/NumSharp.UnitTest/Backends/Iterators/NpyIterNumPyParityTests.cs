@@ -1497,5 +1497,382 @@ namespace NumSharp.UnitTest.Backends.Iterators
             Assert.AreEqual(0, coords2[0]);
             Assert.AreEqual(0, coords2[1]);
         }
+
+        // =========================================================================
+        // Negative Stride Flipping Tests (NumPy Parity)
+        // =========================================================================
+        // NumPy flips negative strides for memory-order iteration while tracking
+        // flipped coordinates via negative Perm entries. These tests verify NumSharp
+        // matches NumPy's behavior exactly.
+        // =========================================================================
+
+        [TestMethod]
+        public void NegativeStride_1D_IteratesMemoryOrder()
+        {
+            // NumPy 2.4.2:
+            // >>> arr = np.arange(5)
+            // >>> rev = arr[::-1]  # strides: (-8,)
+            // >>> it = np.nditer(rev, flags=['multi_index', 'c_index'])
+            // >>> [(it.multi_index, it.index, int(x)) for x in it]
+            // [((4,), 4, 0), ((3,), 3, 1), ((2,), 2, 2), ((1,), 1, 3), ((0,), 0, 4)]
+            //
+            // Key behavior:
+            // - Iterates in MEMORY order (values 0,1,2,3,4)
+            // - multi_index reports ORIGINAL coordinates (4,3,2,1,0)
+            // - c_index is flat index in original array (4,3,2,1,0)
+
+            var arr = np.arange(5);
+            var rev = arr["::-1"];
+
+            // NumSharp uses element strides, not byte strides like NumPy
+            // NumPy: -8 bytes = -1 element (sizeof(long) = 8)
+            Assert.AreEqual(-1, rev.strides[0], "Reversed array should have negative stride");
+
+            using var iter = NpyIterRef.New(rev, NpyIterGlobalFlags.MULTI_INDEX | NpyIterGlobalFlags.C_INDEX);
+
+            var coords = new long[1];
+            var expectedValues = new int[] { 0, 1, 2, 3, 4 };  // Memory order
+            var expectedMultiIndex = new long[] { 4, 3, 2, 1, 0 };  // Flipped
+            var expectedCIndex = new long[] { 4, 3, 2, 1, 0 };  // Original positions
+
+            for (int i = 0; i < 5; i++)
+            {
+                iter.GetMultiIndex(coords);
+                var value = iter.GetValue<long>(0);
+                var cIndex = iter.GetIndex();
+
+                Assert.AreEqual(expectedValues[i], value, $"Value at iteration {i}");
+                Assert.AreEqual(expectedMultiIndex[i], coords[0], $"MultiIndex at iteration {i}");
+                Assert.AreEqual(expectedCIndex[i], cIndex, $"C_INDEX at iteration {i}");
+
+                if (i < 4) iter.Iternext();
+            }
+        }
+
+        [TestMethod]
+        public void NegativeStride_2D_RowReversed_IteratesMemoryOrder()
+        {
+            // NumPy 2.4.2:
+            // >>> arr2d = np.arange(6).reshape(2, 3)
+            // >>> rev2d = arr2d[::-1, :]  # strides: (-24, 8)
+            // >>> it = np.nditer(rev2d, flags=['multi_index', 'c_index'])
+            // >>> [(it.multi_index, it.index, int(x)) for x in it]
+            // [((1, 0), 3, 0), ((1, 1), 4, 1), ((1, 2), 5, 2),
+            //  ((0, 0), 0, 3), ((0, 1), 1, 4), ((0, 2), 2, 5)]
+            //
+            // Values 0,1,2,3,4,5 in memory order
+            // multi_index: first axis flipped
+
+            var arr2d = np.arange(6).reshape(2, 3);
+            var rev2d = arr2d["::-1, :"];
+
+            // NumSharp uses element strides: -24 bytes / 8 = -3 elements, 8 bytes / 8 = 1 element
+            Assert.AreEqual(-3, rev2d.strides[0], "First axis should have negative stride");
+            Assert.AreEqual(1, rev2d.strides[1], "Second axis should have positive stride");
+
+            using var iter = NpyIterRef.New(rev2d, NpyIterGlobalFlags.MULTI_INDEX | NpyIterGlobalFlags.C_INDEX);
+
+            var coords = new long[2];
+            var expectedValues = new int[] { 0, 1, 2, 3, 4, 5 };
+            var expectedMultiIndex = new long[,] { { 1, 0 }, { 1, 1 }, { 1, 2 }, { 0, 0 }, { 0, 1 }, { 0, 2 } };
+            var expectedCIndex = new long[] { 3, 4, 5, 0, 1, 2 };
+
+            for (int i = 0; i < 6; i++)
+            {
+                iter.GetMultiIndex(coords);
+                var value = iter.GetValue<long>(0);
+                var cIndex = iter.GetIndex();
+
+                Assert.AreEqual(expectedValues[i], value, $"Value at iteration {i}");
+                Assert.AreEqual(expectedMultiIndex[i, 0], coords[0], $"MultiIndex[0] at iteration {i}");
+                Assert.AreEqual(expectedMultiIndex[i, 1], coords[1], $"MultiIndex[1] at iteration {i}");
+                Assert.AreEqual(expectedCIndex[i], cIndex, $"C_INDEX at iteration {i}");
+
+                if (i < 5) iter.Iternext();
+            }
+        }
+
+        [TestMethod]
+        public void NegativeStride_2D_ColReversed_IteratesMemoryOrder()
+        {
+            // NumPy 2.4.2:
+            // >>> arr2d = np.arange(6).reshape(2, 3)
+            // >>> rev2d = arr2d[:, ::-1]  # strides: (24, -8)
+            // >>> it = np.nditer(rev2d, flags=['multi_index', 'c_index'])
+            // >>> [(it.multi_index, it.index, int(x)) for x in it]
+            // [((0, 2), 2, 0), ((0, 1), 1, 1), ((0, 0), 0, 2),
+            //  ((1, 2), 5, 3), ((1, 1), 4, 4), ((1, 0), 3, 5)]
+            //
+            // Values 0,1,2,3,4,5 in memory order
+            // multi_index: second axis flipped
+
+            var arr2d = np.arange(6).reshape(2, 3);
+            var rev2d = arr2d[":, ::-1"];
+
+            // NumSharp uses element strides: 24 bytes / 8 = 3 elements, -8 bytes / 8 = -1 element
+            Assert.AreEqual(3, rev2d.strides[0], "First axis should have positive stride");
+            Assert.AreEqual(-1, rev2d.strides[1], "Second axis should have negative stride");
+
+            using var iter = NpyIterRef.New(rev2d, NpyIterGlobalFlags.MULTI_INDEX | NpyIterGlobalFlags.C_INDEX);
+
+            var coords = new long[2];
+            var expectedValues = new int[] { 0, 1, 2, 3, 4, 5 };
+            var expectedMultiIndex = new long[,] { { 0, 2 }, { 0, 1 }, { 0, 0 }, { 1, 2 }, { 1, 1 }, { 1, 0 } };
+            var expectedCIndex = new long[] { 2, 1, 0, 5, 4, 3 };
+
+            for (int i = 0; i < 6; i++)
+            {
+                iter.GetMultiIndex(coords);
+                var value = iter.GetValue<long>(0);
+                var cIndex = iter.GetIndex();
+
+                Assert.AreEqual(expectedValues[i], value, $"Value at iteration {i}");
+                Assert.AreEqual(expectedMultiIndex[i, 0], coords[0], $"MultiIndex[0] at iteration {i}");
+                Assert.AreEqual(expectedMultiIndex[i, 1], coords[1], $"MultiIndex[1] at iteration {i}");
+                Assert.AreEqual(expectedCIndex[i], cIndex, $"C_INDEX at iteration {i}");
+
+                if (i < 5) iter.Iternext();
+            }
+        }
+
+        [TestMethod]
+        public void NegativeStride_2D_BothReversed_IteratesMemoryOrder()
+        {
+            // NumPy 2.4.2:
+            // >>> arr2d = np.arange(6).reshape(2, 3)
+            // >>> rev2d = arr2d[::-1, ::-1]  # strides: (-24, -8)
+            // >>> it = np.nditer(rev2d, flags=['multi_index', 'c_index'])
+            // >>> [(it.multi_index, it.index, int(x)) for x in it]
+            // [((1, 2), 5, 0), ((1, 1), 4, 1), ((1, 0), 3, 2),
+            //  ((0, 2), 2, 3), ((0, 1), 1, 4), ((0, 0), 0, 5)]
+            //
+            // Values 0,1,2,3,4,5 in memory order
+            // multi_index: both axes flipped
+
+            var arr2d = np.arange(6).reshape(2, 3);
+            var rev2d = arr2d["::-1, ::-1"];
+
+            // NumSharp uses element strides: -24 bytes / 8 = -3 elements, -8 bytes / 8 = -1 element
+            Assert.AreEqual(-3, rev2d.strides[0], "First axis should have negative stride");
+            Assert.AreEqual(-1, rev2d.strides[1], "Second axis should have negative stride");
+
+            using var iter = NpyIterRef.New(rev2d, NpyIterGlobalFlags.MULTI_INDEX | NpyIterGlobalFlags.C_INDEX);
+
+            var coords = new long[2];
+            var expectedValues = new int[] { 0, 1, 2, 3, 4, 5 };
+            var expectedMultiIndex = new long[,] { { 1, 2 }, { 1, 1 }, { 1, 0 }, { 0, 2 }, { 0, 1 }, { 0, 0 } };
+            var expectedCIndex = new long[] { 5, 4, 3, 2, 1, 0 };
+
+            for (int i = 0; i < 6; i++)
+            {
+                iter.GetMultiIndex(coords);
+                var value = iter.GetValue<long>(0);
+                var cIndex = iter.GetIndex();
+
+                Assert.AreEqual(expectedValues[i], value, $"Value at iteration {i}");
+                Assert.AreEqual(expectedMultiIndex[i, 0], coords[0], $"MultiIndex[0] at iteration {i}");
+                Assert.AreEqual(expectedMultiIndex[i, 1], coords[1], $"MultiIndex[1] at iteration {i}");
+                Assert.AreEqual(expectedCIndex[i], cIndex, $"C_INDEX at iteration {i}");
+
+                if (i < 5) iter.Iternext();
+            }
+        }
+
+        [TestMethod]
+        public void NegativeStride_WithDontNegateStrides_PreservesViewOrder()
+        {
+            // NumPy 2.4.2:
+            // When DONT_NEGATE_STRIDES is set, NumPy does NOT flip negative strides
+            // and iterates in view logical order instead of memory order.
+            //
+            // >>> arr = np.arange(5)
+            // >>> rev = arr[::-1]
+            // >>> # With DONT_NEGATE_STRIDES, iteration follows view order
+            // >>> # Values would be: 4, 3, 2, 1, 0 (view logical order)
+            // >>> # multi_index: (0,), (1,), (2,), (3,), (4,) (no flipping)
+
+            var arr = np.arange(5);
+            var rev = arr["::-1"];
+
+            using var iter = NpyIterRef.New(rev,
+                NpyIterGlobalFlags.MULTI_INDEX | NpyIterGlobalFlags.C_INDEX | NpyIterGlobalFlags.DONT_NEGATE_STRIDES);
+
+            var coords = new long[1];
+            var expectedValues = new int[] { 4, 3, 2, 1, 0 };  // View logical order
+            var expectedMultiIndex = new long[] { 0, 1, 2, 3, 4 };  // No flipping
+
+            for (int i = 0; i < 5; i++)
+            {
+                iter.GetMultiIndex(coords);
+                var value = iter.GetValue<long>(0);
+
+                Assert.AreEqual(expectedValues[i], value, $"Value at iteration {i}");
+                Assert.AreEqual(expectedMultiIndex[i], coords[0], $"MultiIndex at iteration {i}");
+
+                if (i < 4) iter.Iternext();
+            }
+        }
+
+        [TestMethod]
+        public void NegativeStride_GotoMultiIndex_WorksWithFlippedAxes()
+        {
+            // NumPy 2.4.2:
+            // >>> arr = np.arange(6).reshape(2, 3)
+            // >>> rev = arr[::-1, :]
+            // >>> it = np.nditer(rev, flags=['multi_index'])
+            // >>> it[0]  # Access value at current position
+            // array(0)
+            // >>> # After GotoMultiIndex([0, 0]), we should be at original position (0,0)
+            // >>> # which contains value 3 in the reversed view
+
+            var arr2d = np.arange(6).reshape(2, 3);
+            var rev2d = arr2d["::-1, :"];
+
+            using var iter = NpyIterRef.New(rev2d, NpyIterGlobalFlags.MULTI_INDEX);
+
+            // In NumPy, multi_index=(0,0) refers to original array position (0,0)
+            // After flipping, this is at the "end" of memory iteration
+            iter.GotoMultiIndex(new long[] { 0, 0 });
+
+            var value = iter.GetValue<long>(0);
+            Assert.AreEqual(3, value, "GotoMultiIndex([0,0]) should give original value at (0,0)");
+
+            iter.GotoMultiIndex(new long[] { 1, 0 });
+            value = iter.GetValue<long>(0);
+            Assert.AreEqual(0, value, "GotoMultiIndex([1,0]) should give original value at (1,0)");
+        }
+
+        [TestMethod]
+        public void NegativeStride_GotoIndex_WorksWithFlippedAxes()
+        {
+            // NumPy 2.4.2:
+            // >>> arr = np.arange(6).reshape(2, 3)
+            // >>> rev = arr[::-1, :]
+            // >>> it = np.nditer(rev, flags=['multi_index', 'c_index'])
+            // >>> # GotoIndex(0) should go to original flat index 0
+            // >>> # which is multi_index=(0,0) containing value 3
+
+            var arr2d = np.arange(6).reshape(2, 3);
+            var rev2d = arr2d["::-1, :"];
+
+            using var iter = NpyIterRef.New(rev2d, NpyIterGlobalFlags.MULTI_INDEX | NpyIterGlobalFlags.C_INDEX);
+
+            // C_INDEX=0 means original position (0,0) which has value 3
+            iter.GotoIndex(0);
+            var value = iter.GetValue<long>(0);
+            Assert.AreEqual(3, value, "GotoIndex(0) should give value at original flat index 0");
+
+            // C_INDEX=3 means original position (1,0) which has value 0
+            iter.GotoIndex(3);
+            value = iter.GetValue<long>(0);
+            Assert.AreEqual(0, value, "GotoIndex(3) should give value at original flat index 3");
+        }
+
+        [TestMethod]
+        public void NegativeStride_3D_PartiallyReversed_IteratesMemoryOrder()
+        {
+            // NumPy 2.4.2:
+            // >>> arr = np.arange(24).reshape(2, 3, 4)
+            // >>> rev = arr[::-1, :, ::-1]  # Reverse first and last axes
+            // >>> rev.strides
+            // (-96, 32, -8)
+            // >>> it = np.nditer(rev, flags=['multi_index'])
+            // First few iterations...
+
+            var arr = np.arange(24).reshape(2, 3, 4);
+            var rev = arr["::-1, :, ::-1"];
+
+            // NumSharp uses element strides: -96/8=-12, 32/8=4, -8/8=-1
+            Assert.AreEqual(-12, rev.strides[0], "First axis should have negative stride");
+            Assert.AreEqual(4, rev.strides[1], "Second axis should have positive stride");
+            Assert.AreEqual(-1, rev.strides[2], "Third axis should have negative stride");
+
+            using var iter = NpyIterRef.New(rev, NpyIterGlobalFlags.MULTI_INDEX);
+
+            var coords = new long[3];
+
+            // First iteration should be at memory position 0
+            iter.GetMultiIndex(coords);
+            var value = iter.GetValue<long>(0);
+
+            // At memory position 0: original (0,0,0) = value 0
+            // With axes 0 and 2 flipped: multi_index = (1, 0, 3)
+            Assert.AreEqual(0, value, "First value should be 0 (memory order)");
+            Assert.AreEqual(1, coords[0], "First axis flipped: multi_index[0] = 1");
+            Assert.AreEqual(0, coords[1], "Second axis not flipped: multi_index[1] = 0");
+            Assert.AreEqual(3, coords[2], "Third axis flipped: multi_index[2] = 3");
+        }
+
+        [TestMethod]
+        public void NegativeStride_MixedOperands_OnlyFlipsWhenAllNegative()
+        {
+            // NumPy only flips strides when ALL operands have negative or zero stride
+            // for a given axis. If one operand has positive stride, no flipping occurs.
+            //
+            // This test uses two operands: one reversed, one not reversed on same axis.
+
+            var arr1 = np.arange(6).reshape(2, 3);  // strides (24, 8)
+            var arr2 = arr1["::-1, :"];  // strides (-24, 8)
+
+            using var iter = NpyIterRef.MultiNew(
+                2,
+                new[] { arr1, arr2 },
+                NpyIterGlobalFlags.MULTI_INDEX,
+                NPY_ORDER.NPY_KEEPORDER,
+                NPY_CASTING.NPY_NO_CASTING,
+                new[] { NpyIterPerOpFlags.READONLY, NpyIterPerOpFlags.READONLY },
+                null);
+
+            var coords = new long[2];
+
+            // Since arr1 has positive stride on axis 0 and arr2 has negative,
+            // no flipping should occur (one positive prevents flip).
+            // Iteration should follow arr1's order (values 0,1,2,3,4,5)
+            iter.GetMultiIndex(coords);
+            var v1 = iter.GetValue<long>(0);
+            var v2 = iter.GetValue<long>(1);
+
+            // At (0,0): arr1=0, arr2=3 (arr2 is reversed so sees row 1)
+            Assert.AreEqual(0, v1, "arr1 value at (0,0)");
+            Assert.AreEqual(3, v2, "arr2 value at (0,0) from reversed view");
+        }
+
+        [TestMethod]
+        public void NegativeStride_NEGPERM_FlagIsSet()
+        {
+            // Verify that the NEGPERM flag is set when axes are flipped
+
+            var arr = np.arange(5);
+            var rev = arr["::-1"];
+
+            using var iter = NpyIterRef.New(rev, NpyIterGlobalFlags.MULTI_INDEX);
+
+            // When negative strides are flipped, NEGPERM should be set
+            // and IDENTPERM should be cleared
+            Assert.IsTrue(iter.HasNegPerm, "NEGPERM flag should be set for flipped axes");
+            Assert.IsFalse(iter.HasIdentPerm, "IDENTPERM flag should be cleared when NEGPERM is set");
+        }
+
+        [TestMethod]
+        public void NegativeStride_WithoutMultiIndex_StillIteratesMemoryOrder()
+        {
+            // Even without MULTI_INDEX flag, iteration should be in memory order
+            // for cache efficiency.
+
+            var arr = np.arange(5);
+            var rev = arr["::-1"];
+
+            using var iter = NpyIterRef.New(rev);  // No flags
+
+            var values = new List<long>();
+            do
+            {
+                values.Add(iter.GetValue<long>(0));
+            } while (iter.Iternext());
+
+            // Should iterate in memory order: 0, 1, 2, 3, 4
+            CollectionAssert.AreEqual(new long[] { 0, 1, 2, 3, 4 }, values.ToArray(),
+                "Without MULTI_INDEX, should still iterate memory order");
+        }
     }
 }

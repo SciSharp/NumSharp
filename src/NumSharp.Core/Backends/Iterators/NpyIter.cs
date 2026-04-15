@@ -241,6 +241,17 @@ namespace NumSharp.Backends.Iteration
             // When MULTI_INDEX is NOT set:
             // - Axes are reordered AND coalesced for maximum efficiency
             bool hasMultiIndex = (flags & NpyIterGlobalFlags.MULTI_INDEX) != 0;
+
+            // Step 0: Flip negative strides for memory-order iteration
+            // NumPy's npyiter_flip_negative_strides():
+            // - When all operands have negative or zero strides for an axis, flip the axis
+            // - This allows memory-order iteration even for reversed arrays
+            // - Skip if DONT_NEGATE_STRIDES flag is set
+            if ((flags & NpyIterGlobalFlags.DONT_NEGATE_STRIDES) == 0)
+            {
+                NpyIterCoalescing.FlipNegativeStrides(ref *_state);
+            }
+
             if (_state->NDim > 1)
             {
                 // Step 1: Reorder axes based on iteration order
@@ -278,14 +289,16 @@ namespace NumSharp.Backends.Iteration
             {
                 _state->ItFlags |= (uint)NpyIterFlags.HASINDEX;
                 _state->IsCIndex = true;
-                _state->FlatIndex = 0;
             }
             else if ((flags & NpyIterGlobalFlags.F_INDEX) != 0)
             {
                 _state->ItFlags |= (uint)NpyIterFlags.HASINDEX;
                 _state->IsCIndex = false;
-                _state->FlatIndex = 0;
             }
+
+            // Compute initial FlatIndex based on current coordinates (handles NEGPERM)
+            // Must be called after HASINDEX is set and negative strides are flipped
+            _state->InitializeFlatIndex();
 
             // Update inner strides cache
             // Note: CoalesceAxes calls this internally, but we need to ensure it's
@@ -718,6 +731,8 @@ namespace NumSharp.Backends.Iteration
         /// <summary>
         /// Get the current multi-index (coordinates) in original axis order.
         /// Uses the Perm array to map internal coordinates to original array coordinates.
+        /// When NEGPERM is set, flipped axes have negative perm entries and their
+        /// coordinates are reversed (shape - coord - 1).
         /// Requires MULTI_INDEX flag to be set during construction.
         /// </summary>
         public void GetMultiIndex(Span<long> outCoords)
@@ -728,18 +743,40 @@ namespace NumSharp.Backends.Iteration
             if (outCoords.Length < _state->NDim)
                 throw new ArgumentException($"Output span must have at least {_state->NDim} elements", nameof(outCoords));
 
-            // Apply permutation: Perm[internal_axis] = original_axis
-            // So: outCoords[Perm[d]] = Coords[d]
+            // Fast path: IDENTPERM means perm is identity (no reordering or flipping)
+            if ((_state->ItFlags & (uint)NpyIterFlags.IDENTPERM) != 0)
+            {
+                for (int d = 0; d < _state->NDim; d++)
+                    outCoords[d] = _state->Coords[d];
+                return;
+            }
+
+            // Apply permutation: Perm[internal_axis] = original_axis (or -1-original if flipped)
+            // When perm[d] >= 0: outCoords[perm[d]] = Coords[d]
+            // When perm[d] < 0: original = -1 - perm[d], and coordinate is flipped
+            bool hasNegPerm = (_state->ItFlags & (uint)NpyIterFlags.NEGPERM) != 0;
+
             for (int d = 0; d < _state->NDim; d++)
             {
-                int originalAxis = _state->Perm[d];
-                outCoords[originalAxis] = _state->Coords[d];
+                int p = _state->Perm[d];
+                if (hasNegPerm && p < 0)
+                {
+                    // Flipped axis: original = -1 - p, coordinate = shape - coord - 1
+                    int originalAxis = -1 - p;
+                    outCoords[originalAxis] = _state->Shape[d] - _state->Coords[d] - 1;
+                }
+                else
+                {
+                    outCoords[p] = _state->Coords[d];
+                }
             }
         }
 
         /// <summary>
         /// Jump to a specific multi-index (coordinates) given in original axis order.
         /// Uses the Perm array to map original coordinates to internal iteration order.
+        /// When NEGPERM is set, flipped axes have negative perm entries and their
+        /// coordinates are reversed when mapping to internal coordinates.
         /// Requires MULTI_INDEX flag to be set during construction.
         /// </summary>
         public void GotoMultiIndex(ReadOnlySpan<long> coords)
@@ -750,19 +787,34 @@ namespace NumSharp.Backends.Iteration
             if (coords.Length < _state->NDim)
                 throw new ArgumentException($"Coordinates must have at least {_state->NDim} elements", nameof(coords));
 
-            // Apply permutation: Perm[internal_axis] = original_axis
-            // So: Coords[d] = coords[Perm[d]]
-            // Also compute iterIndex (based on internal shape order)
+            bool hasNegPerm = (_state->ItFlags & (uint)NpyIterFlags.NEGPERM) != 0;
+
+            // Apply permutation: Perm[internal_axis] = original_axis (or -1-original if flipped)
+            // When perm[d] >= 0: Coords[d] = coords[perm[d]]
+            // When perm[d] < 0: original = -1 - perm[d], Coords[d] = shape[d] - coords[original] - 1
             long iterIndex = 0;
             long multiplier = 1;
 
             for (int d = _state->NDim - 1; d >= 0; d--)
             {
-                int originalAxis = _state->Perm[d];
-                long coord = coords[originalAxis];
+                int p = _state->Perm[d];
+                int originalAxis;
+                long coord;
+
+                if (hasNegPerm && p < 0)
+                {
+                    // Flipped axis: map original coord to internal (flipped)
+                    originalAxis = -1 - p;
+                    coord = _state->Shape[d] - coords[originalAxis] - 1;
+                }
+                else
+                {
+                    originalAxis = p;
+                    coord = coords[originalAxis];
+                }
 
                 if (coord < 0 || coord >= _state->Shape[d])
-                    throw new IndexOutOfRangeException($"Coordinate {coord} out of range for original axis {originalAxis} (size {_state->Shape[d]})");
+                    throw new IndexOutOfRangeException($"Coordinate {coords[originalAxis]} out of range for original axis {originalAxis} (size {_state->Shape[d]})");
 
                 _state->Coords[d] = coord;
                 iterIndex += coord * multiplier;
@@ -773,12 +825,17 @@ namespace NumSharp.Backends.Iteration
 
             // Update flat index if tracking (C_INDEX or F_INDEX)
             // Note: C_INDEX/F_INDEX are computed in ORIGINAL array order, not iteration order
+            // The coords provided by the user are in original order, so use them directly
             if ((_state->ItFlags & (uint)NpyIterFlags.HASINDEX) != 0)
             {
-                // Build original shape for index computation
+                // Build original shape for index computation (handle NEGPERM)
                 var origShape = stackalloc long[_state->NDim];
                 for (int d = 0; d < _state->NDim; d++)
-                    origShape[_state->Perm[d]] = _state->Shape[d];
+                {
+                    int p = _state->Perm[d];
+                    int origAxis = (hasNegPerm && p < 0) ? (-1 - p) : p;
+                    origShape[origAxis] = _state->Shape[d];
+                }
 
                 if (_state->IsCIndex)
                 {
@@ -828,6 +885,18 @@ namespace NumSharp.Backends.Iteration
         public bool HasIndex => (_state->ItFlags & (uint)NpyIterFlags.HASINDEX) != 0;
 
         /// <summary>
+        /// Check if any axes have negative permutation entries (flipped for memory-order iteration).
+        /// When NEGPERM is set, GetMultiIndex reverses indices for those axes.
+        /// </summary>
+        public bool HasNegPerm => (_state->ItFlags & (uint)NpyIterFlags.NEGPERM) != 0;
+
+        /// <summary>
+        /// Check if the axis permutation is identity (no reordering).
+        /// Mutually exclusive with NEGPERM - if NEGPERM is set, IDENTPERM is cleared.
+        /// </summary>
+        public bool HasIdentPerm => (_state->ItFlags & (uint)NpyIterFlags.IDENTPERM) != 0;
+
+        /// <summary>
         /// Check if iteration is finished.
         /// </summary>
         public bool Finished => _state->IterIndex >= _state->IterEnd;
@@ -835,6 +904,7 @@ namespace NumSharp.Backends.Iteration
         /// <summary>
         /// Get the current iterator shape in original axis order.
         /// When MULTI_INDEX is set, returns shape in original axis order.
+        /// When NEGPERM is set, handles flipped axes correctly.
         /// Otherwise returns internal (possibly coalesced) shape.
         /// </summary>
         public long[] Shape
@@ -845,11 +915,14 @@ namespace NumSharp.Backends.Iteration
 
                 if ((_state->ItFlags & (uint)NpyIterFlags.HASMULTIINDEX) != 0)
                 {
+                    bool hasNegPerm = (_state->ItFlags & (uint)NpyIterFlags.NEGPERM) != 0;
+
                     // Return shape in original axis order
                     for (int d = 0; d < _state->NDim; d++)
                     {
-                        int originalAxis = _state->Perm[d];
-                        result[originalAxis] = _state->Shape[d];
+                        int p = _state->Perm[d];
+                        int origAxis = (hasNegPerm && p < 0) ? (-1 - p) : p;
+                        result[origAxis] = _state->Shape[d];
                     }
                 }
                 else
@@ -883,6 +956,7 @@ namespace NumSharp.Backends.Iteration
         /// Jump to a specific flat index position (C or F order based on construction flags).
         /// Requires C_INDEX or F_INDEX flag to be set during construction.
         /// Matches NumPy's NpyIter_GotoIndex behavior.
+        /// When NEGPERM is set, handles flipped axes correctly.
         /// </summary>
         /// <param name="flatIndex">The flat index in C or F order (depending on flags)</param>
         public void GotoIndex(long flatIndex)
@@ -893,10 +967,17 @@ namespace NumSharp.Backends.Iteration
             if (flatIndex < 0 || flatIndex >= _state->IterSize)
                 throw new IndexOutOfRangeException($"Flat index {flatIndex} out of range [0, {_state->IterSize})");
 
+            bool hasNegPerm = (_state->ItFlags & (uint)NpyIterFlags.NEGPERM) != 0;
+
             // Get original shape (using Perm to map internal to original)
+            // Handle NEGPERM: when perm[d] < 0, originalAxis = -1 - perm[d]
             var origShape = stackalloc long[_state->NDim];
             for (int d = 0; d < _state->NDim; d++)
-                origShape[_state->Perm[d]] = _state->Shape[d];
+            {
+                int p = _state->Perm[d];
+                int origAxis = (hasNegPerm && p < 0) ? (-1 - p) : p;
+                origShape[origAxis] = _state->Shape[d];
+            }
 
             // Convert flat index to original coordinates
             var coords = stackalloc long[_state->NDim];
@@ -905,7 +986,6 @@ namespace NumSharp.Backends.Iteration
             if (_state->IsCIndex)
             {
                 // C-order: last axis changes fastest
-                // Compute index strides and decompose
                 for (int d = _state->NDim - 1; d >= 0; d--)
                 {
                     coords[d] = remaining % origShape[d];
@@ -926,14 +1006,30 @@ namespace NumSharp.Backends.Iteration
             _state->FlatIndex = flatIndex;
 
             // Convert original coords to internal coords and update position
+            // Handle NEGPERM: flipped axes need reversed coordinates
             long iterIndex = 0;
             long multiplier = 1;
 
             for (int d = _state->NDim - 1; d >= 0; d--)
             {
-                int originalAxis = _state->Perm[d];
-                _state->Coords[d] = coords[originalAxis];
-                iterIndex += _state->Coords[d] * multiplier;
+                int p = _state->Perm[d];
+                int origAxis;
+                long coord;
+
+                if (hasNegPerm && p < 0)
+                {
+                    // Flipped axis: map original coord to internal (flipped)
+                    origAxis = -1 - p;
+                    coord = _state->Shape[d] - coords[origAxis] - 1;
+                }
+                else
+                {
+                    origAxis = p;
+                    coord = coords[origAxis];
+                }
+
+                _state->Coords[d] = coord;
+                iterIndex += coord * multiplier;
                 multiplier *= _state->Shape[d];
             }
 
